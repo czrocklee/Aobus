@@ -33,11 +33,11 @@ namespace ao::audio::test
     CHECK(info.sourceFormat.precisionBits == 16);
     CHECK(info.isLossy);
 
-    auto const block = decoder.readNextBlock();
-    REQUIRE(block);
-    CHECK_FALSE(block->bytes.empty());
-    CHECK(block->frames > 0);
-    CHECK(block->firstFrameIndex == 0);
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK_FALSE(blockRes->bytes.empty());
+    CHECK(blockRes->frames > 0);
+    CHECK(blockRes->firstFrameIndex == 0);
   }
 
   TEST_CASE("AacDecoderSession - seeks within decoded MP4 samples", "[audio][unit][aac][seek]")
@@ -56,11 +56,11 @@ namespace ao::audio::test
     REQUIRE(info.duration > std::chrono::milliseconds{500});
 
     REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
-    auto const block = decoder.readNextBlock();
+    auto const blockRes = decoder.readNextBlock();
 
-    REQUIRE(block);
-    CHECK(block->frames > 0);
-    CHECK(block->firstFrameIndex > 0);
+    REQUIRE(blockRes);
+    CHECK(blockRes->frames > 0);
+    CHECK(blockRes->firstFrameIndex > 0);
   }
 
   TEST_CASE("AacDecoderSession - 32-bit padded output", "[audio][unit][aac]")
@@ -79,11 +79,11 @@ namespace ao::audio::test
     CHECK(info.sourceFormat.precisionBits == 16);
     CHECK(encodingContainerBits(info.outputFormat.encoding) == 32);
 
-    auto const block = decoder.readNextBlock();
-    REQUIRE(block);
-    CHECK(block->frames > 0);
-    CHECK(block->bytes.size() ==
-          static_cast<std::size_t>(block->frames) * info.outputFormat.channels * sizeof(std::int32_t));
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->frames > 0);
+    CHECK(blockRes->bytes.size() ==
+          static_cast<std::size_t>(blockRes->frames) * info.outputFormat.channels * sizeof(std::int32_t));
   }
 
   TEST_CASE("AacDecoderSession - supports lossless output encodings", "[audio][unit][aac]")
@@ -114,11 +114,11 @@ namespace ao::audio::test
     SECTION("Read on unopened file returns end of stream")
     {
       auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-      auto const block = decoder.readNextBlock();
+      auto const blockRes = decoder.readNextBlock();
 
-      REQUIRE(block);
-      CHECK(block->endOfStream);
-      CHECK(block->bytes.empty());
+      REQUIRE(blockRes);
+      CHECK(blockRes->endOfStream);
+      CHECK(blockRes->bytes.empty());
     }
 
     SECTION("Non-existent file")

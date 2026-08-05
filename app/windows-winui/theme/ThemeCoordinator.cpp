@@ -36,22 +36,22 @@ namespace ao::winui
         Error::Code::NotFound, formatResource("ThemeFileNotFoundFormat", utility::pathToUtf8(_themePath)));
     }
 
-    auto buffer = yaml::readFileResult(_themePath, kMaximumThemeBytes);
+    auto bufferRes = yaml::readFileResult(_themePath, kMaximumThemeBytes);
 
-    if (!buffer)
+    if (!bufferRes)
     {
-      return std::unexpected{buffer.error()};
+      return std::unexpected{bufferRes.error()};
     }
 
     try
     {
       auto errorState = yaml::ErrorCallbackState{utility::pathToUtf8(_themePath)};
       auto tree = ryml::Tree{yaml::callbacks(errorState)};
-      yaml::parseInPlace(tree, *buffer, errorState);
+      yaml::parseInPlace(tree, *bufferRes, errorState);
 
-      if (auto const reloaded = _session.reload(tree.rootref()); !reloaded)
+      if (auto const reloadedRes = _session.reload(tree.rootref()); !reloadedRes)
       {
-        return std::unexpected{reloaded.error()};
+        return std::unexpected{reloadedRes.error()};
       }
 
       return _session.theme();

@@ -114,17 +114,17 @@ namespace ao::rt
 
         auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .mtime = view.mtime()};
 
-        if (auto parsed = library::LibraryUri::parse(uri); !parsed)
+        if (auto parsedRes = library::LibraryUri::parse(uri); !parsedRes)
         {
-          row.pathError = parsed.error().message;
+          row.pathError = parsedRes.error().message;
         }
-        else if (auto resolved = parsed->resolveUnder(ml.rootPath()); resolved)
+        else if (auto resolvedRes = parsedRes->resolveUnder(ml.rootPath()); resolvedRes)
         {
-          row.fullPath = std::move(*resolved);
+          row.fullPath = std::move(*resolvedRes);
         }
         else
         {
-          row.pathError = resolved.error().message;
+          row.pathError = resolvedRes.error().message;
         }
 
         rows.push_back(std::move(row));
@@ -173,21 +173,21 @@ namespace ao::rt
                                                                        library::AudioIdentityProgressCallback progress,
                                                                        std::stop_token token)
     {
-      auto fileResult = media::file::File::open(path);
+      auto fileRes = media::file::File::open(path);
 
-      if (!fileResult)
+      if (!fileRes)
       {
-        return std::unexpected{fileResult.error()};
+        return std::unexpected{fileRes.error()};
       }
 
-      auto payloadResult = fileResult->audioPayload();
+      auto payloadRes = fileRes->audioPayload();
 
-      if (!payloadResult)
+      if (!payloadRes)
       {
-        return std::unexpected{payloadResult.error()};
+        return std::unexpected{payloadRes.error()};
       }
 
-      return library::readAudioIdentity(payloadResult->bytes, std::move(progress), token);
+      return library::readAudioIdentity(payloadRes->bytes, std::move(progress), token);
     }
 
     enum class RowStatus : std::uint8_t
@@ -299,18 +299,18 @@ namespace ao::rt
         return RowSlot{.status = RowStatus::Skipped};
       }
 
-      auto identityResult = batch.fingerprint(
+      auto identityRes = batch.fingerprint(
         row.fullPath,
         [&batch, &row](double fraction) { reportProgress(batch, row.fullPath, fraction); },
         batch.stopToken);
 
-      if (!identityResult)
+      if (!identityRes)
       {
-        reportFailure(batch, row.uri, "fingerprint", identityResult.error().message);
+        reportFailure(batch, row.uri, "fingerprint", identityRes.error().message);
         return RowSlot{.status = RowStatus::Failed};
       }
 
-      if (!*identityResult)
+      if (!*identityRes)
       {
         return RowSlot{.status = RowStatus::NotProcessed};
       }
@@ -329,7 +329,7 @@ namespace ao::rt
         return RowSlot{.status = RowStatus::Skipped};
       }
 
-      return RowSlot{.status = RowStatus::Hashed, .identity = **identityResult};
+      return RowSlot{.status = RowStatus::Hashed, .identity = **identityRes};
     }
 
     async::Task<> fingerprintWorker(FingerprintBatch* batch)
@@ -478,15 +478,15 @@ namespace ao::rt
         continue;
       }
 
-      auto commitResult = commitBatchCallback(candidates);
+      auto commitRes = commitBatchCallback(candidates);
 
-      if (!commitResult)
+      if (!commitRes)
       {
-        co_return std::unexpected{commitResult.error()};
+        co_return std::unexpected{commitRes.error()};
       }
 
-      result.completedCount += commitResult->completedCount;
-      result.skippedCount += commitResult->skippedCount;
+      result.completedCount += commitRes->completedCount;
+      result.skippedCount += commitRes->skippedCount;
 
       if (stopToken.stop_requested())
       {

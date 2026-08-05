@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/property/TagEdit.h>
+
 #include <ao/Error.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
 
@@ -49,26 +50,26 @@ namespace ao::uimodel
       return TagEditResult{};
     }
 
-    auto replyResult = session.submitTags(tagsToAdd, tagsToRemove);
+    auto replyRes = session.submitTags(tagsToAdd, tagsToRemove);
 
-    if (!replyResult)
+    if (!replyRes)
     {
-      return std::unexpected{replyResult.error()};
+      return std::unexpected{replyRes.error()};
     }
 
-    switch (replyResult->status)
+    switch (replyRes->status)
     {
       case rt::TrackAuthoringStatus::Applied:
         return TagEditResult{
-          .status = replyResult->status,
+          .status = replyRes->status,
           .notificationText =
-            tagChangeStatusMessage(replyResult->reply.changes.size(), tagsToAdd.size(), tagsToRemove.size()),
+            tagChangeStatusMessage(replyRes->reply.changes.size(), tagsToAdd.size(), tagsToRemove.size()),
         };
       case rt::TrackAuthoringStatus::NoOp: return TagEditResult{};
       case rt::TrackAuthoringStatus::Stale:
       case rt::TrackAuthoringStatus::Unavailable:
         return TagEditResult{
-          .status = replyResult->status,
+          .status = replyRes->status,
           .notificationText = "Library changed while the tag editor was open. Reload and try again.",
         };
     }

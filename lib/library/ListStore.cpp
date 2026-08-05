@@ -138,26 +138,26 @@ namespace ao::library
 
   Result<ListId> ListStore::Writer::create(std::span<std::byte const> data)
   {
-    if (auto validation = validateListPayload(data, "create"); !validation)
+    if (auto validationRes = validateListPayload(data, "create"); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
-    auto idResult = _writer.append(data);
+    auto idRes = _writer.append(data);
 
-    if (!idResult)
+    if (!idRes)
     {
-      return std::unexpected{idResult.error()};
+      return std::unexpected{idRes.error()};
     }
 
-    return ListId{*idResult};
+    return ListId{*idRes};
   }
 
   Result<> ListStore::Writer::update(ListId id, std::span<std::byte const> data)
   {
-    if (auto viewResult = validateListPayload(data, "update"); !viewResult)
+    if (auto viewRes = validateListPayload(data, "update"); !viewRes)
     {
-      return std::unexpected{viewResult.error()};
+      return std::unexpected{viewRes.error()};
     }
 
     return _writer.update(id.raw(), data);

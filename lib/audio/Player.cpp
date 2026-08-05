@@ -230,7 +230,7 @@ namespace ao::audio
     Engine::RouteStatus cachedRouteStatus;
     flow::Graph cachedSystemGraph;
     flow::Graph mergedGraph;
-    QualityResult qualityResult;
+    QualityResult qualityRes;
     mutable std::mutex callbacksMutex;
     std::function<void(Engine::TrackEnded const&)> onTrackEnded;
     std::function<void(Engine::TrackAdvanced const&)> onTrackAdvanced;
@@ -262,7 +262,7 @@ namespace ao::audio
     static void settlePreparation(std::shared_ptr<CallbackGate> const& callbackGatePtr,
                                   async::TaskHandle Impl::* taskSlot,
                                   detail::TrackPreparation preparation,
-                                  Result<> prepared,
+                                  Result<> preparedRes,
                                   Acceptance acceptance,
                                   Completion completion,
                                   Adopter adopter)
@@ -299,23 +299,23 @@ namespace ao::audio
       owner = callbackGatePtr->owner;
       gsl_Expects(owner != nullptr);
       using Outcome = std::invoke_result_t<Adopter&, detail::TrackPreparation&&, Engine&>;
-      auto outcome = Outcome{preparationRejectedError()};
+      auto outcomeRes = Outcome{preparationRejectedError()};
 
       if (accepted)
       {
-        if (!prepared)
+        if (!preparedRes)
         {
-          outcome = std::unexpected{prepared.error()};
+          outcomeRes = std::unexpected{preparedRes.error()};
         }
         else
         {
-          outcome = std::invoke(adopter, std::move(preparation), *owner->enginePtr);
+          outcomeRes = std::invoke(adopter, std::move(preparation), *owner->enginePtr);
         }
       }
 
       publicationStatePtr = owner->outwardPublicationStatePtr;
       auto publication = OutwardPublicationScope{publicationStatePtr};
-      completion(std::move(outcome));
+      completion(std::move(outcomeRes));
     }
 
     template<typename Acceptance, typename Completion, typename Adopter>
@@ -328,9 +328,9 @@ namespace ao::audio
                                             Adopter adopter,
                                             std::stop_token stopToken)
     {
-      auto prepared = preparation.inspect();
+      auto preparedRes = preparation.inspect();
 
-      if (prepared)
+      if (preparedRes)
       {
         co_await runtime->resumeOnCallbackExecutor(stopToken);
 
@@ -341,12 +341,12 @@ namespace ao::audio
 
         auto* const owner = callbackGatePtr->owner;
         gsl_Expects(owner != nullptr);
-        prepared = preparation.selectPrewarmFormat(*owner->enginePtr);
+        preparedRes = preparation.selectPrewarmFormat(*owner->enginePtr);
 
-        if (prepared)
+        if (preparedRes)
         {
           co_await runtime->resumeOnWorker(stopToken);
-          prepared = preparation.prepare();
+          preparedRes = preparation.prepare();
         }
       }
 
@@ -354,7 +354,7 @@ namespace ao::audio
       settlePreparation(callbackGatePtr,
                         taskSlot,
                         std::move(preparation),
-                        std::move(prepared),
+                        std::move(preparedRes),
                         std::move(acceptance),
                         std::move(completion),
                         std::move(adopter));
@@ -419,7 +419,7 @@ namespace ao::audio
       cachedRouteStatus = {};
       cachedSystemGraph = {};
       mergedGraph = {};
-      qualityResult = {};
+      qualityRes = {};
       return generation;
     }
 
@@ -705,11 +705,11 @@ namespace ao::audio
     {
       auto const lock = std::scoped_lock{graphMutex};
       playerStatus.flow = mergedGraph;
-      playerStatus.sourceQuality = qualityResult.sourceQuality;
-      playerStatus.pipelineQuality = qualityResult.pipelineQuality;
-      playerStatus.quality = qualityResult.overall;
-      playerStatus.qualityFullyVerified = qualityResult.fullyVerified;
-      playerStatus.qualityAssessments = qualityResult.assessments;
+      playerStatus.sourceQuality = qualityRes.sourceQuality;
+      playerStatus.pipelineQuality = qualityRes.pipelineQuality;
+      playerStatus.quality = qualityRes.overall;
+      playerStatus.qualityFullyVerified = qualityRes.fullyVerified;
+      playerStatus.qualityAssessments = qualityRes.assessments;
     }
 
     playerStatus.isReady = isReady();
@@ -845,7 +845,7 @@ namespace ao::audio
       mergedGraph.connections.push_back({.sourceId = "ao-engine", .destinationId = streamNodeId, .isActive = true});
     }
 
-    qualityResult = analyzeAudioQuality(mergedGraph);
+    qualityRes = analyzeAudioQuality(mergedGraph);
   }
 
   Player::Player(async::Executor& executor)
@@ -958,16 +958,16 @@ namespace ao::audio
 
   Result<> Player::play(Engine::PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
-    auto preparedStart = stagePlayback(item, initialOffset);
+    auto preparedStartRes = stagePlayback(item, initialOffset);
 
-    if (!preparedStart)
+    if (!preparedStartRes)
     {
-      return std::unexpected{preparedStart.error()};
+      return std::unexpected{preparedStartRes.error()};
     }
 
-    if (auto committed = commitPlayback(std::move(*preparedStart)); !committed)
+    if (auto committedRes = commitPlayback(std::move(*preparedStartRes)); !committedRes)
     {
-      return std::unexpected{committed.error()};
+      return std::unexpected{committedRes.error()};
     }
 
     return {};
@@ -1011,12 +1011,12 @@ namespace ao::audio
         Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    auto preparation = detail::TrackPreparation::capture(
+    auto preparationRes = detail::TrackPreparation::capture(
       *_implPtr->enginePtr, item, initialOffset, detail::TrackPreparation::Purpose::ExplicitStart);
 
-    if (!preparation)
+    if (!preparationRes)
     {
-      return std::unexpected{preparation.error()};
+      return std::unexpected{preparationRes.error()};
     }
 
     auto* const runtime = _implPtr->asyncRuntime;
@@ -1024,7 +1024,7 @@ namespace ao::audio
     _implPtr->startPreparationTask = runtime->spawnCancellable(
       [runtime,
        callbackGatePtr,
-       preparation = std::move(*preparation),
+       preparationRes = std::move(*preparationRes),
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
@@ -1032,7 +1032,7 @@ namespace ao::audio
           runtime,
           std::move(callbackGatePtr),
           &Impl::startPreparationTask,
-          std::move(preparation),
+          std::move(preparationRes),
           std::move(acceptance),
           std::move(completion),
           [](detail::TrackPreparation&& ready, Engine& engine) { return std::move(ready).adoptStart(engine); },
@@ -1051,21 +1051,21 @@ namespace ao::audio
         Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    auto receipt = _implPtr->enginePtr->commitPlayback(std::move(preparedStart));
+    auto receiptRes = _implPtr->enginePtr->commitPlayback(std::move(preparedStart));
 
-    if (!receipt)
+    if (!receiptRes)
     {
-      return std::unexpected{receipt.error()};
+      return std::unexpected{receiptRes.error()};
     }
 
-    _implPtr->acceptAudioBarrier(receipt->cancellationBarrier);
+    _implPtr->acceptAudioBarrier(receiptRes->cancellationBarrier);
     auto const routeGeneration = _implPtr->resetPlaybackGraph();
 
     // A backend may synchronously publish route state during Engine commit.
     // Refresh after Player accepts the receipt so an inline executor cannot
     // strand that already-applied route snapshot behind the old graph epoch.
     _implPtr->handleRouteChanged(_implPtr->enginePtr->routeStatus(), routeGeneration);
-    return receipt;
+    return receiptRes;
   }
 
   Result<Engine::PreparedNextResult> Player::prepareNext(Engine::PlaybackItem const& item)
@@ -1100,33 +1100,33 @@ namespace ao::audio
         Error::Code::InvalidState, "Prepared playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    auto preparation = detail::TrackPreparation::capture(
+    auto preparationRes = detail::TrackPreparation::capture(
       *_implPtr->enginePtr, item, {}, detail::TrackPreparation::Purpose::GaplessLookahead);
 
-    if (!preparation)
+    if (!preparationRes)
     {
-      return std::unexpected{preparation.error()};
+      return std::unexpected{preparationRes.error()};
     }
 
-    if (!preparation->requiresWorker())
+    if (!preparationRes->requiresWorker())
     {
-      auto prepared = preparation->inspect();
+      auto preparedRes = preparationRes->inspect();
 
-      if (prepared)
+      if (preparedRes)
       {
-        prepared = preparation->selectPrewarmFormat(*_implPtr->enginePtr);
+        preparedRes = preparationRes->selectPrewarmFormat(*_implPtr->enginePtr);
       }
 
-      if (prepared)
+      if (preparedRes)
       {
-        prepared = preparation->prepare();
+        preparedRes = preparationRes->prepare();
       }
 
       auto const callbackGatePtr = _implPtr->gatePtr;
       Impl::settlePreparation(callbackGatePtr,
                               nullptr,
-                              std::move(*preparation),
-                              std::move(prepared),
+                              std::move(*preparationRes),
+                              std::move(preparedRes),
                               std::move(acceptance),
                               std::move(completion),
                               [](detail::TrackPreparation&& ready, Engine& engine)
@@ -1140,7 +1140,7 @@ namespace ao::audio
     _implPtr->lookaheadPreparationTask = runtime->spawnCancellable(
       [runtime,
        callbackGatePtr,
-       preparation = std::move(*preparation),
+       preparationRes = std::move(*preparationRes),
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
@@ -1148,7 +1148,7 @@ namespace ao::audio
           runtime,
           std::move(callbackGatePtr),
           &Impl::lookaheadPreparationTask,
-          std::move(preparation),
+          std::move(preparationRes),
           std::move(acceptance),
           std::move(completion),
           [](detail::TrackPreparation&& ready, Engine& engine) { return std::move(ready).adoptNext(engine); },

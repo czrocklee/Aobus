@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+
+#include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -58,22 +59,22 @@ namespace ao::uimodel
         return std::unexpected{result.error()};
       }
 
-      auto stateVersion = yaml::requireScalar<std::uint32_t>(node, "stateVersion", context);
+      auto stateVersionRes = yaml::requireScalar<std::uint32_t>(node, "stateVersion", context);
 
-      if (!stateVersion)
+      if (!stateVersionRes)
       {
-        return std::unexpected{stateVersion.error()};
+        return std::unexpected{stateVersionRes.error()};
       }
 
-      if (*stateVersion != kStateEntryVersion)
+      if (*stateVersionRes != kStateEntryVersion)
       {
-        return makeError(
-          Error::Code::NotSupported, std::format("Unsupported layout component state entry version {}", *stateVersion));
+        return makeError(Error::Code::NotSupported,
+                         std::format("Unsupported layout component state entry version {}", *stateVersionRes));
       }
 
       constexpr auto kKeys = std::to_array<std::string_view>({"type", "stateVersion", "baselineHash", "state"});
 
-      auto entry = LayoutComponentStateEntry{.stateVersion = *stateVersion};
+      auto entry = LayoutComponentStateEntry{.stateVersion = *stateVersionRes};
       auto reader = yaml::MapReader{node, kKeys, context};
       reader.requiredScalar("type", entry.type)
         .requiredScalar("baselineHash", entry.baselineHash)
@@ -315,22 +316,22 @@ namespace ao::uimodel
       return std::unexpected{result.error()};
     }
 
-    auto version = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
+    auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
 
-    if (!version)
+    if (!versionRes)
     {
-      return std::unexpected{version.error()};
+      return std::unexpected{versionRes.error()};
     }
 
-    if (*version != kStateFileVersion)
+    if (*versionRes != kStateFileVersion)
     {
       return makeError(
-        Error::Code::NotSupported, std::format("Unsupported layout component state version {}", *version));
+        Error::Code::NotSupported, std::format("Unsupported layout component state version {}", *versionRes));
     }
 
     constexpr auto kKeys = std::to_array<std::string_view>({"version", "preset", "components"});
 
-    auto document = LayoutComponentStateDocument{.version = *version};
+    auto document = LayoutComponentStateDocument{.version = *versionRes};
     auto reader = yaml::MapReader{node, kKeys, kContext};
     reader.requiredScalar("preset", document.preset).requiredValue("components", document.components, readComponents);
 

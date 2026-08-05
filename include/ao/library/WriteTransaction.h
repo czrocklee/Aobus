@@ -85,7 +85,7 @@ namespace ao::library
       try
       {
         auto optResult = std::optional<OperationResult>{};
-        auto boundaryResult = applyBoundary(
+        auto boundaryRes = applyBoundary(
           [&function, &optResult](WriteTransaction& transaction) -> Result<>
           {
             optResult.emplace(std::invoke(std::forward<Function>(function), transaction));
@@ -98,9 +98,9 @@ namespace ao::library
             return {};
           });
 
-        if (!boundaryResult)
+        if (!boundaryRes)
         {
-          return std::unexpected{std::move(boundaryResult.error())};
+          return std::unexpected{std::move(boundaryRes.error())};
         }
 
         if (optResult)

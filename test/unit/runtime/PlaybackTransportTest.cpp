@@ -105,11 +105,11 @@ namespace ao::rt::test
     auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixtureUri});
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
-    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
-    REQUIRE(nextRequest);
-    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(*nextRequest, ListId{7});
-    REQUIRE(preparedTokenResult);
-    auto const preparedToken = *preparedTokenResult;
+    auto const nextRequestRes = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
+    REQUIRE(nextRequestRes);
+    auto const preparedTokenRes = fixture.playbackTransport.prepareNext(*nextRequestRes, ListId{7});
+    REQUIRE(preparedTokenRes);
+    auto const preparedToken = *preparedTokenRes;
 
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == currentTrack);
     CHECK(fixture.playbackTransport.state().nowPlaying.title == "Current Track");
@@ -173,11 +173,11 @@ namespace ao::rt::test
     auto idleSub = fixture.playbackTransport.onIdle([&] noexcept { ++idleCount; });
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
-    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
-    REQUIRE(nextRequest);
-    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(*nextRequest, ListId{7});
-    REQUIRE(preparedTokenResult);
-    auto const preparedToken = *preparedTokenResult;
+    auto const nextRequestRes = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
+    REQUIRE(nextRequestRes);
+    auto const preparedTokenRes = fixture.playbackTransport.prepareNext(*nextRequestRes, ListId{7});
+    REQUIRE(preparedTokenRes);
+    auto const preparedToken = *preparedTokenRes;
     REQUIRE(fixture.renderTarget != nullptr);
 
     // Only observe the natural advance below, not playTrack's own emission.
@@ -220,11 +220,11 @@ namespace ao::rt::test
       [&](PlaybackTransport::NowPlayingChanged const& ev) noexcept { nowPlaying.push_back(ev); });
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
-    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
-    REQUIRE(nextRequest);
-    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(*nextRequest, ListId{7});
-    REQUIRE(preparedTokenResult);
-    auto const preparedToken = *preparedTokenResult;
+    auto const nextRequestRes = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
+    REQUIRE(nextRequestRes);
+    auto const preparedTokenRes = fixture.playbackTransport.prepareNext(*nextRequestRes, ListId{7});
+    REQUIRE(preparedTokenRes);
+    auto const preparedToken = *preparedTokenRes;
     REQUIRE(fixture.renderTarget != nullptr);
     fixture.executor.drain();
     nowPlaying.clear();

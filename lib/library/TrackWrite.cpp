@@ -30,29 +30,29 @@ namespace ao::library::detail
       std::uint32_t rawTrackId = 0;
 
       {
-        auto hotResult = writer._hotWriter.append(preparedHot.size());
+        auto hotRes = writer._hotWriter.append(preparedHot.size());
 
-        if (!hotResult)
+        if (!hotRes)
         {
-          return std::unexpected{hotResult.error()};
+          return std::unexpected{hotRes.error()};
         }
 
-        rawTrackId = hotResult->first;
+        rawTrackId = hotRes->first;
 
-        auto const hotBytes = hotResult->second;
+        auto const hotBytes = hotRes->second;
         preparedHot.writeTo(hotBytes);
 
-        if (auto validation = validateSerializedHotTrack(hotBytes); !validation)
+        if (auto validationRes = validateSerializedHotTrack(hotBytes); !validationRes)
         {
           throwException<Exception>("Prepared hot Track record is not canonical");
         }
       }
 
-      auto coldResult = writer._coldWriter.create(rawTrackId, preparedCold.size());
+      auto coldRes = writer._coldWriter.create(rawTrackId, preparedCold.size());
 
-      if (!coldResult)
+      if (!coldRes)
       {
-        auto error = std::move(coldResult.error());
+        auto error = std::move(coldRes.error());
 
         if (error.code == Error::Code::Conflict)
         {
@@ -63,10 +63,10 @@ namespace ao::library::detail
         lmdb::detail::throwTransactionFailure(std::move(error));
       }
 
-      auto const coldBytes = *coldResult;
+      auto const coldBytes = *coldRes;
       preparedCold.writeTo(coldBytes);
 
-      if (auto validation = validateSerializedColdTrack(coldBytes); !validation)
+      if (auto validationRes = validateSerializedColdTrack(coldBytes); !validationRes)
       {
         throwException<Exception>("Prepared cold Track record is not canonical");
       }
@@ -76,9 +76,9 @@ namespace ao::library::detail
 
     static Result<> updateHot(TrackStore::Writer& writer, TrackId trackId, TrackBuilder::PreparedHot const& preparedHot)
     {
-      if (auto validation = validateUpdateTarget(writer._hotWriter, trackId); !validation)
+      if (auto validationRes = validateUpdateTarget(writer._hotWriter, trackId); !validationRes)
       {
-        return validation;
+        return validationRes;
       }
 
       replaceHot(writer, trackId, preparedHot);
@@ -89,9 +89,9 @@ namespace ao::library::detail
                                TrackId trackId,
                                TrackBuilder::PreparedCold const& preparedCold)
     {
-      if (auto validation = validateUpdateTarget(writer._coldWriter, trackId); !validation)
+      if (auto validationRes = validateUpdateTarget(writer._coldWriter, trackId); !validationRes)
       {
-        return validation;
+        return validationRes;
       }
 
       replaceCold(writer, trackId, preparedCold);
@@ -103,9 +103,9 @@ namespace ao::library::detail
                            TrackBuilder::PreparedHot const& preparedHot,
                            TrackBuilder::PreparedCold const& preparedCold)
     {
-      if (auto validation = validateUpdateTarget(writer._hotWriter, trackId); !validation)
+      if (auto validationRes = validateUpdateTarget(writer._hotWriter, trackId); !validationRes)
       {
-        return validation;
+        return validationRes;
       }
 
       replaceHot(writer, trackId, preparedHot);
@@ -133,17 +133,17 @@ namespace ao::library::detail
                            TrackId const trackId,
                            TrackBuilder::PreparedHot const& preparedHot)
     {
-      auto hotResult = writer._hotWriter.update(trackId.raw(), preparedHot.size());
+      auto hotRes = writer._hotWriter.update(trackId.raw(), preparedHot.size());
 
-      if (!hotResult)
+      if (!hotRes)
       {
-        lmdb::detail::throwTransactionFailure(std::move(hotResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(hotRes.error()));
       }
 
-      auto const hotBytes = *hotResult;
+      auto const hotBytes = *hotRes;
       preparedHot.writeTo(hotBytes);
 
-      if (auto validation = validateSerializedHotTrack(hotBytes); !validation)
+      if (auto validationRes = validateSerializedHotTrack(hotBytes); !validationRes)
       {
         throwException<Exception>("Prepared hot Track record is not canonical");
       }
@@ -153,17 +153,17 @@ namespace ao::library::detail
                             TrackId const trackId,
                             TrackBuilder::PreparedCold const& preparedCold)
     {
-      auto coldResult = writer._coldWriter.update(trackId.raw(), preparedCold.size());
+      auto coldRes = writer._coldWriter.update(trackId.raw(), preparedCold.size());
 
-      if (!coldResult)
+      if (!coldRes)
       {
-        lmdb::detail::throwTransactionFailure(std::move(coldResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(coldRes.error()));
       }
 
-      auto const coldBytes = *coldResult;
+      auto const coldBytes = *coldRes;
       preparedCold.writeTo(coldBytes);
 
-      if (auto validation = validateSerializedColdTrack(coldBytes); !validation)
+      if (auto validationRes = validateSerializedColdTrack(coldBytes); !validationRes)
       {
         throwException<Exception>("Prepared cold Track record is not canonical");
       }

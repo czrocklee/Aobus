@@ -186,13 +186,13 @@ namespace ao::audio::backend::test
       CHECK(backendPtr->backendId() == kBackendWasapi);
       CHECK(backendPtr->profileId() == kProfileShared);
 
-      if (auto const openResult = backendPtr->open(sourceFormat, &target); !openResult)
+      if (auto const openRes = backendPtr->open(sourceFormat, &target); !openRes)
       {
-        FAIL("open failed: " << openResult.error().message);
+        FAIL("open failed: " << openRes.error().message);
       }
       else
       {
-        CHECK(openResult->clientFormat == format);
+        CHECK(openRes->clientFormat == format);
       }
 
       CHECK_FALSE(target.routeAnchor().empty());

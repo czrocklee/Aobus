@@ -79,14 +79,14 @@ namespace ao::library
         return kInvalidDictionaryId;
       }
 
-      auto idResult = transaction.dictionary().intern(value);
+      auto idRes = transaction.dictionary().intern(value);
 
-      if (!idResult)
+      if (!idRes)
       {
-        lmdb::detail::throwTransactionFailure(std::move(idResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
       }
 
-      return *idResult;
+      return *idRes;
     }
 
     template<typename T>
@@ -542,14 +542,14 @@ namespace ao::library
       return makeError(Error::Code::InvalidState, "A hot-only TrackBuilder cannot serialize cold data");
     }
 
-    auto uri = LibraryUri::parse(_propertyBuilder._uri);
+    auto uriRes = LibraryUri::parse(_propertyBuilder._uri);
 
-    if (!uri)
+    if (!uriRes)
     {
-      return std::unexpected{uri.error()};
+      return std::unexpected{uriRes.error()};
     }
 
-    if (uri->value() != _propertyBuilder._uri)
+    if (uriRes->value() != _propertyBuilder._uri)
     {
       return makeError(Error::Code::InvalidInput, "Track URI is not canonical");
     }
@@ -640,9 +640,9 @@ namespace ao::library
 
   Result<std::vector<std::byte>> TrackBuilder::serializeHot(WriteTransaction& transaction) const
   {
-    if (auto validation = validateHotSerializable(); !validation)
+    if (auto validationRes = validateHotSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     try
@@ -662,9 +662,9 @@ namespace ao::library
   Result<std::vector<std::byte>> TrackBuilder::serializeCold(WriteTransaction& transaction,
                                                              ResourceStore const& resources) const
   {
-    if (auto validation = validateColdSerializable(); !validation)
+    if (auto validationRes = validateColdSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     try
@@ -685,14 +685,14 @@ namespace ao::library
     WriteTransaction& transaction,
     ResourceStore const& resources) const
   {
-    if (auto validation = validateHotSerializable(); !validation)
+    if (auto validationRes = validateHotSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
-    if (auto validation = validateColdSerializable(); !validation)
+    if (auto validationRes = validateColdSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     try
@@ -726,14 +726,14 @@ namespace ao::library
 
     for (auto const& name : builder->_tagsBuilder._tagNames)
     {
-      auto idResult = transaction.dictionary().intern(name);
+      auto idRes = transaction.dictionary().intern(name);
 
-      if (!idResult)
+      if (!idRes)
       {
-        lmdb::detail::throwTransactionFailure(std::move(idResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
       }
 
-      prepared._tagIds.push_back(*idResult);
+      prepared._tagIds.push_back(*idRes);
     }
 
     // Resolve metadata strings to DictionaryIds for header
@@ -851,14 +851,14 @@ namespace ao::library
 
     for (auto const& [key, value] : builder->_customMetadataBuilder._customPairs)
     {
-      auto idResult = transaction.dictionary().intern(key);
+      auto idRes = transaction.dictionary().intern(key);
 
-      if (!idResult)
+      if (!idRes)
       {
-        lmdb::detail::throwTransactionFailure(std::move(idResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
       }
 
-      resolvedPairs.emplace_back(*idResult, value);
+      resolvedPairs.emplace_back(*idRes, value);
     }
 
     std::ranges::sort(resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
@@ -881,14 +881,14 @@ namespace ao::library
       }
 
       auto const data = std::get<std::span<std::byte const>>(pending.source);
-      auto resourceResult = writer.create(data);
+      auto resourceRes = writer.create(data);
 
-      if (!resourceResult)
+      if (!resourceRes)
       {
-        lmdb::detail::throwTransactionFailure(std::move(resourceResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(resourceRes.error()));
       }
 
-      _coverArt.push_back({.resourceId = *resourceResult, .type = pending.type});
+      _coverArt.push_back({.resourceId = *resourceRes, .type = pending.type});
     }
   }
 
@@ -1121,14 +1121,14 @@ namespace ao::library
     WriteTransaction& transaction,
     ResourceStore const& resources) const
   {
-    if (auto validation = validateHotSerializable(); !validation)
+    if (auto validationRes = validateHotSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
-    if (auto validation = validateColdSerializable(); !validation)
+    if (auto validationRes = validateColdSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     try
@@ -1143,9 +1143,9 @@ namespace ao::library
 
   Result<TrackBuilder::PreparedHot> TrackBuilder::prepareHot(WriteTransaction& transaction) const
   {
-    if (auto validation = validateHotSerializable(); !validation)
+    if (auto validationRes = validateHotSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     try
@@ -1161,9 +1161,9 @@ namespace ao::library
   Result<TrackBuilder::PreparedCold> TrackBuilder::prepareCold(WriteTransaction& transaction,
                                                                ResourceStore const& resources) const
   {
-    if (auto validation = validateColdSerializable(); !validation)
+    if (auto validationRes = validateColdSerializable(); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     try

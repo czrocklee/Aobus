@@ -509,15 +509,15 @@ namespace ao::audio
     }
 
     impl->bufferedFrames = blockSize;
-    auto converted = impl->outputAdapter.convert(impl->pcmBuffer);
+    auto convertedRes = impl->outputAdapter.convert(impl->pcmBuffer);
 
-    if (!converted)
+    if (!convertedRes)
     {
-      impl->optOutputError = converted.error();
+      impl->optOutputError = convertedRes.error();
       return ::FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
     }
 
-    impl->outputBytes = *converted;
+    impl->outputBytes = *convertedRes;
 
     return ::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
   }
@@ -536,16 +536,16 @@ namespace ao::audio
       impl->info.sourceFormat.precisionBits = static_cast<std::uint8_t>(streamInfo.bits_per_sample);
       impl->info.sourceFormat.sampleKind = SampleKind::Integer;
 
-      auto const configured = impl->outputAdapter.configure(
+      auto const configuredRes = impl->outputAdapter.configure(
         impl->info.sourceFormat, nativeFlacEncoding(impl->info.sourceFormat.precisionBits));
 
-      if (!configured)
+      if (!configuredRes)
       {
-        impl->optOutputError = configured.error();
+        impl->optOutputError = configuredRes.error();
         return;
       }
 
-      impl->info.outputFormat = *configured;
+      impl->info.outputFormat = *configuredRes;
       impl->totalFrames = streamInfo.total_samples;
 
       if (streamInfo.sample_rate > 0)

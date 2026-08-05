@@ -367,19 +367,18 @@ namespace ao::gtk
         _previewModelPtr.reset();
 
         auto const sourceListId = rt::resolveParentSourceId(_parentListId);
-        auto parentResult = _runtime.sources().acquire(sourceListId);
+        auto parentRes = _runtime.sources().acquire(sourceListId);
 
-        if (!parentResult)
+        if (!parentRes)
         {
-          APP_LOG_ERROR(
-            "Cannot build smart-list preview for source {}: {}", sourceListId, parentResult.error().message);
+          APP_LOG_ERROR("Cannot build smart-list preview for source {}: {}", sourceListId, parentRes.error().message);
           updateSourceLabels();
           updateDialogState();
-          showError(parentResult.error().message);
+          showError(parentRes.error().message);
           return false;
         }
 
-        _previewFilteredListPtr = std::make_shared<rt::SmartListSource>(*parentResult, *_previewEnginePtr);
+        _previewFilteredListPtr = std::make_shared<rt::SmartListSource>(*parentRes, *_previewEnginePtr);
 
         auto projPtr = std::make_shared<rt::TrackListProjection>(rt::kInvalidViewId,
                                                                  rt::TrackSourceLease{_previewFilteredListPtr},

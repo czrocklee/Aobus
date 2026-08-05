@@ -284,12 +284,12 @@ namespace ao::uimodel
         }
 
         visited.push_back(*templateId);
-        auto expanded = expandNode(it->second, templates, visited, meter, depth + 1);
+        auto expandedRes = expandNode(it->second, templates, visited, meter, depth + 1);
         visited.pop_back();
 
-        if (!expanded)
+        if (!expandedRes)
         {
-          return std::unexpected{expanded.error()};
+          return std::unexpected{expandedRes.error()};
         }
 
         if (!node.id.empty())
@@ -299,7 +299,7 @@ namespace ao::uimodel
             return std::unexpected{result.error()};
           }
 
-          expanded->id = node.id;
+          expandedRes->id = node.id;
         }
 
         if (auto result = consumeOverride(node.layout, meter); !result)
@@ -309,7 +309,7 @@ namespace ao::uimodel
 
         for (auto const& [key, value] : node.layout)
         {
-          expanded->layout[key] = value;
+          expandedRes->layout[key] = value;
         }
 
         for (auto const& [key, value] : node.props)
@@ -334,34 +334,34 @@ namespace ao::uimodel
             return std::unexpected{result.error()};
           }
 
-          expanded->props[key] = value;
+          expandedRes->props[key] = value;
         }
 
         for (auto const& child : node.children)
         {
-          auto expandedChild = expandNode(child, templates, visited, meter, depth + 1);
+          auto expandedChildRes = expandNode(child, templates, visited, meter, depth + 1);
 
-          if (!expandedChild)
+          if (!expandedChildRes)
           {
-            return std::unexpected{expandedChild.error()};
+            return std::unexpected{expandedChildRes.error()};
           }
 
-          expanded->children.push_back(std::move(*expandedChild));
+          expandedRes->children.push_back(std::move(*expandedChildRes));
         }
 
         if (node.optTooltip && node.optTooltip->nodePtr)
         {
-          auto expandedTooltip = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, depth + 1);
+          auto expandedTooltipRes = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, depth + 1);
 
-          if (!expandedTooltip)
+          if (!expandedTooltipRes)
           {
-            return std::unexpected{expandedTooltip.error()};
+            return std::unexpected{expandedTooltipRes.error()};
           }
 
-          expanded->optTooltip = BoxedLayoutNode{std::move(*expandedTooltip)};
+          expandedRes->optTooltip = BoxedLayoutNode{std::move(*expandedTooltipRes)};
         }
 
-        return expanded;
+        return expandedRes;
       }
 
       if (auto result = meter.consumeNode(node); !result)
@@ -374,26 +374,26 @@ namespace ao::uimodel
 
       for (auto const& child : node.children)
       {
-        auto expandedChild = expandNode(child, templates, visited, meter, depth + 1);
+        auto expandedChildRes = expandNode(child, templates, visited, meter, depth + 1);
 
-        if (!expandedChild)
+        if (!expandedChildRes)
         {
-          return std::unexpected{expandedChild.error()};
+          return std::unexpected{expandedChildRes.error()};
         }
 
-        result.children.push_back(std::move(*expandedChild));
+        result.children.push_back(std::move(*expandedChildRes));
       }
 
       if (node.optTooltip && node.optTooltip->nodePtr)
       {
-        auto expandedTooltip = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, depth + 1);
+        auto expandedTooltipRes = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, depth + 1);
 
-        if (!expandedTooltip)
+        if (!expandedTooltipRes)
         {
-          return std::unexpected{expandedTooltip.error()};
+          return std::unexpected{expandedTooltipRes.error()};
         }
 
-        result.optTooltip = BoxedLayoutNode{std::move(*expandedTooltip)};
+        result.optTooltip = BoxedLayoutNode{std::move(*expandedTooltipRes)};
       }
 
       return result;
@@ -419,14 +419,14 @@ namespace ao::uimodel
 
       auto effectiveMeter = TreeBudgetMeter{limits.effective, "effective"};
       auto visited = std::vector<std::string_view>{};
-      auto effectiveRoot = expandNode(document.root, document.templates, visited, effectiveMeter, 1);
+      auto effectiveRootRes = expandNode(document.root, document.templates, visited, effectiveMeter, 1);
 
-      if (!effectiveRoot)
+      if (!effectiveRootRes)
       {
-        return std::unexpected{effectiveRoot.error()};
+        return std::unexpected{effectiveRootRes.error()};
       }
 
-      return PreparedLayout{std::move(*effectiveRoot)};
+      return PreparedLayout{std::move(*effectiveRootRes)};
     }
     catch (std::bad_alloc const&)
     {

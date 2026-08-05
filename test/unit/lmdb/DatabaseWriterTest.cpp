@@ -77,13 +77,13 @@ namespace ao::lmdb::test
     auto db = openDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
-    auto const id1 = writer.append(createStringData("first"));
-    REQUIRE(id1);
-    REQUIRE(*id1 == 1);
+    auto const id1Res = writer.append(createStringData("first"));
+    REQUIRE(id1Res);
+    REQUIRE(*id1Res == 1);
 
-    auto const id2 = writer.append(createStringData("second"));
-    REQUIRE(id2);
-    REQUIRE(*id2 == 2);
+    auto const id2Res = writer.append(createStringData("second"));
+    REQUIRE(id2Res);
+    REQUIRE(*id2Res == 2);
 
     REQUIRE(wtxn.commit());
 
@@ -107,17 +107,17 @@ namespace ao::lmdb::test
     auto db = openDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
-    auto appendResult1 = writer.append(8);
-    REQUIRE(appendResult1);
-    auto const& [id1, result1] = *appendResult1;
+    auto append1Res = writer.append(8);
+    REQUIRE(append1Res);
+    auto const& [id1, result1] = *append1Res;
     CHECK(id1 == 1);
     REQUIRE(!result1.empty());
     REQUIRE(result1.size() == 8);
     std::memset(result1.data(), 'a', 8);
 
-    auto appendResult2 = writer.append(12);
-    REQUIRE(appendResult2);
-    auto const& [id2, result2] = *appendResult2;
+    auto append2Res = writer.append(12);
+    REQUIRE(append2Res);
+    auto const& [id2, result2] = *append2Res;
     CHECK(id2 == 2);
     REQUIRE(!result2.empty());
     REQUIRE(result2.size() == 12);
@@ -151,13 +151,13 @@ namespace ao::lmdb::test
     auto wtxn2 = beginWriteTransaction(env);
     auto writer2 = db.writer(wtxn2);
 
-    auto const dataResult = writer2.append(createStringData("overflow"));
-    REQUIRE(!dataResult);
-    CHECK(dataResult.error().code == Error::Code::ResourceExhausted);
+    auto const dataRes = writer2.append(createStringData("overflow"));
+    REQUIRE(!dataRes);
+    CHECK(dataRes.error().code == Error::Code::ResourceExhausted);
 
-    auto const reserveResult = writer2.append(4);
-    REQUIRE(!reserveResult);
-    CHECK(reserveResult.error().code == Error::Code::ResourceExhausted);
+    auto const reserveRes = writer2.append(4);
+    REQUIRE(!reserveRes);
+    CHECK(reserveRes.error().code == Error::Code::ResourceExhausted);
 
     REQUIRE(writer2.update(std::numeric_limits<std::uint32_t>::max(), createStringData("still active")));
     REQUIRE(wtxn2.commit());
@@ -261,10 +261,10 @@ namespace ao::lmdb::test
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.create(42, createStringData("answer")));
-    auto const optDataResult = writer.get(42);
-    REQUIRE(optDataResult);
-    CHECK(optDataResult->size() == 6);
-    CHECK(utility::bytes::stringView(*optDataResult) == "answer");
+    auto const optDataRes = writer.get(42);
+    REQUIRE(optDataRes);
+    CHECK(optDataRes->size() == 6);
+    CHECK(utility::bytes::stringView(*optDataRes) == "answer");
   }
 
   TEST_CASE("Database::Writer - move constructor", "[lmdb][unit][database][writer]")
@@ -321,16 +321,16 @@ namespace ao::lmdb::test
     auto db = openDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
-    auto const initial = writer.create(1, 10);
-    REQUIRE(initial);
-    std::memset(initial->data(), 'i', initial->size());
+    auto const initialRes = writer.create(1, 10);
+    REQUIRE(initialRes);
+    std::memset(initialRes->data(), 'i', initialRes->size());
 
     auto const result = writer.create(1, 5);
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::Conflict);
-    auto const afterConflict = writer.create(2, 6);
-    REQUIRE(afterConflict);
-    std::memset(afterConflict->data(), 'a', afterConflict->size());
+    auto const afterConflictRes = writer.create(2, 6);
+    REQUIRE(afterConflictRes);
+    std::memset(afterConflictRes->data(), 'a', afterConflictRes->size());
     REQUIRE(wtxn.commit());
 
     auto const rtxn = beginReadTransaction(env);

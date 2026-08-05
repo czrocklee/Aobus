@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -12,7 +14,6 @@
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -234,26 +235,26 @@ namespace ao::uimodel
                                                                                       rt::ViewService& views,
                                                                                       rt::ViewId const viewId)
   {
-    auto stateResult = views.findTrackListState(viewId);
+    auto stateRes = views.findTrackListState(viewId);
 
-    if (!stateResult)
+    if (!stateRes)
     {
-      return std::unexpected{stateResult.error()};
+      return std::unexpected{stateRes.error()};
     }
 
-    auto sourceStateResult = views.listSourceState(viewId);
+    auto sourceStateRes = views.listSourceState(viewId);
 
-    if (!sourceStateResult)
+    if (!sourceStateRes)
     {
-      return std::unexpected{sourceStateResult.error()};
+      return std::unexpected{sourceStateRes.error()};
     }
 
     auto capabilities = describeListOrderCapabilities(ListOrderCapabilityInput{
-      .listId = stateResult->listId,
-      .presentation = stateResult->presentation,
-      .quickFilterExpression = stateResult->filterExpression,
-      .sourceLive = *sourceStateResult == rt::TrackSourceState::Live,
-      .sourceHasError = stateResult->optFilterError.has_value(),
+      .listId = stateRes->listId,
+      .presentation = stateRes->presentation,
+      .quickFilterExpression = stateRes->filterExpression,
+      .sourceLive = *sourceStateRes == rt::TrackSourceState::Live,
+      .sourceHasError = stateRes->optFilterError.has_value(),
       .authoring = library.authoringAvailability(),
     });
 
@@ -262,29 +263,29 @@ namespace ao::uimodel
       return makeError(Error::Code::InvalidState, capabilities.disabledReason);
     }
 
-    auto sourceTrackIdsResult = views.listSourceTrackIds(viewId);
+    auto sourceTrackIdsRes = views.listSourceTrackIds(viewId);
 
-    if (!sourceTrackIdsResult)
+    if (!sourceTrackIdsRes)
     {
-      return std::unexpected{sourceTrackIdsResult.error()};
+      return std::unexpected{sourceTrackIdsRes.error()};
     }
 
-    auto orderResult = library.bindListOrder(stateResult->listId, std::move(*sourceTrackIdsResult));
+    auto orderRes = library.bindListOrder(stateRes->listId, std::move(*sourceTrackIdsRes));
 
-    if (!orderResult)
+    if (!orderRes)
     {
-      return std::unexpected{orderResult.error()};
+      return std::unexpected{orderRes.error()};
     }
 
-    auto projectionResult = views.findTrackListProjection(viewId);
+    auto projectionRes = views.findTrackListProjection(viewId);
 
-    if (!projectionResult)
+    if (!projectionRes)
     {
-      return std::unexpected{projectionResult.error()};
+      return std::unexpected{projectionRes.error()};
     }
 
     return std::unique_ptr<ListOrderAuthoringSession>{new ListOrderAuthoringSession{std::make_unique<Impl>(
-      library, views, viewId, std::move(*orderResult), std::move(capabilities), std::move(*projectionResult))}};
+      library, views, viewId, std::move(*orderRes), std::move(capabilities), std::move(*projectionRes))}};
   }
 
   ListOrderAuthoringSession::ListOrderAuthoringSession(std::unique_ptr<Impl> implPtr)
@@ -344,8 +345,8 @@ namespace ao::uimodel
       return makeError(Error::Code::InvalidState, _implPtr->capabilities.disabledReason);
     }
 
-    auto anchorResult = _implPtr->relativeAnchor(selectedTrackIds, -1);
-    return anchorResult ? _implPtr->move(selectedTrackIds, *anchorResult) : std::unexpected{anchorResult.error()};
+    auto anchorRes = _implPtr->relativeAnchor(selectedTrackIds, -1);
+    return anchorRes ? _implPtr->move(selectedTrackIds, *anchorRes) : std::unexpected{anchorRes.error()};
   }
 
   Result<rt::LibraryWriter::MoveOrderAuthoringResult> ListOrderAuthoringSession::moveDown(
@@ -361,8 +362,8 @@ namespace ao::uimodel
       return makeError(Error::Code::InvalidState, _implPtr->capabilities.disabledReason);
     }
 
-    auto anchorResult = _implPtr->relativeAnchor(selectedTrackIds, 1);
-    return anchorResult ? _implPtr->move(selectedTrackIds, *anchorResult) : std::unexpected{anchorResult.error()};
+    auto anchorRes = _implPtr->relativeAnchor(selectedTrackIds, 1);
+    return anchorRes ? _implPtr->move(selectedTrackIds, *anchorRes) : std::unexpected{anchorRes.error()};
   }
 
   Result<rt::LibraryWriter::MoveOrderAuthoringResult> ListOrderAuthoringSession::moveToTop(

@@ -119,9 +119,9 @@ namespace ao::uimodel::test
     std::optional<LayoutRejection> validate(LayoutNode root, LayoutDialect const& dialect)
     {
       auto const document = LayoutDocument{.root = std::move(root)};
-      auto const prepared = prepareLayout(document);
-      REQUIRE(prepared.has_value());
-      return validateLayout(*prepared, fakeCatalog(), fakeActions(), dialect);
+      auto const preparedRes = prepareLayout(document);
+      REQUIRE(preparedRes.has_value());
+      return validateLayout(*preparedRes, fakeCatalog(), fakeActions(), dialect);
     }
 
     LayoutRejection rejectionOf(LayoutNode root, LayoutDialect const& dialect)

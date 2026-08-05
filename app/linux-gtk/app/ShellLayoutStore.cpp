@@ -58,22 +58,22 @@ namespace ao::gtk
     auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly, _limits.maxFileBytes};
     auto doc = uimodel::LayoutDocument{};
 
-    auto const loaded = uimodel::loadLayout(store, "layout", doc);
+    auto const loadedRes = uimodel::loadLayout(store, "layout", doc);
 
-    if (!loaded)
+    if (!loadedRes)
     {
-      return std::unexpected{loaded.error()};
+      return std::unexpected{loadedRes.error()};
     }
 
-    if (!*loaded)
+    if (!*loadedRes)
     {
       return makeError(
         Error::Code::FormatRejected, std::format("Shell layout file '{}' has no 'layout' group", path.string()));
     }
 
-    if (auto prepared = uimodel::prepareLayout(doc, _limits); !prepared)
+    if (auto preparedRes = uimodel::prepareLayout(doc, _limits); !preparedRes)
     {
-      return std::unexpected{prepared.error()};
+      return std::unexpected{preparedRes.error()};
     }
 
     return std::optional<uimodel::LayoutDocument>{std::move(doc)};
@@ -81,9 +81,9 @@ namespace ao::gtk
 
   Result<> ShellLayoutStore::save(uimodel::LayoutDocument const& doc, std::string_view presetId)
   {
-    if (auto prepared = uimodel::prepareLayout(doc, _limits); !prepared)
+    if (auto preparedRes = uimodel::prepareLayout(doc, _limits); !preparedRes)
     {
-      return std::unexpected{prepared.error()};
+      return std::unexpected{preparedRes.error()};
     }
 
     auto const path = filePath(presetId);
@@ -101,22 +101,22 @@ namespace ao::gtk
     if (existed)
     {
       auto previous = uimodel::LayoutDocument{};
-      auto const loaded = uimodel::loadLayout(store, "layout", previous);
+      auto const loadedRes = uimodel::loadLayout(store, "layout", previous);
 
-      if (!loaded)
+      if (!loadedRes)
       {
-        return std::unexpected{loaded.error()};
+        return std::unexpected{loadedRes.error()};
       }
 
-      if (!*loaded)
+      if (!*loadedRes)
       {
         return makeError(
           Error::Code::FormatRejected, std::format("Shell layout file '{}' has no 'layout' group", path.string()));
       }
 
-      if (auto prepared = uimodel::prepareLayout(previous, _limits); !prepared)
+      if (auto preparedRes = uimodel::prepareLayout(previous, _limits); !preparedRes)
       {
-        return std::unexpected{prepared.error()};
+        return std::unexpected{preparedRes.error()};
       }
     }
 

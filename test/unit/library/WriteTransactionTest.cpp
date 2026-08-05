@@ -33,11 +33,11 @@ namespace ao::library::test
     auto transaction = writable.writeTransaction();
     auto const bytes = utility::bytes::view(std::string_view{"committed resource"});
 
-    auto createResult = transaction.apply([&library, bytes](WriteTransaction& activeTransaction)
-                                          { return library.resources().writer(activeTransaction).create(bytes); });
+    auto createRes = transaction.apply([&library, bytes](WriteTransaction& activeTransaction)
+                                       { return library.resources().writer(activeTransaction).create(bytes); });
 
-    REQUIRE(createResult);
-    auto const resourceId = *createResult;
+    REQUIRE(createRes);
+    auto const resourceId = *createRes;
     REQUIRE(transaction.commit());
 
     auto readTransaction = library.readTransaction();
@@ -56,27 +56,27 @@ namespace ao::library::test
     auto const bytes = utility::bytes::view(std::string_view{"rolled back resource"});
     auto stagedId = kInvalidResourceId;
 
-    auto operationResult = transaction.apply(
+    auto operationRes = transaction.apply(
       [&library, bytes, &stagedId](WriteTransaction& activeTransaction) -> Result<ResourceId>
       {
-        auto createResult = library.resources().writer(activeTransaction).create(bytes);
+        auto createRes = library.resources().writer(activeTransaction).create(bytes);
 
-        if (!createResult)
+        if (!createRes)
         {
-          return std::unexpected{createResult.error()};
+          return std::unexpected{createRes.error()};
         }
 
-        stagedId = *createResult;
+        stagedId = *createRes;
         return makeError(Error::Code::Conflict, "reject staged write");
       });
 
-    REQUIRE_FALSE(operationResult);
-    CHECK(operationResult.error().code == Error::Code::Conflict);
-    CHECK(operationResult.error().message == "reject staged write");
+    REQUIRE_FALSE(operationRes);
+    CHECK(operationRes.error().code == Error::Code::Conflict);
+    CHECK(operationRes.error().message == "reject staged write");
 
-    auto commitResult = transaction.commit();
-    REQUIRE_FALSE(commitResult);
-    CHECK(commitResult.error().code == Error::Code::InvalidState);
+    auto commitRes = transaction.commit();
+    REQUIRE_FALSE(commitRes);
+    CHECK(commitRes.error().code == Error::Code::InvalidState);
 
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();
@@ -96,12 +96,12 @@ namespace ao::library::test
     auto transaction = writable.writeTransaction();
     auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
 
-    auto failureResult =
+    auto failureRes =
       transaction.apply([&library, &oversizedValue](WriteTransaction& activeTransaction)
                         { return library.resources().writer(activeTransaction).create(oversizedValue); });
 
-    REQUIRE_FALSE(failureResult);
-    CHECK(failureResult.error().code == Error::Code::IoError);
+    REQUIRE_FALSE(failureRes);
+    CHECK(failureRes.error().code == Error::Code::IoError);
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();
   }
@@ -114,13 +114,13 @@ namespace ao::library::test
     auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
     auto transaction = writable.writeTransaction();
 
-    auto failureResult =
+    auto failureRes =
       transaction.apply([](WriteTransaction&) -> Result<>
                         { detail::throwLibraryError(Error::Code::CorruptData, "private library failure"); });
 
-    REQUIRE_FALSE(failureResult);
-    CHECK(failureResult.error().code == Error::Code::CorruptData);
-    CHECK(failureResult.error().message == "private library failure");
+    REQUIRE_FALSE(failureRes);
+    CHECK(failureRes.error().code == Error::Code::CorruptData);
+    CHECK(failureRes.error().message == "private library failure");
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();
   }
@@ -138,14 +138,14 @@ namespace ao::library::test
     CHECK_THROWS_WITH(transaction.apply(
                         [&library, bytes, &stagedId](WriteTransaction& activeTransaction) -> Result<>
                         {
-                          auto createResult = library.resources().writer(activeTransaction).create(bytes);
+                          auto createRes = library.resources().writer(activeTransaction).create(bytes);
 
-                          if (!createResult)
+                          if (!createRes)
                           {
-                            return std::unexpected{createResult.error()};
+                            return std::unexpected{createRes.error()};
                           }
 
-                          stagedId = *createResult;
+                          stagedId = *createRes;
                           throw Exception{"unexpected operation failure"};
                         }),
                       "unexpected operation failure");
@@ -166,25 +166,25 @@ namespace ao::library::test
     SECTION("nested operation")
     {
       auto transaction = writable.writeTransaction();
-      auto operationResult = transaction.apply(
+      auto operationRes = transaction.apply(
         [](WriteTransaction& activeTransaction) -> Result<>
         {
           return activeTransaction.apply([](WriteTransaction&) -> Result<> { return {}; });
         });
 
-      REQUIRE_FALSE(operationResult);
-      CHECK(operationResult.error().code == Error::Code::InvalidState);
+      REQUIRE_FALSE(operationRes);
+      CHECK(operationRes.error().code == Error::Code::InvalidState);
       CHECK_FALSE(transaction.commit());
     }
 
     SECTION("commit from operation")
     {
       auto transaction = writable.writeTransaction();
-      auto operationResult =
+      auto operationRes =
         transaction.apply([](WriteTransaction& activeTransaction) { return activeTransaction.commit(); });
 
-      REQUIRE_FALSE(operationResult);
-      CHECK(operationResult.error().code == Error::Code::InvalidState);
+      REQUIRE_FALSE(operationRes);
+      CHECK(operationRes.error().code == Error::Code::InvalidState);
       CHECK_FALSE(transaction.commit());
     }
   }

@@ -82,16 +82,16 @@ namespace ao::cli
       // loop executor to the thread that enters the first command callback.
       auto executorPtr = std::make_unique<async::LoopExecutor>();
       auto* const loopExecutor = executorPtr.get();
-      auto runtimeResult = rt::CoreRuntime::create(
+      auto runtimeRes = rt::CoreRuntime::create(
         std::move(executorPtr), _options.root, rt::LibraryPaths{_options.root}.databasePath(), _musicLibraryMapSize);
 
-      if (!runtimeResult)
+      if (!runtimeRes)
       {
-        throwCommandError(runtimeResult.error(), "failed to open library: {}", runtimeResult.error().message);
+        throwCommandError(runtimeRes.error(), "failed to open library: {}", runtimeRes.error().message);
       }
 
       _loopExecutor = loopExecutor;
-      _runtimePtr = std::move(*runtimeResult);
+      _runtimePtr = std::move(*runtimeRes);
     }
 
     return *_runtimePtr;

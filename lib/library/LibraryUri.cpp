@@ -208,9 +208,9 @@ namespace ao::library
 
     auto const relative = utility::pathFromUtf8(_value);
 
-    if (auto const symlinkResult = rejectUnresolvedSymlinks(resolvedRoot, relative, _value); !symlinkResult)
+    if (auto const symlinkRes = rejectUnresolvedSymlinks(resolvedRoot, relative, _value); !symlinkRes)
     {
-      return std::unexpected{symlinkResult.error()};
+      return std::unexpected{symlinkRes.error()};
     }
 
     auto resolvedPath = std::filesystem::weakly_canonical(resolvedRoot / relative, ec);

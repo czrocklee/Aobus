@@ -295,10 +295,10 @@ namespace ao::gtk::test
     playback.commands().seek(std::chrono::milliseconds{550});
     playback.commands().stop();
 
-    auto const restored = runtime.restorePlaybackSession();
-    REQUIRE(restored);
-    REQUIRE(restored->restored);
-    CHECK(restored->trackId == track2);
+    auto const restoredRes = runtime.restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    CHECK(restoredRes->trackId == track2);
     auto const snapshot = playback.snapshot();
     CHECK(snapshot.transport.nowPlaying.trackId == track2);
     CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{550});

@@ -47,15 +47,16 @@ namespace ao::audio::test
     template<typename T>
     std::vector<T> extractSamples(DecoderSession& decoder, std::size_t count)
     {
-      auto const block = decoder.readNextBlock();
+      auto const blockRes = decoder.readNextBlock();
 
-      if (!block || block->bytes.empty())
+      if (!blockRes || blockRes->bytes.empty())
       {
         return {};
       }
 
-      auto const available = std::min<std::size_t>(count, static_cast<std::size_t>(block->frames) * 2); // Assume Stereo
-      auto const* data = reinterpret_cast<T const*>(block->bytes.data());
+      auto const available =
+        std::min<std::size_t>(count, static_cast<std::size_t>(blockRes->frames) * 2); // Assume Stereo
+      auto const* data = reinterpret_cast<T const*>(blockRes->bytes.data());
 
       return {data, data + available};
     }
@@ -175,10 +176,10 @@ namespace ao::audio::test
         auto decoder = AlacDecoderSession{SampleEncoding::Signed24PackedLe};
         REQUIRE(decoder.open(testFile));
         CHECK(decoder.streamInfo().codec == AudioCodec::Alac);
-        auto const block = decoder.readNextBlock();
+        auto const blockRes = decoder.readNextBlock();
 
-        REQUIRE(block);
-        samples24 = unpackS24(block->bytes);
+        REQUIRE(blockRes);
+        samples24 = unpackS24(blockRes->bytes);
       }
 
       // 2. Acquire target 32-bit padded samples
@@ -222,14 +223,14 @@ namespace ao::audio::test
       auto const expectedFrame = frameIndexAt(info, seekOffset);
 
       REQUIRE(decoder.seek(seekOffset));
-      auto const block = decoder.readNextBlock();
+      auto const blockRes = decoder.readNextBlock();
 
-      REQUIRE(block);
-      REQUIRE_FALSE(block->endOfStream);
-      REQUIRE(block->frames > 0);
-      CHECK(block->firstFrameIndex == expectedFrame);
-      checkPcmBlockLayout(*block, info.outputFormat);
-      checkBlockDoesNotRunPastStream(*block, info);
+      REQUIRE(blockRes);
+      REQUIRE_FALSE(blockRes->endOfStream);
+      REQUIRE(blockRes->frames > 0);
+      CHECK(blockRes->firstFrameIndex == expectedFrame);
+      checkPcmBlockLayout(*blockRes, info.outputFormat);
+      checkBlockDoesNotRunPastStream(*blockRes, info);
     }
   }
 
@@ -272,9 +273,9 @@ namespace ao::audio::test
       // Use this source file itself as a fake FLAC
       auto const testFile = std::filesystem::path{__FILE__};
       auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-      auto const res = decoder.open(testFile);
+      auto const resRes = decoder.open(testFile);
 
-      CHECK_FALSE(res);
+      CHECK_FALSE(resRes);
     }
 
     SECTION("MP3: Seek near EOF")
@@ -294,20 +295,20 @@ namespace ao::audio::test
       auto const expectedFrame = frameIndexAt(info, seekOffset);
 
       REQUIRE(decoder.seek(seekOffset));
-      auto const block = decoder.readNextBlock();
-      REQUIRE(block);
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
 
-      if (block->endOfStream)
+      if (blockRes->endOfStream)
       {
-        CHECK(block->frames == 0);
-        CHECK(block->bytes.empty());
+        CHECK(blockRes->frames == 0);
+        CHECK(blockRes->bytes.empty());
       }
       else
       {
-        REQUIRE(block->frames > 0);
-        checkNearSeekFrame(*block, expectedFrame, info.sourceFormat.sampleRate);
-        checkPcmBlockLayout(*block, info.outputFormat);
-        checkBlockDoesNotRunPastStream(*block, info);
+        REQUIRE(blockRes->frames > 0);
+        checkNearSeekFrame(*blockRes, expectedFrame, info.sourceFormat.sampleRate);
+        checkPcmBlockLayout(*blockRes, info.outputFormat);
+        checkBlockDoesNotRunPastStream(*blockRes, info);
       }
     }
 
@@ -328,19 +329,19 @@ namespace ao::audio::test
       auto const expectedFrame = frameIndexAt(info, seekOffset);
 
       REQUIRE(decoder.seek(seekOffset));
-      auto const block = decoder.readNextBlock();
-      REQUIRE(block);
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
 
-      if (block->endOfStream && block->frames == 0)
+      if (blockRes->endOfStream && blockRes->frames == 0)
       {
-        CHECK(block->bytes.empty());
+        CHECK(blockRes->bytes.empty());
       }
       else
       {
-        REQUIRE(block->frames > 0);
-        CHECK(block->firstFrameIndex == expectedFrame);
-        checkPcmBlockLayout(*block, info.outputFormat);
-        checkBlockDoesNotRunPastStream(*block, info);
+        REQUIRE(blockRes->frames > 0);
+        CHECK(blockRes->firstFrameIndex == expectedFrame);
+        checkPcmBlockLayout(*blockRes, info.outputFormat);
+        checkBlockDoesNotRunPastStream(*blockRes, info);
       }
     }
   }

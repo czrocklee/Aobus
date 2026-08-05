@@ -1288,7 +1288,7 @@ namespace ao::rt
 
       auto const script = delta::diff(previousTrackIds, finalTrackIds, updatedTrackIds, preferredMovedIds);
 
-      if (auto const applied = delta::apply(previousTrackIds, script); !applied || *applied != finalTrackIds)
+      if (auto const appliedRes = delta::apply(previousTrackIds, script); !appliedRes || *appliedRes != finalTrackIds)
       {
         publishReset(previousSize);
         return;

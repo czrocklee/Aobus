@@ -28,14 +28,14 @@ namespace ao::audio::test
     CHECK(info.sourceFormat.sampleRate > 0);
     CHECK(info.duration > std::chrono::milliseconds{0});
 
-    auto const firstBlock = decoder.readNextBlock();
-    REQUIRE(firstBlock);
-    CHECK(firstBlock->firstFrameIndex == 0);
+    auto const firstBlockRes = decoder.readNextBlock();
+    REQUIRE(firstBlockRes);
+    CHECK(firstBlockRes->firstFrameIndex == 0);
 
     REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
-    auto const soughtBlock = decoder.readNextBlock();
-    REQUIRE(soughtBlock);
-    CHECK(soughtBlock->firstFrameIndex > 0);
+    auto const soughtBlockRes = decoder.readNextBlock();
+    REQUIRE(soughtBlockRes);
+    CHECK(soughtBlockRes->firstFrameIndex > 0);
 
     decoder.flush();
     CHECK(decoder.readNextBlock()); // Should read again from where we were, or next block
@@ -52,9 +52,9 @@ namespace ao::audio::test
     auto paddedDecoder = FlacDecoderSession{SampleEncoding::Signed32Le};
     REQUIRE(paddedDecoder.open(testFile));
     CHECK(encodingContainerBits(paddedDecoder.streamInfo().outputFormat.encoding) == 32);
-    auto const block = paddedDecoder.readNextBlock();
-    REQUIRE(block);
-    CHECK_FALSE(block->bytes.empty());
+    auto const blockRes = paddedDecoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK_FALSE(blockRes->bytes.empty());
   }
 
   TEST_CASE("FlacDecoderSession - rejects precision-losing output", "[audio][unit][flac]")
@@ -81,9 +81,9 @@ namespace ao::audio::test
     REQUIRE(info.duration > std::chrono::milliseconds{0});
 
     REQUIRE(decoder.seek(info.duration));
-    auto const finalBlock = decoder.readNextBlock();
-    REQUIRE(finalBlock);
-    CHECK(finalBlock->frames > 0);
+    auto const finalBlockRes = decoder.readNextBlock();
+    REQUIRE(finalBlockRes);
+    CHECK(finalBlockRes->frames > 0);
   }
 
   TEST_CASE("FlacDecoderSession - stable end of stream", "[audio][unit][flac]")

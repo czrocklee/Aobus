@@ -44,9 +44,9 @@ namespace ao::gtk::test
     void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)
     {
       runtime.reloadAllTracks();
-      auto const view = runtime.workspace().navigate({.target = rt::kAllTracksListId});
-      REQUIRE(view);
-      REQUIRE(runtime.playback().commands().startFromView(*view, trackId));
+      auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
+      REQUIRE(viewRes);
+      REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
       REQUIRE(waitForPlaybackSettlement(runtime, trackId));
     }
   } // namespace

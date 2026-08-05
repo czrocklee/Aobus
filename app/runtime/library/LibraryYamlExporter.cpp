@@ -285,16 +285,14 @@ namespace ao::rt
       std::uint64_t fileSize = 0;
       std::uint64_t mtime = 0;
 
-      auto const manifestResult = manifestReader.get(property.uri());
-
-      if (manifestResult)
+      if (auto const manifestRes = manifestReader.get(property.uri()); manifestRes)
       {
-        fileSize = manifestResult->fileSize();
-        mtime = manifestResult->mtime();
+        fileSize = manifestRes->fileSize();
+        mtime = manifestRes->mtime();
       }
-      else if (manifestResult.error().code != Error::Code::NotFound)
+      else if (manifestRes.error().code != Error::Code::NotFound)
       {
-        return std::unexpected{manifestResult.error()};
+        return std::unexpected{manifestRes.error()};
       }
 
       node.append_child() << ryml::key("fileSize") << fileSize;
@@ -501,9 +499,9 @@ namespace ao::rt
             Error::Code::CorruptData, std::format("Track {} contains an invalid cold record", trackId.raw()));
         }
 
-        auto uri = library::LibraryUri::parse(optTrackView->property().uri());
+        auto uriRes = library::LibraryUri::parse(optTrackView->property().uri());
 
-        if (!uri || uri->value() != optTrackView->property().uri())
+        if (!uriRes || uriRes->value() != optTrackView->property().uri())
         {
           return makeError(
             Error::Code::CorruptData, std::format("Track {} contains an invalid library URI", trackId.raw()));
@@ -511,7 +509,7 @@ namespace ao::rt
 
         auto refNode = orderNode.append_child();
         refNode |= ryml::MAP;
-        appendString(refNode, "uri", uri->value());
+        appendString(refNode, "uri", uriRes->value());
       }
 
       return {};
@@ -560,15 +558,15 @@ namespace ao::rt
     root |= ryml::MAP;
 
     auto const transaction = ml.readTransaction();
-    auto const header = ml.metadata().load(transaction);
+    auto const headerRes = ml.metadata().load(transaction);
 
-    if (!header)
+    if (!headerRes)
     {
-      return std::unexpected{header.error()};
+      return std::unexpected{headerRes.error()};
     }
 
     root.append_child() << ryml::key("version") << 3;
-    appendString(root, "libraryId", utility::formatUuid(header->libraryId));
+    appendString(root, "libraryId", utility::formatUuid(headerRes->libraryId));
     appendString(root, "export_mode", exportModeName(mode));
 
     auto library = root.append_child();
@@ -654,14 +652,14 @@ namespace ao::rt
     trackNode.append_child() << ryml::key("id") << id.raw();
 
     auto const property = view.property();
-    auto uri = library::LibraryUri::parse(property.uri());
+    auto uriRes = library::LibraryUri::parse(property.uri());
 
-    if (!uri || uri->value() != property.uri())
+    if (!uriRes || uriRes->value() != property.uri())
     {
       return makeError(Error::Code::CorruptData, std::format("Track {} contains an invalid library URI", id.raw()));
     }
 
-    appendString(trackNode, "uri", uri->value());
+    appendString(trackNode, "uri", uriRes->value());
 
     auto optMediaTrack = std::optional<MediaTrack>{};
     auto optBaseline = std::optional<library::TrackBuilder>{};
@@ -670,18 +668,18 @@ namespace ao::rt
     {
       auto fileEc = std::error_code{};
 
-      auto fullPathResult = uri->resolveUnder(ml.rootPath());
+      auto fullPathRes = uriRes->resolveUnder(ml.rootPath());
 
-      if (!fullPathResult)
+      if (!fullPathRes)
       {
-        return std::unexpected{fullPathResult.error()};
+        return std::unexpected{fullPathRes.error()};
       }
 
-      if (auto const& fullPath = *fullPathResult; std::filesystem::exists(fullPath, fileEc) && !fileEc)
+      if (auto const& fullPath = *fullPathRes; std::filesystem::exists(fullPath, fileEc) && !fileEc)
       {
-        if (auto mediaTrackResult = readMediaTrack(fullPath); mediaTrackResult)
+        if (auto mediaTrackRes = readMediaTrack(fullPath); mediaTrackRes)
         {
-          optMediaTrack.emplace(std::move(*mediaTrackResult));
+          optMediaTrack.emplace(std::move(*mediaTrackRes));
           optBaseline = optMediaTrack->builder();
         }
       }

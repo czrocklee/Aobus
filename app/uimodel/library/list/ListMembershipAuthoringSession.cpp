@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/query/Expression.h>
@@ -10,7 +12,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 
 #include <algorithm>
 #include <expected>
@@ -120,15 +121,15 @@ namespace ao::uimodel
     rt::Library& library,
     std::span<TrackId const> const trackIds)
   {
-    auto targetsResult = library.bindTrackTargets(trackIds);
+    auto targetsRes = library.bindTrackTargets(trackIds);
 
-    if (!targetsResult)
+    if (!targetsRes)
     {
-      return std::unexpected{targetsResult.error()};
+      return std::unexpected{targetsRes.error()};
     }
 
     return std::unique_ptr<ListMembershipAuthoringSession>{new ListMembershipAuthoringSession{
-      std::make_unique<Impl>(Impl{.library = library, .targets = std::move(*targetsResult)})}};
+      std::make_unique<Impl>(Impl{.library = library, .targets = std::move(*targetsRes)})}};
   }
 
   ListMembershipAuthoringSession::ListMembershipAuthoringSession(std::unique_ptr<Impl> implPtr)

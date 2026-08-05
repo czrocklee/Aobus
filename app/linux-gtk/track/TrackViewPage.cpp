@@ -551,15 +551,14 @@ namespace ao::gtk
 
     if (auto const capabilities = orderCapabilities(); !capabilities.canGapMove)
     {
-      auto const stateResult = _runtime.views().findTrackListState(_viewId);
-      auto const sourceState = _runtime.views().listSourceState(_viewId);
-      auto const savedList = stateResult && !rt::isVirtualListId(stateResult->listId);
+      auto const stateRes = _runtime.views().findTrackListState(_viewId);
+      auto const sourceStateRes = _runtime.views().listSourceState(_viewId);
+      auto const savedList = stateRes && !rt::isVirtualListId(stateRes->listId);
       auto const authoring = _runtime.library().authoringAvailability();
       auto const shouldExplain =
-        savedList &&
-        (capabilities.canAuthorOrder || stateResult->presentation.id == rt::kListOrderTrackPresentationId ||
-         authoring.state == rt::LibraryAuthoringState::Maintenance || stateResult->optFilterError || !sourceState ||
-         *sourceState != rt::TrackSourceState::Live);
+        savedList && (capabilities.canAuthorOrder || stateRes->presentation.id == rt::kListOrderTrackPresentationId ||
+                      authoring.state == rt::LibraryAuthoringState::Maintenance || stateRes->optFilterError ||
+                      !sourceStateRes || *sourceStateRes != rt::TrackSourceState::Live);
 
       if (shouldExplain)
       {
@@ -589,37 +588,37 @@ namespace ao::gtk
 
   uimodel::ListOrderCapabilityState TrackViewPage::orderCapabilities() const
   {
-    auto const stateResult = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _runtime.views().findTrackListState(_viewId);
 
-    if (!stateResult)
+    if (!stateRes)
     {
       return uimodel::ListOrderCapabilityState{
         .disabledReason = "This view is no longer available.",
       };
     }
 
-    auto const sourceState = _runtime.views().listSourceState(_viewId);
+    auto const sourceStateRes = _runtime.views().listSourceState(_viewId);
     return uimodel::describeListOrderCapabilities(uimodel::ListOrderCapabilityInput{
-      .listId = stateResult->listId,
-      .presentation = stateResult->presentation,
-      .quickFilterExpression = stateResult->filterExpression,
-      .sourceLive = sourceState && *sourceState == rt::TrackSourceState::Live,
-      .sourceHasError = stateResult->optFilterError.has_value(),
+      .listId = stateRes->listId,
+      .presentation = stateRes->presentation,
+      .quickFilterExpression = stateRes->filterExpression,
+      .sourceLive = sourceStateRes && *sourceStateRes == rt::TrackSourceState::Live,
+      .sourceHasError = stateRes->optFilterError.has_value(),
       .authoring = _runtime.library().authoringAvailability(),
     });
   }
 
   void TrackViewPage::applyListOrderCommand(TrackOrderCommand const command)
   {
-    auto sessionResult = uimodel::ListOrderAuthoringSession::begin(_runtime.library(), _runtime.views(), _viewId);
+    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(_runtime.library(), _runtime.views(), _viewId);
 
-    if (!sessionResult)
+    if (!sessionRes)
     {
-      setStatusMessage(sessionResult.error().message);
+      setStatusMessage(sessionRes.error().message);
       return;
     }
 
-    auto& session = **sessionResult;
+    auto& session = **sessionRes;
     auto const selectedIds = _viewHostPtr->selectionController().selectedTrackIds();
     auto const handleStatus = [this](rt::ListOrderAuthoringStatus const status, std::string const& appliedMessage)
     {
@@ -741,31 +740,31 @@ namespace ao::gtk
       return;
     }
 
-    auto const editValueResult = uiDef->parseInlineEdit(newValue);
+    auto const editValueRes = uiDef->parseInlineEdit(newValue);
 
-    if (!editValueResult)
+    if (!editValueRes)
     {
-      setStatusMessage(editValueResult.error().message);
+      setStatusMessage(editValueRes.error().message);
       return;
     }
 
     auto patch = rt::MetadataPatch{};
 
-    if (!uimodel::writeTrackFieldPatch(patch, field, *editValueResult))
+    if (!uimodel::writeTrackFieldPatch(patch, field, *editValueRes))
     {
       return;
     }
 
-    auto const replyResult = session.submitMetadata(patch);
+    auto const replyRes = session.submitMetadata(patch);
 
-    if (!replyResult)
+    if (!replyRes)
     {
-      APP_LOG_ERROR("Metadata update failed: {}", replyResult.error().message);
-      setStatusMessage(replyResult.error().message);
+      APP_LOG_ERROR("Metadata update failed: {}", replyRes.error().message);
+      setStatusMessage(replyRes.error().message);
       return;
     }
 
-    switch (replyResult->status)
+    switch (replyRes->status)
     {
       case rt::TrackAuthoringStatus::NoOp: return;
       case rt::TrackAuthoringStatus::Stale:
@@ -775,7 +774,7 @@ namespace ao::gtk
       case rt::TrackAuthoringStatus::Applied: break;
     }
 
-    uiDef->applyRowEditValue(*rowPtr, *editValueResult, field);
+    uiDef->applyRowEditValue(*rowPtr, *editValueRes, field);
     clearStatusMessage();
   }
 

@@ -62,17 +62,17 @@ namespace ao::query::test
   {
     SECTION("Valid predicate yields a plan")
     {
-      auto const plan = compileQuery(parseOk("$year = 1990"));
-      REQUIRE(plan.has_value());
-      CHECK(plan->accessProfile != AccessProfile::NoTrackData);
+      auto const planRes = compileQuery(parseOk("$year = 1990"));
+      REQUIRE(planRes.has_value());
+      CHECK(planRes->accessProfile != AccessProfile::NoTrackData);
     }
 
     SECTION("Non-predicate expression yields an Error")
     {
-      auto const plan = compileQuery(parseOk("$year"));
-      REQUIRE_FALSE(plan.has_value());
-      CHECK(plan.error().code == Error::Code::FormatRejected);
-      CHECK_FALSE(plan.error().message.empty());
+      auto const planRes = compileQuery(parseOk("$year"));
+      REQUIRE_FALSE(planRes.has_value());
+      CHECK(planRes.error().code == Error::Code::FormatRejected);
+      CHECK_FALSE(planRes.error().message.empty());
     }
   }
 } // namespace ao::query::test

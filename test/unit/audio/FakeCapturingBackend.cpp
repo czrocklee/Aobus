@@ -43,9 +43,9 @@ namespace ao::audio::test
   {
     auto const lock = std::scoped_lock{_mutex};
 
-    if (!_openResult)
+    if (!_openRes)
     {
-      return std::unexpected{_openResult.error()};
+      return std::unexpected{_openRes.error()};
     }
 
     auto const encodings = detail::losslessPcmEncodings(format);
@@ -177,10 +177,10 @@ namespace ao::audio::test
     _mockPropertyInfos[id] = info;
   }
 
-  void FakeCapturingBackend::setOpenResult(Result<> res)
+  void FakeCapturingBackend::setOpenResult(Result<> resRes)
   {
     auto const lock = std::scoped_lock{_mutex};
-    _openResult = res;
+    _openRes = resRes;
   }
 
   void FakeCapturingBackend::setPrewarmEncoding(std::optional<SampleEncoding> optEncoding)

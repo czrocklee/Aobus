@@ -253,14 +253,14 @@ namespace ao::rt
              optPendingViewStart->sessionPtr->indexOf(optPendingViewStart->trackId).has_value();
     }
 
-    void completePendingStart(Result<PreparedPlaybackStart> preparedStart)
+    void completePendingStart(Result<PreparedPlaybackStart> preparedStartRes)
     {
       if (!optPendingViewStart)
       {
         return;
       }
 
-      if (!preparedStart)
+      if (!preparedStartRes)
       {
         optPendingViewStart.reset();
         return;
@@ -268,16 +268,16 @@ namespace ao::rt
 
       auto pending = std::move(*optPendingViewStart);
       optPendingViewStart.reset();
-      auto barrier = transport.commitStagedPlayback(std::move(*preparedStart), false);
+      auto barrierRes = transport.commitStagedPlayback(std::move(*preparedStartRes), false);
 
-      if (!barrier || isClosing())
+      if (!barrierRes || isClosing())
       {
         return;
       }
 
       if (sessionPtr)
       {
-        sessionPtr->clearPreparedCoveredBy(*barrier);
+        sessionPtr->clearPreparedCoveredBy(*barrierRes);
         captureRestorableSnapshot();
       }
 
@@ -477,7 +477,7 @@ namespace ao::rt
       return prepareLookahead(std::move(pending));
     }
 
-    bool completeLookahead(std::shared_ptr<PendingLookahead> const& pendingPtr, Result<PreparedNextToken> prepared)
+    bool completeLookahead(std::shared_ptr<PendingLookahead> const& pendingPtr, Result<PreparedNextToken> preparedRes)
     {
       if (pendingLookaheadPtr != pendingPtr)
       {
@@ -487,9 +487,9 @@ namespace ao::rt
       auto pending = std::move(*pendingPtr);
       pendingLookaheadPtr.reset();
 
-      if (!prepared)
+      if (!preparedRes)
       {
-        return prepared.error().code != Error::Code::Conflict && retryLookahead(std::move(pending));
+        return preparedRes.error().code != Error::Code::Conflict && retryLookahead(std::move(pending));
       }
 
       if (!isLookaheadCandidateCurrent(pending))
@@ -498,7 +498,7 @@ namespace ao::rt
       }
 
       sessionPtr->preparedNextRegistry().activate(
-        *prepared, sessionPtr->anchorFor(pending.trackId, sessionPtr->cursor().anchor().anchorIndex()));
+        *preparedRes, sessionPtr->anchorFor(pending.trackId, sessionPtr->cursor().anchor().anchorIndex()));
       return true;
     }
 
@@ -510,7 +510,7 @@ namespace ao::rt
       auto const pendingWeakPtr = std::weak_ptr{pendingPtr};
       pendingLookaheadPtr = pendingPtr;
 
-      auto admitted = transport.prepareSuccessionNextAsync(
+      auto admittedRes = transport.prepareSuccessionNextAsync(
         successor,
         sourceListId,
         [this, pendingWeakPtr]
@@ -518,17 +518,17 @@ namespace ao::rt
           auto const lockedPendingPtr = pendingWeakPtr.lock();
           return lockedPendingPtr && isPendingLookaheadCurrent(lockedPendingPtr);
         },
-        [this, pendingWeakPtr](Result<PreparedNextToken> prepared)
+        [this, pendingWeakPtr](Result<PreparedNextToken> preparedRes)
         {
           if (auto const lockedPendingPtr = pendingWeakPtr.lock(); lockedPendingPtr)
           {
-            std::ignore = completeLookahead(lockedPendingPtr, std::move(prepared));
+            std::ignore = completeLookahead(lockedPendingPtr, std::move(preparedRes));
           }
         });
 
-      if (!admitted)
+      if (!admittedRes)
       {
-        return completeLookahead(pendingPtr, std::unexpected{admitted.error()});
+        return completeLookahead(pendingPtr, std::unexpected{admittedRes.error()});
       }
 
       return true;
@@ -581,11 +581,11 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "No active playback sequence");
       }
 
-      auto barrier = transport.playTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId, false);
+      auto barrierRes = transport.playTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId, false);
 
-      if (!barrier)
+      if (!barrierRes)
       {
-        return std::unexpected{barrier.error()};
+        return std::unexpected{barrierRes.error()};
       }
 
       if (isClosing())
@@ -593,12 +593,12 @@ namespace ao::rt
         return {};
       }
 
-      sessionPtr->clearPreparedCoveredBy(*barrier);
-      auto adopted = sessionPtr->adoptCurrent(trackId, std::nullopt, origin);
+      sessionPtr->clearPreparedCoveredBy(*barrierRes);
+      auto adoptedRes = sessionPtr->adoptCurrent(trackId, std::nullopt, origin);
 
-      if (!adopted)
+      if (!adoptedRes)
       {
-        return std::unexpected{adopted.error()};
+        return std::unexpected{adoptedRes.error()};
       }
 
       resetFailureState();
@@ -764,12 +764,12 @@ namespace ao::rt
       while (attemptedTrackIds.size() < kMaxConsecutivePlaybackFailures)
       {
         attemptedTrackIds.push_back(candidate);
-        auto const played = startTrack(candidate,
-                                       resolution.action == PlaybackCursor::CommandAction::RestartCurrent
-                                         ? ShuffleHistory::TransitionOrigin::Restart
-                                         : candidateOrigin);
+        auto const playedRes = startTrack(candidate,
+                                          resolution.action == PlaybackCursor::CommandAction::RestartCurrent
+                                            ? ShuffleHistory::TransitionOrigin::Restart
+                                            : candidateOrigin);
 
-        if (played)
+        if (playedRes)
         {
           return true;
         }
@@ -838,10 +838,10 @@ namespace ao::rt
         return;
       }
 
-      auto adopted =
+      auto adoptedRes =
         sessionPtr->adoptCurrent(event.trackId, event.optPreparedNextToken, ShuffleHistory::TransitionOrigin::Forward);
 
-      if (!adopted)
+      if (!adoptedRes)
       {
         return;
       }
@@ -1095,48 +1095,48 @@ namespace ao::rt
     impl->cancelPendingStart();
     impl->cancelPendingLookahead();
 
-    auto launchSpec = impl->views.capturePlaybackLaunchSpec(viewId);
+    auto launchSpecRes = impl->views.capturePlaybackLaunchSpec(viewId);
 
-    if (!launchSpec)
+    if (!launchSpecRes)
     {
-      return std::unexpected{launchSpec.error()};
+      return std::unexpected{launchSpecRes.error()};
     }
 
-    auto candidateSession = PlaybackCursorSession::create(*launchSpec,
-                                                          startTrackId,
-                                                          impl->sources,
-                                                          impl->library,
-                                                          impl->repeatMode,
-                                                          impl->shuffleMode,
-                                                          impl->makeCandidateChooser());
+    auto candidateSessionRes = PlaybackCursorSession::create(*launchSpecRes,
+                                                             startTrackId,
+                                                             impl->sources,
+                                                             impl->library,
+                                                             impl->repeatMode,
+                                                             impl->shuffleMode,
+                                                             impl->makeCandidateChooser());
 
-    if (!candidateSession)
+    if (!candidateSessionRes)
     {
-      return std::unexpected{candidateSession.error()};
+      return std::unexpected{candidateSessionRes.error()};
     }
 
-    auto request = playbackRequestForTrack(impl->library, startTrackId);
+    auto requestRes = playbackRequestForTrack(impl->library, startTrackId);
 
-    if (!request)
+    if (!requestRes)
     {
-      return std::unexpected{request.error()};
+      return std::unexpected{requestRes.error()};
     }
 
     impl->optPendingViewStart.emplace(Impl::PendingViewStart{
       .trackId = startTrackId,
-      .sessionPtr = std::move(*candidateSession),
+      .sessionPtr = std::move(*candidateSessionRes),
     });
-    auto admitted = impl->transport.stageSuccessionPlaybackAsync(
-      *request,
-      launchSpec->sourceListId,
+    auto admittedRes = impl->transport.stageSuccessionPlaybackAsync(
+      *requestRes,
+      launchSpecRes->sourceListId,
       [impl] { return impl->acceptPendingStart(); },
-      [impl](Result<PreparedPlaybackStart> preparedStart) mutable
-      { impl->completePendingStart(std::move(preparedStart)); });
+      [impl](Result<PreparedPlaybackStart> preparedStartRes) mutable
+      { impl->completePendingStart(std::move(preparedStartRes)); });
 
-    if (!admitted)
+    if (!admittedRes)
     {
       impl->optPendingViewStart.reset();
-      return std::unexpected{admitted.error()};
+      return std::unexpected{admittedRes.error()};
     }
 
     return {};

@@ -24,10 +24,10 @@ namespace ao::winui::test
 
     auto tree = ryml::Tree{yaml::callbacks()};
     REQUIRE(DesktopSettingsYamlSchema{}.serialize(tree.rootref(), state));
-    auto decoded = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+    auto decodedRes = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
 
-    REQUIRE(decoded);
-    CHECK(*decoded == state);
+    REQUIRE(decodedRes);
+    CHECK(*decodedRes == state);
   }
 
   TEST_CASE("DesktopSettingsYamlSchema - accepts pane width boundaries", "[winui][unit][layout]")
@@ -38,11 +38,11 @@ namespace ao::winui::test
 
     auto tree = ryml::Tree{yaml::callbacks()};
     REQUIRE(DesktopSettingsYamlSchema{}.serialize(tree.rootref(), state));
-    auto decoded = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+    auto decodedRes = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
 
-    REQUIRE(decoded);
-    CHECK(decoded->navigationPaneWidth == kMaximumNavigationPaneWidth);
-    CHECK(decoded->inspectorPaneWidth == kMinimumInspectorPaneWidth);
+    REQUIRE(decodedRes);
+    CHECK(decodedRes->navigationPaneWidth == kMaximumNavigationPaneWidth);
+    CHECK(decodedRes->inspectorPaneWidth == kMinimumInspectorPaneWidth);
   }
 
   TEST_CASE("DesktopSettingsYamlSchema - rejects noncanonical persisted state", "[winui][unit][layout]")

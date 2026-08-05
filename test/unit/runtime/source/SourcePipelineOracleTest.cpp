@@ -205,9 +205,9 @@ namespace ao::rt::test
       REQUIRE(visibleTrackIds.size() > 1);
       auto const rankedTrackId = visibleTrackIds.back();
       auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(orderedListId, visibleTrackIds));
-      auto const move = writer.moveListOrder(binding, std::array{rankedTrackId}, visibleTrackIds.front());
-      REQUIRE(move);
-      REQUIRE(move->status == ListOrderAuthoringStatus::Applied);
+      auto const moveRes = writer.moveListOrder(binding, std::array{rankedTrackId}, visibleTrackIds.front());
+      REQUIRE(moveRes);
+      REQUIRE(moveRes->status == ListOrderAuthoringStatus::Applied);
       assertOracle();
 
       REQUIRE(writerFixture.updateMetadata(std::array{rankedTrackId}, MetadataPatch{.optYear = 2010}));

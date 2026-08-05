@@ -101,14 +101,14 @@ namespace ao::winui
     // Deliberately discarded: a failed release must not cost the successor.
     std::ignore = guarded(operations.releaseActiveGraph, "Active graph release");
 
-    auto const launched = guarded(operations.launchSuccessor, "Successor process launch");
+    auto const launchedRes = guarded(operations.launchSuccessor, "Successor process launch");
 
-    if (!launched)
+    if (!launchedRes)
     {
-      report(operations.reportLaunchFailure, launched.error());
+      report(operations.reportLaunchFailure, launchedRes.error());
     }
 
     exitProcess(operations.exitProcess);
-    return launched ? DestructiveLibraryRestartOutcome::Launched : DestructiveLibraryRestartOutcome::LaunchFailed;
+    return launchedRes ? DestructiveLibraryRestartOutcome::Launched : DestructiveLibraryRestartOutcome::LaunchFailed;
   }
 } // namespace ao::winui

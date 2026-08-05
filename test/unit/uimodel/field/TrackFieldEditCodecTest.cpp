@@ -18,9 +18,9 @@ namespace ao::uimodel::test
     REQUIRE(text != nullptr);
     CHECK(*text == " Test ");
 
-    auto const parsed = parseTextEditValue("New Title");
-    REQUIRE(parsed.has_value());
-    auto const* parsedText = std::get_if<std::string>(&*parsed);
+    auto const parsedRes = parseTextEditValue("New Title");
+    REQUIRE(parsedRes.has_value());
+    auto const* parsedText = std::get_if<std::string>(&*parsedRes);
     REQUIRE(parsedText != nullptr);
     CHECK(*parsedText == "New Title");
   }

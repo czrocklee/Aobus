@@ -122,20 +122,20 @@ namespace ao::rt
           item.classification = ScanClassification::Error;
           item.errorMessage = entryEc.message();
         }
-        else if (auto manifestResult = manifestReader.get(uri); !manifestResult)
+        else if (auto manifestRes = manifestReader.get(uri); !manifestRes)
         {
-          if (manifestResult.error().code == Error::Code::NotFound)
+          if (manifestRes.error().code == Error::Code::NotFound)
           {
             item.classification = ScanClassification::New;
           }
           else
           {
-            return std::unexpected{manifestResult.error()};
+            return std::unexpected{manifestRes.error()};
           }
         }
         else
         {
-          auto const& view = *manifestResult;
+          auto const& view = *manifestRes;
           item.trackId = view.trackId();
           item.audioPayloadLength = view.audioPayloadLength();
           item.audioSignature = view.audioSignature();
@@ -242,28 +242,28 @@ namespace ao::rt
           continue;
         }
 
-        auto fileResult = media::file::File::open(item.fullPath);
+        auto fileRes = media::file::File::open(item.fullPath);
 
-        if (!fileResult)
+        if (!fileRes)
         {
           continue;
         }
 
-        auto payloadResult = fileResult->audioPayload();
+        auto payloadRes = fileRes->audioPayload();
 
-        if (!payloadResult)
+        if (!payloadRes)
         {
           continue;
         }
 
-        item.audioPayloadLength = static_cast<std::uint64_t>(payloadResult->bytes.size());
+        item.audioPayloadLength = static_cast<std::uint64_t>(payloadRes->bytes.size());
 
         if (!missingByLength.contains(item.audioPayloadLength))
         {
           continue;
         }
 
-        auto optIdentity = library::readAudioIdentity(payloadResult->bytes);
+        auto optIdentity = library::readAudioIdentity(payloadRes->bytes);
 
         if (!optIdentity)
         {
@@ -357,11 +357,11 @@ namespace ao::rt
     }
 
     auto transaction = _library.readTransaction();
-    auto const headerResult = _library.metadata().load(transaction);
+    auto const headerRes = _library.metadata().load(transaction);
 
-    if (!headerResult)
+    if (!headerRes)
     {
-      return std::unexpected{headerResult.error()};
+      return std::unexpected{headerRes.error()};
     }
 
     auto const libraryRevision = _library.libraryRevision(transaction);
@@ -395,14 +395,14 @@ namespace ao::rt
         progress(entry.path());
       }
 
-      auto uri = library::LibraryUri::parse(utility::pathToGenericUtf8(entry.path().lexically_relative(root)));
+      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(entry.path().lexically_relative(root)));
 
-      if (!uri)
+      if (!uriRes)
       {
         auto item = ScanItem{.uri = utility::pathToGenericUtf8(entry.path().filename()),
                              .fullPath = entry.path(),
                              .classification = ScanClassification::Error,
-                             .errorMessage = uri.error().message};
+                             .errorMessage = uriRes.error().message};
         items.push_back(std::move(item));
         it.disable_recursion_pending();
         it.increment(ec);
@@ -410,15 +410,15 @@ namespace ao::rt
         continue;
       }
 
-      auto resolvedPath = uri->resolveUnder(root);
+      auto resolvedPathRes = uriRes->resolveUnder(root);
 
-      if (!resolvedPath)
+      if (!resolvedPathRes)
       {
-        blockedUriPrefixes.insert(std::string{uri->value()});
-        auto item = ScanItem{.uri = std::string{uri->value()},
+        blockedUriPrefixes.insert(std::string{uriRes->value()});
+        auto item = ScanItem{.uri = std::string{uriRes->value()},
                              .fullPath = entry.path(),
                              .classification = ScanClassification::Error,
-                             .errorMessage = resolvedPath.error().message};
+                             .errorMessage = resolvedPathRes.error().message};
         items.push_back(std::move(item));
         it.disable_recursion_pending();
         it.increment(ec);
@@ -426,16 +426,16 @@ namespace ao::rt
         continue;
       }
 
-      auto canonicalUri =
-        library::LibraryUri::parse(utility::pathToGenericUtf8(resolvedPath->lexically_relative(resolvedRoot)));
+      auto canonicalUriRes =
+        library::LibraryUri::parse(utility::pathToGenericUtf8(resolvedPathRes->lexically_relative(resolvedRoot)));
 
-      if (!canonicalUri)
+      if (!canonicalUriRes)
       {
-        blockedUriPrefixes.insert(std::string{uri->value()});
-        auto item = ScanItem{.uri = std::string{uri->value()},
-                             .fullPath = *resolvedPath,
+        blockedUriPrefixes.insert(std::string{uriRes->value()});
+        auto item = ScanItem{.uri = std::string{uriRes->value()},
+                             .fullPath = *resolvedPathRes,
                              .classification = ScanClassification::Error,
-                             .errorMessage = canonicalUri.error().message};
+                             .errorMessage = canonicalUriRes.error().message};
         items.push_back(std::move(item));
         it.disable_recursion_pending();
         it.increment(ec);
@@ -444,18 +444,18 @@ namespace ao::rt
       }
 
       // Proactively check if this is a directory we can't enter
-      if (std::filesystem::is_directory(*resolvedPath, entryEc))
+      if (std::filesystem::is_directory(*resolvedPathRes, entryEc))
       {
         auto testEc = std::error_code{};
         {
-          [[maybe_unused]] auto const testIt = std::filesystem::directory_iterator{*resolvedPath, testEc};
+          [[maybe_unused]] auto const testIt = std::filesystem::directory_iterator{*resolvedPathRes, testEc};
         }
 
         if (testEc)
         {
-          blockedUriPrefixes.insert(std::string{canonicalUri->value()});
-          auto item = ScanItem{.uri = std::string{canonicalUri->value()},
-                               .fullPath = *resolvedPath,
+          blockedUriPrefixes.insert(std::string{canonicalUriRes->value()});
+          auto item = ScanItem{.uri = std::string{canonicalUriRes->value()},
+                               .fullPath = *resolvedPathRes,
                                .classification = ScanClassification::Error,
                                .errorMessage = testEc.message()};
           items.push_back(std::move(item));
@@ -472,7 +472,8 @@ namespace ao::rt
         }
       }
 
-      if (auto result = scanEntry(*resolvedPath, std::string{canonicalUri->value()}, manifestReader, seenUris, items);
+      if (auto result =
+            scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, manifestReader, seenUris, items);
           !result)
       {
         return std::unexpected{result.error()};
@@ -490,6 +491,6 @@ namespace ao::rt
     addMissingEntries(items, manifestReader, seenUris, blockedUriPrefixes);
     classifyMovedEntries(items);
 
-    return ScanPlan{headerResult->libraryId, libraryRevision, std::move(items)};
+    return ScanPlan{headerRes->libraryId, libraryRevision, std::move(items)};
   }
 } // namespace ao::rt

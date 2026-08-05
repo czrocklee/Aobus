@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
+
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <algorithm>
 #include <memory>
@@ -139,16 +140,16 @@ namespace ao::uimodel
       return fallbackSpec;
     }
 
-    auto const expr = query::parse(context.listExpression);
+    auto const exprRes = query::parse(context.listExpression);
 
-    if (!expr)
+    if (!exprRes)
     {
-      APP_LOG_DEBUG("TrackPresentationRecommender: parse failed for expression: {}", expr.error().message);
+      APP_LOG_DEBUG("TrackPresentationRecommender: parse failed for expression: {}", exprRes.error().message);
       return fallbackSpec;
     }
 
     auto visitor = VariableVisitor{};
-    visitor.visit(*expr);
+    visitor.visit(*exprRes);
 
     if (visitor.hasWork())
     {

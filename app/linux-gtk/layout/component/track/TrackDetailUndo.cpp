@@ -100,19 +100,19 @@ namespace ao::gtk::layout
     auto patch = rt::MetadataPatch{};
     patch.customUpdates[pendingUndo.key] = pendingUndo.value;
 
-    auto const replyResult = pendingUndo.sessionPtr->submitMetadata(patch);
+    auto const replyRes = pendingUndo.sessionPtr->submitMetadata(patch);
 
-    if (!replyResult)
+    if (!replyRes)
     {
-      APP_LOG_ERROR("Metadata undo failed: {}", replyResult.error().message);
-      auto error = replyResult.error();
+      APP_LOG_ERROR("Metadata undo failed: {}", replyRes.error().message);
+      auto error = replyRes.error();
       clear();
       return std::unexpected{std::move(error)};
     }
 
     auto result = Result<>{};
 
-    switch (replyResult->status)
+    switch (replyRes->status)
     {
       case rt::TrackAuthoringStatus::Applied:
       case rt::TrackAuthoringStatus::NoOp: break;

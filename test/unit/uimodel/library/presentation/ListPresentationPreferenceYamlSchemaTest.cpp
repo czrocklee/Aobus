@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -17,19 +18,19 @@ namespace ao::uimodel::test
     auto state = ListPresentationPreferenceState{};
     state.presentations[ListId{10}] = "plugin-preset";
 
-    auto const document = toListPresentationPreferenceDocument(state);
+    auto const documentRes = toListPresentationPreferenceDocument(state);
 
-    REQUIRE(document);
-    CHECK(document->version == 1);
-    REQUIRE(document->preferences.size() == 1);
-    CHECK(document->preferences[0].listId == 10);
-    CHECK(document->preferences[0].presentationId == "plugin-preset");
+    REQUIRE(documentRes);
+    CHECK(documentRes->version == 1);
+    REQUIRE(documentRes->preferences.size() == 1);
+    CHECK(documentRes->preferences[0].listId == 10);
+    CHECK(documentRes->preferences[0].presentationId == "plugin-preset");
 
-    auto const decoded = listPresentationPreferenceStateFromDocument(*document);
+    auto const decodedRes = listPresentationPreferenceStateFromDocument(*documentRes);
 
-    REQUIRE(decoded);
-    REQUIRE(decoded->presentations.size() == 1);
-    CHECK(decoded->presentations.at(ListId{10}) == "plugin-preset");
+    REQUIRE(decodedRes);
+    REQUIRE(decodedRes->presentations.size() == 1);
+    CHECK(decodedRes->presentations.at(ListId{10}) == "plugin-preset");
   }
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - rejects an invalid document as one object",
@@ -112,10 +113,10 @@ namespace ao::uimodel::test
     REQUIRE(tree.rootref()["preferences"].is_seq());
     CHECK(yaml::scalarView(tree.rootref()["preferences"][0]["presentationId"]) == "plugin-preset");
 
-    auto const decoded =
+    auto const decodedRes =
       ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
-    REQUIRE(decoded);
-    CHECK(decoded->presentations == state.presentations);
+    REQUIRE(decodedRes);
+    CHECK(decodedRes->presentations == state.presentations);
   }
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - rejects invalid YAML candidates",
@@ -126,11 +127,11 @@ namespace ao::uimodel::test
       auto const* source = "version: 99\npreferences: malformed\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded =
+      auto const decodedRes =
         ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Missing required fields are rejected")
@@ -138,12 +139,12 @@ namespace ao::uimodel::test
       auto const* source = "version: 1\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded =
+      auto const decodedRes =
         ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("preferences"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("preferences"));
     }
 
     SECTION("Unknown structural keys are rejected")
@@ -151,12 +152,12 @@ namespace ao::uimodel::test
       auto const* source = "version: 1\npreferences: []\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded =
+      auto const decodedRes =
         ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("future"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("future"));
     }
 
     SECTION("Malformed nested entries reject the whole candidate")
@@ -169,12 +170,12 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded =
+      auto const decodedRes =
         ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("listId"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("listId"));
     }
   }
 } // namespace ao::uimodel::test

@@ -516,10 +516,10 @@ namespace ao::media::file::mp4::test
     auto const temp = TempFile{data, ".m4a"};
 
     auto const file = File{temp.path};
-    auto rangeResult = file.audioPayload();
+    auto rangeRes = file.audioPayload();
 
-    REQUIRE(rangeResult);
-    auto const range = *rangeResult;
+    REQUIRE(rangeRes);
+    auto const range = *rangeRes;
     CHECK(range.offset == sizeof(AtomLayout));
     REQUIRE(range.bytes.size() == payload.size());
 
@@ -539,13 +539,13 @@ namespace ao::media::file::mp4::test
       auto const data = ao::test::mp4::makeExtendedAtom("mdat", payload);
       auto const temp = TempFile{data, ".m4a"};
       auto const file = File{temp.path};
-      auto const rangeResult = file.audioPayload();
+      auto const rangeRes = file.audioPayload();
 
-      REQUIRE(rangeResult);
-      CHECK(rangeResult->offset == 16);
-      REQUIRE(rangeResult->bytes.size() == payload.size());
-      CHECK(std::to_integer<std::uint8_t>(rangeResult->bytes[0]) == 0x11);
-      CHECK(std::to_integer<std::uint8_t>(rangeResult->bytes[3]) == 0x44);
+      REQUIRE(rangeRes);
+      CHECK(rangeRes->offset == 16);
+      REQUIRE(rangeRes->bytes.size() == payload.size());
+      CHECK(std::to_integer<std::uint8_t>(rangeRes->bytes[0]) == 0x11);
+      CHECK(std::to_integer<std::uint8_t>(rangeRes->bytes[3]) == 0x44);
     }
 
     SECTION("End-of-file mdat")
@@ -556,13 +556,13 @@ namespace ao::media::file::mp4::test
       data.insert(data.end(), mdat.begin(), mdat.end());
       auto const temp = TempFile{data, ".m4a"};
       auto const file = File{temp.path};
-      auto const rangeResult = file.audioPayload();
+      auto const rangeRes = file.audioPayload();
 
-      REQUIRE(rangeResult);
-      CHECK(rangeResult->offset == expectedOffset);
-      REQUIRE(rangeResult->bytes.size() == payload.size());
-      CHECK(std::to_integer<std::uint8_t>(rangeResult->bytes[0]) == 0x11);
-      CHECK(std::to_integer<std::uint8_t>(rangeResult->bytes[3]) == 0x44);
+      REQUIRE(rangeRes);
+      CHECK(rangeRes->offset == expectedOffset);
+      REQUIRE(rangeRes->bytes.size() == payload.size());
+      CHECK(std::to_integer<std::uint8_t>(rangeRes->bytes[0]) == 0x11);
+      CHECK(std::to_integer<std::uint8_t>(rangeRes->bytes[3]) == 0x44);
     }
   }
 
@@ -578,14 +578,14 @@ namespace ao::media::file::mp4::test
     auto const baselineFile = File{baselineTemp.path};
     auto const retaggedFile = File{retaggedTemp.path};
 
-    auto const baselinePayloadResult = baselineFile.audioPayload();
-    auto const retaggedPayloadResult = retaggedFile.audioPayload();
-    REQUIRE(baselinePayloadResult);
-    REQUIRE(retaggedPayloadResult);
+    auto const baselinePayloadRes = baselineFile.audioPayload();
+    auto const retaggedPayloadRes = retaggedFile.audioPayload();
+    REQUIRE(baselinePayloadRes);
+    REQUIRE(retaggedPayloadRes);
 
-    CHECK(baselinePayloadResult->bytes.size() == payload.size());
-    CHECK(retaggedPayloadResult->bytes.size() == payload.size());
-    CHECK(utility::xxh3Hash128(baselinePayloadResult->bytes) == utility::xxh3Hash128(retaggedPayloadResult->bytes));
+    CHECK(baselinePayloadRes->bytes.size() == payload.size());
+    CHECK(retaggedPayloadRes->bytes.size() == payload.size());
+    CHECK(utility::xxh3Hash128(baselinePayloadRes->bytes) == utility::xxh3Hash128(retaggedPayloadRes->bytes));
   }
 
   TEST_CASE("MP4 File - single covr with two data boxes", "[media][unit][mp4-file][cover-art]")

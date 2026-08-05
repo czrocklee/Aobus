@@ -138,16 +138,16 @@ namespace ao::rt::test
     REQUIRE(genresPreset != nullptr);
     auto const created = env.requireView({.filterExpression = "$year > 2000", .optPresentation = genresPreset->spec});
 
-    auto const captured = service.capturePlaybackLaunchSpec(created);
+    auto const capturedRes = service.capturePlaybackLaunchSpec(created);
 
-    REQUIRE(captured);
-    CHECK(captured->sourceListId == kAllTracksListId);
-    CHECK(captured->quickFilterExpression == "$year > 2000");
-    CHECK(captured->order.sortBy == genresPreset->spec.sortBy);
+    REQUIRE(capturedRes);
+    CHECK(capturedRes->sourceListId == kAllTracksListId);
+    CHECK(capturedRes->quickFilterExpression == "$year > 2000");
+    CHECK(capturedRes->order.sortBy == genresPreset->spec.sortBy);
 
-    auto const missing = service.capturePlaybackLaunchSpec(ViewId{999999});
-    REQUIRE_FALSE(missing);
-    CHECK(missing.error().code == Error::Code::NotFound);
+    auto const missingRes = service.capturePlaybackLaunchSpec(ViewId{999999});
+    REQUIRE_FALSE(missingRes);
+    CHECK(missingRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ViewService - setPresentation updates state and projection", "[runtime][unit][view][presentation]")

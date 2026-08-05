@@ -205,20 +205,20 @@ namespace ao::gtk
       return;
     }
 
-    auto const found = _runtime.views().findTrackListState(viewId);
+    auto const foundRes = _runtime.views().findTrackListState(viewId);
 
-    if (!found || found->listId == kInvalidListId)
+    if (!foundRes || foundRes->listId == kInvalidListId)
     {
       return;
     }
 
     _syncingWorkspaceSelection = true;
-    _panelPtr->selectList(found->listId);
+    _panelPtr->selectList(foundRes->listId);
     _syncingWorkspaceSelection = false;
 
-    if (_panelPtr->selectedListId() == found->listId)
+    if (_panelPtr->selectedListId() == foundRes->listId)
     {
-      updateListActions(found->listId);
+      updateListActions(foundRes->listId);
     }
   }
 
@@ -292,9 +292,9 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::OK)
         {
-          if (auto const submitted = submitListDraft(dialog->draft(), dialog->presentationId()); !submitted)
+          if (auto const submittedRes = submitListDraft(dialog->draft(), dialog->presentationId()); !submittedRes)
           {
-            dialog->showError(submitted.error().message);
+            dialog->showError(submittedRes.error().message);
             return;
           }
         }
@@ -327,9 +327,9 @@ namespace ao::gtk
         {
           auto const presId = dialog->presentationId();
 
-          if (auto const submitted = submitListDraft(dialog->draft(), presId); !submitted)
+          if (auto const submittedRes = submitListDraft(dialog->draft(), presId); !submittedRes)
           {
-            dialog->showError(submitted.error().message);
+            dialog->showError(submittedRes.error().message);
             return;
           }
         }
@@ -369,9 +369,9 @@ namespace ao::gtk
           {
             if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
             {
-              if (auto const submitted = submitListDraft(draft, dialog->presentationId()); !submitted)
+              if (auto const submittedRes = submitListDraft(draft, dialog->presentationId()); !submittedRes)
               {
-                dialog->showError(submitted.error().message);
+                dialog->showError(submittedRes.error().message);
                 return;
               }
             }
@@ -390,10 +390,10 @@ namespace ao::gtk
   {
     if (draft.listId != kInvalidListId)
     {
-      if (auto const updateResult = _runtime.library().updateList(draft); !updateResult)
+      if (auto const updateRes = _runtime.library().updateList(draft); !updateRes)
       {
-        APP_LOG_ERROR("Failed to update list: {}", updateResult.error().message);
-        return std::unexpected{updateResult.error()};
+        APP_LOG_ERROR("Failed to update list: {}", updateRes.error().message);
+        return std::unexpected{updateRes.error()};
       }
 
       _pendingSelectId = draft.listId;
@@ -406,15 +406,15 @@ namespace ao::gtk
       return draft.listId;
     }
 
-    auto const listResult = _runtime.library().createList(draft);
+    auto const listRes = _runtime.library().createList(draft);
 
-    if (!listResult)
+    if (!listRes)
     {
-      APP_LOG_ERROR("Failed to create list: {}", listResult.error().message);
-      return std::unexpected{listResult.error()};
+      APP_LOG_ERROR("Failed to create list: {}", listRes.error().message);
+      return std::unexpected{listRes.error()};
     }
 
-    auto const newListId = *listResult;
+    auto const newListId = *listRes;
     _pendingSelectId = newListId;
 
     if (_callbacks.onListPresentationSaved)
@@ -456,11 +456,11 @@ namespace ao::gtk
       return;
     }
 
-    auto const preview = _runtime.library().previewDeleteList(listId);
+    auto const previewRes = _runtime.library().previewDeleteList(listId);
 
-    if (!preview)
+    if (!previewRes)
     {
-      showDeleteError(listId, preview.error().message);
+      showDeleteError(listId, previewRes.error().message);
       return;
     }
 
@@ -468,8 +468,8 @@ namespace ao::gtk
       listId,
       false,
       "Delete List?",
-      std::format("Delete \"{}\"?\n\nThe List will be removed. Music files will be kept.", preview->name),
-      preview->optTagImpact);
+      std::format("Delete \"{}\"?\n\nThe List will be removed. Music files will be kept.", previewRes->name),
+      previewRes->optTagImpact);
   }
 
   void ListNavigationController::handleDeleteListSubtreeActivated()
@@ -481,24 +481,24 @@ namespace ao::gtk
       return;
     }
 
-    auto const preview = _runtime.library().previewDeleteListAndDescendants(listId);
+    auto const previewRes = _runtime.library().previewDeleteListAndDescendants(listId);
 
-    if (!preview)
+    if (!previewRes)
     {
-      showDeleteError(listId, preview.error().message);
+      showDeleteError(listId, previewRes.error().message);
       return;
     }
 
-    auto message = std::format("Delete {} Lists in this derived subtree?\n\n", preview->deletedLists.size());
+    auto message = std::format("Delete {} Lists in this derived subtree?\n\n", previewRes->deletedLists.size());
 
-    for (auto const& list : preview->deletedLists)
+    for (auto const& list : previewRes->deletedLists)
     {
       message.append(std::format("• {} ({})\n", list.name, list.listId));
     }
 
     message.append("\nTags used by nested Playlists are kept.\nMusic files will be kept.");
-    auto optTagImpact = preview->deletedLists.empty() ? std::optional<rt::DeleteListReply::TagImpact>{}
-                                                      : preview->deletedLists.front().optTagImpact;
+    auto optTagImpact = previewRes->deletedLists.empty() ? std::optional<rt::DeleteListReply::TagImpact>{}
+                                                         : previewRes->deletedLists.front().optTagImpact;
     presentDeleteConfirmation(
       listId, true, "Delete List and Descendants?", std::move(message), std::move(optTagImpact));
   }

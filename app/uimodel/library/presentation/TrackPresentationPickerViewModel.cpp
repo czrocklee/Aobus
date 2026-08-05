@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
+
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -10,7 +12,6 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
-#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
 #include <functional>
 #include <optional>
@@ -85,16 +86,16 @@ namespace ao::uimodel
 
     // Reached from three observers via refresh(), so the active view may already
     // be gone by the time the notification is delivered.
-    auto const foundState = _views.findTrackListState(activeViewId);
+    auto const foundStateRes = _views.findTrackListState(activeViewId);
 
-    if (!foundState)
+    if (!foundStateRes)
     {
       return result;
     }
 
     result.enabled = true;
     result.activeViewId = activeViewId;
-    result.label = _catalog.labelForId(foundState->presentation.id);
+    result.label = _catalog.labelForId(foundStateRes->presentation.id);
 
     for (auto& item : result.menuItems)
     {
@@ -103,7 +104,7 @@ namespace ao::uimodel
         continue;
       }
 
-      auto eligibility = trackPresentationEligibility(foundState->listId, item.id);
+      auto eligibility = trackPresentationEligibility(foundStateRes->listId, item.id);
       item.enabled = eligibility.enabled;
       item.disabledReason = std::move(eligibility.disabledReason);
     }
@@ -129,14 +130,14 @@ namespace ao::uimodel
       return {};
     }
 
-    auto const foundState = _views.findTrackListState(activeViewId);
+    auto const foundStateRes = _views.findTrackListState(activeViewId);
 
-    if (!foundState)
+    if (!foundStateRes)
     {
       return {};
     }
 
-    if (!trackPresentationEligibility(foundState->listId, presentationId).enabled)
+    if (!trackPresentationEligibility(foundStateRes->listId, presentationId).enabled)
     {
       return {};
     }
@@ -149,7 +150,7 @@ namespace ao::uimodel
     }
 
     return TrackPresentationSelection{
-      .targetViewId = activeViewId, .targetListId = foundState->listId, .spec = std::move(*optSpec)};
+      .targetViewId = activeViewId, .targetListId = foundStateRes->listId, .spec = std::move(*optSpec)};
   }
 
   void TrackPresentationPickerViewModel::completeSelection(TrackPresentationSelection const& selection)

@@ -19,10 +19,10 @@ namespace ao::audio::test
   {
     CHECK(!decoder.seek(std::chrono::milliseconds{1}));
 
-    auto const block = decoder.readNextBlock();
-    REQUIRE(block);
-    CHECK(block->endOfStream);
-    CHECK(block->bytes.empty());
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->endOfStream);
+    CHECK(blockRes->bytes.empty());
 
     auto const info = decoder.streamInfo();
     CHECK(info.sourceFormat == SignalFormat{});
@@ -38,19 +38,19 @@ namespace ao::audio::test
 
     for (std::size_t count = 0; count < maxBlocks && !sawEndOfStream; ++count)
     {
-      auto const block = decoder.readNextBlock();
-      REQUIRE(block);
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
 
-      totalFrames += block->frames;
-      sawEndOfStream = block->endOfStream;
+      totalFrames += blockRes->frames;
+      sawEndOfStream = blockRes->endOfStream;
     }
 
     REQUIRE(sawEndOfStream);
 
-    auto const stableBlock = decoder.readNextBlock();
-    REQUIRE(stableBlock);
-    CHECK(stableBlock->endOfStream);
-    CHECK(stableBlock->bytes.empty());
+    auto const stableBlockRes = decoder.readNextBlock();
+    REQUIRE(stableBlockRes);
+    CHECK(stableBlockRes->endOfStream);
+    CHECK(stableBlockRes->bytes.empty());
     return totalFrames;
   }
 
@@ -60,17 +60,17 @@ namespace ao::audio::test
 
     for (std::size_t count = 0; count < maxBlocks; ++count)
     {
-      auto const block = decoder.readNextBlock();
+      auto const blockRes = decoder.readNextBlock();
 
-      if (!block)
+      if (!blockRes)
       {
-        result.optError = block.error();
+        result.optError = blockRes.error();
         return result;
       }
 
-      result.frames += block->frames;
+      result.frames += blockRes->frames;
 
-      if (block->endOfStream)
+      if (blockRes->endOfStream)
       {
         return result;
       }

@@ -187,16 +187,16 @@ namespace ao::gtk
         selected = selectionController.selectedTrackIds();
       }
 
-      auto sessionResult = uimodel::ListOrderAuthoringSession::begin(runtime.library(), runtime.views(), viewId);
+      auto sessionRes = uimodel::ListOrderAuthoringSession::begin(runtime.library(), runtime.views(), viewId);
 
-      if (!sessionResult)
+      if (!sessionRes)
       {
-        showStatus(sessionResult.error().message);
+        showStatus(sessionRes.error().message);
         return {};
       }
 
       clearActiveDrag();
-      sessionPtr = std::move(*sessionResult);
+      sessionPtr = std::move(*sessionRes);
       selectedTrackIds = uimodel::listOrderDragSelection(rowPtr->trackId(), selected, sessionPtr->effectiveTrackIds());
 
       if (selectedTrackIds.empty())
@@ -327,17 +327,17 @@ namespace ao::gtk
         return false;
       }
 
-      auto const anchorResult =
+      auto const anchorRes =
         uimodel::listOrderAnchorForGap(sessionPtr->effectiveTrackIds(), selectedTrackIds, *optGapIndex);
 
-      if (!anchorResult)
+      if (!anchorRes)
       {
-        showStatus(anchorResult.error().message);
+        showStatus(anchorRes.error().message);
         clearActiveDrag();
         return false;
       }
 
-      auto result = sessionPtr->moveBefore(selectedTrackIds, *anchorResult);
+      auto result = sessionPtr->moveBefore(selectedTrackIds, *anchorRes);
 
       if (!result)
       {

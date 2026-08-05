@@ -260,14 +260,14 @@ namespace ao::cli
     {
       auto& sources = cli.core().sources();
       sources.reloadAllTracks();
-      auto sourceResult = sources.acquire(listId);
+      auto sourceRes = sources.acquire(listId);
 
-      if (!sourceResult)
+      if (!sourceRes)
       {
-        throwCommandError(sourceResult.error());
+        throwCommandError(sourceRes.error());
       }
 
-      auto sourceLease = std::move(*sourceResult);
+      auto sourceLease = std::move(*sourceRes);
       auto& source = sourceLease.source();
       auto ids = std::vector<TrackId>{};
       ids.reserve(source.size());
@@ -733,16 +733,16 @@ namespace ao::cli
         return;
       }
 
-      auto bindingResult = cli.library().bindTrackTargets(targets);
+      auto bindingRes = cli.library().bindTrackTargets(targets);
 
-      if (!bindingResult)
+      if (!bindingRes)
       {
-        throwCommandError(bindingResult.error());
+        throwCommandError(bindingRes.error());
       }
 
       if (add)
       {
-        auto result = cli.library().writer().addTracksToList(listId, *bindingResult);
+        auto result = cli.library().writer().addTracksToList(listId, *bindingRes);
 
         if (!result)
         {
@@ -772,7 +772,7 @@ namespace ao::cli
         return;
       }
 
-      auto result = cli.library().writer().removeTracksFromList(listId, *bindingResult);
+      auto result = cli.library().writer().removeTracksFromList(listId, *bindingRes);
 
       if (!result)
       {

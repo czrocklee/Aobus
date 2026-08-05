@@ -42,9 +42,9 @@ namespace ao::rt::test::playback_succession
     bool settled = false;
     auto const settlementSubscription = succession.onExplicitStartSettled([&] noexcept { settled = true; });
 
-    if (auto started = succession.playFromView(viewId, trackId); !started)
+    if (auto startedRes = succession.playFromView(viewId, trackId); !startedRes)
     {
-      return started;
+      return startedRes;
     }
 
     if (!executor.drainUntil([&] { return settled; }, std::chrono::seconds{5}))

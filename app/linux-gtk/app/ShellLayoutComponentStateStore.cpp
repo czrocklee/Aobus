@@ -60,45 +60,45 @@ namespace ao::gtk
     try
     {
       auto const fileName = path.string();
-      auto bufferResult = yaml::readFileResult(path);
+      auto bufferRes = yaml::readFileResult(path);
 
-      if (!bufferResult)
+      if (!bufferRes)
       {
-        if (bufferResult.error().code != Error::Code::IoError || std::filesystem::exists(path))
+        if (bufferRes.error().code != Error::Code::IoError || std::filesystem::exists(path))
         {
           APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to load state file ({}): {}",
                        path.string(),
-                       bufferResult.error().message);
+                       bufferRes.error().message);
         }
 
         return std::nullopt;
       }
 
-      auto buffer = std::move(*bufferResult);
+      auto buffer = std::move(*bufferRes);
       auto yamlErrorState = yaml::ErrorCallbackState{fileName};
       auto tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
       yaml::parseInPlace(tree, buffer, yamlErrorState);
 
-      auto doc =
+      auto docRes =
         uimodel::LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutComponentStateDocument{});
 
-      if (!doc)
+      if (!docRes)
       {
         APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to deserialize state file ({}): {}",
                      path.string(),
-                     doc.error().message);
+                     docRes.error().message);
         return std::nullopt;
       }
 
-      if (doc->preset != presetId)
+      if (docRes->preset != presetId)
       {
         APP_LOG_WARN("ShellLayoutComponentStateStore: Ignoring state file ({}) with mismatched preset '{}'",
                      path.string(),
-                     doc->preset);
+                     docRes->preset);
         return std::nullopt;
       }
 
-      return std::move(*doc);
+      return std::move(*docRes);
     }
     catch (std::exception const& e)
     {
@@ -129,12 +129,12 @@ namespace ao::gtk
     {
       auto tree = ryml::Tree{yaml::callbacks()};
 
-      if (auto const serialized = uimodel::LayoutComponentStateYamlSchema{}.serialize(tree.rootref(), stored);
-          !serialized)
+      if (auto const serializedRes = uimodel::LayoutComponentStateYamlSchema{}.serialize(tree.rootref(), stored);
+          !serializedRes)
       {
         APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to serialize state file ({}): {}",
                       path.string(),
-                      serialized.error().message);
+                      serializedRes.error().message);
         return false;
       }
 

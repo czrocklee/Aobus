@@ -260,17 +260,17 @@ namespace ao::audio::test
     backendPtr->setSelectedEncoding(SampleEncoding::Signed24In32Le);
     auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
 
-    auto staged = engine.stagePlayback(makePlaybackItem("native-24.flac"));
+    auto stagedRes = engine.stagePlayback(makePlaybackItem("native-24.flac"));
 
-    REQUIRE(staged);
+    REQUIRE(stagedRes);
     REQUIRE(decoderRequests.size() == 2);
     CHECK_FALSE(decoderRequests[0]);
     CHECK(decoderRequests[1] == SampleEncoding::Signed24In32Le);
 
-    auto committed = engine.commitPlayback(std::move(*staged));
+    auto committedRes = engine.commitPlayback(std::move(*stagedRes));
 
-    REQUIRE(committed);
-    CHECK(committed->playbackStarted);
+    REQUIRE(committedRes);
+    CHECK(committedRes->playbackStarted);
     CHECK(decoderRequests.size() == 2);
     CHECK(engine.status().routeState.decoderOutputFormat ==
           pcmFormat(signalFormat(nativeFormat), SampleEncoding::Signed24In32Le));
@@ -302,16 +302,16 @@ namespace ao::audio::test
     backendPtr->setPrewarmEncoding(SampleEncoding::Signed16Le);
     auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
 
-    auto staged = engine.stagePlayback(makePlaybackItem("native-24.flac"));
+    auto stagedRes = engine.stagePlayback(makePlaybackItem("native-24.flac"));
 
-    REQUIRE(staged);
+    REQUIRE(stagedRes);
     REQUIRE(decoderRequests.size() == 1);
     CHECK_FALSE(decoderRequests.front());
 
-    auto committed = engine.commitPlayback(std::move(*staged));
+    auto committedRes = engine.commitPlayback(std::move(*stagedRes));
 
-    REQUIRE(committed);
-    CHECK(committed->playbackStarted);
+    REQUIRE(committedRes);
+    CHECK(committedRes->playbackStarted);
     REQUIRE(decoderRequests.size() == 2);
     CHECK(decoderRequests.back() == SampleEncoding::Signed24PackedLe);
     CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed24PackedLe);
@@ -348,17 +348,17 @@ namespace ao::audio::test
     REQUIRE(engine.status().transport == Transport::Playing);
     decoderRequests.clear();
 
-    auto staged = engine.stagePlayback(makePlaybackItem("successor-16.flac"));
+    auto stagedRes = engine.stagePlayback(makePlaybackItem("successor-16.flac"));
 
-    REQUIRE(staged);
+    REQUIRE(stagedRes);
     REQUIRE(decoderRequests.size() == 2);
     CHECK_FALSE(decoderRequests[0].second);
     CHECK(decoderRequests[1].second == SampleEncoding::Signed16Le);
 
-    auto committed = engine.commitPlayback(std::move(*staged));
+    auto committedRes = engine.commitPlayback(std::move(*stagedRes));
 
-    REQUIRE(committed);
-    CHECK(committed->playbackStarted);
+    REQUIRE(committedRes);
+    CHECK(committedRes->playbackStarted);
     CHECK(decoderRequests.size() == 2);
     CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed16Le);
     engine.stop();
@@ -389,16 +389,16 @@ namespace ao::audio::test
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     backendPtr->setSelectedEncoding(SampleEncoding::Signed24In32Le);
     auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
-    auto staged = engine.stagePlayback(makePlaybackItem("fallback-24.flac"));
-    REQUIRE(staged);
+    auto stagedRes = engine.stagePlayback(makePlaybackItem("fallback-24.flac"));
+    REQUIRE(stagedRes);
     REQUIRE(decoderRequests.size() == 2);
     CHECK_FALSE(decoderRequests[0]);
     CHECK(decoderRequests[1] == SampleEncoding::Signed24PackedLe);
 
-    auto committed = engine.commitPlayback(std::move(*staged));
+    auto committedRes = engine.commitPlayback(std::move(*stagedRes));
 
-    REQUIRE(committed);
-    CHECK(committed->playbackStarted);
+    REQUIRE(committedRes);
+    CHECK(committedRes->playbackStarted);
     REQUIRE(decoderRequests.size() == 3);
     CHECK(decoderRequests[2] == SampleEncoding::Signed24In32Le);
     CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed24In32Le);

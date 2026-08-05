@@ -52,14 +52,14 @@ namespace ao::winui::layout
   Result<std::string> readShellPreset(ShellPreset const preset)
   {
     auto const resource = shellPresetResource(preset);
-    auto folder = executableFolder();
+    auto folderRes = executableFolder();
 
-    if (!folder)
+    if (!folderRes)
     {
-      return std::unexpected{folder.error()};
+      return std::unexpected{folderRes.error()};
     }
 
-    auto const path = *folder / kShellPresetFolder / resource;
+    auto const path = *folderRes / kShellPresetFolder / resource;
     auto stream = std::ifstream{path, std::ios::binary};
 
     if (!stream)
@@ -83,13 +83,13 @@ namespace ao::winui::layout
 
   Result<uimodel::PreparedLayout> prepareShellPreset(ShellPreset const preset)
   {
-    auto yaml = readShellPreset(preset);
+    auto yamlRes = readShellPreset(preset);
 
-    if (!yaml)
+    if (!yamlRes)
     {
-      return std::unexpected{yaml.error()};
+      return std::unexpected{yamlRes.error()};
     }
 
-    return prepareShellPresetDocument(*yaml, shellPresetResource(preset));
+    return prepareShellPresetDocument(*yamlRes, shellPresetResource(preset));
   }
 } // namespace ao::winui::layout

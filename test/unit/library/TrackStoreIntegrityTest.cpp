@@ -58,8 +58,8 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, replacement);
     builder.property().uri("replacement.flac");
-    auto prepared = builder.prepare(transaction, fixture.library.resources());
-    REQUIRE(prepared);
+    auto preparedRes = builder.prepare(transaction, fixture.library.resources());
+    REQUIRE(preparedRes);
 
     auto writer = fixture.library.tracks().writer(transaction);
     auto const missingId = TrackId{existingId.raw() + 1};
@@ -90,9 +90,10 @@ namespace ao::library::test
     {
       switch (mode)
       {
-        case UpdateMode::Hot: return updatePreparedHotTrackRecord(writer, missingId, prepared->first);
-        case UpdateMode::Cold: return updatePreparedColdTrackRecord(writer, missingId, prepared->second);
-        case UpdateMode::Both: return updatePreparedTrackRecord(writer, missingId, prepared->first, prepared->second);
+        case UpdateMode::Hot: return updatePreparedHotTrackRecord(writer, missingId, preparedRes->first);
+        case UpdateMode::Cold: return updatePreparedColdTrackRecord(writer, missingId, preparedRes->second);
+        case UpdateMode::Both:
+          return updatePreparedTrackRecord(writer, missingId, preparedRes->first, preparedRes->second);
       }
 
       return makeError(Error::Code::InvalidState, "Unreachable update mode");
@@ -119,14 +120,14 @@ namespace ao::library::test
     auto const reserved = makeTrackSpec("Reserved");
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, reserved);
-    auto prepared = builder.prepareHot(transaction);
-    REQUIRE(prepared);
+    auto preparedRes = builder.prepareHot(transaction);
+    REQUIRE(preparedRes);
 
     auto writer = fixture.library.tracks().writer(transaction);
 
     // Track zero is a corrupt target, not a recoverable miss, so it must not
     // read back as NotFound just because no row occupies key zero.
-    auto const result = updatePreparedHotTrackRecord(writer, kInvalidTrackId, *prepared);
+    auto const result = updatePreparedHotTrackRecord(writer, kInvalidTrackId, *preparedRes);
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::CorruptData);
     REQUIRE(transaction.commit());

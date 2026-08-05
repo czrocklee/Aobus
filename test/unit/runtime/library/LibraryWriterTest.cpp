@@ -311,8 +311,8 @@ namespace ao::rt::test
     updateDraft.listId = listId;
     updateDraft.name = "Updated";
     updateDraft.expression = R"(#favorite or #recent)";
-    auto const updateResult = service.updateList(updateDraft);
-    REQUIRE(updateResult);
+    auto const updateRes = service.updateList(updateDraft);
+    REQUIRE(updateRes);
 
     auto const optNode = writerFixture.library().reader().listNode(listId);
     REQUIRE(optNode);
@@ -337,8 +337,8 @@ namespace ao::rt::test
     auto updateDraft = LibraryWriter::ListDraft{};
     updateDraft.listId = listId;
     updateDraft.name = "Updated";
-    auto const updateResult = service.updateList(updateDraft);
-    REQUIRE(updateResult);
+    auto const updateRes = service.updateList(updateDraft);
+    REQUIRE(updateRes);
 
     REQUIRE(upserted.size() == 1);
     CHECK(upserted[0] == listId);
@@ -444,8 +444,8 @@ namespace ao::rt::test
     auto upserted = std::vector<ListId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upserted = ev.listsUpserted; });
 
-    auto const updateResult = service.updateList(draft);
-    REQUIRE(updateResult);
+    auto const updateRes = service.updateList(draft);
+    REQUIRE(updateRes);
     CHECK(upserted.empty());
   }
 
@@ -500,18 +500,18 @@ namespace ao::rt::test
       ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.parentId = childId, .name = "Grandchild"}));
     auto const unrelatedId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.name = "Unrelated"}));
 
-    auto const ordinaryDelete = writer.deleteList(parentId);
-    REQUIRE_FALSE(ordinaryDelete);
-    CHECK(ordinaryDelete.error().code == Error::Code::Conflict);
-    CHECK(ordinaryDelete.error().message.contains("Child"));
+    auto const ordinaryDeleteRes = writer.deleteList(parentId);
+    REQUIRE_FALSE(ordinaryDeleteRes);
+    CHECK(ordinaryDeleteRes.error().code == Error::Code::Conflict);
+    CHECK(ordinaryDeleteRes.error().message.contains("Child"));
 
-    auto const preview = writer.previewDeleteListAndDescendants(parentId);
-    REQUIRE(preview);
-    CHECK(preview->rootListId == parentId);
-    REQUIRE(preview->deletedLists.size() == 3);
-    CHECK(preview->deletedLists[0].listId == parentId);
-    CHECK(preview->deletedLists[1].listId == childId);
-    CHECK(preview->deletedLists[2].listId == grandchildId);
+    auto const previewRes = writer.previewDeleteListAndDescendants(parentId);
+    REQUIRE(previewRes);
+    CHECK(previewRes->rootListId == parentId);
+    REQUIRE(previewRes->deletedLists.size() == 3);
+    CHECK(previewRes->deletedLists[0].listId == parentId);
+    CHECK(previewRes->deletedLists[1].listId == childId);
+    CHECK(previewRes->deletedLists[2].listId == grandchildId);
     CHECK(writerFixture.library().reader().listNode(parentId).has_value());
     CHECK(writerFixture.library().reader().listNode(childId).has_value());
     CHECK(writerFixture.library().reader().listNode(grandchildId).has_value());
@@ -521,7 +521,7 @@ namespace ao::rt::test
     auto const result = writer.deleteListAndDescendants(parentId);
 
     REQUIRE(result);
-    CHECK(result->deletedLists == preview->deletedLists);
+    CHECK(result->deletedLists == previewRes->deletedLists);
     REQUIRE(events.size() == 1);
     CHECK(events.front().listsDeleted == std::vector{parentId, childId, grandchildId});
     CHECK_FALSE(writerFixture.library().reader().listNode(parentId).has_value());

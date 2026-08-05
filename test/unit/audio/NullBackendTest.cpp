@@ -28,12 +28,12 @@ namespace ao::audio::test
     REQUIRE(optHint);
     CHECK(*optHint == pcmFormat(sourceFormat, SampleEncoding::Signed16Le));
 
-    auto const openResult = backend.open(sourceFormat, nullptr);
-    REQUIRE(openResult);
-    CHECK(openResult->clientFormat == pcmFormat(sourceFormat, SampleEncoding::Signed16Le));
+    auto const openRes = backend.open(sourceFormat, nullptr);
+    REQUIRE(openRes);
+    CHECK(openRes->clientFormat == pcmFormat(sourceFormat, SampleEncoding::Signed16Le));
     // A discarding sink has no direct endpoint evidence, but its client mode
     // still preserves the source precision.
-    CHECK_FALSE(openResult->optEndpoint);
+    CHECK_FALSE(openRes->optEndpoint);
     backend.start();
     backend.pause();
     backend.resume();
@@ -48,35 +48,35 @@ namespace ao::audio::test
   TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected", "[audio][unit][null-backend]")
   {
     auto backend = NullBackend{};
-    auto const opened = backend.open(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}, nullptr);
+    auto const openedRes = backend.open(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}, nullptr);
 
     CHECK_FALSE(backend.prewarmFormatHint(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}));
-    REQUIRE_FALSE(opened);
-    CHECK(opened.error().code == Error::Code::NotSupported);
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("NullBackend - volume and mute properties remain readable and writable", "[audio][unit][null-backend]")
   {
     auto backend = NullBackend{};
 
-    auto volume = backend.property(PropertyId::Volume);
-    REQUIRE(volume);
-    CHECK(std::get<float>(*volume) == 1.0F);
+    auto volumeRes = backend.property(PropertyId::Volume);
+    REQUIRE(volumeRes);
+    CHECK(std::get<float>(*volumeRes) == 1.0F);
 
-    auto muted = backend.property(PropertyId::Muted);
-    REQUIRE(muted);
-    CHECK_FALSE(std::get<bool>(*muted));
+    auto mutedRes = backend.property(PropertyId::Muted);
+    REQUIRE(mutedRes);
+    CHECK_FALSE(std::get<bool>(*mutedRes));
 
     REQUIRE(backend.setProperty(PropertyId::Volume, PropertyValue{0.25F}));
     REQUIRE(backend.setProperty(PropertyId::Muted, PropertyValue{true}));
 
-    volume = backend.property(PropertyId::Volume);
-    REQUIRE(volume);
-    CHECK(std::get<float>(*volume) == 0.25F);
+    volumeRes = backend.property(PropertyId::Volume);
+    REQUIRE(volumeRes);
+    CHECK(std::get<float>(*volumeRes) == 0.25F);
 
-    muted = backend.property(PropertyId::Muted);
-    REQUIRE(muted);
-    CHECK(std::get<bool>(*muted));
+    mutedRes = backend.property(PropertyId::Muted);
+    REQUIRE(mutedRes);
+    CHECK(std::get<bool>(*mutedRes));
 
     auto const expectedInfo =
       PropertyInfo{.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
@@ -89,13 +89,13 @@ namespace ao::audio::test
     auto backend = NullBackend{};
     auto const unknown = static_cast<PropertyId>(UINT8_C(0xff));
 
-    auto const writeResult = backend.setProperty(unknown, PropertyValue{false});
-    REQUIRE_FALSE(writeResult);
-    CHECK(writeResult.error().code == Error::Code::NotSupported);
+    auto const writeRes = backend.setProperty(unknown, PropertyValue{false});
+    REQUIRE_FALSE(writeRes);
+    CHECK(writeRes.error().code == Error::Code::NotSupported);
 
-    auto const readResult = backend.property(unknown);
-    REQUIRE_FALSE(readResult);
-    CHECK(readResult.error().code == Error::Code::NotSupported);
+    auto const readRes = backend.property(unknown);
+    REQUIRE_FALSE(readRes);
+    CHECK(readRes.error().code == Error::Code::NotSupported);
 
     CHECK(backend.queryProperty(unknown) == PropertyInfo{});
   }

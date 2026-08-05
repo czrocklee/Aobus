@@ -54,17 +54,17 @@ namespace ao::rt::test
 
   Result<> PlaybackUiFixture::playFromView(TrackId const trackId)
   {
-    auto admitted = admitPlaybackAndWait(
+    auto admittedRes = admitPlaybackAndWait(
       *executor,
       [this, trackId] { return runtime().playback().commands().startFromView(viewId, trackId); },
       [this] { return runtime().playback().snapshot().transport.positionRevision; });
 
-    if (admitted)
+    if (admittedRes)
     {
       observedPositionRevision = runtime().playback().snapshot().transport.positionRevision;
     }
 
-    return admitted;
+    return admittedRes;
   }
 
   bool PlaybackUiFixture::waitForPlayback(TrackId const trackId)

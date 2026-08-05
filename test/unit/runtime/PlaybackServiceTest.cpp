@@ -270,8 +270,8 @@ namespace ao::rt::test
     auto const subscription = fixture.playback().events().onSnapshot(
       [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
-    auto const started = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
-    REQUIRE(started);
+    auto const startedRes = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
+    REQUIRE(startedRes);
     REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
 
     // One accepted command publishes exactly one snapshot even though it drives
@@ -404,9 +404,9 @@ namespace ao::rt::test
     snapshots.clear();
     availabilityChanged = 0;
     auto output = std::array<std::byte, 4096>{};
-    auto const renderResult = fixture.renderTarget->renderPcm(output);
-    REQUIRE(renderResult.bytesWritten > 0);
-    fixture.renderTarget->handlePositionAdvanced(renderResult.positionFrames);
+    auto const renderRes = fixture.renderTarget->renderPcm(output);
+    REQUIRE(renderRes.bytesWritten > 0);
+    fixture.renderTarget->handlePositionAdvanced(renderRes.positionFrames);
 
     playbackPtr->commands().setVolume(0.5F);
 
@@ -697,9 +697,9 @@ namespace ao::rt::test
     CHECK(fixture.playback().snapshot() == lastCommitted);
     CHECK(fixture.playback().snapshot().succession.repeat == RepeatMode::Off);
 
-    auto const rejectedStart = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
-    REQUIRE_FALSE(rejectedStart);
-    CHECK(rejectedStart.error().code == Error::Code::InvalidState);
+    auto const rejectedStartRes = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
+    REQUIRE_FALSE(rejectedStartRes);
+    CHECK(rejectedStartRes.error().code == Error::Code::InvalidState);
 
     fixture.commands().setRepeatMode(RepeatMode::One);
     fixture.application.executor.drain();

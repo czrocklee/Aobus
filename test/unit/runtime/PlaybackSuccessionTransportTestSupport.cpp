@@ -274,11 +274,11 @@ namespace ao::rt::test::playback_succession
   Result<> PlaybackSuccessionTransportFixture::playAndWait(TrackId const trackId)
   {
     auto const activationCounts = decoderProbePtr->snapshot();
-    auto started = playFromViewAndWait(*successionPtr, transport.executor, viewId, trackId);
+    auto startedRes = playFromViewAndWait(*successionPtr, transport.executor, viewId, trackId);
 
-    if (!started || !successionPtr->state().optResolvedSuccessor)
+    if (!startedRes || !successionPtr->state().optResolvedSuccessor)
     {
-      return started;
+      return startedRes;
     }
 
     auto const successorId = *successionPtr->state().optResolvedSuccessor;

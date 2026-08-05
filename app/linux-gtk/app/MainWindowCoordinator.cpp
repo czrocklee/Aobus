@@ -151,21 +151,21 @@ namespace ao::gtk
 
     void restorePlaybackSession(rt::AppRuntime& runtime) const
     {
-      auto restored = runtime.restorePlaybackSession();
+      auto restoredRes = runtime.restorePlaybackSession();
 
-      if (!restored)
+      if (!restoredRes)
       {
-        APP_LOG_WARN("MainWindowCoordinator: Failed to restore playback session - {}", restored.error().message);
+        APP_LOG_WARN("MainWindowCoordinator: Failed to restore playback session - {}", restoredRes.error().message);
         return;
       }
 
-      if (!restored->restored)
+      if (!restoredRes->restored)
       {
         return;
       }
 
-      std::ignore = navigateToList(restored->sourceListId, runtime);
-      runtime.playback().commands().revealTrack(restored->trackId, rt::kInvalidViewId, restored->sourceListId);
+      std::ignore = navigateToList(restoredRes->sourceListId, runtime);
+      runtime.playback().commands().revealTrack(restoredRes->trackId, rt::kInvalidViewId, restoredRes->sourceListId);
     }
 
     GtkLayoutStateStore layoutStateStore;
@@ -239,11 +239,11 @@ namespace ao::gtk
         rebuildListPages();
       });
 
-    auto const restored = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore());
+    auto const restoredRes = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore());
 
-    if (!restored)
+    if (!restoredRes)
     {
-      APP_LOG_WARN("MainWindowCoordinator: Failed to restore workspace session - {}", restored.error().message);
+      APP_LOG_WARN("MainWindowCoordinator: Failed to restore workspace session - {}", restoredRes.error().message);
     }
 
     if (_runtime.workspace().snapshot().openViews.empty())
@@ -291,9 +291,9 @@ namespace ao::gtk
 
     _configStorePtr->saveAppSession(session);
 
-    if (auto const saved = _runtime.savePlaybackSession(); !saved)
+    if (auto const savedRes = _runtime.savePlaybackSession(); !savedRes)
     {
-      APP_LOG_WARN("MainWindowCoordinator: Failed to checkpoint playback session - {}", saved.error().message);
+      APP_LOG_WARN("MainWindowCoordinator: Failed to checkpoint playback session - {}", savedRes.error().message);
     }
 
     _runtime.workspace().saveSession(_runtime.workspaceConfigStore());

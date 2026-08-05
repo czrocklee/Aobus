@@ -169,17 +169,17 @@ namespace ao::rt::test
     auto const trackId = fixture.addTrack("Road Song");
     auto const listId = fixture.seedList("Road Trip", R"(#"road-trip")");
     auto targets = fixture.bind(std::array{trackId});
-    auto first = fixture.writer().addTracksToList(listId, targets);
-    REQUIRE(first);
-    REQUIRE(first->optNextTargets);
+    auto firstRes = fixture.writer().addTracksToList(listId, targets);
+    REQUIRE(firstRes);
+    REQUIRE(firstRes->optNextTargets);
     fixture.clearEvents();
     auto const revision = fixture.revision();
 
-    auto const second = fixture.writer().addTracksToList(listId, *first->optNextTargets);
+    auto const secondRes = fixture.writer().addTracksToList(listId, *firstRes->optNextTargets);
 
-    REQUIRE(second);
-    CHECK(second->status == TrackAuthoringStatus::NoOp);
-    CHECK(second->reply.tagEdit.changes.empty());
+    REQUIRE(secondRes);
+    CHECK(secondRes->status == TrackAuthoringStatus::NoOp);
+    CHECK(secondRes->reply.tagEdit.changes.empty());
     CHECK(fixture.revision() == revision);
     CHECK(fixture.events.empty());
     CHECK(fixture.storedOrder(listId).empty());
@@ -198,19 +198,19 @@ namespace ao::rt::test
     auto targets = fixture.bind(std::array{eligible, outside});
     fixture.clearEvents();
 
-    auto const rejected = fixture.writer().addTracksToList(childId, targets);
+    auto const rejectedRes = fixture.writer().addTracksToList(childId, targets);
 
-    REQUIRE_FALSE(rejected);
-    CHECK(rejected.error().code == Error::Code::InvalidInput);
-    CHECK(rejected.error().message.contains("outside parent List"));
+    REQUIRE_FALSE(rejectedRes);
+    CHECK(rejectedRes.error().code == Error::Code::InvalidInput);
+    CHECK(rejectedRes.error().message.contains("outside parent List"));
     CHECK_FALSE(fixture.hasTag(eligible, "playlist"));
     CHECK_FALSE(fixture.hasTag(outside, "playlist"));
     CHECK(fixture.events.empty());
 
     auto eligibleTargets = fixture.bind(std::array{eligible});
-    auto const accepted = fixture.writer().addTracksToList(childId, eligibleTargets);
-    REQUIRE(accepted);
-    CHECK(accepted->status == TrackAuthoringStatus::Applied);
+    auto const acceptedRes = fixture.writer().addTracksToList(childId, eligibleTargets);
+    REQUIRE(acceptedRes);
+    CHECK(acceptedRes->status == TrackAuthoringStatus::Applied);
     CHECK(fixture.hasTag(eligible, "playlist"));
   }
 
@@ -305,25 +305,25 @@ namespace ao::rt::test
     fixture.clearEvents();
 
     auto const options = DeleteListOptions{.removeWritableTagFromTracks = true};
-    auto const preview = fixture.writer().previewDeleteList(listId, options);
+    auto const previewRes = fixture.writer().previewDeleteList(listId, options);
 
-    REQUIRE(preview);
-    REQUIRE(preview->optTagImpact);
-    CHECK(preview->optTagImpact->tag == "road-trip");
-    CHECK(preview->optTagImpact->taggedTrackCount == 2);
-    CHECK(preview->optTagImpact->removedFromTrackCount == 2);
-    REQUIRE(preview->optTagImpact->otherListReferences.size() == 1);
-    CHECK(preview->optTagImpact->otherListReferences.front().listId == referencingListId);
+    REQUIRE(previewRes);
+    REQUIRE(previewRes->optTagImpact);
+    CHECK(previewRes->optTagImpact->tag == "road-trip");
+    CHECK(previewRes->optTagImpact->taggedTrackCount == 2);
+    CHECK(previewRes->optTagImpact->removedFromTrackCount == 2);
+    REQUIRE(previewRes->optTagImpact->otherListReferences.size() == 1);
+    CHECK(previewRes->optTagImpact->otherListReferences.front().listId == referencingListId);
     CHECK(fixture.hasList(listId));
     CHECK(fixture.hasTag(first, "road-trip"));
     CHECK(fixture.events.empty());
 
-    auto const committed = fixture.writer().deleteList(listId, options);
+    auto const committedRes = fixture.writer().deleteList(listId, options);
 
-    REQUIRE(committed);
-    CHECK(*committed == *preview);
-    REQUIRE(committed->optTagImpact);
-    CHECK(committed->optTagImpact->removedFromTrackCount == 2);
+    REQUIRE(committedRes);
+    CHECK(*committedRes == *previewRes);
+    REQUIRE(committedRes->optTagImpact);
+    CHECK(committedRes->optTagImpact->removedFromTrackCount == 2);
     CHECK_FALSE(fixture.hasList(listId));
     CHECK(fixture.hasList(referencingListId));
     CHECK_FALSE(fixture.hasTag(first, "road-trip"));
@@ -345,23 +345,23 @@ namespace ao::rt::test
     fixture.clearEvents();
     auto const options = DeleteListOptions{.removeWritableTagFromTracks = true};
 
-    auto const preview = fixture.writer().previewDeleteListAndDescendants(rootId, options);
+    auto const previewRes = fixture.writer().previewDeleteListAndDescendants(rootId, options);
 
-    REQUIRE(preview);
-    REQUIRE(preview->deletedLists.size() == 2);
-    REQUIRE(preview->deletedLists.front().optTagImpact);
-    CHECK(preview->deletedLists.front().optTagImpact->tag == "root");
-    CHECK(preview->deletedLists.front().optTagImpact->removedFromTrackCount == 1);
+    REQUIRE(previewRes);
+    REQUIRE(previewRes->deletedLists.size() == 2);
+    REQUIRE(previewRes->deletedLists.front().optTagImpact);
+    CHECK(previewRes->deletedLists.front().optTagImpact->tag == "root");
+    CHECK(previewRes->deletedLists.front().optTagImpact->removedFromTrackCount == 1);
     CHECK(fixture.hasList(rootId));
     CHECK(fixture.hasList(childId));
     CHECK(fixture.hasTag(trackId, "root"));
     CHECK(fixture.hasTag(trackId, "child"));
     CHECK(fixture.events.empty());
 
-    auto const committed = fixture.writer().deleteListAndDescendants(rootId, options);
+    auto const committedRes = fixture.writer().deleteListAndDescendants(rootId, options);
 
-    REQUIRE(committed);
-    CHECK(*committed == *preview);
+    REQUIRE(committedRes);
+    CHECK(*committedRes == *previewRes);
     CHECK_FALSE(fixture.hasList(rootId));
     CHECK_FALSE(fixture.hasList(childId));
     CHECK_FALSE(fixture.hasTag(trackId, "root"));

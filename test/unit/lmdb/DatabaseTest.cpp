@@ -38,9 +38,9 @@ namespace ao::lmdb::test
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
 
-    auto db = Database::open(wtxn, "newdb");
+    auto dbRes = Database::open(wtxn, "newdb");
 
-    CHECK(db);
+    CHECK(dbRes);
     REQUIRE(wtxn.commit());
   }
 
@@ -50,10 +50,10 @@ namespace ao::lmdb::test
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto txn = beginReadTransaction(env);
 
-    auto db = Database::open(txn, "missing");
+    auto dbRes = Database::open(txn, "missing");
 
-    CHECK_FALSE(db);
-    CHECK(db.error().code == Error::Code::NotFound);
+    CHECK_FALSE(dbRes);
+    CHECK(dbRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("Database - write open rejects a finished transaction", "[lmdb][unit][database]")
@@ -91,9 +91,9 @@ namespace ao::lmdb::test
     CHECK(optFailure->code == Error::Code::IoError);
 
     auto readTransaction = beginReadTransaction(env);
-    auto first = Database::open(readTransaction, "first");
-    REQUIRE_FALSE(first);
-    CHECK(first.error().code == Error::Code::NotFound);
+    auto firstRes = Database::open(readTransaction, "first");
+    REQUIRE_FALSE(firstRes);
+    CHECK(firstRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("Database - read-only open rejects a moved-from transaction", "[lmdb][unit][database]")

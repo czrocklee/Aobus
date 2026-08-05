@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/WritableTagList.h>
+
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
-#include <ao/rt/WritableTagList.h>
 
 #include <memory>
 #include <optional>
@@ -41,14 +42,14 @@ namespace ao::rt
 
   std::optional<std::string> writableTagForListExpression(std::string_view const expression)
   {
-    auto parsed = query::parse(expression);
+    auto parsedRes = query::parse(expression);
 
-    if (!parsed)
+    if (!parsedRes)
     {
       return std::nullopt;
     }
 
-    auto const* const variable = std::get_if<query::VariableExpression>(&*parsed);
+    auto const* const variable = std::get_if<query::VariableExpression>(&*parsedRes);
 
     if (variable == nullptr || variable->type != query::VariableType::Tag)
     {
@@ -60,7 +61,7 @@ namespace ao::rt
 
   bool listExpressionReferencesTag(std::string_view const expression, std::string_view const tag)
   {
-    auto parsed = query::parse(expression);
-    return parsed && expressionReferencesTag(*parsed, tag);
+    auto parsedRes = query::parse(expression);
+    return parsedRes && expressionReferencesTag(*parsedRes, tag);
   }
 } // namespace ao::rt

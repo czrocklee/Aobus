@@ -202,36 +202,35 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const replyResult =
+        auto const replyRes =
           add ? cli.library().writer().previewEditTags(trackIds, tags, std::span<std::string const>{})
               : cli.library().writer().previewEditTags(trackIds, std::span<std::string const>{}, tags);
 
-        if (!replyResult)
+        if (!replyRes)
         {
-          throwCommandError(replyResult.error());
+          throwCommandError(replyRes.error());
         }
 
-        formatMutation(add ? "add" : "remove", tagName, *replyResult, true, cli.options().format, cli.io().out);
+        formatMutation(add ? "add" : "remove", tagName, *replyRes, true, cli.options().format, cli.io().out);
         return;
       }
 
-      auto const bindingResult = cli.library().bindTrackTargets(trackIds);
+      auto const bindingRes = cli.library().bindTrackTargets(trackIds);
 
-      if (!bindingResult)
+      if (!bindingRes)
       {
-        throwCommandError(bindingResult.error());
+        throwCommandError(bindingRes.error());
       }
 
-      auto const replyResult =
-        add ? cli.library().writer().editTags(*bindingResult, tags, std::span<std::string const>{})
-            : cli.library().writer().editTags(*bindingResult, std::span<std::string const>{}, tags);
+      auto const replyRes = add ? cli.library().writer().editTags(*bindingRes, tags, std::span<std::string const>{})
+                                : cli.library().writer().editTags(*bindingRes, std::span<std::string const>{}, tags);
 
-      if (!replyResult)
+      if (!replyRes)
       {
-        throwCommandError(replyResult.error());
+        throwCommandError(replyRes.error());
       }
 
-      switch (replyResult->status)
+      switch (replyRes->status)
       {
         case rt::TrackAuthoringStatus::Applied:
         case rt::TrackAuthoringStatus::NoOp: break;
@@ -241,7 +240,7 @@ namespace ao::cli
           throwCommandError(Error::Code::Conflict, "library authoring is unavailable");
       }
 
-      formatMutation(add ? "add" : "remove", tagName, replyResult->reply, false, cli.options().format, cli.io().out);
+      formatMutation(add ? "add" : "remove", tagName, replyRes->reply, false, cli.options().format, cli.io().out);
     }
 
     void listTags(CliRuntime& cli)

@@ -312,17 +312,17 @@ namespace ao::audio::backend::test
       auto backend =
         PipeWireBackend{Device{.id = DeviceId{""}, .isDefault = true, .backendId = kBackendPipeWire}, kProfileShared};
       auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
-      auto const opened = backend.open(sourceFormat, nullptr);
-      auto const diagnostic = opened.has_value() ? std::string{} : opened.error().message;
+      auto const openedRes = backend.open(sourceFormat, nullptr);
+      auto const diagnostic = openedRes.has_value() ? std::string{} : openedRes.error().message;
 
       INFO(diagnostic);
-      REQUIRE(opened);
-      CAPTURE(opened->clientFormat.sampleRate,
-              opened->clientFormat.channels,
-              static_cast<int>(opened->clientFormat.encoding));
-      CHECK(opened->clientFormat.sampleRate == 48000);
-      CHECK(opened->clientFormat.channels == 2);
-      CHECK(opened->clientFormat.encoding == SampleEncoding::Signed16Le);
+      REQUIRE(openedRes);
+      CAPTURE(openedRes->clientFormat.sampleRate,
+              openedRes->clientFormat.channels,
+              static_cast<int>(openedRes->clientFormat.encoding));
+      CHECK(openedRes->clientFormat.sampleRate == 48000);
+      CHECK(openedRes->clientFormat.channels == 2);
+      CHECK(openedRes->clientFormat.encoding == SampleEncoding::Signed16Le);
     }
   }
 } // namespace ao::audio::backend::test

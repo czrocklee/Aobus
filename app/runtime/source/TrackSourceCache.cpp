@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/source/TrackSourceCache.h>
+
 #include "runtime/source/CachedListSource.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -16,7 +18,6 @@
 #include <ao/rt/source/ListOrderSource.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
@@ -209,14 +210,14 @@ namespace ao::rt
       _adHocSources.erase(cached);
     }
 
-    auto baseResult = acquire(spec.baseListId);
+    auto baseRes = acquire(spec.baseListId);
 
-    if (!baseResult)
+    if (!baseRes)
     {
-      return std::unexpected{baseResult.error()};
+      return std::unexpected{baseRes.error()};
     }
 
-    auto sourcePtr = std::make_shared<SmartListSource>(*baseResult, _smartEvaluator);
+    auto sourcePtr = std::make_shared<SmartListSource>(*baseRes, _smartEvaluator);
     sourcePtr->setExpression(spec.filterExpression);
     sourcePtr->reload();
     auto basePtr = std::static_pointer_cast<TrackSource>(std::move(sourcePtr));
@@ -285,15 +286,14 @@ namespace ao::rt
       return;
     }
 
-    auto parentResult = acquire(resolveParentSourceId(definition.parentId));
+    auto parentRes = acquire(resolveParentSourceId(definition.parentId));
 
-    if (!parentResult)
+    if (!parentRes)
     {
-      throwException<Exception>(
-        "Failed to resolve parent source for list {}: {}", listId, parentResult.error().message);
+      throwException<Exception>("Failed to resolve parent source for list {}: {}", listId, parentRes.error().message);
     }
 
-    auto implementationPtr = buildImplementation(*optView, *parentResult);
+    auto implementationPtr = buildImplementation(*optView, *parentRes);
     auto const parentId = definition.parentId;
     linkGraph(listId, parentId);
     sourcePtr->rebind(std::move(definition), std::move(implementationPtr));
@@ -396,16 +396,16 @@ namespace ao::rt
     }
 
     ancestry.push_back(listId);
-    auto parentResult = acquire(resolveParentSourceId(optView->parentId()), std::move(ancestry));
+    auto parentRes = acquire(resolveParentSourceId(optView->parentId()), std::move(ancestry));
 
-    if (!parentResult)
+    if (!parentRes)
     {
-      return std::unexpected{parentResult.error()};
+      return std::unexpected{parentRes.error()};
     }
 
     auto definition = definitionOf(*optView);
     auto const parentId = definition.parentId;
-    auto implementationPtr = buildImplementation(*optView, *parentResult);
+    auto implementationPtr = buildImplementation(*optView, *parentRes);
     auto sourcePtr = std::make_shared<CachedListSource>(std::move(definition), std::move(implementationPtr));
     _sources.insert_or_assign(listId, sourcePtr);
     linkGraph(listId, parentId);

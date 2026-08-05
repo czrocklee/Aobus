@@ -97,9 +97,9 @@ namespace ao::winui
 
   Result<> DesktopSettingsYamlSchema::serialize(ryml::NodeRef node, DesktopSettings const& state) const
   {
-    if (auto const valid = validateSettings(state); !valid)
+    if (auto const validRes = validateSettings(state); !validRes)
     {
-      return valid;
+      return validRes;
     }
 
     auto writer = yaml::MapWriter{node};
@@ -135,18 +135,18 @@ namespace ao::winui
       return result;
     }
 
-    auto mode = shellModeFromId(modeId);
+    auto modeRes = shellModeFromId(modeId);
 
-    if (!mode)
+    if (!modeRes)
     {
-      return std::unexpected{mode.error()};
+      return std::unexpected{modeRes.error()};
     }
 
-    result->shellMode = *mode;
+    result->shellMode = *modeRes;
 
-    if (auto const valid = validateSettings(*result); !valid)
+    if (auto const validRes = validateSettings(*result); !validRes)
     {
-      return std::unexpected{valid.error()};
+      return std::unexpected{validRes.error()};
     }
 
     return result;

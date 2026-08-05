@@ -180,14 +180,14 @@ namespace winrt::Aobus::implementation
       return ao::makeError(ao::Error::Code::ResourceBusy, "A WinUI process transition is already in progress");
     }
 
-    auto normalized = normalizeRestartRoot(std::move(root));
+    auto normalizedRes = normalizeRestartRoot(std::move(root));
 
-    if (!normalized)
+    if (!normalizedRes)
     {
-      return std::unexpected{normalized.error()};
+      return std::unexpected{normalizedRes.error()};
     }
 
-    if (sameDirectory(*normalized, _windowSessionPtr->musicRoot()))
+    if (sameDirectory(*normalizedRes, _windowSessionPtr->musicRoot()))
     {
       return {};
     }
@@ -203,7 +203,7 @@ namespace winrt::Aobus::implementation
     try
     {
       auto const queued = _dispatcher.TryEnqueue(
-        [weak, root = std::move(*normalized)] mutable
+        [weak, root = std::move(*normalizedRes)] mutable
         {
           if (auto self = weak.get(); self)
           {
@@ -288,17 +288,17 @@ namespace winrt::Aobus::implementation
       _dispatcher = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
       auto const appStateRoot = stateRoot();
       ao::rt::Log::initialize(ao::rt::LogLevel::Info, appStateRoot / "logs", ao::rt::LogConsoleMode::Disabled);
-      auto startupOptions = ao::winui::readStartupOptions();
+      auto startupOptionsRes = ao::winui::readStartupOptions();
 
-      if (!startupOptions)
+      if (!startupOptionsRes)
       {
-        ao::throwException<ao::Exception>(startupOptions.error().message);
+        ao::throwException<ao::Exception>(startupOptionsRes.error().message);
       }
 
       _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(appStateRoot, _dispatcher);
       auto const weak = get_weak();
-      auto started = _windowSessionPtr->start(
-        std::move(*startupOptions),
+      auto startedRes = _windowSessionPtr->start(
+        std::move(*startupOptionsRes),
         [weak](std::filesystem::path root) -> ao::Result<>
         {
           if (auto self = weak.get(); self)
@@ -316,9 +316,9 @@ namespace winrt::Aobus::implementation
           }
         });
 
-      if (!started)
+      if (!startedRes)
       {
-        ao::throwException<ao::Exception>(started.error().message);
+        ao::throwException<ao::Exception>(startedRes.error().message);
       }
 
       if (_processPhase != ProcessPhase::Exiting)

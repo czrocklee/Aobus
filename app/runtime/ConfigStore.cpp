@@ -36,9 +36,9 @@ namespace ao::rt
 
   Result<bool> ConfigStore::contains(std::string_view const group)
   {
-    if (auto const loaded = ensureLoaded(); !loaded)
+    if (auto const loadedRes = ensureLoaded(); !loadedRes)
     {
-      return std::unexpected{loaded.error()};
+      return std::unexpected{loadedRes.error()};
     }
 
     return _root.is_map(0) && _root.rootref()[yaml::toCsubstr(group)].readable();
@@ -46,14 +46,14 @@ namespace ao::rt
 
   Result<> ConfigStore::removeGroup(std::string_view const group)
   {
-    auto candidateResult = prepareWriteCandidate();
+    auto candidateRes = prepareWriteCandidate();
 
-    if (!candidateResult)
+    if (!candidateRes)
     {
-      return std::unexpected{candidateResult.error()};
+      return std::unexpected{candidateRes.error()};
     }
 
-    auto candidate = std::move(*candidateResult);
+    auto candidate = std::move(*candidateRes);
     auto const groupName = yaml::toCsubstr(group);
     auto root = candidate.rootref();
 
@@ -103,14 +103,14 @@ namespace ao::rt
       return {};
     }
 
-    auto bufferResult = yaml::readFileResult(_filePath, _optMaxFileBytes);
+    auto bufferRes = yaml::readFileResult(_filePath, _optMaxFileBytes);
 
-    if (!bufferResult)
+    if (!bufferRes)
     {
-      return std::unexpected{bufferResult.error()};
+      return std::unexpected{bufferRes.error()};
     }
 
-    auto inputBuffer = std::move(*bufferResult);
+    auto inputBuffer = std::move(*bufferRes);
     auto root = ryml::Tree{yaml::callbacks(_yamlErrorState)};
 
     try
@@ -152,9 +152,9 @@ namespace ao::rt
       throwException<Exception>("write called on ReadOnly ConfigStore");
     }
 
-    if (auto const loaded = ensureLoaded(); !loaded)
+    if (auto const loadedRes = ensureLoaded(); !loadedRes)
     {
-      return std::unexpected{loaded.error()};
+      return std::unexpected{loadedRes.error()};
     }
 
     assert(_root.is_map(0) && "Successful ConfigStore initialization must establish a top-level mapping");
@@ -180,9 +180,9 @@ namespace ao::rt
                                    *_optMaxFileBytes));
     }
 
-    if (auto const written = utility::writeAtomically(_filePath, yaml); !written)
+    if (auto const writtenRes = utility::writeAtomically(_filePath, yaml); !writtenRes)
     {
-      return written;
+      return writtenRes;
     }
 
     _root = std::move(candidate);

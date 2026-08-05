@@ -93,10 +93,10 @@ namespace ao::cli::test
   {
     auto musicLibrary = library::test::makeTestMusicLibrary(root(), rt::LibraryPaths{root()}.databasePath());
     auto transaction = library::test::writeTransaction(musicLibrary);
-    auto idResult = musicLibrary.resources().writer(transaction).create(bytes);
-    REQUIRE(idResult);
+    auto idRes = musicLibrary.resources().writer(transaction).create(bytes);
+    REQUIRE(idRes);
     REQUIRE(transaction.commit());
-    return *idResult;
+    return *idRes;
   }
 
   CliResult CliFixture::run(std::initializer_list<std::string_view> args) const

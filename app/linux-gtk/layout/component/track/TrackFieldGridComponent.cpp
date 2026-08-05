@@ -613,32 +613,31 @@ namespace ao::gtk::layout
           return true;
         }
 
-        auto const editValueResult = uiDef->parseInlineEdit(newText);
+        auto const editValueRes = uiDef->parseInlineEdit(newText);
 
-        if (!editValueResult)
+        if (!editValueRes)
         {
-          APP_LOG_ERROR(
-            "Failed to parse edit value for {}: {}", rt::trackFieldId(field), editValueResult.error().message);
+          APP_LOG_ERROR("Failed to parse edit value for {}: {}", rt::trackFieldId(field), editValueRes.error().message);
           _notifications.post(
-            rt::NotificationSeverity::Error, editValueResult.error().message, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, editValueRes.error().message, rt::NotificationLifetime::history());
           return false;
         }
 
         auto patch = rt::MetadataPatch{};
 
-        if (!uimodel::writeTrackFieldPatch(patch, field, *editValueResult))
+        if (!uimodel::writeTrackFieldPatch(patch, field, *editValueRes))
         {
           return false;
         }
 
-        auto const replyResult = _editSessionPtr->submitMetadata(patch);
+        auto const replyRes = _editSessionPtr->submitMetadata(patch);
 
-        if (reportMetadataSubmissionFailure(replyResult, "Metadata update"))
+        if (reportMetadataSubmissionFailure(replyRes, "Metadata update"))
         {
           return false;
         }
 
-        switch (replyResult->status)
+        switch (replyRes->status)
         {
           case rt::TrackAuthoringStatus::Applied: editor.setText(newText); return true;
           case rt::TrackAuthoringStatus::NoOp: editor.setText(oldText); return true;
@@ -839,14 +838,14 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const replyResult = _editSessionPtr->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, newValue));
+        auto const replyRes = _editSessionPtr->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, newValue));
 
-        if (reportMetadataSubmissionFailure(replyResult, "Custom metadata update"))
+        if (reportMetadataSubmissionFailure(replyRes, "Custom metadata update"))
         {
           return;
         }
 
-        if (replyResult->status == rt::TrackAuthoringStatus::Applied && _detailUndo != nullptr)
+        if (replyRes->status == rt::TrackAuthoringStatus::Applied && _detailUndo != nullptr)
         {
           _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
         }
@@ -862,26 +861,26 @@ namespace ao::gtk::layout
         auto const snap = _scope->snapshot();
 
         auto const optPrevValue = uimodel::undoValueForDeletedTrackCustomMetadata(snap, key);
-        auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
+        auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
 
-        if (!sessionResult)
+        if (!sessionRes)
         {
-          APP_LOG_ERROR("Custom metadata delete could not start: {}", sessionResult.error().message);
+          APP_LOG_ERROR("Custom metadata delete could not start: {}", sessionRes.error().message);
           _notifications.post(
-            rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
           return;
         }
 
-        auto const replyResult = (*sessionResult)->submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
+        auto const replyRes = (*sessionRes)->submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
 
-        if (reportMetadataSubmissionFailure(replyResult, "Custom metadata delete"))
+        if (reportMetadataSubmissionFailure(replyRes, "Custom metadata delete"))
         {
           return;
         }
 
-        if (replyResult->status == rt::TrackAuthoringStatus::Applied && optPrevValue && _detailUndo != nullptr)
+        if (replyRes->status == rt::TrackAuthoringStatus::Applied && optPrevValue && _detailUndo != nullptr)
         {
-          _detailUndo->presentCustomMetadataDeletedUndo(std::move(key), *optPrevValue, std::move(*sessionResult));
+          _detailUndo->presentCustomMetadataDeletedUndo(std::move(key), *optPrevValue, std::move(*sessionRes));
         }
       }
 
@@ -902,24 +901,24 @@ namespace ao::gtk::layout
 
         _addMetadataButton.popdown();
 
-        auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
+        auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
 
-        if (!sessionResult)
+        if (!sessionRes)
         {
-          APP_LOG_ERROR("Custom metadata add could not start: {}", sessionResult.error().message);
+          APP_LOG_ERROR("Custom metadata add could not start: {}", sessionRes.error().message);
           _notifications.post(
-            rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
           return;
         }
 
-        auto const replyResult = (*sessionResult)->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, value));
+        auto const replyRes = (*sessionRes)->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, value));
 
-        if (reportMetadataSubmissionFailure(replyResult, "Custom metadata add"))
+        if (reportMetadataSubmissionFailure(replyRes, "Custom metadata add"))
         {
           return;
         }
 
-        if (replyResult->status == rt::TrackAuthoringStatus::Applied && _detailUndo != nullptr)
+        if (replyRes->status == rt::TrackAuthoringStatus::Applied && _detailUndo != nullptr)
         {
           _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
         }
@@ -1119,18 +1118,18 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, snapshot.trackIds);
+        auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snapshot.trackIds);
 
-        if (!sessionResult)
+        if (!sessionRes)
         {
-          APP_LOG_ERROR("Metadata edit could not start: {}", sessionResult.error().message);
+          APP_LOG_ERROR("Metadata edit could not start: {}", sessionRes.error().message);
           _notifications.post(
-            rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
           return;
         }
 
         _optEditSnapshot.emplace(std::move(snapshot));
-        _editSessionPtr = std::move(*sessionResult);
+        _editSessionPtr = std::move(*sessionRes);
         _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated(
           [this] noexcept
           {

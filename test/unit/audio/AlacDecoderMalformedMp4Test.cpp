@@ -256,10 +256,10 @@ namespace ao::audio::test
 
       REQUIRE(decoder.open(temp.path));
 
-      auto const block = decoder.readNextBlock();
-      REQUIRE(block);
-      CHECK(block->firstFrameIndex == 0);
-      CHECK(block->frames > 0);
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
+      CHECK(blockRes->firstFrameIndex == 0);
+      CHECK(blockRes->frames > 0);
     }
   }
 } // namespace ao::audio::test

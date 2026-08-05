@@ -99,11 +99,11 @@ namespace ao::rt
       {
         if (manifestReader != nullptr)
         {
-          auto const manifestResult = manifestReader->get(view.property().uri());
+          auto const manifestRes = manifestReader->get(view.property().uri());
 
-          if (manifestResult)
+          if (manifestRes)
           {
-            return TrackFieldRawValue{std::in_place_type<std::uint64_t>, manifestResult->fileSize()};
+            return TrackFieldRawValue{std::in_place_type<std::uint64_t>, manifestRes->fileSize()};
           }
         }
 
@@ -114,11 +114,11 @@ namespace ao::rt
       {
         if (manifestReader != nullptr)
         {
-          auto const manifestResult = manifestReader->get(view.property().uri());
+          auto const manifestRes = manifestReader->get(view.property().uri());
 
-          if (manifestResult)
+          if (manifestRes)
           {
-            return TrackFieldRawValue{std::in_place_type<std::uint64_t>, manifestResult->mtime()};
+            return TrackFieldRawValue{std::in_place_type<std::uint64_t>, manifestRes->mtime()};
           }
         }
 

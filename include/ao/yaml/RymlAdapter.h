@@ -20,6 +20,7 @@
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace ao::yaml
@@ -168,14 +169,14 @@ namespace ao::yaml
   template<typename T>
   inline Result<T> scalarAs(ryml::ConstNodeRef const& node, std::string_view context)
   {
-    auto parsed = Result<T>{std::in_place};
+    auto parsedRes = Result<T>{std::in_place};
 
-    if (!tryReadScalar(node, *parsed))
+    if (!tryReadScalar(node, *parsedRes))
     {
       return makeError(Error::Code::FormatRejected, boundedErrorContext(context) + " must be a valid scalar");
     }
 
-    return parsed;
+    return parsedRes;
   }
 
   /**

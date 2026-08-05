@@ -245,11 +245,11 @@ namespace ao::winui::test
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
 
-      auto const prepared = prepareShellPresetDocument(readShippedDocument(preset), resource);
-      REQUIRE(prepared.has_value());
+      auto const preparedRes = prepareShellPresetDocument(readShippedDocument(preset), resource);
+      REQUIRE(preparedRes.has_value());
 
       auto actions = std::vector<std::string>{};
-      collectBoundActions(catalog, prepared->effectiveRoot(), actions);
+      collectBoundActions(catalog, preparedRes->effectiveRoot(), actions);
       CHECK_FALSE(actions.empty());
 
       for (auto const& action : actions)
@@ -269,12 +269,12 @@ namespace ao::winui::test
      * its own document; Classic authors no toggle of its own and reaches the
      * command through the menu bar the frame composes for it.
      */
-    auto const prepared =
+    auto const preparedRes =
       prepareShellPresetDocument(readShippedDocument(ShellPreset::Modern), shellPresetResource(ShellPreset::Modern));
-    REQUIRE(prepared.has_value());
+    REQUIRE(preparedRes.has_value());
 
     auto actions = std::vector<std::string>{};
-    collectBoundActions(layoutCatalog(), prepared->effectiveRoot(), actions);
+    collectBoundActions(layoutCatalog(), preparedRes->effectiveRoot(), actions);
     CHECK(contains(actions, "shell.toggleInspector"));
 
     auto const builder = readShellBuilderSource();
@@ -289,10 +289,10 @@ namespace ao::winui::test
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
 
-      auto const prepared = prepareShellPresetDocument(readShippedDocument(preset), resource);
+      auto const preparedRes = prepareShellPresetDocument(readShippedDocument(preset), resource);
 
-      REQUIRE(prepared.has_value());
-      CHECK_FALSE(prepared->effectiveRoot().children.empty());
+      REQUIRE(preparedRes.has_value());
+      CHECK_FALSE(preparedRes->effectiveRoot().children.empty());
     }
   }
 
@@ -315,11 +315,11 @@ namespace ao::winui::test
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
 
-      auto const prepared = prepareShellPresetDocument(readShippedDocument(preset), resource);
-      REQUIRE(prepared.has_value());
+      auto const preparedRes = prepareShellPresetDocument(readShippedDocument(preset), resource);
+      REQUIRE(preparedRes.has_value());
 
       auto painted = std::vector<ThemeSurface>{};
-      collectSurfaces(prepared->effectiveRoot(), painted);
+      collectSurfaces(preparedRes->effectiveRoot(), painted);
 
       for (auto const surface : expected)
       {
@@ -334,11 +334,11 @@ namespace ao::winui::test
   {
     SECTION("modern")
     {
-      auto const prepared =
+      auto const preparedRes =
         prepareShellPresetDocument(readShippedDocument(ShellPreset::Modern), shellPresetResource(ShellPreset::Modern));
-      REQUIRE(prepared.has_value());
+      REQUIRE(preparedRes.has_value());
 
-      auto const ids = nodeIds(*prepared);
+      auto const ids = nodeIds(*preparedRes);
       CHECK(contains(ids, "modern-track-table"));
       CHECK(contains(ids, "modern-track-detail"));
       // The inspector shows the selection's artwork above its fields, which is
@@ -351,11 +351,11 @@ namespace ao::winui::test
 
     SECTION("classic")
     {
-      auto const prepared = prepareShellPresetDocument(
+      auto const preparedRes = prepareShellPresetDocument(
         readShippedDocument(ShellPreset::Classic), shellPresetResource(ShellPreset::Classic));
-      REQUIRE(prepared.has_value());
+      REQUIRE(preparedRes.has_value());
 
-      auto const ids = nodeIds(*prepared);
+      auto const ids = nodeIds(*preparedRes);
       CHECK(contains(ids, "classic-track-table"));
       CHECK(contains(ids, "classic-track-detail"));
       // Classic shows the selection's artwork above its property rows too; the
@@ -380,11 +380,11 @@ namespace ao::winui::test
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
 
-      auto const prepared = prepareShellPresetDocument(readShippedDocument(preset), resource);
-      REQUIRE(prepared.has_value());
+      auto const preparedRes = prepareShellPresetDocument(readShippedDocument(preset), resource);
+      REQUIRE(preparedRes.has_value());
 
       auto panes = std::vector<std::pair<LayoutNode const*, std::string>>{};
-      collectSelfSizedPanes(prepared->effectiveRoot(), {}, panes);
+      collectSelfSizedPanes(preparedRes->effectiveRoot(), {}, panes);
       CHECK_FALSE(panes.empty());
 
       for (auto const& [node, parentType] : panes)
@@ -405,16 +405,16 @@ namespace ao::winui::test
     // collapsing itself. A status bar's own reading must never take the same
     // rule, so which of the two a node is has to be authored rather than
     // inferred from the type.
-    auto const modern =
+    auto const modernRes =
       prepareShellPresetDocument(readShippedDocument(ShellPreset::Modern), shellPresetResource(ShellPreset::Modern));
-    REQUIRE(modern.has_value());
+    REQUIRE(modernRes.has_value());
 
-    auto const classic =
+    auto const classicRes =
       prepareShellPresetDocument(readShippedDocument(ShellPreset::Classic), shellPresetResource(ShellPreset::Classic));
-    REQUIRE(classic.has_value());
+    REQUIRE(classicRes.has_value());
 
     auto readings = std::vector<LayoutNode const*>{};
-    collectStatusReadings(modern->effectiveRoot(), readings);
+    collectStatusReadings(modernRes->effectiveRoot(), readings);
     CHECK(readings.size() == 2);
 
     for (auto const* const node : readings)
@@ -424,7 +424,7 @@ namespace ao::winui::test
     }
 
     readings.clear();
-    collectStatusReadings(classic->effectiveRoot(), readings);
+    collectStatusReadings(classicRes->effectiveRoot(), readings);
     CHECK_FALSE(readings.empty());
 
     for (auto const* const node : readings)
@@ -448,13 +448,13 @@ namespace ao::winui::test
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
 
-      auto const prepared = prepareShellPresetDocument(readShippedDocument(preset), resource);
-      REQUIRE(prepared.has_value());
+      auto const preparedRes = prepareShellPresetDocument(readShippedDocument(preset), resource);
+      REQUIRE(preparedRes.has_value());
 
-      CHECK(countPlayPauseControls(catalog, prepared->effectiveRoot()) == 1);
+      CHECK(countPlayPauseControls(catalog, preparedRes->effectiveRoot()) == 1);
 
       auto souls = std::vector<LayoutNode const*>{};
-      collectByType(prepared->effectiveRoot(), "playback.soulButton", souls);
+      collectByType(preparedRes->effectiveRoot(), "playback.soulButton", souls);
       CHECK_FALSE(souls.empty());
 
       auto const optDescriptor = catalog.descriptor("playback.soulButton");
@@ -474,19 +474,19 @@ namespace ao::winui::test
   TEST_CASE("prepareShellPresetDocument - the presets keep disjoint node ids so state never crosses shells",
             "[winui][unit][layout]")
   {
-    auto const modern =
+    auto const modernRes =
       prepareShellPresetDocument(readShippedDocument(ShellPreset::Modern), shellPresetResource(ShellPreset::Modern));
-    auto const classic =
+    auto const classicRes =
       prepareShellPresetDocument(readShippedDocument(ShellPreset::Classic), shellPresetResource(ShellPreset::Classic));
-    REQUIRE(modern.has_value());
-    REQUIRE(classic.has_value());
+    REQUIRE(modernRes.has_value());
+    REQUIRE(classicRes.has_value());
 
     CHECK(shellPresetId(ShellPreset::Modern) != shellPresetId(ShellPreset::Classic));
 
-    for (auto const& id : nodeIds(*modern))
+    for (auto const& id : nodeIds(*modernRes))
     {
       INFO("modern id " << id);
-      CHECK_FALSE(contains(nodeIds(*classic), id));
+      CHECK_FALSE(contains(nodeIds(*classicRes), id));
     }
   }
 
@@ -494,38 +494,38 @@ namespace ao::winui::test
   {
     SECTION("unparsable YAML")
     {
-      auto const prepared = prepareShellPresetDocument("version: 1\nroot: [unterminated", "broken.yaml");
+      auto const preparedRes = prepareShellPresetDocument("version: 1\nroot: [unterminated", "broken.yaml");
 
-      REQUIRE_FALSE(prepared.has_value());
-      CHECK(prepared.error().code == Error::Code::FormatRejected);
-      CHECK(prepared.error().message.contains("broken.yaml"));
+      REQUIRE_FALSE(preparedRes.has_value());
+      CHECK(preparedRes.error().code == Error::Code::FormatRejected);
+      CHECK(preparedRes.error().message.contains("broken.yaml"));
     }
 
     SECTION("an unsupported document version")
     {
-      auto const prepared = prepareShellPresetDocument("version: 2\nroot:\n  type: box\n", "future.yaml");
+      auto const preparedRes = prepareShellPresetDocument("version: 2\nroot:\n  type: box\n", "future.yaml");
 
-      REQUIRE_FALSE(prepared.has_value());
-      CHECK(prepared.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(preparedRes.has_value());
+      CHECK(preparedRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("a component the Windows catalog does not register")
     {
-      auto const prepared = prepareShellPresetDocument("version: 1\nroot:\n  id: root\n  type: tabs\n", "gtk.yaml");
+      auto const preparedRes = prepareShellPresetDocument("version: 1\nroot:\n  id: root\n  type: tabs\n", "gtk.yaml");
 
-      REQUIRE_FALSE(prepared.has_value());
-      CHECK(prepared.error().code == Error::Code::FormatRejected);
-      CHECK(prepared.error().message.contains("gtk.yaml"));
-      CHECK(prepared.error().message.contains("unknown component type"));
+      REQUIRE_FALSE(preparedRes.has_value());
+      CHECK(preparedRes.error().code == Error::Code::FormatRejected);
+      CHECK(preparedRes.error().message.contains("gtk.yaml"));
+      CHECK(preparedRes.error().message.contains("unknown component type"));
     }
 
     SECTION("a document over the shipped size budget")
     {
       auto const oversized = std::string(uimodel::LayoutDocumentLimits::kDefaultMaxFileBytes + 1, 'x');
-      auto const prepared = prepareShellPresetDocument(oversized, "huge.yaml");
+      auto const preparedRes = prepareShellPresetDocument(oversized, "huge.yaml");
 
-      REQUIRE_FALSE(prepared.has_value());
-      CHECK(prepared.error().code == Error::Code::ValueTooLarge);
+      REQUIRE_FALSE(preparedRes.has_value());
+      CHECK(preparedRes.error().code == Error::Code::ValueTooLarge);
     }
   }
 } // namespace ao::winui::test

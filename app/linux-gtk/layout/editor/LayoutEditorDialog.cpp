@@ -146,9 +146,9 @@ namespace ao::gtk::layout::editor
             result.activePresetId = _comboPresets.get_active_id().raw();
             result.activeDocument = _document;
 
-            if (auto saved = _signalSaveRequest.emit(result); !saved)
+            if (auto savedRes = _signalSaveRequest.emit(result); !savedRes)
             {
-              presentErrorDialog("Unable to Save Layout", saved.error().message);
+              presentErrorDialog("Unable to Save Layout", savedRes.error().message);
               return;
             }
 
@@ -681,17 +681,17 @@ namespace ao::gtk::layout::editor
     {
       if (entry.dirty || presetId == _currentPresetId)
       {
-        auto prepared = uimodel::prepareLayout(entry.doc, _limits);
+        auto preparedRes = uimodel::prepareLayout(entry.doc, _limits);
 
-        if (!prepared)
+        if (!preparedRes)
         {
           presentErrorDialog(
             "Invalid Layout Document",
-            std::format("Validation failed on preset '{}':\n\n{}", presetId, prepared.error().message));
+            std::format("Validation failed on preset '{}':\n\n{}", presetId, preparedRes.error().message));
           return false;
         }
 
-        auto const idDiagnostics = uimodel::validateStatefulLayoutNodeIds(*prepared);
+        auto const idDiagnostics = uimodel::validateStatefulLayoutNodeIds(*preparedRes);
 
         if (uimodel::hasLayoutNodeIdErrors(idDiagnostics))
         {

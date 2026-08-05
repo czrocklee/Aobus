@@ -189,14 +189,14 @@ namespace ao::audio
         info.sourceFormat.channels = channelCountFromFrameMode(frameInfo.mode);
       }
 
-      auto const configured = outputAdapter.configure(info.sourceFormat, SampleEncoding::Signed16Le);
+      auto const configuredRes = outputAdapter.configure(info.sourceFormat, SampleEncoding::Signed16Le);
 
-      if (!configured)
+      if (!configuredRes)
       {
-        detail::throwDecoderError(configured.error());
+        detail::throwDecoderError(configuredRes.error());
       }
 
-      info.outputFormat = *configured;
+      info.outputFormat = *configuredRes;
       info.isLossy = true;
       info.codec = AudioCodec::Mp3;
     }
@@ -294,15 +294,15 @@ namespace ao::audio
       std::uint64_t const currentFrameIndex = impl->nextFrameIndex;
       impl->nextFrameIndex += frames;
 
-      auto converted = impl->outputAdapter.convert({impl->decodeBuffer.data(), done});
+      auto convertedRes = impl->outputAdapter.convert({impl->decodeBuffer.data(), done});
 
-      if (!converted)
+      if (!convertedRes)
       {
-        detail::throwDecoderError(converted.error());
+        detail::throwDecoderError(convertedRes.error());
       }
 
       return PcmBlock{
-        .bytes = *converted, .frames = frames, .firstFrameIndex = currentFrameIndex, .endOfStream = false};
+        .bytes = *convertedRes, .frames = frames, .firstFrameIndex = currentFrameIndex, .endOfStream = false};
     }
     catch (detail::DecoderException const& ex)
     {

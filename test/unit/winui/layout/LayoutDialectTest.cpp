@@ -42,9 +42,9 @@ namespace ao::winui::test
     std::optional<uimodel::LayoutRejection> validate(LayoutNode root)
     {
       auto const document = uimodel::LayoutDocument{.root = std::move(root)};
-      auto const prepared = uimodel::prepareLayout(document);
-      REQUIRE(prepared.has_value());
-      return uimodel::validateLayout(*prepared, layoutCatalog(), layoutActionCatalog(), layoutDialect());
+      auto const preparedRes = uimodel::prepareLayout(document);
+      REQUIRE(preparedRes.has_value());
+      return uimodel::validateLayout(*preparedRes, layoutCatalog(), layoutActionCatalog(), layoutDialect());
     }
 
     uimodel::LayoutRejection rejectionOf(LayoutNode root)
@@ -332,15 +332,15 @@ namespace ao::winui::test
             "[winui][unit][layout]")
   {
     auto const document = uimodel::LayoutDocument{.root = shellRoot({LayoutNode{.id = "tabs", .type = "tabs"}})};
-    auto const prepared = uimodel::prepareLayout(document);
-    REQUIRE(prepared.has_value());
+    auto const preparedRes = uimodel::prepareLayout(document);
+    REQUIRE(preparedRes.has_value());
 
-    auto const validated =
-      uimodel::requireValidLayout(*prepared, layoutCatalog(), layoutActionCatalog(), layoutDialect());
+    auto const validatedRes =
+      uimodel::requireValidLayout(*preparedRes, layoutCatalog(), layoutActionCatalog(), layoutDialect());
 
-    REQUIRE_FALSE(validated.has_value());
-    CHECK(validated.error().code == Error::Code::FormatRejected);
-    CHECK(validated.error().message.contains("tabs"));
-    CHECK(validated.error().message.contains("unknown component type"));
+    REQUIRE_FALSE(validatedRes.has_value());
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
+    CHECK(validatedRes.error().message.contains("tabs"));
+    CHECK(validatedRes.error().message.contains("unknown component type"));
   }
 } // namespace ao::winui::test

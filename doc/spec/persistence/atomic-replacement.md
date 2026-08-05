@@ -28,7 +28,7 @@ The public boundary is [`include/ao/utility/AtomicFile.h`](../../../include/ao/u
 Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data);
 ```
 
-[`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects [`AtomicFile.cpp`](../../../lib/utility/AtomicFile.cpp) for non-Windows builds and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) for Windows builds.
+[`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) for non-Windows builds and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) for Windows builds.
 [`AtomicFileTransaction.h`](../../../lib/utility/AtomicFileTransaction.h) contains the source-private common state machine and its deterministic test seam.
 None of these mechanisms can depend on application runtime, UIModel, a frontend, YAML, or an application payload type.
 
@@ -200,7 +200,7 @@ No platform barrier receipt crosses into `ConfigStore` or frontend state owners.
 
 - [`AtomicFile.h`](../../../include/ao/utility/AtomicFile.h) defines the two-argument public operation and private-file contract.
 - [`AtomicFileTransaction.h`](../../../lib/utility/AtomicFileTransaction.h) owns the private common state sequence.
-- [`AtomicFile.cpp`](../../../lib/utility/AtomicFile.cpp) owns POSIX temporary-file RAII, mode, write, barriers, replacement, and parent synchronization.
+- [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) owns POSIX temporary-file RAII, mode, write, barriers, replacement, and parent synchronization.
 - [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) owns extended paths, protected DACL creation, Windows temporary-file RAII, barriers, and replacement.
 - [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects one platform implementation and links the Windows security API.
 - [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp) and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) are the current production callers.

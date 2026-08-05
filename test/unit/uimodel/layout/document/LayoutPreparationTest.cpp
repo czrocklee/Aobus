@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
+
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -63,10 +64,10 @@ namespace ao::uimodel::test
     REQUIRE(prepareLayout(document, limits));
 
     document.root.children.push_back(LayoutNode{.type = "spacer"});
-    auto const rejected = prepareLayout(document, limits);
+    auto const rejectedRes = prepareLayout(document, limits);
 
-    REQUIRE_FALSE(rejected);
-    CHECK(rejected.error().code == Error::Code::ValueTooLarge);
+    REQUIRE_FALSE(rejectedRes);
+    CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
   TEST_CASE("LayoutPreparation - enforces depth and value-byte limits at exact boundaries",
@@ -80,9 +81,9 @@ namespace ao::uimodel::test
 
       REQUIRE(prepareLayout(documentWithDepth(3), limits));
 
-      auto const rejected = prepareLayout(documentWithDepth(4), limits);
-      REQUIRE_FALSE(rejected);
-      CHECK(rejected.error().code == Error::Code::ValueTooLarge);
+      auto const rejectedRes = prepareLayout(documentWithDepth(4), limits);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Owned string bytes")
@@ -96,9 +97,9 @@ namespace ao::uimodel::test
       REQUIRE(prepareLayout(document, limits));
 
       document.root.id = "xx";
-      auto const rejected = prepareLayout(document, limits);
-      REQUIRE_FALSE(rejected);
-      CHECK(rejected.error().code == Error::Code::ValueTooLarge);
+      auto const rejectedRes = prepareLayout(document, limits);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
     }
   }
 
@@ -111,10 +112,10 @@ namespace ao::uimodel::test
     document.root.type = "spacer";
     document.templates["unused"] = LayoutNode{.type = "spacer"};
 
-    auto const rejected = prepareLayout(document, limits);
+    auto const rejectedRes = prepareLayout(document, limits);
 
-    REQUIRE_FALSE(rejected);
-    CHECK(rejected.error().code == Error::Code::ValueTooLarge);
+    REQUIRE_FALSE(rejectedRes);
+    CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
   TEST_CASE("LayoutPreparation - bounds long acyclic template chains", "[uimodel][unit][layout][document]")
@@ -129,10 +130,10 @@ namespace ao::uimodel::test
     document.templates["t2"] = templateReference("t3");
     document.templates["t3"] = LayoutNode{.type = "spacer"};
 
-    auto const rejected = prepareLayout(document, limits);
+    auto const rejectedRes = prepareLayout(document, limits);
 
-    REQUIRE_FALSE(rejected);
-    CHECK(rejected.error().code == Error::Code::ValueTooLarge);
+    REQUIRE_FALSE(rejectedRes);
+    CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
   TEST_CASE("LayoutPreparation - charges every repeated template expansion", "[uimodel][unit][layout][document]")
@@ -150,9 +151,9 @@ namespace ao::uimodel::test
 
     auto rejectedLimits = exactLimits;
     rejectedLimits.effective.maxEntries = 4;
-    auto const rejected = prepareLayout(document, rejectedLimits);
+    auto const rejectedRes = prepareLayout(document, rejectedLimits);
 
-    REQUIRE_FALSE(rejected);
-    CHECK(rejected.error().code == Error::Code::ValueTooLarge);
+    REQUIRE_FALSE(rejectedRes);
+    CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 } // namespace ao::uimodel::test

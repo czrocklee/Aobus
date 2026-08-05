@@ -47,14 +47,14 @@ namespace ao::rt::test
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
-    auto const missing = service.setSelection(ViewId{999}, {});
-    REQUIRE_FALSE(missing);
-    CHECK(missing.error().code == Error::Code::NotFound);
+    auto const missingRes = service.setSelection(ViewId{999}, {});
+    REQUIRE_FALSE(missingRes);
+    CHECK(missingRes.error().code == Error::Code::NotFound);
 
     auto const view = env.requireView();
     REQUIRE(env.workspace.closeView(view));
-    auto const removed = service.setSelection(view, {});
-    REQUIRE_FALSE(removed);
-    CHECK(removed.error().code == Error::Code::NotFound);
+    auto const removedRes = service.setSelection(view, {});
+    REQUIRE_FALSE(removedRes);
+    CHECK(removedRes.error().code == Error::Code::NotFound);
   }
 } // namespace ao::rt::test

@@ -84,9 +84,9 @@ namespace ao::rt::test
       auto transaction = library::test::writeTransaction(musicLibrary);
 
       auto resourceWriter = musicLibrary.resources().writer(transaction);
-      auto resourceIdResult = resourceWriter.create(kCoverBytes);
-      REQUIRE(resourceIdResult);
-      auto const resourceId = *resourceIdResult;
+      auto resourceIdRes = resourceWriter.create(kCoverBytes);
+      REQUIRE(resourceIdRes);
+      auto const resourceId = *resourceIdRes;
 
       auto trackBuilder = library::TrackBuilder::makeEmpty();
       trackBuilder.metadata()
@@ -120,20 +120,20 @@ namespace ao::rt::test
       trackBuilder.tags().add("Favorite").add("Live");
       trackBuilder.coverArt().add(PictureType::FrontCover, resourceId);
 
-      auto prepared = trackBuilder.prepare(transaction, musicLibrary.resources());
-      REQUIRE(prepared);
+      auto preparedRes = trackBuilder.prepare(transaction, musicLibrary.resources());
+      REQUIRE(preparedRes);
       auto trackWriter = musicLibrary.tracks().writer(transaction);
-      auto const trackId =
-        ao::test::requireValue(library::createPreparedTrackRecord(trackWriter, prepared->first, prepared->second));
+      auto const trackId = ao::test::requireValue(
+        library::createPreparedTrackRecord(trackWriter, preparedRes->first, preparedRes->second));
 
       auto otherTrackBuilder = library::TrackBuilder::makeEmpty();
       otherTrackBuilder.metadata().title("Another Song");
       otherTrackBuilder.property().uri("other.flac");
       otherTrackBuilder.tags().add("Favorite").add("Jazz");
-      auto otherPrepared = otherTrackBuilder.prepare(transaction, musicLibrary.resources());
-      REQUIRE(otherPrepared);
+      auto otherPreparedRes = otherTrackBuilder.prepare(transaction, musicLibrary.resources());
+      REQUIRE(otherPreparedRes);
       auto const otherTrackId = ao::test::requireValue(
-        library::createPreparedTrackRecord(trackWriter, otherPrepared->first, otherPrepared->second));
+        library::createPreparedTrackRecord(trackWriter, otherPreparedRes->first, otherPreparedRes->second));
 
       auto manifestPayload = library::FileManifestBuilder::makeEmpty()
                                .trackId(trackId)

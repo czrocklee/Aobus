@@ -33,13 +33,13 @@ namespace ao::lmdb::test
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.append(createStringData("first")));
-    auto const id2 = writer.append(createStringData("second"));
-    REQUIRE(id2);
+    auto const id2Res = writer.append(createStringData("second"));
+    REQUIRE(id2Res);
     REQUIRE(wtxn.commit());
 
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
-    CHECK(reader.maxKey() == *id2);
+    CHECK(reader.maxKey() == *id2Res);
   }
 
   TEST_CASE("Database::Reader - maxKey tracks explicitly created keys", "[lmdb][unit][database-reader][max-key]")

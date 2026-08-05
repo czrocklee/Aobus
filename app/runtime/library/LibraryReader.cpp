@@ -82,15 +82,15 @@ namespace ao::rt
         return std::nullopt;
       }
 
-      auto parsed = library::LibraryUri::parse(uri);
+      auto parsedRes = library::LibraryUri::parse(uri);
 
-      if (!parsed)
+      if (!parsedRes)
       {
         return std::nullopt;
       }
 
-      auto resolved = parsed->resolveUnder(libraryRoot);
-      return resolved ? std::optional<std::filesystem::path>{std::move(*resolved)} : std::nullopt;
+      auto resolvedRes = parsedRes->resolveUnder(libraryRoot);
+      return resolvedRes ? std::optional<std::filesystem::path>{std::move(*resolvedRes)} : std::nullopt;
     }
 
     TrackRow rowDataFromView(TrackId id,
@@ -111,15 +111,15 @@ namespace ao::rt
       {
         auto const manifestReader = library.manifest().reader(transaction);
 
-        if (auto manifestResult = manifestReader.get(uri); manifestResult)
+        if (auto manifestRes = manifestReader.get(uri); manifestRes)
         {
-          fileSize = manifestResult->fileSize();
-          modifiedTime = manifestResult->mtime();
-          status = manifestResult->status();
+          fileSize = manifestRes->fileSize();
+          modifiedTime = manifestRes->mtime();
+          status = manifestRes->status();
         }
-        else if (manifestResult.error().code != Error::Code::NotFound)
+        else if (manifestRes.error().code != Error::Code::NotFound)
         {
-          auto const& error = manifestResult.error();
+          auto const& error = manifestRes.error();
           auto const message = std::format("Failed to load file manifest entry: {}", error.message);
           throwException<Exception>(std::string_view{message}, error.location);
         }

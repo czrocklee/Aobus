@@ -63,7 +63,7 @@ namespace ao::audio::test
   {
     _opened = true;
     _lastOpenedPath = path;
-    return _openResult;
+    return _openRes;
   }
 
   void ScriptedDecoderSession::close() noexcept
@@ -92,7 +92,7 @@ namespace ao::audio::test
     }
 
     _scriptIndex = 0;
-    return _seekResult;
+    return _seekRes;
   }
 
   Result<PcmBlock> ScriptedDecoderSession::readNextBlock() noexcept
@@ -169,13 +169,13 @@ namespace ao::audio::test
     return _readCount;
   }
 
-  void ScriptedDecoderSession::setOpenResult(Result<> res)
+  void ScriptedDecoderSession::setOpenResult(Result<> resRes)
   {
-    _openResult = std::move(res);
+    _openRes = std::move(resRes);
   }
 
-  void ScriptedDecoderSession::setSeekResult(Result<> res)
+  void ScriptedDecoderSession::setSeekResult(Result<> resRes)
   {
-    _seekResult = std::move(res);
+    _seekRes = std::move(resRes);
   }
 } // namespace ao::audio::test

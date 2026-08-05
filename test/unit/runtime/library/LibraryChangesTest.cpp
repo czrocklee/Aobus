@@ -170,9 +170,9 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
     auto binding = changes.bindReplica("FirstReplica", [](LibraryChangeSet const&) noexcept {});
-    auto mutationResult = mutationService.beginInteractiveMutation();
-    REQUIRE(mutationResult);
-    REQUIRE(mutationResult->commit(LibraryChangeSet{}));
+    auto mutationRes = mutationService.beginInteractiveMutation();
+    REQUIRE(mutationRes);
+    REQUIRE(mutationRes->commit(LibraryChangeSet{}));
     CHECK(executor.queuedCount() == 1);
 
     binding.reset();
@@ -193,9 +193,9 @@ namespace ao::rt::test
       auto changes = LibraryChanges{executor, 0};
       auto mutationService = LibraryMutationService{
         executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
-      auto mutationResult = mutationService.beginInteractiveMutation();
-      REQUIRE(mutationResult);
-      REQUIRE(mutationResult->commit(LibraryChangeSet{}));
+      auto mutationRes = mutationService.beginInteractiveMutation();
+      REQUIRE(mutationRes);
+      REQUIRE(mutationRes->commit(LibraryChangeSet{}));
       CHECK(executor.queuedCount() == 1);
     }
 
@@ -211,9 +211,9 @@ namespace ao::rt::test
     auto changes = LibraryChanges{executor, 0};
     auto mutationServicePtr = std::make_unique<LibraryMutationService>(
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes);
-    auto maintenanceResult = mutationServicePtr->beginMaintenance(LibraryMaintenanceKind::ScanApply);
-    REQUIRE(maintenanceResult);
-    auto maintenance = std::move(*maintenanceResult);
+    auto maintenanceRes = mutationServicePtr->beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    REQUIRE(maintenanceRes);
+    auto maintenance = std::move(*maintenanceRes);
 
     auto completion = std::async(
       std::launch::async,
@@ -237,8 +237,8 @@ namespace ao::rt::test
     auto changes = LibraryChanges{executor, 0};
     auto mutationService = LibraryMutationService{
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
-    auto maintenanceResult = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
-    REQUIRE(maintenanceResult);
+    auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    REQUIRE(maintenanceRes);
     auto phases = std::vector<std::string_view>{};
     auto changedSubscription =
       changes.onChanged([&phases](LibraryChangeSet const&) noexcept { phases.emplace_back("publication"); });
@@ -251,12 +251,12 @@ namespace ao::rt::test
         }
       });
 
-    auto mutationResult = mutationService.beginMaintenanceMutation(*maintenanceResult);
-    REQUIRE(mutationResult);
-    REQUIRE(mutationResult->commit(LibraryChangeSet{}));
+    auto mutationRes = mutationService.beginMaintenanceMutation(*maintenanceRes);
+    REQUIRE(mutationRes);
+    REQUIRE(mutationRes->commit(LibraryChangeSet{}));
     CHECK(executor.queuedCount() == 1);
 
-    auto maintenance = std::move(*maintenanceResult);
+    auto maintenance = std::move(*maintenanceRes);
     auto completion = std::async(
       std::launch::async,
       [optMaintenance = std::optional<LibraryMutationService::MaintenanceGuard>{std::move(maintenance)}] mutable
@@ -290,8 +290,8 @@ namespace ao::rt::test
     auto committed = std::async(std::launch::async,
                                 [&mutationService]
                                 {
-                                  auto mutationResult = mutationService.beginInteractiveMutation();
-                                  return mutationResult && mutationResult->commit(LibraryChangeSet{}).has_value();
+                                  auto mutationRes = mutationService.beginInteractiveMutation();
+                                  return mutationRes && mutationRes->commit(LibraryChangeSet{}).has_value();
                                 });
 
     REQUIRE(executor.waitUntilQueued());
@@ -322,8 +322,8 @@ namespace ao::rt::test
                                  [&mutationService, started]
                                  {
                                    started.set(true);
-                                   auto mutationResult = mutationService.beginInteractiveMutation();
-                                   return mutationResult.has_value();
+                                   auto mutationRes = mutationService.beginInteractiveMutation();
+                                   return mutationRes.has_value();
                                  });
     REQUIRE(started.waitUntil(true));
     CHECK(nextWriter.wait_for(std::chrono::milliseconds{20}) == std::future_status::timeout);

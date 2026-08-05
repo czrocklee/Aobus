@@ -39,11 +39,11 @@ namespace ao::audio::detail::test
   TEST_CASE("validateOpenedMode - a lossy result without a confirmed endpoint is rejected",
             "[audio][regression][engine]")
   {
-    auto const validated = validateOpenedMode(integerSignal(24), unconfirmedMode(SampleEncoding::Signed16Le));
+    auto const validatedRes = validateOpenedMode(integerSignal(24), unconfirmedMode(SampleEncoding::Signed16Le));
 
-    REQUIRE_FALSE(validated);
-    CHECK(validated.error().code == Error::Code::FormatRejected);
-    CHECK(validated.error().message.contains("Backend returned lossy S16_LE"));
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
+    CHECK(validatedRes.error().message.contains("Backend returned lossy S16_LE"));
   }
 
   TEST_CASE("validateOpenedMode - a lossless result without a confirmed endpoint is accepted", "[audio][unit][engine]")
@@ -57,11 +57,11 @@ namespace ao::audio::detail::test
   {
     auto const mode = openedMode(SampleEncoding::Signed16Le, 16);
 
-    auto const validated = validateOpenedMode(integerSignal(24), mode);
+    auto const validatedRes = validateOpenedMode(integerSignal(24), mode);
 
-    REQUIRE_FALSE(validated);
-    CHECK(validated.error().code == Error::Code::FormatRejected);
-    CHECK(validated.error().message.contains("Backend returned lossy S16_LE"));
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
+    CHECK(validatedRes.error().message.contains("Backend returned lossy S16_LE"));
   }
 
   TEST_CASE("validateOpenedMode - a confirmed endpoint at source precision loses nothing",
@@ -78,11 +78,11 @@ namespace ao::audio::detail::test
   TEST_CASE("validateOpenedMode - a confirmed endpoint narrower than the source is rejected",
             "[audio][regression][engine]")
   {
-    auto const validated = validateOpenedMode(integerSignal(32), openedMode(SampleEncoding::Signed32Le, 24));
+    auto const validatedRes = validateOpenedMode(integerSignal(32), openedMode(SampleEncoding::Signed32Le, 24));
 
-    REQUIRE_FALSE(validated);
-    CHECK(validated.error().code == Error::Code::FormatRejected);
-    CHECK(validated.error().message.contains("24-bit endpoint for a 32-bit source"));
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
+    CHECK(validatedRes.error().message.contains("24-bit endpoint for a 32-bit source"));
   }
 
   TEST_CASE("validateOpenedMode - an endpoint wider than its client encoding is rejected",
@@ -90,11 +90,11 @@ namespace ao::audio::detail::test
   {
     auto const mode = openedMode(SampleEncoding::Signed16Le, 24);
 
-    auto const validated = validateOpenedMode(integerSignal(16), mode);
+    auto const validatedRes = validateOpenedMode(integerSignal(16), mode);
 
-    REQUIRE_FALSE(validated);
-    CHECK(validated.error().code == Error::Code::FormatRejected);
-    CHECK(validated.error().message.contains("cannot carry it"));
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
+    CHECK(validatedRes.error().message.contains("cannot carry it"));
   }
 
   TEST_CASE("validateOpenedMode - a zero-precision endpoint is rejected", "[audio][unit][engine]")
@@ -107,9 +107,9 @@ namespace ao::audio::detail::test
     auto rateChanged = unconfirmedMode(SampleEncoding::Signed24PackedLe);
     rateChanged.clientFormat.sampleRate = 44100;
 
-    auto const validatedRate = validateOpenedMode(integerSignal(24), rateChanged);
-    REQUIRE_FALSE(validatedRate);
-    CHECK(validatedRate.error().code == Error::Code::FormatRejected);
+    auto const validatedRateRes = validateOpenedMode(integerSignal(24), rateChanged);
+    REQUIRE_FALSE(validatedRateRes);
+    CHECK(validatedRateRes.error().code == Error::Code::FormatRejected);
 
     auto channelsChanged = unconfirmedMode(SampleEncoding::Signed24PackedLe);
     channelsChanged.clientFormat.channels = 1;
@@ -130,10 +130,10 @@ namespace ao::audio::detail::test
     auto mode = openedMode(SampleEncoding::Signed16Le, 16);
     mode.optEndpoint->signalFormat.sampleKind = SampleKind::FloatingPoint;
 
-    auto const validated = validateOpenedMode(integerSignal(16), mode);
+    auto const validatedRes = validateOpenedMode(integerSignal(16), mode);
 
-    REQUIRE_FALSE(validated);
-    CHECK(validated.error().message.contains("sample domain"));
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().message.contains("sample domain"));
   }
 
   TEST_CASE("validateOpenedMode - float signals are never quantized to integers", "[audio][regression][engine]")
@@ -142,9 +142,9 @@ namespace ao::audio::detail::test
       SignalFormat{.sampleRate = kRate, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint};
 
     auto floatToInteger = openedMode(SampleEncoding::Signed16Le, 16);
-    auto const validated = validateOpenedMode(floatSignal, floatToInteger);
+    auto const validatedRes = validateOpenedMode(floatSignal, floatToInteger);
 
-    REQUIRE_FALSE(validated);
-    CHECK(validated.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
   }
 } // namespace ao::audio::detail::test

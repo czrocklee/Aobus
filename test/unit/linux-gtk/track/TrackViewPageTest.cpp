@@ -89,10 +89,10 @@ namespace ao::gtk::test
         };
         library::test::applyTrackSpec(builder, spec);
 
-        auto prepared = builder.prepare(transaction, library.resources());
-        REQUIRE(prepared);
+        auto preparedRes = builder.prepare(transaction, library.resources());
+        REQUIRE(preparedRes);
         trackIds.push_back(
-          ao::test::requireValue(library::createPreparedTrackRecord(writer, prepared->first, prepared->second)));
+          ao::test::requireValue(library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second)));
       }
 
       REQUIRE(transaction.commit());

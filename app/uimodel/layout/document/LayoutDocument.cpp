@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -115,14 +116,14 @@ namespace ao::uimodel
 
     if (node.is_seq())
     {
-      auto sequence = yaml::readScalarSequence<std::string>(node, context);
+      auto sequenceRes = yaml::readScalarSequence<std::string>(node, context);
 
-      if (!sequence)
+      if (!sequenceRes)
       {
-        return std::unexpected{sequence.error()};
+        return std::unexpected{sequenceRes.error()};
       }
 
-      return LayoutValue{std::move(*sequence)};
+      return LayoutValue{std::move(*sequenceRes)};
     }
 
     return makeError(Error::Code::FormatRejected,
@@ -192,14 +193,14 @@ namespace ao::uimodel
 
     if (auto const tooltipNode = yaml::findChild(node, "tooltip"); tooltipNode.readable())
     {
-      auto tooltip = readLayoutNode(tooltipNode, yaml::fieldContext(context, "tooltip"));
+      auto tooltipRes = readLayoutNode(tooltipNode, yaml::fieldContext(context, "tooltip"));
 
-      if (!tooltip)
+      if (!tooltipRes)
       {
-        return std::unexpected{tooltip.error()};
+        return std::unexpected{tooltipRes.error()};
       }
 
-      value.optTooltip = BoxedLayoutNode{std::move(*tooltip)};
+      value.optTooltip = BoxedLayoutNode{std::move(*tooltipRes)};
     }
 
     return value;
@@ -234,21 +235,21 @@ namespace ao::uimodel
       return std::unexpected{result.error()};
     }
 
-    auto version = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
+    auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
 
-    if (!version)
+    if (!versionRes)
     {
-      return std::unexpected{version.error()};
+      return std::unexpected{versionRes.error()};
     }
 
-    if (*version != kLayoutDocumentVersion)
+    if (*versionRes != kLayoutDocumentVersion)
     {
-      return makeError(Error::Code::NotSupported, std::format("Unsupported layout document version {}", *version));
+      return makeError(Error::Code::NotSupported, std::format("Unsupported layout document version {}", *versionRes));
     }
 
     constexpr auto kKeys = std::to_array<std::string_view>({"version", "root", "templates"});
 
-    auto document = LayoutDocument{.version = *version};
+    auto document = LayoutDocument{.version = *versionRes};
     auto reader = yaml::MapReader{node, kKeys, kContext};
     reader.requiredValue("root", document.root, readLayoutNode)
       .optionalValue("templates", document.templates, readLayoutNodeMap);

@@ -214,11 +214,11 @@ namespace ao::gtk::layout::editor::test
       auto tree = ryml::Tree{};
       REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));
 
-      auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-      REQUIRE(decoded);
+      auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      REQUIRE(decodedRes);
 
-      REQUIRE(decoded->templates.contains("playback.compactControls"));
-      CHECK(decoded->templates.at("playback.compactControls").type == "box");
+      REQUIRE(decodedRes->templates.contains("playback.compactControls"));
+      CHECK(decodedRes->templates.at("playback.compactControls").type == "box");
     }
   }
 } // namespace ao::gtk::layout::editor::test

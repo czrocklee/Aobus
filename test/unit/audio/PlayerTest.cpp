@@ -1106,15 +1106,15 @@ namespace ao::audio::test
 
     auto const nextItem =
       Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 2}, .input = PlaybackInput{.filePath = fixturePath}};
-    auto const preparedNext = player.prepareNext(nextItem);
-    REQUIRE(preparedNext);
+    auto const preparedNextRes = player.prepareNext(nextItem);
+    REQUIRE(preparedNextRes);
     auto const audioGeneration = player.audioPlaybackGeneration();
     auto const graphGeneration = player.playbackGeneration();
-    REQUIRE(preparedNext->generation == audioGeneration);
+    REQUIRE(preparedNextRes->generation == audioGeneration);
 
-    auto candidate = player.stagePlayback(Engine::PlaybackItem{
+    auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
       .id = Engine::PlaybackItemId{.value = 3}, .input = PlaybackInput{.filePath = "/missing/staged.flac"}});
-    REQUIRE_FALSE(candidate);
+    REQUIRE_FALSE(candidateRes);
     CHECK(player.audioPlaybackGeneration() == audioGeneration);
     CHECK(player.playbackGeneration() == graphGeneration);
     CHECK(player.clearPreparedNext() == nextItem.id);
@@ -1728,11 +1728,11 @@ namespace ao::audio::test
     auto* const activeTarget = probePtr->target();
     REQUIRE(activeTarget != nullptr);
 
-    auto candidate = player.stagePlayback(Engine::PlaybackItem{
+    auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
       .id = Engine::PlaybackItemId{.value = 6},
       .input = PlaybackInput{.filePath = "candidate-failure.flac"},
     });
-    REQUIRE(candidate);
+    REQUIRE(candidateRes);
     CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{0}));
 
     std::size_t stateChangedCount = 0;
@@ -1777,13 +1777,13 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto candidate = player.stagePlayback(Engine::PlaybackItem{
+      auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
         .id = Engine::PlaybackItemId{.value = 11}, .input = PlaybackInput{.filePath = fixturePath}});
-      REQUIRE(candidate);
-      auto receipt = player.commitPlayback(std::move(*candidate));
-      REQUIRE(receipt);
-      barrier = receipt->cancellationBarrier;
-      CHECK(receipt->generation == player.audioPlaybackGeneration());
+      REQUIRE(candidateRes);
+      auto receiptRes = player.commitPlayback(std::move(*candidateRes));
+      REQUIRE(receiptRes);
+      barrier = receiptRes->cancellationBarrier;
+      CHECK(receiptRes->generation == player.audioPlaybackGeneration());
     }
 
     SECTION("completed stop")
@@ -1810,9 +1810,9 @@ namespace ao::audio::test
     REQUIRE(player.play(Engine::PlaybackItem{
       .id = Engine::PlaybackItemId{.value = 201}, .input = PlaybackInput{.filePath = "current.flac"}}));
     executor.drain();
-    auto candidate = player.stagePlayback(Engine::PlaybackItem{
+    auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
       .id = Engine::PlaybackItemId{.value = 202}, .input = PlaybackInput{.filePath = "replacement.flac"}});
-    REQUIRE(candidate);
+    REQUIRE(candidateRes);
 
     auto const oldAudioGeneration = player.audioPlaybackGeneration();
     auto const oldGraphGeneration = player.playbackGeneration();
@@ -1820,10 +1820,10 @@ namespace ao::audio::test
     player.setOnPlaybackFailure([&](Engine::PlaybackFailure const&) { ++failureCount; });
     probePtr->setOpenError(Error{.code = Error::Code::ResourceBusy, .message = "device busy"});
 
-    auto const committed = player.commitPlayback(std::move(*candidate));
-    REQUIRE(committed);
-    CHECK_FALSE(committed->playbackStarted);
-    CHECK(committed->generation == committed->cancellationBarrier.generation);
+    auto const committedRes = player.commitPlayback(std::move(*candidateRes));
+    REQUIRE(committedRes);
+    CHECK_FALSE(committedRes->playbackStarted);
+    CHECK(committedRes->generation == committedRes->cancellationBarrier.generation);
     CHECK(player.audioPlaybackGeneration() > oldAudioGeneration);
     CHECK(player.playbackGeneration() > oldGraphGeneration);
     CHECK(player.transport() == Transport::Error);
@@ -1857,12 +1857,12 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto candidate = player.stagePlayback(Engine::PlaybackItem{
+      auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
         .id = Engine::PlaybackItemId{.value = 31}, .input = PlaybackInput{.filePath = fixturePath}});
-      REQUIRE(candidate);
-      auto receipt = player.commitPlayback(std::move(*candidate));
-      REQUIRE(receipt);
-      barrier = receipt->cancellationBarrier;
+      REQUIRE(candidateRes);
+      auto receiptRes = player.commitPlayback(std::move(*candidateRes));
+      REQUIRE(receiptRes);
+      barrier = receiptRes->cancellationBarrier;
     }
 
     SECTION("completed stop")
@@ -1909,12 +1909,12 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto candidate = player.stagePlayback(Engine::PlaybackItem{
+      auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
         .id = Engine::PlaybackItemId{.value = 41}, .input = PlaybackInput{.filePath = "replacement.flac"}});
-      REQUIRE(candidate);
-      auto receipt = player.commitPlayback(std::move(*candidate));
-      REQUIRE(receipt);
-      barrier = receipt->cancellationBarrier;
+      REQUIRE(candidateRes);
+      auto receiptRes = player.commitPlayback(std::move(*candidateRes));
+      REQUIRE(receiptRes);
+      barrier = receiptRes->cancellationBarrier;
     }
 
     SECTION("completed stop")
@@ -1949,10 +1949,10 @@ namespace ao::audio::test
 
     bool advanced = false;
     player.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advanced = true; });
-    auto const prepared = player.prepareNext(Engine::PlaybackItem{
+    auto const preparedRes = player.prepareNext(Engine::PlaybackItem{
       .id = Engine::PlaybackItemId{.value = 51}, .input = PlaybackInput{.filePath = "second.flac"}});
-    REQUIRE(prepared);
-    REQUIRE(prepared->transition == Engine::PreparedTransitionMode::Gapless);
+    REQUIRE(preparedRes);
+    REQUIRE(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
     auto* const target = probePtr->target();
     REQUIRE(target != nullptr);
     auto output = std::array<std::byte, 4>{};
@@ -2008,14 +2008,14 @@ namespace ao::audio::test
     player.setOnPlaybackFailure([&](Engine::PlaybackFailure const& failure) { failures.push_back(failure); });
     auto const preparedItem = Engine::PlaybackItem{
       .id = Engine::PlaybackItemId{.value = 21}, .input = PlaybackInput{.filePath = "prepared-failure.flac"}};
-    auto const prepared = player.prepareNext(preparedItem);
-    REQUIRE(prepared);
+    auto const preparedRes = player.prepareNext(preparedItem);
+    REQUIRE(preparedRes);
     REQUIRE(executor.drainUntil([&] { return !failures.empty(); }, std::chrono::seconds{5}));
 
     REQUIRE(failures.size() == 1);
     CHECK(failures.front().kind == Engine::PlaybackFailureKind::Decode);
     CHECK(failures.front().itemId == preparedItem.id);
-    CHECK(failures.front().generation == prepared->generation);
+    CHECK(failures.front().generation == preparedRes->generation);
     CHECK(failures.front().error.message == "prepared decode failed");
     CHECK(failures.front().recoverable);
     CHECK(player.transport() == Transport::Playing);

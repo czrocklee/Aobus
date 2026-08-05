@@ -40,7 +40,6 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
@@ -90,20 +89,20 @@ namespace ao::gtk
                                                            uimodel::LayoutComponentCatalog const& components,
                                                            uimodel::LayoutActionCatalog const& actions)
     {
-      auto prepared = uimodel::prepareLayout(document, limits);
+      auto preparedRes = uimodel::prepareLayout(document, limits);
 
-      if (!prepared)
+      if (!preparedRes)
       {
-        return std::unexpected{prepared.error()};
+        return std::unexpected{preparedRes.error()};
       }
 
-      if (auto validated = uimodel::requireValidLayout(*prepared, components, actions, layout::layoutDialect());
-          !validated)
+      if (auto validatedRes = uimodel::requireValidLayout(*preparedRes, components, actions, layout::layoutDialect());
+          !validatedRes)
       {
-        return std::unexpected{validated.error()};
+        return std::unexpected{validatedRes.error()};
       }
 
-      return prepared;
+      return preparedRes;
     }
 
     LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
@@ -126,42 +125,42 @@ namespace ao::gtk
       }
 
       auto const presetId = layout::presetIdFromString(selection.presetId);
-      auto loaded = store.load(selection.presetId);
+      auto loadedRes = store.load(selection.presetId);
       bool usingCustomLayout = false;
       auto doc = uimodel::LayoutDocument{};
 
-      if (!loaded)
+      if (!loadedRes)
       {
         APP_LOG_WARN("ShellLayoutController: Rejected custom layout for preset '{}': {}",
                      selection.presetId,
-                     loaded.error().message);
+                     loadedRes.error().message);
         doc = layout::makeBuiltInLayout(presetId);
       }
-      else if (*loaded)
+      else if (*loadedRes)
       {
         usingCustomLayout = true;
-        doc = std::move(**loaded);
+        doc = std::move(**loadedRes);
       }
       else
       {
         doc = layout::makeBuiltInLayout(presetId);
       }
 
-      auto prepared = prepareValidatedLayout(doc, store.limits(), components, actions);
+      auto preparedRes = prepareValidatedLayout(doc, store.limits(), components, actions);
 
-      if (!prepared && usingCustomLayout)
+      if (!preparedRes && usingCustomLayout)
       {
         APP_LOG_WARN("ShellLayoutController: Rejected custom layout for preset '{}': {}",
                      selection.presetId,
-                     prepared.error().message);
+                     preparedRes.error().message);
         doc = layout::makeBuiltInLayout(presetId);
-        prepared = prepareValidatedLayout(doc, store.limits(), components, actions);
+        preparedRes = prepareValidatedLayout(doc, store.limits(), components, actions);
       }
 
-      if (!prepared)
+      if (!preparedRes)
       {
         throwException<Exception>(
-          "Built-in shell layout '{}' is invalid: {}", selection.presetId, prepared.error().message);
+          "Built-in shell layout '{}' is invalid: {}", selection.presetId, preparedRes.error().message);
       }
 
       auto stateDoc = componentStateStore == nullptr
@@ -171,7 +170,7 @@ namespace ao::gtk
 
       return {.presetId = selection.presetId,
               .document = std::move(doc),
-              .preparedLayout = std::move(*prepared),
+              .preparedLayout = std::move(*preparedRes),
               .componentState = std::move(stateDoc)};
     }
 
@@ -230,9 +229,9 @@ namespace ao::gtk
         std::move(stateProvider));
     };
 
-    auto const hasActiveSequence = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
+    auto const hasActiveSequence = [this](layout::ActionActivationContext const&) -> layout::ActionAvailability
     {
-      return uimodel::LayoutActionAvailability{
+      return layout::ActionAvailability{
         .enabled = _runtime.playback().snapshot().succession.currentTrackId != kInvalidTrackId, .disabledReason = ""};
     };
 
@@ -285,9 +284,9 @@ namespace ao::gtk
 
     auto const isEnabled = [this](uimodel::PlaybackCommand command)
     {
-      return [this, command](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
+      return [this, command](layout::ActionActivationContext const&) -> layout::ActionAvailability
       {
-        return uimodel::LayoutActionAvailability{
+        return layout::ActionAvailability{
           .enabled = commandSurface(_dependencies.playbackCommandSurface).isEnabled(command), .disabledReason = ""};
       };
     };
@@ -467,12 +466,11 @@ namespace ao::gtk
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+      [](layout::ActionActivationContext const& ctx) -> layout::ActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
         auto projPtr = ctx.runtime.workspace().detailProjection(target);
-        return uimodel::LayoutActionAvailability{
-          .enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
+        return layout::ActionAvailability{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
 
     registerAction(
@@ -494,12 +492,11 @@ namespace ao::gtk
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+      [](layout::ActionActivationContext const& ctx) -> layout::ActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
         auto projPtr = ctx.runtime.workspace().detailProjection(target);
-        return uimodel::LayoutActionAvailability{
-          .enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
+        return layout::ActionAvailability{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
 
     registerTrackOrderActions(registerAction);
@@ -529,7 +526,7 @@ namespace ao::gtk
             entry->pagePtr->applyListOrderCommand(command);
           }
         },
-        [this, command](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
+        [this, command](layout::ActionActivationContext const&) -> layout::ActionAvailability
         {
           if (_dependencies.trackPageHost == nullptr)
           {
@@ -631,23 +628,23 @@ namespace ao::gtk
 
   void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc, uimodel::LayoutBuildStateView buildState)
   {
-    auto prepared = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
+    auto preparedRes = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
-    if (!prepared)
+    if (!preparedRes)
     {
-      APP_LOG_WARN("ShellLayoutController: Rejected layout rebuild: {}", prepared.error().message);
+      APP_LOG_WARN("ShellLayoutController: Rejected layout rebuild: {}", preparedRes.error().message);
       return;
     }
 
-    auto pending = prepareHost(*prepared, std::move(buildState));
+    auto pendingRes = prepareHost(*preparedRes, std::move(buildState));
 
-    if (!pending)
+    if (!pendingRes)
     {
-      APP_LOG_ERROR("ShellLayoutController: Failed to prepare layout rebuild: {}", pending.error().message);
+      APP_LOG_ERROR("ShellLayoutController: Failed to prepare layout rebuild: {}", pendingRes.error().message);
       return;
     }
 
-    _host.commit(_runtimeState, std::move(*pending));
+    _host.commit(_runtimeState, std::move(*pendingRes));
   }
 
   void ShellLayoutController::loadLayout()
@@ -690,7 +687,7 @@ namespace ao::gtk
   {
     APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started");
 
-    auto optResult = std::optional<LayoutLoadResult>{};
+    auto optRes = std::optional<LayoutLoadResult>{};
     bool failed = false;
 
     try
@@ -700,7 +697,7 @@ namespace ao::gtk
 
       if (layoutStorePtr && configStorePtr)
       {
-        optResult = loadLayoutOnWorker(
+        optRes = loadLayoutOnWorker(
           *layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, componentCatalog, actionCatalog);
       }
     }
@@ -718,16 +715,16 @@ namespace ao::gtk
       co_return;
     }
 
-    if (!optResult)
+    if (!optRes)
     {
       co_return;
     }
 
     APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-    controller->applyLoadedLayoutWithFaultReporting(std::move(optResult->presetId),
-                                                    std::move(optResult->document),
-                                                    std::move(optResult->preparedLayout),
-                                                    std::move(optResult->componentState));
+    controller->applyLoadedLayoutWithFaultReporting(std::move(optRes->presetId),
+                                                    std::move(optRes->document),
+                                                    std::move(optRes->preparedLayout),
+                                                    std::move(optRes->componentState));
   }
 
   void ShellLayoutController::applyLoadedLayoutWithFaultReporting(std::string presetId,
@@ -751,13 +748,13 @@ namespace ao::gtk
                                                 uimodel::PreparedLayout preparedLayout,
                                                 uimodel::LayoutComponentStateDocument componentState)
   {
-    auto pending = prepareHost(
+    auto pendingRes = prepareHost(
       preparedLayout, uimodel::LayoutBuildStateView{presetId, componentState, _runtimeState.componentStateGeneration});
 
-    if (!pending)
+    if (!pendingRes)
     {
       APP_LOG_ERROR(
-        "ShellLayoutController: Failed to prepare loaded layout '{}': {}", presetId, pending.error().message);
+        "ShellLayoutController: Failed to prepare loaded layout '{}': {}", presetId, pendingRes.error().message);
       return;
     }
 
@@ -782,12 +779,12 @@ namespace ao::gtk
     }
 
     // Invalidate the old generation before replacing the shared component-state document.
-    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
+    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
     _session.applyLayout(std::move(presetId), std::move(document));
     auto const snapshot = _session.snapshot();
     _runtimeState.activePresetId = snapshot.presetId;
     _runtimeState.componentState = std::move(componentState);
-    _host.commit(_runtimeState, std::move(*pending));
+    _host.commit(_runtimeState, std::move(*pendingRes));
   }
 
   void ShellLayoutController::openEditor(AppConfigStore& configStore)
@@ -803,17 +800,17 @@ namespace ao::gtk
     {
       if (storePtr)
       {
-        auto loaded = storePtr->load(id);
+        auto loadedRes = storePtr->load(id);
 
-        if (loaded && *loaded)
+        if (loadedRes && *loadedRes)
         {
-          return std::move(**loaded);
+          return std::move(**loadedRes);
         }
 
-        if (!loaded)
+        if (!loadedRes)
         {
           APP_LOG_WARN(
-            "ShellLayoutController: Editor rejected custom layout for preset '{}': {}", id, loaded.error().message);
+            "ShellLayoutController: Editor rejected custom layout for preset '{}': {}", id, loadedRes.error().message);
         }
       }
 
@@ -884,26 +881,27 @@ namespace ao::gtk
 
     for (auto const& [id, doc] : result.modified)
     {
-      auto prepared = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
+      auto preparedRes = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
-      if (!prepared)
+      if (!preparedRes)
       {
-        APP_LOG_WARN("ShellLayoutController: Rejected editor save for preset '{}': {}", id, prepared.error().message);
-        return std::unexpected{prepared.error()};
+        APP_LOG_WARN(
+          "ShellLayoutController: Rejected editor save for preset '{}': {}", id, preparedRes.error().message);
+        return std::unexpected{preparedRes.error()};
       }
 
-      preparedModified.emplace(id, std::move(*prepared));
+      preparedModified.emplace(id, std::move(*preparedRes));
     }
 
-    auto activePrepared =
+    auto activePreparedRes =
       prepareValidatedLayout(result.activeDocument, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
-    if (!activePrepared)
+    if (!activePreparedRes)
     {
       APP_LOG_WARN("ShellLayoutController: Rejected active editor layout '{}': {}",
                    result.activePresetId,
-                   activePrepared.error().message);
-      return std::unexpected{activePrepared.error()};
+                   activePreparedRes.error().message);
+      return std::unexpected{activePreparedRes.error()};
     }
 
     auto nextComponentState = uimodel::ShellLayoutSessionModel::emptyComponentState(result.activePresetId);
@@ -913,38 +911,39 @@ namespace ao::gtk
     {
       nextComponentState = _componentStateStorePtr->load(result.activePresetId)
                              .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(result.activePresetId));
-      uimodel::pruneComponentState(nextComponentState, *activePrepared);
+      uimodel::pruneComponentState(nextComponentState, *activePreparedRes);
     }
 
-    auto pending = prepareHost(
-      *activePrepared,
+    auto pendingRes = prepareHost(
+      *activePreparedRes,
       uimodel::LayoutBuildStateView{result.activePresetId, nextComponentState, _runtimeState.componentStateGeneration});
 
-    if (!pending)
+    if (!pendingRes)
     {
       APP_LOG_ERROR("ShellLayoutController: Failed to prepare editor save for preset '{}': {}",
                     result.activePresetId,
-                    pending.error().message);
-      return std::unexpected{pending.error()};
+                    pendingRes.error().message);
+      return std::unexpected{pendingRes.error()};
     }
 
     if (_layoutStorePtr)
     {
       for (auto const& [id, doc] : result.modified)
       {
-        if (auto saved = _layoutStorePtr->save(doc, id); !saved)
+        if (auto savedRes = _layoutStorePtr->save(doc, id); !savedRes)
         {
-          APP_LOG_ERROR("ShellLayoutController: Failed to save layout preset '{}': {}", id, saved.error().message);
-          return std::unexpected{saved.error()};
+          APP_LOG_ERROR("ShellLayoutController: Failed to save layout preset '{}': {}", id, savedRes.error().message);
+          return std::unexpected{savedRes.error()};
         }
       }
 
       for (auto const& id : result.resets)
       {
-        if (auto removed = _layoutStorePtr->remove(id); !removed)
+        if (auto removedRes = _layoutStorePtr->remove(id); !removedRes)
         {
-          APP_LOG_ERROR("ShellLayoutController: Failed to reset layout preset '{}': {}", id, removed.error().message);
-          return std::unexpected{removed.error()};
+          APP_LOG_ERROR(
+            "ShellLayoutController: Failed to reset layout preset '{}': {}", id, removedRes.error().message);
+          return std::unexpected{removedRes.error()};
         }
       }
     }
@@ -978,12 +977,12 @@ namespace ao::gtk
     }
 
     // Invalidate the retiring generation before replacing its shared state document.
-    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
+    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
     _session.applyLayout(result.activePresetId, result.activeDocument);
     auto const snapshot = _session.snapshot();
     _runtimeState.activePresetId = snapshot.presetId;
     _runtimeState.componentState = std::move(nextComponentState);
-    _host.commit(_runtimeState, std::move(*pending));
+    _host.commit(_runtimeState, std::move(*pendingRes));
     return {};
   }
 
@@ -991,23 +990,24 @@ namespace ao::gtk
   {
     auto const presetId = uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
     auto nextComponentState = uimodel::ShellLayoutSessionModel::emptyComponentState(presetId);
-    auto prepared = prepareValidatedLayout(
+    auto preparedRes = prepareValidatedLayout(
       _session.snapshot().layout, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
-    if (!prepared)
+    if (!preparedRes)
     {
       APP_LOG_WARN(
-        "ShellLayoutController: Rejected runtime-state reset layout '{}': {}", presetId, prepared.error().message);
+        "ShellLayoutController: Rejected runtime-state reset layout '{}': {}", presetId, preparedRes.error().message);
       return;
     }
 
-    auto pending = prepareHost(
-      *prepared, uimodel::LayoutBuildStateView{presetId, nextComponentState, _runtimeState.componentStateGeneration});
+    auto pendingRes =
+      prepareHost(*preparedRes,
+                  uimodel::LayoutBuildStateView{presetId, nextComponentState, _runtimeState.componentStateGeneration});
 
-    if (!pending)
+    if (!pendingRes)
     {
       APP_LOG_ERROR(
-        "ShellLayoutController: Failed to prepare runtime-state reset '{}': {}", presetId, pending.error().message);
+        "ShellLayoutController: Failed to prepare runtime-state reset '{}': {}", presetId, pendingRes.error().message);
       return;
     }
 
@@ -1019,11 +1019,11 @@ namespace ao::gtk
       }
     }
 
-    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
+    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
     auto reset = _session.resetRuntimeLayoutState();
     _runtimeState.activePresetId = reset.presetId;
     _runtimeState.componentState = std::move(reset.componentState);
-    _host.commit(_runtimeState, std::move(*pending));
+    _host.commit(_runtimeState, std::move(*pendingRes));
     refreshExportedActions();
   }
 
@@ -1064,31 +1064,31 @@ namespace ao::gtk
                                                       uimodel::LayoutComponentStateDocument promotedState)
   {
     auto const& presetId = promotedState.preset;
-    auto prepared =
+    auto preparedRes =
       prepareValidatedLayout(promotedLayout, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
-    if (!prepared)
+    if (!preparedRes)
     {
-      APP_LOG_WARN("ShellLayoutController: Rejected promoted layout '{}': {}", presetId, prepared.error().message);
+      APP_LOG_WARN("ShellLayoutController: Rejected promoted layout '{}': {}", presetId, preparedRes.error().message);
       return;
     }
 
-    auto pending = prepareHost(
-      *prepared, uimodel::LayoutBuildStateView{presetId, promotedState, _runtimeState.componentStateGeneration});
+    auto pendingRes = prepareHost(
+      *preparedRes, uimodel::LayoutBuildStateView{presetId, promotedState, _runtimeState.componentStateGeneration});
 
-    if (!pending)
+    if (!pendingRes)
     {
       APP_LOG_ERROR(
-        "ShellLayoutController: Failed to prepare promoted layout '{}': {}", presetId, pending.error().message);
+        "ShellLayoutController: Failed to prepare promoted layout '{}': {}", presetId, pendingRes.error().message);
       return;
     }
 
     if (_layoutStorePtr)
     {
-      if (auto saved = _layoutStorePtr->save(promotedLayout, presetId); !saved)
+      if (auto savedRes = _layoutStorePtr->save(promotedLayout, presetId); !savedRes)
       {
         APP_LOG_ERROR(
-          "ShellLayoutController: Failed to save promoted layout '{}': {}", presetId, saved.error().message);
+          "ShellLayoutController: Failed to save promoted layout '{}': {}", presetId, savedRes.error().message);
         return;
       }
 
@@ -1112,10 +1112,10 @@ namespace ao::gtk
 
     _session.applyLayout(presetId, std::move(promotedLayout));
     auto const snapshot = _session.snapshot();
-    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
+    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
     _runtimeState.activePresetId = snapshot.presetId;
     _runtimeState.componentState = std::move(promotedState);
-    _host.commit(_runtimeState, std::move(*pending));
+    _host.commit(_runtimeState, std::move(*pendingRes));
     refreshExportedActions();
   }
 
@@ -1145,7 +1145,7 @@ namespace ao::gtk
     _actionRegistry.activate(id, ctx);
   }
 
-  uimodel::LayoutActionAvailability ShellLayoutController::actionAvailability(std::string_view id)
+  layout::ActionAvailability ShellLayoutController::actionAvailability(std::string_view id)
   {
     auto ctx = actionContext(id);
     return _actionRegistry.state(id, ctx);

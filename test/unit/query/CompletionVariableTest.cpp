@@ -224,9 +224,9 @@ namespace ao::query::test
           auto const* found = findQueryVariableDescriptor(descriptor.type, descriptor.canonicalName);
           REQUIRE(found != nullptr);
           CHECK(found->field == descriptor.field);
-          auto const field = detail::resolveVariableField(descriptor.type, descriptor.canonicalName);
-          REQUIRE(field.has_value());
-          CHECK(*field == descriptor.field);
+          auto const fieldRes = detail::resolveVariableField(descriptor.type, descriptor.canonicalName);
+          REQUIRE(fieldRes.has_value());
+          CHECK(*fieldRes == descriptor.field);
 
           auto const matches = completeQueryVariable(descriptor.type, descriptor.canonicalName);
           CHECK(containsMatch(matches, descriptor, QueryVariableCompletionMatchKind::CanonicalPrefix));
@@ -239,9 +239,9 @@ namespace ao::query::test
             auto const* found = findQueryVariableDescriptor(descriptor.type, alias);
             REQUIRE(found != nullptr);
             CHECK(found->field == descriptor.field);
-            auto const field = detail::resolveVariableField(descriptor.type, alias);
-            REQUIRE(field.has_value());
-            CHECK(*field == descriptor.field);
+            auto const fieldRes = detail::resolveVariableField(descriptor.type, alias);
+            REQUIRE(fieldRes.has_value());
+            CHECK(*fieldRes == descriptor.field);
 
             auto const matches = completeQueryVariable(descriptor.type, alias);
             CHECK(containsMatch(matches, descriptor, QueryVariableCompletionMatchKind::ExactAlias));

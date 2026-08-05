@@ -180,14 +180,14 @@ namespace ao::media::file::mpeg
         audioStartOffset = *optId3Size;
       }
 
-      auto const payloadEndResult = trimTrailingTags(fileBytes);
+      auto const payloadEndRes = trimTrailingTags(fileBytes);
 
-      if (!payloadEndResult)
+      if (!payloadEndRes)
       {
-        return std::unexpected{payloadEndResult.error()};
+        return std::unexpected{payloadEndRes.error()};
       }
 
-      auto const payloadEnd = *payloadEndResult;
+      auto const payloadEnd = *payloadEndRes;
 
       if (payloadEnd <= audioStartOffset)
       {

@@ -127,9 +127,9 @@ namespace ao::rt
 
   void PlaybackSessionPersistence::checkpointBestEffort()
   {
-    if (auto const saved = checkpoint(); !saved)
+    if (auto const savedRes = checkpoint(); !savedRes)
     {
-      APP_LOG_WARN("Playback session checkpoint failed: {}", saved.error().message);
+      APP_LOG_WARN("Playback session checkpoint failed: {}", savedRes.error().message);
     }
   }
 
@@ -295,14 +295,14 @@ namespace ao::rt
 
     ensureStarted();
     auto loaded = PlaybackSessionState{};
-    auto const loadedSession = _config.load(kPlaybackSessionConfigGroup, loaded, PlaybackSessionYamlSchema{});
+    auto const loadedSessionRes = _config.load(kPlaybackSessionConfigGroup, loaded, PlaybackSessionYamlSchema{});
 
-    if (!loadedSession)
+    if (!loadedSessionRes)
     {
-      return std::unexpected{loadedSession.error()};
+      return std::unexpected{loadedSessionRes.error()};
     }
 
-    if (!*loadedSession)
+    if (!*loadedSessionRes)
     {
       return PlaybackSessionRestoreResult{};
     }
@@ -331,15 +331,15 @@ namespace ao::rt
 
       auto currentTrackId = loaded.currentTrackId;
       auto positionMs = loaded.positionMs;
-      auto candidate = _succession.preparePlaybackSessionRestore(launchSpec,
-                                                                 currentTrackId,
-                                                                 static_cast<std::size_t>(loaded.anchorIndex),
-                                                                 loaded.shuffleMode,
-                                                                 loaded.repeatMode);
+      auto candidateRes = _succession.preparePlaybackSessionRestore(launchSpec,
+                                                                    currentTrackId,
+                                                                    static_cast<std::size_t>(loaded.anchorIndex),
+                                                                    loaded.shuffleMode,
+                                                                    loaded.repeatMode);
 
-      if (!candidate)
+      if (!candidateRes)
       {
-        return std::unexpected{candidate.error()};
+        return std::unexpected{candidateRes.error()};
       }
 
       if (!currentExists)
@@ -347,11 +347,11 @@ namespace ao::rt
         auto optReplacementIndex = std::optional<std::size_t>{};
         auto const savedAnchor = static_cast<std::size_t>(loaded.anchorIndex);
 
-        if (savedAnchor < (*candidate)->projectionSize())
+        if (savedAnchor < (*candidateRes)->projectionSize())
         {
           optReplacementIndex = savedAnchor;
         }
-        else if (loaded.repeatMode == RepeatMode::All && (*candidate)->projectionSize() != 0)
+        else if (loaded.repeatMode == RepeatMode::All && (*candidateRes)->projectionSize() != 0)
         {
           optReplacementIndex = 0;
         }
@@ -361,14 +361,14 @@ namespace ao::rt
           return PlaybackSessionRestoreResult{};
         }
 
-        currentTrackId = (*candidate)->trackIdAt(*optReplacementIndex);
+        currentTrackId = (*candidateRes)->trackIdAt(*optReplacementIndex);
         positionMs = 0;
-        candidate = _succession.preparePlaybackSessionRestore(
+        candidateRes = _succession.preparePlaybackSessionRestore(
           launchSpec, currentTrackId, *optReplacementIndex, loaded.shuffleMode, loaded.repeatMode);
 
-        if (!candidate)
+        if (!candidateRes)
         {
-          return std::unexpected{candidate.error()};
+          return std::unexpected{candidateRes.error()};
         }
       }
 
@@ -385,28 +385,28 @@ namespace ao::rt
         .muted = loaded.muted,
       };
 
-      auto restored = [&] -> Result<>
+      auto restoredRes = [&] -> Result<>
       {
         auto const restoring = RestoreScope{_restoring};
-        auto restoredElapsed = _playbackTransport.restorePlaybackTransport(transport);
+        auto restoredElapsedRes = _playbackTransport.restorePlaybackTransport(transport);
 
-        if (!restoredElapsed)
+        if (!restoredElapsedRes)
         {
-          return std::unexpected{restoredElapsed.error()};
+          return std::unexpected{restoredElapsedRes.error()};
         }
 
         _restorePublicationPending = true;
         _succession.commitPlaybackSessionRestore(
-          std::move(*candidate), loaded.shuffleMode, loaded.repeatMode, *restoredElapsed);
+          std::move(*candidateRes), loaded.shuffleMode, loaded.repeatMode, *restoredElapsedRes);
 
         _sessionDiscarded = false;
 
         return {};
       }();
 
-      if (!restored)
+      if (!restoredRes)
       {
-        return std::unexpected{restored.error()};
+        return std::unexpected{restoredRes.error()};
       }
 
       return result;
@@ -423,9 +423,9 @@ namespace ao::rt
     ensureStarted();
     cancelScheduledSave();
 
-    if (auto const removed = _config.removeGroup(kPlaybackSessionConfigGroup); !removed)
+    if (auto const removedRes = _config.removeGroup(kPlaybackSessionConfigGroup); !removedRes)
     {
-      return std::unexpected{removed.error()};
+      return std::unexpected{removedRes.error()};
     }
 
     _succession.discardPlaybackSessionSnapshot();

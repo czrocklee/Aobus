@@ -471,14 +471,14 @@ namespace ao::rt
 
   Result<LibraryMutationService::Mutation> LibraryMutationService::beginInteractiveMutation()
   {
-    auto writerLockResult = acquireWriter(LibraryAuthoringState::Available, "Library mutation");
+    auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "Library mutation");
 
-    if (!writerLockResult)
+    if (!writerLockRes)
     {
-      return std::unexpected{writerLockResult.error()};
+      return std::unexpected{writerLockRes.error()};
     }
 
-    return Mutation{*this, std::move(*writerLockResult), _writableLibrary.writeTransaction()};
+    return Mutation{*this, std::move(*writerLockRes), _writableLibrary.writeTransaction()};
   }
 
   LibraryMutationService::AuthoringStart LibraryMutationService::beginAuthoringMutation(
@@ -489,9 +489,9 @@ namespace ao::rt
       return AuthoringStart{.status = TrackAuthoringStatus::Stale};
     }
 
-    auto writerLockResult = acquireWriter(LibraryAuthoringState::Available, "Track authoring");
+    auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "Track authoring");
 
-    if (!writerLockResult)
+    if (!writerLockRes)
     {
       return AuthoringStart{.status = TrackAuthoringStatus::Unavailable};
     }
@@ -515,7 +515,7 @@ namespace ao::rt
     }
 
     auto result = AuthoringStart{.status = TrackAuthoringStatus::NoOp};
-    result.optMutation.emplace(Mutation{*this, std::move(*writerLockResult), std::move(transaction)});
+    result.optMutation.emplace(Mutation{*this, std::move(*writerLockRes), std::move(transaction)});
     return result;
   }
 
@@ -527,9 +527,9 @@ namespace ao::rt
       return ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::Stale};
     }
 
-    auto writerLockResult = acquireWriter(LibraryAuthoringState::Available, "List order authoring");
+    auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "List order authoring");
 
-    if (!writerLockResult)
+    if (!writerLockRes)
     {
       return ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::Unavailable};
     }
@@ -547,7 +547,7 @@ namespace ao::rt
     gsl_Assert(order._listId != kInvalidListId);
     gsl_Assert(_library.lists().writer(transaction).get(order._listId));
     auto result = ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::NoOp};
-    result.optMutation.emplace(Mutation{*this, std::move(*writerLockResult), std::move(transaction)});
+    result.optMutation.emplace(Mutation{*this, std::move(*writerLockRes), std::move(transaction)});
     return result;
   }
 
@@ -563,11 +563,11 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Library maintenance must begin on the callback executor");
     }
 
-    auto writerLockResult = acquireWriter(LibraryAuthoringState::Available, "Library maintenance");
+    auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "Library maintenance");
 
-    if (!writerLockResult)
+    if (!writerLockRes)
     {
-      return std::unexpected{writerLockResult.error()};
+      return std::unexpected{writerLockRes.error()};
     }
 
     auto expected = LibraryAuthoringAvailability{};
@@ -582,8 +582,8 @@ namespace ao::rt
       expected = availabilityLocked();
     }
 
-    emitAvailability(expected, *writerLockResult);
-    writerLockResult->unlock();
+    emitAvailability(expected, *writerLockRes);
+    writerLockRes->unlock();
 
     return MaintenanceGuard{_lifetimeStatePtr, generation};
   }
@@ -591,11 +591,11 @@ namespace ao::rt
   Result<LibraryMutationService::Mutation> LibraryMutationService::beginMaintenanceMutation(
     MaintenanceGuard const& guard)
   {
-    auto writerLockResult = acquireWriter(LibraryAuthoringState::Maintenance, "Library maintenance mutation");
+    auto writerLockRes = acquireWriter(LibraryAuthoringState::Maintenance, "Library maintenance mutation");
 
-    if (!writerLockResult)
+    if (!writerLockRes)
     {
-      return std::unexpected{writerLockResult.error()};
+      return std::unexpected{writerLockRes.error()};
     }
 
     {
@@ -607,7 +607,7 @@ namespace ao::rt
       }
     }
 
-    return Mutation{*this, std::move(*writerLockResult), _writableLibrary.writeTransaction()};
+    return Mutation{*this, std::move(*writerLockRes), _writableLibrary.writeTransaction()};
   }
 
   Result<LibraryMutationService::CommitInfo> LibraryMutationService::commit(Mutation& mutation,
@@ -648,11 +648,11 @@ namespace ao::rt
         std::format("Library revision gap before commit: expected {}, got {}", expectedRevision, revision));
     }
 
-    auto commitResult = Result<>{};
+    auto commitRes = Result<>{};
 
     try
     {
-      commitResult = mutation._transaction.commit();
+      commitRes = mutation._transaction.commit();
     }
     catch (...)
     {
@@ -660,10 +660,10 @@ namespace ao::rt
       throw;
     }
 
-    if (!commitResult)
+    if (!commitRes)
     {
       releaseMutation();
-      return std::unexpected{commitResult.error()};
+      return std::unexpected{commitRes.error()};
     }
 
     auto const submissionFromOwner = _callbackExecutor.isCurrent();
@@ -827,9 +827,9 @@ namespace ao::rt
       }
     }
 
-    auto writerLockResult = acquireWriter(LibraryAuthoringState::Maintenance, "Library maintenance completion");
+    auto writerLockRes = acquireWriter(LibraryAuthoringState::Maintenance, "Library maintenance completion");
 
-    if (!writerLockResult)
+    if (!writerLockRes)
     {
       {
         auto const stateLock = std::scoped_lock{_stateMutex};
@@ -858,8 +858,8 @@ namespace ao::rt
       expected = availabilityLocked();
     }
 
-    emitAvailability(expected, *writerLockResult);
-    writerLockResult->unlock();
+    emitAvailability(expected, *writerLockRes);
+    writerLockRes->unlock();
   }
 
   void LibraryMutationService::finishPublication(std::uint64_t const revision) noexcept

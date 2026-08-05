@@ -192,13 +192,13 @@ namespace ao::gtk
 
     saveSession();
 
-    if (auto discarded = _runtime.discardRestorablePlaybackSession(); !discarded)
+    if (auto discardedRes = _runtime.discardRestorablePlaybackSession(); !discardedRes)
     {
-      APP_LOG_ERROR("Failed to retire active library for replacement: {}", discarded.error().message);
+      APP_LOG_ERROR("Failed to retire active library for replacement: {}", discardedRes.error().message);
       auto* const dialog = AppDialog::presentMessage(
         *this,
         "Unable to Switch Libraries",
-        discarded.error().message,
+        discardedRes.error().message,
         {AppDialogAction{
           .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
         Gtk::ResponseType::CLOSE);
@@ -209,7 +209,7 @@ namespace ao::gtk
         dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
       }
 
-      return discarded;
+      return discardedRes;
     }
 
     _sessionPhase = SessionPhase::Retired;

@@ -39,16 +39,16 @@ namespace ao::audio::test
     CHECK(encodingContainerBits(info.outputFormat.encoding) == 16);
     CHECK(info.duration > std::chrono::milliseconds{0});
 
-    auto const firstBlock = decoder.readNextBlock();
-    REQUIRE(firstBlock);
-    CHECK(firstBlock->firstFrameIndex == 0);
-    CHECK(firstBlock->frames > 0);
-    CHECK(!firstBlock->bytes.empty());
+    auto const firstBlockRes = decoder.readNextBlock();
+    REQUIRE(firstBlockRes);
+    CHECK(firstBlockRes->firstFrameIndex == 0);
+    CHECK(firstBlockRes->frames > 0);
+    CHECK(!firstBlockRes->bytes.empty());
 
     REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
-    auto const soughtBlock = decoder.readNextBlock();
-    REQUIRE(soughtBlock);
-    CHECK(soughtBlock->firstFrameIndex > 0);
+    auto const soughtBlockRes = decoder.readNextBlock();
+    REQUIRE(soughtBlockRes);
+    CHECK(soughtBlockRes->firstFrameIndex > 0);
 
     decoder.flush();
     CHECK(decoder.readNextBlock());
@@ -69,10 +69,10 @@ namespace ao::audio::test
     CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
     CHECK(info.isLossy);
 
-    auto const block = decoder.readNextBlock();
-    REQUIRE(block);
-    CHECK(block->frames > 0);
-    CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * 2U * 2U);
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->frames > 0);
+    CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 2U);
   }
 
   TEST_CASE("Mp3DecoderSession - handles floating point output", "[audio][unit][mp3]")
@@ -87,9 +87,9 @@ namespace ao::audio::test
     CHECK(isFloatEncoding(info.outputFormat.encoding));
     CHECK(encodingContainerBits(info.outputFormat.encoding) == 32);
 
-    auto const block = decoder.readNextBlock();
-    REQUIRE(block);
-    CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * 2U * 4U);
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 4U);
   }
 
   TEST_CASE("Mp3DecoderSession - supports reopening", "[audio][unit][mp3]")
@@ -103,9 +103,9 @@ namespace ao::audio::test
 
     // Open same file again
     REQUIRE(decoder.open(testFile));
-    auto const block = decoder.readNextBlock();
-    REQUIRE(block);
-    CHECK(block->firstFrameIndex == 0); // Should be reset
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->firstFrameIndex == 0); // Should be reset
   }
 
   TEST_CASE("Mp3DecoderSession - reads until EOF", "[audio][unit][mp3]")
@@ -130,10 +130,10 @@ namespace ao::audio::test
     CHECK(info.duration == std::chrono::milliseconds{20088});
 
     REQUIRE(decoder.seek(std::chrono::seconds{10}));
-    auto const soughtBlock = decoder.readNextBlock();
-    REQUIRE(soughtBlock);
-    CHECK(soughtBlock->firstFrameIndex == 441000);
-    CHECK(soughtBlock->frames > 0);
+    auto const soughtBlockRes = decoder.readNextBlock();
+    REQUIRE(soughtBlockRes);
+    CHECK(soughtBlockRes->firstFrameIndex == 441000);
+    CHECK(soughtBlockRes->frames > 0);
 
     REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
     CHECK(readUntilStableEndOfStream(decoder, 1024) == 885888);
@@ -157,12 +157,12 @@ namespace ao::audio::test
 
     for (std::int32_t count = 0; count < 512 && !rejectedFormatChange; ++count)
     {
-      if (auto const block = decoder.readNextBlock(); !block)
+      if (auto const blockRes = decoder.readNextBlock(); !blockRes)
       {
-        CHECK(block.error().code == Error::Code::NotSupported);
+        CHECK(blockRes.error().code == Error::Code::NotSupported);
         rejectedFormatChange = true;
       }
-      else if (block->endOfStream)
+      else if (blockRes->endOfStream)
       {
         break;
       }
@@ -171,14 +171,14 @@ namespace ao::audio::test
     CHECK(rejectedFormatChange);
     CHECK(decoder.streamInfo().outputFormat == initialInfo.outputFormat);
 
-    auto const repeatedRead = decoder.readNextBlock();
-    REQUIRE_FALSE(repeatedRead);
-    CHECK(repeatedRead.error().code == Error::Code::NotSupported);
+    auto const repeatedReadRes = decoder.readNextBlock();
+    REQUIRE_FALSE(repeatedReadRes);
+    CHECK(repeatedReadRes.error().code == Error::Code::NotSupported);
 
     REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
-    auto const recoveredBlock = decoder.readNextBlock();
-    REQUIRE(recoveredBlock);
-    CHECK(recoveredBlock->frames > 0);
+    auto const recoveredBlockRes = decoder.readNextBlock();
+    REQUIRE(recoveredBlockRes);
+    CHECK(recoveredBlockRes->frames > 0);
   }
 
   TEST_CASE("Mp3DecoderSession - reports error paths", "[audio][unit][mp3][error]")

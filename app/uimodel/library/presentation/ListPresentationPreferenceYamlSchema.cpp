@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
 
@@ -54,22 +55,22 @@ namespace ao::uimodel
         return std::unexpected{result.error()};
       }
 
-      auto version = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
+      auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
 
-      if (!version)
+      if (!versionRes)
       {
-        return std::unexpected{version.error()};
+        return std::unexpected{versionRes.error()};
       }
 
-      if (*version != kListPresentationPreferenceVersion)
+      if (*versionRes != kListPresentationPreferenceVersion)
       {
         return makeError(
-          Error::Code::NotSupported, std::format("Unsupported list presentation preference version {}", *version));
+          Error::Code::NotSupported, std::format("Unsupported list presentation preference version {}", *versionRes));
       }
 
       constexpr auto kKeys = std::to_array<std::string_view>({"version", "preferences"});
 
-      auto document = ListPresentationPreferenceDocument{.version = *version};
+      auto document = ListPresentationPreferenceDocument{.version = *versionRes};
       auto reader = yaml::MapReader{node, kKeys, kContext};
       reader.requiredSequence("preferences", document.preferences, readPreference);
       return std::move(reader).finish(std::move(document));
@@ -141,27 +142,27 @@ namespace ao::uimodel
   Result<> ListPresentationPreferenceYamlSchema::serialize(ryml::NodeRef node,
                                                            ListPresentationPreferenceState const& state) const
   {
-    auto document = toListPresentationPreferenceDocument(state);
+    auto documentRes = toListPresentationPreferenceDocument(state);
 
-    if (!document)
+    if (!documentRes)
     {
-      return std::unexpected{document.error()};
+      return std::unexpected{documentRes.error()};
     }
 
-    return writeDocument(node, *document);
+    return writeDocument(node, *documentRes);
   }
 
   Result<ListPresentationPreferenceState> ListPresentationPreferenceYamlSchema::deserialize(
     ryml::ConstNodeRef node,
     ListPresentationPreferenceState const& /*seed*/) const
   {
-    auto document = readDocument(node);
+    auto documentRes = readDocument(node);
 
-    if (!document)
+    if (!documentRes)
     {
-      return std::unexpected{document.error()};
+      return std::unexpected{documentRes.error()};
     }
 
-    return listPresentationPreferenceStateFromDocument(*document);
+    return listPresentationPreferenceStateFromDocument(*documentRes);
   }
 } // namespace ao::uimodel

@@ -97,14 +97,14 @@ namespace ao::library
                                              std::span<std::byte const> const coldBytes,
                                              std::size_t const dictionarySize)
   {
-    if (auto const validation = validateSerializedHotTrack(hotBytes); !validation)
+    if (auto const validationRes = validateSerializedHotTrack(hotBytes); !validationRes)
     {
-      return validation;
+      return validationRes;
     }
 
-    if (auto const validation = validateSerializedColdTrack(coldBytes); !validation)
+    if (auto const validationRes = validateSerializedColdTrack(coldBytes); !validationRes)
     {
-      return validation;
+      return validationRes;
     }
 
     auto const validReference = [dictionarySize](DictionaryId const id, bool const optional) noexcept

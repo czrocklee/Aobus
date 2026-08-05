@@ -94,8 +94,9 @@ namespace ao::audio
     Result<Engine::PreparedPlaybackStart> stagePlayback(Engine::PlaybackItem const& item,
                                                         std::chrono::milliseconds initialOffset = {});
     using PreparationAcceptance = std::move_only_function<bool()>;
-    using PreparedStartCompletion = std::move_only_function<void(Result<Engine::PreparedPlaybackStart> preparedStart)>;
-    using PreparedNextCompletion = std::move_only_function<void(Result<Engine::PreparedNextResult> preparedNext)>;
+    using PreparedStartCompletion =
+      std::move_only_function<void(Result<Engine::PreparedPlaybackStart> preparedStartRes)>;
+    using PreparedNextCompletion = std::move_only_function<void(Result<Engine::PreparedNextResult> preparedNextRes)>;
 
     /// Admits isolated source preparation on the async worker pool. Success
     /// reports admission only. Acceptance runs on the Player executor before

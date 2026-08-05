@@ -98,11 +98,11 @@ namespace ao::media::file::test
   struct TestFile::Impl final
   {
     explicit Impl(std::filesystem::path const& path)
-      : fileResult{File::open(path)}
+      : fileRes{File::open(path)}
     {
     }
 
-    Result<File> fileResult;
+    Result<File> fileRes;
   };
 
   TestFile::TestFile(std::filesystem::path const& path)
@@ -115,17 +115,17 @@ namespace ao::media::file::test
 
   Result<RecordedContent> TestFile::readContent() const
   {
-    if (!_implPtr->fileResult)
+    if (!_implPtr->fileRes)
     {
-      return std::unexpected{_implPtr->fileResult.error()};
+      return std::unexpected{_implPtr->fileRes.error()};
     }
 
     auto content = RecordedContent{};
     auto visitor = VisitorSpy{content};
 
-    if (auto const visitResult = _implPtr->fileResult->visit(visitor); !visitResult)
+    if (auto const visitRes = _implPtr->fileRes->visit(visitor); !visitRes)
     {
-      return std::unexpected{visitResult.error()};
+      return std::unexpected{visitRes.error()};
     }
 
     return content;
@@ -133,11 +133,11 @@ namespace ao::media::file::test
 
   Result<PayloadView> TestFile::audioPayload() const
   {
-    if (!_implPtr->fileResult)
+    if (!_implPtr->fileRes)
     {
-      return std::unexpected{_implPtr->fileResult.error()};
+      return std::unexpected{_implPtr->fileRes.error()};
     }
 
-    return _implPtr->fileResult->audioPayload();
+    return _implPtr->fileRes->audioPayload();
   }
 } // namespace ao::media::file::test

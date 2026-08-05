@@ -198,15 +198,15 @@ namespace ao::utility
 
     Result<LocalAllocationHandle> createPrivateSecurityDescriptor()
     {
-      auto sidResult = currentUserSidString();
+      auto sidRes = currentUserSidString();
 
-      if (!sidResult)
+      if (!sidRes)
       {
-        return std::unexpected{sidResult.error()};
+        return std::unexpected{sidRes.error()};
       }
 
       auto descriptorText = std::wstring{L"D:P(A;;FA;;;SY)(A;;FA;;;"};
-      descriptorText += *sidResult;
+      descriptorText += *sidRes;
       descriptorText += L")";
 
       PSECURITY_DESCRIPTOR rawDescriptor = nullptr;
@@ -355,14 +355,14 @@ namespace ao::utility
 
       Result<WindowsTemporaryFile> createPrivateTemporaryFile(std::filesystem::path const& parentPath) const
       {
-        auto descriptorResult = createPrivateSecurityDescriptor();
+        auto descriptorRes = createPrivateSecurityDescriptor();
 
-        if (!descriptorResult)
+        if (!descriptorRes)
         {
-          return std::unexpected{descriptorResult.error()};
+          return std::unexpected{descriptorRes.error()};
         }
 
-        auto descriptor = std::move(*descriptorResult);
+        auto descriptor = std::move(*descriptorRes);
         auto securityAttributes = SECURITY_ATTRIBUTES{
           .nLength = static_cast<DWORD>(sizeof(SECURITY_ATTRIBUTES)),
           .lpSecurityDescriptor = descriptor.get(),

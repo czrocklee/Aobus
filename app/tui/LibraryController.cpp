@@ -87,8 +87,8 @@ namespace ao::tui
     }
 
     // Reached from the workspace observer via refreshPresentationNavigation().
-    auto const found = _runtime.views().findTrackListState(_activeViewId);
-    return found ? found->presentation.id : std::string{};
+    auto const foundRes = _runtime.views().findTrackListState(_activeViewId);
+    return foundRes ? foundRes->presentation.id : std::string{};
   }
 
   SelectedTrackView LibraryController::selectedTrackView() const
@@ -126,9 +126,9 @@ namespace ao::tui
       APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
     }
 
-    if (auto const focused = _runtime.workspace().focusView(_activeViewId); !focused)
+    if (auto const focusedRes = _runtime.workspace().focusView(_activeViewId); !focusedRes)
     {
-      APP_LOG_ERROR("Failed to focus TUI track view: {}", focused.error().message);
+      APP_LOG_ERROR("Failed to focus TUI track view: {}", focusedRes.error().message);
     }
   }
 
@@ -245,9 +245,9 @@ namespace ao::tui
     // The projection maintains an indexed track-to-row lookup. _tracks can drift
     // from projection indices when a row's LMDB lookup was skipped, so trust the
     // index only when the materialized row matches and otherwise scan below.
-    if (auto const found = _runtime.views().findTrackListProjection(_activeViewId); found && *found != nullptr)
+    if (auto const foundRes = _runtime.views().findTrackListProjection(_activeViewId); foundRes && *foundRes != nullptr)
     {
-      if (auto const optIndex = (*found)->indexOf(trackId);
+      if (auto const optIndex = (*foundRes)->indexOf(trackId);
           optIndex && *optIndex < _tracks.size() && _tracks[*optIndex].id == trackId)
       {
         _selectedTrack = static_cast<std::int32_t>(*optIndex);
@@ -371,11 +371,11 @@ namespace ao::tui
     }
 
     auto const resolved = uimodel::resolveTrackFilterExpression(_filterDraft);
-    auto filterResult = _runtime.views().setFilter(_activeViewId, resolved.expression);
+    auto filterRes = _runtime.views().setFilter(_activeViewId, resolved.expression);
 
-    if (!filterResult)
+    if (!filterRes)
     {
-      return std::unexpected{filterResult.error()};
+      return std::unexpected{filterRes.error()};
     }
 
     auto snapshot = loadTrackItemsFromView(_activeViewId);
@@ -429,14 +429,14 @@ namespace ao::tui
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItemsFromView(rt::ViewId const activeViewId)
   {
     // Reached from the library-changes observer via reloadActiveList().
-    auto const foundProjection = _runtime.views().findTrackListProjection(activeViewId);
+    auto const foundProjectionRes = _runtime.views().findTrackListProjection(activeViewId);
 
-    if (!foundProjection || *foundProjection == nullptr)
+    if (!foundProjectionRes || *foundProjectionRes == nullptr)
     {
       return {};
     }
 
-    auto const& projectionPtr = *foundProjection;
+    auto const& projectionPtr = *foundProjectionRes;
 
     auto const reader = _runtime.library().reader();
     auto snapshot = TrackItemsSnapshot{};
@@ -486,23 +486,23 @@ namespace ao::tui
 
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItems(ListId const listId)
   {
-    auto navigationResult = Result<rt::ViewId>{};
+    auto navigationRes = Result<rt::ViewId>{};
 
     if (listId == rt::kAllTracksListId)
     {
-      navigationResult = _runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks});
+      navigationRes = _runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks});
     }
     else
     {
-      navigationResult = _runtime.workspace().navigate({.target = listId});
+      navigationRes = _runtime.workspace().navigate({.target = listId});
     }
 
-    if (!navigationResult)
+    if (!navigationRes)
     {
       return {};
     }
 
-    _activeViewId = *navigationResult;
+    _activeViewId = *navigationRes;
     return loadTrackItemsFromView(_activeViewId);
   }
 } // namespace ao::tui

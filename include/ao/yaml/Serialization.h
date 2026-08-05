@@ -116,14 +116,14 @@ namespace ao::yaml
   template<typename T>
   inline Result<T> requireScalar(ryml::ConstNodeRef node, std::string_view key, std::string_view context)
   {
-    auto child = requireChild(node, key, context);
+    auto childRes = requireChild(node, key, context);
 
-    if (!child)
+    if (!childRes)
     {
-      return std::unexpected{child.error()};
+      return std::unexpected{childRes.error()};
     }
 
-    return scalarAs<T>(*child, fieldContext(context, key));
+    return scalarAs<T>(*childRes, fieldContext(context, key));
   }
 
   class MapReader final
@@ -148,13 +148,13 @@ namespace ao::yaml
     {
       if (_result)
       {
-        if (auto child = requireChild(_node, key, _context); !child)
+        if (auto childRes = requireChild(_node, key, _context); !childRes)
         {
-          _result = std::unexpected{std::move(child.error())};
+          _result = std::unexpected{std::move(childRes.error())};
         }
         else
         {
-          assign(reader(*child, fieldContext(_context, key)), destination);
+          assign(reader(*childRes, fieldContext(_context, key)), destination);
         }
       }
 
@@ -226,15 +226,15 @@ namespace ao::yaml
 
   private:
     template<typename T>
-    void assign(Result<T> value, T& destination)
+    void assign(Result<T> valueRes, T& destination)
     {
-      if (!value)
+      if (!valueRes)
       {
-        _result = std::unexpected{std::move(value.error())};
+        _result = std::unexpected{std::move(valueRes.error())};
         return;
       }
 
-      destination = std::move(*value);
+      destination = std::move(*valueRes);
     }
 
     ryml::ConstNodeRef _node;
@@ -258,14 +258,14 @@ namespace ao::yaml
 
     for (auto const& child : node.children())
     {
-      auto value = elementReader(child, fieldContext(context, std::to_string(index)));
+      auto valueRes = elementReader(child, fieldContext(context, std::to_string(index)));
 
-      if (!value)
+      if (!valueRes)
       {
-        return std::unexpected{value.error()};
+        return std::unexpected{valueRes.error()};
       }
 
-      values.push_back(std::move(*value));
+      values.push_back(std::move(*valueRes));
       ++index;
     }
 
@@ -356,14 +356,14 @@ namespace ao::yaml
         return makeError(Error::Code::FormatRejected, boundedErrorContext(context) + " contains an empty key");
       }
 
-      auto value = valueReader(child, fieldContext(context, key));
+      auto valueRes = valueReader(child, fieldContext(context, key));
 
-      if (!value)
+      if (!valueRes)
       {
-        return std::unexpected{value.error()};
+        return std::unexpected{valueRes.error()};
       }
 
-      values.emplace(std::string{key}, std::move(*value));
+      values.emplace(std::string{key}, std::move(*valueRes));
     }
 
     return values;

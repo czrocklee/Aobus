@@ -112,10 +112,10 @@ namespace ao::audio::test
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     auto const secondItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
-    auto const prepared = engine.setNext(secondItem);
-    REQUIRE(prepared);
-    CHECK(prepared->itemId == secondItem.id);
-    CHECK(prepared->transition == Engine::PreparedTransitionMode::Gapless);
+    auto const preparedRes = engine.setNext(secondItem);
+    REQUIRE(preparedRes);
+    CHECK(preparedRes->itemId == secondItem.id);
+    CHECK(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
 
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
@@ -174,11 +174,11 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
 
     auto out = std::array<std::byte, 8>{};
-    auto const renderResult = target->renderPcm(out);
+    auto const renderRes = target->renderPcm(out);
 
-    REQUIRE(renderResult.bytesWritten == out.size());
-    CHECK(renderResult.positionFrameOffset == 2);
-    CHECK(renderResult.positionFrames == 2);
+    REQUIRE(renderRes.bytesWritten == out.size());
+    CHECK(renderRes.positionFrameOffset == 2);
+    CHECK(renderRes.positionFrames == 2);
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == std::vector<std::byte>{std::byte{0x11},
                                                                                    std::byte{0x12},
                                                                                    std::byte{0x13},
@@ -188,7 +188,7 @@ namespace ao::audio::test
                                                                                    std::byte{0x23},
                                                                                    std::byte{0x24}});
 
-    target->handlePositionAdvanced(renderResult.positionFrames);
+    target->handlePositionAdvanced(renderRes.positionFrames);
 
     REQUIRE(advancedLatch.waitForCount(1));
     CHECK(engine.status().elapsed == std::chrono::milliseconds{2});
@@ -444,11 +444,11 @@ namespace ao::audio::test
     auto const callsAfterCurrentOpen = decoderFactoryCallCount.load(std::memory_order_relaxed);
     auto const successor = makePlaybackItem(PlaybackInput{.filePath = "successor.flac"});
 
-    auto const prepared = engine.setNext(successor);
+    auto const preparedRes = engine.setNext(successor);
 
-    REQUIRE(prepared);
-    CHECK(prepared->itemId == successor.id);
-    CHECK(prepared->transition == Engine::PreparedTransitionMode::DrainFallback);
+    REQUIRE(preparedRes);
+    CHECK(preparedRes->itemId == successor.id);
+    CHECK(preparedRes->transition == Engine::PreparedTransitionMode::DrainFallback);
     CHECK(decoderFactoryCallCount.load(std::memory_order_relaxed) == callsAfterCurrentOpen);
   }
 
@@ -546,10 +546,10 @@ namespace ao::audio::test
                          })};
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    auto const prepared = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
+    auto const preparedRes = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
 
-    REQUIRE(prepared);
-    CHECK(prepared->transition == Engine::PreparedTransitionMode::DrainFallback);
+    REQUIRE(preparedRes);
+    CHECK(preparedRes->transition == Engine::PreparedTransitionMode::DrainFallback);
     CHECK(backendRaw->currentFormat() == firstFormat);
     CHECK(countBackendEvents(backendRaw->events(), "open") == 1);
   }
@@ -571,10 +571,10 @@ namespace ao::audio::test
                          })};
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    auto const prepared = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
+    auto const preparedRes = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
 
-    REQUIRE(prepared);
-    CHECK(prepared->transition == Engine::PreparedTransitionMode::Gapless);
+    REQUIRE(preparedRes);
+    CHECK(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
     CHECK(backendRaw->currentFormat() == firstFormat);
 
     auto* const target = backendRaw->target();
@@ -802,27 +802,27 @@ namespace ao::audio::test
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     auto const secondItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
-    auto const preparedNext = engine.setNext(secondItem);
-    REQUIRE(preparedNext);
+    auto const preparedNextRes = engine.setNext(secondItem);
+    REQUIRE(preparedNextRes);
     auto const originalGeneration = engine.playbackGeneration();
-    REQUIRE(preparedNext->generation == originalGeneration);
+    REQUIRE(preparedNextRes->generation == originalGeneration);
 
     SECTION("failed stage")
     {
-      auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "missing.flac"}));
-      REQUIRE_FALSE(candidate);
-      CHECK(candidate.error().code == Error::Code::NotSupported);
+      auto candidateRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "missing.flac"}));
+      REQUIRE_FALSE(candidateRes);
+      CHECK(candidateRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("foreign commit")
     {
-      auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate.flac"}));
-      REQUIRE(candidate);
+      auto candidateRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate.flac"}));
+      REQUIRE(candidateRes);
       auto foreignEngine =
         Engine{std::make_unique<FakeCapturingBackend>(), device, makePathScriptedDecoderFactory(tracks)};
-      auto committed = foreignEngine.commitPlayback(std::move(*candidate));
-      REQUIRE_FALSE(committed);
-      CHECK(committed.error().code == Error::Code::InvalidState);
+      auto committedRes = foreignEngine.commitPlayback(std::move(*candidateRes));
+      REQUIRE_FALSE(committedRes);
+      CHECK(committedRes.error().code == Error::Code::InvalidState);
     }
 
     CHECK(engine.playbackGeneration() == originalGeneration);
@@ -851,14 +851,14 @@ namespace ao::audio::test
     auto const currentItem = makePlaybackItem(PlaybackInput{.filePath = "current.flac"});
     auto const nextItem = makePlaybackItem(PlaybackInput{.filePath = "next.flac"});
     engine.play(currentItem);
-    auto const preparedNext = engine.setNext(nextItem);
-    REQUIRE(preparedNext);
+    auto const preparedNextRes = engine.setNext(nextItem);
+    REQUIRE(preparedNextRes);
     auto* const activeTarget = backendRaw->target();
     REQUIRE(activeTarget != nullptr);
     auto const activeGeneration = engine.playbackGeneration();
 
-    auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"}));
-    REQUIRE(candidate);
+    auto candidateRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"}));
+    REQUIRE(candidateRes);
     CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{50}));
     CHECK(engine.playbackGeneration() == activeGeneration);
     CHECK(engine.transport() == Transport::Playing);
@@ -888,13 +888,13 @@ namespace ao::audio::test
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
 
     auto const candidateItem = makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"});
-    auto candidate = engine.stagePlayback(candidateItem);
-    REQUIRE(candidate);
+    auto candidateRes = engine.stagePlayback(candidateItem);
+    REQUIRE(candidateRes);
     auto releaseGuard = StagedFailureReleaseGuard{failureGate};
     CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{50}));
 
-    auto const committed = engine.commitPlayback(std::move(*candidate));
-    REQUIRE(committed);
+    auto const committedRes = engine.commitPlayback(std::move(*candidateRes));
+    REQUIRE(committedRes);
     REQUIRE(failureGate.waitForRead());
     releaseGuard.release();
     REQUIRE(failureLatch.waitForCount(1));
@@ -903,12 +903,12 @@ namespace ao::audio::test
     REQUIRE(optFailure);
     CHECK(optFailure->kind == Engine::PlaybackFailureKind::Decode);
     CHECK(optFailure->itemId == candidateItem.id);
-    CHECK(optFailure->generation == committed->generation);
+    CHECK(optFailure->generation == committedRes->generation);
     CHECK(optFailure->error.code == Error::Code::IoError);
     CHECK(optFailure->error.message == "gated staged decode failure");
     CHECK(failureLatch.count() == 1);
     CHECK(endedLatch.count() == 1);
-    CHECK(engine.playbackGeneration() == committed->generation);
+    CHECK(engine.playbackGeneration() == committedRes->generation);
     CHECK(engine.transport() == Transport::Error);
   }
 
@@ -938,8 +938,8 @@ namespace ao::audio::test
                               { advancedCount.fetch_add(1, std::memory_order_relaxed); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    auto const preparedNext = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
-    REQUIRE(preparedNext);
+    auto const preparedNextRes = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
+    REQUIRE(preparedNextRes);
     engine.defer(
       [&]
       {
@@ -955,17 +955,17 @@ namespace ao::audio::test
 
     // Control entry settles the pending splice and materializes its callback
     // behind the held worker without publishing the explicit candidate.
-    auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "explicit.flac"}));
-    REQUIRE(candidate);
-    auto receipt = engine.commitPlayback(std::move(*candidate));
-    REQUIRE(receipt);
-    REQUIRE(receipt->cancellationBarrier.covers(preparedNext->generation));
+    auto candidateRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "explicit.flac"}));
+    REQUIRE(candidateRes);
+    auto receiptRes = engine.commitPlayback(std::move(*candidateRes));
+    REQUIRE(receiptRes);
+    REQUIRE(receiptRes->cancellationBarrier.covers(preparedNextRes->generation));
 
     releaseGuard.release();
     engine.defer([&] { workerFlushed.release(); });
     REQUIRE(workerFlushed.try_acquire_for(std::chrono::seconds{5}));
     CHECK(advancedCount.load(std::memory_order_relaxed) == 0);
-    CHECK(engine.playbackGeneration() == receipt->generation);
+    CHECK(engine.playbackGeneration() == receiptRes->generation);
   }
 
   TEST_CASE("Engine - prepared source failure reports its item and audio generation without stopping current",
@@ -1001,14 +1001,14 @@ namespace ao::audio::test
                                 { failurePromise.set_value(failure); });
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
     auto const preparedItem = makePlaybackItem(PlaybackInput{.filePath = "prepared-failure.flac"});
-    auto const prepared = engine.setNext(preparedItem);
-    REQUIRE(prepared);
+    auto const preparedRes = engine.setNext(preparedItem);
+    REQUIRE(preparedRes);
 
     REQUIRE(failureFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
     auto const failure = failureFuture.get();
     CHECK(failure.kind == Engine::PlaybackFailureKind::Decode);
     CHECK(failure.itemId == preparedItem.id);
-    CHECK(failure.generation == prepared->generation);
+    CHECK(failure.generation == preparedRes->generation);
     CHECK(failure.error.message == "prepared decode failed");
     CHECK(failure.recoverable);
     CHECK(engine.transport() == Transport::Playing);
@@ -1043,10 +1043,10 @@ namespace ao::audio::test
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "current-16.flac"}));
     REQUIRE(engine.status().transport == Transport::Playing);
 
-    auto const prepared = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "next-24.flac"}));
+    auto const preparedRes = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "next-24.flac"}));
 
-    REQUIRE(prepared);
-    CHECK(prepared->transition == Engine::PreparedTransitionMode::DrainFallback);
+    REQUIRE(preparedRes);
+    CHECK(preparedRes->transition == Engine::PreparedTransitionMode::DrainFallback);
     engine.stop();
   }
 } // namespace ao::audio::test

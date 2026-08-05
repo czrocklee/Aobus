@@ -120,6 +120,7 @@ add_executable(ao_core_test
 
     # utility tests
     unit/utility/AtomicFileTest.cpp
+    unit/utility/RaiiTest.cpp
     unit/utility/Base64Test.cpp
     unit/utility/Xxh3Test.cpp
     unit/utility/MappedFileTest.cpp

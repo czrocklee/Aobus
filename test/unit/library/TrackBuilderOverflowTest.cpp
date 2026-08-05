@@ -203,15 +203,15 @@ namespace ao::library::test
     rejected.property().uri("rejected.flac");
     rejected.customMetadata().add("oversized-key", oversizedValue);
 
-    auto rejectedResult = rejected.serialize(context.transaction(), context.resources());
-    REQUIRE_FALSE(rejectedResult);
-    CHECK(rejectedResult.error().code == Error::Code::ValueTooLarge);
+    auto rejectedRes = rejected.serialize(context.transaction(), context.resources());
+    REQUIRE_FALSE(rejectedRes);
+    CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
 
     auto accepted = TrackBuilder::makeEmpty();
     accepted.metadata().artist("accepted-artist");
     accepted.property().uri("accepted.flac");
-    auto acceptedResult = accepted.serialize(context.transaction(), context.resources());
-    REQUIRE(acceptedResult);
+    auto acceptedRes = accepted.serialize(context.transaction(), context.resources());
+    REQUIRE(acceptedRes);
     REQUIRE(context.transaction().commit());
 
     CHECK_FALSE(context.dictionary().findId("rejected-artist"));

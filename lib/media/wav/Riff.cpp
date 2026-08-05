@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Error.h>
 #include <ao/media/wav/Riff.h>
+
+#include <ao/Error.h>
 
 #include <algorithm>
 #include <array>
@@ -224,14 +225,14 @@ namespace ao::media::wav
           return makeError(Error::Code::CorruptData, "WAV file has multiple fmt chunks");
         }
 
-        auto formatResult = parseFormatChunk(chunk.bytes);
+        auto formatRes = parseFormatChunk(chunk.bytes);
 
-        if (!formatResult)
+        if (!formatRes)
         {
-          return std::unexpected{formatResult.error()};
+          return std::unexpected{formatRes.error()};
         }
 
-        parsed.format = *formatResult;
+        parsed.format = *formatRes;
         hasFormat = true;
       }
       else if (hasChunkId(chunk, "data") && !chunk.bytes.empty())
@@ -301,11 +302,11 @@ namespace ao::media::wav
       auto chunk = ChunkView{.id = chunkId, .offset = payloadOffset, .bytes = bytes.subspan(payloadOffset, chunkSize)};
       parsed.chunks.push_back(chunk);
 
-      auto applyResult = applyChunk(parsed, chunk, hasFormat, hasData);
+      auto applyRes = applyChunk(parsed, chunk, hasFormat, hasData);
 
-      if (!applyResult)
+      if (!applyRes)
       {
-        return std::unexpected{applyResult.error()};
+        return std::unexpected{applyRes.error()};
       }
 
       offset = paddedEnd;

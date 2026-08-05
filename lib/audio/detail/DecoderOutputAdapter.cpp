@@ -63,11 +63,11 @@ namespace ao::audio::detail
       return nativeBytes;
     }
 
-    if (auto converted =
+    if (auto convertedRes =
           convertPcmEncoding(nativeBytes, _nativeFormat, _sourceFormat, _outputFormat.encoding, _convertedBytes);
-        !converted)
+        !convertedRes)
     {
-      return std::unexpected{converted.error()};
+      return std::unexpected{convertedRes.error()};
     }
 
     return std::span<std::byte const>{_convertedBytes};

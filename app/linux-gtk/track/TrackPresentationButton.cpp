@@ -220,14 +220,14 @@ namespace ao::gtk
 
     // _state is a cached render snapshot, so its view id can be stale by the
     // time the user clicks.
-    auto const found = _runtime.views().findTrackListState(_state.activeViewId);
+    auto const foundRes = _runtime.views().findTrackListState(_state.activeViewId);
 
-    if (!found)
+    if (!foundRes)
     {
       return;
     }
 
-    auto const& spec = found->presentation;
+    auto const& spec = foundRes->presentation;
 
     auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};

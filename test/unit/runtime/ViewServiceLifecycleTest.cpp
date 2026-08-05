@@ -60,10 +60,10 @@ namespace ao::rt::test
             "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto const failed = env.workspace.navigate({.target = ListId{kInvalidListId}});
+    auto const failedRes = env.workspace.navigate({.target = ListId{kInvalidListId}});
 
-    REQUIRE_FALSE(failed);
-    CHECK(failed.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(failedRes);
+    CHECK(failedRes.error().code == Error::Code::InvalidInput);
     CHECK(env.workspace.snapshot().openViews.empty());
 
     auto const created = env.requireView();
@@ -92,9 +92,9 @@ namespace ao::rt::test
       CHECK_THROWS_AS(std::ignore = service.trackListState(viewId), std::out_of_range);
 
       // The checked lookup reports the same NotFound the other fallible methods use.
-      auto const found = service.findTrackListState(viewId);
-      REQUIRE_FALSE(found);
-      CHECK(found.error().code == Error::Code::NotFound);
+      auto const foundRes = service.findTrackListState(viewId);
+      REQUIRE_FALSE(foundRes);
+      CHECK(foundRes.error().code == Error::Code::NotFound);
 
       REQUIRE(env.workspace.closeView(viewId));
       CHECK(env.workspace.snapshot().openViews.empty());
@@ -102,47 +102,47 @@ namespace ao::rt::test
 
     SECTION("the checked lookup returns the same state as the precondition form")
     {
-      auto const found = service.findTrackListState(viewId);
-      REQUIRE(found);
-      CHECK(found->id == service.trackListState(viewId).id);
-      CHECK(found->listId == service.trackListState(viewId).listId);
+      auto const foundRes = service.findTrackListState(viewId);
+      REQUIRE(foundRes);
+      CHECK(foundRes->id == service.trackListState(viewId).id);
+      CHECK(foundRes->listId == service.trackListState(viewId).listId);
     }
 
     SECTION("the checked projection lookup returns the owned projection")
     {
-      auto const found = service.findTrackListProjection(viewId);
-      REQUIRE(found);
-      CHECK((*found)->viewId() == viewId);
+      auto const foundRes = service.findTrackListProjection(viewId);
+      REQUIRE(foundRes);
+      CHECK((*foundRes)->viewId() == viewId);
     }
 
     SECTION("the public base-source state reports live and then missing")
     {
-      auto const state = service.listSourceState(viewId);
-      REQUIRE(state);
-      CHECK(*state == TrackSourceState::Live);
+      auto const stateRes = service.listSourceState(viewId);
+      REQUIRE(stateRes);
+      CHECK(*stateRes == TrackSourceState::Live);
 
       REQUIRE(env.workspace.closeView(viewId));
-      auto const missing = service.listSourceState(viewId);
-      REQUIRE_FALSE(missing);
-      CHECK(missing.error().code == Error::Code::NotFound);
+      auto const missingRes = service.listSourceState(viewId);
+      REQUIRE_FALSE(missingRes);
+      CHECK(missingRes.error().code == Error::Code::NotFound);
     }
 
     SECTION("the checked projection lookup reports NotFound after destroy")
     {
       REQUIRE(env.workspace.closeView(viewId));
 
-      auto const found = service.findTrackListProjection(viewId);
-      REQUIRE_FALSE(found);
-      CHECK(found.error().code == Error::Code::NotFound);
+      auto const foundRes = service.findTrackListProjection(viewId);
+      REQUIRE_FALSE(foundRes);
+      CHECK(foundRes.error().code == Error::Code::NotFound);
     }
 
     SECTION("destroyed views reject launch-context capture")
     {
       REQUIRE(env.workspace.closeView(viewId));
 
-      auto const captured = service.capturePlaybackLaunchSpec(viewId);
-      REQUIRE_FALSE(captured);
-      CHECK(captured.error().code == Error::Code::NotFound);
+      auto const capturedRes = service.capturePlaybackLaunchSpec(viewId);
+      REQUIRE_FALSE(capturedRes);
+      CHECK(capturedRes.error().code == Error::Code::NotFound);
     }
 
     SECTION("close releases the owned projection")
@@ -150,9 +150,9 @@ namespace ao::rt::test
       auto projectionWeakPtr = std::weak_ptr<TrackListProjection>{};
 
       {
-        auto const projectionResult = service.findTrackListProjection(viewId);
-        REQUIRE(projectionResult);
-        projectionWeakPtr = *projectionResult;
+        auto const projectionRes = service.findTrackListProjection(viewId);
+        REQUIRE(projectionRes);
+        projectionWeakPtr = *projectionRes;
       }
 
       REQUIRE_FALSE(projectionWeakPtr.expired());
@@ -196,9 +196,9 @@ namespace ao::rt::test
     auto& service = env.service;
 
     auto const result = env.requireView();
-    auto const projectionResult = service.findTrackListProjection(result);
-    REQUIRE(projectionResult);
-    auto const& projectionPtr = *projectionResult;
+    auto const projectionRes = service.findTrackListProjection(result);
+    REQUIRE(projectionRes);
+    auto const& projectionPtr = *projectionRes;
     REQUIRE(projectionPtr != nullptr);
     CHECK(projectionPtr->viewId() == result);
     CHECK(projectionPtr->size() == 0);
@@ -216,9 +216,9 @@ namespace ao::rt::test
     CHECK(state.groupBy == TrackGroupKey::None);
     CHECK(state.sortBy == order);
     CHECK(state.presentation.id == kDefaultTrackPresentationId);
-    auto const launchSpec = service.capturePlaybackLaunchSpec(result);
-    REQUIRE(launchSpec);
-    CHECK(launchSpec->order.sortBy == order);
+    auto const launchSpecRes = service.capturePlaybackLaunchSpec(result);
+    REQUIRE(launchSpecRes);
+    CHECK(launchSpecRes->order.sortBy == order);
   }
 
   TEST_CASE("ViewService - projection subscription replays initial reset", "[runtime][unit][view][lifecycle]")
@@ -227,9 +227,9 @@ namespace ao::rt::test
     auto& service = env.service;
 
     auto const result = env.requireView();
-    auto const projectionResult = service.findTrackListProjection(result);
-    REQUIRE(projectionResult);
-    auto const& projectionPtr = *projectionResult;
+    auto const projectionRes = service.findTrackListProjection(result);
+    REQUIRE(projectionRes);
+    auto const& projectionPtr = *projectionRes;
     REQUIRE(projectionPtr != nullptr);
 
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};

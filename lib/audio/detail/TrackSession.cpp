@@ -51,14 +51,14 @@ namespace ao::audio::detail
         return decoderPtr;
       }
 
-      auto res = createDecoderSession(path, optOutputEncoding);
+      auto resRes = createDecoderSession(path, optOutputEncoding);
 
-      if (!res)
+      if (!resRes)
       {
-        throwDecoderError(res.error());
+        throwDecoderError(resRes.error());
       }
 
-      return std::move(*res);
+      return std::move(*resRes);
     }
   } // namespace
 
@@ -69,9 +69,9 @@ namespace ao::audio::detail
     {
       auto decoderPtr = makeDecoder(decoderFactory, input.filePath, std::nullopt);
 
-      if (auto const openResult = decoderPtr->open(input.filePath); !openResult)
+      if (auto const openRes = decoderPtr->open(input.filePath); !openRes)
       {
-        throwDecoderError(openResult.error());
+        throwDecoderError(openRes.error());
       }
 
       auto info = decoderPtr->streamInfo();
@@ -100,9 +100,9 @@ namespace ao::audio::detail
     {
       auto decoderPtr = makeDecoder(decoderFactory, input.filePath, backendFormat.encoding);
 
-      if (auto const openResult = decoderPtr->open(input.filePath); !openResult)
+      if (auto const openRes = decoderPtr->open(input.filePath); !openRes)
       {
-        throwDecoderError(openResult.error());
+        throwDecoderError(openRes.error());
       }
 
       auto const info = decoderPtr->streamInfo();
@@ -119,9 +119,9 @@ namespace ao::audio::detail
 
       if (initialOffset > std::chrono::milliseconds{0})
       {
-        if (auto const seekResult = decoderPtr->seek(initialOffset); !seekResult)
+        if (auto const seekRes = decoderPtr->seek(initialOffset); !seekRes)
         {
-          throwDecoderError(seekResult.error());
+          throwDecoderError(seekRes.error());
         }
       }
 
@@ -142,9 +142,9 @@ namespace ao::audio::detail
       return makeError(Error::Code::InvalidState, "Prepared track has no streaming source");
     }
 
-    if (auto activated = preparedTrack.sourcePtr->activate(std::move(onSourceError)); !activated)
+    if (auto activatedRes = preparedTrack.sourcePtr->activate(std::move(onSourceError)); !activatedRes)
     {
-      return std::unexpected{activated.error()};
+      return std::unexpected{activatedRes.error()};
     }
 
     return OpenedTrack{.sourcePtr = std::shared_ptr<PcmSource>{std::move(preparedTrack.sourcePtr)},
@@ -158,9 +158,9 @@ namespace ao::audio::detail
     auto streamingSourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, OnSourceErrorFn{}, kPrerollDuration, kDecodeHighWatermarkThreshold);
 
-    if (auto const prepareResult = streamingSourcePtr->prepare(); !prepareResult)
+    if (auto const prepareRes = streamingSourcePtr->prepare(); !prepareRes)
     {
-      throwDecoderError(prepareResult.error());
+      throwDecoderError(prepareRes.error());
     }
 
     return streamingSourcePtr;

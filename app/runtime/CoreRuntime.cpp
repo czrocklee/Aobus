@@ -128,29 +128,29 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "CoreRuntime requires an executor");
     }
 
-    auto storage = library::MusicLibrary::open(
+    auto storageRes = library::MusicLibrary::open(
       musicRoot, databasePath, library::MusicLibrary::Options{.mapSize = musicLibraryMapSize});
 
-    if (!storage)
+    if (!storageRes)
     {
-      return std::unexpected{storage.error()};
+      return std::unexpected{storageRes.error()};
     }
 
-    auto storagePtr = std::make_unique<library::MusicLibrary>(std::move(*storage));
+    auto storagePtr = std::make_unique<library::MusicLibrary>(std::move(*storageRes));
     auto implPtr = std::make_unique<Impl>(std::move(executorPtr),
                                           std::move(musicRoot),
                                           std::move(databasePath),
                                           std::move(storagePtr),
                                           sleeper,
                                           std::move(asyncExceptionHandler));
-    auto libraryResult = Library::create(implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges);
+    auto libraryRes = Library::create(implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges);
 
-    if (!libraryResult)
+    if (!libraryRes)
     {
-      return std::unexpected{libraryResult.error()};
+      return std::unexpected{libraryRes.error()};
     }
 
-    implPtr->libraryFacadePtr = std::move(*libraryResult);
+    implPtr->libraryFacadePtr = std::move(*libraryRes);
     implPtr->trackSourceCache.reloadAllTracks();
     _implPtr = std::move(implPtr);
     return {};

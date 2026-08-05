@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/media/mp4/Atom.h>
+
 #include "media/mp4/AtomDispatch.h"
 #include <ao/Error.h>
-#include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/utility/ByteView.h>
 
@@ -164,30 +165,30 @@ namespace ao::media::mp4
 
     while (true)
     {
-      auto childResult = cursor.next();
+      auto childRes = cursor.next();
 
-      if (!childResult)
+      if (!childRes)
       {
-        return std::unexpected{childResult.error()};
+        return std::unexpected{childRes.error()};
       }
 
-      if (!*childResult)
+      if (!*childRes)
       {
         return OptionalAtom{};
       }
 
-      if (auto const& child = **childResult; child.type() == path[1])
+      if (auto const& child = **childRes; child.type() == path[1])
       {
-        auto foundResult = findAtom(child, path.subspan(1));
+        auto foundRes = findAtom(child, path.subspan(1));
 
-        if (!foundResult)
+        if (!foundRes)
         {
-          return std::unexpected{foundResult.error()};
+          return std::unexpected{foundRes.error()};
         }
 
-        if (*foundResult)
+        if (*foundRes)
         {
-          return *foundResult;
+          return *foundRes;
         }
       }
     }

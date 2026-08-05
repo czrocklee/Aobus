@@ -559,7 +559,7 @@ namespace ao::audio::backend
     void handleXrun(std::int32_t err) const;
     void commitFrames(::snd_pcm_uframes_t offset,
                       ::snd_pcm_uframes_t framesRead,
-                      RenderPcmResult const& renderResult,
+                      RenderPcmResult const& renderRes,
                       ::snd_pcm_uframes_t bufferSize,
                       ::snd_pcm_uframes_t startThreshold) const;
   };
@@ -627,8 +627,8 @@ namespace ao::audio::backend
       auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + (offset * areas[0].step)) / 8);
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
-      auto const renderResult = renderTarget->renderPcm({dst, bytesToRead});
-      std::size_t const bytesRead = renderResult.bytesWritten;
+      auto const renderRes = renderTarget->renderPcm({dst, bytesToRead});
+      std::size_t const bytesRead = renderRes.bytesWritten;
 
       // Per the RenderTarget contract renderPcm returns whole frames; commit only
       // the whole-frame portion defensively. A partial frame must never be
@@ -645,13 +645,13 @@ namespace ao::audio::backend
             {dst, committedBytes}, clientFormat.encoding, mixer.isSoftwareMuted() ? 0.0F : mixer.softwareVolume());
         }
 
-        commitFrames(offset, framesRead, renderResult, bufferSize, periodSize);
+        commitFrames(offset, framesRead, renderRes, bufferSize, periodSize);
       }
       else
       {
         ::snd_pcm_mmap_commit(pcmPtr.get(), offset, 0); // Release back to ALSA
 
-        if (renderResult.drained)
+        if (renderRes.drained)
         {
           ::snd_pcm_drain(pcmPtr.get());
           renderTarget->handleDrainComplete();
@@ -692,7 +692,7 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::commitFrames(::snd_pcm_uframes_t offset,
                                                 ::snd_pcm_uframes_t framesRead,
-                                                RenderPcmResult const& renderResult,
+                                                RenderPcmResult const& renderRes,
                                                 ::snd_pcm_uframes_t bufferSize,
                                                 ::snd_pcm_uframes_t startThreshold) const
   {
@@ -726,7 +726,7 @@ namespace ao::audio::backend
       }
 
       auto const committedPositionFrames = detail::committedPositionFrames(
-        static_cast<std::uint64_t>(committed), renderResult.positionFrameOffset, renderResult.positionFrames);
+        static_cast<std::uint64_t>(committed), renderRes.positionFrameOffset, renderRes.positionFrames);
       renderTarget->handlePositionAdvanced(static_cast<std::uint32_t>(committedPositionFrames));
     }
   }
@@ -910,15 +910,15 @@ namespace ao::audio::backend
                                                   : std::nullopt});
     }
 
-    auto const selected = detail::selectAlsaMode(sourceFormat, evidence);
+    auto const selectedRes = detail::selectAlsaMode(sourceFormat, evidence);
 
-    if (!selected)
+    if (!selectedRes)
     {
-      return std::unexpected{selected.error()};
+      return std::unexpected{selectedRes.error()};
     }
 
-    auto const clientFormat = pcmFormat(sourceFormat, selected->encoding);
-    auto const optAlsaFormat = detail::alsaFormatFromSampleEncoding(selected->encoding);
+    auto const clientFormat = pcmFormat(sourceFormat, selectedRes->encoding);
+    auto const optAlsaFormat = detail::alsaFormatFromSampleEncoding(selectedRes->encoding);
     gsl_Expects(optAlsaFormat);
 
     ::snd_pcm_hw_params_t* applied = nullptr;
@@ -928,7 +928,7 @@ namespace ao::audio::backend
     if (::snd_pcm_hw_params_set_format(pcm, applied, *optAlsaFormat) < 0)
     {
       return makeError(Error::Code::InitFailed,
-                       std::format("ALSA rejected {} after admitting it", sampleEncodingName(selected->encoding)));
+                       std::format("ALSA rejected {} after admitting it", sampleEncodingName(selectedRes->encoding)));
     }
 
     std::uint32_t periods = 4;
@@ -967,7 +967,7 @@ namespace ao::audio::backend
     }
 
     auto const endpointBits = static_cast<std::uint8_t>(
-      std::min(appliedSbits, static_cast<std::int32_t>(encodingNominalBits(selected->encoding))));
+      std::min(appliedSbits, static_cast<std::int32_t>(encodingNominalBits(selectedRes->encoding))));
 
     if (endpointBits < sourceFormat.precisionBits)
     {
@@ -977,11 +977,11 @@ namespace ao::audio::backend
                                    static_cast<std::uint32_t>(sourceFormat.precisionBits)));
     }
 
-    auto const endpointSignal =
-      SignalFormat{.sampleRate = clientFormat.sampleRate,
-                   .channels = clientFormat.channels,
-                   .precisionBits = endpointBits,
-                   .sampleKind = isFloatEncoding(selected->encoding) ? SampleKind::FloatingPoint : SampleKind::Integer};
+    auto const endpointSignal = SignalFormat{
+      .sampleRate = clientFormat.sampleRate,
+      .channels = clientFormat.channels,
+      .precisionBits = endpointBits,
+      .sampleKind = isFloatEncoding(selectedRes->encoding) ? SampleKind::FloatingPoint : SampleKind::Integer};
 
     return NegotiatedMode{.mode = OpenedPcmMode{.clientFormat = clientFormat,
                                                 .optEndpoint = ConfirmedEndpoint{.signalFormat = endpointSignal}},
@@ -1069,20 +1069,20 @@ namespace ao::audio::backend
                        std::format("ALSA exclusive output requires a direct hardware PCM: {}", _implPtr->deviceName));
     }
 
-    auto negotiated = _implPtr->negotiateHwParams(safePcmPtr.get(), sourceFormat);
+    auto negotiatedRes = _implPtr->negotiateHwParams(safePcmPtr.get(), sourceFormat);
 
-    if (!negotiated)
+    if (!negotiatedRes)
     {
-      return std::unexpected{negotiated.error()};
+      return std::unexpected{negotiatedRes.error()};
     }
 
-    if (auto const res = _implPtr->configureSwParams(safePcmPtr.get(), negotiated->periodSize); !res)
+    if (auto const resRes = _implPtr->configureSwParams(safePcmPtr.get(), negotiatedRes->periodSize); !resRes)
     {
-      return std::unexpected{res.error()};
+      return std::unexpected{resRes.error()};
     }
 
-    _implPtr->optOpenedMode = negotiated->mode;
-    _implPtr->prewarmCache.store(sourceFormat, negotiated->mode.clientFormat);
+    _implPtr->optOpenedMode = negotiatedRes->mode;
+    _implPtr->prewarmCache.store(sourceFormat, negotiatedRes->mode.clientFormat);
     _implPtr->renderTarget = target;
 
     _implPtr->pcmPtr = std::move(safePcmPtr);
@@ -1096,7 +1096,7 @@ namespace ao::audio::backend
       _implPtr->renderTarget->handleRouteReady(_implPtr->deviceName);
     }
 
-    return negotiated->mode;
+    return negotiatedRes->mode;
   }
 
   void AlsaExclusiveBackend::start()

@@ -22,14 +22,14 @@ namespace ao::utility::detail
   template<typename Operations>
   Result<> runAtomicReplacement(Operations& operations, std::filesystem::path const& targetPath, std::string_view data)
   {
-    auto normalizedTargetResult = operations.normalizeTargetPath(targetPath);
+    auto normalizedTargetRes = operations.normalizeTargetPath(targetPath);
 
-    if (!normalizedTargetResult)
+    if (!normalizedTargetRes)
     {
-      return std::unexpected{normalizedTargetResult.error()};
+      return std::unexpected{normalizedTargetRes.error()};
     }
 
-    auto const& normalizedTarget = *normalizedTargetResult;
+    auto const& normalizedTarget = *normalizedTargetRes;
     auto const parentPath = normalizedTarget.parent_path();
 
     if (auto const result = operations.createParentDirectories(parentPath); !result)
@@ -37,14 +37,14 @@ namespace ao::utility::detail
       return result;
     }
 
-    auto temporaryFileResult = operations.createPrivateTemporaryFile(parentPath);
+    auto temporaryFileRes = operations.createPrivateTemporaryFile(parentPath);
 
-    if (!temporaryFileResult)
+    if (!temporaryFileRes)
     {
-      return std::unexpected{temporaryFileResult.error()};
+      return std::unexpected{temporaryFileRes.error()};
     }
 
-    auto temporaryFile = std::move(*temporaryFileResult);
+    auto temporaryFile = std::move(*temporaryFileRes);
 
     if (auto const result = temporaryFile.writeAll(data); !result)
     {

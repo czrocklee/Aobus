@@ -236,9 +236,9 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - serialization rejects text beyond the product limit", "[library][unit][list]")
   {
-    auto const longTextResult = ListBuilder::makeEmpty().name(std::string(65'536, 'n')).serialize();
-    REQUIRE_FALSE(longTextResult);
-    CHECK(longTextResult.error().code == Error::Code::ValueTooLarge);
+    auto const longTextRes = ListBuilder::makeEmpty().name(std::string(65'536, 'n')).serialize();
+    REQUIRE_FALSE(longTextRes);
+    CHECK(longTextRes.error().code == Error::Code::ValueTooLarge);
   }
 
   TEST_CASE("ListBuilder - order supports more than 16-bit byte offsets", "[library][unit][list]")

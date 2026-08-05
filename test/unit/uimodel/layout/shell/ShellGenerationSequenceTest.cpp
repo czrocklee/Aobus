@@ -43,10 +43,10 @@ namespace ao::uimodel::test
     CHECK(sequence.stagedCount() == 1);
     CHECK_FALSE(candidatePtr->isActive());
 
-    auto const retired = sequence.publish(candidatePtr->id(), succeeds);
+    auto const retiredRes = sequence.publish(candidatePtr->id(), succeeds);
 
-    REQUIRE(retired.has_value());
-    CHECK(*retired == ShellGenerationId::None);
+    REQUIRE(retiredRes.has_value());
+    CHECK(*retiredRes == ShellGenerationId::None);
     CHECK(sequence.activeId() == candidatePtr->id());
     CHECK(sequence.stagedCount() == 0);
     CHECK(candidatePtr->isActive());
@@ -64,10 +64,10 @@ namespace ao::uimodel::test
     CHECK(firstPtr->isActive());
     CHECK_FALSE(secondPtr->isActive());
 
-    auto const retired = sequence.publish(secondPtr->id(), succeeds);
+    auto const retiredRes = sequence.publish(secondPtr->id(), succeeds);
 
-    REQUIRE(retired.has_value());
-    CHECK(*retired == firstPtr->id());
+    REQUIRE(retiredRes.has_value());
+    CHECK(*retiredRes == firstPtr->id());
     CHECK(sequence.activeId() == secondPtr->id());
     CHECK(secondPtr->isActive());
     CHECK_FALSE(firstPtr->isActive());
@@ -81,10 +81,10 @@ namespace ao::uimodel::test
     REQUIRE(sequence.publish(firstPtr->id(), succeeds).has_value());
 
     auto const candidatePtr = sequence.stage();
-    auto const published = sequence.publish(candidatePtr->id(), fails);
+    auto const publishedRes = sequence.publish(candidatePtr->id(), fails);
 
-    REQUIRE_FALSE(published.has_value());
-    CHECK(published.error().code == Error::Code::InitFailed);
+    REQUIRE_FALSE(publishedRes.has_value());
+    CHECK(publishedRes.error().code == Error::Code::InitFailed);
     CHECK(sequence.activeId() == firstPtr->id());
     CHECK(firstPtr->isActive());
     CHECK_FALSE(candidatePtr->isActive());
@@ -99,10 +99,10 @@ namespace ao::uimodel::test
     REQUIRE(sequence.publish(firstPtr->id(), succeeds).has_value());
 
     auto const candidatePtr = sequence.stage();
-    auto const published = sequence.publish(candidatePtr->id(), throws);
+    auto const publishedRes = sequence.publish(candidatePtr->id(), throws);
 
-    REQUIRE_FALSE(published.has_value());
-    CHECK(published.error().code == Error::Code::InitFailed);
+    REQUIRE_FALSE(publishedRes.has_value());
+    CHECK(publishedRes.error().code == Error::Code::InitFailed);
     CHECK(sequence.activeId() == firstPtr->id());
     CHECK(firstPtr->isActive());
     CHECK_FALSE(candidatePtr->isActive());
@@ -118,10 +118,10 @@ namespace ao::uimodel::test
     CHECK(sequence.stagedCount() == 0);
     CHECK_FALSE(candidatePtr->isActive());
 
-    auto const published = sequence.publish(candidatePtr->id(), succeeds);
+    auto const publishedRes = sequence.publish(candidatePtr->id(), succeeds);
 
-    REQUIRE_FALSE(published.has_value());
-    CHECK(published.error().code == Error::Code::InvalidState);
+    REQUIRE_FALSE(publishedRes.has_value());
+    CHECK(publishedRes.error().code == Error::Code::InvalidState);
     CHECK(sequence.activeId() == ShellGenerationId::None);
   }
 

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/media/file/File.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/file/TestFile.h"
-#include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
 
 #include <catch2/catch_message.hpp>
@@ -45,16 +46,16 @@ namespace ao::media::file::test
       auto const temp = TempFile{".txt"};
       CHECK_FALSE(File::isSupported(temp.path));
 
-      auto fileResult = File::open(temp.path);
-      REQUIRE_FALSE(fileResult);
-      CHECK(fileResult.error().code == Error::Code::NotSupported);
+      auto fileRes = File::open(temp.path);
+      REQUIRE_FALSE(fileRes);
+      CHECK(fileRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("missing supported file")
     {
-      auto fileResult = File::open("/tmp/aobus-missing-file.mp3");
-      REQUIRE_FALSE(fileResult);
-      CHECK(fileResult.error().code == Error::Code::IoError);
+      auto fileRes = File::open("/tmp/aobus-missing-file.mp3");
+      REQUIRE_FALSE(fileRes);
+      CHECK(fileRes.error().code == Error::Code::IoError);
     }
   }
 

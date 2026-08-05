@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/lmdb/Transaction.h>
+
 #include "detail/ResultError.h"
 #include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <lmdb.h>
 
@@ -33,26 +34,26 @@ namespace ao::lmdb
 
   Result<ReadTransaction> ReadTransaction::begin(Environment const& env)
   {
-    auto txnPtr = create(env.handle(), nullptr, MDB_RDONLY);
+    auto txnPtrRes = create(env.handle(), nullptr, MDB_RDONLY);
 
-    if (!txnPtr)
+    if (!txnPtrRes)
     {
-      return std::unexpected{txnPtr.error()};
+      return std::unexpected{txnPtrRes.error()};
     }
 
-    return ReadTransaction{std::move(*txnPtr)};
+    return ReadTransaction{std::move(*txnPtrRes)};
   }
 
   Result<WriteTransaction> WriteTransaction::begin(Environment& env)
   {
-    auto txnPtr = create(env.handle(), nullptr, 0);
+    auto txnPtrRes = create(env.handle(), nullptr, 0);
 
-    if (!txnPtr)
+    if (!txnPtrRes)
     {
-      return std::unexpected{txnPtr.error()};
+      return std::unexpected{txnPtrRes.error()};
     }
 
-    return WriteTransaction{std::move(*txnPtr)};
+    return WriteTransaction{std::move(*txnPtrRes)};
   }
 
   Result<WriteTransaction> WriteTransaction::begin(WriteTransaction& parent)
@@ -62,14 +63,14 @@ namespace ao::lmdb
       return makeError(Error::Code::InvalidState, "Cannot begin a child transaction from a finished parent");
     }
 
-    auto txnPtr = create(::mdb_txn_env(parent.handle()), parent.handle(), 0);
+    auto txnPtrRes = create(::mdb_txn_env(parent.handle()), parent.handle(), 0);
 
-    if (!txnPtr)
+    if (!txnPtrRes)
     {
-      return std::unexpected{txnPtr.error()};
+      return std::unexpected{txnPtrRes.error()};
     }
 
-    return WriteTransaction{std::move(*txnPtr)};
+    return WriteTransaction{std::move(*txnPtrRes)};
   }
 
   Result<> WriteTransaction::commit()

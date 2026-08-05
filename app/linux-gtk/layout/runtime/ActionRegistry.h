@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
@@ -34,8 +33,15 @@ namespace ao::gtk::layout
     std::string componentId;
   };
 
+  /// Whether a layout action can be activated in the current context.
+  struct ActionAvailability final
+  {
+    bool enabled = true;
+    std::string disabledReason;
+  };
+
   using ActionHandler = std::function<void(ActionActivationContext&)>;
-  using ActionStateProvider = std::function<uimodel::LayoutActionAvailability(ActionActivationContext const&)>;
+  using ActionStateProvider = std::function<ActionAvailability(ActionActivationContext const&)>;
 
   class ActionRegistry final
   {
@@ -55,7 +61,7 @@ namespace ao::gtk::layout
     std::optional<uimodel::LayoutActionDescriptor> descriptor(std::string_view id) const;
     std::vector<uimodel::LayoutActionDescriptor> descriptors() const;
 
-    uimodel::LayoutActionAvailability state(std::string_view id, ActionActivationContext const& ctx) const;
+    ActionAvailability state(std::string_view id, ActionActivationContext const& ctx) const;
     bool activate(std::string_view id, ActionActivationContext& ctx) const;
 
     uimodel::LayoutActionCatalog const& catalog() const noexcept;

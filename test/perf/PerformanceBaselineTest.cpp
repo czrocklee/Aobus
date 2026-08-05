@@ -1156,7 +1156,7 @@ namespace ao::rt::test
 
       for (std::int32_t i = 0; i < kLookupIters; ++i)
       {
-        [[maybe_unused]] auto const optResult = proj.indexOf(midId);
+        [[maybe_unused]] auto const optRes = proj.indexOf(midId);
       }
 
       auto const t6 = std::chrono::steady_clock::now();
@@ -1380,11 +1380,11 @@ namespace ao::rt::test
       {
         auto builder = library::TrackBuilder::makeEmpty();
         library::test::applyTrackSpec(builder, pipelineTrackSpec(firstIndex + offset));
-        auto prepared = builder.prepare(transaction, library.resources());
-        REQUIRE(prepared);
-        auto created = library::createPreparedTrackRecord(writer, prepared->first, prepared->second);
-        REQUIRE(created);
-        ids.push_back(*created);
+        auto preparedRes = builder.prepare(transaction, library.resources());
+        REQUIRE(preparedRes);
+        auto createdRes = library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
+        REQUIRE(createdRes);
+        ids.push_back(*createdRes);
       }
 
       auto const start = std::chrono::steady_clock::now();
@@ -1521,9 +1521,9 @@ namespace ao::rt::test
           auto const index = startIndex + offset;
           auto builder = library::TrackBuilder::makeEmpty();
           library::test::applyTrackSpec(builder, pipelineTrackSpec(index, true));
-          auto prepared = builder.prepareHot(transaction);
-          REQUIRE(prepared);
-          REQUIRE(library::updatePreparedHotTrackRecord(writer, _ids[index], *prepared));
+          auto preparedRes = builder.prepareHot(transaction);
+          REQUIRE(preparedRes);
+          REQUIRE(library::updatePreparedHotTrackRecord(writer, _ids[index], *preparedRes));
         }
 
         auto const start = std::chrono::steady_clock::now();

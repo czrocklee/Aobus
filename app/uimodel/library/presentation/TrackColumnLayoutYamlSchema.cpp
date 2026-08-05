@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
@@ -80,22 +81,22 @@ namespace ao::uimodel
         return std::unexpected{result.error()};
       }
 
-      auto version = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
+      auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
 
-      if (!version)
+      if (!versionRes)
       {
-        return std::unexpected{version.error()};
+        return std::unexpected{versionRes.error()};
       }
 
-      if (*version != kTrackColumnLayoutVersion)
+      if (*versionRes != kTrackColumnLayoutVersion)
       {
         return makeError(
-          Error::Code::NotSupported, std::format("Unsupported track column layout version {}", *version));
+          Error::Code::NotSupported, std::format("Unsupported track column layout version {}", *versionRes));
       }
 
       constexpr auto kKeys = std::to_array<std::string_view>({"version", "layouts"});
 
-      auto document = TrackColumnLayoutDocument{.version = *version};
+      auto document = TrackColumnLayoutDocument{.version = *versionRes};
       auto reader = yaml::MapReader{node, kKeys, kContext};
       reader.requiredSequence("layouts", document.layouts, readLayout);
       return std::move(reader).finish(std::move(document));
@@ -141,9 +142,9 @@ namespace ao::uimodel
 
       for (auto const& column : columns)
       {
-        if (auto const valid = validateColumn(column, Error::Code::InvalidState); !valid)
+        if (auto const validRes = validateColumn(column, Error::Code::InvalidState); !validRes)
         {
-          return std::unexpected{valid.error()};
+          return std::unexpected{validRes.error()};
         }
 
         auto const field = rt::trackFieldId(column.field);
@@ -216,9 +217,9 @@ namespace ao::uimodel
           .visible = column.visible,
         };
 
-        if (auto const valid = validateColumn(columnState, Error::Code::FormatRejected); !valid)
+        if (auto const validRes = validateColumn(columnState, Error::Code::FormatRejected); !validRes)
         {
-          return std::unexpected{valid.error()};
+          return std::unexpected{validRes.error()};
         }
 
         columns.push_back(columnState);
@@ -232,26 +233,26 @@ namespace ao::uimodel
 
   Result<> TrackColumnLayoutYamlSchema::serialize(ryml::NodeRef node, TrackColumnLayoutState const& state) const
   {
-    auto document = toTrackColumnLayoutDocument(state);
+    auto documentRes = toTrackColumnLayoutDocument(state);
 
-    if (!document)
+    if (!documentRes)
     {
-      return std::unexpected{document.error()};
+      return std::unexpected{documentRes.error()};
     }
 
-    return writeDocument(node, *document);
+    return writeDocument(node, *documentRes);
   }
 
   Result<TrackColumnLayoutState> TrackColumnLayoutYamlSchema::deserialize(ryml::ConstNodeRef node,
                                                                           TrackColumnLayoutState const& /*seed*/) const
   {
-    auto document = readDocument(node);
+    auto documentRes = readDocument(node);
 
-    if (!document)
+    if (!documentRes)
     {
-      return std::unexpected{document.error()};
+      return std::unexpected{documentRes.error()};
     }
 
-    return trackColumnLayoutStateFromDocument(*document);
+    return trackColumnLayoutStateFromDocument(*documentRes);
   }
 } // namespace ao::uimodel

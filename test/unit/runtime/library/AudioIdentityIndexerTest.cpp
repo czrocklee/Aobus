@@ -72,10 +72,10 @@ namespace ao::rt::test
     ManifestIdentityState manifestIdentity(library::MusicLibrary& ml, std::string_view uri)
     {
       auto transaction = ml.readTransaction();
-      auto manifestResult = ml.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestResult);
+      auto manifestRes = ml.manifest().reader(transaction).get(uri);
+      REQUIRE(manifestRes);
       return ManifestIdentityState{
-        .audioPayloadLength = manifestResult->audioPayloadLength(), .audioSignature = manifestResult->audioSignature()};
+        .audioPayloadLength = manifestRes->audioPayloadLength(), .audioSignature = manifestRes->audioSignature()};
     }
 
     bool manifestHasIdentity(library::MusicLibrary& ml, std::string_view uri)
@@ -90,21 +90,21 @@ namespace ao::rt::test
       auto plan = scanService.buildPlan().value();
       REQUIRE(plan.count(ScanClassification::New) == expectedNewCount);
 
-      auto runResult =
+      auto runRes =
         ScanApplyOperation{ml, std::move(plan), {}, {}, ScanApplyOptions{.audioIdentityPolicy = policy}}.run();
-      REQUIRE(runResult);
-      REQUIRE(runResult->insertedIds.size() == expectedNewCount);
-      REQUIRE(runResult->failureCount == 0);
+      REQUIRE(runRes);
+      REQUIRE(runRes->insertedIds.size() == expectedNewCount);
+      REQUIRE(runRes->failureCount == 0);
     }
 
     void writeManifestIdentity(library::MusicLibrary& ml, std::string_view uri)
     {
       auto transaction = library::test::writeTransaction(ml);
       auto writer = ml.manifest().writer(transaction);
-      auto currentResult = writer.get(uri);
-      REQUIRE(currentResult);
+      auto currentRes = writer.get(uri);
+      REQUIRE(currentRes);
 
-      auto builder = library::FileManifestBuilder::fromView(*currentResult);
+      auto builder = library::FileManifestBuilder::fromView(*currentRes);
       builder.audioPayloadLength(1).audioSignature(utility::xxh3Hash128("test-identity"));
       REQUIRE(writer.put(uri, builder.serialize()));
       REQUIRE(transaction.commit());
@@ -132,14 +132,14 @@ namespace ao::rt::test
           commitLock = std::unique_lock{*optCommitMutex};
         }
 
-        auto writableResult = library::WritableMusicLibrary::acquire(library);
+        auto writableRes = library::WritableMusicLibrary::acquire(library);
 
-        if (!writableResult)
+        if (!writableRes)
         {
-          return std::unexpected{writableResult.error()};
+          return std::unexpected{writableRes.error()};
         }
 
-        auto transaction = writableResult->writeTransaction();
+        auto transaction = writableRes->writeTransaction();
         auto result = applyAudioIdentityBatch(library, transaction, candidates);
 
         if (!result || result->completedCount == 0)
@@ -147,9 +147,9 @@ namespace ao::rt::test
           return result;
         }
 
-        if (auto commitResult = transaction.commit(); !commitResult)
+        if (auto commitRes = transaction.commit(); !commitRes)
         {
-          return std::unexpected{commitResult.error()};
+          return std::unexpected{commitRes.error()};
         }
 
         return result;
@@ -212,19 +212,19 @@ namespace ao::rt::test
     auto ml = library::test::makeTestMusicLibrary(musicRoot, databasePath);
 
     {
-      auto environmentResult = lmdb::Environment::open(
+      auto environmentRes = lmdb::Environment::open(
         databasePath.string(),
         {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
-      REQUIRE(environmentResult);
-      auto environment = std::move(*environmentResult);
-      auto transactionResult = lmdb::WriteTransaction::begin(environment);
-      REQUIRE(transactionResult);
-      auto transaction = std::move(*transactionResult);
-      auto manifestResult = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
-      REQUIRE(manifestResult);
+      REQUIRE(environmentRes);
+      auto environment = std::move(*environmentRes);
+      auto transactionRes = lmdb::WriteTransaction::begin(environment);
+      REQUIRE(transactionRes);
+      auto transaction = std::move(*transactionRes);
+      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      REQUIRE(manifestRes);
       auto const malformedKey = utility::bytes::view(std::string_view{"zz"});
       auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
-      REQUIRE(manifestResult->writer(transaction).create(malformedKey, payload));
+      REQUIRE(manifestRes->writer(transaction).create(malformedKey, payload));
       REQUIRE(transaction.commit());
     }
 
@@ -566,10 +566,10 @@ namespace ao::rt::test
     CHECK(manifestHasIdentity(ml, "a.flac"));
     CHECK_FALSE(manifestHasIdentity(ml, "b.flac"));
 
-    auto resumed = runIndexPending(ml, AudioIdentityIndexer::Options{.maxConcurrency = 1});
-    REQUIRE(resumed);
-    CHECK(resumed->completedCount == 1);
-    CHECK(resumed->failureCount == 0);
+    auto resumedRes = runIndexPending(ml, AudioIdentityIndexer::Options{.maxConcurrency = 1});
+    REQUIRE(resumedRes);
+    CHECK(resumedRes->completedCount == 1);
+    CHECK(resumedRes->failureCount == 0);
     CHECK(manifestHasIdentity(ml, "a.flac"));
     CHECK(manifestHasIdentity(ml, "b.flac"));
   }

@@ -67,14 +67,14 @@ namespace ao::audio
   {
     auto callback = std::move(_onError);
 
-    if (auto prepared = prepare(); !prepared)
+    if (auto preparedRes = prepare(); !preparedRes)
     {
       if (callback)
       {
-        callback(prepared.error());
+        callback(preparedRes.error());
       }
 
-      return prepared;
+      return preparedRes;
     }
 
     return activate(std::move(callback));
@@ -183,9 +183,9 @@ namespace ao::audio
       {
         auto lock = std::scoped_lock{_decoderMutex};
 
-        if (auto const res = _decoderPtr->seek(offset); !res)
+        if (auto const resRes = _decoderPtr->seek(offset); !resRes)
         {
-          detail::throwDecoderError(res.error());
+          detail::throwDecoderError(resRes.error());
         }
       }
 
@@ -330,14 +330,14 @@ namespace ao::audio
         return DecodeBlockStatus::Stopped;
       }
 
-      auto const blockResult = _decoderPtr->readNextBlock();
+      auto const blockRes = _decoderPtr->readNextBlock();
 
-      if (!blockResult)
+      if (!blockRes)
       {
-        detail::throwDecoderError(blockResult.error());
+        detail::throwDecoderError(blockRes.error());
       }
 
-      block = *blockResult;
+      block = *blockRes;
     }
 
     if (block.endOfStream && block.bytes.empty())

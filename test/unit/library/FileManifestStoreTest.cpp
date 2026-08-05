@@ -37,18 +37,18 @@ namespace ao::library::test
   {
     void seedPostOpenMalformedManifest(std::filesystem::path const& databasePath)
     {
-      auto environmentResult = lmdb::Environment::open(
+      auto environmentRes = lmdb::Environment::open(
         databasePath.string(), {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = kTestMusicLibraryMapSize});
-      REQUIRE(environmentResult);
-      auto environment = std::move(*environmentResult);
-      auto transactionResult = lmdb::WriteTransaction::begin(environment);
-      REQUIRE(transactionResult);
-      auto transaction = std::move(*transactionResult);
-      auto manifestResult = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
-      REQUIRE(manifestResult);
+      REQUIRE(environmentRes);
+      auto environment = std::move(*environmentRes);
+      auto transactionRes = lmdb::WriteTransaction::begin(environment);
+      REQUIRE(transactionRes);
+      auto transaction = std::move(*transactionRes);
+      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      REQUIRE(manifestRes);
       auto const malformedKey = utility::bytes::view(std::string_view{"zz"});
       auto const payload = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
-      REQUIRE(manifestResult->writer(transaction).create(malformedKey, payload));
+      REQUIRE(manifestRes->writer(transaction).create(malformedKey, payload));
       REQUIRE(transaction.commit());
     }
   } // namespace
@@ -89,15 +89,15 @@ namespace ao::library::test
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
-    auto const viewResult = store.reader(rtxn).get("song.flac");
-    REQUIRE(viewResult);
-    CHECK(viewResult->trackId() == TrackId{42});
-    CHECK(viewResult->fileSize() == 12345);
-    CHECK(viewResult->mtime() == 67890);
-    CHECK(viewResult->audioPayloadLength() == 55555);
-    CHECK(viewResult->audioSignature() == signature);
-    CHECK(viewResult->status() == FileStatus::Available);
-    CHECK(std::ranges::equal(viewResult->rawData(), payload));
+    auto const viewRes = store.reader(rtxn).get("song.flac");
+    REQUIRE(viewRes);
+    CHECK(viewRes->trackId() == TrackId{42});
+    CHECK(viewRes->fileSize() == 12345);
+    CHECK(viewRes->mtime() == 67890);
+    CHECK(viewRes->audioPayloadLength() == 55555);
+    CHECK(viewRes->audioSignature() == signature);
+    CHECK(viewRes->status() == FileStatus::Available);
+    CHECK(std::ranges::equal(viewRes->rawData(), payload));
   }
 
   TEST_CASE("FileManifestStore - rejects non-canonical or root-escaping URI keys", "[library][unit][manifest]")
@@ -114,17 +114,17 @@ namespace ao::library::test
                            std::string_view{R"(album\song.flac)"}})
     {
       CAPTURE(uri);
-      auto const putResult = writer.put(uri, std::span<std::byte const>{});
-      REQUIRE_FALSE(putResult);
-      CHECK(putResult.error().code == Error::Code::InvalidInput);
+      auto const putRes = writer.put(uri, std::span<std::byte const>{});
+      REQUIRE_FALSE(putRes);
+      CHECK(putRes.error().code == Error::Code::InvalidInput);
 
-      auto const getResult = writer.get(uri);
-      REQUIRE_FALSE(getResult);
-      CHECK(getResult.error().code == Error::Code::InvalidInput);
+      auto const getRes = writer.get(uri);
+      REQUIRE_FALSE(getRes);
+      CHECK(getRes.error().code == Error::Code::InvalidInput);
 
-      auto const removeResult = writer.remove(uri);
-      REQUIRE_FALSE(removeResult);
-      CHECK(removeResult.error().code == Error::Code::InvalidInput);
+      auto const removeRes = writer.remove(uri);
+      REQUIRE_FALSE(removeRes);
+      CHECK(removeRes.error().code == Error::Code::InvalidInput);
     }
   }
 
@@ -150,9 +150,9 @@ namespace ao::library::test
         auto const uri = std::string(uriLength, 'a');
         REQUIRE(writer.put(uri, payload));
 
-        auto const viewResult = writer.get(uri);
-        REQUIRE(viewResult);
-        CHECK(viewResult->trackId() == TrackId{42});
+        auto const viewRes = writer.get(uri);
+        REQUIRE(viewRes);
+        CHECK(viewRes->trackId() == TrackId{42});
       }
     }
 
@@ -164,9 +164,9 @@ namespace ao::library::test
 
       for (auto const uriLength : kUriLengths)
       {
-        auto const viewResult = reader.get(std::string(uriLength, 'a'));
-        REQUIRE(viewResult);
-        CHECK(viewResult->trackId() == TrackId{42});
+        auto const viewRes = reader.get(std::string(uriLength, 'a'));
+        REQUIRE(viewRes);
+        CHECK(viewRes->trackId() == TrackId{42});
       }
     }
 
@@ -179,9 +179,9 @@ namespace ao::library::test
         auto const uri = std::string(uriLength, 'a');
         REQUIRE(writer.remove(uri));
 
-        auto const viewResult = writer.get(uri);
-        REQUIRE_FALSE(viewResult);
-        CHECK(viewResult.error().code == Error::Code::NotFound);
+        auto const viewRes = writer.get(uri);
+        REQUIRE_FALSE(viewRes);
+        CHECK(viewRes.error().code == Error::Code::NotFound);
       }
 
       REQUIRE(removeTxn.commit());
@@ -192,9 +192,9 @@ namespace ao::library::test
 
     for (auto const uriLength : kUriLengths)
     {
-      auto const viewResult = reader.get(std::string(uriLength, 'a'));
-      REQUIRE_FALSE(viewResult);
-      CHECK(viewResult.error().code == Error::Code::NotFound);
+      auto const viewRes = reader.get(std::string(uriLength, 'a'));
+      REQUIRE_FALSE(viewRes);
+      CHECK(viewRes.error().code == Error::Code::NotFound);
     }
   }
 
@@ -205,9 +205,9 @@ namespace ao::library::test
     auto const& store = library.manifest();
 
     auto rtxn = library.readTransaction();
-    auto const viewResult = store.reader(rtxn).get("nonexistent.flac");
-    REQUIRE_FALSE(viewResult);
-    CHECK(viewResult.error().code == Error::Code::NotFound);
+    auto const viewRes = store.reader(rtxn).get("nonexistent.flac");
+    REQUIRE_FALSE(viewRes);
+    CHECK(viewRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("FileManifestStore - remove is idempotent", "[library][unit][manifest]")
@@ -227,9 +227,9 @@ namespace ao::library::test
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
-    auto const viewResult = store.reader(rtxn).get("song.flac");
-    REQUIRE_FALSE(viewResult);
-    CHECK(viewResult.error().code == Error::Code::NotFound);
+    auto const viewRes = store.reader(rtxn).get("song.flac");
+    REQUIRE_FALSE(viewRes);
+    CHECK(viewRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("FileManifestStore - rejects corrupt payloads before mutation", "[library][unit][manifest]")
@@ -240,9 +240,9 @@ namespace ao::library::test
     auto wtxn = writeTransaction(library);
     auto invalidPayload = std::vector{std::byte{0x42}};
 
-    auto const putResult = store.writer(wtxn).put("song.flac", invalidPayload);
-    REQUIRE_FALSE(putResult);
-    CHECK(putResult.error().code == Error::Code::CorruptData);
+    auto const putRes = store.writer(wtxn).put("song.flac", invalidPayload);
+    REQUIRE_FALSE(putRes);
+    CHECK(putRes.error().code == Error::Code::CorruptData);
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
@@ -307,12 +307,12 @@ namespace ao::library::test
     {
       auto const uri = invalid.name + ".flac";
       CAPTURE(invalid.name);
-      auto const putResult = writer.put(uri, invalid.payload);
-      REQUIRE_FALSE(putResult);
-      CHECK(putResult.error().code == Error::Code::CorruptData);
-      auto const stagedRead = writer.get(uri);
-      REQUIRE_FALSE(stagedRead);
-      CHECK(stagedRead.error().code == Error::Code::NotFound);
+      auto const putRes = writer.put(uri, invalid.payload);
+      REQUIRE_FALSE(putRes);
+      CHECK(putRes.error().code == Error::Code::CorruptData);
+      auto const stagedReadRes = writer.get(uri);
+      REQUIRE_FALSE(stagedReadRes);
+      CHECK(stagedReadRes.error().code == Error::Code::NotFound);
     }
 
     REQUIRE(transaction.commit());

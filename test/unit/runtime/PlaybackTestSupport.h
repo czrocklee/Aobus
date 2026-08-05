@@ -59,9 +59,9 @@ namespace ao::rt::test
   {
     auto const previousRevision = positionRevision();
 
-    if (auto admitted = admit(); !admitted)
+    if (auto admittedRes = admit(); !admittedRes)
     {
-      return admitted;
+      return admittedRes;
     }
 
     if (!waitForPlaybackSettlement(executor, previousRevision, std::move(positionRevision), timeout))

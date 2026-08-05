@@ -293,9 +293,9 @@ namespace ao::gtk::test
       draft.description = "Tracks touched this week";
       draft.expression = "$title ~ \"Recent\"";
 
-      auto const listResult = controller.submitListDraft(draft, "compact");
-      REQUIRE(listResult);
-      auto const listId = *listResult;
+      auto const listRes = controller.submitListDraft(draft, "compact");
+      REQUIRE(listRes);
+      auto const listId = *listRes;
 
       auto const optList = findList(fixture.runtime().musicLibrary(), listId);
       REQUIRE(optList);
@@ -314,9 +314,9 @@ namespace ao::gtk::test
       auto draft = rt::LibraryListDraft{};
       draft.name = "Retry selection";
       draft.expression = "true";
-      auto const listResult = controller.submitListDraft(draft, {});
-      REQUIRE(listResult);
-      auto const listId = *listResult;
+      auto const listRes = controller.submitListDraft(draft, {});
+      REQUIRE(listRes);
+      auto const listId = *listRes;
       rejectSelection = true;
 
       controller.rebuildTree(cache);
@@ -424,12 +424,12 @@ namespace ao::gtk::test
       draft.description = "Updated description";
       draft.expression = "$title ~ \"Energy\"";
 
-      auto const savedResult = controller.submitListDraft(draft, "wide");
-      REQUIRE(savedResult);
+      auto const savedRes = controller.submitListDraft(draft, "wide");
+      REQUIRE(savedRes);
 
       auto const optList = findList(fixture.runtime().musicLibrary(), listId);
       REQUIRE(optList);
-      CHECK(*savedResult == listId);
+      CHECK(*savedRes == listId);
       CHECK_FALSE(optList->name().empty());
       CHECK(savedPresentationListId == listId);
       CHECK(savedPresentationId == "wide");
@@ -446,9 +446,9 @@ namespace ao::gtk::test
       draft.name = "Invalid";
       draft.expression = "(";
 
-      auto const listResult = controller.submitListDraft(draft, "wide");
+      auto const listRes = controller.submitListDraft(draft, "wide");
 
-      REQUIRE_FALSE(listResult);
+      REQUIRE_FALSE(listRes);
       CHECK(savedPresentationListId == kInvalidListId);
       CHECK(savedPresentationId.empty());
     }

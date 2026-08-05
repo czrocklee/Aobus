@@ -21,10 +21,10 @@ namespace ao::library::test
 {
   TEST_CASE("LibraryUri - parsing produces canonical root-relative values", "[library][unit][uri]")
   {
-    auto const uri = LibraryUri::parse(R"(albums\live\..\song.flac)");
+    auto const uriRes = LibraryUri::parse(R"(albums\live\..\song.flac)");
 
-    REQUIRE(uri);
-    CHECK(uri->value() == "albums/song.flac");
+    REQUIRE(uriRes);
+    CHECK(uriRes->value() == "albums/song.flac");
 
     for (auto const alias : {std::string_view{"albums"},
                              std::string_view{"albums/"},
@@ -32,14 +32,14 @@ namespace ao::library::test
                              std::string_view{"albums/live/.."}})
     {
       CAPTURE(alias);
-      auto const normalized = LibraryUri::parse(alias);
-      REQUIRE(normalized);
-      CHECK(normalized->value() == "albums");
+      auto const normalizedRes = LibraryUri::parse(alias);
+      REQUIRE(normalizedRes);
+      CHECK(normalizedRes->value() == "albums");
     }
 
-    auto const literalPercentEncoding = LibraryUri::parse("literal/%2e%2e/song.flac");
-    REQUIRE(literalPercentEncoding);
-    CHECK(literalPercentEncoding->value() == "literal/%2e%2e/song.flac");
+    auto const literalPercentEncodingRes = LibraryUri::parse("literal/%2e%2e/song.flac");
+    REQUIRE(literalPercentEncodingRes);
+    CHECK(literalPercentEncodingRes->value() == "literal/%2e%2e/song.flac");
   }
 
   TEST_CASE("LibraryUri - persisted canonical check agrees with parse normalization", "[library][unit][uri]")
@@ -52,9 +52,9 @@ namespace ao::library::test
                             std::string_view{"Dvo\xC5\x99\xC3\xA1k/song.flac"}})
     {
       CAPTURE(text);
-      auto const parsed = LibraryUri::parse(text);
-      REQUIRE(parsed);
-      CHECK(parsed->value() == text);
+      auto const parsedRes = LibraryUri::parse(text);
+      REQUIRE(parsedRes);
+      CHECK(parsedRes->value() == text);
       CHECK(detail::isCanonicalLibraryUri(text));
     }
 
@@ -79,8 +79,8 @@ namespace ao::library::test
     for (auto const& text : nonCanonical)
     {
       CAPTURE(text);
-      auto const parsed = LibraryUri::parse(text);
-      CHECK_FALSE((parsed && parsed->value() == text));
+      auto const parsedRes = LibraryUri::parse(text);
+      CHECK_FALSE((parsedRes && parsedRes->value() == text));
       CHECK_FALSE(detail::isCanonicalLibraryUri(text));
     }
   }
@@ -89,27 +89,27 @@ namespace ao::library::test
   {
     CHECK(LibraryUri::parse(std::string(LibraryUri::kMaxLength, 'a')));
 
-    auto const tooLong = LibraryUri::parse(std::string(LibraryUri::kMaxLength + 1U, 'a'));
-    REQUIRE_FALSE(tooLong);
-    CHECK(tooLong.error().code == Error::Code::ValueTooLarge);
+    auto const tooLongRes = LibraryUri::parse(std::string(LibraryUri::kMaxLength + 1U, 'a'));
+    REQUIRE_FALSE(tooLongRes);
+    CHECK(tooLongRes.error().code == Error::Code::ValueTooLarge);
   }
 
   TEST_CASE("LibraryUri - UTF-8 names resolve through native filesystem paths", "[library][regression][uri]")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
-    auto const uri = LibraryUri::parse(expected);
-    REQUIRE(uri);
-    CHECK(uri->value() == expected);
+    auto const uriRes = LibraryUri::parse(expected);
+    REQUIRE(uriRes);
+    CHECK(uriRes->value() == expected);
 
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
     std::filesystem::create_directories(root);
 
-    auto const resolved = uri->resolveUnder(root);
+    auto const resolvedRes = uriRes->resolveUnder(root);
 
-    REQUIRE(resolved);
-    CHECK(utility::pathToGenericUtf8(resolved->lexically_relative(root)) == expected);
+    REQUIRE(resolvedRes);
+    CHECK(utility::pathToGenericUtf8(resolvedRes->lexically_relative(root)) == expected);
   }
 
   TEST_CASE("LibraryUri - parsing rejects paths outside the library namespace", "[library][unit][uri]")
@@ -148,19 +148,19 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto const missingRoot = temp.path() / "future-music";
-    auto const futureUri = LibraryUri::parse("future/song.flac");
-    REQUIRE(futureUri);
-    auto const future = futureUri->resolveUnder(missingRoot);
-    REQUIRE(future);
-    CHECK(*future == missingRoot / "future" / "song.flac");
+    auto const futureUriRes = LibraryUri::parse("future/song.flac");
+    REQUIRE(futureUriRes);
+    auto const futureRes = futureUriRes->resolveUnder(missingRoot);
+    REQUIRE(futureRes);
+    CHECK(*futureRes == missingRoot / "future" / "song.flac");
 
     auto const root = temp.path() / "music";
     std::filesystem::create_directories(root);
-    auto const directUri = LibraryUri::parse("upcoming/song.flac");
-    REQUIRE(directUri);
-    auto const direct = directUri->resolveUnder(root);
-    REQUIRE(direct);
-    CHECK(*direct == root / "upcoming" / "song.flac");
+    auto const directUriRes = LibraryUri::parse("upcoming/song.flac");
+    REQUIRE(directUriRes);
+    auto const directRes = directUriRes->resolveUnder(root);
+    REQUIRE(directRes);
+    CHECK(*directRes == root / "upcoming" / "song.flac");
   }
 
   TEST_CASE("LibraryUri - resolution accepts in-root symlinks", "[library][unit][uri]")
@@ -171,11 +171,11 @@ namespace ao::library::test
     std::filesystem::create_directories(album);
     auto const symlink = ao::test::SymlinkFixture{album, root / "alias", ao::test::SymlinkType::Directory};
 
-    auto const aliasUri = LibraryUri::parse("alias/song.flac");
-    REQUIRE(aliasUri);
-    auto const alias = aliasUri->resolveUnder(root);
-    REQUIRE(alias);
-    CHECK(*alias == album / "song.flac");
+    auto const aliasUriRes = LibraryUri::parse("alias/song.flac");
+    REQUIRE(aliasUriRes);
+    auto const aliasRes = aliasUriRes->resolveUnder(root);
+    REQUIRE(aliasRes);
+    CHECK(*aliasRes == album / "song.flac");
   }
 
   TEST_CASE("LibraryUri - resolution rejects a symlink escaping the root", "[library][unit][uri]")
@@ -186,12 +186,12 @@ namespace ao::library::test
     std::filesystem::create_directories(root);
     std::filesystem::create_directories(outside);
     auto const symlink = ao::test::SymlinkFixture{outside, root / "alias", ao::test::SymlinkType::Directory};
-    auto const uri = LibraryUri::parse("alias/song.flac");
+    auto const uriRes = LibraryUri::parse("alias/song.flac");
 
-    REQUIRE(uri);
-    auto const resolved = uri->resolveUnder(root);
-    REQUIRE_FALSE(resolved);
-    CHECK(resolved.error().code == Error::Code::InvalidInput);
+    REQUIRE(uriRes);
+    auto const resolvedRes = uriRes->resolveUnder(root);
+    REQUIRE_FALSE(resolvedRes);
+    CHECK(resolvedRes.error().code == Error::Code::InvalidInput);
   }
 
   TEST_CASE("LibraryUri - resolution rejects a dangling symlink", "[library][regression][uri]")
@@ -203,13 +203,13 @@ namespace ao::library::test
     std::filesystem::create_directories(outside);
     auto const symlink =
       ao::test::SymlinkFixture{outside / "missing", root / "alias", ao::test::SymlinkType::Directory};
-    auto const uri = LibraryUri::parse("alias/song.flac");
+    auto const uriRes = LibraryUri::parse("alias/song.flac");
 
-    REQUIRE(uri);
-    auto const resolved = uri->resolveUnder(root);
-    REQUIRE_FALSE(resolved);
-    CHECK(resolved.error().code == Error::Code::InvalidInput);
-    CHECK(resolved.error().message.contains("unresolved symlink"));
+    REQUIRE(uriRes);
+    auto const resolvedRes = uriRes->resolveUnder(root);
+    REQUIRE_FALSE(resolvedRes);
+    CHECK(resolvedRes.error().code == Error::Code::InvalidInput);
+    CHECK(resolvedRes.error().message.contains("unresolved symlink"));
   }
 
   TEST_CASE("LibraryUri - resolution requires an item below the root", "[library][unit][uri]")
@@ -218,11 +218,11 @@ namespace ao::library::test
     auto const root = temp.path() / "music";
     std::filesystem::create_directories(root);
     auto const symlink = ao::test::SymlinkFixture{root, root / "self", ao::test::SymlinkType::Directory};
-    auto const uri = LibraryUri::parse("self");
+    auto const uriRes = LibraryUri::parse("self");
 
-    REQUIRE(uri);
-    auto const resolved = uri->resolveUnder(root);
-    REQUIRE_FALSE(resolved);
-    CHECK(resolved.error().code == Error::Code::InvalidInput);
+    REQUIRE(uriRes);
+    auto const resolvedRes = uriRes->resolveUnder(root);
+    REQUIRE_FALSE(resolvedRes);
+    CHECK(resolvedRes.error().code == Error::Code::InvalidInput);
   }
 } // namespace ao::library::test

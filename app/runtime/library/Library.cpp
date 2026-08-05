@@ -51,14 +51,14 @@ namespace ao::rt
                                                    library::MusicLibrary& storage,
                                                    LibraryChanges& changes)
   {
-    auto writableStorage = library::WritableMusicLibrary::acquire(storage);
+    auto writableStorageRes = library::WritableMusicLibrary::acquire(storage);
 
-    if (!writableStorage)
+    if (!writableStorageRes)
     {
-      return std::unexpected{writableStorage.error()};
+      return std::unexpected{writableStorageRes.error()};
     }
 
-    auto implPtr = std::make_unique<Impl>(asyncRuntime, storage, std::move(*writableStorage), changes);
+    auto implPtr = std::make_unique<Impl>(asyncRuntime, storage, std::move(*writableStorageRes), changes);
     return std::unique_ptr<Library>{new Library{std::move(implPtr)}};
   }
 

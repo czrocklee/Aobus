@@ -503,15 +503,15 @@ namespace ao::lmdb
     }
 
     auto id = ++_lastId;
-    auto data = create(id, size);
+    auto dataRes = create(id, size);
 
-    if (!data)
+    if (!dataRes)
     {
       --_lastId;
-      return std::unexpected{data.error()};
+      return std::unexpected{dataRes.error()};
     }
 
-    return std::pair{id, *data};
+    return std::pair{id, *dataRes};
   }
 
   Result<> Database::Writer::update(std::uint32_t id, std::span<std::byte const> data)

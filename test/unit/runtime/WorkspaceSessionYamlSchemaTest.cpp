@@ -73,13 +73,13 @@ namespace ao::rt::test
         },
     };
 
-    auto const document = detail::toWorkspaceSessionDocument(state);
+    auto const documentRes = detail::toWorkspaceSessionDocument(state);
 
-    REQUIRE(document);
-    CHECK(document->presentationVersion == 1);
-    REQUIRE(document->openViews.size() == 2);
-    CHECK(document->activeViewIndex == 1);
-    auto const& stored = document->openViews[0].presentation;
+    REQUIRE(documentRes);
+    CHECK(documentRes->presentationVersion == 1);
+    REQUIRE(documentRes->openViews.size() == 2);
+    CHECK(documentRes->activeViewIndex == 1);
+    auto const& stored = documentRes->openViews[0].presentation;
     CHECK(stored.group == "album");
     REQUIRE(stored.sort.size() == 2);
     CHECK(stored.sort[0].field == "disc-number");
@@ -89,32 +89,32 @@ namespace ao::rt::test
     CHECK(stored.visibleFields == std::vector<std::string>{"title", "duration"});
     CHECK(stored.redundantFields == std::vector<std::string>{"album"});
 
-    auto const decoded = detail::workspaceSessionStateFromDocument(*document);
+    auto const decodedRes = detail::workspaceSessionStateFromDocument(*documentRes);
 
-    REQUIRE(decoded);
-    REQUIRE(decoded->openViews.size() == 2);
-    REQUIRE(decoded->openViews[0].optPresentation);
-    CHECK(*decoded->openViews[0].optPresentation == presentation);
-    CHECK(decoded->openViews[0].groupBy == presentation.groupBy);
-    CHECK(decoded->openViews[0].sortBy == presentation.sortBy);
-    CHECK(decoded->activeViewIndex == 1);
-    REQUIRE(decoded->customPresets.size() == 1);
-    CHECK(decoded->customPresets[0] == state.customPresets[0]);
+    REQUIRE(decodedRes);
+    REQUIRE(decodedRes->openViews.size() == 2);
+    REQUIRE(decodedRes->openViews[0].optPresentation);
+    CHECK(*decodedRes->openViews[0].optPresentation == presentation);
+    CHECK(decodedRes->openViews[0].groupBy == presentation.groupBy);
+    CHECK(decodedRes->openViews[0].sortBy == presentation.sortBy);
+    CHECK(decodedRes->activeViewIndex == 1);
+    REQUIRE(decodedRes->customPresets.size() == 1);
+    CHECK(decodedRes->customPresets[0] == state.customPresets[0]);
   }
 
   TEST_CASE("WorkspaceSessionYamlSchema - empty workspace uses active view index zero",
             "[runtime][unit][workspace][session-schema]")
   {
-    auto const document = detail::toWorkspaceSessionDocument(WorkspaceSessionState{});
+    auto const documentRes = detail::toWorkspaceSessionDocument(WorkspaceSessionState{});
 
-    REQUIRE(document);
-    CHECK(document->openViews.empty());
-    CHECK(document->activeViewIndex == 0);
+    REQUIRE(documentRes);
+    CHECK(documentRes->openViews.empty());
+    CHECK(documentRes->activeViewIndex == 0);
 
-    auto const decoded = detail::workspaceSessionStateFromDocument(*document);
-    REQUIRE(decoded);
-    CHECK(decoded->openViews.empty());
-    CHECK(decoded->activeViewIndex == 0);
+    auto const decodedRes = detail::workspaceSessionStateFromDocument(*documentRes);
+    REQUIRE(decodedRes);
+    CHECK(decodedRes->openViews.empty());
+    CHECK(decodedRes->activeViewIndex == 0);
   }
 
   TEST_CASE("WorkspaceSessionYamlSchema - canonicalizes permitted live presentation state",
@@ -136,13 +136,13 @@ namespace ao::rt::test
         },
     };
 
-    auto const document = detail::toWorkspaceSessionDocument(state);
+    auto const documentRes = detail::toWorkspaceSessionDocument(state);
 
-    REQUIRE(document);
-    REQUIRE(document->openViews.size() == 2);
-    CHECK(document->openViews[0].presentation.visibleFields == std::vector<std::string>{"title"});
-    CHECK(document->openViews[1].presentation.visibleFields == std::vector<std::string>{"title"});
-    CHECK(document->openViews[1].presentation.redundantFields == std::vector<std::string>{"album"});
+    REQUIRE(documentRes);
+    REQUIRE(documentRes->openViews.size() == 2);
+    CHECK(documentRes->openViews[0].presentation.visibleFields == std::vector<std::string>{"title"});
+    CHECK(documentRes->openViews[1].presentation.visibleFields == std::vector<std::string>{"title"});
+    CHECK(documentRes->openViews[1].presentation.redundantFields == std::vector<std::string>{"album"});
   }
 
   TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid persisted state",
@@ -154,9 +154,9 @@ namespace ao::rt::test
           TrackListViewConfig{.listId = ListId{10}, .optPresentation = makePresentation()},
         },
     };
-    auto documentResult = detail::toWorkspaceSessionDocument(validState);
-    REQUIRE(documentResult);
-    auto document = std::move(*documentResult);
+    auto documentRes = detail::toWorkspaceSessionDocument(validState);
+    REQUIRE(documentRes);
+    auto document = std::move(*documentRes);
     auto& presentation = document.openViews[0].presentation;
     auto expectedCode = Error::Code::FormatRejected;
 
@@ -328,11 +328,11 @@ namespace ao::rt::test
     CHECK(yaml::scalarView(tree.rootref()["activeViewIndex"]) == "0");
     CHECK(yaml::scalarView(tree.rootref()["openViews"][0]["presentation"]["sort"][0]["field"]) == "disc-number");
 
-    auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
-    REQUIRE(decoded);
-    REQUIRE(decoded->openViews.size() == 1);
-    CHECK(decoded->openViews[0].listId == ListId{10});
-    CHECK(decoded->openViews[0].optPresentation == state.openViews[0].optPresentation);
+    auto const decodedRes = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+    REQUIRE(decodedRes);
+    REQUIRE(decodedRes->openViews.size() == 1);
+    CHECK(decodedRes->openViews[0].listId == ListId{10});
+    CHECK(decodedRes->openViews[0].optPresentation == state.openViews[0].optPresentation);
   }
 
   TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid YAML candidates",
@@ -344,10 +344,10 @@ namespace ao::rt::test
                            "malformed\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+      auto const decodedRes = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Missing required fields are rejected")
@@ -355,11 +355,11 @@ namespace ao::rt::test
       auto const* source = "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+      auto const decodedRes = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("customPresets"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("customPresets"));
     }
 
     SECTION("Missing active view index is rejected")
@@ -367,11 +367,11 @@ namespace ao::rt::test
       auto const* source = "presentationVersion: 1\nopenViews: []\ncustomPresets: []\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+      auto const decodedRes = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("activeViewIndex"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("activeViewIndex"));
     }
 
     SECTION("Unknown structural keys are rejected")
@@ -380,11 +380,11 @@ namespace ao::rt::test
         "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\ncustomPresets: []\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+      auto const decodedRes = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("future"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("future"));
     }
 
     SECTION("Malformed nested entries reject the whole candidate")
@@ -400,11 +400,11 @@ namespace ao::rt::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+      auto const decodedRes = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("presentation"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("presentation"));
     }
   }
 } // namespace ao::rt::test

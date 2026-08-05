@@ -135,14 +135,14 @@ namespace ao::winui
 
     for (std::int32_t index = 1; index < argumentCount; ++index)
     {
-      auto converted = utf8FromWide(arguments[index]);
+      auto convertedRes = utf8FromWide(arguments[index]);
 
-      if (!converted)
+      if (!convertedRes)
       {
-        return std::unexpected{converted.error()};
+        return std::unexpected{convertedRes.error()};
       }
 
-      storage.push_back(std::move(*converted));
+      storage.push_back(std::move(*convertedRes));
     }
 
     auto views = std::vector<std::string_view>{};
@@ -163,14 +163,14 @@ namespace ao::winui
       return makeError(Error::Code::InvalidInput, "A successor process requires a library root");
     }
 
-    auto executable = currentExecutablePath();
+    auto executableRes = currentExecutablePath();
 
-    if (!executable)
+    if (!executableRes)
     {
-      return std::unexpected{executable.error()};
+      return std::unexpected{executableRes.error()};
     }
 
-    auto commandLine = quoteCommandLineArgument(executable->native());
+    auto commandLine = quoteCommandLineArgument(executableRes->native());
     commandLine.push_back(L' ');
     commandLine += quoteCommandLineArgument(L"--library-root");
     commandLine.push_back(L' ');
@@ -181,7 +181,7 @@ namespace ao::winui
     startup.cb = sizeof(startup);
     auto process = PROCESS_INFORMATION{};
 
-    if (::CreateProcessW(executable->c_str(),
+    if (::CreateProcessW(executableRes->c_str(),
                          mutableCommandLine.data(),
                          nullptr,
                          nullptr,

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -20,24 +21,24 @@ namespace ao::uimodel::test
       TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .visible = false},
     };
 
-    auto const document = toTrackColumnLayoutDocument(state);
+    auto const documentRes = toTrackColumnLayoutDocument(state);
 
-    REQUIRE(document);
-    CHECK(document->version == 2);
-    REQUIRE(document->layouts.size() == 1);
-    CHECK(document->layouts[0].listId == 10);
-    REQUIRE(document->layouts[0].columns.size() == 2);
-    CHECK(document->layouts[0].columns[0].field == "artist");
-    CHECK(document->layouts[0].columns[1].field == "duration");
-    CHECK_FALSE(document->layouts[0].columns[1].visible);
+    REQUIRE(documentRes);
+    CHECK(documentRes->version == 2);
+    REQUIRE(documentRes->layouts.size() == 1);
+    CHECK(documentRes->layouts[0].listId == 10);
+    REQUIRE(documentRes->layouts[0].columns.size() == 2);
+    CHECK(documentRes->layouts[0].columns[0].field == "artist");
+    CHECK(documentRes->layouts[0].columns[1].field == "duration");
+    CHECK_FALSE(documentRes->layouts[0].columns[1].visible);
 
-    auto const decoded = trackColumnLayoutStateFromDocument(*document);
+    auto const decodedRes = trackColumnLayoutStateFromDocument(*documentRes);
 
-    REQUIRE(decoded);
-    REQUIRE(decoded->listLayouts.size() == 1);
-    REQUIRE(decoded->listLayouts.at(ListId{10}).size() == 2);
-    CHECK(decoded->listLayouts.at(ListId{10})[0] == state.listLayouts.at(ListId{10})[0]);
-    CHECK(decoded->listLayouts.at(ListId{10})[1] == state.listLayouts.at(ListId{10})[1]);
+    REQUIRE(decodedRes);
+    REQUIRE(decodedRes->listLayouts.size() == 1);
+    REQUIRE(decodedRes->listLayouts.at(ListId{10}).size() == 2);
+    CHECK(decodedRes->listLayouts.at(ListId{10})[0] == state.listLayouts.at(ListId{10})[0]);
+    CHECK(decodedRes->listLayouts.at(ListId{10})[1] == state.listLayouts.at(ListId{10})[1]);
   }
 
   TEST_CASE("TrackColumnLayoutYamlSchema - rejects an invalid document as one object",
@@ -163,9 +164,9 @@ namespace ao::uimodel::test
     CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["field"]) == "artist");
     CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["visible"]) == "true");
 
-    auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
-    REQUIRE(decoded);
-    CHECK(decoded->listLayouts == state.listLayouts);
+    auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+    REQUIRE(decodedRes);
+    CHECK(decodedRes->listLayouts == state.listLayouts);
   }
 
   TEST_CASE("TrackColumnLayoutYamlSchema - rejects invalid YAML candidates",
@@ -176,10 +177,10 @@ namespace ao::uimodel::test
       auto const* source = "version: 99\nlayouts: malformed\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Missing required fields are rejected")
@@ -187,11 +188,11 @@ namespace ao::uimodel::test
       auto const* source = "version: 2\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("layouts"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("layouts"));
     }
 
     SECTION("Unknown structural keys are rejected")
@@ -199,11 +200,11 @@ namespace ao::uimodel::test
       auto const* source = "version: 2\nlayouts: []\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("future"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("future"));
     }
 
     SECTION("Malformed nested entries reject the whole candidate")
@@ -220,11 +221,11 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("weight"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("weight"));
     }
 
     SECTION("Column visibility is required")
@@ -240,11 +241,11 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("visible"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("visible"));
     }
   }
 } // namespace ao::uimodel::test

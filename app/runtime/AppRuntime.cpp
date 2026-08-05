@@ -109,16 +109,16 @@ namespace ao::rt
     }
 
     auto runtimePtr = std::unique_ptr<AppRuntime>{new AppRuntime{}};
-    auto initializeResult = runtimePtr->initialize(std::move(dependencies.executorPtr),
-                                                   std::move(dependencies.musicRoot),
-                                                   std::move(dependencies.databasePath),
-                                                   dependencies.musicLibraryMapSize,
-                                                   dependencies.sleeper,
-                                                   std::move(dependencies.asyncExceptionHandler));
+    auto initializeRes = runtimePtr->initialize(std::move(dependencies.executorPtr),
+                                                std::move(dependencies.musicRoot),
+                                                std::move(dependencies.databasePath),
+                                                dependencies.musicLibraryMapSize,
+                                                dependencies.sleeper,
+                                                std::move(dependencies.asyncExceptionHandler));
 
-    if (!initializeResult)
+    if (!initializeRes)
     {
-      return std::unexpected{initializeResult.error()};
+      return std::unexpected{initializeRes.error()};
     }
 
     runtimePtr->_implPtr = std::make_unique<Impl>(
@@ -171,12 +171,12 @@ namespace ao::rt
 
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
-    auto restored = Result<PlaybackSessionRestoreResult>{};
+    auto restoredRes = Result<PlaybackSessionRestoreResult>{};
     auto const accepted = _implPtr->playbackPtr->runSynchronousCommand(
-      [this, &restored]
+      [this, &restoredRes]
       {
-        restored = _implPtr->playbackSessionPersistencePtr->restore();
-        return restored && restored->restored;
+        restoredRes = _implPtr->playbackSessionPersistencePtr->restore();
+        return restoredRes && restoredRes->restored;
       });
 
     if (!accepted)
@@ -185,12 +185,12 @@ namespace ao::rt
         Error::Code::InvalidState, "Cannot restore playback while another playback command is active or pending");
     }
 
-    if (!restored)
+    if (!restoredRes)
     {
-      return std::unexpected{restored.error()};
+      return std::unexpected{restoredRes.error()};
     }
 
-    return restored;
+    return restoredRes;
   }
 
   Result<> AppRuntime::discardRestorablePlaybackSession()
@@ -212,23 +212,23 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "No track view is focused");
     }
 
-    auto const state = _implPtr->viewService.findTrackListState(focus.activeViewId);
+    auto const stateRes = _implPtr->viewService.findTrackListState(focus.activeViewId);
 
-    if (!state)
+    if (!stateRes)
     {
-      return std::unexpected{state.error()};
+      return std::unexpected{stateRes.error()};
     }
 
-    if (state->selection.empty())
+    if (stateRes->selection.empty())
     {
       return makeError(Error::Code::NotFound, "The focused track view has no selection");
     }
 
-    auto const trackId = state->selection.front();
+    auto const trackId = stateRes->selection.front();
 
-    if (auto const played = _implPtr->playbackPtr->commands().startFromView(focus.activeViewId, trackId); !played)
+    if (auto const playedRes = _implPtr->playbackPtr->commands().startFromView(focus.activeViewId, trackId); !playedRes)
     {
-      return std::unexpected{played.error()};
+      return std::unexpected{playedRes.error()};
     }
 
     return trackId;
@@ -248,7 +248,7 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "The albums presentation is unavailable");
     }
 
-    auto navigation = _implPtr->workspaceService.navigate(NavigationRequest{
+    auto navigationRes = _implPtr->workspaceService.navigate(NavigationRequest{
       .target = GlobalViewKind::AllTracks,
       .optPresentation =
         NavigationPresentation{
@@ -257,12 +257,12 @@ namespace ao::rt
         },
     });
 
-    if (!navigation)
+    if (!navigationRes)
     {
-      return std::unexpected{navigation.error()};
+      return std::unexpected{navigationRes.error()};
     }
 
-    _implPtr->playbackPtr->commands().revealTrack(trackId, *navigation);
+    _implPtr->playbackPtr->commands().revealTrack(trackId, *navigationRes);
     return {};
   }
 

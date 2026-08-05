@@ -52,6 +52,7 @@ set(AOBUS_LINT_PLUGIN_SOURCES
   check/LocalInitializationStyleCheck.cpp
   check/BracedInitializationCheck.cpp
   check/OptionalNamingAndUsageCheck.cpp
+  check/ResultNamingConventionCheck.cpp
   check/RedundantNamespaceQualificationCheck.cpp
   check/RedundantUsingDirectiveCheck.cpp
   check/SpdxLicenseHeaderCheck.cpp

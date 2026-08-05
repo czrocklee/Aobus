@@ -29,33 +29,33 @@ namespace ao::gtk
   void GtkLayoutStateStore::load(uimodel::TrackColumnLayoutState& layoutState,
                                  uimodel::ListPresentationPreferenceState& prefState) const
   {
-    auto const loadedLayouts =
+    auto const loadedLayoutsRes =
       _storePtr->load("trackView.columnLayouts", layoutState, uimodel::TrackColumnLayoutYamlSchema{});
 
-    if (!loadedLayouts)
+    if (!loadedLayoutsRes)
     {
-      APP_LOG_DEBUG("GtkLayoutStateStore: Failed to load column layouts: {}", loadedLayouts.error().message);
+      APP_LOG_DEBUG("GtkLayoutStateStore: Failed to load column layouts: {}", loadedLayoutsRes.error().message);
     }
 
-    auto const loadedPreferences =
+    auto const loadedPreferencesRes =
       _storePtr->load("trackView.presentations", prefState, uimodel::ListPresentationPreferenceYamlSchema{});
 
-    if (!loadedPreferences)
+    if (!loadedPreferencesRes)
     {
       APP_LOG_DEBUG(
-        "GtkLayoutStateStore: Failed to load presentation preferences: {}", loadedPreferences.error().message);
+        "GtkLayoutStateStore: Failed to load presentation preferences: {}", loadedPreferencesRes.error().message);
     }
   }
 
   void GtkLayoutStateStore::save(uimodel::TrackColumnLayoutState const& layoutState,
                                  uimodel::ListPresentationPreferenceState const& prefState)
   {
-    if (auto const res = _storePtr->saveTogether(
+    if (auto const resRes = _storePtr->saveTogether(
           rt::configWrite("trackView.columnLayouts", layoutState, uimodel::TrackColumnLayoutYamlSchema{}),
           rt::configWrite("trackView.presentations", prefState, uimodel::ListPresentationPreferenceYamlSchema{}));
-        !res)
+        !resRes)
     {
-      APP_LOG_ERROR("GtkLayoutStateStore: Failed to save: {}", res.error().message);
+      APP_LOG_ERROR("GtkLayoutStateStore: Failed to save: {}", resRes.error().message);
     }
   }
 } // namespace ao::gtk

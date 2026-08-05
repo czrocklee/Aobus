@@ -63,20 +63,20 @@ namespace ao::rt::detail
 
       for (auto const field : fields)
       {
-        auto storedId = storedIdFor(field, trackFieldId, context);
+        auto storedIdRes = storedIdFor(field, trackFieldId, context);
 
-        if (!storedId)
+        if (!storedIdRes)
         {
-          return std::unexpected{storedId.error()};
+          return std::unexpected{storedIdRes.error()};
         }
 
-        if (std::ranges::contains(stored, *storedId))
+        if (std::ranges::contains(stored, *storedIdRes))
         {
           return makeError(
-            Error::Code::InvalidState, std::format("Cannot serialize duplicate {} '{}'", context, *storedId));
+            Error::Code::InvalidState, std::format("Cannot serialize duplicate {} '{}'", context, *storedIdRes));
         }
 
-        stored.push_back(std::move(*storedId));
+        stored.push_back(std::move(*storedIdRes));
       }
 
       return stored;
@@ -90,53 +90,53 @@ namespace ao::rt::detail
       }
 
       auto const normalized = normalizeTrackPresentationSpec(spec);
-      auto group = storedIdFor(normalized.groupBy, trackGroupKeyId, "track group key");
+      auto groupRes = storedIdFor(normalized.groupBy, trackGroupKeyId, "track group key");
 
-      if (!group)
+      if (!groupRes)
       {
-        return std::unexpected{group.error()};
+        return std::unexpected{groupRes.error()};
       }
 
-      auto stored = StoredTrackPresentationSpec{.id = normalized.id, .group = std::move(*group)};
+      auto stored = StoredTrackPresentationSpec{.id = normalized.id, .group = std::move(*groupRes)};
       stored.sort.reserve(normalized.sortBy.size());
 
       for (auto const& term : normalized.sortBy)
       {
-        auto field = storedIdFor(term.field, trackSortFieldId, "track sort field");
+        auto fieldRes = storedIdFor(term.field, trackSortFieldId, "track sort field");
 
-        if (!field)
+        if (!fieldRes)
         {
-          return std::unexpected{field.error()};
+          return std::unexpected{fieldRes.error()};
         }
 
-        if (std::ranges::contains(stored.sort, *field, &StoredTrackSortTerm::field))
+        if (std::ranges::contains(stored.sort, *fieldRes, &StoredTrackSortTerm::field))
         {
           return makeError(
-            Error::Code::InvalidState, std::format("Cannot serialize duplicate sort field '{}'", *field));
+            Error::Code::InvalidState, std::format("Cannot serialize duplicate sort field '{}'", *fieldRes));
         }
 
         stored.sort.push_back(StoredTrackSortTerm{
-          .field = std::move(*field),
+          .field = std::move(*fieldRes),
           .direction = std::string{term.ascending ? kAscending : kDescending},
         });
       }
 
-      auto visibleFields = toStoredFields(normalized.visibleFields, "visible field");
+      auto visibleFieldsRes = toStoredFields(normalized.visibleFields, "visible field");
 
-      if (!visibleFields)
+      if (!visibleFieldsRes)
       {
-        return std::unexpected{visibleFields.error()};
+        return std::unexpected{visibleFieldsRes.error()};
       }
 
-      auto redundantFields = toStoredFields(normalized.redundantFields, "redundant field");
+      auto redundantFieldsRes = toStoredFields(normalized.redundantFields, "redundant field");
 
-      if (!redundantFields)
+      if (!redundantFieldsRes)
       {
-        return std::unexpected{redundantFields.error()};
+        return std::unexpected{redundantFieldsRes.error()};
       }
 
-      stored.visibleFields = std::move(*visibleFields);
-      stored.redundantFields = std::move(*redundantFields);
+      stored.visibleFields = std::move(*visibleFieldsRes);
+      stored.redundantFields = std::move(*redundantFieldsRes);
       return stored;
     }
 
@@ -206,27 +206,27 @@ namespace ao::rt::detail
         spec.sortBy.push_back(TrackSortTerm{.field = *optField, .ascending = term.direction == kAscending});
       }
 
-      auto visibleFields = trackFieldsFromStored(stored.visibleFields, "visible field");
+      auto visibleFieldsRes = trackFieldsFromStored(stored.visibleFields, "visible field");
 
-      if (!visibleFields)
+      if (!visibleFieldsRes)
       {
-        return std::unexpected{visibleFields.error()};
+        return std::unexpected{visibleFieldsRes.error()};
       }
 
-      if (visibleFields->empty())
+      if (visibleFieldsRes->empty())
       {
         return makeError(Error::Code::FormatRejected, "Track presentation has no visible fields");
       }
 
-      auto redundantFields = trackFieldsFromStored(stored.redundantFields, "redundant field");
+      auto redundantFieldsRes = trackFieldsFromStored(stored.redundantFields, "redundant field");
 
-      if (!redundantFields)
+      if (!redundantFieldsRes)
       {
-        return std::unexpected{redundantFields.error()};
+        return std::unexpected{redundantFieldsRes.error()};
       }
 
-      spec.visibleFields = std::move(*visibleFields);
-      spec.redundantFields = std::move(*redundantFields);
+      spec.visibleFields = std::move(*visibleFieldsRes);
+      spec.redundantFields = std::move(*redundantFieldsRes);
       return spec;
     }
 
@@ -330,23 +330,23 @@ namespace ao::rt::detail
         return std::unexpected{result.error()};
       }
 
-      auto presentationVersion = yaml::requireScalar<std::uint32_t>(node, "presentationVersion", kContext);
+      auto presentationVersionRes = yaml::requireScalar<std::uint32_t>(node, "presentationVersion", kContext);
 
-      if (!presentationVersion)
+      if (!presentationVersionRes)
       {
-        return std::unexpected{presentationVersion.error()};
+        return std::unexpected{presentationVersionRes.error()};
       }
 
-      if (*presentationVersion != kWorkspacePresentationVersion)
+      if (*presentationVersionRes != kWorkspacePresentationVersion)
       {
         return makeError(Error::Code::NotSupported,
-                         std::format("Unsupported workspace presentation version {}", *presentationVersion));
+                         std::format("Unsupported workspace presentation version {}", *presentationVersionRes));
       }
 
       constexpr auto kKeys =
         std::to_array<std::string_view>({"presentationVersion", "openViews", "activeViewIndex", "customPresets"});
 
-      auto document = WorkspaceSessionDocument{.presentationVersion = *presentationVersion};
+      auto document = WorkspaceSessionDocument{.presentationVersion = *presentationVersionRes};
       auto reader = yaml::MapReader{node, kKeys, kContext};
       reader.requiredSequence("openViews", document.openViews, readView)
         .requiredScalar("activeViewIndex", document.activeViewIndex)
@@ -387,17 +387,17 @@ namespace ao::rt::detail
         return makeError(Error::Code::InvalidState, "Workspace view has no exact presentation to persist");
       }
 
-      auto presentation = toStoredPresentation(*view.optPresentation);
+      auto presentationRes = toStoredPresentation(*view.optPresentation);
 
-      if (!presentation)
+      if (!presentationRes)
       {
-        return std::unexpected{presentation.error()};
+        return std::unexpected{presentationRes.error()};
       }
 
       document.openViews.push_back(StoredTrackListViewConfig{
         .listId = view.listId.raw(),
         .filterExpression = view.filterExpression,
-        .presentation = std::move(*presentation),
+        .presentation = std::move(*presentationRes),
       });
     }
 
@@ -405,17 +405,17 @@ namespace ao::rt::detail
 
     for (auto const& preset : state.customPresets)
     {
-      auto spec = toStoredPresentation(preset.spec);
+      auto specRes = toStoredPresentation(preset.spec);
 
-      if (!spec)
+      if (!specRes)
       {
-        return std::unexpected{spec.error()};
+        return std::unexpected{specRes.error()};
       }
 
       document.customPresets.push_back(StoredCustomTrackPresentationPreset{
         .label = preset.label,
         .basePresetId = preset.basePresetId,
-        .spec = std::move(*spec),
+        .spec = std::move(*specRes),
       });
     }
 
@@ -447,19 +447,19 @@ namespace ao::rt::detail
         return makeError(Error::Code::FormatRejected, "Workspace view uses the invalid list id");
       }
 
-      auto presentation = trackPresentationFromStored(stored.presentation);
+      auto presentationRes = trackPresentationFromStored(stored.presentation);
 
-      if (!presentation)
+      if (!presentationRes)
       {
-        return std::unexpected{presentation.error()};
+        return std::unexpected{presentationRes.error()};
       }
 
       state.openViews.push_back(TrackListViewConfig{
         .listId = ListId{stored.listId},
         .filterExpression = stored.filterExpression,
-        .groupBy = presentation->groupBy,
-        .sortBy = presentation->sortBy,
-        .optPresentation = std::move(*presentation),
+        .groupBy = presentationRes->groupBy,
+        .sortBy = presentationRes->sortBy,
+        .optPresentation = std::move(*presentationRes),
       });
     }
 
@@ -467,17 +467,17 @@ namespace ao::rt::detail
 
     for (auto const& stored : document.customPresets)
     {
-      auto spec = trackPresentationFromStored(stored.spec);
+      auto specRes = trackPresentationFromStored(stored.spec);
 
-      if (!spec)
+      if (!specRes)
       {
-        return std::unexpected{spec.error()};
+        return std::unexpected{specRes.error()};
       }
 
       state.customPresets.push_back(CustomTrackPresentationPreset{
         .label = stored.label,
         .basePresetId = stored.basePresetId,
-        .spec = std::move(*spec),
+        .spec = std::move(*specRes),
       });
     }
 
@@ -486,26 +486,26 @@ namespace ao::rt::detail
 
   Result<> WorkspaceSessionYamlSchema::serialize(ryml::NodeRef node, WorkspaceSessionState const& state) const
   {
-    auto document = toWorkspaceSessionDocument(state);
+    auto documentRes = toWorkspaceSessionDocument(state);
 
-    if (!document)
+    if (!documentRes)
     {
-      return std::unexpected{document.error()};
+      return std::unexpected{documentRes.error()};
     }
 
-    return writeDocument(node, *document);
+    return writeDocument(node, *documentRes);
   }
 
   Result<WorkspaceSessionState> WorkspaceSessionYamlSchema::deserialize(ryml::ConstNodeRef node,
                                                                         WorkspaceSessionState const& /*seed*/) const
   {
-    auto document = readDocument(node);
+    auto documentRes = readDocument(node);
 
-    if (!document)
+    if (!documentRes)
     {
-      return std::unexpected{document.error()};
+      return std::unexpected{documentRes.error()};
     }
 
-    return workspaceSessionStateFromDocument(*document);
+    return workspaceSessionStateFromDocument(*documentRes);
   }
 } // namespace ao::rt::detail

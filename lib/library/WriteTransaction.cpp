@@ -77,15 +77,15 @@ namespace ao::library
     // Every library writer acquires the process gate before LMDB's writer lock.
     // Keeping that order fixed prevents two writers from waiting in inversion.
     auto writerGate = std::unique_lock{dictionary._writerMutex};
-    auto transaction = lmdb::WriteTransaction::begin(environment);
+    auto transactionRes = lmdb::WriteTransaction::begin(environment);
 
-    if (!transaction)
+    if (!transactionRes)
     {
-      return std::unexpected{transaction.error()};
+      return std::unexpected{transactionRes.error()};
     }
 
     auto implPtr = std::make_unique<Impl>(std::move(writerGate),
-                                          std::move(*transaction),
+                                          std::move(*transactionRes),
                                           dictionary,
                                           identity,
                                           std::move(options),

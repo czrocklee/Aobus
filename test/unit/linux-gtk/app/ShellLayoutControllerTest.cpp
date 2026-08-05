@@ -427,16 +427,16 @@ namespace ao::gtk::test
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
       runtime.reloadAllTracks();
-      auto const view = runtime.workspace().navigate({.target = rt::kAllTracksListId});
-      REQUIRE(view);
-      REQUIRE(playback.commands().startFromView(*view, trackId));
+      auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
+      REQUIRE(viewRes);
+      REQUIRE(playback.commands().startFromView(*viewRes, trackId));
       REQUIRE(waitForPlaybackSettlement(runtime, trackId));
       playback.commands().seek(std::chrono::milliseconds{50});
       REQUIRE(runtime.savePlaybackSession());
       playback.commands().stop();
-      auto const restored = runtime.restorePlaybackSession();
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
+      auto const restoredRes = runtime.restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
       controller.attachToWindow();
       controller.refreshExportedActions();
 
@@ -482,9 +482,9 @@ namespace ao::gtk::test
 
       CHECK(controller.runtimeState().componentState.components.empty());
       CHECK_FALSE(componentStateStorePtr->load("classic").has_value());
-      auto const loadedLayout = storePtr->load("classic");
-      REQUIRE(loadedLayout);
-      CHECK((*loadedLayout).has_value());
+      auto const loadedLayoutRes = storePtr->load("classic");
+      REQUIRE(loadedLayoutRes);
+      CHECK((*loadedLayoutRes).has_value());
     }
 
     SECTION("saveCurrentPanelSizesAsLayoutDefaults cancels when the user declines")
@@ -512,10 +512,10 @@ namespace ao::gtk::test
         [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(false); });
       controller.saveCurrentPanelSizesAsLayoutDefaults();
 
-      auto saved = storePtr->load("classic");
-      REQUIRE(saved);
-      REQUIRE(*saved);
-      auto const& savedDoc = **saved;
+      auto savedRes = storePtr->load("classic");
+      REQUIRE(savedRes);
+      REQUIRE(*savedRes);
+      auto const& savedDoc = **savedRes;
 
       auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
       REQUIRE(savedSplit != nullptr);
@@ -560,10 +560,10 @@ namespace ao::gtk::test
         [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(true); });
       controller.saveCurrentPanelSizesAsLayoutDefaults();
 
-      auto saved = storePtr->load("classic");
-      REQUIRE(saved);
-      REQUIRE(*saved);
-      auto const& savedDoc = **saved;
+      auto savedRes = storePtr->load("classic");
+      REQUIRE(savedRes);
+      REQUIRE(*savedRes);
+      auto const& savedDoc = **savedRes;
 
       auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
       auto const* savedCollapsible = findNodeById(savedDoc.root, "detail-split");

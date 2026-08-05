@@ -148,11 +148,11 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, spec);
 
-    auto prepared = builder.prepare(transaction, library.resources());
-    REQUIRE(prepared);
-    auto createResult = createPreparedTrackRecord(writer, prepared->first, prepared->second);
-    REQUIRE(createResult);
-    return *createResult;
+    auto preparedRes = builder.prepare(transaction, library.resources());
+    REQUIRE(preparedRes);
+    auto createRes = createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
+    REQUIRE(createRes);
+    return *createRes;
   }
 
   TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
@@ -174,9 +174,9 @@ namespace ao::library::test
     auto builder = TrackBuilder::fromCompleteView(*optView, library.dictionary());
     mutate(builder);
 
-    auto prepared = builder.prepare(transaction, library.resources());
-    REQUIRE(prepared);
-    REQUIRE(updatePreparedTrackRecord(writer, id, prepared->first, prepared->second));
+    auto preparedRes = builder.prepare(transaction, library.resources());
+    REQUIRE(preparedRes);
+    REQUIRE(updatePreparedTrackRecord(writer, id, preparedRes->first, preparedRes->second));
     REQUIRE(transaction.commit());
   }
 

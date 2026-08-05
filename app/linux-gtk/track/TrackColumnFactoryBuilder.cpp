@@ -322,15 +322,15 @@ namespace ao::gtk
         return;
       }
 
-      auto sessionResult = beginEditSession(rowPtr);
+      auto sessionRes = beginEditSession(rowPtr);
 
-      if (!sessionResult)
+      if (!sessionRes)
       {
         stack.set_visible_child("display");
         return;
       }
 
-      bindingState.editSessionPtr = std::move(*sessionResult);
+      bindingState.editSessionPtr = std::move(*sessionRes);
       bindingState.editSessionInvalidatedSubscription = bindingState.editSessionPtr->onInvalidated(
         [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState] noexcept
         { handleEditSessionInvalidated(*itemRaw, *stackRaw, *bindingStateRaw); });

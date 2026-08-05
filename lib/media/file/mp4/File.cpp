@@ -232,48 +232,47 @@ namespace ao::media::file::mp4
       auto value = std::string_view{};
       bool malformed = false;
 
-      auto const visitResult = visitChildren(view,
-                                             [&](AtomView const& child)
-                                             {
-                                               if (child.type() == "mean" || child.type() == "name")
-                                               {
-                                                 constexpr std::size_t kFullBoxHeaderSize = sizeof(std::uint32_t);
+      auto const visitRes = visitChildren(view,
+                                          [&](AtomView const& child)
+                                          {
+                                            if (child.type() == "mean" || child.type() == "name")
+                                            {
+                                              constexpr std::size_t kFullBoxHeaderSize = sizeof(std::uint32_t);
 
-                                                 if (child.payload().size() < kFullBoxHeaderSize)
-                                                 {
-                                                   malformed = true;
-                                                   return false;
-                                                 }
+                                              if (child.payload().size() < kFullBoxHeaderSize)
+                                              {
+                                                malformed = true;
+                                                return false;
+                                              }
 
-                                                 auto const text =
-                                                   atomPayloadAfter(child.payload(), kFullBoxHeaderSize);
+                                              auto const text = atomPayloadAfter(child.payload(), kFullBoxHeaderSize);
 
-                                                 if (child.type() == "mean")
-                                                 {
-                                                   mean = text;
-                                                 }
-                                                 else
-                                                 {
-                                                   name = text;
-                                                 }
-                                               }
-                                               else if (child.type() == "data")
-                                               {
-                                                 auto const optValue = atomTextView(child);
+                                              if (child.type() == "mean")
+                                              {
+                                                mean = text;
+                                              }
+                                              else
+                                              {
+                                                name = text;
+                                              }
+                                            }
+                                            else if (child.type() == "data")
+                                            {
+                                              auto const optValue = atomTextView(child);
 
-                                                 if (!optValue)
-                                                 {
-                                                   malformed = true;
-                                                   return false;
-                                                 }
+                                              if (!optValue)
+                                              {
+                                                malformed = true;
+                                                return false;
+                                              }
 
-                                                 value = *optValue;
-                                               }
+                                              value = *optValue;
+                                            }
 
-                                               return true;
-                                             });
+                                            return true;
+                                          });
 
-      if (!visitResult || malformed || mean != "com.apple.iTunes" || name.empty())
+      if (!visitRes || malformed || mean != "com.apple.iTunes" || name.empty())
       {
         return;
       }
@@ -392,25 +391,25 @@ namespace ao::media::file::mp4
       auto images = std::vector<std::span<std::byte const>>{};
       bool malformed = false;
 
-      auto const visitResult = visitChildren(view,
-                                             [&](AtomView const& child)
-                                             {
-                                               if (child.type() != "data")
-                                               {
-                                                 return true;
-                                               }
+      auto const visitRes = visitChildren(view,
+                                          [&](AtomView const& child)
+                                          {
+                                            if (child.type() != "data")
+                                            {
+                                              return true;
+                                            }
 
-                                               if (child.payload().size() <= kDataFieldsSize)
-                                               {
-                                                 malformed = true;
-                                                 return false;
-                                               }
+                                            if (child.payload().size() <= kDataFieldsSize)
+                                            {
+                                              malformed = true;
+                                              return false;
+                                            }
 
-                                               images.push_back(child.payload().subspan(kDataFieldsSize));
-                                               return true;
-                                             });
+                                            images.push_back(child.payload().subspan(kDataFieldsSize));
+                                            return true;
+                                          });
 
-      if (!visitResult || malformed)
+      if (!visitRes || malformed)
       {
         return;
       }
@@ -657,14 +656,14 @@ namespace ao::media::file::mp4
       }
 
       auto cursor = stsdView.children();
-      auto entryResult = cursor.next();
+      auto entryRes = cursor.next();
 
-      if (!entryResult || !*entryResult)
+      if (!entryRes || !*entryRes)
       {
         return std::nullopt;
       }
 
-      auto const& entry = **entryResult;
+      auto const& entry = **entryRes;
 
       if (entry.type() != "mp4a" && entry.type() != "alac")
       {
@@ -688,20 +687,20 @@ namespace ao::media::file::mp4
     // Helper to extract audio properties from mdhd and stsd
     void extractAudioProperties(detail::ContentBuilder& builder, AtomView const& root, std::size_t fileSize)
     {
-      auto const selectionResult = findAudioTrack(root);
+      auto const selectionRes = findAudioTrack(root);
 
-      if (!selectionResult)
+      if (!selectionRes)
       {
         return;
       }
 
-      auto const& selection = *selectionResult;
+      auto const& selection = *selectionRes;
       auto const& track = selection.track;
 
       // Get mdhd for sample rate and duration
-      if (auto const mdhdResult = findAtom(track, kTrackMdhdPath); mdhdResult && *mdhdResult)
+      if (auto const mdhdRes = findAtom(track, kTrackMdhdPath); mdhdRes && *mdhdRes)
       {
-        auto const& view = **mdhdResult;
+        auto const& view = **mdhdRes;
 
         if (auto const payload = view.payload();
             payload.size() >= sizeof(MdhdVersion0BodyLayout) && std::to_integer<std::uint8_t>(payload[0]) == 0)
@@ -769,39 +768,38 @@ namespace ao::media::file::mp4
     auto optPayload = std::optional<PayloadView>{};
     std::size_t mdatCount = 0;
 
-    auto const visitResult = visitChildren(root,
-                                           [&](AtomView const& atom)
-                                           {
-                                             if (atom.type() != "mdat")
-                                             {
-                                               return true;
-                                             }
+    auto const visitRes = visitChildren(root,
+                                        [&](AtomView const& atom)
+                                        {
+                                          if (atom.type() != "mdat")
+                                          {
+                                            return true;
+                                          }
 
-                                             ++mdatCount;
+                                          ++mdatCount;
 
-                                             if (mdatCount > 1)
-                                             {
-                                               return false;
-                                             }
+                                          if (mdatCount > 1)
+                                          {
+                                            return false;
+                                          }
 
-                                             auto const payload = atom.payload();
+                                          auto const payload = atom.payload();
 
-                                             if (payload.empty())
-                                             {
-                                               return true;
-                                             }
+                                          if (payload.empty())
+                                          {
+                                            return true;
+                                          }
 
-                                             auto const offset =
-                                               static_cast<std::size_t>(payload.data() - bytes().data());
-                                             optPayload = payloadRange(offset, payload.size());
-                                             return true;
-                                           });
+                                          auto const offset = static_cast<std::size_t>(payload.data() - bytes().data());
+                                          optPayload = payloadRange(offset, payload.size());
+                                          return true;
+                                        });
 
     auto result = [&] -> Result<Index>
     {
-      if (!visitResult)
+      if (!visitRes)
       {
-        return std::unexpected{visitResult.error()};
+        return std::unexpected{visitRes.error()};
       }
 
       if (mdatCount > 1)
@@ -831,17 +829,17 @@ namespace ao::media::file::mp4
     }
 
     auto const& root = indexResult->root;
-    auto const ilstResult = findAtom(root, kIlstPath);
-    auto const keysResult = findAtom(root, kMdtaKeysPath);
-    auto const optMdtaKeys = readMdtaKeys(keysResult ? *keysResult : std::optional<AtomView>{});
+    auto const ilstRes = findAtom(root, kIlstPath);
+    auto const keysRes = findAtom(root, kMdtaKeysPath);
+    auto const optMdtaKeys = readMdtaKeys(keysRes ? *keysRes : std::optional<AtomView>{});
     auto builder = detail::ContentBuilder::makeEmpty();
 
-    if (ilstResult && *ilstResult)
+    if (ilstRes && *ilstRes)
     {
       // Metadata is optional. A malformed tail preserves already completed
       // sibling items, matching the bounded optional-evidence contract.
       std::ignore =
-        visitChildren(**ilstResult,
+        visitChildren(**ilstRes,
                       [&](AtomView const& atom)
                       {
                         std::string_view const type = atom.type();

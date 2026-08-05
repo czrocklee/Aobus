@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/media/mp4/TrackSelection.h>
+
 #include <ao/Error.h>
 #include <ao/media/mp4/Atom.h>
-#include <ao/media/mp4/TrackSelection.h>
 #include <ao/utility/ByteView.h>
 
 #include <boost/endian/buffers.hpp>
@@ -49,19 +50,19 @@ namespace ao::media::mp4
 
     Result<std::string_view> trackHandlerType(AtomView const& track)
     {
-      auto nodeResult = findAtom(track, kTrackHdlrPath);
+      auto nodeRes = findAtom(track, kTrackHdlrPath);
 
-      if (!nodeResult)
+      if (!nodeRes)
       {
-        return std::unexpected{nodeResult.error()};
+        return std::unexpected{nodeRes.error()};
       }
 
-      if (!*nodeResult)
+      if (!*nodeRes)
       {
         return makeError(Error::Code::NotFound, "MP4 track has no handler atom");
       }
 
-      auto const payload = (*nodeResult)->payload();
+      auto const payload = (*nodeRes)->payload();
 
       if (payload.size() < kHandlerTypeOffset + kHandlerTypeSize)
       {
@@ -82,19 +83,19 @@ namespace ao::media::mp4
       }
 
       auto cursor = stsdView.children();
-      auto entryResult = cursor.next();
+      auto entryRes = cursor.next();
 
-      if (!entryResult)
+      if (!entryRes)
       {
-        return std::unexpected{entryResult.error()};
+        return std::unexpected{entryRes.error()};
       }
 
-      if (!*entryResult)
+      if (!*entryRes)
       {
         return makeError(Error::Code::NotFound, "MP4 sample description entry is missing");
       }
 
-      return std::string{(**entryResult).type()};
+      return std::string{(**entryRes).type()};
     }
 
     bool isSupportedAudioSampleEntry(std::string_view sampleEntryType) noexcept
@@ -104,37 +105,37 @@ namespace ao::media::mp4
 
     Result<AudioTrackSelection> selectTrack(AtomView const& track, std::string_view targetSampleEntryType)
     {
-      auto stsdResult = findAtom(track, kTrackStsdPath);
+      auto stsdRes = findAtom(track, kTrackStsdPath);
 
-      if (!stsdResult)
+      if (!stsdRes)
       {
-        return std::unexpected{stsdResult.error()};
+        return std::unexpected{stsdRes.error()};
       }
 
-      if (!*stsdResult)
+      if (!*stsdRes)
       {
         return makeError(Error::Code::NotFound, "MP4 track has no sample description");
       }
 
-      auto sampleEntryTypeResult = firstSampleEntryType(**stsdResult);
+      auto sampleEntryTypeRes = firstSampleEntryType(**stsdRes);
 
-      if (!sampleEntryTypeResult)
+      if (!sampleEntryTypeRes)
       {
-        return std::unexpected{sampleEntryTypeResult.error()};
+        return std::unexpected{sampleEntryTypeRes.error()};
       }
 
-      auto sampleEntryType = std::move(*sampleEntryTypeResult);
+      auto sampleEntryType = std::move(*sampleEntryTypeRes);
 
       if (!targetSampleEntryType.empty() && sampleEntryType != targetSampleEntryType)
       {
         return makeError(Error::Code::NotFound, "MP4 track sample entry does not match");
       }
 
-      if (auto handlerTypeResult = trackHandlerType(track); !handlerTypeResult)
+      if (auto handlerTypeRes = trackHandlerType(track); !handlerTypeRes)
       {
-        if (handlerTypeResult.error().code != Error::Code::NotFound)
+        if (handlerTypeRes.error().code != Error::Code::NotFound)
         {
-          return std::unexpected{handlerTypeResult.error()};
+          return std::unexpected{handlerTypeRes.error()};
         }
 
         if (!isSupportedAudioSampleEntry(sampleEntryType))
@@ -142,14 +143,14 @@ namespace ao::media::mp4
           return makeError(Error::Code::NotFound, "MP4 track is not recognizable as audio");
         }
       }
-      else if (*handlerTypeResult != "soun")
+      else if (*handlerTypeRes != "soun")
       {
         return makeError(Error::Code::NotFound, "MP4 track handler is not audio");
       }
 
       return AudioTrackSelection{
         .track = track,
-        .stsd = **stsdResult,
+        .stsd = **stsdRes,
         .sampleEntryType = std::move(sampleEntryType),
       };
     }
@@ -160,35 +161,35 @@ namespace ao::media::mp4
 
       while (true)
       {
-        auto trackResult = trackCursor.next();
+        auto trackRes = trackCursor.next();
 
-        if (!trackResult)
+        if (!trackRes)
         {
-          return std::unexpected{trackResult.error()};
+          return std::unexpected{trackRes.error()};
         }
 
-        if (!*trackResult)
+        if (!*trackRes)
         {
           return makeError(Error::Code::NotFound, "MP4 movie has no matching audio track");
         }
 
-        auto const& track = **trackResult;
+        auto const& track = **trackRes;
 
         if (track.type() != "trak")
         {
           continue;
         }
 
-        auto selectionResult = selectTrack(track, targetSampleEntryType);
+        auto selectionRes = selectTrack(track, targetSampleEntryType);
 
-        if (selectionResult)
+        if (selectionRes)
         {
-          return selectionResult;
+          return selectionRes;
         }
 
-        if (selectionResult.error().code != Error::Code::NotFound)
+        if (selectionRes.error().code != Error::Code::NotFound)
         {
-          return std::unexpected{selectionResult.error()};
+          return std::unexpected{selectionRes.error()};
         }
       }
     }
@@ -200,35 +201,35 @@ namespace ao::media::mp4
 
     while (true)
     {
-      auto movieResult = rootCursor.next();
+      auto movieRes = rootCursor.next();
 
-      if (!movieResult)
+      if (!movieRes)
       {
-        return std::unexpected{movieResult.error()};
+        return std::unexpected{movieRes.error()};
       }
 
-      if (!*movieResult)
+      if (!*movieRes)
       {
         return makeError(Error::Code::NotFound, "MP4 audio track was not found");
       }
 
-      auto const& movie = **movieResult;
+      auto const& movie = **movieRes;
 
       if (movie.type() != "moov")
       {
         continue;
       }
 
-      auto selectionResult = findAudioTrackInMovie(movie, targetSampleEntryType);
+      auto selectionRes = findAudioTrackInMovie(movie, targetSampleEntryType);
 
-      if (selectionResult)
+      if (selectionRes)
       {
-        return selectionResult;
+        return selectionRes;
       }
 
-      if (selectionResult.error().code != Error::Code::NotFound)
+      if (selectionRes.error().code != Error::Code::NotFound)
       {
-        return std::unexpected{selectionResult.error()};
+        return std::unexpected{selectionRes.error()};
       }
     }
   }

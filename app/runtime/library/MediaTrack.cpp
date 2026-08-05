@@ -88,21 +88,21 @@ namespace ao::rt
 
   Result<MediaTrack> readMediaTrack(std::filesystem::path const& path)
   {
-    auto fileResult = media::file::File::open(path);
+    auto fileRes = media::file::File::open(path);
 
-    if (!fileResult)
+    if (!fileRes)
     {
-      return std::unexpected{fileResult.error()};
+      return std::unexpected{fileRes.error()};
     }
 
     auto builder = library::TrackBuilder::makeEmpty();
     auto visitor = TrackBuilderVisitor{builder};
 
-    if (auto const visitResult = fileResult->visit(visitor); !visitResult)
+    if (auto const visitRes = fileRes->visit(visitor); !visitRes)
     {
-      return std::unexpected{visitResult.error()};
+      return std::unexpected{visitRes.error()};
     }
 
-    return MediaTrack{std::move(*fileResult), std::move(builder)};
+    return MediaTrack{std::move(*fileRes), std::move(builder)};
   }
 } // namespace ao::rt

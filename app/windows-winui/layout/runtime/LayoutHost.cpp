@@ -52,22 +52,23 @@ namespace ao::winui::layout
     auto const previousChild = _host.Child();
     auto const candidateElement = candidate.rootPtr->element();
 
-    auto published = _sequence.publish(candidate.gatePtr->id(),
-                                       [this, candidateElement] -> Result<>
-                                       {
-                                         try
-                                         {
-                                           _host.Child(candidateElement);
-                                         }
-                                         catch (winrt::hresult_error const& error)
-                                         {
-                                           return makeError(Error::Code::InitFailed, winrt::to_string(error.message()));
-                                         }
+    auto publishedRes =
+      _sequence.publish(candidate.gatePtr->id(),
+                        [this, candidateElement] -> Result<>
+                        {
+                          try
+                          {
+                            _host.Child(candidateElement);
+                          }
+                          catch (winrt::hresult_error const& error)
+                          {
+                            return makeError(Error::Code::InitFailed, winrt::to_string(error.message()));
+                          }
 
-                                         return {};
-                                       });
+                          return {};
+                        });
 
-    if (!published)
+    if (!publishedRes)
     {
       try
       {
@@ -79,7 +80,7 @@ namespace ao::winui::layout
           "LayoutHost: failed to restore the previous shell root: {}", winrt::to_string(error.message()));
       }
 
-      return std::unexpected{published.error()};
+      return std::unexpected{publishedRes.error()};
     }
 
     // The retired generation is destroyed only after the candidate is live, so

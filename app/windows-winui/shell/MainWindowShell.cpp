@@ -113,17 +113,17 @@ namespace winrt::Aobus::implementation
     }
 
     auto const mode = _session != nullptr ? _session->settings().shellMode : ao::winui::ShellMode::Modern;
-    auto applied = _shellBuilderPtr->applyShellState(mode, width, _optInspectorRequest);
+    auto appliedRes = _shellBuilderPtr->applyShellState(mode, width, _optInspectorRequest);
 
-    if (!applied)
+    if (!appliedRes)
     {
       // The generation that was already live stays live, which is the whole
       // point of building the candidate before publishing it.
-      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", applied.error().message));
+      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", appliedRes.error().message));
       return;
     }
 
-    auto const& state = *applied;
+    auto const& state = *appliedRes;
     ExtendsContentIntoTitleBar(state.integratedTitleBar);
     SetTitleBar(state.integratedTitleBar ? _shellBuilderPtr->titleBar() : Microsoft::UI::Xaml::UIElement{nullptr});
   }
@@ -197,11 +197,11 @@ namespace winrt::Aobus::implementation
 
     try
     {
-      if (auto const saved = _session->saveSettings(); !saved)
+      if (auto const savedRes = _session->saveSettings(); !savedRes)
       {
         try
         {
-          updateStatus(ao::winui::formatResource("SaveSettingsFailedFormat", saved.error().message));
+          updateStatus(ao::winui::formatResource("SaveSettingsFailedFormat", savedRes.error().message));
         }
         catch (...)
         {
@@ -235,9 +235,9 @@ namespace winrt::Aobus::implementation
       {
         // The callback only queues an App-owned restart. Its dispatcher turn
         // runs after this coroutine returns and releases its strong window ref.
-        if (auto const requested = _requestRestart(std::filesystem::path{result.Path().c_str()}); !requested)
+        if (auto const requestedRes = _requestRestart(std::filesystem::path{result.Path().c_str()}); !requestedRes)
         {
-          updateStatus(ao::winui::formatResource("ErrorFormat", requested.error().message));
+          updateStatus(ao::winui::formatResource("ErrorFormat", requestedRes.error().message));
         }
       }
     }
@@ -276,22 +276,22 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    auto reloaded = _themePtr->reload();
+    auto reloadedRes = _themePtr->reload();
 
-    if (!reloaded)
+    if (!reloadedRes)
     {
-      if (reloaded.error().code == ao::Error::Code::NotFound)
+      if (reloadedRes.error().code == ao::Error::Code::NotFound)
       {
         applySystemTheme();
         updateStatus(ao::winui::resourceString("ThemeOverrideRemoved"));
         return;
       }
 
-      updateStatus(ao::winui::formatResource("ThemeReloadFailedFormat", reloaded.error().message));
+      updateStatus(ao::winui::formatResource("ThemeReloadFailedFormat", reloadedRes.error().message));
       return;
     }
 
-    applyTheme(*reloaded);
+    applyTheme(*reloadedRes);
     updateStatus(ao::winui::formatResource("ThemeReloadedFormat", ao::utility::pathToUtf8(_themePtr->path())));
   }
 
@@ -310,9 +310,9 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    if (auto rebuilt = _shellBuilderPtr->rebuild(); !rebuilt)
+    if (auto rebuiltRes = _shellBuilderPtr->rebuild(); !rebuiltRes)
     {
-      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", rebuilt.error().message));
+      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", rebuiltRes.error().message));
     }
   }
 

@@ -48,19 +48,19 @@ namespace ao::uimodel
       auto tree = ryml::Tree{yaml::callbacks(errorState)};
       yaml::parseInArena(tree, yaml, errorState);
 
-      auto deserialized = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      auto deserializedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
 
-      if (!deserialized)
+      if (!deserializedRes)
       {
         // Keep the schema's code: an unsupported version is a different defect
         // from a malformed node, even though both reject the whole candidate.
         return makeError(
-          deserialized.error().code,
+          deserializedRes.error().code,
           std::format(
-            "Failed to read {} layout document '{}': {}", dialect.name, sourceName, deserialized.error().message));
+            "Failed to read {} layout document '{}': {}", dialect.name, sourceName, deserializedRes.error().message));
       }
 
-      document = std::move(*deserialized);
+      document = std::move(*deserializedRes);
     }
     catch (std::exception const& exception)
     {
@@ -69,19 +69,20 @@ namespace ao::uimodel
         std::format("Failed to parse {} layout document '{}': {}", dialect.name, sourceName, exception.what()));
     }
 
-    auto prepared = prepareLayout(document, kLimits);
+    auto preparedRes = prepareLayout(document, kLimits);
 
-    if (!prepared)
+    if (!preparedRes)
     {
-      return std::unexpected{prepared.error()};
+      return std::unexpected{preparedRes.error()};
     }
 
-    if (auto validated = requireValidLayout(*prepared, components, actions, dialect); !validated)
+    if (auto validatedRes = requireValidLayout(*preparedRes, components, actions, dialect); !validatedRes)
     {
-      return makeError(validated.error().code,
-                       std::format("{} layout document '{}': {}", dialect.name, sourceName, validated.error().message));
+      return makeError(
+        validatedRes.error().code,
+        std::format("{} layout document '{}': {}", dialect.name, sourceName, validatedRes.error().message));
     }
 
-    return prepared;
+    return preparedRes;
   }
 } // namespace ao::uimodel

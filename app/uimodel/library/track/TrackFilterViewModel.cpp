@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/track/TrackFilterViewModel.h>
+
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
-#include <ao/uimodel/library/track/TrackFilterViewModel.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <functional>
@@ -74,9 +75,9 @@ namespace ao::uimodel
 
     // Reached from the workspace observer, whose snapshot can name a view that
     // has already been destroyed.
-    auto const found = _viewService.findTrackListState(_viewId);
+    auto const foundRes = _viewService.findTrackListState(_viewId);
 
-    if (!found)
+    if (!foundRes)
     {
       _viewId = rt::kInvalidViewId;
       _entryText.clear();
@@ -86,11 +87,11 @@ namespace ao::uimodel
       return;
     }
 
-    _entryText = found->filterExpression;
+    _entryText = foundRes->filterExpression;
 
     auto const resolved = resolveTrackFilterExpression(_entryText);
     _resolvedExpression = resolved.expression;
-    _optFilterError = found->optFilterError;
+    _optFilterError = foundRes->optFilterError;
 
     refresh();
   }

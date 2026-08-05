@@ -267,10 +267,10 @@ namespace ao::winui::test
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
 
-      auto const prepared = prepareShellPresetDocument(readShippedDocument(preset), resource);
-      REQUIRE(prepared);
+      auto const preparedRes = prepareShellPresetDocument(readShippedDocument(preset), resource);
+      REQUIRE(preparedRes);
 
-      for (auto const* const node : presetNodes(*prepared))
+      for (auto const* const node : presetNodes(*preparedRes))
       {
         auto const optKind = componentElementKind(*node);
         REQUIRE(optKind);

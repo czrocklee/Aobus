@@ -35,9 +35,9 @@ namespace ao::media::file::test
 
     rt::MediaTrack loadTrack(fs::path const& path)
     {
-      auto trackResult = rt::readMediaTrack(path);
-      REQUIRE(trackResult);
-      return std::move(*trackResult);
+      auto trackRes = rt::readMediaTrack(path);
+      REQUIRE(trackRes);
+      return std::move(*trackRes);
     }
 
     bool hasPngSignature(std::span<std::byte const> bytes)
@@ -256,9 +256,9 @@ namespace ao::media::file::test
     auto const tempDir = ao::test::TempDir{};
     auto musicLibrary = library::test::makeTestMusicLibrary(tempDir.path(), tempDir.path() / "db");
     auto transaction = library::test::writeTransaction(musicLibrary);
-    auto serializeResult = builder.serialize(transaction, musicLibrary.resources());
-    REQUIRE(serializeResult);
-    auto const [hotData, coldData] = *serializeResult;
+    auto serializeRes = builder.serialize(transaction, musicLibrary.resources());
+    REQUIRE(serializeRes);
+    auto const [hotData, coldData] = *serializeRes;
 
     CHECK(!hotData.empty());
     CHECK(!coldData.empty());

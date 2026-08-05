@@ -42,9 +42,9 @@ namespace ao::gtk::test
     auto const trackId = addRuntimeTrack(
       fixture.runtime(), library::test::TrackSpec{.title = "Song", .artist = "Artist", .uri = fixturePath});
     fixture.runtime().reloadAllTracks();
-    auto const view = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
-    REQUIRE(view);
-    REQUIRE(playback.commands().startFromView(*view, trackId));
+    auto const viewRes = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
+    REQUIRE(viewRes);
+    REQUIRE(playback.commands().startFromView(*viewRes, trackId));
     REQUIRE(waitForPlaybackSettlement(fixture.runtime(), trackId));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());

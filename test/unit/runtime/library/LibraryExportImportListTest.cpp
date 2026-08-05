@@ -287,12 +287,12 @@ library:
 )";
     }
 
-    auto const report = importer.importFromYamlOffline(yamlPath);
-    REQUIRE(report);
-    CHECK(report->payloadVersion == 3);
-    CHECK(report->payloadMode == ExportMode::Full);
-    CHECK(report->targetScope == ImportTargetScope::Library);
-    CHECK(report->danglingReferencesIgnored == 3);
+    auto const reportRes = importer.importFromYamlOffline(yamlPath);
+    REQUIRE(reportRes);
+    CHECK(reportRes->payloadVersion == 3);
+    CHECK(reportRes->payloadMode == ExportMode::Full);
+    CHECK(reportRes->targetScope == ImportTargetScope::Library);
+    CHECK(reportRes->danglingReferencesIgnored == 3);
 
     auto transaction = ml.readTransaction();
     auto const listReader = ml.lists().reader(transaction);

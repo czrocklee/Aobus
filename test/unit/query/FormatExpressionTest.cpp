@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/FormatExpression.h>
+
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
@@ -9,7 +11,6 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -264,16 +265,16 @@ namespace ao::query::test
   {
     SECTION("Valid format expression yields a plan")
     {
-      auto const plan = compileFormat(parseOk(R"($title + " " + $year)"));
-      CHECK(plan.has_value());
+      auto const planRes = compileFormat(parseOk(R"($title + " " + $year)"));
+      CHECK(planRes.has_value());
     }
 
     SECTION("Non-formattable expression yields an Error")
     {
-      auto const plan = compileFormat(parseOk("#favorite"));
-      REQUIRE_FALSE(plan.has_value());
-      CHECK(plan.error().code == Error::Code::FormatRejected);
-      CHECK_FALSE(plan.error().message.empty());
+      auto const planRes = compileFormat(parseOk("#favorite"));
+      REQUIRE_FALSE(planRes.has_value());
+      CHECK(planRes.error().code == Error::Code::FormatRejected);
+      CHECK_FALSE(planRes.error().message.empty());
     }
   }
 } // namespace ao::query::test

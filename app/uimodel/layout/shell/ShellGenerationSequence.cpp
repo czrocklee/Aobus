@@ -88,11 +88,11 @@ namespace ao::uimodel
       }
     };
 
-    auto attached = Result<>{};
+    auto attachedRes = Result<>{};
 
     try
     {
-      attached = attach ? attach() : Result<>{};
+      attachedRes = attach ? attach() : Result<>{};
     }
     catch (std::exception const& error)
     {
@@ -106,10 +106,10 @@ namespace ao::uimodel
       return makeError(Error::Code::InitFailed, "Shell generation attachment threw an unknown exception");
     }
 
-    if (!attached)
+    if (!attachedRes)
     {
       restorePrevious();
-      return std::unexpected{attached.error()};
+      return std::unexpected{attachedRes.error()};
     }
 
     return previousId;

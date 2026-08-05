@@ -73,12 +73,12 @@ namespace ao::rt::test
     // 1. Setup initial library with shared cover art
     {
       auto transaction = library::test::writeTransaction(ml1);
-      auto resIdResult = ml1.resources().writer(transaction).create(coverData);
-      REQUIRE(resIdResult);
-      resId = *resIdResult;
-      auto backResIdResult = ml1.resources().writer(transaction).create(backCoverData);
-      REQUIRE(backResIdResult);
-      backResId = *backResIdResult;
+      auto resIdRes = ml1.resources().writer(transaction).create(coverData);
+      REQUIRE(resIdRes);
+      resId = *resIdRes;
+      auto backResIdRes = ml1.resources().writer(transaction).create(backCoverData);
+      REQUIRE(backResIdRes);
+      backResId = *backResIdRes;
 
       auto trackBuilder1 = TrackBuilder::makeEmpty();
       trackBuilder1.property().uri("song1.flac");
@@ -167,16 +167,16 @@ namespace ao::rt::test
 
     {
       auto transaction = library::test::writeTransaction(ml);
-      auto resourceIdResult = ml.resources().writer(transaction).create(lmdb::test::createTestData(8));
-      REQUIRE(resourceIdResult);
+      auto resourceIdRes = ml.resources().writer(transaction).create(lmdb::test::createTestData(8));
+      REQUIRE(resourceIdRes);
 
       auto builder = TrackBuilder::makeEmpty();
       builder.property().uri("song.flac");
-      builder.coverArt().add(PictureType::FrontCover, *resourceIdResult);
+      builder.coverArt().add(PictureType::FrontCover, *resourceIdRes);
       auto const [hot, cold] = prepareTrack(builder, transaction, ml.resources());
       auto trackWriter = ml.tracks().writer(transaction);
       createPreparedTrack(trackWriter, hot, cold);
-      REQUIRE(ml.resources().writer(transaction).remove(*resourceIdResult));
+      REQUIRE(ml.resources().writer(transaction).remove(*resourceIdRes));
       REQUIRE(transaction.commit());
     }
 
@@ -194,12 +194,12 @@ namespace ao::rt::test
     {
       auto transaction = library::test::writeTransaction(ml);
       auto resWriter = ml.resources().writer(transaction);
-      auto frontIdResult = resWriter.create(lmdb::test::createTestData(8));
-      REQUIRE(frontIdResult);
-      auto const frontId = *frontIdResult;
-      auto backIdResult = resWriter.create(lmdb::test::createTestData(9));
-      REQUIRE(backIdResult);
-      auto const backId = *backIdResult;
+      auto frontIdRes = resWriter.create(lmdb::test::createTestData(8));
+      REQUIRE(frontIdRes);
+      auto const frontId = *frontIdRes;
+      auto backIdRes = resWriter.create(lmdb::test::createTestData(9));
+      REQUIRE(backIdRes);
+      auto const backId = *backIdRes;
 
       auto builder = TrackBuilder::makeEmpty();
       builder.property().uri(uri);
@@ -235,10 +235,10 @@ library:
 
     {
       auto transaction = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestResult);
+      auto const manifestRes = ml.manifest().reader(transaction).get(uri);
+      REQUIRE(manifestRes);
       auto const optView =
-        ml.tracks().reader(transaction).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
+        ml.tracks().reader(transaction).get(manifestRes->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       REQUIRE(optView->coverArt().count() == 1);
       CHECK(optView->coverArt().at(0).type == PictureType::BackCover);
@@ -267,10 +267,10 @@ library:
 
     {
       auto transaction = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestResult);
+      auto const manifestRes = ml.manifest().reader(transaction).get(uri);
+      REQUIRE(manifestRes);
       auto const optView =
-        ml.tracks().reader(transaction).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
+        ml.tracks().reader(transaction).get(manifestRes->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       CHECK(optView->coverArt().count() == 0);
     }

@@ -260,23 +260,23 @@ namespace ao::winui
     if (restoredView != rt::kInvalidViewId)
     {
       _viewId = restoredView;
-      auto const foundProjection = _runtime->views().findTrackListProjection(_viewId);
-      resetProjection(foundProjection ? *foundProjection : nullptr);
+      auto const foundProjectionRes = _runtime->views().findTrackListProjection(_viewId);
+      resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
       return;
     }
 
-    auto view = _runtime->workspace().navigate({.target = rt::GlobalViewKind::AllTracks});
+    auto viewRes = _runtime->workspace().navigate({.target = rt::GlobalViewKind::AllTracks});
 
-    if (!view)
+    if (!viewRes)
     {
       _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
       _changed.emit();
       return;
     }
 
-    _viewId = *view;
-    auto const foundProjection = _runtime->views().findTrackListProjection(_viewId);
-    resetProjection(foundProjection ? *foundProjection : nullptr);
+    _viewId = *viewRes;
+    auto const foundProjectionRes = _runtime->views().findTrackListProjection(_viewId);
+    resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
   }
 
   void TrackListController::setViewportWidth(double const width, double const trailingChromeWidth)
@@ -766,16 +766,16 @@ namespace ao::winui
     auto request = rt::NavigationRequest{};
     request.target = listId == rt::kAllTracksListId ? rt::NavigationTarget{rt::GlobalViewKind::AllTracks}
                                                     : rt::NavigationTarget{listId};
-    auto view = _runtime->workspace().navigate(request);
+    auto viewRes = _runtime->workspace().navigate(request);
 
-    if (!view)
+    if (!viewRes)
     {
-      return std::unexpected{view.error()};
+      return std::unexpected{viewRes.error()};
     }
 
-    _viewId = *view;
-    auto const foundProjection = _runtime->views().findTrackListProjection(_viewId);
-    resetProjection(foundProjection ? *foundProjection : nullptr);
+    _viewId = *viewRes;
+    auto const foundProjectionRes = _runtime->views().findTrackListProjection(_viewId);
+    resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
     return {};
   }
 

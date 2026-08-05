@@ -85,16 +85,16 @@ namespace ao::gtk
     buildUi();
     loadSelectedTrackFields();
 
-    auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
+    auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
 
-    if (sessionResult)
+    if (sessionRes)
     {
-      _editSessionPtr = std::move(*sessionResult);
+      _editSessionPtr = std::move(*sessionRes);
       _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated([this] noexcept { updateSaveEnabled(); });
     }
     else
     {
-      _sessionErrorLabel.set_text(std::format("Editing unavailable: {}", sessionResult.error().message));
+      _sessionErrorLabel.set_text(std::format("Editing unavailable: {}", sessionRes.error().message));
       _sessionErrorLabel.set_visible(true);
 
       for (auto const& editor : _editors)
@@ -333,22 +333,21 @@ namespace ao::gtk
       return;
     }
 
-    auto const replyResult = _editSessionPtr->submitMetadata(patch);
+    auto const replyRes = _editSessionPtr->submitMetadata(patch);
 
-    if (!replyResult)
+    if (!replyRes)
     {
       AppDialog::presentMessage(
         *this,
         "Save failed",
-        replyResult.error().message,
+        replyRes.error().message,
         {AppDialogAction{
           .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
         Gtk::ResponseType::CLOSE);
       return;
     }
 
-    if (replyResult->status != rt::TrackAuthoringStatus::Applied &&
-        replyResult->status != rt::TrackAuthoringStatus::NoOp)
+    if (replyRes->status != rt::TrackAuthoringStatus::Applied && replyRes->status != rt::TrackAuthoringStatus::NoOp)
     {
       AppDialog::presentMessage(
         *this,
@@ -360,7 +359,7 @@ namespace ao::gtk
       return;
     }
 
-    for (auto const& change : replyResult->reply.changes)
+    for (auto const& change : replyRes->reply.changes)
     {
       _rowCache.invalidate(change.trackId);
     }

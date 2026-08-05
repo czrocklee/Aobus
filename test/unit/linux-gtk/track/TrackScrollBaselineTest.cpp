@@ -91,10 +91,10 @@ namespace ao::gtk::test
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
 
-        auto prepared = builder.prepare(transaction, library.resources());
-        REQUIRE(prepared);
+        auto preparedRes = builder.prepare(transaction, library.resources());
+        REQUIRE(preparedRes);
         ids.push_back(
-          ao::test::requireValue(library::createPreparedTrackRecord(writer, prepared->first, prepared->second)));
+          ao::test::requireValue(library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second)));
       }
 
       REQUIRE(transaction.commit());

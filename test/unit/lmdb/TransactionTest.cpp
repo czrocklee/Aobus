@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/lmdb/Transaction.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
@@ -37,9 +38,9 @@ namespace ao::lmdb::test
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto txn = ReadTransaction::begin(env);
+    auto txnRes = ReadTransaction::begin(env);
 
-    CHECK(txn);
+    CHECK(txnRes);
   }
 
   TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][unit][transaction]")
@@ -100,9 +101,9 @@ namespace ao::lmdb::test
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto txn = WriteTransaction::begin(env);
+    auto txnRes = WriteTransaction::begin(env);
 
-    CHECK(txn);
+    CHECK(txnRes);
   }
 
   TEST_CASE("WriteTransaction - commit persists written data", "[lmdb][unit][transaction]")
@@ -167,9 +168,9 @@ namespace ao::lmdb::test
     CHECK(transaction.isFinished());
     CHECK_NOTHROW(transaction.abort());
 
-    auto const commitResult = transaction.commit();
-    REQUIRE_FALSE(commitResult);
-    CHECK(commitResult.error().code == Error::Code::InvalidState);
+    auto const commitRes = transaction.commit();
+    REQUIRE_FALSE(commitRes);
+    CHECK(commitRes.error().code == Error::Code::InvalidState);
     CHECK_THROWS_AS(writer.get(1), Exception);
   }
 
@@ -228,10 +229,10 @@ namespace ao::lmdb::test
     auto parent = beginWriteTransaction(env);
     REQUIRE(parent.commit());
 
-    auto const childResult = WriteTransaction::begin(parent);
+    auto const childRes = WriteTransaction::begin(parent);
 
-    REQUIRE_FALSE(childResult);
-    CHECK(childResult.error().code == Error::Code::InvalidState);
+    REQUIRE_FALSE(childRes);
+    CHECK(childRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][unit][nested]")

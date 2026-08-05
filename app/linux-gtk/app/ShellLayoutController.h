@@ -17,7 +17,6 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
-#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
@@ -118,7 +117,7 @@ namespace ao::gtk
     void setConfirmPromotionCallback(ConfirmPromotionFn fn);
 
     void activateAction(std::string_view id);
-    uimodel::LayoutActionAvailability actionAvailability(std::string_view id);
+    layout::ActionAvailability actionAvailability(std::string_view id);
 
     layout::editor::LayoutEditorDialog* editorDialog() const { return _editorDialogPtr.get(); }
 

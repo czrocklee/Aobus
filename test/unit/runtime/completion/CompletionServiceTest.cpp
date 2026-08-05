@@ -229,7 +229,7 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{
       mutationExecutor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto secondIdResult = mutation.apply(
+    auto secondIdRes = mutation.apply(
       [&libraryFixture](library::WriteTransaction& transaction) -> Result<TrackId>
       {
         return library::test::addTrack(libraryFixture.library(),
@@ -242,8 +242,8 @@ namespace ao::rt::test
                                          .customMetadata = {{"Second Key", "Value"}},
                                        });
       });
-    REQUIRE(secondIdResult);
-    auto const secondId = *secondIdResult;
+    REQUIRE(secondIdRes);
+    auto const secondId = *secondIdRes;
     REQUIRE(mutation.commit(LibraryChangeSet{.tracksInserted = {secondId}}));
 
     // Storage is committed, but publication is still queued. Every vocabulary
@@ -368,9 +368,9 @@ namespace ao::rt::test
 
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto const tagsToAdd = std::array{std::string{"Jazz"}};
-    auto const editResult = writerFixture.editTags(std::array{trackId}, tagsToAdd, {});
-    REQUIRE(editResult);
-    CHECK_FALSE(editResult->changes.empty());
+    auto const editRes = writerFixture.editTags(std::array{trackId}, tagsToAdd, {});
+    REQUIRE(editRes);
+    CHECK_FALSE(editRes->changes.empty());
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Jazz", 1},
@@ -404,15 +404,15 @@ namespace ao::rt::test
                                                              });
 
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto const updateResult = writerFixture.updateMetadata(std::array{trackId},
-                                                           MetadataPatch{
-                                                             .optArtist = "Glass",
-                                                             .optAlbum = "Glassworks",
-                                                             .optConductor = "Michael Riesman",
-                                                             .optWork = "Etudes",
-                                                           });
-    REQUIRE(updateResult);
-    CHECK_FALSE(updateResult->changes.empty());
+    auto const updateRes = writerFixture.updateMetadata(std::array{trackId},
+                                                        MetadataPatch{
+                                                          .optArtist = "Glass",
+                                                          .optAlbum = "Glassworks",
+                                                          .optConductor = "Michael Riesman",
+                                                          .optWork = "Etudes",
+                                                        });
+    REQUIRE(updateRes);
+    CHECK_FALSE(updateRes->changes.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Glass", 1},
@@ -547,14 +547,14 @@ namespace ao::rt::test
                                                         });
 
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto const updateResult = writerFixture.updateMetadata(std::array{trackId},
-                                                           MetadataPatch{
-                                                             .optArtist = "Glass",
-                                                             .optAlbum = "Glassworks",
-                                                             .optWork = "Etudes",
-                                                           });
-    REQUIRE(updateResult);
-    CHECK_FALSE(updateResult->changes.empty());
+    auto const updateRes = writerFixture.updateMetadata(std::array{trackId},
+                                                        MetadataPatch{
+                                                          .optArtist = "Glass",
+                                                          .optAlbum = "Glassworks",
+                                                          .optWork = "Etudes",
+                                                        });
+    REQUIRE(updateRes);
+    CHECK_FALSE(updateRes->changes.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Etudes", 1},

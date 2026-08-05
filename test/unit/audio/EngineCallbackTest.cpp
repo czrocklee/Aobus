@@ -425,9 +425,9 @@ namespace ao::audio::test
     REQUIRE(shutdownFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
     REQUIRE(commandFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
 
-    auto const commandResult = commandFuture.get();
-    REQUIRE_FALSE(commandResult);
-    CHECK(commandResult.error().code == Error::Code::InvalidState);
+    auto const commandRes = commandFuture.get();
+    REQUIRE_FALSE(commandRes);
+    CHECK(commandRes.error().code == Error::Code::InvalidState);
 
     engine.shutdown();
     CHECK(lifecycleCountsPtr->stop.load(std::memory_order_relaxed) == 1);
@@ -494,11 +494,11 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto preparedStart = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
-      REQUIRE(preparedStart);
-      auto receipt = engine.commitPlayback(std::move(*preparedStart));
-      REQUIRE(receipt);
-      barrier = receipt->cancellationBarrier;
+      auto preparedStartRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
+      REQUIRE(preparedStartRes);
+      auto receiptRes = engine.commitPlayback(std::move(*preparedStartRes));
+      REQUIRE(receiptRes);
+      barrier = receiptRes->cancellationBarrier;
     }
 
     SECTION("completed stop")
@@ -548,11 +548,11 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto preparedStart = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
-      REQUIRE(preparedStart);
-      auto receipt = engine.commitPlayback(std::move(*preparedStart));
-      REQUIRE(receipt);
-      barrier = receipt->cancellationBarrier;
+      auto preparedStartRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
+      REQUIRE(preparedStartRes);
+      auto receiptRes = engine.commitPlayback(std::move(*preparedStartRes));
+      REQUIRE(receiptRes);
+      barrier = receiptRes->cancellationBarrier;
     }
 
     SECTION("completed stop")
@@ -602,12 +602,12 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto preparedStart = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
-      REQUIRE(preparedStart);
-      auto receipt = engine.commitPlayback(std::move(*preparedStart));
-      REQUIRE(receipt);
-      barrier = receipt->cancellationBarrier;
-      CHECK(receipt->generation == engine.playbackGeneration());
+      auto preparedStartRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
+      REQUIRE(preparedStartRes);
+      auto receiptRes = engine.commitPlayback(std::move(*preparedStartRes));
+      REQUIRE(receiptRes);
+      barrier = receiptRes->cancellationBarrier;
+      CHECK(receiptRes->generation == engine.playbackGeneration());
     }
 
     SECTION("completed stop")

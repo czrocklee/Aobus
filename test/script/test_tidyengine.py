@@ -383,6 +383,17 @@ class CompileCommandCoverageTest(unittest.TestCase):
                 with self.subTest(path=path):
                     self.assertTrue(tidyengine._is_platform_incompatible(path, root))
 
+    def test_posix_suffix_impl_is_incompatible_with_the_windows_native_graph(self):
+        root = Path("/repo")
+        with mock.patch.object(
+            tidyengine.builddir,
+            "platform_profile",
+            return_value=tidyengine.builddir.WINDOWS_PROFILE,
+        ):
+            self.assertTrue(
+                tidyengine._is_platform_incompatible(root / "lib" / "utility" / "AtomicFilePosix.cpp", root)
+            )
+
     def test_explicit_lint_fixture_can_borrow_native_flags(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"

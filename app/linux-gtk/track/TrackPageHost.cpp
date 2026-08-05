@@ -123,9 +123,9 @@ namespace ao::gtk
 
   void TrackPageHost::tryRevealTrackInView(rt::ViewId viewId, TrackId trackId)
   {
-    if (auto const focused = _runtime.workspace().focusView(viewId); !focused)
+    if (auto const focusedRes = _runtime.workspace().focusView(viewId); !focusedRes)
     {
-      APP_LOG_DEBUG("TrackPageHost: Could not focus view {} for reveal: {}", viewId.raw(), focused.error().message);
+      APP_LOG_DEBUG("TrackPageHost: Could not focus view {} for reveal: {}", viewId.raw(), focusedRes.error().message);
       return;
     }
 
@@ -341,22 +341,22 @@ namespace ao::gtk
 
     // Reached from the workspace observer, so the snapshot may name a view that
     // has already been destroyed; the find form reports that instead of throwing.
-    auto const foundProjection = _runtime.views().findTrackListProjection(viewId);
-    auto const foundState = _runtime.views().findTrackListState(viewId);
+    auto const foundProjectionRes = _runtime.views().findTrackListProjection(viewId);
+    auto const foundStateRes = _runtime.views().findTrackListState(viewId);
 
-    if (!foundProjection || *foundProjection == nullptr || !foundState)
+    if (!foundProjectionRes || *foundProjectionRes == nullptr || !foundStateRes)
     {
       return;
     }
 
-    auto const& projPtr = *foundProjection;
-    auto const listId = ListId{foundState->listId};
+    auto const& projPtr = *foundProjectionRes;
+    auto const listId = ListId{foundStateRes->listId};
 
     auto modelPtr = TrackListModel::create(dataProvider);
     modelPtr->bindProjection(projPtr);
 
     auto trackPagePtr = std::make_unique<TrackViewPage>(
-      listId, modelPtr, _layoutStore, _runtime, _thumbnailLoader, foundState->presentation, viewId);
+      listId, modelPtr, _layoutStore, _runtime, _thumbnailLoader, foundStateRes->presentation, viewId);
     trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
     auto const pageId = std::format("view-{}", viewId.raw());
 
@@ -440,9 +440,9 @@ namespace ao::gtk
       APP_LOG_ERROR("Failed to publish track selection: {}", result.error().message);
     }
 
-    if (auto const focused = _runtime.workspace().focusView(viewId); !focused)
+    if (auto const focusedRes = _runtime.workspace().focusView(viewId); !focusedRes)
     {
-      APP_LOG_ERROR("Failed to focus selected track view: {}", focused.error().message);
+      APP_LOG_ERROR("Failed to focus selected track view: {}", focusedRes.error().message);
     }
   }
 

@@ -194,8 +194,8 @@ namespace ao::rt
 
               // The workspace snapshot can name a view that ViewService has
               // already dropped, and observers cannot throw.
-              auto const found = _implPtr->views.findTrackListState(viewId);
-              refreshSnapshot(found ? std::span<TrackId const>{found->selection} : std::span<TrackId const>{});
+              auto const foundRes = _implPtr->views.findTrackListState(viewId);
+              refreshSnapshot(foundRes ? std::span<TrackId const>{foundRes->selection} : std::span<TrackId const>{});
             });
         }
         else if constexpr (std::is_same_v<T, ExplicitViewTarget>)

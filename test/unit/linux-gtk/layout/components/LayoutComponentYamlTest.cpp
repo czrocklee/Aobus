@@ -63,9 +63,9 @@ namespace ao::gtk::layout::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
-      auto decodedNode = readLayoutNode(tree.rootref(), "action button fixture");
-      REQUIRE(decodedNode);
-      auto layoutNode = std::move(*decodedNode);
+      auto decodedNodeRes = readLayoutNode(tree.rootref(), "action button fixture");
+      REQUIRE(decodedNodeRes);
+      auto layoutNode = std::move(*decodedNodeRes);
 
       std::int32_t primaryFired = 0;
       std::int32_t longPressFired = 0;
@@ -129,9 +129,9 @@ namespace ao::gtk::layout::test
     )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
-      auto decodedNode = readLayoutNode(tree.rootref(), "playback row fixture");
-      REQUIRE(decodedNode);
-      auto layoutNode = std::move(*decodedNode);
+      auto decodedNodeRes = readLayoutNode(tree.rootref(), "playback row fixture");
+      REQUIRE(decodedNodeRes);
+      auto layoutNode = std::move(*decodedNodeRes);
 
       auto const compPtr = fixture.create(layoutNode);
       REQUIRE(compPtr != nullptr);
@@ -165,9 +165,9 @@ namespace ao::gtk::layout::test
     )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
-      auto decodedNode = readLayoutNode(tree.rootref(), "listening layout fixture");
-      REQUIRE(decodedNode);
-      auto layoutNode = std::move(*decodedNode);
+      auto decodedNodeRes = readLayoutNode(tree.rootref(), "listening layout fixture");
+      REQUIRE(decodedNodeRes);
+      auto layoutNode = std::move(*decodedNodeRes);
 
       auto const compPtr = fixture.create(layoutNode);
       REQUIRE(compPtr != nullptr);
@@ -195,9 +195,9 @@ namespace ao::gtk::layout::test
 
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
-      auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-      REQUIRE(decoded);
-      auto doc = std::move(*decoded);
+      auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      REQUIRE(decodedRes);
+      auto doc = std::move(*decodedRes);
 
       CHECK(doc.version == 1);
       CHECK(doc.root.children.size() == 4);
@@ -219,9 +219,9 @@ namespace ao::gtk::layout::test
 
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
-      auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-      REQUIRE(decoded);
-      auto doc = std::move(*decoded);
+      auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      REQUIRE(decodedRes);
+      auto doc = std::move(*decodedRes);
       doc.templates = makeDefaultLayout().templates;
 
       auto const compPtr = fixture.layoutRuntime().build(ctx, preparedLayout(doc));

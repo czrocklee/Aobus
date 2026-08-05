@@ -92,8 +92,8 @@ namespace ao::library::test
 
   void initializeLibraryStorage(std::filesystem::path const& path)
   {
-    auto const library = openTestMusicLibrary(path, path);
-    REQUIRE(library);
+    auto const libraryRes = openTestMusicLibrary(path, path);
+    REQUIRE(libraryRes);
   }
 
   void requireCorruptOpen(std::filesystem::path const& path)
@@ -110,13 +110,13 @@ namespace ao::library::test
 
   TrackId requireCreate(MusicLibrary& library, WriteTransaction& transaction, TrackBuilder const& builder)
   {
-    auto prepared = builder.prepare(transaction, library.resources());
-    REQUIRE(prepared);
+    auto preparedRes = builder.prepare(transaction, library.resources());
+    REQUIRE(preparedRes);
 
     auto writer = library.tracks().writer(transaction);
-    auto created = createPreparedTrackRecord(writer, prepared->first, prepared->second);
-    REQUIRE(created);
-    return *created;
+    auto createdRes = createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
+    REQUIRE(createdRes);
+    return *createdRes;
   }
 
   TrackId createCommittedTrack(MusicLibrary& library, TrackBuilder const& builder)

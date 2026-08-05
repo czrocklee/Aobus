@@ -63,7 +63,7 @@ namespace ao::audio::test
 
     // Helpers for tests
     void setMockPropertyInfo(PropertyId id, PropertyInfo const& info);
-    void setOpenResult(Result<> res);
+    void setOpenResult(Result<> resRes);
     void setPrewarmEncoding(std::optional<SampleEncoding> optEncoding);
     void setSelectedEncoding(std::optional<SampleEncoding> optEncoding);
 
@@ -98,7 +98,7 @@ namespace ao::audio::test
     std::function<void(std::string_view)> _eventObserver;
     RenderTarget* _target = nullptr;
     PcmFormat _format{};
-    Result<> _openResult{};
+    Result<> _openRes{};
     std::optional<SampleEncoding> _optPrewarmEncoding;
     std::optional<SampleEncoding> _optSelectedEncoding;
     std::optional<std::uint8_t> _optEndpointPrecisionBits;

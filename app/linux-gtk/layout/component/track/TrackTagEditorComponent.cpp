@@ -81,17 +81,17 @@ namespace ao::gtk::layout
       {
         if (_tagEditSessionPtr == nullptr || !std::ranges::equal(_tagEditSessionPtr->targetIds(), _currentTrackIds))
         {
-          auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, _currentTrackIds);
+          auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _currentTrackIds);
 
-          if (!sessionResult)
+          if (!sessionRes)
           {
-            APP_LOG_ERROR("Tag edit could not start: {}", sessionResult.error().message);
+            APP_LOG_ERROR("Tag edit could not start: {}", sessionRes.error().message);
             _notifications.post(
-              rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
+              rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
             return;
           }
 
-          _tagEditSessionPtr = std::move(*sessionResult);
+          _tagEditSessionPtr = std::move(*sessionRes);
         }
 
         auto const result = uimodel::applyTagEdit(*_tagEditSessionPtr, tagsToAdd, tagsToRemove);

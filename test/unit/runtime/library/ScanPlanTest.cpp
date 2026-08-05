@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/ScanPlan.h>
+
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -15,7 +17,6 @@
 #include <ao/media/file/File.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/rt/library/LibraryScan.h>
-#include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Xxh3.h>
@@ -138,14 +139,14 @@ namespace ao::rt::test
 
     AudioIdentity requireAudioIdentity(std::filesystem::path const& path)
     {
-      auto fileResult = media::file::File::open(path);
-      REQUIRE(fileResult);
+      auto fileRes = media::file::File::open(path);
+      REQUIRE(fileRes);
 
-      auto payloadResult = fileResult->audioPayload();
-      REQUIRE(payloadResult);
+      auto payloadRes = fileRes->audioPayload();
+      REQUIRE(payloadRes);
 
-      return AudioIdentity{.payloadLength = static_cast<std::uint64_t>(payloadResult->bytes.size()),
-                           .signature = utility::xxh3Hash128(payloadResult->bytes)};
+      return AudioIdentity{.payloadLength = static_cast<std::uint64_t>(payloadRes->bytes.size()),
+                           .signature = utility::xxh3Hash128(payloadRes->bytes)};
     }
 
     void putManifestEntry(library::MusicLibrary& ml, std::string_view uri, TrackId trackId, AudioIdentity identity)
@@ -459,28 +460,28 @@ namespace ao::rt::test
     CHECK(plan.count(ScanClassification::Missing) == 2);
     CHECK(plan.size() == 4);
 
-    auto invalidSourceResult = attemptRelink(plan, "old/not-found.flac", "disc-1/copy-a.flac");
-    REQUIRE_FALSE(invalidSourceResult);
-    CHECK(invalidSourceResult.error().code == Error::Code::InvalidInput);
+    auto invalidSourceRes = attemptRelink(plan, "old/not-found.flac", "disc-1/copy-a.flac");
+    REQUIRE_FALSE(invalidSourceRes);
+    CHECK(invalidSourceRes.error().code == Error::Code::InvalidInput);
     CHECK(plan.size() == 4);
 
-    auto invalidDestinationResult = attemptRelink(plan, "old/copy-a.flac", "disc-3/not-found.flac");
-    REQUIRE_FALSE(invalidDestinationResult);
-    CHECK(invalidDestinationResult.error().code == Error::Code::InvalidInput);
+    auto invalidDestinationRes = attemptRelink(plan, "old/copy-a.flac", "disc-3/not-found.flac");
+    REQUIRE_FALSE(invalidDestinationRes);
+    CHECK(invalidDestinationRes.error().code == Error::Code::InvalidInput);
     CHECK(plan.size() == 4);
 
-    auto relinkResult = attemptRelink(plan, "old/copy-a.flac", "disc-1/copy-a.flac");
-    REQUIRE(relinkResult);
-    REQUIRE(relinkResult->size() == 1);
-    auto const& relinkItem = relinkResult->items().front();
+    auto relinkRes = attemptRelink(plan, "old/copy-a.flac", "disc-1/copy-a.flac");
+    REQUIRE(relinkRes);
+    REQUIRE(relinkRes->size() == 1);
+    auto const& relinkItem = relinkRes->items().front();
     CHECK(relinkItem.classification == ScanClassification::Moved);
     CHECK(relinkItem.oldUri == "old/copy-a.flac");
     CHECK(relinkItem.uri == "disc-1/copy-a.flac");
     CHECK(relinkItem.trackId == TrackId{100});
 
-    auto consumedResult = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr}.run();
-    REQUIRE_FALSE(consumedResult);
-    CHECK(consumedResult.error().code == Error::Code::InvalidState);
+    auto consumedRes = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr}.run();
+    REQUIRE_FALSE(consumedRes);
+    CHECK(consumedRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities", "[runtime][unit][library][scan]")
@@ -560,12 +561,12 @@ namespace ao::rt::test
     createFile(mediaPath);
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
-    auto const plan = LibraryScan{library}.buildPlan();
+    auto const planRes = LibraryScan{library}.buildPlan();
 
-    REQUIRE(plan);
-    REQUIRE(plan->size() == 1);
-    CHECK(plan->items().front().uri == expected);
-    CHECK(plan->items().front().fullPath == mediaPath);
+    REQUIRE(planRes);
+    REQUIRE(planRes->size() == 1);
+    CHECK(planRes->items().front().uri == expected);
+    CHECK(planRes->items().front().fullPath == mediaPath);
   }
 
   TEST_CASE("ScanPlan - rejects file symlinks escaping the music root", "[runtime][unit][library-scan][uri]")

@@ -38,12 +38,12 @@ namespace ao::lmdb::test
     SECTION("lmdbError captures the caller and classifies the code")
     {
       auto const expectedLine = std::source_location::current().line() + 1;
-      auto const error = Result<>{lmdbError("mdb_put", MDB_KEYEXIST)};
+      auto const errorRes = Result<>{lmdbError("mdb_put", MDB_KEYEXIST)};
 
-      REQUIRE_FALSE(error);
-      CHECK(error.error().code == Error::Code::Conflict);
-      CHECK(error.error().location.line() == expectedLine);
-      CHECK(std::string_view{error.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
+      REQUIRE_FALSE(errorRes);
+      CHECK(errorRes.error().code == Error::Code::Conflict);
+      CHECK(errorRes.error().location.line() == expectedLine);
+      CHECK(std::string_view{errorRes.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
     }
 
     SECTION("Unmapped failures collapse to IoError")

@@ -95,18 +95,18 @@ namespace ao::library
   Result<ValidatedFileManifestEntry> validateFileManifestEntry(std::span<std::byte const> const rawKey,
                                                                std::span<std::byte const> const payload)
   {
-    auto uri = validateManifestKey(rawKey);
+    auto uriRes = validateManifestKey(rawKey);
 
-    if (!uri)
+    if (!uriRes)
     {
-      return std::unexpected{uri.error()};
+      return std::unexpected{uriRes.error()};
     }
 
-    if (auto const validation = validateFileManifestPayload(payload); !validation)
+    if (auto const validationRes = validateFileManifestPayload(payload); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
-    return ValidatedFileManifestEntry{.uri = *uri};
+    return ValidatedFileManifestEntry{.uri = *uriRes};
   }
 } // namespace ao::library

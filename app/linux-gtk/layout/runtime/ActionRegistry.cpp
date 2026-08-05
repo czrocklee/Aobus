@@ -4,7 +4,6 @@
 #include "layout/runtime/ActionRegistry.h"
 
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <algorithm>
@@ -42,7 +41,7 @@ namespace ao::gtk::layout
     return _catalog.descriptors();
   }
 
-  uimodel::LayoutActionAvailability ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
+  ActionAvailability ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
   {
     auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 
@@ -51,7 +50,7 @@ namespace ao::gtk::layout
       return it->stateProvider(ctx);
     }
 
-    return uimodel::LayoutActionAvailability{.enabled = true, .disabledReason = ""};
+    return ActionAvailability{.enabled = true, .disabledReason = ""};
   }
 
   bool ActionRegistry::activate(std::string_view id, ActionActivationContext& ctx) const

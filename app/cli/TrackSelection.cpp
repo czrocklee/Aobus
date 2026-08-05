@@ -39,30 +39,30 @@ namespace ao::cli
       return ids;
     }
 
-    auto const expr = query::parse(filter);
+    auto const exprRes = query::parse(filter);
 
-    if (!expr)
+    if (!exprRes)
     {
-      auto const& error = expr.error();
+      auto const& error = exprRes.error();
       throwCommandError(error, "filter error: {}{}", error.message, queryFilterUsageHint());
     }
 
-    auto const plan = query::compileQuery(*expr);
+    auto const planRes = query::compileQuery(*exprRes);
 
-    if (!plan)
+    if (!planRes)
     {
-      auto const& error = plan.error();
+      auto const& error = planRes.error();
       throwCommandError(error, "filter error: {}{}", error.message, queryFilterUsageHint());
     }
 
     auto evaluator = query::PlanEvaluator{};
     auto dictionaryCache = library::DictionaryReadCache{library.dictionary()};
     auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
-    auto binding = query::PlanBinding{*plan, dictionaryContext};
+    auto binding = query::PlanBinding{*planRes, dictionaryContext};
 
     for (auto const& [id, view] : reader)
     {
-      if (!query::hasRequiredTrackData(plan->accessProfile, view))
+      if (!query::hasRequiredTrackData(planRes->accessProfile, view))
       {
         throwCommandError(Error::Code::CorruptData, "track {} contains invalid data required by the filter", id);
       }

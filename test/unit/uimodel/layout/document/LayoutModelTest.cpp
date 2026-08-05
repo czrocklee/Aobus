@@ -50,10 +50,10 @@ namespace ao::uimodel::test
         auto parsed = ryml::Tree{};
         ryml::parse_in_arena(ryml::to_csubstr(emitted), &parsed);
 
-        auto decoded = readLayoutValue(parsed.rootref(), "test string");
-        REQUIRE(decoded);
-        REQUIRE(decoded->getIf<std::string>() != nullptr);
-        CHECK(decoded->asString() == value);
+        auto decodedRes = readLayoutValue(parsed.rootref(), "test string");
+        REQUIRE(decodedRes);
+        REQUIRE(decodedRes->getIf<std::string>() != nullptr);
+        CHECK(decodedRes->asString() == value);
       }
     }
 
@@ -73,10 +73,10 @@ namespace ao::uimodel::test
       CHECK(yaml::scalarView(tree3.rootref()) == "true");
       CHECK(yaml::asBool(tree3.rootref()) == true);
 
-      auto decoded = readLayoutValue(tree3.rootref(), "test value");
-      REQUIRE(decoded);
-      REQUIRE(decoded->getIf<bool>() != nullptr);
-      CHECK(decoded->asBool() == true);
+      auto decodedRes = readLayoutValue(tree3.rootref(), "test value");
+      REQUIRE(decodedRes);
+      REQUIRE(decodedRes->getIf<bool>() != nullptr);
+      CHECK(decodedRes->asBool() == true);
 
       auto const falseValue = LayoutValue{false};
       auto falseTree = ryml::Tree{};
@@ -110,14 +110,14 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{};
     REQUIRE(writeLayoutNode(tree.rootref(), node));
 
-    auto decoded = readLayoutNode(tree.rootref(), "test node");
-    REQUIRE(decoded);
+    auto decodedRes = readLayoutNode(tree.rootref(), "test node");
+    REQUIRE(decodedRes);
 
-    CHECK(decoded->type == "box");
-    CHECK(decoded->id == "main");
-    CHECK(decoded->props.at("spacing").asInt() == 10);
-    CHECK(decoded->children.size() == 1);
-    CHECK(decoded->children[0].type == "spacer");
+    CHECK(decodedRes->type == "box");
+    CHECK(decodedRes->id == "main");
+    CHECK(decodedRes->props.at("spacing").asInt() == 10);
+    CHECK(decodedRes->children.size() == 1);
+    CHECK(decodedRes->children[0].type == "spacer");
   }
 
   TEST_CASE("LayoutDocument - round-trip preserves layout props and child order", "[uimodel][unit][layout][document]")
@@ -142,17 +142,17 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{};
     REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));
 
-    auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-    REQUIRE(decoded);
+    auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+    REQUIRE(decodedRes);
 
-    REQUIRE(decoded->root.children.size() == 2);
-    CHECK(decoded->root.children[0].type == "spacer");
-    CHECK(decoded->root.children[0].layout.at("hexpand").asBool() == true);
-    CHECK(decoded->root.children[0].layout.at("vexpand").asBool() == true);
-    CHECK(decoded->root.children[1].type == "scroll");
-    CHECK(decoded->root.children[1].id == "scroller");
-    CHECK(decoded->root.children[1].layout.at("vexpand").asBool() == true);
-    CHECK(decoded->root.children[1].props.at("hscrollPolicy").asString() == "never");
+    REQUIRE(decodedRes->root.children.size() == 2);
+    CHECK(decodedRes->root.children[0].type == "spacer");
+    CHECK(decodedRes->root.children[0].layout.at("hexpand").asBool() == true);
+    CHECK(decodedRes->root.children[0].layout.at("vexpand").asBool() == true);
+    CHECK(decodedRes->root.children[1].type == "scroll");
+    CHECK(decodedRes->root.children[1].id == "scroller");
+    CHECK(decodedRes->root.children[1].layout.at("vexpand").asBool() == true);
+    CHECK(decodedRes->root.children[1].props.at("hscrollPolicy").asString() == "never");
   }
 
   TEST_CASE("LayoutDocument - round-trip preserves action-id props", "[uimodel][unit][layout][document]")
@@ -165,12 +165,12 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{};
     REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));
 
-    auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-    REQUIRE(decoded);
+    auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+    REQUIRE(decodedRes);
 
-    CHECK(decoded->root.type == "playback.qualityIndicator");
-    CHECK(decoded->root.props.at("primaryAction").asString() == "playback.playPause");
-    CHECK(decoded->root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
+    CHECK(decodedRes->root.type == "playback.qualityIndicator");
+    CHECK(decodedRes->root.props.at("primaryAction").asString() == "playback.playPause");
+    CHECK(decodedRes->root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
   }
 
   TEST_CASE("LayoutDocument - round-trip preserves tooltip", "[uimodel][unit][layout][document]")
@@ -187,14 +187,14 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{};
     REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));
 
-    auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-    REQUIRE(decoded);
+    auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+    REQUIRE(decodedRes);
 
-    CHECK(decoded->root.type == "playback.qualityIndicator");
-    REQUIRE(decoded->root.optTooltip);
-    REQUIRE(decoded->root.optTooltip->nodePtr != nullptr);
-    CHECK(decoded->root.optTooltip->nodePtr->type == "playback.audioPipelinePanel");
-    CHECK(decoded->root.optTooltip->nodePtr->props.at("variant").asString() == "tooltip");
+    CHECK(decodedRes->root.type == "playback.qualityIndicator");
+    REQUIRE(decodedRes->root.optTooltip);
+    REQUIRE(decodedRes->root.optTooltip->nodePtr != nullptr);
+    CHECK(decodedRes->root.optTooltip->nodePtr->type == "playback.audioPipelinePanel");
+    CHECK(decodedRes->root.optTooltip->nodePtr->props.at("variant").asString() == "tooltip");
   }
 
   TEST_CASE("LayoutModel - YAML deserialization tolerates missing optional fields", "[uimodel][unit][layout][document]")
@@ -207,13 +207,13 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{yaml::callbacks()};
     ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
 
-    auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-    REQUIRE(decoded);
-    CHECK(decoded->version == 1);
-    CHECK(decoded->root.type == "box");
-    CHECK(decoded->root.id.empty());
-    CHECK(decoded->root.children.empty());
-    CHECK(decoded->root.props.empty());
+    auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+    REQUIRE(decodedRes);
+    CHECK(decodedRes->version == 1);
+    CHECK(decodedRes->root.type == "box");
+    CHECK(decodedRes->root.id.empty());
+    CHECK(decodedRes->root.children.empty());
+    CHECK(decodedRes->root.props.empty());
   }
 
   TEST_CASE("LayoutModel - YAML deserialization tolerates fields set to empty string",
@@ -228,10 +228,10 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{yaml::callbacks()};
     ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
 
-    auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-    REQUIRE(decoded);
-    CHECK(decoded->root.type == "spacer");
-    CHECK(decoded->root.id.empty());
+    auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+    REQUIRE(decodedRes);
+    CHECK(decodedRes->root.type == "spacer");
+    CHECK(decodedRes->root.id.empty());
   }
 
   TEST_CASE("LayoutDocumentYamlSchema - rejects malformed and unsupported documents", "[uimodel][unit][layout][schema]")
@@ -245,10 +245,10 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      auto const decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Unknown structural fields are rejected")
@@ -261,11 +261,11 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      auto const decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("unexpected"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("unexpected"));
     }
 
     SECTION("Missing required node type is rejected")
@@ -277,11 +277,11 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      auto const decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("type"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("type"));
     }
 
     SECTION("Every scalar-list item must be a scalar")
@@ -297,11 +297,11 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      auto const decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("cssClasses"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("cssClasses"));
     }
   }
 
@@ -311,9 +311,9 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{};
     REQUIRE(writeLayoutValue(tree.rootref(), v));
 
-    auto decoded = readLayoutValue(tree.rootref(), "test double");
-    REQUIRE(decoded);
-    CHECK(decoded->asDouble() == 3.14);
+    auto decodedRes = readLayoutValue(tree.rootref(), "test double");
+    REQUIRE(decodedRes);
+    CHECK(decodedRes->asDouble() == 3.14);
   }
 
   TEST_CASE("LayoutValue - coercion returns typed optional values", "[uimodel][unit][layout][document]")

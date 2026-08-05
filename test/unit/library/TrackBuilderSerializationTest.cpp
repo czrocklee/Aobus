@@ -363,30 +363,30 @@ namespace ao::library::test
     auto context = TrackSerializationFixture{};
     auto original = TrackBuilder::makeEmpty();
     original.metadata().title("Hot baseline");
-    auto hotData = context.trySerializeHot(original);
-    REQUIRE(hotData);
-    auto const hotView = TrackView{*hotData, {}};
+    auto hotDataRes = context.trySerializeHot(original);
+    REQUIRE(hotDataRes);
+    auto const hotView = TrackView{*hotDataRes, {}};
 
     auto builder = TrackBuilder::fromHotView(hotView, context.dictionary());
-    auto serializedHot = builder.serializeHot(context.transaction());
-    REQUIRE(serializedHot);
-    CHECK(TrackView{*serializedHot, {}}.metadata().title() == "Hot baseline");
+    auto serializedHotRes = builder.serializeHot(context.transaction());
+    REQUIRE(serializedHotRes);
+    CHECK(TrackView{*serializedHotRes, {}}.metadata().title() == "Hot baseline");
 
-    auto serializedCold = builder.serializeCold(context.transaction(), context.resources());
-    REQUIRE_FALSE(serializedCold);
-    CHECK(serializedCold.error().code == Error::Code::InvalidState);
+    auto serializedColdRes = builder.serializeCold(context.transaction(), context.resources());
+    REQUIRE_FALSE(serializedColdRes);
+    CHECK(serializedColdRes.error().code == Error::Code::InvalidState);
 
-    auto serializedComplete = builder.serialize(context.transaction(), context.resources());
-    REQUIRE_FALSE(serializedComplete);
-    CHECK(serializedComplete.error().code == Error::Code::InvalidState);
+    auto serializedCompleteRes = builder.serialize(context.transaction(), context.resources());
+    REQUIRE_FALSE(serializedCompleteRes);
+    CHECK(serializedCompleteRes.error().code == Error::Code::InvalidState);
 
-    auto preparedCold = builder.prepareCold(context.transaction(), context.resources());
-    REQUIRE_FALSE(preparedCold);
-    CHECK(preparedCold.error().code == Error::Code::InvalidState);
+    auto preparedColdRes = builder.prepareCold(context.transaction(), context.resources());
+    REQUIRE_FALSE(preparedColdRes);
+    CHECK(preparedColdRes.error().code == Error::Code::InvalidState);
 
-    auto preparedComplete = builder.prepare(context.transaction(), context.resources());
-    REQUIRE_FALSE(preparedComplete);
-    CHECK(preparedComplete.error().code == Error::Code::InvalidState);
+    auto preparedCompleteRes = builder.prepare(context.transaction(), context.resources());
+    REQUIRE_FALSE(preparedCompleteRes);
+    CHECK(preparedCompleteRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("TrackBuilder - serialized views expose property and metadata fields",

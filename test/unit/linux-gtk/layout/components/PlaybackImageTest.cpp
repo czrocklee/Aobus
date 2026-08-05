@@ -118,9 +118,9 @@ namespace ao::gtk::layout::test
     void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)
     {
       runtime.reloadAllTracks();
-      auto const view = runtime.workspace().navigate({.target = rt::kAllTracksListId});
-      REQUIRE(view);
-      REQUIRE(runtime.playback().commands().startFromView(*view, trackId));
+      auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
+      REQUIRE(viewRes);
+      REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
       REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
     }
   } // namespace
@@ -448,9 +448,9 @@ namespace ao::gtk::layout::test
 
       // Advancing straight to another track whose cover is already decoded never passes through
       // an unavailable state, so nothing reports a transition; availability must still hold.
-      auto const view = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
-      REQUIRE(view);
-      REQUIRE(fixture.runtime().playback().commands().startFromView(*view, mutableCoverTrackId));
+      auto const viewRes = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
+      REQUIRE(viewRes);
+      REQUIRE(fixture.runtime().playback().commands().startFromView(*viewRes, mutableCoverTrackId));
       REQUIRE(ao::gtk::test::waitForPlaybackSettlement(fixture.runtime(), mutableCoverTrackId));
       ao::gtk::test::drainGtkEvents();
 

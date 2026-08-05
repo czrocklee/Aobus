@@ -97,8 +97,8 @@ namespace ao::rt::test
             "[runtime][unit][library-authoring]")
   {
     auto fixture = AuthoringFixture{};
-    auto boundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
-    REQUIRE(boundResult);
+    auto boundRes = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
+    REQUIRE(boundRes);
 
     auto order = std::vector<std::string>{};
     bool reboundFromAvailability = false;
@@ -112,20 +112,20 @@ namespace ao::rt::test
         if (availability.state == LibraryAuthoringState::Available)
         {
           order.emplace_back("available");
-          auto reboundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
-          reboundFromAvailability = reboundResult && reboundResult->libraryRevision() == availability.libraryRevision;
+          auto reboundRes = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
+          reboundFromAvailability = reboundRes && reboundRes->libraryRevision() == availability.libraryRevision;
         }
       });
 
     auto patch = MetadataPatch{};
     patch.optTitle = "After";
-    auto authoringResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
+    auto authoringRes = fixture.runtimeLibrary().writer().updateMetadata(*boundRes, patch);
 
-    REQUIRE(authoringResult);
-    CHECK(authoringResult->status == TrackAuthoringStatus::Applied);
-    REQUIRE(authoringResult->optNextTargets);
-    CHECK(authoringResult->optNextTargets->libraryRevision() == boundResult->libraryRevision() + 1U);
-    CHECK(std::ranges::equal(authoringResult->optNextTargets->trackIds(), boundResult->trackIds()));
+    REQUIRE(authoringRes);
+    CHECK(authoringRes->status == TrackAuthoringStatus::Applied);
+    REQUIRE(authoringRes->optNextTargets);
+    CHECK(authoringRes->optNextTargets->libraryRevision() == boundRes->libraryRevision() + 1U);
+    CHECK(std::ranges::equal(authoringRes->optNextTargets->trackIds(), boundRes->trackIds()));
     CHECK(order == std::vector<std::string>{"replica", "change", "available"});
     CHECK(reboundFromAvailability);
     CHECK(fixture.title() == "After");
@@ -135,22 +135,21 @@ namespace ao::rt::test
             "[runtime][unit][library-authoring][concurrency]")
   {
     auto fixture = AuthoringFixture{};
-    auto boundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
-    REQUIRE(boundResult);
+    auto boundRes = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
+    REQUIRE(boundRes);
     bool nestedMutationRejected = false;
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
       [&](LibraryChangeSet const&) noexcept
       {
-        auto nestedResult =
+        auto nestedRes =
           fixture.runtimeLibrary().writer().createList(LibraryWriter::ListDraft{.name = "Nested mutation"});
-        nestedMutationRejected = !nestedResult && nestedResult.error().code == Error::Code::InvalidState;
+        nestedMutationRejected = !nestedRes && nestedRes.error().code == Error::Code::InvalidState;
       });
 
-    auto authoringResult =
-      fixture.runtimeLibrary().writer().updateMetadata(*boundResult, MetadataPatch{.optTitle = "After"});
+    auto authoringRes = fixture.runtimeLibrary().writer().updateMetadata(*boundRes, MetadataPatch{.optTitle = "After"});
 
-    REQUIRE(authoringResult);
-    CHECK(authoringResult->status == TrackAuthoringStatus::Applied);
+    REQUIRE(authoringRes);
+    CHECK(authoringRes->status == TrackAuthoringStatus::Applied);
     CHECK(nestedMutationRejected);
   }
 
@@ -192,16 +191,15 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
     auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
-    auto failureResult =
-      mutation.apply([&musicLibrary, &oversizedValue](library::WriteTransaction& transaction)
-                     { return musicLibrary.resources().writer(transaction).create(oversizedValue); });
+    auto failureRes = mutation.apply([&musicLibrary, &oversizedValue](library::WriteTransaction& transaction)
+                                     { return musicLibrary.resources().writer(transaction).create(oversizedValue); });
 
-    REQUIRE_FALSE(failureResult);
-    CHECK(failureResult.error().code == Error::Code::IoError);
+    REQUIRE_FALSE(failureRes);
+    CHECK(failureRes.error().code == Error::Code::IoError);
 
-    auto commitResult = mutation.commit(LibraryChangeSet{});
-    REQUIRE_FALSE(commitResult);
-    CHECK(commitResult.error().code == Error::Code::InvalidState);
+    auto commitRes = mutation.commit(LibraryChangeSet{});
+    REQUIRE_FALSE(commitRes);
+    CHECK(commitRes.error().code == Error::Code::InvalidState);
 
     // A failed mutation must release admission before its wrapper is destroyed.
     REQUIRE(mutationService.beginInteractiveMutation());
@@ -221,11 +219,11 @@ namespace ao::rt::test
     SECTION("Result error")
     {
       auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-      auto failureResult = mutation.apply([](library::WriteTransaction&) -> Result<>
-                                          { return makeError(Error::Code::Conflict, "rejected"); });
+      auto failureRes = mutation.apply([](library::WriteTransaction&) -> Result<>
+                                       { return makeError(Error::Code::Conflict, "rejected"); });
 
-      REQUIRE_FALSE(failureResult);
-      CHECK(failureResult.error().code == Error::Code::Conflict);
+      REQUIRE_FALSE(failureRes);
+      CHECK(failureRes.error().code == Error::Code::Conflict);
       REQUIRE(mutationService.beginInteractiveMutation());
     }
 
@@ -243,8 +241,8 @@ namespace ao::rt::test
   TEST_CASE("Library authoring - semantic no-op preserves the current binding", "[runtime][unit][library-authoring]")
   {
     auto fixture = AuthoringFixture{};
-    auto boundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
-    REQUIRE(boundResult);
+    auto boundRes = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
+    REQUIRE(boundRes);
 
     std::size_t changedCount = 0;
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
@@ -252,13 +250,13 @@ namespace ao::rt::test
     auto patch = MetadataPatch{};
     patch.optTitle = "Before";
 
-    auto authoringResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
+    auto authoringRes = fixture.runtimeLibrary().writer().updateMetadata(*boundRes, patch);
 
-    REQUIRE(authoringResult);
-    CHECK(authoringResult->status == TrackAuthoringStatus::NoOp);
-    CHECK_FALSE(authoringResult->optNextTargets);
+    REQUIRE(authoringRes);
+    CHECK(authoringRes->status == TrackAuthoringStatus::NoOp);
+    CHECK_FALSE(authoringRes->optNextTargets);
     CHECK(changedCount == 0);
-    CHECK(fixture.runtimeLibrary().authoringAvailability().libraryRevision == boundResult->libraryRevision());
+    CHECK(fixture.runtimeLibrary().authoringAvailability().libraryRevision == boundRes->libraryRevision());
     CHECK(fixture.title() == "Before");
   }
 
@@ -281,26 +279,26 @@ namespace ao::rt::test
 
         if (availability.state == LibraryAuthoringState::Available)
         {
-          auto nestedResult = mutationService.beginInteractiveMutation();
-          nestedMutationRejected = !nestedResult && nestedResult.error().code == Error::Code::InvalidState;
+          auto nestedRes = mutationService.beginInteractiveMutation();
+          nestedMutationRejected = !nestedRes && nestedRes.error().code == Error::Code::InvalidState;
         }
       });
 
-    auto invalidResult = mutationService.beginMaintenance(LibraryMaintenanceKind::None);
-    REQUIRE_FALSE(invalidResult);
-    CHECK(invalidResult.error().code == Error::Code::InvalidInput);
+    auto invalidRes = mutationService.beginMaintenance(LibraryMaintenanceKind::None);
+    REQUIRE_FALSE(invalidRes);
+    CHECK(invalidRes.error().code == Error::Code::InvalidInput);
 
     {
-      auto maintenanceResult = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
-      REQUIRE(maintenanceResult);
-      auto maintenance = std::move(*maintenanceResult);
+      auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
+      REQUIRE(maintenanceRes);
+      auto maintenance = std::move(*maintenanceRes);
       auto const availability = mutationService.availability();
       CHECK(availability.state == LibraryAuthoringState::Maintenance);
       CHECK(availability.maintenanceKind == LibraryMaintenanceKind::ScanApply);
       CHECK_FALSE(mutationService.beginInteractiveMutation());
-      auto const listOrderBinding = mutationService.bindListOrder(kAllTracksListId, std::span<TrackId const>{});
-      REQUIRE_FALSE(listOrderBinding);
-      CHECK(listOrderBinding.error().code == Error::Code::InvalidState);
+      auto const listOrderBindingRes = mutationService.bindListOrder(kAllTracksListId, std::span<TrackId const>{});
+      REQUIRE_FALSE(listOrderBindingRes);
+      CHECK(listOrderBindingRes.error().code == Error::Code::InvalidState);
     }
 
     auto const availability = mutationService.availability();
@@ -354,9 +352,9 @@ namespace ao::rt::test
     auto firstMutationService = LibraryMutationService{executor, std::move(firstWritable), firstChanges};
     auto secondMutationService = LibraryMutationService{executor, std::move(secondWritable), secondChanges};
     auto foreignTargets = ao::test::requireValue(firstMutationService.bindTrackTargets(std::array{firstTrackId}));
-    auto maintenanceResult = secondMutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
-    REQUIRE(maintenanceResult);
-    auto maintenance = std::move(*maintenanceResult);
+    auto maintenanceRes = secondMutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    REQUIRE(maintenanceRes);
+    auto maintenance = std::move(*maintenanceRes);
 
     auto const start = secondMutationService.beginAuthoringMutation(foreignTargets);
 
@@ -368,8 +366,8 @@ namespace ao::rt::test
             "[runtime][unit][library-authoring]")
   {
     auto fixture = AuthoringFixture{};
-    auto boundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
-    REQUIRE(boundResult);
+    auto boundRes = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
+    REQUIRE(boundRes);
 
     auto draft = LibraryWriter::ListDraft{
       .name = "Unrelated",
@@ -378,11 +376,11 @@ namespace ao::rt::test
 
     auto patch = MetadataPatch{};
     patch.optTitle = "Should not apply";
-    auto authoringResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
+    auto authoringRes = fixture.runtimeLibrary().writer().updateMetadata(*boundRes, patch);
 
-    REQUIRE(authoringResult);
-    CHECK(authoringResult->status == TrackAuthoringStatus::Stale);
-    CHECK(authoringResult->reply.changes.empty());
+    REQUIRE(authoringRes);
+    CHECK(authoringRes->status == TrackAuthoringStatus::Stale);
+    CHECK(authoringRes->reply.changes.empty());
     CHECK(fixture.title() == "Before");
   }
 } // namespace ao::rt::test

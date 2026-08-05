@@ -103,10 +103,10 @@ namespace ao::gtk::platform::test
     {
       auto transaction = library::test::writeTransaction(library);
       auto writer = library.resources().writer(transaction);
-      auto resourceId = writer.create(bytes);
-      REQUIRE(resourceId);
+      auto resourceIdRes = writer.create(bytes);
+      REQUIRE(resourceIdRes);
       REQUIRE(transaction.commit());
-      return *resourceId;
+      return *resourceIdRes;
     }
 
     std::filesystem::path pathFromFileUrl(std::string const& url)

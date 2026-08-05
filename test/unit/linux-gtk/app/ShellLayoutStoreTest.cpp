@@ -43,13 +43,13 @@ namespace ao::gtk::test
       REQUIRE(store.save(doc, "classic"));
 
       auto const store2 = ShellLayoutStore{layoutsDir};
-      auto const loaded = store2.load("classic");
+      auto const loadedRes = store2.load("classic");
 
-      REQUIRE(loaded);
-      REQUIRE(*loaded);
-      CHECK((*loaded)->version == uimodel::kLayoutDocumentVersion);
-      CHECK((*loaded)->root.type == "box");
-      CHECK((*loaded)->root.id == "my-root");
+      REQUIRE(loadedRes);
+      REQUIRE(*loadedRes);
+      CHECK((*loadedRes)->version == uimodel::kLayoutDocumentVersion);
+      CHECK((*loadedRes)->root.type == "box");
+      CHECK((*loadedRes)->root.id == "my-root");
     }
 
     SECTION("load reports a corrupted file")

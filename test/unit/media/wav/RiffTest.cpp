@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/media/wav/Riff.h>
+
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/Error.h>
-#include <ao/media/wav/Riff.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,10 +28,10 @@ namespace ao::media::wav::test
   TEST_CASE("WAV RIFF parser - reads real PCM fixture layout", "[media][unit][wav]")
   {
     auto const bytes = audio::test::readFileBytes(audio::test::requireAudioFixture("basic_metadata.wav"));
-    auto parsedResult = parseWave(asBytes(bytes));
+    auto parsedRes = parseWave(asBytes(bytes));
 
-    REQUIRE(parsedResult);
-    auto const& parsed = *parsedResult;
+    REQUIRE(parsedRes);
+    auto const& parsed = *parsedRes;
     CHECK(parsed.format.formatTag == kFormatPcm);
     CHECK(parsed.format.sampleRate == 44100);
     CHECK(parsed.format.channels == 2);
@@ -53,10 +54,10 @@ namespace ao::media::wav::test
   TEST_CASE("WAV RIFF parser - resolves real extensible PCM fixture layout", "[media][unit][wav]")
   {
     auto const bytes = audio::test::readFileBytes(audio::test::requireAudioFixture("hires.wav"));
-    auto parsedResult = parseWave(asBytes(bytes));
+    auto parsedRes = parseWave(asBytes(bytes));
 
-    REQUIRE(parsedResult);
-    auto const& parsed = *parsedResult;
+    REQUIRE(parsedRes);
+    auto const& parsed = *parsedRes;
     CHECK(parsed.format.formatTag == kFormatPcm);
     CHECK(parsed.format.sampleRate == 96000);
     CHECK(parsed.format.channels == 2);
@@ -69,10 +70,10 @@ namespace ao::media::wav::test
   TEST_CASE("WAV RIFF parser - reads real IEEE float fixture layout", "[media][unit][wav]")
   {
     auto const bytes = audio::test::readFileBytes(audio::test::requireAudioFixture("float32.wav"));
-    auto parsedResult = parseWave(asBytes(bytes));
+    auto parsedRes = parseWave(asBytes(bytes));
 
-    REQUIRE(parsedResult);
-    auto const& parsed = *parsedResult;
+    REQUIRE(parsedRes);
+    auto const& parsed = *parsedRes;
     CHECK(parsed.format.formatTag == kFormatIeeeFloat);
     CHECK(parsed.format.sampleRate == 48000);
     CHECK(parsed.format.channels == 2);
@@ -87,13 +88,13 @@ namespace ao::media::wav::test
     auto data = ao::test::wav::makeWav({});
     ao::test::wav::appendTruncatedChunk(data, "JUNK", 100);
 
-    auto requiredResult = parseWave(asBytes(data), WaveParseExtent::RequiredAudio);
-    auto completeResult = parseWave(asBytes(data), WaveParseExtent::Complete);
+    auto requiredRes = parseWave(asBytes(data), WaveParseExtent::RequiredAudio);
+    auto completeRes = parseWave(asBytes(data), WaveParseExtent::Complete);
 
-    REQUIRE(requiredResult);
-    CHECK(requiredResult->data.size() == 2);
-    REQUIRE_FALSE(completeResult);
-    CHECK(completeResult.error().code == Error::Code::CorruptData);
+    REQUIRE(requiredRes);
+    CHECK(requiredRes->data.size() == 2);
+    REQUIRE_FALSE(completeRes);
+    CHECK(completeRes.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("WAV RIFF parser - skips empty data chunks before required audio", "[media][regression][wav]")
@@ -101,13 +102,13 @@ namespace ao::media::wav::test
     auto const emptyData = ao::test::wav::Chunk{.id = {'d', 'a', 't', 'a'}, .payload = {}};
     auto const data = ao::test::wav::makeWav({.extraChunks = {emptyData}});
 
-    auto requiredResult = parseWave(asBytes(data), WaveParseExtent::RequiredAudio);
-    auto completeResult = parseWave(asBytes(data), WaveParseExtent::Complete);
+    auto requiredRes = parseWave(asBytes(data), WaveParseExtent::RequiredAudio);
+    auto completeRes = parseWave(asBytes(data), WaveParseExtent::Complete);
 
-    REQUIRE(requiredResult);
-    CHECK(requiredResult->data.size() == 2);
-    REQUIRE(completeResult);
-    CHECK(completeResult->data.size() == 2);
+    REQUIRE(requiredRes);
+    CHECK(requiredRes->data.size() == 2);
+    REQUIRE(completeRes);
+    CHECK(completeRes->data.size() == 2);
   }
 
   TEST_CASE("WAV RIFF parser - rejects malformed or unsupported RIFF data", "[media][unit][wav]")

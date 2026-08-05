@@ -92,9 +92,9 @@ namespace ao::media::file
 
     auto implPtr = std::make_unique<Impl>();
 
-    if (auto const mappedResult = implPtr->mappedFile.map(path); !mappedResult)
+    if (auto const mappedRes = implPtr->mappedFile.map(path); !mappedRes)
     {
-      auto error = mappedResult.error();
+      auto error = mappedRes.error();
       error.message = std::format("Failed to open media file '{}': {}", utility::pathToUtf8(path), error.message);
       return std::unexpected{std::move(error)};
     }
@@ -115,9 +115,9 @@ namespace ao::media::file
 
   Result<> File::visit(Visitor& visitor) const
   {
-    if (auto const payloadResult = audioPayload(); !payloadResult)
+    if (auto const payloadRes = audioPayload(); !payloadRes)
     {
-      return std::unexpected{payloadResult.error()};
+      return std::unexpected{payloadRes.error()};
     }
 
     if (!_implPtr->optContentResult)

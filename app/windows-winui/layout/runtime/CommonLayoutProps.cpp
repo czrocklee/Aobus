@@ -239,9 +239,9 @@ namespace ao::winui::layout
 
     if (auto const optPlan = planStyleLookup(node, kind); optPlan)
     {
-      if (auto applied = applyStyle(element, *optPlan, resources); !applied)
+      if (auto appliedRes = applyStyle(element, *optPlan, resources); !appliedRes)
       {
-        return applied;
+        return appliedRes;
       }
     }
 

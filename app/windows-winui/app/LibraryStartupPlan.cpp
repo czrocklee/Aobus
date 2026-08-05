@@ -42,18 +42,18 @@ namespace ao::winui
 
     Result<std::filesystem::path> explicitRoot(std::filesystem::path root)
     {
-      auto normalized = absolutePath(std::move(root), "explicit");
+      auto normalizedRes = absolutePath(std::move(root), "explicit");
 
-      if (!normalized)
+      if (!normalizedRes)
       {
-        return std::unexpected{normalized.error()};
+        return std::unexpected{normalizedRes.error()};
       }
 
       auto ec = std::error_code{};
 
-      if (std::filesystem::is_directory(*normalized, ec))
+      if (std::filesystem::is_directory(*normalizedRes, ec))
       {
-        return normalized;
+        return normalizedRes;
       }
 
       if (ec)
@@ -61,16 +61,16 @@ namespace ao::winui
         if (ec == std::errc::no_such_file_or_directory)
         {
           return makeError(Error::Code::NotFound,
-                           std::format("Explicit library root does not exist: '{}'", normalized->generic_string()));
+                           std::format("Explicit library root does not exist: '{}'", normalizedRes->generic_string()));
         }
 
         return makeError(
           Error::Code::IoError,
-          std::format("Cannot access explicit library root '{}': {}", normalized->generic_string(), ec.message()));
+          std::format("Cannot access explicit library root '{}': {}", normalizedRes->generic_string(), ec.message()));
       }
 
       return makeError(Error::Code::NotFound,
-                       std::format("Explicit library root is not a directory: '{}'", normalized->generic_string()));
+                       std::format("Explicit library root is not a directory: '{}'", normalizedRes->generic_string()));
     }
 
     std::optional<std::filesystem::path> persistedRoot(std::string_view const value)
@@ -82,16 +82,16 @@ namespace ao::winui
 
       try
       {
-        auto normalized = absolutePath(utility::pathFromUtf8(value), "persisted");
+        auto normalizedRes = absolutePath(utility::pathFromUtf8(value), "persisted");
 
-        if (!normalized)
+        if (!normalizedRes)
         {
           return std::nullopt;
         }
 
-        if (auto ec = std::error_code{}; std::filesystem::is_directory(*normalized, ec) && !ec)
+        if (auto ec = std::error_code{}; std::filesystem::is_directory(*normalizedRes, ec) && !ec)
         {
-          return *normalized;
+          return *normalizedRes;
         }
       }
       catch (std::exception const&)
@@ -118,16 +118,16 @@ namespace ao::winui
   {
     if (options.optLibraryRoot)
     {
-      auto root = explicitRoot(*options.optLibraryRoot);
+      auto rootRes = explicitRoot(*options.optLibraryRoot);
 
-      if (!root)
+      if (!rootRes)
       {
-        return std::unexpected{root.error()};
+        return std::unexpected{rootRes.error()};
       }
 
-      return LibraryStartupPlan{.libraryRoot = *root,
+      return LibraryStartupPlan{.libraryRoot = *rootRes,
                                 .source = LibraryStartupRootSource::Explicit,
-                                .optSelectedRootCommit = SelectedRootCommit{.root = *root}};
+                                .optSelectedRootCommit = SelectedRootCommit{.root = *rootRes}};
     }
 
     if (auto const optRoot = persistedRoot(settings.lastLibraryPath); optRoot)
@@ -135,14 +135,14 @@ namespace ao::winui
       return LibraryStartupPlan{.libraryRoot = *optRoot, .source = LibraryStartupRootSource::Persisted};
     }
 
-    auto fallback = absolutePath(std::move(emptyLibraryRoot), "empty-library fallback");
+    auto fallbackRes = absolutePath(std::move(emptyLibraryRoot), "empty-library fallback");
 
-    if (!fallback)
+    if (!fallbackRes)
     {
-      return std::unexpected{fallback.error()};
+      return std::unexpected{fallbackRes.error()};
     }
 
-    return LibraryStartupPlan{.libraryRoot = *fallback, .source = LibraryStartupRootSource::EmptyLibraryFallback};
+    return LibraryStartupPlan{.libraryRoot = *fallbackRes, .source = LibraryStartupRootSource::EmptyLibraryFallback};
   }
 
   void commitSelectedRoot(LibraryStartupPlan const& plan, DesktopSettings& settings)

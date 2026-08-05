@@ -84,18 +84,18 @@ namespace ao::winui
 
       implementation = winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>());
 
-      if (auto activated = implementation->activate(); !activated)
+      if (auto activatedRes = implementation->activate(); !activatedRes)
       {
         retire();
-        return activated;
+        return activatedRes;
       }
 
       // The explicit successor root becomes durable only after both the native
       // window and its process-wide adapters are active. A failed save leaves
       // the usable process live and later settings saves retry the in-memory root.
-      if (auto committed = _sessionPtr->commitSelectedRoot(); !committed)
+      if (auto committedRes = _sessionPtr->commitSelectedRoot(); !committedRes)
       {
-        APP_LOG_WARN("LibraryWindowSession: failed to persist the selected library: {}", committed.error().message);
+        APP_LOG_WARN("LibraryWindowSession: failed to persist the selected library: {}", committedRes.error().message);
       }
 
       if (_sessionPtr->scanAfterOpen())

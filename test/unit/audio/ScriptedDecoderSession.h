@@ -68,8 +68,8 @@ namespace ao::audio::test
     std::size_t readCount() const;
 
     // Configuration
-    void setOpenResult(Result<> res);
-    void setSeekResult(Result<> res);
+    void setOpenResult(Result<> resRes);
+    void setSeekResult(Result<> resRes);
 
   private:
     DecodedStreamInfo _info;
@@ -80,8 +80,8 @@ namespace ao::audio::test
     std::size_t _scriptIndex = 0;
     std::size_t _seekCount = 0;
 
-    Result<> _openResult = {};
-    Result<> _seekResult = {};
+    Result<> _openRes = {};
+    Result<> _seekRes = {};
 
     bool _opened = false;
     bool _closed = false;

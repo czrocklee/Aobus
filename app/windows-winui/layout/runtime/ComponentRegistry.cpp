@@ -52,21 +52,21 @@ namespace ao::winui::layout
         Error::Code::NotSupported, std::format("No Windows component construction is registered for '{}'", node.type));
     }
 
-    auto componentPtr = it->second(ctx, node);
+    auto componentPtrRes = it->second(ctx, node);
 
-    if (!componentPtr)
+    if (!componentPtrRes)
     {
-      return std::unexpected{componentPtr.error()};
+      return std::unexpected{componentPtrRes.error()};
     }
 
-    if (!*componentPtr)
+    if (!*componentPtrRes)
     {
       return makeError(Error::Code::InitFailed, std::format("Windows component '{}' produced no element", node.type));
     }
 
     if (!node.children.empty())
     {
-      auto* const container = dynamic_cast<LayoutContainer*>(componentPtr->get());
+      auto* const container = dynamic_cast<LayoutContainer*>(componentPtrRes->get());
 
       if (container == nullptr)
       {
@@ -79,37 +79,37 @@ namespace ao::winui::layout
 
       for (auto const& child : node.children)
       {
-        auto built = build(ctx, child);
+        auto builtRes = build(ctx, child);
 
-        if (!built)
+        if (!builtRes)
         {
-          return std::unexpected{built.error()};
+          return std::unexpected{builtRes.error()};
         }
 
-        children.push_back(std::move(*built));
+        children.push_back(std::move(*builtRes));
       }
 
       container->adopt(std::move(children));
     }
 
     auto const placement = winui::planPlacement(node);
-    auto const element = (*componentPtr)->element();
-    auto applied = applyCommonProps(element, node, placement, *optKind, ctx.resources, ctx.surfaceBrush);
+    auto const element = (*componentPtrRes)->element();
+    auto appliedRes = applyCommonProps(element, node, placement, *optKind, ctx.resources, ctx.surfaceBrush);
 
-    if (!applied)
+    if (!appliedRes)
     {
-      return std::unexpected{applied.error()};
+      return std::unexpected{appliedRes.error()};
     }
 
     // Interaction is bound centrally because the slot policy is a catalog fact:
     // a component decides what it presents, never which gestures it accepts.
-    auto bound = bindActions(ctx, node, optDescriptor->actionPolicy, element);
+    auto boundRes = bindActions(ctx, node, optDescriptor->actionPolicy, element);
 
-    if (!bound)
+    if (!boundRes)
     {
-      return std::unexpected{bound.error()};
+      return std::unexpected{boundRes.error()};
     }
 
-    return PlacedChild{.componentPtr = std::move(*componentPtr), .placement = placement};
+    return PlacedChild{.componentPtr = std::move(*componentPtrRes), .placement = placement};
   }
 } // namespace ao::winui::layout

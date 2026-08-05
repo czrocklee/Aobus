@@ -91,22 +91,21 @@ namespace ao::rt::test
     std::filesystem::copy_file(sourcePath, destinationPath, std::filesystem::copy_options::overwrite_existing);
 
     auto& writer = runtime.library().writer();
-    auto createResult = writer.createTrackFromFile(destinationPath);
-    REQUIRE(createResult);
-    auto const trackId = createResult->trackId;
+    auto createRes = writer.createTrackFromFile(destinationPath);
+    REQUIRE(createRes);
+    auto const trackId = createRes->trackId;
 
     if (settlePublication)
     {
       settlePublication();
     }
 
-    auto bindingResult = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
-    REQUIRE(bindingResult);
-    auto targets = std::move(*bindingResult);
-    auto patchResult = writer.updateMetadata(targets, metadataPatch(spec));
-    REQUIRE(patchResult);
-    REQUIRE(
-      (patchResult->status == TrackAuthoringStatus::Applied || patchResult->status == TrackAuthoringStatus::NoOp));
+    auto bindingRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
+    REQUIRE(bindingRes);
+    auto targets = std::move(*bindingRes);
+    auto patchRes = writer.updateMetadata(targets, metadataPatch(spec));
+    REQUIRE(patchRes);
+    REQUIRE((patchRes->status == TrackAuthoringStatus::Applied || patchRes->status == TrackAuthoringStatus::NoOp));
 
     if (settlePublication)
     {
@@ -115,14 +114,14 @@ namespace ao::rt::test
 
     if (!spec.tags.empty())
     {
-      if (patchResult->optNextTargets)
+      if (patchRes->optNextTargets)
       {
-        targets = *patchResult->optNextTargets;
+        targets = *patchRes->optNextTargets;
       }
 
-      auto tagResult = writer.editTags(targets, spec.tags, std::span<std::string const>{});
-      REQUIRE(tagResult);
-      REQUIRE((tagResult->status == TrackAuthoringStatus::Applied || tagResult->status == TrackAuthoringStatus::NoOp));
+      auto tagRes = writer.editTags(targets, spec.tags, std::span<std::string const>{});
+      REQUIRE(tagRes);
+      REQUIRE((tagRes->status == TrackAuthoringStatus::Applied || tagRes->status == TrackAuthoringStatus::NoOp));
 
       if (settlePublication)
       {
@@ -149,9 +148,9 @@ namespace ao::rt::test
 
     updater(spec);
     REQUIRE(spec.coverArtId == kInvalidResourceId);
-    auto bindingResult = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
-    REQUIRE(bindingResult);
-    auto result = runtime.library().writer().updateMetadata(*bindingResult, metadataPatch(spec));
+    auto bindingRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
+    REQUIRE(bindingRes);
+    auto result = runtime.library().writer().updateMetadata(*bindingRes, metadataPatch(spec));
     REQUIRE(result);
     REQUIRE((result->status == TrackAuthoringStatus::Applied || result->status == TrackAuthoringStatus::NoOp));
   }
@@ -231,10 +230,10 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(storage), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto trackIdResult = mutation.apply([&storage, &spec](library::WriteTransaction& transaction) -> Result<TrackId>
-                                        { return library::test::addTrack(storage, transaction, spec); });
-    REQUIRE(trackIdResult);
-    auto const trackId = *trackIdResult;
+    auto trackIdRes = mutation.apply([&storage, &spec](library::WriteTransaction& transaction) -> Result<TrackId>
+                                     { return library::test::addTrack(storage, transaction, spec); });
+    REQUIRE(trackIdRes);
+    auto const trackId = *trackIdRes;
     REQUIRE(mutation.commit(LibraryChangeSet{
       .libraryReset = libraryReset,
       .tracksInserted = {trackId},
@@ -308,24 +307,24 @@ namespace ao::rt::test
   Result<UpdateTrackMetadataReply> LibraryWriterFixture::updateMetadata(std::span<TrackId const> const trackIds,
                                                                         MetadataPatch const& patch)
   {
-    auto bindingResult = _implPtr->ensureLibrary().bindTrackTargets(trackIds);
+    auto bindingRes = _implPtr->ensureLibrary().bindTrackTargets(trackIds);
 
-    if (!bindingResult)
+    if (!bindingRes)
     {
-      return std::unexpected{bindingResult.error()};
+      return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeResult = _implPtr->ensureLibrary().writer().updateMetadata(*bindingResult, patch);
+    auto outcomeRes = _implPtr->ensureLibrary().writer().updateMetadata(*bindingRes, patch);
 
-    if (!outcomeResult)
+    if (!outcomeRes)
     {
-      return std::unexpected{outcomeResult.error()};
+      return std::unexpected{outcomeRes.error()};
     }
 
-    switch (outcomeResult->status)
+    switch (outcomeRes->status)
     {
       case TrackAuthoringStatus::Applied:
-      case TrackAuthoringStatus::NoOp: return std::move(outcomeResult->reply);
+      case TrackAuthoringStatus::NoOp: return std::move(outcomeRes->reply);
       case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
       case TrackAuthoringStatus::Unavailable:
         return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
@@ -338,24 +337,24 @@ namespace ao::rt::test
                                                             std::span<std::string const> const tagsToAdd,
                                                             std::span<std::string const> const tagsToRemove)
   {
-    auto bindingResult = _implPtr->ensureLibrary().bindTrackTargets(trackIds);
+    auto bindingRes = _implPtr->ensureLibrary().bindTrackTargets(trackIds);
 
-    if (!bindingResult)
+    if (!bindingRes)
     {
-      return std::unexpected{bindingResult.error()};
+      return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeResult = _implPtr->ensureLibrary().writer().editTags(*bindingResult, tagsToAdd, tagsToRemove);
+    auto outcomeRes = _implPtr->ensureLibrary().writer().editTags(*bindingRes, tagsToAdd, tagsToRemove);
 
-    if (!outcomeResult)
+    if (!outcomeRes)
     {
-      return std::unexpected{outcomeResult.error()};
+      return std::unexpected{outcomeRes.error()};
     }
 
-    switch (outcomeResult->status)
+    switch (outcomeRes->status)
     {
       case TrackAuthoringStatus::Applied:
-      case TrackAuthoringStatus::NoOp: return std::move(outcomeResult->reply);
+      case TrackAuthoringStatus::NoOp: return std::move(outcomeRes->reply);
       case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
       case TrackAuthoringStatus::Unavailable:
         return makeError(Error::Code::InvalidState, "Track authoring is unavailable");

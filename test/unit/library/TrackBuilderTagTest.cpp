@@ -94,9 +94,9 @@ namespace ao::library::test
     builder.tags().add("tag10").add("tag20");
 
     auto context = TrackSerializationFixture{};
-    auto hotDataResult = builder.serializeHot(context.transaction());
-    REQUIRE(hotDataResult);
-    auto const& hotData = *hotDataResult;
+    auto hotDataRes = builder.serializeHot(context.transaction());
+    REQUIRE(hotDataRes);
+    auto const& hotData = *hotDataRes;
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 8); // 2 tags * 4 bytes

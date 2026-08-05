@@ -138,16 +138,16 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
 
-    auto const runtime = AppRuntime::create(AppRuntimeDependencies{
+    auto const runtimeRes = AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
     });
 
-    REQUIRE_FALSE(runtime);
-    CHECK(runtime.error().code == Error::Code::InvalidInput);
-    CHECK(runtime.error().message == "AppRuntime requires a workspace config store");
+    REQUIRE_FALSE(runtimeRes);
+    CHECK(runtimeRes.error().code == Error::Code::InvalidInput);
+    CHECK(runtimeRes.error().message == "AppRuntime requires a workspace config store");
   }
 
   TEST_CASE("runtime factories preserve storage construction errors", "[runtime][unit][app-runtime][factory]")
@@ -246,17 +246,17 @@ namespace ao::rt::test
     CHECK_NOTHROW(appPtr->reloadAllTracks());
 
     // playSelectionInFocusedView (with no focused view)
-    auto const withoutFocus = appPtr->playSelectionInFocusedView();
-    REQUIRE_FALSE(withoutFocus);
-    CHECK(withoutFocus.error().code == Error::Code::InvalidState);
+    auto const withoutFocusRes = appPtr->playSelectionInFocusedView();
+    REQUIRE_FALSE(withoutFocusRes);
+    CHECK(withoutFocusRes.error().code == Error::Code::InvalidState);
 
     // Add a view and focus it
     REQUIRE(appPtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     // playSelectionInFocusedView (with focused view but no selection)
-    auto const withoutSelection = appPtr->playSelectionInFocusedView();
-    REQUIRE_FALSE(withoutSelection);
-    CHECK(withoutSelection.error().code == Error::Code::NotFound);
+    auto const withoutSelectionRes = appPtr->playSelectionInFocusedView();
+    REQUIRE_FALSE(withoutSelectionRes);
+    CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
 
     // Cover polymorphic destruction of CoreRuntime
     auto const corePtr = std::unique_ptr<CoreRuntime>{std::move(appPtr)};

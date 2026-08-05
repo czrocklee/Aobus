@@ -86,9 +86,9 @@ namespace ao::rt::test
 
     SECTION("invalid view ID is safe")
     {
-      auto const missingView = service.setFilter(ViewId{999}, "foo");
-      REQUIRE_FALSE(missingView);
-      CHECK(missingView.error().code == Error::Code::NotFound);
+      auto const missingViewRes = service.setFilter(ViewId{999}, "foo");
+      REQUIRE_FALSE(missingViewRes);
+      CHECK(missingViewRes.error().code == Error::Code::NotFound);
     }
   }
 } // namespace ao::rt::test

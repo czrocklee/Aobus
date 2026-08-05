@@ -81,10 +81,10 @@ namespace ao::library::test
     auto const [preparedHot, preparedCold] = prepareTrack(builder, transaction, fixture.library.resources());
     auto writer = fixture.store.writer(transaction);
 
-    auto createResult = createPreparedTrackRecord(writer, preparedHot, preparedCold);
-    REQUIRE(createResult);
+    auto createRes = createPreparedTrackRecord(writer, preparedHot, preparedCold);
+    REQUIRE(createRes);
 
-    auto const trackId = *createResult;
+    auto const trackId = *createRes;
     auto const optView = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
     CHECK(trackId != kInvalidTrackId);
@@ -128,12 +128,12 @@ namespace ao::library::test
     auto const [updatedHot, updatedCold] = prepareTrack(updatedBuilder, transaction, fixture.library.resources());
 
     auto writer = fixture.store.writer(transaction);
-    auto createResult = createPreparedTrackRecord(writer, originalHot, originalCold);
-    REQUIRE(createResult);
+    auto createRes = createPreparedTrackRecord(writer, originalHot, originalCold);
+    REQUIRE(createRes);
 
-    auto const trackId = *createResult;
-    auto updateResult = updatePreparedTrackRecord(writer, trackId, updatedHot, updatedCold);
-    REQUIRE(updateResult);
+    auto const trackId = *createRes;
+    auto updateRes = updatePreparedTrackRecord(writer, trackId, updatedHot, updatedCold);
+    REQUIRE(updateRes);
 
     auto optView = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
@@ -165,10 +165,10 @@ namespace ao::library::test
 
       auto writer = fixture.store.writer(transaction);
 
-      auto createResult = createPreparedTrackRecord(writer, preparedHot, preparedCold);
-      REQUIRE(createResult);
+      auto createRes = createPreparedTrackRecord(writer, preparedHot, preparedCold);
+      REQUIRE(createRes);
 
-      auto const trackId = *createResult;
+      auto const trackId = *createRes;
       auto const optView = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       CHECK(trackId != kInvalidTrackId);
@@ -185,10 +185,10 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     seedColdOnlyTrack(temp.path());
-    auto const library = openTestMusicLibrary(temp.path(), temp.path());
+    auto const libraryRes = openTestMusicLibrary(temp.path(), temp.path());
 
-    REQUIRE_FALSE(library);
-    CHECK(library.error().code == Error::Code::CorruptData);
+    REQUIRE_FALSE(libraryRes);
+    CHECK(libraryRes.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("updatePreparedTrackRecord rolls back its hot update when the cold reservation fails",
@@ -204,9 +204,9 @@ namespace ao::library::test
     originalBuilder.property().uri("original.flac");
     auto const [originalHot, originalCold] = prepareTrack(originalBuilder, originalTransaction, library.resources());
     auto originalWriter = library.tracks().writer(originalTransaction);
-    auto const createResult = createPreparedTrackRecord(originalWriter, originalHot, originalCold);
-    REQUIRE(createResult);
-    auto const trackId = *createResult;
+    auto const createRes = createPreparedTrackRecord(originalWriter, originalHot, originalCold);
+    REQUIRE(createRes);
+    auto const trackId = *createRes;
     REQUIRE(originalTransaction.commit());
 
     auto optFailure = std::optional<Error>{};

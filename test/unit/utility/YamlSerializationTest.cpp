@@ -49,23 +49,23 @@ namespace ao::test
     SECTION("unknown keys follow the caller policy")
     {
       auto tree = parseYaml("known: 1\nfuture: 2\n");
-      auto rejected = yaml::validateMapKeys(tree.rootref(), kAllowed, "root");
-      auto allowed = yaml::validateMapKeys(tree.rootref(), kAllowed, "root", yaml::UnknownKeyPolicy::Allow);
+      auto rejectedRes = yaml::validateMapKeys(tree.rootref(), kAllowed, "root");
+      auto allowedRes = yaml::validateMapKeys(tree.rootref(), kAllowed, "root", yaml::UnknownKeyPolicy::Allow);
 
-      REQUIRE_FALSE(rejected);
-      CHECK(rejected.error().message.contains("future"));
-      CHECK(allowed);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().message.contains("future"));
+      CHECK(allowedRes);
     }
 
     SECTION("duplicate keys are rejected under both unknown-key policies")
     {
       auto tree = parseYaml("known: 1\nknown: 2\n");
-      auto rejected = yaml::validateMapKeys(tree.rootref(), kAllowed, "root");
-      auto allowed = yaml::validateMapKeys(tree.rootref(), kAllowed, "root", yaml::UnknownKeyPolicy::Allow);
+      auto rejectedRes = yaml::validateMapKeys(tree.rootref(), kAllowed, "root");
+      auto allowedRes = yaml::validateMapKeys(tree.rootref(), kAllowed, "root", yaml::UnknownKeyPolicy::Allow);
 
-      REQUIRE_FALSE(rejected);
-      REQUIRE_FALSE(allowed);
-      CHECK(rejected.error().message.contains("more than once"));
+      REQUIRE_FALSE(rejectedRes);
+      REQUIRE_FALSE(allowedRes);
+      CHECK(rejectedRes.error().message.contains("more than once"));
     }
   }
 
@@ -81,9 +81,9 @@ namespace ao::test
       auto reader = yaml::MapReader{tree.rootref(), kKeys, "state", yaml::UnknownKeyPolicy::Allow};
       reader.requiredScalar("count", count).optionalScalar("name", name);
 
-      auto readCount = std::move(reader).finish(count);
-      REQUIRE(readCount);
-      CHECK(*readCount == 7);
+      auto readCountRes = std::move(reader).finish(count);
+      REQUIRE(readCountRes);
+      CHECK(*readCountRes == 7);
       CHECK(name == "updated");
     }
 
@@ -140,21 +140,21 @@ namespace ao::test
                        { return yaml::scalarAs<std::int32_t>(child, context); })
         .requiredScalarSequence("values", values);
 
-      auto read = std::move(reader).finish(std::pair{nested, values});
-      REQUIRE(read);
-      CHECK(read->first == 9);
-      CHECK((read->second == std::vector<std::int32_t>{1, 2, 3}));
+      auto readRes = std::move(reader).finish(std::pair{nested, values});
+      REQUIRE(readRes);
+      CHECK(readRes->first == 9);
+      CHECK((readRes->second == std::vector<std::int32_t>{1, 2, 3}));
     }
   }
 
   TEST_CASE("YamlSerialization - sequence helpers preserve index context", "[core][unit][yaml]")
   {
     auto tree = parseYaml("[1, invalid, 3]");
-    auto read = yaml::readScalarSequence<std::int32_t>(tree.rootref(), "values");
+    auto readRes = yaml::readScalarSequence<std::int32_t>(tree.rootref(), "values");
 
-    REQUIRE_FALSE(read);
-    CHECK(read.error().code == Error::Code::FormatRejected);
-    CHECK(read.error().message.contains("values.1"));
+    REQUIRE_FALSE(readRes);
+    CHECK(readRes.error().code == Error::Code::FormatRejected);
+    CHECK(readRes.error().message.contains("values.1"));
   }
 
   TEST_CASE("YamlSerialization - emitted scalars and composed maps own their text", "[core][unit][yaml]")
@@ -188,10 +188,10 @@ namespace ao::test
         REQUIRE(tree.rootref().is_val_quoted());
 
         auto parsed = parseYaml(ryml::emitrs_yaml<std::string>(tree));
-        auto const read = yaml::scalarAs<std::string>(parsed.rootref(), "string value");
+        auto const readRes = yaml::scalarAs<std::string>(parsed.rootref(), "string value");
 
-        REQUIRE(read);
-        CHECK(*read == value);
+        REQUIRE(readRes);
+        CHECK(*readRes == value);
       }
     }
 
@@ -206,13 +206,13 @@ namespace ao::test
       }
 
       auto parsed = parseYaml(ryml::emitrs_yaml<std::string>(tree));
-      auto name = yaml::scalarAs<std::string>(yaml::findChild(parsed.rootref(), "name"), "name");
-      auto count = yaml::scalarAs<std::int32_t>(yaml::findChild(parsed.rootref(), "count"), "count");
+      auto nameRes = yaml::scalarAs<std::string>(yaml::findChild(parsed.rootref(), "name"), "name");
+      auto countRes = yaml::scalarAs<std::int32_t>(yaml::findChild(parsed.rootref(), "count"), "count");
 
-      REQUIRE(name);
-      REQUIRE(count);
-      CHECK(*name == "owned field");
-      CHECK(*count == 7);
+      REQUIRE(nameRes);
+      REQUIRE(countRes);
+      CHECK(*nameRes == "owned field");
+      CHECK(*countRes == 7);
     }
 
     SECTION("MapWriter composes nested values and retains the first writer failure")
@@ -245,22 +245,22 @@ namespace ao::test
       using StringIntMap = std::map<std::string, std::int32_t, std::less<>>;
       auto const source = StringIntMap{{"first", 1}, {"second", 2}};
       auto tree = ryml::Tree{yaml::callbacks()};
-      auto written = yaml::writeStringMap(tree.rootref(),
-                                          source,
-                                          "values",
-                                          [](ryml::NodeRef child, std::int32_t value) -> Result<>
-                                          {
-                                            yaml::writeScalar(child, value);
-                                            return {};
-                                          });
-      REQUIRE(written);
+      auto writtenRes = yaml::writeStringMap(tree.rootref(),
+                                             source,
+                                             "values",
+                                             [](ryml::NodeRef child, std::int32_t value) -> Result<>
+                                             {
+                                               yaml::writeScalar(child, value);
+                                               return {};
+                                             });
+      REQUIRE(writtenRes);
 
-      auto read = yaml::readStringMap<StringIntMap>(tree.rootref(),
-                                                    "values",
-                                                    [](ryml::ConstNodeRef child, std::string_view context)
-                                                    { return yaml::scalarAs<std::int32_t>(child, context); });
-      REQUIRE(read);
-      CHECK(*read == source);
+      auto readRes = yaml::readStringMap<StringIntMap>(tree.rootref(),
+                                                       "values",
+                                                       [](ryml::ConstNodeRef child, std::string_view context)
+                                                       { return yaml::scalarAs<std::int32_t>(child, context); });
+      REQUIRE(readRes);
+      CHECK(*readRes == source);
     }
 
     SECTION("string-map empty keys identify the failing boundary")
@@ -268,26 +268,26 @@ namespace ao::test
       using StringIntMap = std::map<std::string, std::int32_t, std::less<>>;
 
       auto writtenTree = ryml::Tree{yaml::callbacks()};
-      auto const written = yaml::writeStringMap(writtenTree.rootref(),
-                                                StringIntMap{{"", 1}},
-                                                "values",
-                                                [](ryml::NodeRef child, std::int32_t value) -> Result<>
-                                                {
-                                                  yaml::writeScalar(child, value);
-                                                  return {};
-                                                });
+      auto const writtenRes = yaml::writeStringMap(writtenTree.rootref(),
+                                                   StringIntMap{{"", 1}},
+                                                   "values",
+                                                   [](ryml::NodeRef child, std::int32_t value) -> Result<>
+                                                   {
+                                                     yaml::writeScalar(child, value);
+                                                     return {};
+                                                   });
 
-      REQUIRE_FALSE(written);
-      CHECK(written.error().code == Error::Code::InvalidState);
+      REQUIRE_FALSE(writtenRes);
+      CHECK(writtenRes.error().code == Error::Code::InvalidState);
 
       auto readTree = parseYaml("\"\": 1\n");
-      auto const read = yaml::readStringMap<StringIntMap>(readTree.rootref(),
-                                                          "values",
-                                                          [](ryml::ConstNodeRef child, std::string_view context)
-                                                          { return yaml::scalarAs<std::int32_t>(child, context); });
+      auto const readRes = yaml::readStringMap<StringIntMap>(readTree.rootref(),
+                                                             "values",
+                                                             [](ryml::ConstNodeRef child, std::string_view context)
+                                                             { return yaml::scalarAs<std::int32_t>(child, context); });
 
-      REQUIRE_FALSE(read);
-      CHECK(read.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(readRes);
+      CHECK(readRes.error().code == Error::Code::FormatRejected);
     }
   }
 } // namespace ao::test

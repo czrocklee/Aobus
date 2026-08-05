@@ -114,9 +114,9 @@ namespace winrt::Aobus::implementation
     _resourceBytes = &_coordinatorPtr->resourceBytes();
     _themePtr = &_coordinatorPtr->theme();
 
-    if (auto theme = _themePtr->reload(); theme)
+    if (auto themeRes = _themePtr->reload(); themeRes)
     {
-      applyTheme(*theme);
+      applyTheme(*themeRes);
     }
 
     // Built before the first resolved policy, which is what asks it for a shell.

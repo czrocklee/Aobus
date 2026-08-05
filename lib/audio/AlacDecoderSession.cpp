@@ -169,15 +169,15 @@ namespace ao::audio
       _implPtr->info.sourceFormat.precisionBits = config.bitDepth;
       _implPtr->info.sourceFormat.sampleKind = SampleKind::Integer;
 
-      auto const configured = _implPtr->outputAdapter.configure(
+      auto const configuredRes = _implPtr->outputAdapter.configure(
         _implPtr->info.sourceFormat, nativeAlacEncoding(_implPtr->info.sourceFormat.precisionBits));
 
-      if (!configured)
+      if (!configuredRes)
       {
-        detail::throwDecoderError(configured.error());
+        detail::throwDecoderError(configuredRes.error());
       }
 
-      _implPtr->info.outputFormat = *configured;
+      _implPtr->info.outputFormat = *configuredRes;
 
       return {};
     }
@@ -258,17 +258,17 @@ namespace ao::audio
     }
 
     _implPtr->targetPcm.resize(static_cast<std::size_t>(frameCount) * nativeBytesPerFrame);
-    auto converted = _implPtr->outputAdapter.convert(_implPtr->targetPcm);
+    auto convertedRes = _implPtr->outputAdapter.convert(_implPtr->targetPcm);
 
-    if (!converted)
+    if (!convertedRes)
     {
-      return std::unexpected{converted.error()};
+      return std::unexpected{convertedRes.error()};
     }
 
     _implPtr->packetSource.advance();
 
     return PcmBlock{
-      .bytes = *converted,
+      .bytes = *convertedRes,
       .frames = frameCount,
       .firstFrameIndex = firstFrameIndex,
       .endOfStream = _implPtr->packetSource.isAtEnd(),

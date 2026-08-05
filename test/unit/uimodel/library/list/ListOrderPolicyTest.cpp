@@ -143,25 +143,25 @@ namespace ao::uimodel::test
     auto const effective = std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}};
     auto const selected = std::array{TrackId{2}, TrackId{3}};
 
-    auto const beforeFirst = listOrderAnchorForGap(effective, selected, 0);
-    REQUIRE(beforeFirst);
-    REQUIRE(*beforeFirst);
-    CHECK(**beforeFirst == TrackId{1});
+    auto const beforeFirstRes = listOrderAnchorForGap(effective, selected, 0);
+    REQUIRE(beforeFirstRes);
+    REQUIRE(*beforeFirstRes);
+    CHECK(**beforeFirstRes == TrackId{1});
 
     for (std::size_t gapIndex = 1; gapIndex < effective.size(); ++gapIndex)
     {
-      auto const beforeFourth = listOrderAnchorForGap(effective, selected, gapIndex);
-      REQUIRE(beforeFourth);
-      REQUIRE(*beforeFourth);
-      CHECK(**beforeFourth == TrackId{4});
+      auto const beforeFourthRes = listOrderAnchorForGap(effective, selected, gapIndex);
+      REQUIRE(beforeFourthRes);
+      REQUIRE(*beforeFourthRes);
+      CHECK(**beforeFourthRes == TrackId{4});
     }
 
-    auto const atEnd = listOrderAnchorForGap(effective, selected, 4);
-    REQUIRE(atEnd);
-    CHECK_FALSE(atEnd->has_value());
+    auto const atEndRes = listOrderAnchorForGap(effective, selected, 4);
+    REQUIRE(atEndRes);
+    CHECK_FALSE(atEndRes->has_value());
 
-    auto const outside = listOrderAnchorForGap(effective, selected, 5);
-    REQUIRE_FALSE(outside);
-    CHECK(outside.error().code == Error::Code::InvalidInput);
+    auto const outsideRes = listOrderAnchorForGap(effective, selected, 5);
+    REQUIRE_FALSE(outsideRes);
+    CHECK(outsideRes.error().code == Error::Code::InvalidInput);
   }
 } // namespace ao::uimodel::test

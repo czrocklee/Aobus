@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
@@ -12,7 +14,6 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -69,10 +70,10 @@ namespace ao::uimodel::test
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open();
-    auto sessionResult =
+    auto sessionRes =
       ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId);
-    REQUIRE(sessionResult);
-    auto& session = **sessionResult;
+    REQUIRE(sessionRes);
+    auto& session = **sessionRes;
 
     CHECK(std::vector<TrackId>{session.effectiveTrackIds().begin(), session.effectiveTrackIds().end()} ==
           std::vector{fixture.first, fixture.second, fixture.third});
@@ -89,22 +90,22 @@ namespace ao::uimodel::test
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open("true");
-    auto sessionResult =
+    auto sessionRes =
       ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId);
-    REQUIRE(sessionResult);
-    auto& session = **sessionResult;
+    REQUIRE(sessionRes);
+    auto& session = **sessionRes;
 
     CHECK(session.capabilities().canAbsoluteMove);
     CHECK_FALSE(session.capabilities().canGapMove);
     CHECK_FALSE(session.capabilities().canRelativeMove);
 
-    auto const relative = session.moveUp(std::array{fixture.second});
-    REQUIRE_FALSE(relative);
-    CHECK(relative.error().code == Error::Code::InvalidState);
+    auto const relativeRes = session.moveUp(std::array{fixture.second});
+    REQUIRE_FALSE(relativeRes);
+    CHECK(relativeRes.error().code == Error::Code::InvalidState);
 
-    auto const absolute = session.moveToTop(std::array{fixture.third});
-    REQUIRE(absolute);
-    CHECK(absolute->status == rt::ListOrderAuthoringStatus::Applied);
+    auto const absoluteRes = session.moveToTop(std::array{fixture.third});
+    REQUIRE(absoluteRes);
+    CHECK(absoluteRes->status == rt::ListOrderAuthoringStatus::Applied);
     CHECK(fixture.storedOrder() == std::vector{fixture.third, fixture.first, fixture.second});
   }
 

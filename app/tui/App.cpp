@@ -594,7 +594,7 @@ namespace ao::tui
     screen.TrackMouse(true);
     auto executorPtr = std::make_unique<Executor>(screen);
     auto* const executor = executorPtr.get();
-    auto runtimeResult = rt::AppRuntime::create(rt::AppRuntimeDependencies{
+    auto runtimeRes = rt::AppRuntime::create(rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = options.libraryRoot,
       .databasePath = options.databasePath,
@@ -602,12 +602,12 @@ namespace ao::tui
       .asyncExceptionHandler = std::move(asyncExceptionHandler),
     });
 
-    if (!runtimeResult)
+    if (!runtimeRes)
     {
-      throwException<Exception>("Failed to open library: {}", runtimeResult.error().message);
+      throwException<Exception>("Failed to open library: {}", runtimeRes.error().message);
     }
 
-    auto runtimePtr = std::move(*runtimeResult);
+    auto runtimePtr = std::move(*runtimeRes);
     auto& runtime = *runtimePtr;
 
     registerPlatformAudioBackends(runtime);

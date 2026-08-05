@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/playback/PlaybackService.h>
+
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
@@ -17,7 +19,6 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
-#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -132,9 +133,9 @@ namespace ao::rt
       return submitResult(
         [this, viewId, startTrackId] -> Result<bool>
         {
-          if (auto const started = succession.playFromView(viewId, startTrackId); !started)
+          if (auto const startedRes = succession.playFromView(viewId, startTrackId); !startedRes)
           {
-            return std::unexpected{started.error()};
+            return std::unexpected{startedRes.error()};
           }
 
           // Admission starts worker preparation but does not establish a new

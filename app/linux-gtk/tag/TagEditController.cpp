@@ -427,17 +427,17 @@ namespace ao::gtk
       return;
     }
 
-    auto sessionResult =
+    auto sessionRes =
       uimodel::ListMembershipAuthoringSession::begin(_runtime.library(), _optActiveSelection->selectedIds);
 
-    if (!sessionResult)
+    if (!sessionRes)
     {
       _runtime.notifications().post(
-        rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
+        rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
       return;
     }
 
-    auto result = add ? (*sessionResult)->addToList(listId) : (*sessionResult)->removeFromList(listId);
+    auto result = add ? (*sessionRes)->addToList(listId) : (*sessionRes)->removeFromList(listId);
 
     if (!result)
     {
@@ -603,17 +603,17 @@ namespace ao::gtk
 
   bool TagEditController::beginTagEditSession(std::span<TrackId const> trackIds)
   {
-    auto sessionResult = uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
+    auto sessionRes = uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
 
-    if (!sessionResult)
+    if (!sessionRes)
     {
       _tagEditSessionPtr.reset();
       _runtime.notifications().post(
-        rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
+        rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
       return false;
     }
 
-    _tagEditSessionPtr = std::move(*sessionResult);
+    _tagEditSessionPtr = std::move(*sessionRes);
     return true;
   }
 } // namespace ao::gtk

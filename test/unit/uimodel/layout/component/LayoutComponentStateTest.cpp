@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -51,14 +52,14 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{};
     REQUIRE(LayoutComponentStateYamlSchema{}.serialize(tree.rootref(), original));
 
-    auto decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
-    REQUIRE(decoded);
+    auto decodedRes = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+    REQUIRE(decodedRes);
 
-    CHECK(decoded->version == kStateFileVersion);
-    CHECK(decoded->preset == "modern");
-    REQUIRE(decoded->components.contains("main-paned"));
-    CHECK(decoded->components.at("main-paned").type == "split");
-    CHECK(decoded->components.at("main-paned").state.at("positionPercent").asDouble() == 0.42);
+    CHECK(decodedRes->version == kStateFileVersion);
+    CHECK(decodedRes->preset == "modern");
+    REQUIRE(decodedRes->components.contains("main-paned"));
+    CHECK(decodedRes->components.at("main-paned").type == "split");
+    CHECK(decodedRes->components.at("main-paned").state.at("positionPercent").asDouble() == 0.42);
   }
 
   TEST_CASE("LayoutComponentState - resolver validates versions type and baseline",
@@ -146,9 +147,10 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
 
-      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      auto const decodedRes =
+        LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("one malformed component rejects the whole candidate")
@@ -170,10 +172,11 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
 
-      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("bad-entry"));
+      auto const decodedRes =
+        LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("bad-entry"));
     }
 
     SECTION("future file version wins over unknown payload structure")
@@ -186,10 +189,11 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
-      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+      auto const decodedRes =
+        LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("unknown structural keys are rejected")
@@ -202,11 +206,12 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
-      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+      auto const decodedRes =
+        LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("futureField"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("futureField"));
     }
   }
 
@@ -239,9 +244,9 @@ namespace ao::uimodel::test
     };
     doc.root.children.push_back(LayoutNode{.id = "wrong-type", .type = "split"});
 
-    auto const prepared = prepareLayout(doc);
-    REQUIRE(prepared);
-    pruneComponentState(stateDoc, *prepared);
+    auto const preparedRes = prepareLayout(doc);
+    REQUIRE(preparedRes);
+    pruneComponentState(stateDoc, *preparedRes);
 
     CHECK(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));

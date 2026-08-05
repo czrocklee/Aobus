@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/WorkspaceService.h>
+
 #include "WorkspaceSessionYamlSchema.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -15,7 +17,6 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSessionState.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -218,14 +219,14 @@ namespace ao::rt
 
     Result<ViewId> navigateToReusableView(ViewId const viewId, NavigationRequest const& request)
     {
-      auto stateResult = liveViewState(viewId);
+      auto stateRes = liveViewState(viewId);
 
-      if (!stateResult)
+      if (!stateRes)
       {
-        return std::unexpected{stateResult.error()};
+        return std::unexpected{stateRes.error()};
       }
 
-      auto const& state = *stateResult;
+      auto const& state = *stateRes;
       auto presentation = state.presentation;
 
       if (request.optPresentation && request.optPresentation->mode == NavigationPresentationMode::Override)
@@ -278,14 +279,14 @@ namespace ao::rt
 
     Result<ViewId> navigate(NavigationRequest const& request)
     {
-      auto targetResult = resolveNavigationTarget(request.target);
+      auto targetRes = resolveNavigationTarget(request.target);
 
-      if (!targetResult)
+      if (!targetRes)
       {
-        return std::unexpected{targetResult.error()};
+        return std::unexpected{targetRes.error()};
       }
 
-      if (auto const optViewId = reusableView(*targetResult); optViewId)
+      if (auto const optViewId = reusableView(*targetRes); optViewId)
       {
         return navigateToReusableView(*optViewId, request);
       }
@@ -294,8 +295,8 @@ namespace ao::rt
       nextSnapshot.openViews.reserve(nextSnapshot.openViews.size() + 1);
       auto nextHistory = navigationHistory;
       auto config = TrackListViewConfig{
-        .listId = targetResult->listId,
-        .filterExpression = targetResult->filterExpression,
+        .listId = targetRes->listId,
+        .filterExpression = targetRes->filterExpression,
       };
 
       if (request.optPresentation)
@@ -303,14 +304,14 @@ namespace ao::rt
         config.optPresentation = request.optPresentation->spec;
       }
 
-      auto viewResult = views.createView(config);
+      auto viewRes = views.createView(config);
 
-      if (!viewResult)
+      if (!viewRes)
       {
-        return std::unexpected{viewResult.error()};
+        return std::unexpected{viewRes.error()};
       }
 
-      auto const viewId = *viewResult;
+      auto const viewId = *viewRes;
 
       try
       {
@@ -341,9 +342,9 @@ namespace ao::rt
         return makeError(Error::Code::InvalidInput, std::format("View {} is not open in this workspace", viewId));
       }
 
-      if (auto state = liveViewState(viewId); !state)
+      if (auto stateRes = liveViewState(viewId); !stateRes)
       {
-        return std::unexpected{state.error()};
+        return std::unexpected{stateRes.error()};
       }
 
       if (currentSnapshot.activeViewId == viewId)
@@ -390,9 +391,9 @@ namespace ao::rt
         return {};
       }
 
-      if (auto state = liveViewState(viewId); !state)
+      if (auto stateRes = liveViewState(viewId); !stateRes)
       {
-        return std::unexpected{state.error()};
+        return std::unexpected{stateRes.error()};
       }
 
       auto const ids = std::array{viewId};
@@ -408,20 +409,20 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "No workspace view is focused");
       }
 
-      auto stateResult = liveViewState(viewId);
+      auto stateRes = liveViewState(viewId);
 
-      if (!stateResult)
+      if (!stateRes)
       {
-        return std::unexpected{stateResult.error()};
+        return std::unexpected{stateRes.error()};
       }
 
       auto const presentation = normalizeTrackPresentationSpec(requested);
       auto nextHistory = navigationHistory;
-      auto changed = stateResult->presentation != presentation;
+      auto changed = stateRes->presentation != presentation;
 
       if (options.recordHistory)
       {
-        changed = nextHistory.commit(navigationPoint(*stateResult, presentation)) || changed;
+        changed = nextHistory.commit(navigationPoint(*stateRes, presentation)) || changed;
       }
 
       if (!changed)
@@ -431,7 +432,7 @@ namespace ao::rt
 
       auto pending = prepareCommit(currentSnapshot, std::move(nextHistory), WorkspaceChangeCause::Presentation);
 
-      if (stateResult->presentation != presentation)
+      if (stateRes->presentation != presentation)
       {
         if (auto result = views.setPresentation(viewId, presentation); !result)
         {
@@ -743,19 +744,19 @@ namespace ao::rt
   {
     _implPtr->ensureOnExecutor();
     auto state = WorkspaceSessionState{};
-    auto const loaded = store.load("workspace", state, detail::WorkspaceSessionYamlSchema{});
+    auto const loadedRes = store.load("workspace", state, detail::WorkspaceSessionYamlSchema{});
 
-    if (!loaded)
+    if (!loadedRes)
     {
-      if (loaded.error().code == Error::Code::NotFound)
+      if (loadedRes.error().code == Error::Code::NotFound)
       {
         return {};
       }
 
-      return std::unexpected{loaded.error()};
+      return std::unexpected{loadedRes.error()};
     }
 
-    if (!*loaded)
+    if (!*loadedRes)
     {
       return {};
     }

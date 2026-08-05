@@ -28,10 +28,10 @@ namespace ao::test
     {
       auto fn = [] -> Result<int> { return makeError(Error::Code::InvalidState, "Bad state"); };
 
-      auto const res = fn();
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::InvalidState);
-      CHECK(res.error().message == "Bad state");
+      auto const resRes = fn();
+      REQUIRE_FALSE(resRes);
+      CHECK(resRes.error().code == Error::Code::InvalidState);
+      CHECK(resRes.error().message == "Bad state");
     }
 
     SECTION("Result<T> remains expected-compatible")
@@ -39,47 +39,47 @@ namespace ao::test
       STATIC_REQUIRE(std::is_base_of_v<std::expected<int, Error>, Result<int>>);
       STATIC_REQUIRE_FALSE(std::is_same_v<std::expected<int, Error>, Result<int>>);
 
-      auto const fromBase = Result<int>{std::expected<int, Error>{7}};
-      REQUIRE(fromBase);
-      CHECK(*fromBase == 7);
+      auto const fromBaseRes = Result<int>{std::expected<int, Error>{7}};
+      REQUIRE(fromBaseRes);
+      CHECK(*fromBaseRes == 7);
 
-      auto const fromUnexpected = Result<int>{makeError(Error::Code::InvalidInput, "bad value")};
-      REQUIRE_FALSE(fromUnexpected);
-      CHECK(fromUnexpected.error().code == Error::Code::InvalidInput);
+      auto const fromUnexpectedRes = Result<int>{makeError(Error::Code::InvalidInput, "bad value")};
+      REQUIRE_FALSE(fromUnexpectedRes);
+      CHECK(fromUnexpectedRes.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("Result<> supports void success and errors")
     {
-      auto const success = Result<>{std::expected<void, Error>{}};
-      CHECK(success);
+      auto const successRes = Result<>{std::expected<void, Error>{}};
+      CHECK(successRes);
 
-      auto const failure = Result<>{makeError(Error::Code::IoError, "disk gone")};
-      REQUIRE_FALSE(failure);
-      CHECK(failure.error().message == "disk gone");
+      auto const failureRes = Result<>{makeError(Error::Code::IoError, "disk gone")};
+      REQUIRE_FALSE(failureRes);
+      CHECK(failureRes.error().message == "disk gone");
     }
 
     SECTION("Error codes cover external data and storage failures")
     {
-      auto const invalidInput = Result<>{makeError(Error::Code::InvalidInput, "Invalid user value")};
-      auto const corruptData = Result<>{makeError(Error::Code::CorruptData, "Corrupt file")};
-      auto const conflict = Result<>{makeError(Error::Code::Conflict, "Record already exists")};
-      auto const resourceBusy = Result<>{makeError(Error::Code::ResourceBusy, "Audio device is busy")};
-      auto const tooLarge = Result<>{makeError(Error::Code::ValueTooLarge, "Serialized record is too large")};
-      auto const resourceExhausted = Result<>{makeError(Error::Code::ResourceExhausted, "Resource IDs exhausted")};
+      auto const invalidInputRes = Result<>{makeError(Error::Code::InvalidInput, "Invalid user value")};
+      auto const corruptDataRes = Result<>{makeError(Error::Code::CorruptData, "Corrupt file")};
+      auto const conflictRes = Result<>{makeError(Error::Code::Conflict, "Record already exists")};
+      auto const resourceBusyRes = Result<>{makeError(Error::Code::ResourceBusy, "Audio device is busy")};
+      auto const tooLargeRes = Result<>{makeError(Error::Code::ValueTooLarge, "Serialized record is too large")};
+      auto const resourceExhaustedRes = Result<>{makeError(Error::Code::ResourceExhausted, "Resource IDs exhausted")};
 
-      REQUIRE_FALSE(invalidInput);
-      REQUIRE_FALSE(corruptData);
-      REQUIRE_FALSE(conflict);
-      REQUIRE_FALSE(resourceBusy);
-      REQUIRE_FALSE(tooLarge);
-      REQUIRE_FALSE(resourceExhausted);
+      REQUIRE_FALSE(invalidInputRes);
+      REQUIRE_FALSE(corruptDataRes);
+      REQUIRE_FALSE(conflictRes);
+      REQUIRE_FALSE(resourceBusyRes);
+      REQUIRE_FALSE(tooLargeRes);
+      REQUIRE_FALSE(resourceExhaustedRes);
 
-      CHECK(invalidInput.error().code == Error::Code::InvalidInput);
-      CHECK(corruptData.error().code == Error::Code::CorruptData);
-      CHECK(conflict.error().code == Error::Code::Conflict);
-      CHECK(resourceBusy.error().code == Error::Code::ResourceBusy);
-      CHECK(tooLarge.error().code == Error::Code::ValueTooLarge);
-      CHECK(resourceExhausted.error().code == Error::Code::ResourceExhausted);
+      CHECK(invalidInputRes.error().code == Error::Code::InvalidInput);
+      CHECK(corruptDataRes.error().code == Error::Code::CorruptData);
+      CHECK(conflictRes.error().code == Error::Code::Conflict);
+      CHECK(resourceBusyRes.error().code == Error::Code::ResourceBusy);
+      CHECK(tooLargeRes.error().code == Error::Code::ValueTooLarge);
+      CHECK(resourceExhaustedRes.error().code == Error::Code::ResourceExhausted);
     }
 
     SECTION("makeError captures the caller's source location, not makeError's body")

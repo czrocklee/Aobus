@@ -40,26 +40,26 @@ namespace ao::audio
     {
       auto mappedFile = utility::MappedFile{};
 
-      if (auto const mapResult = mappedFile.map(filePath); !mapResult)
+      if (auto const mapRes = mappedFile.map(filePath); !mapRes)
       {
         return makeError(
-          Error::Code::IoError, std::format("Failed to map '{}': {}", filePath.string(), mapResult.error().message));
+          Error::Code::IoError, std::format("Failed to map '{}': {}", filePath.string(), mapRes.error().message));
       }
 
-      auto const sampleEntryTypeResult = media::mp4::audioSampleEntryType(mappedFile.bytes());
+      auto const sampleEntryTypeRes = media::mp4::audioSampleEntryType(mappedFile.bytes());
 
-      if (!sampleEntryTypeResult)
+      if (!sampleEntryTypeRes)
       {
-        if (sampleEntryTypeResult.error().code == Error::Code::NotFound)
+        if (sampleEntryTypeRes.error().code == Error::Code::NotFound)
         {
           return makeError(Error::Code::NotSupported,
                            std::format("MP4 container in '{}' has no supported audio track", filePath.string()));
         }
 
-        return std::unexpected{sampleEntryTypeResult.error()};
+        return std::unexpected{sampleEntryTypeRes.error()};
       }
 
-      auto const& sampleEntryType = *sampleEntryTypeResult;
+      auto const& sampleEntryType = *sampleEntryTypeRes;
 
       if (sampleEntryType == "alac")
       {

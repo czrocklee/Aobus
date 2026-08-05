@@ -58,16 +58,16 @@ namespace ao::rt::test
 
     SECTION("unknown view")
     {
-      auto const rejected = succession.playFromView(ViewId{999999}, fixture.secondTrackId);
-      REQUIRE_FALSE(rejected);
-      CHECK(rejected.error().code == Error::Code::NotFound);
+      auto const rejectedRes = succession.playFromView(ViewId{999999}, fixture.secondTrackId);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().code == Error::Code::NotFound);
     }
 
     SECTION("start absent from captured projection")
     {
-      auto const rejected = succession.playFromView(fixture.viewId, outsideTrackId);
-      REQUIRE_FALSE(rejected);
-      CHECK(rejected.error().code == Error::Code::NotFound);
+      auto const rejectedRes = succession.playFromView(fixture.viewId, outsideTrackId);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().code == Error::Code::NotFound);
     }
 
     CHECK(succession.state() == accepted);
@@ -113,9 +113,9 @@ namespace ao::rt::test
     auto const changedSubscription =
       succession.onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
 
-    auto const admitted = succession.playFromView(fixture.viewId, broken);
+    auto const admittedRes = succession.playFromView(fixture.viewId, broken);
 
-    REQUIRE(admitted);
+    REQUIRE(admittedRes);
     REQUIRE(fixture.executor.drainUntil([&fixture] { return !fixture.notifications.feed().entries.empty(); }));
     auto const rejectionFeed = fixture.notifications.feed();
     REQUIRE(rejectionFeed.entries.size() == 1);
@@ -402,9 +402,9 @@ namespace ao::rt::test
     auto trailingSubscription = succession.onChanged([&](PlaybackSuccessionState const& state) noexcept
                                                      { trailingObserverTrackId = state.currentTrackId; });
 
-    auto const launched = succession.playFromView(fixture.viewId, fixture.thirdTrackId);
+    auto const launchedRes = succession.playFromView(fixture.viewId, fixture.thirdTrackId);
 
-    REQUIRE(launched);
+    REQUIRE(launchedRes);
     REQUIRE(fixture.executor.drainUntil(
       [&] { return playbackTransport.state().nowPlaying.trackId == fixture.thirdTrackId; }));
     CHECK(changedObserverEntered);
@@ -452,9 +452,9 @@ namespace ao::rt::test
     CHECK_FALSE(invalidated.optResolvedSuccessor);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
-    auto const rejectedRelaunch = succession.playFromView(fixture.viewId, fixture.firstTrackId);
-    REQUIRE_FALSE(rejectedRelaunch);
-    CHECK(rejectedRelaunch.error().code == Error::Code::NotFound);
+    auto const rejectedRelaunchRes = succession.playFromView(fixture.viewId, fixture.firstTrackId);
+    REQUIRE_FALSE(rejectedRelaunchRes);
+    CHECK(rejectedRelaunchRes.error().code == Error::Code::NotFound);
     CHECK(succession.state() == invalidated);
 
     succession.next();

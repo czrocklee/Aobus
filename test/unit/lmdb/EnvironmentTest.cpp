@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/lmdb/Environment.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
-#include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -37,11 +38,11 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - open returns environment on success", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = Environment::open(temp.path().string(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    CHECK(env);
+    auto envRes = Environment::open(temp.path().string(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    CHECK(envRes);
 
-    auto txn = WriteTransaction::begin(*env);
-    CHECK(txn);
+    auto txnRes = WriteTransaction::begin(*envRes);
+    CHECK(txnRes);
   }
 
   TEST_CASE("Environment - move constructor transfers ownership", "[lmdb][unit][environment]")

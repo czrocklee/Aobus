@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/ConfigStore.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/yaml/Serialization.h>
 
 #include <catch2/catch_message.hpp>
@@ -120,10 +121,10 @@ namespace ao::rt::test
 
     auto reloaded = ConfigStore{configPath};
     auto restored = State{};
-    auto const loaded = reloaded.load("owned", restored, StateYamlSchema{});
+    auto const loadedRes = reloaded.load("owned", restored, StateYamlSchema{});
 
-    REQUIRE(loaded);
-    REQUIRE(*loaded);
+    REQUIRE(loadedRes);
+    REQUIRE(*loadedRes);
     CHECK(restored.count == original.count);
     CHECK(restored.name == original.name);
     CHECK(restored.enabled == original.enabled);
@@ -137,10 +138,10 @@ namespace ao::rt::test
     {
       auto store = ConfigStore{tempDir.path() / "missing.yaml"};
       auto target = State{.count = 99, .name = "unchanged", .enabled = false};
-      auto const loaded = store.load("absent", target, StateYamlSchema{});
+      auto const loadedRes = store.load("absent", target, StateYamlSchema{});
 
-      REQUIRE(loaded);
-      CHECK_FALSE(*loaded);
+      REQUIRE(loadedRes);
+      CHECK_FALSE(*loadedRes);
       CHECK(target.count == 99);
       CHECK(target.name == "unchanged");
       CHECK_FALSE(target.enabled);
@@ -150,10 +151,10 @@ namespace ao::rt::test
     {
       auto store = ConfigStore{tempDir.path() / "missing.yaml", ConfigStore::OpenMode::ReadOnly};
       auto target = State{.count = 99};
-      auto const loaded = store.load("absent", target, StateYamlSchema{});
+      auto const loadedRes = store.load("absent", target, StateYamlSchema{});
 
-      REQUIRE_FALSE(loaded);
-      CHECK(loaded.error().code == Error::Code::NotFound);
+      REQUIRE_FALSE(loadedRes);
+      CHECK(loadedRes.error().code == Error::Code::NotFound);
       CHECK(target.count == 99);
     }
   }
@@ -169,10 +170,10 @@ namespace ao::rt::test
       writeFile(configPath, original);
       auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly, 64};
       auto target = State{.count = 99};
-      auto const loaded = store.load("owned", target, StateYamlSchema{});
+      auto const loadedRes = store.load("owned", target, StateYamlSchema{});
 
-      REQUIRE_FALSE(loaded);
-      CHECK(loaded.error().code == Error::Code::ValueTooLarge);
+      REQUIRE_FALSE(loadedRes);
+      CHECK(loadedRes.error().code == Error::Code::ValueTooLarge);
       CHECK(target.count == 99);
       CHECK(ao::test::readFile(configPath) == original);
     }
@@ -182,10 +183,10 @@ namespace ao::rt::test
       auto const original = std::string{"owned:\n  count: 1\n  name: ok\n  enabled: true\n"};
       writeFile(configPath, original);
       auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadWrite, original.size()};
-      auto const saved = store.save("added", State{.name = std::string(128, 'x')}, StateYamlSchema{});
+      auto const savedRes = store.save("added", State{.name = std::string(128, 'x')}, StateYamlSchema{});
 
-      REQUIRE_FALSE(saved);
-      CHECK(saved.error().code == Error::Code::ValueTooLarge);
+      REQUIRE_FALSE(savedRes);
+      CHECK(savedRes.error().code == Error::Code::ValueTooLarge);
       CHECK(ao::test::readFile(configPath) == original);
     }
   }
@@ -201,10 +202,10 @@ namespace ao::rt::test
 
     auto store = ConfigStore{configPath};
     auto target = State{.count = 99, .name = "seed name", .enabled = false};
-    auto const loaded = store.load("owned", target, SeededStateYamlSchema{});
+    auto const loadedRes = store.load("owned", target, SeededStateYamlSchema{});
 
-    REQUIRE(loaded);
-    REQUIRE(*loaded);
+    REQUIRE(loadedRes);
+    REQUIRE(*loadedRes);
     CHECK(target.count == 7);
     CHECK(target.name == "seed name");
     CHECK_FALSE(target.enabled);
@@ -224,11 +225,11 @@ namespace ao::rt::test
                 "  enabled: not-a-bool\n");
       auto store = ConfigStore{configPath};
       auto target = State{.count = 99, .name = "unchanged", .enabled = true};
-      auto const loaded = store.load("owned", target, StateYamlSchema{});
+      auto const loadedRes = store.load("owned", target, StateYamlSchema{});
 
-      REQUIRE_FALSE(loaded);
-      CHECK(loaded.error().code == Error::Code::FormatRejected);
-      CHECK(loaded.error().message.contains("owned"));
+      REQUIRE_FALSE(loadedRes);
+      CHECK(loadedRes.error().code == Error::Code::FormatRejected);
+      CHECK(loadedRes.error().message.contains("owned"));
       CHECK(target.count == 99);
       CHECK(target.name == "unchanged");
       CHECK(target.enabled);
@@ -239,11 +240,11 @@ namespace ao::rt::test
       writeFile(configPath, "owned: {}\n");
       auto store = ConfigStore{configPath};
       auto target = State{.count = 99};
-      auto const loaded = store.load("owned", target, ThrowingYamlSchema{});
+      auto const loadedRes = store.load("owned", target, ThrowingYamlSchema{});
 
-      REQUIRE_FALSE(loaded);
-      CHECK(loaded.error().code == Error::Code::FormatRejected);
-      CHECK(loaded.error().message.contains("intentional deserializer exception"));
+      REQUIRE_FALSE(loadedRes);
+      CHECK(loadedRes.error().code == Error::Code::FormatRejected);
+      CHECK(loadedRes.error().message.contains("intentional deserializer exception"));
       CHECK(target.count == 99);
     }
 
@@ -253,10 +254,10 @@ namespace ao::rt::test
       writeFile(configPath, kOriginal);
       auto store = ConfigStore{configPath};
       auto target = State{.count = 99};
-      auto const loaded = store.load("owned", target, StateYamlSchema{});
+      auto const loadedRes = store.load("owned", target, StateYamlSchema{});
 
-      REQUIRE_FALSE(loaded);
-      CHECK(loaded.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(loadedRes);
+      CHECK(loadedRes.error().code == Error::Code::FormatRejected);
       CHECK(target.count == 99);
       CHECK(ao::test::readFile(configPath) == kOriginal);
     }
@@ -293,12 +294,12 @@ namespace ao::rt::test
     }
 
     auto reloaded = ConfigStore{configPath};
-    auto const staged = reloaded.contains("staged");
-    auto const broken = reloaded.contains("broken");
-    REQUIRE(staged);
-    REQUIRE(broken);
-    CHECK_FALSE(*staged);
-    CHECK_FALSE(*broken);
+    auto const stagedRes = reloaded.contains("staged");
+    auto const brokenRes = reloaded.contains("broken");
+    REQUIRE(stagedRes);
+    REQUIRE(brokenRes);
+    CHECK_FALSE(*stagedRes);
+    CHECK_FALSE(*brokenRes);
   }
 
   TEST_CASE("ConfigStore - successful batch saves replace independent groups", "[runtime][unit][config]")
@@ -315,13 +316,13 @@ namespace ao::rt::test
     auto reloaded = ConfigStore{configPath};
     auto first = State{};
     auto second = State{};
-    auto firstLoaded = reloaded.load("first", first, StateYamlSchema{});
-    auto secondLoaded = reloaded.load("second", second, StateYamlSchema{});
+    auto firstLoadedRes = reloaded.load("first", first, StateYamlSchema{});
+    auto secondLoadedRes = reloaded.load("second", second, StateYamlSchema{});
 
-    REQUIRE(firstLoaded);
-    REQUIRE(*firstLoaded);
-    REQUIRE(secondLoaded);
-    REQUIRE(*secondLoaded);
+    REQUIRE(firstLoadedRes);
+    REQUIRE(*firstLoadedRes);
+    REQUIRE(secondLoadedRes);
+    REQUIRE(*secondLoadedRes);
     CHECK(first.count == 3);
     CHECK(first.name == "replacement");
     CHECK(second.count == 2);
@@ -340,10 +341,10 @@ namespace ao::rt::test
 
     std::filesystem::rename(configPath, backupPath);
     std::filesystem::create_directory(configPath);
-    auto const failed = store.save("staged", State{.count = 22}, StateYamlSchema{});
+    auto const failedRes = store.save("staged", State{.count = 22}, StateYamlSchema{});
 
-    REQUIRE_FALSE(failed);
-    CHECK(failed.error().code == Error::Code::IoError);
+    REQUIRE_FALSE(failedRes);
+    CHECK(failedRes.error().code == Error::Code::IoError);
     CHECK(ao::test::readFile(backupPath) == originalContents);
 
     std::filesystem::remove(configPath);
@@ -353,12 +354,12 @@ namespace ao::rt::test
     auto reloaded = ConfigStore{configPath};
     auto retained = State{};
     auto later = State{};
-    auto retainedLoaded = reloaded.load("retained", retained, StateYamlSchema{});
-    auto laterLoaded = reloaded.load("later", later, StateYamlSchema{});
-    REQUIRE(retainedLoaded);
-    REQUIRE(*retainedLoaded);
-    REQUIRE(laterLoaded);
-    REQUIRE(*laterLoaded);
+    auto retainedLoadedRes = reloaded.load("retained", retained, StateYamlSchema{});
+    auto laterLoadedRes = reloaded.load("later", later, StateYamlSchema{});
+    REQUIRE(retainedLoadedRes);
+    REQUIRE(*retainedLoadedRes);
+    REQUIRE(laterLoadedRes);
+    REQUIRE(*laterLoadedRes);
     CHECK(retained.count == 11);
     CHECK(later.count == 33);
     CHECK_FALSE(*reloaded.contains("staged"));
@@ -396,17 +397,17 @@ namespace ao::rt::test
       REQUIRE(store.save("second", State{.count = 7}, StateYamlSchema{}));
 
       auto liveFirst = State{};
-      auto const liveLoaded = store.load("first", liveFirst, StateYamlSchema{});
-      REQUIRE(liveLoaded);
-      REQUIRE(*liveLoaded);
+      auto const liveLoadedRes = store.load("first", liveFirst, StateYamlSchema{});
+      REQUIRE(liveLoadedRes);
+      REQUIRE(*liveLoadedRes);
       CHECK(liveFirst.name == "temporary value");
     }
 
     auto reloaded = ConfigStore{configPath};
     auto first = State{};
-    auto const loaded = reloaded.load("first", first, StateYamlSchema{});
-    REQUIRE(loaded);
-    REQUIRE(*loaded);
+    auto const loadedRes = reloaded.load("first", first, StateYamlSchema{});
+    REQUIRE(loadedRes);
+    REQUIRE(*loadedRes);
     CHECK(first.name == "temporary value");
   }
 
@@ -424,12 +425,12 @@ namespace ao::rt::test
       REQUIRE(store.removeGroup("removed"));
 
       auto reloaded = ConfigStore{configPath};
-      auto removed = reloaded.contains("removed");
-      auto retained = reloaded.contains("retained");
-      REQUIRE(removed);
-      REQUIRE(retained);
-      CHECK_FALSE(*removed);
-      CHECK(*retained);
+      auto removedRes = reloaded.contains("removed");
+      auto retainedRes = reloaded.contains("retained");
+      REQUIRE(removedRes);
+      REQUIRE(retainedRes);
+      CHECK_FALSE(*removedRes);
+      CHECK(*retainedRes);
     }
 
     SECTION("Removing an absent group does not create a file")

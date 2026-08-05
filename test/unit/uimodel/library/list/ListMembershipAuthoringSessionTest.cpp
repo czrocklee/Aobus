@@ -46,20 +46,19 @@ namespace ao::uimodel::test
     auto transaction = library::test::writeTransaction(storage.library());
     auto builder = library::ListBuilder::makeEmpty().name("Road Trip").filter(R"(#"road-trip")");
     builder.orderTrackIds().add(trackId);
-    auto createResult =
-      storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
-    REQUIRE(createResult);
-    auto const listId = *createResult;
+    auto createRes = storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
+    REQUIRE(createRes);
+    auto const listId = *createRes;
     REQUIRE(transaction.commit());
 
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
     auto const tag = std::array{std::string{"road-trip"}};
     REQUIRE(writerFixture.editTags(std::array{trackId}, tag, {}));
-    auto sessionResult = ListMembershipAuthoringSession::begin(writerFixture.library(), std::array{trackId});
-    REQUIRE(sessionResult);
+    auto sessionRes = ListMembershipAuthoringSession::begin(writerFixture.library(), std::array{trackId});
+    REQUIRE(sessionRes);
 
-    auto const result = (*sessionResult)->removeFromList(listId);
+    auto const result = (*sessionRes)->removeFromList(listId);
 
     REQUIRE(result);
     CHECK(result->status == rt::TrackAuthoringStatus::Applied);

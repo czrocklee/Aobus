@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/ResourceStore.h>
+
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -28,9 +29,9 @@ namespace ao::library::test
     auto const buffer = utility::bytes::view(std::string_view{"hello"});
 
     auto wtxn2 = writeTransaction(library);
-    auto idResult = store.writer(wtxn2).create(buffer);
-    REQUIRE(idResult);
-    auto const id = *idResult;
+    auto idRes = store.writer(wtxn2).create(buffer);
+    REQUIRE(idRes);
+    auto const id = *idRes;
     CHECK(id > 0);
     REQUIRE(wtxn2.commit());
 
@@ -60,9 +61,9 @@ namespace ao::library::test
     auto const buffer = utility::bytes::view(std::string_view{"test"});
 
     auto wtxn2 = writeTransaction(library);
-    auto idResult = store.writer(wtxn2).create(buffer);
-    REQUIRE(idResult);
-    auto const id = *idResult;
+    auto idRes = store.writer(wtxn2).create(buffer);
+    REQUIRE(idRes);
+    auto const id = *idRes;
     REQUIRE(wtxn2.commit());
 
     // Delete it
@@ -87,16 +88,16 @@ namespace ao::library::test
     auto const buffer = utility::bytes::view(std::string_view{"samedata"});
 
     auto wtxn2 = writeTransaction(library);
-    auto id1Result = store.writer(wtxn2).create(buffer);
-    REQUIRE(id1Result);
-    auto const id1 = *id1Result;
+    auto id1Res = store.writer(wtxn2).create(buffer);
+    REQUIRE(id1Res);
+    auto const id1 = *id1Res;
     REQUIRE(wtxn2.commit());
 
     // Create same content again - should return same ID (deduplication)
     auto wtxn3 = writeTransaction(library);
-    auto id2Result = store.writer(wtxn3).create(buffer);
-    REQUIRE(id2Result);
-    auto const id2 = *id2Result;
+    auto id2Res = store.writer(wtxn3).create(buffer);
+    REQUIRE(id2Res);
+    auto const id2 = *id2Res;
     CHECK(id2 == id1);
     REQUIRE(wtxn3.commit());
 
@@ -125,12 +126,12 @@ namespace ao::library::test
 
     auto wtxn2 = writeTransaction(library);
     auto writer = store.writer(wtxn2);
-    auto idResult = writer.create(kData);
-    REQUIRE(idResult);
-    auto const id = *idResult;
-    auto duplicateIdResult = writer.create(kData);
-    REQUIRE(duplicateIdResult);
-    auto const duplicateId = *duplicateIdResult;
+    auto idRes = writer.create(kData);
+    REQUIRE(idRes);
+    auto const id = *idRes;
+    auto duplicateIdRes = writer.create(kData);
+    REQUIRE(duplicateIdRes);
+    auto const duplicateId = *duplicateIdRes;
     CHECK(id != kInvalidResourceId);
     CHECK(duplicateId == id);
     REQUIRE(wtxn2.commit());

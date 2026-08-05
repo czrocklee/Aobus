@@ -180,11 +180,11 @@ namespace ao::winui::layout
           return;
         }
 
-        if (auto const selected = _trackList.selectPresentation(presentationId); !selected)
+        if (auto const selectedRes = _trackList.selectPresentation(presentationId); !selectedRes)
         {
           if (_reportStatus)
           {
-            _reportStatus(formatResource("PresentationFailedFormat", selected.error().message));
+            _reportStatus(formatResource("PresentationFailedFormat", selectedRes.error().message));
           }
 
           return;

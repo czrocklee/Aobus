@@ -141,6 +141,7 @@ EXPECTED_AOBUS_CHECKS = frozenset(
         "aobus-readability-pointer-naming-convention",
         "aobus-readability-redundant-namespace-qualification",
         "aobus-readability-redundant-using-directive",
+        "aobus-readability-result-naming-convention",
         "aobus-readability-std-c-library-qualification",
         "aobus-readability-unused-suppression-style",
         "aobus-readability-use-if-init-statement",

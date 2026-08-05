@@ -131,25 +131,25 @@ namespace ao::library::test
     auto transaction = writeTransaction(fixture.library);
     auto writer = fixture.library.lists().writer(transaction);
 
-    auto const createResult = writer.create(corruptPayload);
-    REQUIRE_FALSE(createResult);
-    CHECK(createResult.error().code == Error::Code::CorruptData);
+    auto const createRes = writer.create(corruptPayload);
+    REQUIRE_FALSE(createRes);
+    CHECK(createRes.error().code == Error::Code::CorruptData);
 
-    auto created = writer.create(validPayload);
-    REQUIRE(created);
-    auto const updateResult = writer.update(*created, corruptPayload);
-    REQUIRE_FALSE(updateResult);
-    CHECK(updateResult.error().code == Error::Code::CorruptData);
+    auto createdRes = writer.create(validPayload);
+    REQUIRE(createdRes);
+    auto const updateRes = writer.update(*createdRes, corruptPayload);
+    REQUIRE_FALSE(updateRes);
+    CHECK(updateRes.error().code == Error::Code::CorruptData);
     REQUIRE(transaction.commit());
 
     auto readTransaction = fixture.library.readTransaction();
     auto reader = fixture.library.lists().reader(readTransaction);
-    auto const optStored = reader.get(*created);
+    auto const optStored = reader.get(*createdRes);
     REQUIRE(optStored);
     CHECK(optStored->name() == "Original");
     auto iterator = reader.begin();
     REQUIRE(iterator != reader.end());
-    CHECK((*iterator).first == *created);
+    CHECK((*iterator).first == *createdRes);
     ++iterator;
     CHECK(iterator == reader.end());
   }

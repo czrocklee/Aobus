@@ -135,19 +135,19 @@ namespace ao::media::mp4
 
     while (true)
     {
-      auto childResult = cursor.next();
+      auto childRes = cursor.next();
 
-      if (!childResult)
+      if (!childRes)
       {
-        return std::unexpected{childResult.error()};
+        return std::unexpected{childRes.error()};
       }
 
-      if (!*childResult)
+      if (!*childRes)
       {
         return {};
       }
 
-      if (!std::invoke(visitor, **childResult))
+      if (!std::invoke(visitor, **childRes))
       {
         return {};
       }

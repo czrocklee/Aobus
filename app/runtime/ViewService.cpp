@@ -117,14 +117,14 @@ namespace ao::rt
 
       if (!filterExpression.empty())
       {
-        auto sourceResult = sources.acquire(SourceSpec{.baseListId = baseListId, .filterExpression = filterExpression});
+        auto sourceRes = sources.acquire(SourceSpec{.baseListId = baseListId, .filterExpression = filterExpression});
 
-        if (!sourceResult)
+        if (!sourceRes)
         {
-          return std::unexpected{sourceResult.error()};
+          return std::unexpected{sourceRes.error()};
         }
 
-        activeSourceLease = std::move(*sourceResult);
+        activeSourceLease = std::move(*sourceRes);
 
         if (auto optQuickFilterError = sources.sourceError(activeSourceLease); optQuickFilterError)
         {
@@ -222,26 +222,26 @@ namespace ao::rt
 
   Result<ViewId> ViewService::createView(TrackListViewConfig const& initial)
   {
-    auto baseSourceResult = _implPtr->sources.acquire(initial.listId);
+    auto baseSourceRes = _implPtr->sources.acquire(initial.listId);
 
-    if (!baseSourceResult)
+    if (!baseSourceRes)
     {
-      return std::unexpected{baseSourceResult.error()};
+      return std::unexpected{baseSourceRes.error()};
     }
 
     auto const id = ViewId{_implPtr->nextViewId};
     auto const presentation = initialPresentation(initial);
-    auto resourcesResult = prepareViewResources(id,
-                                                initial.listId,
-                                                std::move(*baseSourceResult),
-                                                initial.filterExpression,
-                                                presentation,
-                                                _implPtr->library,
-                                                _implPtr->sources);
+    auto resourcesRes = prepareViewResources(id,
+                                             initial.listId,
+                                             std::move(*baseSourceRes),
+                                             initial.filterExpression,
+                                             presentation,
+                                             _implPtr->library,
+                                             _implPtr->sources);
 
-    if (!resourcesResult)
+    if (!resourcesRes)
     {
-      return std::unexpected{resourcesResult.error()};
+      return std::unexpected{resourcesRes.error()};
     }
 
     auto state = TrackListViewState{
@@ -252,7 +252,7 @@ namespace ao::rt
       .sortBy = presentation.sortBy,
       .presentation = presentation,
     };
-    auto resources = std::move(*resourcesResult);
+    auto resources = std::move(*resourcesRes);
     auto entry = ViewEntry{
       .state = std::move(state),
       .baseSourceLease = std::move(resources.baseSourceLease),
@@ -290,20 +290,20 @@ namespace ao::rt
       return {};
     }
 
-    auto resourcesResult = prepareViewResources(viewId,
-                                                entry.state.listId,
-                                                entry.baseSourceLease,
-                                                filterExpression,
-                                                entry.state.presentation,
-                                                _implPtr->library,
-                                                _implPtr->sources);
+    auto resourcesRes = prepareViewResources(viewId,
+                                             entry.state.listId,
+                                             entry.baseSourceLease,
+                                             filterExpression,
+                                             entry.state.presentation,
+                                             _implPtr->library,
+                                             _implPtr->sources);
 
-    if (!resourcesResult)
+    if (!resourcesRes)
     {
-      return std::unexpected{resourcesResult.error()};
+      return std::unexpected{resourcesRes.error()};
     }
 
-    installResources(entry, std::move(*resourcesResult));
+    installResources(entry, std::move(*resourcesRes));
     entry.state.filterExpression = std::move(filterExpression);
     _implPtr->projectionChangedSignal.post(
       _implPtr->executor, TrackListProjectionChanged{.viewId = viewId, .projectionPtr = entry.projectionPtr});

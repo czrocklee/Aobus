@@ -350,10 +350,10 @@ namespace ao::media::file::mpeg::test
 
     auto const temp = TempFile{data, ".mp3"};
     auto const file = TestFile{temp.path};
-    auto rangeResult = file.audioPayload();
+    auto rangeRes = file.audioPayload();
 
-    REQUIRE(rangeResult);
-    auto const range = *rangeResult;
+    REQUIRE(rangeRes);
+    auto const range = *rangeRes;
     CHECK(range.offset == expectedOffset);
     REQUIRE(range.bytes.size() == frame.size());
     CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == frame[0]);
@@ -374,10 +374,10 @@ namespace ao::media::file::mpeg::test
 
     auto const temp = TempFile{data, ".mp3"};
     auto const file = TestFile{temp.path};
-    auto rangeResult = file.audioPayload();
+    auto rangeRes = file.audioPayload();
 
-    REQUIRE(rangeResult);
-    auto const range = *rangeResult;
+    REQUIRE(rangeRes);
+    auto const range = *rangeRes;
     CHECK(range.offset == expectedOffset);
     REQUIRE(range.bytes.size() == frame.size());
     CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == frame[0]);
@@ -395,10 +395,10 @@ namespace ao::media::file::mpeg::test
 
     auto const temp = TempFile{data, ".mp3"};
     auto const file = TestFile{temp.path};
-    auto rangeResult = file.audioPayload();
+    auto rangeRes = file.audioPayload();
 
-    REQUIRE(rangeResult);
-    auto const range = *rangeResult;
+    REQUIRE(rangeRes);
+    auto const range = *rangeRes;
     CHECK(range.offset == 0);
     REQUIRE(range.bytes.size() == frame.size());
     CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == frame[0]);
@@ -427,14 +427,14 @@ namespace ao::media::file::mpeg::test
     auto const firstFile = TestFile{firstTemp.path};
     auto const secondFile = TestFile{secondTemp.path};
 
-    auto const firstPayloadResult = firstFile.audioPayload();
-    auto const secondPayloadResult = secondFile.audioPayload();
-    REQUIRE(firstPayloadResult);
-    REQUIRE(secondPayloadResult);
+    auto const firstPayloadRes = firstFile.audioPayload();
+    auto const secondPayloadRes = secondFile.audioPayload();
+    REQUIRE(firstPayloadRes);
+    REQUIRE(secondPayloadRes);
 
-    CHECK(firstPayloadResult->bytes.size() == frame.size());
-    CHECK(secondPayloadResult->bytes.size() == frame.size());
-    CHECK(utility::xxh3Hash128(firstPayloadResult->bytes) == utility::xxh3Hash128(secondPayloadResult->bytes));
+    CHECK(firstPayloadRes->bytes.size() == frame.size());
+    CHECK(secondPayloadRes->bytes.size() == frame.size());
+    CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
   TEST_CASE("MPEG File - derives CBR audio properties", "[media][unit][mpeg][file]")
@@ -469,12 +469,12 @@ namespace ao::media::file::mpeg::test
     auto const temp = TempFile{data, ".mp3"};
     auto const file = TestFile{temp.path};
     auto content = readContent(file);
-    auto payloadResult = file.audioPayload();
+    auto payloadRes = file.audioPayload();
 
     CHECK(content.bitrate() == 240000);
-    REQUIRE(payloadResult);
-    CHECK(payloadResult->offset == 0);
-    CHECK(payloadResult->bytes.size() == 2160);
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->offset == 0);
+    CHECK(payloadRes->bytes.size() == 2160);
   }
 
   TEST_CASE("MPEG File - decodes ID3v2.4 syncsafe frame sizes", "[media][unit][mpeg][id3v2]")
@@ -571,9 +571,9 @@ namespace ao::media::file::mpeg::test
     auto const frame = createValidMpegFrame();
     data.insert(data.end(), frame.begin(), frame.end());
     auto const temp = TempFile{data, ".mp3"};
-    auto fileResult = File::open(temp.path);
-    REQUIRE(fileResult);
-    auto file = std::move(*fileResult);
+    auto fileRes = File::open(temp.path);
+    REQUIRE(fileRes);
+    auto file = std::move(*fileRes);
 
     auto first = ao::media::file::test::RecordedContent{};
     auto firstVisitor = ao::media::file::test::VisitorSpy{first};
@@ -660,15 +660,15 @@ namespace ao::media::file::mpeg::test
 
       auto const temp = TempFile{data, ".mp3"};
       auto const file = TestFile{temp.path};
-      auto trackResult = file.readContent();
-      auto payloadResult = file.audioPayload();
+      auto trackRes = file.readContent();
+      auto payloadRes = file.audioPayload();
 
-      REQUIRE(trackResult);
-      CHECK(trackResult->text(TextField::Title).empty());
-      CHECK(trackResult->codec() == AudioCodec::Mp3);
-      REQUIRE(payloadResult);
-      CHECK(payloadResult->offset == expectedOffset);
-      CHECK(payloadResult->bytes.size() == frame.size());
+      REQUIRE(trackRes);
+      CHECK(trackRes->text(TextField::Title).empty());
+      CHECK(trackRes->codec() == AudioCodec::Mp3);
+      REQUIRE(payloadRes);
+      CHECK(payloadRes->offset == expectedOffset);
+      CHECK(payloadRes->bytes.size() == frame.size());
     }
 
     SECTION("Frame size exceeds tag body")
@@ -742,13 +742,13 @@ namespace ao::media::file::mpeg::test
 
       auto const temp = TempFile{data, ".mp3"};
       auto const file = TestFile{temp.path};
-      auto trackResult = file.readContent();
-      auto payloadResult = file.audioPayload();
+      auto trackRes = file.readContent();
+      auto payloadRes = file.audioPayload();
 
-      REQUIRE_FALSE(trackResult);
-      CHECK(trackResult.error().code == Error::Code::CorruptData);
-      REQUIRE_FALSE(payloadResult);
-      CHECK(payloadResult.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(trackRes);
+      CHECK(trackRes.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(payloadRes);
+      CHECK(payloadRes.error().code == Error::Code::CorruptData);
     }
   }
 } // namespace ao::media::file::mpeg::test

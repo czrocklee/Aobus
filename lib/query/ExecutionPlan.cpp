@@ -782,14 +782,14 @@ namespace ao::query
       detail::throwQueryError("operator '?' requires a field operand");
     }
 
-    auto const fieldResult = detail::resolveVariableField(*var);
+    auto const fieldRes = detail::resolveVariableField(*var);
 
-    if (!fieldResult)
+    if (!fieldRes)
     {
-      detail::throwQueryError(fieldResult.error());
+      detail::throwQueryError(fieldRes.error());
     }
 
-    auto const field = *fieldResult;
+    auto const field = *fieldRes;
     _lastField = field;
 
     if (isColdField(field))
@@ -872,14 +872,14 @@ namespace ao::query
       return fieldReg;
     }
 
-    auto const fieldResult = detail::resolveVariableField(var);
+    auto const fieldRes = detail::resolveVariableField(var);
 
-    if (!fieldResult)
+    if (!fieldRes)
     {
-      detail::throwQueryError(fieldResult.error());
+      detail::throwQueryError(fieldRes.error());
     }
 
-    auto const field = *fieldResult;
+    auto const field = *fieldRes;
     _lastField = field; // Track for string resolution context
 
     // Track access profile for hot/cold determination based on field storage location
@@ -1191,14 +1191,14 @@ namespace ao::query
       return std::nullopt;
     }
 
-    auto const fieldResult = detail::resolveVariableField(*variable);
+    auto const fieldRes = detail::resolveVariableField(*variable);
 
-    if (!fieldResult)
+    if (!fieldRes)
     {
-      detail::throwQueryError(fieldResult.error());
+      detail::throwQueryError(fieldRes.error());
     }
 
-    auto const field = *fieldResult;
+    auto const field = *fieldRes;
 
     if (isTagField(field))
     {

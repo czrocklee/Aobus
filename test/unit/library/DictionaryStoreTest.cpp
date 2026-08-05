@@ -79,9 +79,9 @@ namespace ao::library::test
     CHECK_THROWS_AS(listWriter.clear(), Exception);
     CHECK_THROWS_AS(resourceWriter.clear(), Exception);
     CHECK_THROWS_AS(manifestWriter.clear(), Exception);
-    auto const lateIntern = dictionaryWriter.intern("after-commit");
-    REQUIRE_FALSE(lateIntern);
-    CHECK(lateIntern.error().code == Error::Code::InvalidState);
+    auto const lateInternRes = dictionaryWriter.intern("after-commit");
+    REQUIRE_FALSE(lateInternRes);
+    CHECK(lateInternRes.error().code == Error::Code::InvalidState);
     CHECK_THROWS_AS(transaction.dictionary(), Exception);
   }
 
@@ -136,9 +136,9 @@ namespace ao::library::test
     CHECK_THROWS_AS(listWriter.clear(), Exception);
     CHECK_THROWS_AS(resourceWriter.clear(), Exception);
     CHECK_THROWS_AS(manifestWriter.clear(), Exception);
-    auto const lateIntern = dictionaryWriter.intern("after-failure");
-    REQUIRE_FALSE(lateIntern);
-    CHECK(lateIntern.error().code == Error::Code::InvalidState);
+    auto const lateInternRes = dictionaryWriter.intern("after-failure");
+    REQUIRE_FALSE(lateInternRes);
+    CHECK(lateInternRes.error().code == Error::Code::InvalidState);
     CHECK_THROWS_AS(transaction.dictionary(), Exception);
 
     auto retry = writeTransaction(library);

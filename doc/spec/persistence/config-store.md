@@ -185,7 +185,7 @@ A runtime or frontend workflow decides how to report or recover from a store fai
 - [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns the public modes, `ConfigSchema` concept, `ConfigWrite` descriptors, explicit load/save templates, candidate serialization, schema exception containment, and error context.
 - [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp) owns lazy parsing, complete-document cloning, removal, emission, atomic replacement, and live-document installation.
 - [`RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) owns reusable parser callbacks, file reading, arena lifetime helpers, and scalar conversion; [`Serialization.h`](../../../include/ao/yaml/Serialization.h) owns explicit node validation and arena-owning map/sequence writes.
-- [`AtomicFile.h`](../../../include/ao/utility/AtomicFile.h), [`AtomicFile.cpp`](../../../lib/utility/AtomicFile.cpp), and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) own the lower file-replacement mechanism.
+- [`AtomicFile.h`](../../../include/ao/utility/AtomicFile.h), [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp), and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) own the lower file-replacement mechanism.
 
 ## Test map
 

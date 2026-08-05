@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/Completion.h>
+
 #include "detail/CompletionTokenizer.h"
 #include "detail/Lexical.h"
-#include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
@@ -406,9 +407,9 @@ namespace ao::query
       // AST, returning no value on a grammar mismatch. A single parse() therefore subsumes the
       // syntactic check: a grammar failure (or a future value callback that fails after a syntactic
       // match) leaves parsed empty and degrades to "not a completed expression".
-      auto const parsed = parse(expression);
+      auto const parsedRes = parse(expression);
 
-      return parsed && detail::isPredicateExpression(*parsed);
+      return parsedRes && detail::isPredicateExpression(*parsedRes);
     }
 
     bool isOperatorCompletionPrefixToken(std::string_view text, detail::CompletionToken token)

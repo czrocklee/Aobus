@@ -138,9 +138,9 @@ namespace ao::rt::test
         request.optPresentation = NavigationPresentation{.spec = TrackPresentationSpec{.sortBy = std::move(sortBy)}};
       }
 
-      auto const created = runtime.workspace().navigate(request);
-      REQUIRE(created);
-      return *created;
+      auto const createdRes = runtime.workspace().navigate(request);
+      REQUIRE(createdRes);
+      return *createdRes;
     }
 
     auto makePlaybackSessionRuntime(ao::test::TempDir const& tempDir,
@@ -166,9 +166,9 @@ namespace ao::rt::test
     PlaybackSessionState storedSession(ConfigStore& store)
     {
       auto session = PlaybackSessionState{};
-      auto const loaded = store.load(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
-      REQUIRE(loaded);
-      REQUIRE(*loaded);
+      auto const loadedRes = store.load(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
+      REQUIRE(loadedRes);
+      REQUIRE(*loadedRes);
       return session;
     }
 
@@ -190,24 +190,24 @@ namespace ao::rt::test
                                           std::vector<TrackSortTerm> sortBy = {})
     {
       auto const membershipTag = std::array{std::string{"playbacksessionorder"}};
-      auto targetsResult = runtime.library().bindTrackTargets(trackIds);
-      INFO((targetsResult ? "initial membership targets bound" : targetsResult.error().message));
-      REQUIRE(targetsResult);
-      auto membershipResultValue = runtime.library().writer().editTags(*targetsResult, membershipTag, {});
-      INFO((membershipResultValue ? "initial membership updated" : membershipResultValue.error().message));
-      REQUIRE(membershipResultValue);
-      auto const& membershipResult = *membershipResultValue;
-      REQUIRE((membershipResult.status == TrackAuthoringStatus::Applied ||
-               membershipResult.status == TrackAuthoringStatus::NoOp));
+      auto targetsRes = runtime.library().bindTrackTargets(trackIds);
+      INFO((targetsRes ? "initial membership targets bound" : targetsRes.error().message));
+      REQUIRE(targetsRes);
+      auto membershipResultValueRes = runtime.library().writer().editTags(*targetsRes, membershipTag, {});
+      INFO((membershipResultValueRes ? "initial membership updated" : membershipResultValueRes.error().message));
+      REQUIRE(membershipResultValueRes);
+      auto const& membershipRes = *membershipResultValueRes;
+      REQUIRE(
+        (membershipRes.status == TrackAuthoringStatus::Applied || membershipRes.status == TrackAuthoringStatus::NoOp));
       executor.drain();
       runtime.reloadAllTracks();
-      auto listResult = runtime.library().writer().createList(LibraryWriter::ListDraft{
+      auto listRes = runtime.library().writer().createList(LibraryWriter::ListDraft{
         .name = "Playback session order",
         .expression = "#playbacksessionorder",
       });
-      INFO((listResult ? "playback List created" : listResult.error().message));
-      REQUIRE(listResult);
-      auto const listId = *listResult;
+      INFO((listRes ? "playback List created" : listRes.error().message));
+      REQUIRE(listRes);
+      auto const listId = *listRes;
       executor.drain();
       auto request = NavigationRequest{
         .target = FilteredListTarget{.listId = listId, .filterExpression = {}},
@@ -220,22 +220,22 @@ namespace ao::rt::test
         request.optPresentation = NavigationPresentation{.spec = TrackPresentationSpec{.sortBy = std::move(sortBy)}};
       }
 
-      auto const created = runtime.workspace().navigate(request);
-      REQUIRE(created);
-      return OrderedListView{.listId = listId, .viewId = *created};
+      auto const createdRes = runtime.workspace().navigate(request);
+      REQUIRE(createdRes);
+      return OrderedListView{.listId = listId, .viewId = *createdRes};
     }
 
     void setOrderedListViewMembership(AppRuntime& runtime, std::span<TrackId const> const trackIds, bool const included)
     {
       auto const membershipTag = std::array{std::string{"playbacksessionorder"}};
-      auto targetsResult = runtime.library().bindTrackTargets(trackIds);
-      INFO((targetsResult ? "membership targets bound" : targetsResult.error().message));
-      REQUIRE(targetsResult);
-      auto resultValue = included ? runtime.library().writer().editTags(*targetsResult, membershipTag, {})
-                                  : runtime.library().writer().editTags(*targetsResult, {}, membershipTag);
-      INFO((resultValue ? "membership updated" : resultValue.error().message));
-      REQUIRE(resultValue);
-      auto const& result = *resultValue;
+      auto targetsRes = runtime.library().bindTrackTargets(trackIds);
+      INFO((targetsRes ? "membership targets bound" : targetsRes.error().message));
+      REQUIRE(targetsRes);
+      auto resultValueRes = included ? runtime.library().writer().editTags(*targetsRes, membershipTag, {})
+                                     : runtime.library().writer().editTags(*targetsRes, {}, membershipTag);
+      INFO((resultValueRes ? "membership updated" : resultValueRes.error().message));
+      REQUIRE(resultValueRes);
+      auto const& result = *resultValueRes;
       REQUIRE((result.status == TrackAuthoringStatus::Applied || result.status == TrackAuthoringStatus::NoOp));
     }
 
@@ -568,9 +568,9 @@ namespace ao::rt::test
     CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "3");
     CHECK(yaml::scalarView(tree.rootref()["sortBy"][0]["field"]) == "13");
 
-    auto const decoded = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
-    REQUIRE(decoded);
-    CHECK(*decoded == state);
+    auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
+    REQUIRE(decodedRes);
+    CHECK(*decodedRes == state);
   }
 
   TEST_CASE("PlaybackSessionYamlSchema - rejects future and unknown YAML structure",
@@ -581,10 +581,10 @@ namespace ao::rt::test
       auto const* source = "schemaVersion: 99\nsortBy: malformed\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
+      auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Unknown structural keys are rejected")
@@ -605,11 +605,11 @@ namespace ao::rt::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decoded = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
+      auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
 
-      REQUIRE_FALSE(decoded);
-      CHECK(decoded.error().code == Error::Code::FormatRejected);
-      CHECK(decoded.error().message.contains("future"));
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("future"));
     }
   }
 
@@ -651,11 +651,11 @@ namespace ao::rt::test
     CHECK(saved.muted);
 
     runtimePtr->playback().commands().stop();
-    auto const restored = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
 
-    REQUIRE(restored);
-    REQUIRE(restored->restored);
-    CHECK(restored->trackId == alpha);
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    CHECK(restoredRes->trackId == alpha);
     CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Idle);
     CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == alpha);
     CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{500});
@@ -748,9 +748,9 @@ namespace ao::rt::test
     REQUIRE(captureStatePtr->renderTarget != nullptr);
 
     auto output = std::array<std::byte, 4096>{};
-    auto const renderResult = captureStatePtr->renderTarget->renderPcm(output);
-    REQUIRE(renderResult.bytesWritten > 0);
-    captureStatePtr->renderTarget->handlePositionAdvanced(renderResult.positionFrames);
+    auto const renderRes = captureStatePtr->renderTarget->renderPcm(output);
+    REQUIRE(renderRes.bytesWritten > 0);
+    captureStatePtr->renderTarget->handlePositionAdvanced(renderRes.positionFrames);
     REQUIRE(runtimePtr->savePlaybackSession());
 
     auto sentinel = storedSession(playbackSessionStore);
@@ -782,9 +782,9 @@ namespace ao::rt::test
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
     auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
-    auto const restored = runtimePtr->restorePlaybackSession();
-    REQUIRE(restored);
-    CHECK_FALSE(restored->restored);
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    CHECK_FALSE(restoredRes->restored);
 
     addReadyAudioProvider(*runtimePtr);
     executor->runUntilIdle();
@@ -832,9 +832,9 @@ namespace ao::rt::test
     executor->drain();
     setOrderedListViewMembership(*runtimePtr, removedIds, false);
 
-    auto const launched = startFromViewAndWait(*runtimePtr, *executor, orderedList.viewId, current);
+    auto const launchedRes = startFromViewAndWait(*runtimePtr, *executor, orderedList.viewId, current);
 
-    REQUIRE(launched);
+    REQUIRE(launchedRes);
     auto const accepted = runtimePtr->playback().snapshot().succession;
     CHECK(accepted.sourceState == PlaybackSourceState::Live);
     CHECK(accepted.currentTrackId == current);
@@ -895,23 +895,23 @@ namespace ao::rt::test
         if (!nestedCommandRequested)
         {
           nestedCommandRequested = true;
-          auto const nestedRestore = runtimePtr->restorePlaybackSession();
-          nestedRestoreAccepted = nestedRestore.has_value();
+          auto const nestedRestoreRes = runtimePtr->restorePlaybackSession();
+          nestedRestoreAccepted = nestedRestoreRes.has_value();
 
-          if (!nestedRestore)
+          if (!nestedRestoreRes)
           {
-            nestedRestoreError = nestedRestore.error().code;
+            nestedRestoreError = nestedRestoreRes.error().code;
           }
 
-          auto const nestedLaunch = runtimePtr->playback().commands().startFromView(viewId, secondTrackId);
-          nestedLaunchAccepted = nestedLaunch.has_value();
+          auto const nestedLaunchRes = runtimePtr->playback().commands().startFromView(viewId, secondTrackId);
+          nestedLaunchAccepted = nestedLaunchRes.has_value();
         }
       });
 
-    auto const restored = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
 
-    REQUIRE(restored);
-    REQUIRE(restored->restored);
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
     CHECK(snapshotCount == 1);
     CHECK(observedSuccessionTrackId == firstTrackId);
     CHECK(observedTransportTrackId == firstTrackId);
@@ -966,10 +966,10 @@ namespace ao::rt::test
     runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
     REQUIRE(queuedRepeat);
 
-    auto const restored = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
 
-    REQUIRE_FALSE(restored);
-    CHECK(restored.error().code == Error::Code::InvalidState);
+    REQUIRE_FALSE(restoredRes);
+    CHECK(restoredRes.error().code == Error::Code::InvalidState);
     executor->drain();
     CHECK(runtimePtr->playback().snapshot().succession.repeat == RepeatMode::All);
   }
@@ -994,10 +994,10 @@ namespace ao::rt::test
     session.positionMs = 750;
     storeSession(*runtimePtr, session);
 
-    auto const restored = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
 
-    REQUIRE(restored);
-    REQUIRE(restored->restored);
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
     auto const after = runtimePtr->playback().snapshot();
     CHECK(after.transport.positionRevision.value == before.transport.positionRevision.value + 1);
     CHECK(after.transport.finalSeekRevision == before.transport.finalSeekRevision);
@@ -1082,9 +1082,9 @@ namespace ao::rt::test
     }
 
     storeSession(*runtimePtr, payload);
-    auto const restored = runtimePtr->restorePlaybackSession();
-    REQUIRE_FALSE(restored);
-    CHECK(restored.error().code == expectedError);
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE_FALSE(restoredRes);
+    CHECK(restoredRes.error().code == expectedError);
   }
 
   TEST_CASE("PlaybackSession - exact schema rejects missing and malformed raw YAML fields",
@@ -1118,10 +1118,10 @@ namespace ao::rt::test
     }
 
     writeWorkspaceYaml(tempDir, rawPlaybackSessionYaml(trackId, schemaLine, sortBy));
-    auto const restored = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
 
-    REQUIRE_FALSE(restored);
-    CHECK(restored.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(restoredRes);
+    CHECK(restoredRes.error().code == Error::Code::FormatRejected);
     CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
     CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
@@ -1147,10 +1147,10 @@ namespace ao::rt::test
     {
       payload.anchorIndex = 0;
       storeSession(*runtimePtr, payload);
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
-      CHECK(restored->trackId == first);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
+      CHECK(restoredRes->trackId == first);
       CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
     }
 
@@ -1159,10 +1159,10 @@ namespace ao::rt::test
       payload.quickFilterExpression = "$year > 2000";
       payload.anchorIndex = 1;
       storeSession(*runtimePtr, payload);
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
-      CHECK(restored->trackId == first);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
+      CHECK(restoredRes->trackId == first);
       CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
       CHECK(runtimePtr->playback().snapshot().succession.hasNext);
     }
@@ -1173,10 +1173,10 @@ namespace ao::rt::test
       payload.anchorIndex = 1;
       payload.shuffleMode = ShuffleMode::On;
       storeSession(*runtimePtr, payload);
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
-      CHECK(restored->trackId == second);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
+      CHECK(restoredRes->trackId == second);
       CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
     }
 
@@ -1186,10 +1186,10 @@ namespace ao::rt::test
       payload.anchorIndex = 3;
       payload.repeatMode = RepeatMode::All;
       storeSession(*runtimePtr, payload);
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
-      CHECK(restored->trackId == first);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
+      CHECK(restoredRes->trackId == first);
       CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
     }
 
@@ -1198,9 +1198,9 @@ namespace ao::rt::test
       payload.currentTrackId = TrackId{999'999};
       payload.anchorIndex = 3;
       storeSession(*runtimePtr, payload);
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE(restored);
-      CHECK_FALSE(restored->restored);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE(restoredRes);
+      CHECK_FALSE(restoredRes->restored);
       CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
     }
   }
@@ -1223,10 +1223,10 @@ namespace ao::rt::test
                    .positionMs = 250,
                  });
 
-    auto const restored = runtimePtr->restorePlaybackSession();
-    REQUIRE(restored);
-    REQUIRE(restored->restored);
-    CHECK(restored->sourceListId == kAllTracksListId);
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    CHECK(restoredRes->sourceListId == kAllTracksListId);
     REQUIRE(runtimePtr->savePlaybackSession());
     auto const corrected = storedSession(runtimePtr->playbackSessionConfigStore());
     CHECK(corrected.sourceListId == kAllTracksListId);
@@ -1239,9 +1239,9 @@ namespace ao::rt::test
                    .sourceListId = ListId{999'999},
                    .currentTrackId = TrackId{888'888},
                  });
-    auto const discarded = runtimePtr->restorePlaybackSession();
-    REQUIRE(discarded);
-    CHECK_FALSE(discarded->restored);
+    auto const discardedRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(discardedRes);
+    CHECK_FALSE(discardedRes->restored);
   }
 
   TEST_CASE("PlaybackSession - duration clamping restores zero", "[runtime][unit][playback-session][restore-matrix]")
@@ -1258,9 +1258,9 @@ namespace ao::rt::test
                    .positionMs = 10'000,
                  });
 
-    auto const restored = runtimePtr->restorePlaybackSession();
-    REQUIRE(restored);
-    REQUIRE(restored->restored);
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
     CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
     REQUIRE(runtimePtr->savePlaybackSession());
     CHECK(storedSession(runtimePtr->playbackSessionConfigStore()).positionMs == 0);
@@ -1309,10 +1309,10 @@ namespace ao::rt::test
       muteAttempted = true;
     }
 
-    auto const restored = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
 
-    REQUIRE_FALSE(restored);
-    CHECK(restored.error().code == Error::Code::IoError);
+    REQUIRE_FALSE(restoredRes);
+    CHECK(restoredRes.error().code == Error::Code::IoError);
     CHECK(runtimePtr->playback().snapshot().succession == sequenceBefore);
     auto const snapshotAfter = runtimePtr->playback().snapshot();
     auto const& playbackAfter = snapshotAfter.transport;
@@ -1345,9 +1345,9 @@ namespace ao::rt::test
       auto const listId = ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{
         .name = "Temporary source",
       }));
-      auto const view = runtimePtr->workspace().navigate({.target = listId});
-      REQUIRE(view);
-      REQUIRE(startFromViewAndWait(*runtimePtr, *executor, *view, first));
+      auto const viewRes = runtimePtr->workspace().navigate({.target = listId});
+      REQUIRE(viewRes);
+      REQUIRE(startFromViewAndWait(*runtimePtr, *executor, *viewRes, first));
       REQUIRE(runtimePtr->savePlaybackSession());
 
       auto const selected = runtimePtr->playback().snapshot().transport.output.selectedDevice;
@@ -1390,10 +1390,10 @@ namespace ao::rt::test
       auto const frozen = storedSession(runtimePtr->playbackSessionConfigStore());
       CHECK(frozen.currentTrackId == only);
       CHECK(frozen.positionMs == 350);
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
-      CHECK(restored->trackId == only);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
+      CHECK(restoredRes->trackId == only);
       CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{350});
     }
   }
@@ -1480,9 +1480,9 @@ namespace ao::rt::test
     CHECK(beforePayload.currentTrackId == current);
     CHECK(beforePayload.anchorIndex == 1);
     CHECK(beforePayload.sortBy == titleSort);
-    auto const projectionResult = runtimePtr->views().findTrackListProjection(orderedList.viewId);
-    REQUIRE(projectionResult);
-    auto const& projectionPtr = *projectionResult;
+    auto const projectionRes = runtimePtr->views().findTrackListProjection(orderedList.viewId);
+    REQUIRE(projectionRes);
+    auto const& projectionPtr = *projectionRes;
     REQUIRE(projectionPtr->size() == 2);
     CHECK(projectionPtr->trackIdAt(0) == alpha);
     CHECK(projectionPtr->trackIdAt(1) == charlie);
@@ -1696,8 +1696,8 @@ namespace ao::rt::test
                      .volume = 0.75F,
                    });
 
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE_FALSE(restored);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE_FALSE(restoredRes);
       CHECK(runtimePtr->playback().snapshot().succession == sequenceBefore);
       CHECK(runtimePtr->playback().snapshot().transport.nowPlaying == playbackBefore.nowPlaying);
       CHECK(runtimePtr->playback().snapshot().transport.transport == playbackBefore.transport);
@@ -1718,8 +1718,8 @@ namespace ao::rt::test
       auto const snapshot = runtimePtr->playback().snapshot();
       REQUIRE(snapshot.succession.currentTrackId == otherTrack);
       REQUIRE(snapshot.transport.nowPlaying.trackId == otherTrack);
-      auto const saved = runtimePtr->savePlaybackSession();
-      REQUIRE(saved);
+      auto const savedRes = runtimePtr->savePlaybackSession();
+      REQUIRE(savedRes);
     }
 
     SECTION("flush failure returns an I/O diagnostic")
@@ -1732,9 +1732,9 @@ namespace ao::rt::test
       auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
       auto const viewId = createView(*runtimePtr);
       REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-      auto const saved = runtimePtr->savePlaybackSession();
-      REQUIRE_FALSE(saved);
-      CHECK(saved.error().code == Error::Code::IoError);
+      auto const savedRes = runtimePtr->savePlaybackSession();
+      REQUIRE_FALSE(savedRes);
+      CHECK(savedRes.error().code == Error::Code::IoError);
     }
 
     SECTION("malformed config load retains diagnostics")
@@ -1742,9 +1742,9 @@ namespace ao::rt::test
       auto tempDir = ao::test::TempDir{};
       std::ofstream{tempDir.path() / "workspace.yaml"} << "playback-session: [not, a, map]\n";
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      auto const restored = runtimePtr->restorePlaybackSession();
-      REQUIRE_FALSE(restored);
-      CHECK(restored.error().code == Error::Code::FormatRejected);
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE_FALSE(restoredRes);
+      CHECK(restoredRes.error().code == Error::Code::FormatRejected);
     }
   }
 } // namespace ao::rt::test

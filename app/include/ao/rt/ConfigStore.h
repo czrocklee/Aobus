@@ -98,14 +98,14 @@ namespace ao::rt
 
       try
       {
-        auto deserialized = schema.deserialize(child, value);
+        auto deserializedRes = schema.deserialize(child, value);
 
-        if (!deserialized)
+        if (!deserializedRes)
         {
-          return std::unexpected{withGroupContext(deserialized.error(), "deserialize", group)};
+          return std::unexpected{withGroupContext(deserializedRes.error(), "deserialize", group)};
         }
 
-        value = std::move(*deserialized);
+        value = std::move(*deserializedRes);
         return true;
       }
       catch (std::exception const& error)
@@ -153,30 +153,30 @@ namespace ao::rt
     template<typename... T, typename... Schema>
     Result<> saveWrites(ConfigWrite<T, Schema> const&... writes)
     {
-      auto candidateResult = prepareWriteCandidate();
+      auto candidateRes = prepareWriteCandidate();
 
-      if (!candidateResult)
+      if (!candidateRes)
       {
-        return std::unexpected{candidateResult.error()};
+        return std::unexpected{candidateRes.error()};
       }
 
-      auto candidate = std::move(*candidateResult);
+      auto candidate = std::move(*candidateRes);
 
       try
       {
-        auto serialized = Result<>{};
-        auto const serialize = [&candidate, &serialized](auto const& write)
+        auto serializedRes = Result<>{};
+        auto const serialize = [&candidate, &serializedRes](auto const& write)
         {
-          if (serialized)
+          if (serializedRes)
           {
-            serialized = serializeGroup(candidate, write.group, write.value, write.schema);
+            serializedRes = serializeGroup(candidate, write.group, write.value, write.schema);
           }
         };
         (serialize(writes), ...);
 
-        if (!serialized)
+        if (!serializedRes)
         {
-          return serialized;
+          return serializedRes;
         }
 
         return commitCandidate(std::move(candidate));

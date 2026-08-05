@@ -151,17 +151,17 @@ namespace ao::winui::layout
           return;
         }
 
-        if (auto const navigated = _trackList.navigateTo(listId); !navigated)
+        if (auto const navigatedRes = _trackList.navigateTo(listId); !navigatedRes)
         {
-          report(formatResource("NavigationFailedFormat", navigated.error().message));
+          report(formatResource("NavigationFailedFormat", navigatedRes.error().message));
           return;
         }
 
         if (auto const optPresentation = _preferredPresentation(listId); optPresentation)
         {
-          if (auto const selected = _trackList.selectPresentation(*optPresentation); !selected)
+          if (auto const selectedRes = _trackList.selectPresentation(*optPresentation); !selectedRes)
           {
-            report(formatResource("PresentationFailedFormat", selected.error().message));
+            report(formatResource("PresentationFailedFormat", selectedRes.error().message));
             return;
           }
         }

@@ -274,14 +274,14 @@ namespace ao::rt::test
     REQUIRE(fixture.playbackTransport.play(current, kSourceListId));
     auto const beforePrepare = fixture.playbackTransport.state().nowPlaying;
 
-    auto const firstResult = fixture.playbackTransport.prepareNext(successor, kSourceListId);
-    REQUIRE(firstResult);
-    auto const firstToken = *firstResult;
+    auto const firstRes = fixture.playbackTransport.prepareNext(successor, kSourceListId);
+    REQUIRE(firstRes);
+    auto const firstToken = *firstRes;
     CHECK(fixture.playbackTransport.state().nowPlaying == beforePrepare);
 
-    auto const implicitReplacement = fixture.playbackTransport.prepareNext(successor, kSourceListId);
-    REQUIRE_FALSE(implicitReplacement);
-    CHECK(implicitReplacement.error().code == Error::Code::InvalidState);
+    auto const implicitReplacementRes = fixture.playbackTransport.prepareNext(successor, kSourceListId);
+    REQUIRE_FALSE(implicitReplacementRes);
+    CHECK(implicitReplacementRes.error().code == Error::Code::InvalidState);
 
     // The rejected implicit replacement leaves the original commitment armed:
     // clearing it returns the original token, and nothing remains afterward.
@@ -290,9 +290,9 @@ namespace ao::rt::test
 
     // Explicit session replacement does not reset the transport-lifetime token counter.
     REQUIRE(fixture.playbackTransport.play(current, ListId{8}));
-    auto const secondResult = fixture.playbackTransport.prepareNext(successor, kSourceListId);
-    REQUIRE(secondResult);
-    auto const secondToken = *secondResult;
+    auto const secondRes = fixture.playbackTransport.prepareNext(successor, kSourceListId);
+    REQUIRE(secondRes);
+    auto const secondToken = *secondRes;
     CHECK(secondToken != firstToken);
     CHECK(fixture.playbackTransport.clearPreparedNext() == secondToken);
   }
@@ -307,15 +307,15 @@ namespace ao::rt::test
     auto const nextTrackId = fixture.libraryFixture.addTrack({.title = "Next", .uri = fixtureUri});
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrackId, kSourceListId));
-    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrackId);
-    REQUIRE(nextRequest);
-    auto const tokenResult = fixture.playbackTransport.prepareNext(*nextRequest, kSourceListId);
-    REQUIRE(tokenResult);
-    auto const token = *tokenResult;
+    auto const nextRequestRes = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrackId);
+    REQUIRE(nextRequestRes);
+    auto const tokenRes = fixture.playbackTransport.prepareNext(*nextRequestRes, kSourceListId);
+    REQUIRE(tokenRes);
+    auto const token = *tokenRes;
 
-    auto const missingResult = playbackRequestForTrack(fixture.libraryFixture.library(), TrackId{99999});
-    REQUIRE_FALSE(missingResult);
-    CHECK(missingResult.error().code == Error::Code::NotFound);
+    auto const missingRes = playbackRequestForTrack(fixture.libraryFixture.library(), TrackId{99999});
+    REQUIRE_FALSE(missingRes);
+    CHECK(missingRes.error().code == Error::Code::NotFound);
     // The rejected missing-track replacement preserves the active token identity.
     CHECK(fixture.playbackTransport.clearPreparedNext() == token);
   }
@@ -332,27 +332,27 @@ namespace ao::rt::test
     auto const successor = request(TrackId{4}, fixturePath, "Replacement successor");
 
     REQUIRE(fixture.playbackTransport.play(current, kSourceListId));
-    auto const oldTokenResult = fixture.playbackTransport.prepareNext(successor, kSourceListId);
-    REQUIRE(oldTokenResult);
-    auto const oldToken = *oldTokenResult;
+    auto const oldTokenRes = fixture.playbackTransport.prepareNext(successor, kSourceListId);
+    REQUIRE(oldTokenRes);
+    auto const oldToken = *oldTokenRes;
 
-    auto const rejectedStage = fixture.playbackTransport.stagePlayback(
+    auto const rejectedStageRes = fixture.playbackTransport.stagePlayback(
       request(TrackId{99}, "/missing/staged.flac", "Missing staged candidate"), kSourceListId);
-    REQUIRE_FALSE(rejectedStage);
+    REQUIRE_FALSE(rejectedStageRes);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == current.item.trackId);
     CHECK(fixture.playbackTransport.clearPreparedNext() == oldToken);
 
-    auto staged = fixture.playbackTransport.stagePlayback(stagedCandidate, kSourceListId);
-    REQUIRE(staged);
+    auto stagedRes = fixture.playbackTransport.stagePlayback(stagedCandidate, kSourceListId);
+    REQUIRE(stagedRes);
     REQUIRE(fixture.playbackTransport.play(replacement, kSourceListId));
 
-    auto const liveTokenResult = fixture.playbackTransport.prepareNext(successor, kSourceListId);
-    REQUIRE(liveTokenResult);
-    auto const liveToken = *liveTokenResult;
-    auto const staleCommit = fixture.playbackTransport.commitPlayback(std::move(*staged));
+    auto const liveTokenRes = fixture.playbackTransport.prepareNext(successor, kSourceListId);
+    REQUIRE(liveTokenRes);
+    auto const liveToken = *liveTokenRes;
+    auto const staleCommitRes = fixture.playbackTransport.commitPlayback(std::move(*stagedRes));
 
-    REQUIRE_FALSE(staleCommit);
-    CHECK(staleCommit.error().code == Error::Code::Conflict);
+    REQUIRE_FALSE(staleCommitRes);
+    CHECK(staleCommitRes.error().code == Error::Code::Conflict);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == replacement.item.trackId);
     CHECK(fixture.playbackTransport.clearPreparedNext() == liveToken);
   }
@@ -396,11 +396,11 @@ namespace ao::rt::test
     auto const candidate = request(TrackId{33}, "candidate-failure.flac", "Failed candidate");
     REQUIRE(transportPtr->play(current, kSourceListId));
     executor.drain();
-    auto const preparedNext = transportPtr->prepareNext(next, kSourceListId);
-    REQUIRE(preparedNext);
+    auto const preparedNextRes = transportPtr->prepareNext(next, kSourceListId);
+    REQUIRE(preparedNextRes);
 
-    auto staged = transportPtr->stagePlayback(candidate, ListId{8});
-    REQUIRE(staged);
+    auto stagedRes = transportPtr->stagePlayback(candidate, ListId{8});
+    REQUIRE(stagedRes);
 
     std::size_t startedCount = 0;
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
@@ -417,8 +417,8 @@ namespace ao::rt::test
         }
       });
 
-    auto const committed = transportPtr->commitPlayback(std::move(*staged));
-    REQUIRE(committed);
+    auto const committedRes = transportPtr->commitPlayback(std::move(*stagedRes));
+    REQUIRE(committedRes);
     CHECK(transportPtr->state().transport == audio::Transport::Error);
     CHECK(transportPtr->state().nowPlaying.trackId == candidate.item.trackId);
     CHECK(transportPtr->state().nowPlaying.sourceListId == ListId{8});
@@ -449,9 +449,9 @@ namespace ao::rt::test
     auto const fallbackSuccessor = request(TrackId{2}, mp3Path, "Drain fallback successor");
 
     REQUIRE(fixture.playbackTransport.play(current, kSourceListId));
-    auto const tokenResult = fixture.playbackTransport.prepareNext(fallbackSuccessor, kSourceListId);
-    REQUIRE(tokenResult);
-    auto const token = *tokenResult;
+    auto const tokenRes = fixture.playbackTransport.prepareNext(fallbackSuccessor, kSourceListId);
+    REQUIRE(tokenRes);
+    auto const token = *tokenRes;
 
     // The disarm acknowledgement returns the exact armed token, then nothing.
     CHECK(fixture.playbackTransport.clearPreparedNext() == token);
@@ -475,9 +475,9 @@ namespace ao::rt::test
 
     for (std::size_t index = 0; index < kReprepareCount; ++index)
     {
-      auto const tokenResult = fixture.playbackTransport.prepareNext(fallbackSuccessor, kSourceListId);
-      REQUIRE(tokenResult);
-      tokens.push_back(*tokenResult);
+      auto const tokenRes = fixture.playbackTransport.prepareNext(fallbackSuccessor, kSourceListId);
+      REQUIRE(tokenRes);
+      tokens.push_back(*tokenRes);
 
       CHECK(fixture.playbackTransport.clearPreparedNext() == tokens.back());
     }
@@ -531,14 +531,14 @@ namespace ao::rt::test
     auto const failingCommitment = request(sharedTrackId, "prepared-fail.flac", "Same track second");
 
     REQUIRE(transportPtr->play(current, kSourceListId));
-    auto const firstTokenResult = transportPtr->prepareNext(firstCommitment, kSourceListId);
-    REQUIRE(firstTokenResult);
-    auto const firstToken = *firstTokenResult;
+    auto const firstTokenRes = transportPtr->prepareNext(firstCommitment, kSourceListId);
+    REQUIRE(firstTokenRes);
+    auto const firstToken = *firstTokenRes;
     REQUIRE(transportPtr->clearPreparedNext() == firstToken);
 
-    auto const failingTokenResult = transportPtr->prepareNext(failingCommitment, kSourceListId);
-    REQUIRE(failingTokenResult);
-    auto const failingToken = *failingTokenResult;
+    auto const failingTokenRes = transportPtr->prepareNext(failingCommitment, kSourceListId);
+    REQUIRE(failingTokenRes);
+    auto const failingToken = *failingTokenRes;
     REQUIRE(failingToken != firstToken);
 
     releaseGuard.release();
@@ -577,9 +577,9 @@ namespace ao::rt::test
     auto const nowPlayingSubscription = fixture.playbackTransport.onNowPlayingChanged(
       [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { nowPlaying.push_back(event); });
 
-    auto const accepted = fixture.playbackTransport.play(replacement, ListId{10});
+    auto const acceptedRes = fixture.playbackTransport.play(replacement, ListId{10});
 
-    REQUIRE(accepted);
+    REQUIRE(acceptedRes);
     CHECK(callbackEntered);
     CHECK(observedTrackId == replacement.item.trackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);

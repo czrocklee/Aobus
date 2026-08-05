@@ -37,9 +37,9 @@ namespace ao::rt::test
     auto const subscription = succession.onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
     auto const beforeMove = succession.state();
 
-    auto const moved = fixture.moveListOrder(std::array{fixture.thirdTrackId}, fixture.secondTrackId);
-    REQUIRE(moved);
-    REQUIRE(moved->status == ListOrderAuthoringStatus::Applied);
+    auto const movedRes = fixture.moveListOrder(std::array{fixture.thirdTrackId}, fixture.secondTrackId);
+    REQUIRE(movedRes);
+    REQUIRE(movedRes->status == ListOrderAuthoringStatus::Applied);
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(succession.state().optResolvedSuccessor == fixture.thirdTrackId);
@@ -48,9 +48,9 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
-    auto const noOp = fixture.moveListOrder(std::array{fixture.thirdTrackId}, fixture.secondTrackId);
-    REQUIRE(noOp);
-    CHECK(noOp->status == ListOrderAuthoringStatus::NoOp);
+    auto const noOpRes = fixture.moveListOrder(std::array{fixture.thirdTrackId}, fixture.secondTrackId);
+    REQUIRE(noOpRes);
+    CHECK(noOpRes->status == ListOrderAuthoringStatus::NoOp);
     CHECK(succession.state().optResolvedSuccessor == fixture.thirdTrackId);
     CHECK(changedCount == 1);
   }

@@ -37,19 +37,19 @@ namespace ao::audio::test
       CHECK(terminal.frames > 0);
       CHECK(terminal.frames < 44100);
 
-      auto const stableBlock = decoder.readNextBlock();
-      REQUIRE(stableBlock);
-      CHECK(stableBlock->endOfStream);
-      CHECK(stableBlock->bytes.empty());
+      auto const stableBlockRes = decoder.readNextBlock();
+      REQUIRE(stableBlockRes);
+      CHECK(stableBlockRes->endOfStream);
+      CHECK(stableBlockRes->bytes.empty());
 
       auto const info = decoder.streamInfo();
       CHECK(info.duration > std::chrono::milliseconds{0});
       REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
 
-      auto const restartedBlock = decoder.readNextBlock();
-      REQUIRE(restartedBlock);
-      CHECK(restartedBlock->frames > 0);
-      CHECK_FALSE(restartedBlock->endOfStream);
+      auto const restartedBlockRes = decoder.readNextBlock();
+      REQUIRE(restartedBlockRes);
+      CHECK(restartedBlockRes->frames > 0);
+      CHECK_FALSE(restartedBlockRes->endOfStream);
     }
 
     SECTION("Corrupt frames are skipped without hanging")
@@ -71,10 +71,10 @@ namespace ao::audio::test
       CHECK_FALSE(terminal.optError);
       CHECK(terminal.frames > 0);
 
-      auto const stableBlock = decoder.readNextBlock();
-      REQUIRE(stableBlock);
-      CHECK(stableBlock->endOfStream);
-      CHECK(stableBlock->bytes.empty());
+      auto const stableBlockRes = decoder.readNextBlock();
+      REQUIRE(stableBlockRes);
+      CHECK(stableBlockRes->endOfStream);
+      CHECK(stableBlockRes->bytes.empty());
     }
   }
 } // namespace ao::audio::test

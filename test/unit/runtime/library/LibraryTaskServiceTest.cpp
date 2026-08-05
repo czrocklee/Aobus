@@ -184,17 +184,17 @@ namespace ao::rt::test
     auto missingFuture =
       spawnFuture(runtime, runtimeLibraryPtr->taskService().loadResourceAsync(ResourceId{987654}), missingCompletedPtr);
     REQUIRE(executor.drainUntil([&missingCompletedPtr] { return isReady(missingCompletedPtr); }));
-    auto missingResult = missingFuture.get();
-    REQUIRE(missingResult);
-    CHECK_FALSE(*missingResult);
+    auto missingRes = missingFuture.get();
+    REQUIRE(missingRes);
+    CHECK_FALSE(*missingRes);
 
     auto invalidCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto invalidFuture =
       spawnFuture(runtime, runtimeLibraryPtr->taskService().loadResourceAsync(kInvalidResourceId), invalidCompletedPtr);
     REQUIRE(executor.drainUntil([&invalidCompletedPtr] { return isReady(invalidCompletedPtr); }));
-    auto invalidResult = invalidFuture.get();
-    REQUIRE(invalidResult);
-    CHECK_FALSE(*invalidResult);
+    auto invalidRes = invalidFuture.get();
+    REQUIRE(invalidRes);
+    CHECK_FALSE(*invalidRes);
 
     runtime.requestStop();
     runtime.join();
@@ -290,18 +290,17 @@ namespace ao::rt::test
     auto& service = runtimeLibraryPtr->taskService();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
-    auto planResult =
-      runQueuedTask(runtime, executor, service.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    auto planRes = runQueuedTask(runtime, executor, service.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
 
-    REQUIRE(planResult);
-    CHECK(planResult->report().payloadVersion == 3);
-    CHECK(planResult->report().payloadMode == ExportMode::Full);
-    CHECK(planResult->report().targetScope == ImportTargetScope::Library);
-    CHECK(planResult->report().tracksCreated == 1);
+    REQUIRE(planRes);
+    CHECK(planRes->report().payloadVersion == 3);
+    CHECK(planRes->report().payloadMode == ExportMode::Full);
+    CHECK(planRes->report().targetScope == ImportTargetScope::Library);
+    CHECK(planRes->report().tracksCreated == 1);
 
     SECTION("unchanged preview applies")
     {
-      auto result = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(*planResult)));
+      auto result = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(*planRes)));
 
       INFO((result ? "import applied" : result.error().message));
       REQUIRE(result);
@@ -311,7 +310,7 @@ namespace ao::rt::test
     SECTION("changed source is rejected")
     {
       writeImportPayload(yamlPath, "Changed");
-      auto result = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(*planResult)));
+      auto result = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(*planRes)));
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::Conflict);
@@ -319,10 +318,10 @@ namespace ao::rt::test
 
     SECTION("changed target revision is rejected")
     {
-      auto deleteResult = runtimeLibraryPtr->writer().deleteTrack(existingTrackId);
-      INFO((deleteResult ? "target changed" : deleteResult.error().message));
-      REQUIRE(deleteResult);
-      auto result = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(*planResult)));
+      auto deleteRes = runtimeLibraryPtr->writer().deleteTrack(existingTrackId);
+      INFO((deleteRes ? "target changed" : deleteRes.error().message));
+      REQUIRE(deleteRes);
+      auto result = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(*planRes)));
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::Conflict);
@@ -330,17 +329,17 @@ namespace ao::rt::test
 
     SECTION("consumed plan cannot be applied again")
     {
-      auto plan = std::move(*planResult);
-      auto const firstApplication =
+      auto plan = std::move(*planRes);
+      auto const firstApplicationRes =
         runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(plan)));
-      REQUIRE(firstApplication);
+      REQUIRE(firstApplicationRes);
 
       // LibraryImportPlan specifies an empty moved-from state so callers receive
       // InvalidState when an already-consumed authorization is submitted again.
       // NOLINTNEXTLINE(bugprone-use-after-move)
-      auto const reused = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(plan)));
-      REQUIRE_FALSE(reused);
-      CHECK(reused.error().code == Error::Code::InvalidState);
+      auto const reusedRes = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(plan)));
+      REQUIRE_FALSE(reusedRes);
+      CHECK(reusedRes.error().code == Error::Code::InvalidState);
     }
   }
 
@@ -467,8 +466,8 @@ namespace ao::rt::test
       spawnFuture(runtime, service.prepareLibraryImportAsync(yamlPath, ImportMode::Restore), prepareCompletedPtr);
 
     REQUIRE(executor.drainUntil([&prepareCompletedPtr] { return isReady(prepareCompletedPtr); }));
-    auto planResult = prepareFuture.get();
-    REQUIRE(planResult);
+    auto planRes = prepareFuture.get();
+    REQUIRE(planRes);
     executor.drain();
     REQUIRE(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
 
@@ -477,7 +476,7 @@ namespace ao::rt::test
     auto stopSource = std::stop_source{};
     auto applyCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto applyFuture = spawnFuture(
-      runtime, service.applyLibraryImportPlanAsync(std::move(*planResult), stopSource.get_token()), applyCompletedPtr);
+      runtime, service.applyLibraryImportPlanAsync(std::move(*planRes), stopSource.get_token()), applyCompletedPtr);
 
     REQUIRE(executor.drainUntil([&committed] { return committed.load(); }));
     REQUIRE(stopSource.request_stop());
@@ -563,10 +562,10 @@ namespace ao::rt::test
 
     SECTION("scan plan apply")
     {
-      auto planResult = LibraryScan{libraryFixture.library()}.buildPlan();
-      REQUIRE(planResult);
-      auto future = spawnFuture(
-        runtime, service.applyScanPlanAsync(std::move(*planResult), {}, stopSource.get_token()), completedPtr);
+      auto planRes = LibraryScan{libraryFixture.library()}.buildPlan();
+      REQUIRE(planRes);
+      auto future =
+        spawnFuture(runtime, service.applyScanPlanAsync(std::move(*planRes), {}, stopSource.get_token()), completedPtr);
 
       REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK(progressCount == 0);
@@ -659,9 +658,9 @@ namespace ao::rt::test
     REQUIRE(result);
     REQUIRE(result->insertedIds.size() == 1);
     auto transaction = libraryFixture.library().readTransaction();
-    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK_FALSE(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
+    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK_FALSE(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
   }
 
   TEST_CASE("LibraryTaskService - scan preparation keeps interactive authoring closed",
@@ -672,21 +671,21 @@ namespace ao::rt::test
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
     auto scanService = LibraryScan{libraryFixture.library()};
-    auto planResult = scanService.buildPlan();
-    REQUIRE(planResult);
+    auto planRes = scanService.buildPlan();
+    REQUIRE(planRes);
 
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
-    auto bindingResult = runtimeLibraryPtr->bindTrackTargets(std::array{authoringTarget});
-    REQUIRE(bindingResult);
+    auto bindingRes = runtimeLibraryPtr->bindTrackTargets(std::array{authoringTarget});
+    REQUIRE(bindingRes);
     auto preparationStarted = AsyncTestState<bool>::create(false);
     auto releasePreparation = AsyncBarrier{};
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = spawnFuture(runtime,
                               runtimeLibraryPtr->taskService().applyScanPlanAsync(
-                                std::move(*planResult),
+                                std::move(*planRes),
                                 {},
                                 {},
                                 [&preparationStarted, &releasePreparation](ScanApplyProgress const&)
@@ -707,14 +706,14 @@ namespace ao::rt::test
       CHECK(availability.state == LibraryAuthoringState::Maintenance);
       CHECK(availability.maintenanceKind == LibraryMaintenanceKind::ScanApply);
 
-      auto authoringResult =
-        runtimeLibraryPtr->writer().updateMetadata(*bindingResult, MetadataPatch{.optTitle = "Must not apply"});
-      REQUIRE(authoringResult);
-      CHECK(authoringResult->status == TrackAuthoringStatus::Unavailable);
+      auto authoringRes =
+        runtimeLibraryPtr->writer().updateMetadata(*bindingRes, MetadataPatch{.optTitle = "Must not apply"});
+      REQUIRE(authoringRes);
+      CHECK(authoringRes->status == TrackAuthoringStatus::Unavailable);
 
-      auto listResult = runtimeLibraryPtr->writer().createList(LibraryWriter::ListDraft{.name = "Blocked"});
-      REQUIRE_FALSE(listResult);
-      CHECK(listResult.error().code == Error::Code::InvalidState);
+      auto listRes = runtimeLibraryPtr->writer().createList(LibraryWriter::ListDraft{.name = "Blocked"});
+      REQUIRE_FALSE(listRes);
+      CHECK(listRes.error().code == Error::Code::InvalidState);
     }
 
     releasePreparation.release();
@@ -740,24 +739,24 @@ namespace ao::rt::test
 
     auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
-    auto const applyResult =
+    auto const applyRes =
       runQueuedTask(runtime,
                     executor,
                     service.applyScanPlanAsync(
                       std::move(plan), ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}));
-    REQUIRE(applyResult);
+    REQUIRE(applyRes);
 
-    auto const backfillResult = runQueuedTask(runtime, executor, service.backfillAudioIdentityAsync());
+    auto const backfillRes = runQueuedTask(runtime, executor, service.backfillAudioIdentityAsync());
 
-    REQUIRE(backfillResult);
-    CHECK(backfillResult->completedCount == 1);
-    CHECK(backfillResult->skippedCount == 0);
-    CHECK(backfillResult->failureCount == 0);
+    REQUIRE(backfillRes);
+    CHECK(backfillRes->completedCount == 1);
+    CHECK(backfillRes->skippedCount == 0);
+    CHECK(backfillRes->failureCount == 0);
 
     auto transaction = libraryFixture.library().readTransaction();
-    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
+    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
   }
 
   TEST_CASE("LibraryTaskService - applyScanPlanAsync reports progress while applying plan",
@@ -923,16 +922,16 @@ namespace ao::rt::test
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
     auto scanService = LibraryScan{libraryFixture.library()};
-    auto planResult = scanService.buildPlan();
-    REQUIRE(planResult);
-    auto applyResult = ScanApplyOperation{libraryFixture.library(),
-                                          std::move(*planResult),
-                                          {},
-                                          {},
-                                          ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
-                         .run();
-    REQUIRE(applyResult);
-    REQUIRE(applyResult->insertedIds.size() == 1);
+    auto planRes = scanService.buildPlan();
+    REQUIRE(planRes);
+    auto applyRes = ScanApplyOperation{libraryFixture.library(),
+                                       std::move(*planRes),
+                                       {},
+                                       {},
+                                       ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+                      .run();
+    REQUIRE(applyRes);
+    REQUIRE(applyRes->insertedIds.size() == 1);
 
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
@@ -996,16 +995,16 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
-    auto planResult = LibraryScan{libraryFixture.library()}.buildPlan();
-    REQUIRE(planResult);
-    auto applyResult = ScanApplyOperation{libraryFixture.library(),
-                                          std::move(*planResult),
-                                          {},
-                                          {},
-                                          ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
-                         .run();
-    REQUIRE(applyResult);
-    REQUIRE(applyResult->insertedIds.size() == 1);
+    auto planRes = LibraryScan{libraryFixture.library()}.buildPlan();
+    REQUIRE(planRes);
+    auto applyRes = ScanApplyOperation{libraryFixture.library(),
+                                       std::move(*planRes),
+                                       {},
+                                       {},
+                                       ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+                      .run();
+    REQUIRE(applyRes);
+    REQUIRE(applyRes->insertedIds.size() == 1);
 
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};

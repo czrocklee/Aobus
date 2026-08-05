@@ -101,49 +101,49 @@ namespace ao::winui
   {
     std::filesystem::create_directories(_stateRoot);
 
-    if (auto loaded = _settingsStorePtr->load("desktop", _settings, winui::DesktopSettingsYamlSchema{});
-        !loaded && loaded.error().code != Error::Code::NotFound)
+    if (auto loadedRes = _settingsStorePtr->load("desktop", _settings, winui::DesktopSettingsYamlSchema{});
+        !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
-      APP_LOG_WARN("LibrarySession: failed to load Windows settings: {}", loaded.error().message);
+      APP_LOG_WARN("LibrarySession: failed to load Windows settings: {}", loadedRes.error().message);
     }
 
-    if (auto loaded =
+    if (auto loadedRes =
           _settingsStorePtr->load("trackView.columnLayouts", _columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
-        !loaded && loaded.error().code != Error::Code::NotFound)
+        !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
-      APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loaded.error().message);
+      APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loadedRes.error().message);
     }
 
-    if (auto loaded = _settingsStorePtr->load(
+    if (auto loadedRes = _settingsStorePtr->load(
           "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{});
-        !loaded && loaded.error().code != Error::Code::NotFound)
+        !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
-      APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loaded.error().message);
+      APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
     }
 
-    auto startupPlan = planLibraryStartup(startupOptions, _settings, _stateRoot / "empty-library");
+    auto startupPlanRes = planLibraryStartup(startupOptions, _settings, _stateRoot / "empty-library");
 
-    if (!startupPlan)
+    if (!startupPlanRes)
     {
-      throwException<Exception>("Failed to select the startup library: {}", startupPlan.error().message);
+      throwException<Exception>("Failed to select the startup library: {}", startupPlanRes.error().message);
     }
 
-    if (startupPlan->source == LibraryStartupRootSource::EmptyLibraryFallback)
+    if (startupPlanRes->source == LibraryStartupRootSource::EmptyLibraryFallback)
     {
-      std::filesystem::create_directories(startupPlan->libraryRoot);
+      std::filesystem::create_directories(startupPlanRes->libraryRoot);
     }
 
-    auto root = std::move(startupPlan->libraryRoot);
-    _optSelectedRootCommit = std::move(startupPlan->optSelectedRootCommit);
+    auto root = std::move(startupPlanRes->libraryRoot);
+    _optSelectedRootCommit = std::move(startupPlanRes->optSelectedRootCommit);
     _scanAfterOpen = !rt::LibraryPaths{root}.hasExistingDatabase();
-    auto runtimeResult = createRuntime(root);
+    auto runtimeRes = createRuntime(root);
 
-    if (!runtimeResult)
+    if (!runtimeRes)
     {
-      throwException<Exception>("Failed to open initial library: {}", runtimeResult.error().message);
+      throwException<Exception>("Failed to open initial library: {}", runtimeRes.error().message);
     }
 
-    _runtimePtr = std::move(*runtimeResult);
+    _runtimePtr = std::move(*runtimeRes);
     bindRuntimeServices();
   }
 
@@ -274,7 +274,7 @@ namespace ao::winui
     auto const paths = rt::LibraryPaths{root};
     auto workspaceStorePtr = std::make_unique<rt::ConfigStore>(paths.databasePath() / "workspace.yaml");
     auto executorPtr = std::make_unique<DispatcherQueueExecutor>(_dispatcher);
-    auto runtimeResult =
+    auto runtimeRes =
       rt::AppRuntime::create(rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
                                                         .musicRoot = root,
                                                         .databasePath = paths.databasePath(),
@@ -282,21 +282,22 @@ namespace ao::winui
                                                         .playbackSessionConfigStore = _playbackStorePtr.get(),
                                                         .asyncExceptionHandler = rt::Log::asyncExceptionHandler()});
 
-    if (!runtimeResult)
+    if (!runtimeRes)
     {
-      return std::unexpected{runtimeResult.error()};
+      return std::unexpected{runtimeRes.error()};
     }
 
-    auto runtimePtr = std::move(*runtimeResult);
+    auto runtimePtr = std::move(*runtimeRes);
 #if AOBUS_HAS_WASAPI
     runtimePtr->addAudioProvider(std::make_unique<audio::backend::WasapiProvider>());
 #endif
 
-    if (auto const restored = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()); !restored)
+    if (auto const restoredRes = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore());
+        !restoredRes)
     {
       APP_LOG_WARN("LibrarySession: failed to restore workspace for '{}': {}",
                    utility::pathToUtf8(root),
-                   restored.error().message);
+                   restoredRes.error().message);
     }
 
     return runtimePtr;
@@ -315,13 +316,13 @@ namespace ao::winui
       {
         try
         {
-          auto const saved = _settingsStorePtr->save(
+          auto const savedRes = _settingsStorePtr->save(
             "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{});
 
-          if (!saved)
+          if (!savedRes)
           {
             APP_LOG_WARN(
-              "LibrarySession: failed to persist deleted List preference cleanup: {}", saved.error().message);
+              "LibrarySession: failed to persist deleted List preference cleanup: {}", savedRes.error().message);
           }
         }
         catch (std::exception const& error)
@@ -552,14 +553,14 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
     }
 
-    if (auto selected = _runtimePtr->views().setSelection(viewId, {trackId}); !selected)
+    if (auto selectedRes = _runtimePtr->views().setSelection(viewId, {trackId}); !selectedRes)
     {
-      return selected;
+      return selectedRes;
     }
 
-    if (auto focused = _runtimePtr->workspace().focusView(viewId); !focused)
+    if (auto focusedRes = _runtimePtr->workspace().focusView(viewId); !focusedRes)
     {
-      return focused;
+      return focusedRes;
     }
 
     return _runtimePtr->playback().commands().startFromView(viewId, trackId);

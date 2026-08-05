@@ -118,10 +118,10 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    auto const& result = *runResult;
+    auto const& result = *runRes;
     CHECK(changedTrackIds(result).size() == 1);
     CHECK(result.insertedIds == changedTrackIds(result));
     CHECK(result.mutatedIds.empty());
@@ -134,10 +134,10 @@ namespace ao::rt::test
     REQUIRE(optView);
     CHECK(optView->metadata().title() == "Test Title");
 
-    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK(manifestResult->audioPayloadLength() > 0);
-    CHECK(manifestResult->audioSignature() != utility::Hash128{});
+    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK(manifestRes->audioPayloadLength() > 0);
+    CHECK(manifestRes->audioSignature() != utility::Hash128{});
   }
 
   TEST_CASE("ScanApplyOperation - deferred new scans write pending audio identity", "[runtime][unit][library][scan]")
@@ -163,21 +163,21 @@ namespace ao::rt::test
                                        nullptr,
                                        counts.callback(),
                                        ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    CHECK(changedTrackIds(*runResult).size() == 1);
-    CHECK(runResult->failureCount == 0);
+    CHECK(changedTrackIds(*runRes).size() == 1);
+    CHECK(runRes->failureCount == 0);
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK(manifestResult->status() == library::FileStatus::Available);
-    CHECK(manifestResult->fileSize() == std::filesystem::file_size(targetFile));
-    CHECK(manifestResult->mtime() == fileMtime(targetFile));
-    CHECK(manifestResult->audioPayloadLength() == 0);
-    CHECK(manifestResult->audioSignature() == utility::Hash128{});
+    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK(manifestRes->status() == library::FileStatus::Available);
+    CHECK(manifestRes->fileSize() == std::filesystem::file_size(targetFile));
+    CHECK(manifestRes->mtime() == fileMtime(targetFile));
+    CHECK(manifestRes->audioPayloadLength() == 0);
+    CHECK(manifestRes->audioSignature() == utility::Hash128{});
   }
 
   TEST_CASE("ScanApplyOperation - exhausted Track ids abort later scan work", "[runtime][regression][scan][atomicity]")
@@ -234,12 +234,12 @@ namespace ao::rt::test
     CHECK(ml.libraryRevision(transaction) == revisionBefore);
     CHECK_FALSE(ml.dictionary().findId("Test Artist"));
     REQUIRE(ml.tracks().reader(transaction).get(TrackId{kLastTrackId}));
-    auto missingManifest = ml.manifest().reader(transaction).get("missing.flac");
-    REQUIRE(missingManifest);
-    CHECK(missingManifest->status() == library::FileStatus::Available);
-    auto newManifest = ml.manifest().reader(transaction).get("new.flac");
-    REQUIRE_FALSE(newManifest);
-    CHECK(newManifest.error().code == Error::Code::NotFound);
+    auto missingManifestRes = ml.manifest().reader(transaction).get("missing.flac");
+    REQUIRE(missingManifestRes);
+    CHECK(missingManifestRes->status() == library::FileStatus::Available);
+    auto newManifestRes = ml.manifest().reader(transaction).get("new.flac");
+    REQUIRE_FALSE(newManifestRes);
+    CHECK(newManifestRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ScanApplyOperation - missing persisted Track evidence aborts every planned item",
@@ -257,15 +257,15 @@ namespace ao::rt::test
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     auto initialPlan = LibraryScan{ml}.buildPlan().value();
     auto initialOperation = ScanApplyOperation{ml, std::move(initialPlan), nullptr, nullptr};
-    auto initialResult = initialOperation.run();
-    REQUIRE(initialResult);
-    REQUIRE(initialResult->insertedIds.size() == 1);
-    auto const existingTrackId = initialResult->insertedIds.front();
+    auto initialRes = initialOperation.run();
+    REQUIRE(initialRes);
+    REQUIRE(initialRes->insertedIds.size() == 1);
+    auto const existingTrackId = initialRes->insertedIds.front();
 
     {
-      auto writableResult = library::WritableMusicLibrary::acquire(ml);
-      REQUIRE(writableResult);
-      auto transaction = writableResult->writeTransaction();
+      auto writableRes = library::WritableMusicLibrary::acquire(ml);
+      REQUIRE(writableRes);
+      auto transaction = writableRes->writeTransaction();
       REQUIRE(ml.tracks().writer(transaction).remove(existingTrackId));
       REQUIRE(transaction.commit());
     }
@@ -288,9 +288,9 @@ namespace ao::rt::test
     CHECK(ml.libraryRevision(transaction) == revisionBefore);
     CHECK_FALSE(ml.tracks().reader(transaction).get(existingTrackId));
     CHECK(ml.manifest().reader(transaction).get("existing.flac"));
-    auto newManifest = ml.manifest().reader(transaction).get("later-new.flac");
-    REQUIRE_FALSE(newManifest);
-    CHECK(newManifest.error().code == Error::Code::NotFound);
+    auto newManifestRes = ml.manifest().reader(transaction).get("later-new.flac");
+    REQUIRE_FALSE(newManifestRes);
+    CHECK(newManifestRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ScanApplyOperation - apply requires prepared-file revalidation", "[runtime][unit][library][scan]")
@@ -305,13 +305,13 @@ namespace ao::rt::test
     auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
     REQUIRE(operation.prepare());
 
-    auto writableResult = library::WritableMusicLibrary::acquire(ml);
-    REQUIRE(writableResult);
-    auto transaction = writableResult->writeTransaction();
-    auto applyResult = operation.apply(transaction);
+    auto writableRes = library::WritableMusicLibrary::acquire(ml);
+    REQUIRE(writableRes);
+    auto transaction = writableRes->writeTransaction();
+    auto applyRes = operation.apply(transaction);
 
-    REQUIRE_FALSE(applyResult);
-    CHECK(applyResult.error().code == Error::Code::InvalidState);
+    REQUIRE_FALSE(applyRes);
+    CHECK(applyRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("ScanApplyOperation - one revalidation permits exactly one apply", "[runtime][unit][library][scan]")
@@ -328,16 +328,16 @@ namespace ao::rt::test
     REQUIRE(operation.revalidatePreparedFiles());
     REQUIRE(operation.readyForMutation());
 
-    auto writableResult = library::WritableMusicLibrary::acquire(ml);
-    REQUIRE(writableResult);
-    auto transaction = writableResult->writeTransaction();
-    auto firstApplyResult = operation.apply(transaction);
-    REQUIRE(firstApplyResult);
-    REQUIRE(firstApplyResult->insertedIds.size() == 1);
+    auto writableRes = library::WritableMusicLibrary::acquire(ml);
+    REQUIRE(writableRes);
+    auto transaction = writableRes->writeTransaction();
+    auto firstApplyRes = operation.apply(transaction);
+    REQUIRE(firstApplyRes);
+    REQUIRE(firstApplyRes->insertedIds.size() == 1);
 
-    auto secondApplyResult = operation.apply(transaction);
-    REQUIRE_FALSE(secondApplyResult);
-    CHECK(secondApplyResult.error().code == Error::Code::InvalidState);
+    auto secondApplyRes = operation.apply(transaction);
+    REQUIRE_FALSE(secondApplyRes);
+    CHECK(secondApplyRes.error().code == Error::Code::InvalidState);
     REQUIRE(transaction.commit());
 
     auto readTransaction = ml.readTransaction();
@@ -394,18 +394,18 @@ namespace ao::rt::test
                                        nullptr,
                                        counts.callback(),
                                        ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    CHECK(runResult->insertedIds.size() == 2);
-    CHECK(runResult->failureCount == 0);
+    CHECK(runRes->insertedIds.size() == 2);
+    CHECK(runRes->failureCount == 0);
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(transaction).get("first-new.flac");
-    REQUIRE(manifestResult);
-    CHECK(manifestResult->audioPayloadLength() == cachedPayloadLength);
-    CHECK(manifestResult->audioSignature() == cachedSignature);
+    auto const manifestRes = ml.manifest().reader(transaction).get("first-new.flac");
+    REQUIRE(manifestRes);
+    CHECK(manifestRes->audioPayloadLength() == cachedPayloadLength);
+    CHECK(manifestRes->audioSignature() == cachedSignature);
   }
 
   TEST_CASE("ScanApplyOperation - reports fingerprint progress while hashing audio payload",
@@ -430,11 +430,11 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), std::move(progress), counts.callback()};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    CHECK(changedTrackIds(*runResult).size() == 1);
-    CHECK(runResult->failureCount == 0);
+    CHECK(changedTrackIds(*runRes).size() == 1);
+    CHECK(runRes->failureCount == 0);
     REQUIRE(progressEvents.size() >= 3);
     CHECK(progressEvents[0].stage == ScanApplyProgressStage::Updating);
     CHECK(progressEvents[1].stage == ScanApplyProgressStage::Fingerprinting);
@@ -595,8 +595,8 @@ namespace ao::rt::test
       auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
-      auto runResult = executor.run();
-      REQUIRE(runResult);
+      auto runRes = executor.run();
+      REQUIRE(runRes);
     }
 
     // Second scan should find unchanged file
@@ -607,10 +607,10 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    auto const& result = *runResult;
+    auto const& result = *runRes;
     // An unchanged file is skipped silently: nothing processed, nothing reported.
     CHECK(changedTrackIds(result).empty());
     CHECK(result.failureCount == 0);
@@ -634,18 +634,18 @@ namespace ao::rt::test
       auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
-      auto runResult = executor.run();
-      REQUIRE(runResult);
+      auto runRes = executor.run();
+      REQUIRE(runRes);
     }
 
     std::uint64_t oldPayloadLength = 0;
     auto oldSignature = utility::Hash128{};
     {
       auto transaction = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
-      REQUIRE(manifestResult);
-      oldPayloadLength = manifestResult->audioPayloadLength();
-      oldSignature = manifestResult->audioSignature();
+      auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(manifestRes);
+      oldPayloadLength = manifestRes->audioPayloadLength();
+      oldSignature = manifestRes->audioSignature();
     }
 
     // Modify targetFile and advance mtime
@@ -663,10 +663,10 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    auto const& result = *runResult;
+    auto const& result = *runRes;
     CHECK(changedTrackIds(result).size() == 1);
     CHECK(result.insertedIds.empty());
     CHECK(result.mutatedIds == changedTrackIds(result));
@@ -675,15 +675,15 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
+    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
     auto const actualMtime =
       static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    std::filesystem::last_write_time(targetFile).time_since_epoch())
                                    .count());
-    CHECK(manifestResult->mtime() == actualMtime);
-    CHECK(manifestResult->audioPayloadLength() > oldPayloadLength);
-    CHECK(manifestResult->audioSignature() != oldSignature);
+    CHECK(manifestRes->mtime() == actualMtime);
+    CHECK(manifestRes->audioPayloadLength() > oldPayloadLength);
+    CHECK(manifestRes->audioSignature() != oldSignature);
   }
 
   TEST_CASE("ScanApplyOperation - updates manifest status for missing files", "[runtime][unit][library][scan]")
@@ -703,8 +703,8 @@ namespace ao::rt::test
       auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
-      auto runResult = executor.run();
-      REQUIRE(runResult);
+      auto runRes = executor.run();
+      REQUIRE(runRes);
     }
 
     // Remove the file
@@ -716,16 +716,16 @@ namespace ao::rt::test
     CHECK(plan.items()[0].classification == ScanClassification::Missing);
 
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
     auto transaction = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK(manifestResult->status() == library::FileStatus::Missing);
-    CHECK(changedTrackIds(*runResult).empty());
-    CHECK(runResult->missingCount == 1);
-    CHECK(runResult->failureCount == 0);
+    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK(manifestRes->status() == library::FileStatus::Missing);
+    CHECK(changedTrackIds(*runRes).empty());
+    CHECK(runRes->missingCount == 1);
+    CHECK(runRes->failureCount == 0);
   }
 
   TEST_CASE("ScanApplyOperation - relinks moved files while preserving DB-owned curation",
@@ -747,20 +747,20 @@ namespace ao::rt::test
       auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
-      auto runResult = executor.run();
-      REQUIRE(runResult);
-      REQUIRE(changedTrackIds(*runResult).size() == 1);
-      originalTrackId = changedTrackIds(*runResult).front();
+      auto runRes = executor.run();
+      REQUIRE(runRes);
+      REQUIRE(changedTrackIds(*runRes).size() == 1);
+      originalTrackId = changedTrackIds(*runRes).front();
     }
 
     std::uint64_t originalPayloadLength = 0;
     auto originalSignature = utility::Hash128{};
     {
       auto transaction = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
-      REQUIRE(manifestResult);
-      originalPayloadLength = manifestResult->audioPayloadLength();
-      originalSignature = manifestResult->audioSignature();
+      auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(manifestRes);
+      originalPayloadLength = manifestRes->audioPayloadLength();
+      originalSignature = manifestRes->audioSignature();
     }
 
     updateTrackSpec(ml,
@@ -777,9 +777,9 @@ namespace ao::rt::test
       auto transaction = library::test::writeTransaction(ml);
       auto listBuilder = library::ListBuilder::makeEmpty();
       listBuilder.name("Ordered").orderTrackIds().add(originalTrackId);
-      auto createResult = ml.lists().writer(transaction).create(ao::test::requireValue(listBuilder.serialize()));
-      REQUIRE(createResult);
-      orderedListId = *createResult;
+      auto createRes = ml.lists().writer(transaction).create(ao::test::requireValue(listBuilder.serialize()));
+      REQUIRE(createRes);
+      orderedListId = *createRes;
       REQUIRE(transaction.commit());
     }
 
@@ -809,16 +809,16 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), std::move(progress), counts.callback()};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    REQUIRE(changedTrackIds(*runResult).size() == 1);
-    CHECK(changedTrackIds(*runResult).front() == originalTrackId);
-    CHECK(runResult->insertedIds.empty());
-    CHECK(runResult->mutatedIds.empty());
-    CHECK(runResult->relinkedIds == std::vector{originalTrackId});
-    CHECK(runResult->relinkedIds.size() == 1);
-    CHECK(runResult->failureCount == 0);
+    REQUIRE(changedTrackIds(*runRes).size() == 1);
+    CHECK(changedTrackIds(*runRes).front() == originalTrackId);
+    CHECK(runRes->insertedIds.empty());
+    CHECK(runRes->mutatedIds.empty());
+    CHECK(runRes->relinkedIds == std::vector{originalTrackId});
+    CHECK(runRes->relinkedIds.size() == 1);
+    CHECK(runRes->failureCount == 0);
     CHECK(counts.failed == 0);
     CHECK(sawFingerprinting);
     CHECK(std::ranges::is_sorted(progressFractions));
@@ -835,16 +835,16 @@ namespace ao::rt::test
     CHECK(hasCustomMetadata(spec, "catalog", "AOB-42"));
 
     auto manifestReader = ml.manifest().reader(transaction);
-    auto const oldManifestResult = manifestReader.get("song.flac");
-    REQUIRE_FALSE(oldManifestResult);
-    CHECK(oldManifestResult.error().code == Error::Code::NotFound);
+    auto const oldManifestRes = manifestReader.get("song.flac");
+    REQUIRE_FALSE(oldManifestRes);
+    CHECK(oldManifestRes.error().code == Error::Code::NotFound);
 
-    auto const newManifestResult = manifestReader.get("renamed/song.flac");
-    REQUIRE(newManifestResult);
-    CHECK(newManifestResult->trackId() == originalTrackId);
-    CHECK(newManifestResult->status() == library::FileStatus::Available);
-    CHECK(newManifestResult->audioPayloadLength() == originalPayloadLength);
-    CHECK(newManifestResult->audioSignature() == originalSignature);
+    auto const newManifestRes = manifestReader.get("renamed/song.flac");
+    REQUIRE(newManifestRes);
+    CHECK(newManifestRes->trackId() == originalTrackId);
+    CHECK(newManifestRes->status() == library::FileStatus::Available);
+    CHECK(newManifestRes->audioPayloadLength() == originalPayloadLength);
+    CHECK(newManifestRes->audioSignature() == originalSignature);
 
     auto const optOrderedList = ml.lists().reader(transaction).get(orderedListId);
     REQUIRE(optOrderedList);
@@ -871,10 +871,10 @@ namespace ao::rt::test
       auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
-      auto runResult = executor.run();
-      REQUIRE(runResult);
-      REQUIRE(changedTrackIds(*runResult).size() == 1);
-      originalTrackId = changedTrackIds(*runResult).front();
+      auto runRes = executor.run();
+      REQUIRE(runRes);
+      REQUIRE(changedTrackIds(*runRes).size() == 1);
+      originalTrackId = changedTrackIds(*runRes).front();
     }
 
     auto const movedFile = musicRoot / "renamed.flac";
@@ -901,20 +901,20 @@ namespace ao::rt::test
                                        std::move(progress),
                                        counts.callback(),
                                        ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}};
-    auto prepareResult = executor.prepare();
-    REQUIRE(prepareResult);
+    auto prepareRes = executor.prepare();
+    REQUIRE(prepareRes);
     REQUIRE(sawFingerprinting);
-    REQUIRE(prepareResult->failureCount == 0);
+    REQUIRE(prepareRes->failureCount == 0);
 
     auto const differentAudio = audio::test::requireAudioFixture("hires.flac");
     std::filesystem::copy_file(differentAudio, movedFile, std::filesystem::copy_options::overwrite_existing);
 
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    CHECK(changedTrackIds(*runResult).empty());
-    CHECK(runResult->relinkedIds.empty());
-    CHECK(runResult->failureCount == 1);
+    CHECK(changedTrackIds(*runRes).empty());
+    CHECK(runRes->relinkedIds.empty());
+    CHECK(runRes->failureCount == 1);
     CHECK(counts.failed == 1);
     CHECK(sawFingerprinting);
 
@@ -926,9 +926,9 @@ namespace ao::rt::test
 
     auto manifestReader = ml.manifest().reader(transaction);
     CHECK(manifestReader.get("song.flac"));
-    auto const newManifestResult = manifestReader.get("renamed.flac");
-    REQUIRE_FALSE(newManifestResult);
-    CHECK(newManifestResult.error().code == Error::Code::NotFound);
+    auto const newManifestRes = manifestReader.get("renamed.flac");
+    REQUIRE_FALSE(newManifestRes);
+    CHECK(newManifestRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ScanApplyOperation - moved-file revalidation failure aborts co-planned inserts",
@@ -943,10 +943,10 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     auto initialPlan = LibraryScan{ml}.buildPlan().value();
-    auto initialResult = ScanApplyOperation{ml, std::move(initialPlan), nullptr, nullptr}.run();
-    REQUIRE(initialResult);
-    REQUIRE(initialResult->insertedIds.size() == 1);
-    auto const originalTrackId = initialResult->insertedIds.front();
+    auto initialRes = ScanApplyOperation{ml, std::move(initialPlan), nullptr, nullptr}.run();
+    REQUIRE(initialRes);
+    REQUIRE(initialRes->insertedIds.size() == 1);
+    auto const originalTrackId = initialRes->insertedIds.front();
 
     auto const movedFile = musicRoot / "renamed.flac";
     auto const newFile = musicRoot / "new.flac";
@@ -959,9 +959,9 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
-    auto prepareResult = operation.prepare();
-    REQUIRE(prepareResult);
-    REQUIRE(prepareResult->failureCount == 0);
+    auto prepareRes = operation.prepare();
+    REQUIRE(prepareRes);
+    REQUIRE(prepareRes->failureCount == 0);
 
     auto const revisionBeforeRevalidation = [&]
     {
@@ -972,12 +972,12 @@ namespace ao::rt::test
     std::filesystem::copy_file(
       audio::test::requireAudioFixture("hires.flac"), movedFile, std::filesystem::copy_options::overwrite_existing);
 
-    auto runResult = operation.run();
-    REQUIRE(runResult);
-    CHECK(runResult->insertedIds.empty());
-    CHECK(runResult->mutatedIds.empty());
-    CHECK(runResult->relinkedIds.empty());
-    CHECK(runResult->failureCount == 1);
+    auto runRes = operation.run();
+    REQUIRE(runRes);
+    CHECK(runRes->insertedIds.empty());
+    CHECK(runRes->mutatedIds.empty());
+    CHECK(runRes->relinkedIds.empty());
+    CHECK(runRes->failureCount == 1);
     CHECK(counts.failed == 1);
 
     auto transaction = ml.readTransaction();
@@ -1018,15 +1018,15 @@ namespace ao::rt::test
     REQUIRE(executor.prepare());
 
     {
-      auto writableResult = library::WritableMusicLibrary::acquire(ml);
-      REQUIRE(writableResult);
-      auto transaction = writableResult->writeTransaction();
+      auto writableRes = library::WritableMusicLibrary::acquire(ml);
+      REQUIRE(writableRes);
+      auto transaction = writableRes->writeTransaction();
       REQUIRE(transaction.commit());
     }
 
-    auto runResult = executor.run();
-    REQUIRE_FALSE(runResult);
-    CHECK(runResult.error().code == Error::Code::Conflict);
+    auto runRes = executor.run();
+    REQUIRE_FALSE(runRes);
+    CHECK(runRes.error().code == Error::Code::Conflict);
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
@@ -1076,16 +1076,16 @@ namespace ao::rt::test
     auto firstPlan = LibraryScan{ml}.buildPlan().value();
     auto secondPlan = LibraryScan{ml}.buildPlan().value();
 
-    auto firstResult = ScanApplyOperation{ml, std::move(firstPlan), nullptr, nullptr}.run();
-    REQUIRE(firstResult);
-    REQUIRE(firstResult->insertedIds.size() == 1);
+    auto firstRes = ScanApplyOperation{ml, std::move(firstPlan), nullptr, nullptr}.run();
+    REQUIRE(firstRes);
+    REQUIRE(firstRes->insertedIds.size() == 1);
 
     bool sawReplayProgress = false;
     auto secondOperation = ScanApplyOperation{
       ml, std::move(secondPlan), [&sawReplayProgress](ScanApplyProgress const&) { sawReplayProgress = true; }, nullptr};
-    auto secondResult = secondOperation.run();
-    REQUIRE_FALSE(secondResult);
-    CHECK(secondResult.error().code == Error::Code::Conflict);
+    auto secondRes = secondOperation.run();
+    REQUIRE_FALSE(secondRes);
+    CHECK(secondRes.error().code == Error::Code::Conflict);
     CHECK_FALSE(sawReplayProgress);
 
     auto transaction = ml.readTransaction();
@@ -1098,9 +1098,9 @@ namespace ao::rt::test
     }
 
     CHECK(trackCount == 1);
-    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK(manifestResult->trackId() == firstResult->insertedIds.front());
+    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK(manifestRes->trackId() == firstRes->insertedIds.front());
   }
 
   TEST_CASE("ScanApplyOperation - reports corrupted file failures", "[runtime][unit][library][scan]")
@@ -1122,10 +1122,10 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    auto const& result = *runResult;
+    auto const& result = *runRes;
     CHECK(counts.failed == 1);
     CHECK(result.failureCount == 1);
     CHECK(changedTrackIds(result).empty());
@@ -1174,11 +1174,11 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
-    auto runResult = executor.run();
-    REQUIRE(runResult);
+    auto runRes = executor.run();
+    REQUIRE(runRes);
 
-    CHECK(changedTrackIds(*runResult).empty());
-    CHECK(runResult->failureCount == 0);
+    CHECK(changedTrackIds(*runRes).empty());
+    CHECK(runRes->failureCount == 0);
     CHECK(counts.failed == 0);
   }
 } // namespace ao::rt::test

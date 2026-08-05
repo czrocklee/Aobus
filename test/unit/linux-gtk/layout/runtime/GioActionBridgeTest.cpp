@@ -7,7 +7,6 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
@@ -141,8 +140,7 @@ namespace ao::gtk::layout::test
                                .category = "Test",
                                .capabilities = LayoutActionCapability::None},
         [&](ActionActivationContext&) {},
-        [&](ActionActivationContext const&)
-        { return LayoutActionAvailability{.enabled = isEnabled, .disabledReason = ""}; });
+        [&](ActionActivationContext const&) { return ActionAvailability{.enabled = isEnabled, .disabledReason = ""}; });
 
       auto sessionPtr = GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
       REQUIRE(sessionPtr != nullptr);

@@ -127,9 +127,9 @@ namespace ao::rt::test
       auto transaction = library::test::writeTransaction(ml1);
 
       auto resWriter = ml1.resources().writer(transaction);
-      auto resIdResult = resWriter.create(lmdb::test::createTestData(100));
-      REQUIRE(resIdResult);
-      auto const resId = *resIdResult;
+      auto resIdRes = resWriter.create(lmdb::test::createTestData(100));
+      REQUIRE(resIdRes);
+      auto const resId = *resIdRes;
       REQUIRE(resWriter.create(lmdb::test::createTestData(64)));
       REQUIRE(transaction.commit());
       auto const trackId = library::test::addTrack(ml1,
@@ -568,14 +568,14 @@ library:
       auto const targetTemp = ao::test::TempDir{};
       auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
       auto importer = LibraryYamlImporter{target};
-      auto const report = importer.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
+      auto const reportRes = importer.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
 
-      REQUIRE(report);
-      CHECK(report->tracksCreated == 1);
-      CHECK(report->tracksUpdated == 0);
-      CHECK(report->tracksDeleted == 0);
-      CHECK(report->listsCreated == 1);
-      CHECK(report->listsDeleted == 0);
+      REQUIRE(reportRes);
+      CHECK(reportRes->tracksCreated == 1);
+      CHECK(reportRes->tracksUpdated == 0);
+      CHECK(reportRes->tracksDeleted == 0);
+      CHECK(reportRes->listsCreated == 1);
+      CHECK(reportRes->listsDeleted == 0);
       CHECK(trackCount(target) == 0);
       CHECK(listCount(target) == 0);
     }
@@ -616,21 +616,21 @@ library:
       }
 
       auto importer = LibraryYamlImporter{ml};
-      auto const dryRunReport = importer.previewImportFromYamlOffline(yamlPath, ImportMode::Merge);
+      auto const dryRunReportRes = importer.previewImportFromYamlOffline(yamlPath, ImportMode::Merge);
 
-      REQUIRE(dryRunReport);
-      CHECK(dryRunReport->tracksCreated == 1);
-      CHECK(dryRunReport->tracksUpdated == 1);
-      CHECK(dryRunReport->tracksDeleted == 0);
-      CHECK(dryRunReport->listsCreated == 1);
-      CHECK(dryRunReport->listsDeleted == 0);
+      REQUIRE(dryRunReportRes);
+      CHECK(dryRunReportRes->tracksCreated == 1);
+      CHECK(dryRunReportRes->tracksUpdated == 1);
+      CHECK(dryRunReportRes->tracksDeleted == 0);
+      CHECK(dryRunReportRes->listsCreated == 1);
+      CHECK(dryRunReportRes->listsDeleted == 0);
       CHECK(trackCount(ml) == 1);
       CHECK(listCount(ml) == 0);
       CHECK(trackTitleForUri(ml, "track1.flac") == "Original");
 
-      auto const commitReport = importer.importFromYamlOffline(yamlPath, ImportMode::Merge);
-      REQUIRE(commitReport);
-      CHECK(*commitReport == *dryRunReport);
+      auto const commitReportRes = importer.importFromYamlOffline(yamlPath, ImportMode::Merge);
+      REQUIRE(commitReportRes);
+      CHECK(*commitReportRes == *dryRunReportRes);
       CHECK(trackCount(ml) == 2);
       CHECK(listCount(ml) == 1);
       CHECK(trackTitleForUri(ml, "track1.flac") == "Updated");
@@ -694,18 +694,18 @@ library:
 
     CHECK(count == 3);
 
-    auto manifestResult = manifestReader.get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK(manifestResult->fileSize() == 13);
-    CHECK(manifestResult->mtime() > 0);
+    auto manifestRes = manifestReader.get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK(manifestRes->fileSize() == 13);
+    CHECK(manifestRes->mtime() > 0);
 
-    auto manifestResult2 = manifestReader.get("song2.flac");
-    REQUIRE(manifestResult2);
-    CHECK(manifestResult2->fileSize() == 0);
+    auto manifestResult2Res = manifestReader.get("song2.flac");
+    REQUIRE(manifestResult2Res);
+    CHECK(manifestResult2Res->fileSize() == 0);
 
-    auto manifestResult3 = manifestReader.get("song3.flac");
-    REQUIRE(manifestResult3);
-    CHECK(manifestResult3->fileSize() == 0);
+    auto manifestResult3Res = manifestReader.get("song3.flac");
+    REQUIRE(manifestResult3Res);
+    CHECK(manifestResult3Res->fileSize() == 0);
 
     auto const listReader = ml.lists().reader(transaction);
     auto optList = listReader.get(ListId{1});
@@ -777,8 +777,8 @@ library:
       yaml << "        - id: 1\n";
     }
 
-    auto resultDelta = importer.importFromYamlOffline(yamlPathDelta, ImportMode::Merge);
-    REQUIRE(resultDelta);
+    auto resultDeltaRes = importer.importFromYamlOffline(yamlPathDelta, ImportMode::Merge);
+    REQUIRE(resultDeltaRes);
   }
 
   TEST_CASE("LibraryYaml - version 3 rejects aliases and extension fields",

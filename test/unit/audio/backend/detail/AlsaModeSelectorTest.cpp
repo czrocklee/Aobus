@@ -29,11 +29,11 @@ namespace ao::audio::backend::detail::test
                  AlsaModeEvidence{.encoding = SampleEncoding::Signed24PackedLe, .optSignificantBits = 24},
                  AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le, .optSignificantBits = 32}};
 
-    auto const selected = selectAlsaMode(integerSignal(24), evidence);
+    auto const selectedRes = selectAlsaMode(integerSignal(24), evidence);
 
-    REQUIRE(selected);
-    CHECK(selected->encoding == SampleEncoding::Signed24PackedLe);
-    CHECK(selected->endpointPrecisionBits == 24);
+    REQUIRE(selectedRes);
+    CHECK(selectedRes->encoding == SampleEncoding::Signed24PackedLe);
+    CHECK(selectedRes->endpointPrecisionBits == 24);
   }
 
   TEST_CASE("selectAlsaMode - a 16-bit endpoint rejects a 24-bit signal", "[audio][regression][alsa]")
@@ -41,12 +41,12 @@ namespace ao::audio::backend::detail::test
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 16}};
 
-    auto const selected = selectAlsaMode(integerSignal(24), evidence);
+    auto const selectedRes = selectAlsaMode(integerSignal(24), evidence);
 
-    REQUIRE_FALSE(selected);
-    CHECK(selected.error().code == Error::Code::FormatRejected);
-    CHECK(selected.error().message.contains("no confirmed lossless endpoint"));
-    CHECK(selected.error().message.contains("S16_LE sbits=16"));
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().message.contains("no confirmed lossless endpoint"));
+    CHECK(selectedRes.error().message.contains("S16_LE sbits=16"));
   }
 
   TEST_CASE("selectAlsaMode - documented lossless order chooses the native container first", "[audio][unit][alsa]")
@@ -55,11 +55,11 @@ namespace ao::audio::backend::detail::test
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed24In32Le, .optSignificantBits = 24},
                  AlsaModeEvidence{.encoding = SampleEncoding::Signed24PackedLe, .optSignificantBits = 24}};
 
-    auto const selected = selectAlsaMode(integerSignal(24), evidence);
+    auto const selectedRes = selectAlsaMode(integerSignal(24), evidence);
 
-    REQUIRE(selected);
-    CHECK(selected->encoding == SampleEncoding::Signed24PackedLe);
-    CHECK(selected->endpointPrecisionBits == 24);
+    REQUIRE(selectedRes);
+    CHECK(selectedRes->encoding == SampleEncoding::Signed24PackedLe);
+    CHECK(selectedRes->endpointPrecisionBits == 24);
   }
 
   TEST_CASE("selectAlsaMode - significant bits decide whether a wide container is lossless",
@@ -68,16 +68,16 @@ namespace ao::audio::backend::detail::test
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le, .optSignificantBits = 24}};
 
-    auto const lossless = selectAlsaMode(integerSignal(24), evidence);
+    auto const losslessRes = selectAlsaMode(integerSignal(24), evidence);
 
-    REQUIRE(lossless);
-    CHECK(lossless->encoding == SampleEncoding::Signed32Le);
-    CHECK(lossless->endpointPrecisionBits == 24);
+    REQUIRE(losslessRes);
+    CHECK(losslessRes->encoding == SampleEncoding::Signed32Le);
+    CHECK(losslessRes->endpointPrecisionBits == 24);
 
-    auto const reduced = selectAlsaMode(integerSignal(32), evidence);
+    auto const reducedRes = selectAlsaMode(integerSignal(32), evidence);
 
-    REQUIRE_FALSE(reduced);
-    CHECK(reduced.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(reducedRes);
+    CHECK(reducedRes.error().code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - missing significant-bit evidence is not treated as full precision",
@@ -85,11 +85,11 @@ namespace ao::audio::backend::detail::test
   {
     auto const evidence = std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le}};
 
-    auto const selected = selectAlsaMode(integerSignal(32), evidence);
+    auto const selectedRes = selectAlsaMode(integerSignal(32), evidence);
 
-    REQUIRE_FALSE(selected);
-    CHECK(selected.error().code == Error::Code::FormatRejected);
-    CHECK(selected.error().message.contains("S32_LE sbits=unknown"));
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().message.contains("S32_LE sbits=unknown"));
   }
 
   TEST_CASE("selectAlsaMode - endpoint precision never exceeds its encoding", "[audio][regression][alsa]")
@@ -97,20 +97,20 @@ namespace ao::audio::backend::detail::test
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 32}};
 
-    auto const selected = selectAlsaMode(integerSignal(24), evidence);
+    auto const selectedRes = selectAlsaMode(integerSignal(24), evidence);
 
-    REQUIRE_FALSE(selected);
-    CHECK(selected.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - an integer signal is not quantized into float", "[audio][regression][alsa]")
   {
     auto const evidence = std::array{AlsaModeEvidence{.encoding = SampleEncoding::Float32Le, .optSignificantBits = 32}};
 
-    auto const selected = selectAlsaMode(integerSignal(32), evidence);
+    auto const selectedRes = selectAlsaMode(integerSignal(32), evidence);
 
-    REQUIRE_FALSE(selected);
-    CHECK(selected.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - a float signal is not quantized into integer", "[audio][regression][alsa]")
@@ -120,18 +120,18 @@ namespace ao::audio::backend::detail::test
     auto const floatSignal =
       SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint};
 
-    auto const selected = selectAlsaMode(floatSignal, evidence);
+    auto const selectedRes = selectAlsaMode(floatSignal, evidence);
 
-    REQUIRE_FALSE(selected);
-    CHECK(selected.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - empty evidence reports what was inspected", "[audio][unit][alsa]")
   {
-    auto const selected = selectAlsaMode(integerSignal(24), {});
+    auto const selectedRes = selectAlsaMode(integerSignal(24), {});
 
-    REQUIRE_FALSE(selected);
-    CHECK(selected.error().message.contains("none"));
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().message.contains("none"));
   }
 
   TEST_CASE("selectAlsaMode - a signal without precision is rejected", "[audio][unit][alsa]")
@@ -139,9 +139,9 @@ namespace ao::audio::backend::detail::test
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 16}};
 
-    auto const selected = selectAlsaMode(integerSignal(0), evidence);
+    auto const selectedRes = selectAlsaMode(integerSignal(0), evidence);
 
-    REQUIRE_FALSE(selected);
-    CHECK(selected.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().code == Error::Code::InvalidInput);
   }
 } // namespace ao::audio::backend::detail::test

@@ -269,11 +269,11 @@ namespace ao::winui::layout
 
   Result<> ShellBuilder::build(ShellPreset const preset)
   {
-    auto prepared = prepareShellPreset(preset);
+    auto preparedRes = prepareShellPreset(preset);
 
-    if (!prepared)
+    if (!preparedRes)
     {
-      return std::unexpected{prepared.error()};
+      return std::unexpected{preparedRes.error()};
     }
 
     // The preset id keys the component runtime state, so it names the candidate
@@ -318,21 +318,21 @@ namespace ao::winui::layout
         .titleBarSlot = generation.titleBarElement,
       };
 
-      auto built = _registry.build(context, prepared->effectiveRoot());
+      auto builtRes = _registry.build(context, preparedRes->effectiveRoot());
 
-      if (!built)
+      if (!builtRes)
       {
         _host.discard(std::move(generation));
         _runtimeState.activePresetId = previousPresetId;
-        return std::unexpected{built.error()};
+        return std::unexpected{builtRes.error()};
       }
 
-      generation.rootPtr = std::move(built->componentPtr);
+      generation.rootPtr = std::move(builtRes->componentPtr);
 
-      if (auto published = _host.publish(std::move(generation)); !published)
+      if (auto publishedRes = _host.publish(std::move(generation)); !publishedRes)
       {
         _runtimeState.activePresetId = previousPresetId;
-        return std::unexpected{published.error()};
+        return std::unexpected{publishedRes.error()};
       }
 
       _optLivePreset = preset;
@@ -372,16 +372,16 @@ namespace ao::winui::layout
         return _shellState;
       }
 
-      if (auto built = build(preset); !built)
+      if (auto builtRes = build(preset); !builtRes)
       {
         _optRejectedPreset = preset;
 
         if (!_host.hasActiveGeneration())
         {
-          showFatalLayoutError(built.error());
+          showFatalLayoutError(builtRes.error());
         }
 
-        return std::unexpected{built.error()};
+        return std::unexpected{builtRes.error()};
       }
     }
 

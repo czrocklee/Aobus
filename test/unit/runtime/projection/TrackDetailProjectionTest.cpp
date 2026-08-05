@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/projection/TrackDetailProjection.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
@@ -16,7 +18,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -228,9 +229,9 @@ namespace ao::rt::test
     sub = {};
 
     // Now trigger a selection change in the old view, should NOT update because it's no longer focused
-    auto const removedSelection = env.views.setSelection(reply1, {id1});
-    REQUIRE_FALSE(removedSelection);
-    CHECK(removedSelection.error().code == Error::Code::NotFound);
+    auto const removedSelectionRes = env.views.setSelection(reply1, {id1});
+    REQUIRE_FALSE(removedSelectionRes);
+    CHECK(removedSelectionRes.error().code == Error::Code::NotFound);
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
   }
 

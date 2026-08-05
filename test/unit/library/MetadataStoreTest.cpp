@@ -52,11 +52,11 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = library.readTransaction();
-    auto const loadedResult = library.metadata().load(transaction);
+    auto const loadedRes = library.metadata().load(transaction);
 
-    REQUIRE(loadedResult);
-    CHECK(loadedResult->magic == kMetadataMagic);
-    CHECK(loadedResult->libraryVersion == kLibraryVersion);
+    REQUIRE(loadedRes);
+    CHECK(loadedRes->magic == kMetadataMagic);
+    CHECK(loadedRes->libraryVersion == kLibraryVersion);
     STATIC_REQUIRE_FALSE(std::is_same_v<ReadTransaction, lmdb::ReadTransaction>);
     STATIC_REQUIRE(std::is_move_constructible_v<ReadTransaction>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ReadTransaction>);
@@ -71,14 +71,14 @@ namespace ao::library::test
     header.flags = 42;
 
     REQUIRE(library.metadata().update(transaction, header));
-    auto const stagedResult = library.metadata().load(transaction);
-    REQUIRE(stagedResult);
-    CHECK(stagedResult->flags == 42);
+    auto const stagedRes = library.metadata().load(transaction);
+    REQUIRE(stagedRes);
+    CHECK(stagedRes->flags == 42);
     REQUIRE(transaction.commit());
 
     auto readTransaction = library.readTransaction();
-    auto const loadedResult = library.metadata().load(readTransaction);
-    REQUIRE(loadedResult);
-    CHECK(loadedResult->flags == 42);
+    auto const loadedRes = library.metadata().load(readTransaction);
+    REQUIRE(loadedRes);
+    CHECK(loadedRes->flags == 42);
   }
 } // namespace ao::library::test

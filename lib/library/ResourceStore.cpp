@@ -75,9 +75,9 @@ namespace ao::library
       if (!optExisting)
       {
         // Slot is free: this content has not been stored under this key yet.
-        if (auto createResult = _writer.create(key.raw(), data); !createResult)
+        if (auto createRes = _writer.create(key.raw(), data); !createRes)
         {
-          return std::unexpected{createResult.error()};
+          return std::unexpected{createRes.error()};
         }
 
         return key;

@@ -199,9 +199,9 @@ namespace ao::cli::test
       auto musicLibrary =
         library::test::makeTestMusicLibrary(fixture.root(), rt::LibraryPaths{fixture.root()}.databasePath());
       auto transaction = musicLibrary.readTransaction();
-      auto manifestResult = musicLibrary.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestResult);
-      return library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature());
+      auto manifestRes = musicLibrary.manifest().reader(transaction).get(uri);
+      REQUIRE(manifestRes);
+      return library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature());
     }
   } // namespace
 
@@ -210,15 +210,15 @@ namespace ao::cli::test
     CHECK(validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Applied));
     CHECK(validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::NoOp));
 
-    auto const stale = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Stale);
-    REQUIRE_FALSE(stale);
-    CHECK(stale.error().code == Error::Code::Conflict);
-    CHECK(stale.error().message == "List order target became stale");
+    auto const staleRes = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Stale);
+    REQUIRE_FALSE(staleRes);
+    CHECK(staleRes.error().code == Error::Code::Conflict);
+    CHECK(staleRes.error().message == "List order target became stale");
 
-    auto const unavailable = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Unavailable);
-    REQUIRE_FALSE(unavailable);
-    CHECK(unavailable.error().code == Error::Code::InvalidState);
-    CHECK(unavailable.error().message == "Library is busy");
+    auto const unavailableRes = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Unavailable);
+    REQUIRE_FALSE(unavailableRes);
+    CHECK(unavailableRes.error().code == Error::Code::InvalidState);
+    CHECK(unavailableRes.error().message == "Library is busy");
   }
 
   TEST_CASE("CLI - init and dump commands run against fixture library", "[cli][workflow][smoke]")
@@ -318,17 +318,17 @@ namespace ao::cli::test
       std::ignore = library::test::makeTestMusicLibrary(fixture.root(), databasePath);
     }
 
-    auto environmentResult = lmdb::Environment::open(
+    auto environmentRes = lmdb::Environment::open(
       databasePath.string(),
       {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
-    REQUIRE(environmentResult);
-    auto environment = std::move(*environmentResult);
-    auto transactionResult = lmdb::WriteTransaction::begin(environment);
-    REQUIRE(transactionResult);
-    auto transaction = std::move(*transactionResult);
-    auto manifestResult = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
-    REQUIRE(manifestResult);
-    auto manifest = std::move(*manifestResult);
+    REQUIRE(environmentRes);
+    auto environment = std::move(*environmentRes);
+    auto transactionRes = lmdb::WriteTransaction::begin(environment);
+    REQUIRE(transactionRes);
+    auto transaction = std::move(*transactionRes);
+    auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+    REQUIRE(manifestRes);
+    auto manifest = std::move(*manifestRes);
     auto const malformedKey = utility::bytes::view(std::string_view{"bad"});
     auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
     REQUIRE(manifest.writer(transaction).create(malformedKey, payload));

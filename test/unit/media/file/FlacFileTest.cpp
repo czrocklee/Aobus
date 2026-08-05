@@ -176,10 +176,10 @@ namespace ao::media::file::flac::test
 
     auto const temp = TempFile{data, ".flac"};
     auto const file = File{temp.path};
-    auto rangeResult = file.audioPayload();
+    auto rangeRes = file.audioPayload();
 
-    REQUIRE(rangeResult);
-    auto const range = *rangeResult;
+    REQUIRE(rangeRes);
+    auto const range = *rangeRes;
     CHECK(range.offset == expectedOffset);
     REQUIRE(range.bytes.size() == 3);
     CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == 0xA0);
@@ -192,10 +192,10 @@ namespace ao::media::file::flac::test
     auto const data = createMinimalFlac();
     auto const temp = TempFile{data, ".flac"};
     auto const file = File{temp.path};
-    auto rangeResult = file.audioPayload();
+    auto rangeRes = file.audioPayload();
 
-    REQUIRE_FALSE(rangeResult);
-    CHECK(rangeResult.error().code == Error::Code::CorruptData);
+    REQUIRE_FALSE(rangeRes);
+    CHECK(rangeRes.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("FLAC File - audio payload signature ignores metadata changes", "[media][unit][flac][file]")
@@ -211,14 +211,14 @@ namespace ao::media::file::flac::test
     auto const firstFile = File{firstTemp.path};
     auto const secondFile = File{secondTemp.path};
 
-    auto const firstPayloadResult = firstFile.audioPayload();
-    auto const secondPayloadResult = secondFile.audioPayload();
-    REQUIRE(firstPayloadResult);
-    REQUIRE(secondPayloadResult);
+    auto const firstPayloadRes = firstFile.audioPayload();
+    auto const secondPayloadRes = secondFile.audioPayload();
+    REQUIRE(firstPayloadRes);
+    REQUIRE(secondPayloadRes);
 
-    CHECK(firstPayloadResult->bytes.size() == audioPayload.size());
-    CHECK(secondPayloadResult->bytes.size() == audioPayload.size());
-    CHECK(utility::xxh3Hash128(firstPayloadResult->bytes) == utility::xxh3Hash128(secondPayloadResult->bytes));
+    CHECK(firstPayloadRes->bytes.size() == audioPayload.size());
+    CHECK(secondPayloadRes->bytes.size() == audioPayload.size());
+    CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
   TEST_CASE("FLAC File - rejects malformed input", "[media][unit][flac][file]")

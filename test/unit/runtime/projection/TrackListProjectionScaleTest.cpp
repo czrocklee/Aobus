@@ -58,11 +58,11 @@ namespace ao::rt::test
         auto const spec = makeSpec(index);
         library::test::applyTrackSpec(builder, spec);
 
-        auto prepared = builder.prepare(transaction, lib.resources());
-        REQUIRE(prepared);
-        auto createResult = library::createPreparedTrackRecord(writer, prepared->first, prepared->second);
-        REQUIRE(createResult);
-        result.push_back(*createResult);
+        auto preparedRes = builder.prepare(transaction, lib.resources());
+        REQUIRE(preparedRes);
+        auto createRes = library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
+        REQUIRE(createRes);
+        result.push_back(*createRes);
       }
 
       REQUIRE(transaction.commit());

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/library/WritableMusicLibrary.h>
+
 #include "WriterSessionLease.h"
 #include <ao/Error.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -23,15 +24,14 @@ namespace ao::library
 
   Result<WritableMusicLibrary> WritableMusicLibrary::acquire(MusicLibrary& library)
   {
-    auto leaseResult = detail::WriterSessionLease::acquire(library.databasePath());
+    auto leaseRes = detail::WriterSessionLease::acquire(library.databasePath());
 
-    if (!leaseResult)
+    if (!leaseRes)
     {
-      return std::unexpected{leaseResult.error()};
+      return std::unexpected{leaseRes.error()};
     }
 
-    auto implPtr =
-      std::make_unique<Impl>(&library, std::make_shared<detail::WriterSessionLease>(std::move(*leaseResult)));
+    auto implPtr = std::make_unique<Impl>(&library, std::make_shared<detail::WriterSessionLease>(std::move(*leaseRes)));
     return WritableMusicLibrary{std::move(implPtr)};
   }
 

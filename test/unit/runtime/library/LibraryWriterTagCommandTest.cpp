@@ -34,9 +34,9 @@ namespace ao::rt::test
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
-    auto const reply = writer.editTags(std::array{trackId}, favorite, {});
-    REQUIRE(reply);
-    CHECK_FALSE(reply->changes.empty());
+    auto const replyRes = writer.editTags(std::array{trackId}, favorite, {});
+    REQUIRE(replyRes);
+    CHECK_FALSE(replyRes->changes.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
 
@@ -67,9 +67,9 @@ namespace ao::rt::test
     REQUIRE(writer.editTags(std::array{trackId}, favorite, {}));
     mutated.clear();
 
-    auto const reply = writer.editTags(std::array{trackId}, favorite, {});
-    REQUIRE(reply);
-    CHECK(reply->changes.empty());
+    auto const replyRes = writer.editTags(std::array{trackId}, favorite, {});
+    REQUIRE(replyRes);
+    CHECK(replyRes->changes.empty());
     CHECK(mutated.empty());
   }
 
@@ -88,9 +88,9 @@ namespace ao::rt::test
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
-    auto const reply = writer.editTags(std::array{TrackId{99999}}, favorite, {});
-    REQUIRE_FALSE(reply);
-    CHECK(reply.error().code == Error::Code::NotFound);
+    auto const replyRes = writer.editTags(std::array{TrackId{99999}}, favorite, {});
+    REQUIRE_FALSE(replyRes);
+    CHECK(replyRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("LibraryWriter - editTags removes an existing tag and publishes a mutation",
@@ -112,9 +112,9 @@ namespace ao::rt::test
     REQUIRE(writer.editTags(std::array{trackId}, favorite, {}));
     mutated.clear();
 
-    auto const reply = writer.editTags(std::array{trackId}, {}, favorite);
-    REQUIRE(reply);
-    CHECK_FALSE(reply->changes.empty());
+    auto const replyRes = writer.editTags(std::array{trackId}, {}, favorite);
+    REQUIRE(replyRes);
+    CHECK_FALSE(replyRes->changes.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
   }
@@ -133,9 +133,9 @@ namespace ao::rt::test
       changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
 
     auto const nonExistent = std::array{std::string{"NonExistent"}};
-    auto const reply = writer.editTags(std::array{trackId}, {}, nonExistent);
-    REQUIRE(reply);
-    CHECK(reply->changes.empty());
+    auto const replyRes = writer.editTags(std::array{trackId}, {}, nonExistent);
+    REQUIRE(replyRes);
+    CHECK(replyRes->changes.empty());
     CHECK(mutated.empty());
   }
 
@@ -154,8 +154,8 @@ namespace ao::rt::test
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
-    auto const reply = writer.editTags(std::array{TrackId{99999}}, {}, favorite);
-    REQUIRE_FALSE(reply);
-    CHECK(reply.error().code == Error::Code::NotFound);
+    auto const replyRes = writer.editTags(std::array{TrackId{99999}}, {}, favorite);
+    REQUIRE_FALSE(replyRes);
+    CHECK(replyRes.error().code == Error::Code::NotFound);
   }
 } // namespace ao::rt::test

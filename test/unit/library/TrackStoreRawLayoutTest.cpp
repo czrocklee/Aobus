@@ -94,10 +94,10 @@ namespace ao::library::test
       auto transaction = writeTransaction(fixture.library);
       auto const replacement = TrackSpec{.title = "After", .artist = "Second Artist"};
       auto builder = makeBuilder(replacement);
-      auto prepared = builder.prepareHot(transaction);
-      REQUIRE(prepared);
+      auto preparedRes = builder.prepareHot(transaction);
+      REQUIRE(preparedRes);
       auto writer = fixture.store.writer(transaction);
-      REQUIRE(updatePreparedHotTrackRecord(writer, id, *prepared));
+      REQUIRE(updatePreparedHotTrackRecord(writer, id, *preparedRes));
       REQUIRE(transaction.commit());
     }
 
@@ -120,10 +120,10 @@ namespace ao::library::test
       auto transaction = writeTransaction(fixture.library);
       auto const replacement = TrackSpec{.title = "Kept", .trackNumber = 2, .duration = std::chrono::seconds{200}};
       auto builder = makeBuilder(replacement);
-      auto prepared = builder.prepareCold(transaction, fixture.library.resources());
-      REQUIRE(prepared);
+      auto preparedRes = builder.prepareCold(transaction, fixture.library.resources());
+      REQUIRE(preparedRes);
       auto writer = fixture.store.writer(transaction);
-      REQUIRE(updatePreparedColdTrackRecord(writer, id, *prepared));
+      REQUIRE(updatePreparedColdTrackRecord(writer, id, *preparedRes));
       REQUIRE(transaction.commit());
     }
 
@@ -145,10 +145,10 @@ namespace ao::library::test
       auto const replacement =
         TrackSpec{.title = "Replaced", .artist = "New Artist", .duration = std::chrono::minutes{7}};
       auto builder = makeBuilder(replacement);
-      auto prepared = builder.prepare(transaction, fixture.library.resources());
-      REQUIRE(prepared);
+      auto preparedRes = builder.prepare(transaction, fixture.library.resources());
+      REQUIRE(preparedRes);
       auto writer = fixture.store.writer(transaction);
-      REQUIRE(updatePreparedTrackRecord(writer, targetId, prepared->first, prepared->second));
+      REQUIRE(updatePreparedTrackRecord(writer, targetId, preparedRes->first, preparedRes->second));
       REQUIRE(transaction.commit());
     }
 

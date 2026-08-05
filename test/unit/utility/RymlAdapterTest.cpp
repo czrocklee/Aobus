@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/yaml/RymlAdapter.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/Exception.h>
-#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ryml.hpp>
@@ -96,13 +97,13 @@ namespace ao::test
       auto const path = std::filesystem::path{tempDir.path()} / "bounded.yaml";
       std::ofstream{path, std::ios::binary} << "12345";
 
-      auto exact = yaml::readFileResult(path, 5);
-      REQUIRE(exact);
-      CHECK(exact->size() == 5);
+      auto exactRes = yaml::readFileResult(path, 5);
+      REQUIRE(exactRes);
+      CHECK(exactRes->size() == 5);
 
-      auto const rejected = yaml::readFileResult(path, 4);
-      REQUIRE_FALSE(rejected);
-      CHECK(rejected.error().code == Error::Code::ValueTooLarge);
+      auto const rejectedRes = yaml::readFileResult(path, 4);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("scalarAs reports malformed scalars as FormatRejected")

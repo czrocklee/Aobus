@@ -49,10 +49,10 @@ namespace ao::audio::test
     auto decoder = ScriptedDecoderSession{info};
     decoder.setReadScript({{{std::byte{0}}, true}});
 
-    auto const block = decoder.readNextBlock();
+    auto const blockRes = decoder.readNextBlock();
 
-    REQUIRE_FALSE(block);
-    CHECK(block.error().code == Error::Code::InvalidState);
+    REQUIRE_FALSE(blockRes);
+    CHECK(blockRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("StreamingSource - initialize starts decode thread after successful preroll",

@@ -63,8 +63,8 @@ namespace ao::library::test
 
     void initializeLibrary(std::filesystem::path const& path)
     {
-      auto const library = openTestMusicLibrary(path, path);
-      REQUIRE(library);
+      auto const libraryRes = openTestMusicLibrary(path, path);
+      REQUIRE(libraryRes);
     }
 
     void createRawIntegerRow(std::filesystem::path const& path,
@@ -117,17 +117,17 @@ namespace ao::library::test
 
     auto const firstHeader = [&]
     {
-      auto firstResult = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE(firstResult);
-      auto const header = MetadataHeader{firstResult->metadataHeader()};
+      auto firstRes = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE(firstRes);
+      auto const header = MetadataHeader{firstRes->metadataHeader()};
       CHECK(header.magic == kMetadataMagic);
       CHECK(header.libraryVersion == kLibraryVersion);
       return header;
     }();
 
-    auto reopenedResult = openTestMusicLibrary(temp.path(), temp.path());
-    REQUIRE(reopenedResult);
-    auto const& reopened = *reopenedResult;
+    auto reopenedRes = openTestMusicLibrary(temp.path(), temp.path());
+    REQUIRE(reopenedRes);
+    auto const& reopened = *reopenedRes;
     CHECK(reopened.metadataHeader().libraryId == firstHeader.libraryId);
     CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
   }
@@ -346,19 +346,19 @@ namespace ao::library::test
     auto secondLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
 
     {
-      auto firstWriterResult = WritableMusicLibrary::acquire(firstLibrary);
-      REQUIRE(firstWriterResult);
+      auto firstWriterRes = WritableMusicLibrary::acquire(firstLibrary);
+      REQUIRE(firstWriterRes);
 
-      auto secondWriterResult = WritableMusicLibrary::acquire(secondLibrary);
-      REQUIRE_FALSE(secondWriterResult);
-      CHECK(secondWriterResult.error().code == Error::Code::Conflict);
+      auto secondWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+      REQUIRE_FALSE(secondWriterRes);
+      CHECK(secondWriterRes.error().code == Error::Code::Conflict);
 
-      auto transaction = firstWriterResult->writeTransaction();
+      auto transaction = firstWriterRes->writeTransaction();
       REQUIRE(transaction.commit());
     }
 
-    auto releasedWriterResult = WritableMusicLibrary::acquire(secondLibrary);
-    REQUIRE(releasedWriterResult);
+    auto releasedWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+    REQUIRE(releasedWriterRes);
   }
 
   TEST_CASE("WritableMusicLibrary - active transaction retains the writer session",
@@ -370,18 +370,18 @@ namespace ao::library::test
     auto optTransaction = std::optional<WriteTransaction>{};
 
     {
-      auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
-      REQUIRE(writerResult);
-      optTransaction.emplace(writerResult->writeTransaction());
+      auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+      REQUIRE(writerRes);
+      optTransaction.emplace(writerRes->writeTransaction());
     }
 
-    auto activeTransactionWriterResult = WritableMusicLibrary::acquire(secondLibrary);
-    REQUIRE_FALSE(activeTransactionWriterResult);
-    CHECK(activeTransactionWriterResult.error().code == Error::Code::Conflict);
+    auto activeTransactionWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+    REQUIRE_FALSE(activeTransactionWriterRes);
+    CHECK(activeTransactionWriterRes.error().code == Error::Code::Conflict);
 
     REQUIRE(optTransaction->commit());
-    auto committedTransactionWriterResult = WritableMusicLibrary::acquire(secondLibrary);
-    REQUIRE(committedTransactionWriterResult);
+    auto committedTransactionWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+    REQUIRE(committedTransactionWriterRes);
   }
 
   TEST_CASE("WritableMusicLibrary - terminal transaction paths release the retained writer session",
@@ -394,9 +394,9 @@ namespace ao::library::test
     SECTION("abort by destruction")
     {
       {
-        auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
-        REQUIRE(writerResult);
-        auto transaction = writerResult->writeTransaction();
+        auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+        REQUIRE(writerRes);
+        auto transaction = writerRes->writeTransaction();
       }
 
       REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
@@ -407,16 +407,16 @@ namespace ao::library::test
       auto optTransaction = std::optional<WriteTransaction>{};
 
       {
-        auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
-        REQUIRE(writerResult);
-        optTransaction.emplace(writerResult->writeTransaction());
+        auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+        REQUIRE(writerRes);
+        optTransaction.emplace(writerRes->writeTransaction());
       }
 
       optTransaction->abort();
       REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
-      auto commitResult = optTransaction->commit();
-      REQUIRE_FALSE(commitResult);
-      CHECK(commitResult.error().code == Error::Code::InvalidState);
+      auto commitRes = optTransaction->commit();
+      REQUIRE_FALSE(commitRes);
+      CHECK(commitRes.error().code == Error::Code::InvalidState);
     }
 
     SECTION("commit failure")
@@ -424,16 +424,16 @@ namespace ao::library::test
       auto optTransaction = std::optional<WriteTransaction>{};
 
       {
-        auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
-        REQUIRE(writerResult);
-        optTransaction.emplace(writerResult->writeTransaction(WriteTransaction::Options{
+        auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+        REQUIRE(writerRes);
+        optTransaction.emplace(writerRes->writeTransaction(WriteTransaction::Options{
           .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected failure"},
         }));
       }
 
-      auto commitResult = optTransaction->commit();
-      REQUIRE_FALSE(commitResult);
-      CHECK(commitResult.error().code == Error::Code::IoError);
+      auto commitRes = optTransaction->commit();
+      REQUIRE_FALSE(commitRes);
+      CHECK(commitRes.error().code == Error::Code::IoError);
       REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
     }
 
@@ -445,15 +445,15 @@ namespace ao::library::test
       auto secondSmallLibrary = ao::test::requireValue(
         MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
       {
-        auto writerResult = WritableMusicLibrary::acquire(smallLibrary);
-        REQUIRE(writerResult);
-        auto transaction = writerResult->writeTransaction();
+        auto writerRes = WritableMusicLibrary::acquire(smallLibrary);
+        REQUIRE(writerRes);
+        auto transaction = writerRes->writeTransaction();
         auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
-        auto failureResult =
+        auto failureRes =
           transaction.apply([&smallLibrary, &oversizedValue](WriteTransaction& activeTransaction)
                             { return smallLibrary.resources().writer(activeTransaction).create(oversizedValue); });
-        REQUIRE_FALSE(failureResult);
-        CHECK(failureResult.error().code == Error::Code::IoError);
+        REQUIRE_FALSE(failureRes);
+        CHECK(failureRes.error().code == Error::Code::IoError);
       }
 
       REQUIRE(WritableMusicLibrary::acquire(secondSmallLibrary));
@@ -470,9 +470,9 @@ namespace ao::library::test
     // The wrapper specifies an inactive moved-from state that is safe to query.
     // NOLINTNEXTLINE(bugprone-use-after-move)
     CHECK_THROWS_AS(source.dictionary(), Exception);
-    auto const sourceCommit = source.commit();
-    REQUIRE_FALSE(sourceCommit);
-    CHECK(sourceCommit.error().code == Error::Code::InvalidState);
+    auto const sourceCommitRes = source.commit();
+    REQUIRE_FALSE(sourceCommitRes);
+    CHECK(sourceCommitRes.error().code == Error::Code::InvalidState);
     REQUIRE(destination.commit());
   }
 
@@ -483,9 +483,9 @@ namespace ao::library::test
     auto transaction = writeTransaction(library);
 
     REQUIRE(transaction.commit());
-    auto const repeatedCommit = transaction.commit();
-    REQUIRE_FALSE(repeatedCommit);
-    CHECK(repeatedCommit.error().code == Error::Code::InvalidState);
+    auto const repeatedCommitRes = transaction.commit();
+    REQUIRE_FALSE(repeatedCommitRes);
+    CHECK(repeatedCommitRes.error().code == Error::Code::InvalidState);
     CHECK_THROWS_AS(transaction.dictionary(), Exception);
   }
 

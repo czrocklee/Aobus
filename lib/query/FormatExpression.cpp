@@ -186,14 +186,14 @@ namespace ao::query
 
   void FormatCompiler::compileVariable(VariableExpression const& variable)
   {
-    auto const fieldResult = detail::resolveVariableField(variable);
+    auto const fieldRes = detail::resolveVariableField(variable);
 
-    if (!fieldResult)
+    if (!fieldRes)
     {
-      detail::throwQueryError(fieldResult.error());
+      detail::throwQueryError(fieldRes.error());
     }
 
-    auto const field = *fieldResult;
+    auto const field = *fieldRes;
 
     if (isUnsupportedScalarField(field))
     {

@@ -55,7 +55,7 @@ The principal code boundaries refine the layer model in the [system architecture
 | Concern | System layer | Public boundary | Implementation |
 |---|---|---|---|
 | Durable library data | Core libraries | `ao::library::MusicLibrary` | `include/ao/library/` and `lib/library/` over LMDB |
-| YAML and atomic-file mechanisms | Core libraries | `include/ao/yaml/` and `include/ao/utility/AtomicFile.h` | Header adapters and `lib/utility/AtomicFile.cpp` |
+| YAML and atomic-file mechanisms | Core libraries | `include/ao/yaml/` and `include/ao/utility/AtomicFile.h` | Header adapters and `lib/utility/AtomicFilePosix.cpp` |
 | Grouped managed file | Application runtime | `app/include/ao/rt/ConfigStore.h` | `app/runtime/ConfigStore.cpp`; payload schemas remain beside their runtime, UIModel, or frontend owners |
 | Canonical per-library paths | Application runtime | `app/include/ao/rt/library/LibraryPaths.h` | `app/runtime/library/LibraryPaths.cpp` |
 | Runtime session semantics | Application runtime | `WorkspaceService`, `AppRuntime`, and playback-session commands | Runtime workspace and playback-persistence implementations under the [workspace](workspace.md), [interactive session lifecycle](interactive-session-lifecycle.md), and playback owners |
@@ -256,7 +256,7 @@ The specialized layout component-state store provides its own mutex-protected op
 
 - [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns durable per-library database state.
 - [`RymlAdapter.h`](../../include/ao/yaml/RymlAdapter.h) contains RapidYAML callbacks, file reading, parsing, arena lifetime helpers, and scalar conversion; [`Serialization.h`](../../include/ao/yaml/Serialization.h) contains the domain-neutral explicit map/sequence serialization helpers.
-- [`AtomicFile.h`](../../include/ao/utility/AtomicFile.h), [`AtomicFileTransaction.h`](../../lib/utility/AtomicFileTransaction.h), [`AtomicFile.cpp`](../../lib/utility/AtomicFile.cpp), and [`AtomicFileWindows.cpp`](../../lib/utility/AtomicFileWindows.cpp) provide the private-file replacement state machine and platform operations.
+- [`AtomicFile.h`](../../include/ao/utility/AtomicFile.h), [`AtomicFileTransaction.h`](../../lib/utility/AtomicFileTransaction.h), [`AtomicFilePosix.cpp`](../../lib/utility/AtomicFilePosix.cpp), and [`AtomicFileWindows.cpp`](../../lib/utility/AtomicFileWindows.cpp) provide the private-file replacement state machine and platform operations.
 - [`ConfigStore`](../../app/include/ao/rt/ConfigStore.h) and [`ConfigStore.cpp`](../../app/runtime/ConfigStore.cpp) implement the schema-neutral grouped runtime mechanism and explicit schema boundary.
 - [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) and [`LibraryPaths.cpp`](../../app/runtime/library/LibraryPaths.cpp) own canonical per-library path derivation and existing-database detection.
 - [`AppRuntimeDependencies`](../../app/include/ao/rt/AppRuntime.h) injects workspace and playback-session stores.

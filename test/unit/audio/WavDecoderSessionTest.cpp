@@ -90,9 +90,9 @@ namespace ao::audio::test
     CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
 
     auto const parsed = requireParsedWave(fixture);
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-    auto const& block = *blockResult;
+    auto blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    auto const& block = *blockRes;
     REQUIRE(block.bytes.size() <= parsed.wave.data.size());
     CHECK(block.firstFrameIndex == 0);
     CHECK(block.frames > 0);
@@ -113,9 +113,9 @@ namespace ao::audio::test
     CHECK(encodingContainerBits(info.outputFormat.encoding) == 24);
 
     auto const parsed = requireParsedWave(fixture);
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-    auto const& block = *blockResult;
+    auto blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    auto const& block = *blockRes;
     CHECK(info.outputFormat.encoding == SampleEncoding::Signed24PackedLe);
     REQUIRE(block.bytes.size() <= parsed.wave.data.size());
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
@@ -148,11 +148,11 @@ namespace ao::audio::test
     for (std::size_t openCount = 0; openCount < 2; ++openCount)
     {
       REQUIRE(decoder.open(temp.path));
-      auto blockResult = decoder.readNextBlock();
-      REQUIRE(blockResult);
-      CHECK(blockResult->frames == 4);
-      CHECK(blockResult->endOfStream);
-      CHECK(std::ranges::equal(blockResult->bytes, asBytes(audioData)));
+      auto blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
+      CHECK(blockRes->frames == 4);
+      CHECK(blockRes->endOfStream);
+      CHECK(std::ranges::equal(blockRes->bytes, asBytes(audioData)));
     }
   }
 
@@ -194,17 +194,17 @@ namespace ao::audio::test
 
     REQUIRE(decoder.open(temp.path));
 
-    auto firstResult = decoder.readNextBlock();
-    REQUIRE(firstResult);
-    CHECK(firstResult->frames == 4096);
-    CHECK_FALSE(firstResult->endOfStream);
-    CHECK(std::ranges::equal(firstResult->bytes, asBytes(audioData).first(4096 * sizeof(std::int16_t))));
+    auto firstRes = decoder.readNextBlock();
+    REQUIRE(firstRes);
+    CHECK(firstRes->frames == 4096);
+    CHECK_FALSE(firstRes->endOfStream);
+    CHECK(std::ranges::equal(firstRes->bytes, asBytes(audioData).first(4096 * sizeof(std::int16_t))));
 
-    auto finalResult = decoder.readNextBlock();
-    REQUIRE(finalResult);
-    CHECK(finalResult->frames == 1);
-    CHECK(finalResult->endOfStream);
-    CHECK(std::ranges::equal(finalResult->bytes, asBytes(audioData).last(sizeof(std::int16_t))));
+    auto finalRes = decoder.readNextBlock();
+    REQUIRE(finalRes);
+    CHECK(finalRes->frames == 1);
+    CHECK(finalRes->endOfStream);
+    CHECK(std::ranges::equal(finalRes->bytes, asBytes(audioData).last(sizeof(std::int16_t))));
   }
 
   TEST_CASE("WavDecoderSession - preserves real 32-bit float PCM", "[audio][unit][wav]")
@@ -221,9 +221,9 @@ namespace ao::audio::test
     CHECK(encodingContainerBits(info.outputFormat.encoding) == 32);
 
     auto const parsed = requireParsedWave(fixture);
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-    auto const& block = *blockResult;
+    auto blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    auto const& block = *blockRes;
     REQUIRE(block.bytes.size() <= parsed.wave.data.size());
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
   }
@@ -254,9 +254,9 @@ namespace ao::audio::test
     CHECK(encodingContainerBits(info.outputFormat.encoding) == 16);
 
     auto const parsed = requireParsedWave(fixture);
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-    auto const& block = *blockResult;
+    auto blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    auto const& block = *blockRes;
     REQUIRE(block.frames > 8);
     REQUIRE(block.bytes.size() >= 16);
 
@@ -275,13 +275,13 @@ namespace ao::audio::test
     auto const temp = ao::test::TempFile{data, ".wav"};
     auto decoder = WavDecoderSession{std::nullopt};
 
-    auto const openResult = decoder.open(temp.path);
+    auto const openRes = decoder.open(temp.path);
 
-    REQUIRE(openResult);
+    REQUIRE(openRes);
     CHECK(decoder.streamInfo().codec == AudioCodec::Wav);
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-    CHECK(blockResult->frames > 0);
+    auto blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->frames > 0);
   }
 
   TEST_CASE("WavDecoderSession - seek and end-of-stream are stable", "[audio][unit][wav]")
@@ -290,9 +290,9 @@ namespace ao::audio::test
 
     REQUIRE(decoder.open(requireAudioFixture("basic_metadata.wav")));
     REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-    CHECK(blockResult->firstFrameIndex == 22050);
+    auto blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->firstFrameIndex == 22050);
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 

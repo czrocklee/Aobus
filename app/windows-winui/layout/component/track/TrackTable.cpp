@@ -213,11 +213,11 @@ namespace ao::winui::layout
           return;
         }
 
-        auto const played = _trackList.play(TrackId{row.TrackId()}, _playTrack);
+        auto const playedRes = _trackList.play(TrackId{row.TrackId()}, _playTrack);
 
-        if (!played && _reportStatus)
+        if (!playedRes && _reportStatus)
         {
-          _reportStatus(formatResource("PlaybackFailedFormat", played.error().message));
+          _reportStatus(formatResource("PlaybackFailedFormat", playedRes.error().message));
         }
       }
 

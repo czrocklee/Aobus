@@ -97,14 +97,14 @@ namespace ao::audio
       inputBuffer.resize(magicCookie.size());
       std::memcpy(inputBuffer.data(), magicCookie.data(), magicCookie.size());
 
-      auto const configResult = [&]
+      auto const configRes = [&]
       {
         auto configData = std::array{inputBuffer.data()};
         auto configSize = std::array{static_cast<UINT>(inputBuffer.size())};
         return ::aacDecoder_ConfigRaw(decoder, configData.data(), configSize.data());
       }();
 
-      if (configResult != AAC_DEC_OK)
+      if (configRes != AAC_DEC_OK)
       {
         detail::throwDecoderError(Error::Code::InitFailed, "Failed to configure AAC decoder");
       }
@@ -140,14 +140,14 @@ namespace ao::audio
 
     void applyOutputFormat()
     {
-      auto const configured = outputAdapter.configure(info.sourceFormat, SampleEncoding::Signed16Le);
+      auto const configuredRes = outputAdapter.configure(info.sourceFormat, SampleEncoding::Signed16Le);
 
-      if (!configured)
+      if (!configuredRes)
       {
-        detail::throwDecoderError(configured.error());
+        detail::throwDecoderError(configuredRes.error());
       }
 
-      info.outputFormat = *configured;
+      info.outputFormat = *configuredRes;
     }
 
     void refreshStreamInfo()
@@ -266,14 +266,14 @@ namespace ao::audio
       std::memcpy(_implPtr->inputBuffer.data(), packet.data(), packet.size());
 
       auto bytesValid = static_cast<UINT>(_implPtr->inputBuffer.size());
-      auto const fillResult = [&]
+      auto const fillRes = [&]
       {
         auto inputData = std::array{_implPtr->inputBuffer.data()};
         auto inputSize = std::array{static_cast<UINT>(_implPtr->inputBuffer.size())};
         return ::aacDecoder_Fill(_implPtr->decoder, inputData.data(), inputSize.data(), &bytesValid);
       }();
 
-      if (fillResult != AAC_DEC_OK)
+      if (fillRes != AAC_DEC_OK)
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "Failed to fill AAC decoder input");
       }
@@ -300,10 +300,10 @@ namespace ao::audio
 
       _implPtr->pcmBuffer.resize(static_cast<std::size_t>(frameSizeBefore) * channelsBefore);
 
-      auto const decodeResult = ::aacDecoder_DecodeFrame(
+      auto const decodeRes = ::aacDecoder_DecodeFrame(
         _implPtr->decoder, _implPtr->pcmBuffer.data(), static_cast<INT>(_implPtr->pcmBuffer.size()), 0);
 
-      if (decodeResult != AAC_DEC_OK)
+      if (decodeRes != AAC_DEC_OK)
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "AAC decode failed");
       }
@@ -341,15 +341,15 @@ namespace ao::audio
       _implPtr->packetSource.advance();
 
       auto const nativeBytes = std::as_bytes(std::span{_implPtr->pcmBuffer});
-      auto converted = _implPtr->outputAdapter.convert(nativeBytes);
+      auto convertedRes = _implPtr->outputAdapter.convert(nativeBytes);
 
-      if (!converted)
+      if (!convertedRes)
       {
-        detail::throwDecoderError(converted.error());
+        detail::throwDecoderError(convertedRes.error());
       }
 
       return PcmBlock{
-        .bytes = *converted,
+        .bytes = *convertedRes,
         .frames = frames,
         .firstFrameIndex = firstFrameIndex,
         .endOfStream = _implPtr->packetSource.isAtEnd(),

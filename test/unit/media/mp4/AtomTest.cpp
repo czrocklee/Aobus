@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/media/mp4/Atom.h>
+
 #include "TestAtoms.h"
 #include <ao/Error.h>
-#include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,21 +41,21 @@ namespace ao::media::mp4::test
     auto const bytes = toBytes(data);
     auto cursor = fromBuffer(bytes).children();
 
-    auto firstResult = cursor.next();
-    REQUIRE(firstResult);
-    REQUIRE(*firstResult);
-    CHECK((*firstResult)->type() == "ftyp");
-    CHECK((*firstResult)->bytes().size() == 10);
+    auto firstRes = cursor.next();
+    REQUIRE(firstRes);
+    REQUIRE(*firstRes);
+    CHECK((*firstRes)->type() == "ftyp");
+    CHECK((*firstRes)->bytes().size() == 10);
 
-    auto secondResult = cursor.next();
-    REQUIRE(secondResult);
-    REQUIRE(*secondResult);
-    CHECK((*secondResult)->type() == "free");
-    CHECK((*secondResult)->bytes().size() == 9);
+    auto secondRes = cursor.next();
+    REQUIRE(secondRes);
+    REQUIRE(*secondRes);
+    CHECK((*secondRes)->type() == "free");
+    CHECK((*secondRes)->bytes().size() == 9);
 
-    auto endResult = cursor.next();
-    REQUIRE(endResult);
-    CHECK_FALSE(*endResult);
+    auto endRes = cursor.next();
+    REQUIRE(endRes);
+    CHECK_FALSE(*endRes);
   }
 
   TEST_CASE("MP4 AtomCursor - accepts extended and end-of-file atom sizes", "[media][regression][mp4]")
@@ -65,23 +66,23 @@ namespace ao::media::mp4::test
     auto const bytes = toBytes(data);
     auto cursor = fromBuffer(bytes).children();
 
-    auto const extendedResult = cursor.next();
-    REQUIRE(extendedResult);
-    REQUIRE(*extendedResult);
-    CHECK((*extendedResult)->type() == "free");
-    CHECK((*extendedResult)->bytes().size() == 18);
-    CHECK((*extendedResult)->payload().size() == 2);
+    auto const extendedRes = cursor.next();
+    REQUIRE(extendedRes);
+    REQUIRE(*extendedRes);
+    CHECK((*extendedRes)->type() == "free");
+    CHECK((*extendedRes)->bytes().size() == 18);
+    CHECK((*extendedRes)->payload().size() == 2);
 
-    auto const endOfFileResult = cursor.next();
-    REQUIRE(endOfFileResult);
-    REQUIRE(*endOfFileResult);
-    CHECK((*endOfFileResult)->type() == "mdat");
-    CHECK((*endOfFileResult)->bytes().size() == 11);
-    CHECK((*endOfFileResult)->payload().size() == 3);
+    auto const endOfFileRes = cursor.next();
+    REQUIRE(endOfFileRes);
+    REQUIRE(*endOfFileRes);
+    CHECK((*endOfFileRes)->type() == "mdat");
+    CHECK((*endOfFileRes)->bytes().size() == 11);
+    CHECK((*endOfFileRes)->payload().size() == 3);
 
-    auto const endResult = cursor.next();
-    REQUIRE(endResult);
-    CHECK_FALSE(*endResult);
+    auto const endRes = cursor.next();
+    REQUIRE(endRes);
+    CHECK_FALSE(*endRes);
   }
 
   TEST_CASE("MP4 AtomCursor - rejects malformed extended atom sizes", "[media][unit][mp4][error]")
@@ -136,26 +137,26 @@ namespace ao::media::mp4::test
     auto const child = ao::test::mp4::makeEndOfFileAtom("free", {1});
     auto const bytes = toBytes(ao::test::mp4::makeAtom("moov", child));
     auto rootCursor = fromBuffer(bytes).children();
-    auto const movieResult = rootCursor.next();
-    REQUIRE(movieResult);
-    REQUIRE(*movieResult);
+    auto const movieRes = rootCursor.next();
+    REQUIRE(movieRes);
+    REQUIRE(*movieRes);
 
-    auto childCursor = (*movieResult)->children();
-    auto const childResult = childCursor.next();
+    auto childCursor = (*movieRes)->children();
+    auto const childRes = childCursor.next();
 
-    REQUIRE_FALSE(childResult);
-    CHECK(childResult.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(childRes);
+    CHECK(childRes.error().code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("MP4 AtomView - short typed layout returns no view", "[media][regression][mp4]")
   {
     auto const bytes = toBytes(ao::test::mp4::makeAtom("stsd", {}));
     auto cursor = fromBuffer(bytes).children();
-    auto atomResult = cursor.next();
+    auto atomRes = cursor.next();
 
-    REQUIRE(atomResult);
-    REQUIRE(*atomResult);
-    CHECK((*atomResult)->tryLayout<StsdAtomLayout>() == nullptr);
+    REQUIRE(atomRes);
+    REQUIRE(*atomRes);
+    CHECK((*atomRes)->tryLayout<StsdAtomLayout>() == nullptr);
   }
 
   TEST_CASE("MP4 findAtom - returns a non-owning nested path view", "[media][unit][mp4]")
@@ -183,15 +184,15 @@ namespace ao::media::mp4::test
     auto const bytes = toBytes(data);
     auto cursor = fromBuffer(bytes).children();
 
-    auto firstResult = cursor.next();
-    REQUIRE(firstResult);
-    REQUIRE(*firstResult);
-    CHECK((*firstResult)->type() == "free");
+    auto firstRes = cursor.next();
+    REQUIRE(firstRes);
+    REQUIRE(*firstRes);
+    CHECK((*firstRes)->type() == "free");
 
-    auto malformedResult = cursor.next();
-    REQUIRE_FALSE(malformedResult);
-    CHECK(malformedResult.error().code == Error::Code::CorruptData);
-    CHECK(malformedResult.error().message == "mp4 atom size exceeds its container boundary");
+    auto malformedRes = cursor.next();
+    REQUIRE_FALSE(malformedRes);
+    CHECK(malformedRes.error().code == Error::Code::CorruptData);
+    CHECK(malformedRes.error().message == "mp4 atom size exceeds its container boundary");
   }
 
   TEST_CASE("MP4 findAtom - stops before unrelated siblings after the matched path", "[media][regression][mp4]")

@@ -30,14 +30,14 @@ namespace ao::library
 
     Result<> validateUri(std::string_view uri)
     {
-      auto parsed = LibraryUri::parse(uri);
+      auto parsedRes = LibraryUri::parse(uri);
 
-      if (!parsed)
+      if (!parsedRes)
       {
-        return std::unexpected{parsed.error()};
+        return std::unexpected{parsedRes.error()};
       }
 
-      if (parsed->value() != uri)
+      if (parsedRes->value() != uri)
       {
         return makeError(Error::Code::InvalidInput, std::format("File manifest URI '{}' is not canonical", uri));
       }
@@ -107,9 +107,9 @@ namespace ao::library
       return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
     }
 
-    if (auto const validation = validateFileManifestEntry(key.view(), *optData); !validation)
+    if (auto const validationRes = validateFileManifestEntry(key.view(), *optData); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     auto view = FileManifestView{*optData};
@@ -131,12 +131,12 @@ namespace ao::library
   std::pair<std::string_view, FileManifestView> FileManifestStore::Reader::Iterator::operator*() const
   {
     auto const pair = *_it;
-    auto validation = validateFileManifestEntry(pair.first, pair.second);
+    auto validationRes = validateFileManifestEntry(pair.first, pair.second);
 
-    if (!validation)
+    if (!validationRes)
     {
       throwException<Exception>(
-        "File manifest iterator encountered invalid data after library validation: {}", validation.error().message);
+        "File manifest iterator encountered invalid data after library validation: {}", validationRes.error().message);
     }
 
     auto view = FileManifestView{pair.second};
@@ -146,7 +146,7 @@ namespace ao::library
       throwException<Exception>("File manifest iterator encountered a misaligned payload after library validation");
     }
 
-    return {validation->uri, view};
+    return {validationRes->uri, view};
   }
 
   FileManifestStore::Reader::Iterator FileManifestStore::Reader::begin() const
@@ -170,9 +170,9 @@ namespace ao::library
       return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
     }
 
-    if (auto const validation = validateFileManifestEntry(key.view(), *optData); !validation)
+    if (auto const validationRes = validateFileManifestEntry(key.view(), *optData); !validationRes)
     {
-      return std::unexpected{validation.error()};
+      return std::unexpected{validationRes.error()};
     }
 
     auto view = FileManifestView{*optData};

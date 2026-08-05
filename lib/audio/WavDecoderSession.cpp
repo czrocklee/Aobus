@@ -190,15 +190,15 @@ namespace ao::audio
         .precisionBits = static_cast<std::uint8_t>(format.validBitsPerSample),
         .sampleKind = format.isFloat ? SampleKind::FloatingPoint : SampleKind::Integer,
       };
-      auto const configured = outputAdapter.configure(sourceFormat, nativeWavEncoding(format));
+      auto const configuredRes = outputAdapter.configure(sourceFormat, nativeWavEncoding(format));
 
-      if (!configured)
+      if (!configuredRes)
       {
-        detail::throwDecoderError(configured.error());
+        detail::throwDecoderError(configuredRes.error());
       }
 
       info.sourceFormat = sourceFormat;
-      info.outputFormat = *configured;
+      info.outputFormat = *configuredRes;
       info.isLossy = false;
       info.codec = AudioCodec::Wav;
     }
@@ -224,14 +224,14 @@ namespace ao::audio
         detail::throwDecoderError(result.error());
       }
 
-      auto parsedResult = media::wav::parseWave(_implPtr->file.bytes(), media::wav::WaveParseExtent::RequiredAudio);
+      auto parsedRes = media::wav::parseWave(_implPtr->file.bytes(), media::wav::WaveParseExtent::RequiredAudio);
 
-      if (!parsedResult)
+      if (!parsedRes)
       {
-        detail::throwDecoderError(parsedResult.error());
+        detail::throwDecoderError(parsedRes.error());
       }
 
-      auto const& parsed = *parsedResult;
+      auto const& parsed = *parsedRes;
       _implPtr->selectOutputFormat(parsed.format);
       _implPtr->dataOffset = parsed.dataOffset;
       _implPtr->dataSize = parsed.data.size();
@@ -344,18 +344,18 @@ namespace ao::audio
       }
     }
 
-    auto converted = _implPtr->outputAdapter.convert(_implPtr->pcmBuffer);
+    auto convertedRes = _implPtr->outputAdapter.convert(_implPtr->pcmBuffer);
 
-    if (!converted)
+    if (!convertedRes)
     {
-      return std::unexpected{converted.error()};
+      return std::unexpected{convertedRes.error()};
     }
 
     _implPtr->nextFrameIndex += frames;
     _implPtr->eof = _implPtr->nextFrameIndex == _implPtr->totalFrames;
 
     return PcmBlock{
-      .bytes = *converted, .frames = frames, .firstFrameIndex = currentFrameIndex, .endOfStream = _implPtr->eof};
+      .bytes = *convertedRes, .frames = frames, .firstFrameIndex = currentFrameIndex, .endOfStream = _implPtr->eof};
   }
 
   DecodedStreamInfo WavDecoderSession::streamInfo() const noexcept

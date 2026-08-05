@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/media/mp4/SampleDescription.h>
+
 #include <ao/Error.h>
 #include <ao/media/mp4/Atom.h>
-#include <ao/media/mp4/SampleDescription.h>
 #include <ao/media/mp4/TrackSelection.h>
 
 #include <cstddef>
@@ -17,13 +18,13 @@ namespace ao::media::mp4
   Result<std::string> audioSampleEntryType(std::span<std::byte const> fileData)
   {
     auto const root = fromBuffer(fileData);
-    auto selectionResult = findAudioTrack(root);
+    auto selectionRes = findAudioTrack(root);
 
-    if (!selectionResult)
+    if (!selectionRes)
     {
-      return std::unexpected{selectionResult.error()};
+      return std::unexpected{selectionRes.error()};
     }
 
-    return std::move(selectionResult->sampleEntryType);
+    return std::move(selectionRes->sampleEntryType);
   }
 } // namespace ao::media::mp4

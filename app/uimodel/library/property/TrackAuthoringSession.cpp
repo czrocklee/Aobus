@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -8,7 +10,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <expected>
 #include <functional>
@@ -65,15 +66,15 @@ namespace ao::uimodel
     }
 
     template<typename RuntimeResult, typename SubmitResult>
-    Result<SubmitResult> finishSubmission(Result<RuntimeResult> runtimeResult)
+    Result<SubmitResult> finishSubmission(Result<RuntimeResult> runtimeRes)
     {
-      if (!runtimeResult)
+      if (!runtimeRes)
       {
         invalidate(bindingIsCurrent() ? rt::TrackAuthoringStatus::Unavailable : rt::TrackAuthoringStatus::Stale);
-        return std::unexpected{runtimeResult.error()};
+        return std::unexpected{runtimeRes.error()};
       }
 
-      auto completed = std::move(*runtimeResult);
+      auto completed = std::move(*runtimeRes);
       auto result = SubmitResult{.status = completed.status, .reply = std::move(completed.reply)};
 
       switch (completed.status)
@@ -127,9 +128,9 @@ namespace ao::uimodel
 
       try
       {
-        auto runtimeResult = std::invoke(std::forward<Operation>(operation));
+        auto runtimeRes = std::invoke(std::forward<Operation>(operation));
         submitting = false;
-        return finishSubmission<RuntimeResult, SubmitResult>(std::move(runtimeResult));
+        return finishSubmission<RuntimeResult, SubmitResult>(std::move(runtimeRes));
       }
       catch (...)
       {
@@ -151,15 +152,15 @@ namespace ao::uimodel
   Result<std::unique_ptr<TrackAuthoringSession>> TrackAuthoringSession::begin(rt::Library& library,
                                                                               std::span<TrackId const> targetIds)
   {
-    auto targetsResult = library.bindTrackTargets(targetIds);
+    auto targetsRes = library.bindTrackTargets(targetIds);
 
-    if (!targetsResult)
+    if (!targetsRes)
     {
-      return std::unexpected{targetsResult.error()};
+      return std::unexpected{targetsRes.error()};
     }
 
     return std::unique_ptr<TrackAuthoringSession>{
-      new TrackAuthoringSession{std::make_unique<Impl>(library, std::move(*targetsResult))}};
+      new TrackAuthoringSession{std::make_unique<Impl>(library, std::move(*targetsRes))}};
   }
 
   TrackAuthoringSession::TrackAuthoringSession(std::unique_ptr<Impl> implPtr)

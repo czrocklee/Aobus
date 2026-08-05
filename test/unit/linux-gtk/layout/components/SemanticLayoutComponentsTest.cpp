@@ -543,9 +543,9 @@ namespace ao::gtk::layout::test
     auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
     auto deletePatch = rt::MetadataPatch{};
     deletePatch.customUpdates["Mood"] = std::nullopt;
-    auto deleteResult = sessionPtr->submitMetadata(deletePatch);
-    REQUIRE(deleteResult);
-    REQUIRE(deleteResult->status == rt::TrackAuthoringStatus::Applied);
+    auto deleteRes = sessionPtr->submitMetadata(deletePatch);
+    REQUIRE(deleteRes);
+    REQUIRE(deleteRes->status == rt::TrackAuthoringStatus::Applied);
     auto controller = TrackDetailUndoController{};
     controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
 
@@ -553,10 +553,10 @@ namespace ao::gtk::layout::test
     REQUIRE(controller.pendingCustomMetadataUndo());
     CHECK_FALSE(controller.pendingCustomMetadataUndo()->sessionPtr->isCurrent());
 
-    auto const undoResult = controller.undo();
+    auto const undoRes = controller.undo();
 
-    REQUIRE_FALSE(undoResult);
-    CHECK(undoResult.error().message == "Library changed before metadata undo could be applied");
+    REQUIRE_FALSE(undoRes);
+    CHECK(undoRes.error().message == "Library changed before metadata undo could be applied");
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
     CHECK(trackSpecFor(runtime.musicLibrary(), trackId).customMetadata.empty());
   }
@@ -579,9 +579,9 @@ namespace ao::gtk::layout::test
       "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(sessionPtr));
     REQUIRE(controller.pendingCustomMetadataUndo());
 
-    auto const undoResult = controller.undo();
+    auto const undoRes = controller.undo();
 
-    REQUIRE_FALSE(undoResult);
+    REQUIRE_FALSE(undoRes);
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
     CHECK(changedCount == 2);
     CHECK(trackSpecFor(fixture.runtime().musicLibrary(), trackId).customMetadata.empty());

@@ -191,14 +191,14 @@ namespace ao::audio::test
         endedLatch.notify();
       });
 
-    auto staged = engine.stagePlayback(makePlaybackItem("empty.flac"));
-    REQUIRE(staged);
-    auto committed = engine.commitPlayback(std::move(*staged));
+    auto stagedRes = engine.stagePlayback(makePlaybackItem("empty.flac"));
+    REQUIRE(stagedRes);
+    auto committedRes = engine.commitPlayback(std::move(*stagedRes));
 
-    REQUIRE(committed);
-    CHECK_FALSE(committed->playbackStarted);
+    REQUIRE(committedRes);
+    CHECK_FALSE(committedRes->playbackStarted);
     REQUIRE(endedLatch.waitForCount(1));
-    CHECK(endedGeneration.load(std::memory_order_acquire) == committed->generation);
+    CHECK(endedGeneration.load(std::memory_order_acquire) == committedRes->generation);
     CHECK(engine.status().transport == Transport::Idle);
     auto const events = backendRaw->events();
     REQUIRE(events.size() == 3);

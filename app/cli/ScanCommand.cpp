@@ -225,15 +225,15 @@ namespace ao::cli
       { std::println(cli.io().err, "scan: {}", utility::pathToGenericUtf8(path)); };
     }
 
-    auto planResult = scanService.buildPlan(std::move(buildProgress));
+    auto planRes = scanService.buildPlan(std::move(buildProgress));
 
-    if (!planResult)
+    if (!planRes)
     {
-      auto const& error = planResult.error();
+      auto const& error = planRes.error();
       throwCommandError(error, "scan failed: {}", error.message);
     }
 
-    auto plan = std::move(*planResult);
+    auto plan = std::move(*planRes);
     printScanResult(plan, dryRun, cli.options().format, cli.io().out);
 
     if (dryRun)
@@ -262,20 +262,20 @@ namespace ao::cli
       };
     }
 
-    if (auto const applyResult = cli.runTask(cli.library().taskService().applyScanPlanAsync(
+    if (auto const applyRes = cli.runTask(cli.library().taskService().applyScanPlanAsync(
           std::move(plan),
           options,
           {},
           std::move(applyProgress),
           [&cli](rt::ScanFailure const& failure) { printFailure(failure, cli.io().err); }));
-        !applyResult)
+        !applyRes)
     {
-      auto const& error = applyResult.error();
+      auto const& error = applyRes.error();
       throwCommandError(error, "scan apply failed: {}", error.message);
     }
     else if (cli.options().format == OutputFormat::Plain)
     {
-      printApplySummary(*applyResult, cli.io().out);
+      printApplySummary(*applyRes, cli.io().out);
 
       if (deferFingerprint)
       {

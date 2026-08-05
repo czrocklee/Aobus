@@ -73,10 +73,10 @@ namespace ao::uimodel::test
       REQUIRE(fixture.playFromView(trackId));
       REQUIRE(fixture.runtime().savePlaybackSession());
       playback.commands().stop();
-      auto const restored = fixture.runtime().restorePlaybackSession();
+      auto const restoredRes = fixture.runtime().restorePlaybackSession();
 
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
       REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
       REQUIRE(playback.snapshot().transport.nowPlaying.trackId == trackId);
       REQUIRE(playback.snapshot().succession.currentTrackId == trackId);
@@ -91,10 +91,10 @@ namespace ao::uimodel::test
       REQUIRE(fixture.playFromView(trackId));
       REQUIRE(fixture.runtime().savePlaybackSession());
       playback.commands().stop();
-      auto const restored = fixture.runtime().restorePlaybackSession();
+      auto const restoredRes = fixture.runtime().restorePlaybackSession();
 
-      REQUIRE(restored);
-      REQUIRE(restored->restored);
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
       playback.commands().clearSequence();
       REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
       REQUIRE(playback.snapshot().transport.nowPlaying.trackId == trackId);

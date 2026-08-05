@@ -26,18 +26,18 @@ namespace ao::winui::test
     auto const originalSettings = settings;
     auto const options = StartupOptions{.optLibraryRoot = musicRoot};
 
-    auto plan = planLibraryStartup(options, settings, fixture.path() / "empty-library");
+    auto planRes = planLibraryStartup(options, settings, fixture.path() / "empty-library");
 
-    REQUIRE(plan);
-    CHECK(plan->source == LibraryStartupRootSource::Explicit);
-    CHECK(plan->libraryRoot == std::filesystem::absolute(musicRoot).lexically_normal());
-    REQUIRE(plan->optSelectedRootCommit);
-    CHECK(plan->optSelectedRootCommit->root == plan->libraryRoot);
+    REQUIRE(planRes);
+    CHECK(planRes->source == LibraryStartupRootSource::Explicit);
+    CHECK(planRes->libraryRoot == std::filesystem::absolute(musicRoot).lexically_normal());
+    REQUIRE(planRes->optSelectedRootCommit);
+    CHECK(planRes->optSelectedRootCommit->root == planRes->libraryRoot);
     CHECK(settings == originalSettings);
 
-    commitSelectedRoot(*plan, settings);
+    commitSelectedRoot(*planRes, settings);
 
-    CHECK(settings.lastLibraryPath == utility::pathToUtf8(plan->libraryRoot));
+    CHECK(settings.lastLibraryPath == utility::pathToUtf8(planRes->libraryRoot));
   }
 
   TEST_CASE("LibraryStartupPlan - explicit missing root fails instead of using the fallback", "[winui][unit][app]")
@@ -48,10 +48,10 @@ namespace ao::winui::test
     auto const originalSettings = settings;
     auto const options = StartupOptions{.optLibraryRoot = fixture.path() / "missing-library"};
 
-    auto plan = planLibraryStartup(options, settings, fixture.path() / "empty-library");
+    auto planRes = planLibraryStartup(options, settings, fixture.path() / "empty-library");
 
-    REQUIRE_FALSE(plan);
-    CHECK(plan.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(planRes);
+    CHECK(planRes.error().code == Error::Code::NotFound);
     CHECK(settings == originalSettings);
   }
 
@@ -65,12 +65,12 @@ namespace ao::winui::test
     settings.lastLibraryPath = utility::pathToUtf8(musicRoot);
     auto const originalSettings = settings;
 
-    auto plan = planLibraryStartup(StartupOptions{}, settings, fixture.path() / "empty-library");
+    auto planRes = planLibraryStartup(StartupOptions{}, settings, fixture.path() / "empty-library");
 
-    REQUIRE(plan);
-    CHECK(plan->source == LibraryStartupRootSource::Persisted);
-    CHECK(plan->libraryRoot == std::filesystem::absolute(musicRoot).lexically_normal());
-    CHECK_FALSE(plan->optSelectedRootCommit);
+    REQUIRE(planRes);
+    CHECK(planRes->source == LibraryStartupRootSource::Persisted);
+    CHECK(planRes->libraryRoot == std::filesystem::absolute(musicRoot).lexically_normal());
+    CHECK_FALSE(planRes->optSelectedRootCommit);
     CHECK(settings == originalSettings);
   }
 
@@ -82,12 +82,12 @@ namespace ao::winui::test
     auto const originalSettings = settings;
     auto const fallback = fixture.path() / "empty-library";
 
-    auto plan = planLibraryStartup(StartupOptions{}, settings, fallback);
+    auto planRes = planLibraryStartup(StartupOptions{}, settings, fallback);
 
-    REQUIRE(plan);
-    CHECK(plan->source == LibraryStartupRootSource::EmptyLibraryFallback);
-    CHECK(plan->libraryRoot == std::filesystem::absolute(fallback).lexically_normal());
-    CHECK_FALSE(plan->optSelectedRootCommit);
+    REQUIRE(planRes);
+    CHECK(planRes->source == LibraryStartupRootSource::EmptyLibraryFallback);
+    CHECK(planRes->libraryRoot == std::filesystem::absolute(fallback).lexically_normal());
+    CHECK_FALSE(planRes->optSelectedRootCommit);
     CHECK(settings == originalSettings);
   }
 } // namespace ao::winui::test

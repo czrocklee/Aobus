@@ -6,7 +6,6 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
@@ -88,7 +87,7 @@ namespace ao::gtk::layout::test
       registry.registerAction(
         descriptor1,
         [&](auto&) { called = true; },
-        [](auto const&) { return LayoutActionAvailability{.enabled = false, .disabledReason = "Test"}; });
+        [](auto const&) { return ActionAvailability{.enabled = false, .disabledReason = "Test"}; });
 
       auto const s = registry.state("test.action1", ctx);
       CHECK_FALSE(s.enabled);
@@ -118,7 +117,7 @@ namespace ao::gtk::layout::test
         [&](auto const&)
         {
           stateCalls++;
-          return LayoutActionAvailability{.enabled = true, .disabledReason = ""};
+          return ActionAvailability{.enabled = true, .disabledReason = ""};
         });
 
       registry.activate("test.action1", ctx);

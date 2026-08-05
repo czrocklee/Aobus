@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
+
+#include <ao/query/Expression.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -482,12 +483,12 @@ namespace ao::query::test
 
   TEST_CASE("Parser - reports syntax errors as Result errors", "[query][unit][parser]")
   {
-    auto const ok = ::ao::query::parse("$artist = Bach");
-    CHECK(ok.has_value());
+    auto const okRes = ::ao::query::parse("$artist = Bach");
+    CHECK(okRes.has_value());
 
-    auto const bad = ::ao::query::parse("$artist =");
-    REQUIRE_FALSE(bad.has_value());
-    CHECK(bad.error().code == Error::Code::FormatRejected);
-    CHECK_FALSE(bad.error().message.empty());
+    auto const badRes = ::ao::query::parse("$artist =");
+    REQUIRE_FALSE(badRes.has_value());
+    CHECK(badRes.error().code == Error::Code::FormatRejected);
+    CHECK_FALSE(badRes.error().message.empty());
   }
 } // namespace ao::query::test

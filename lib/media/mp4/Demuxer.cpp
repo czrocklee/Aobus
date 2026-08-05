@@ -255,14 +255,14 @@ namespace ao::media::mp4
 
     OptionalAtom findAtomOrThrow(AtomView const& root, std::span<std::string_view const> path)
     {
-      auto nodeResult = findAtom(root, path);
+      auto nodeRes = findAtom(root, path);
 
-      if (!nodeResult)
+      if (!nodeRes)
       {
-        detail::throwMediaError(Error::Code::FormatRejected, nodeResult.error().message);
+        detail::throwMediaError(Error::Code::FormatRejected, nodeRes.error().message);
       }
 
-      return *nodeResult;
+      return *nodeRes;
     }
 
     TrackTiming parseTrackTiming(AtomView const& track)
@@ -582,38 +582,38 @@ namespace ao::media::mp4
                                  std::vector<SampleToChunkEntry>& sampleToChunk,
                                  std::vector<TimeToSampleEntry>& timeToSample)
   {
-    auto const visitResult = visitChildren(table,
-                                           [this, &chunkOffsets, &sampleToChunk, &timeToSample](AtomView const& atom)
-                                           {
-                                             auto type = atom.type();
+    auto const visitRes = visitChildren(table,
+                                        [this, &chunkOffsets, &sampleToChunk, &timeToSample](AtomView const& atom)
+                                        {
+                                          auto type = atom.type();
 
-                                             if (auto const atomPayload = atom.payload(); type == "stsz")
-                                             {
-                                               parseStsz(atomPayload);
-                                             }
-                                             else if (type == "stts")
-                                             {
-                                               parseStts(atomPayload, timeToSample);
-                                             }
-                                             else if (type == "stsc")
-                                             {
-                                               parseStsc(atomPayload, sampleToChunk);
-                                             }
-                                             else if (type == "stco")
-                                             {
-                                               parseStco(atomPayload, chunkOffsets);
-                                             }
-                                             else if (type == "co64")
-                                             {
-                                               parseCo64(atomPayload, chunkOffsets);
-                                             }
+                                          if (auto const atomPayload = atom.payload(); type == "stsz")
+                                          {
+                                            parseStsz(atomPayload);
+                                          }
+                                          else if (type == "stts")
+                                          {
+                                            parseStts(atomPayload, timeToSample);
+                                          }
+                                          else if (type == "stsc")
+                                          {
+                                            parseStsc(atomPayload, sampleToChunk);
+                                          }
+                                          else if (type == "stco")
+                                          {
+                                            parseStco(atomPayload, chunkOffsets);
+                                          }
+                                          else if (type == "co64")
+                                          {
+                                            parseCo64(atomPayload, chunkOffsets);
+                                          }
 
-                                             return true;
-                                           });
+                                          return true;
+                                        });
 
-    if (!visitResult)
+    if (!visitRes)
     {
-      detail::throwMediaError(Error::Code::FormatRejected, visitResult.error().message);
+      detail::throwMediaError(Error::Code::FormatRejected, visitRes.error().message);
     }
   }
 
@@ -631,14 +631,14 @@ namespace ao::media::mp4
       auto sampleToChunk = std::vector<SampleToChunkEntry>{};
       auto timeToSample = std::vector<TimeToSampleEntry>{};
 
-      auto const selectionResult = findAudioTrack(root, targetFormat);
+      auto const selectionRes = findAudioTrack(root, targetFormat);
 
-      if (!selectionResult)
+      if (!selectionRes)
       {
-        return makeError(Error::Code::FormatRejected, selectionResult.error().message);
+        return makeError(Error::Code::FormatRejected, selectionRes.error().message);
       }
 
-      auto const& track = selectionResult->track;
+      auto const& track = selectionRes->track;
 
       auto const timing = parseTrackTiming(track);
       _timescale = timing.timescale;

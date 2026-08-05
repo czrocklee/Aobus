@@ -104,10 +104,10 @@ namespace ao::library::test
       auto wtxn = writeTransaction(fixture.library);
       auto const replacement = TrackSpec{.title = "After", .artist = "After artist", .album = "After album"};
       auto builder = makeBuilder(replacement);
-      auto prepared = builder.prepareHot(wtxn);
-      REQUIRE(prepared);
+      auto preparedRes = builder.prepareHot(wtxn);
+      REQUIRE(preparedRes);
       auto writer = fixture.store.writer(wtxn);
-      REQUIRE(updatePreparedHotTrackRecord(writer, id, *prepared));
+      REQUIRE(updatePreparedHotTrackRecord(writer, id, *preparedRes));
       REQUIRE(wtxn.commit());
     }
 

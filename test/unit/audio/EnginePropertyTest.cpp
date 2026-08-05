@@ -264,10 +264,10 @@ namespace ao::audio::test
       CHECK(engine.volume() == Catch::Approx{0.42F});
       CHECK(engine.status().volume == Catch::Approx{0.42F});
 
-      auto const backendVol = backendRaw->property(PropertyId::Volume);
+      auto const backendVolRes = backendRaw->property(PropertyId::Volume);
 
-      REQUIRE(backendVol);
-      CHECK(std::get<float>(*backendVol) == Catch::Approx{0.42F});
+      REQUIRE(backendVolRes);
+      CHECK(std::get<float>(*backendVolRes) == Catch::Approx{0.42F});
     }
 
     SECTION("setMuted round-trips through engine and backend")
@@ -276,10 +276,10 @@ namespace ao::audio::test
       CHECK(engine.isMuted() == true);
       CHECK(engine.status().muted == true);
 
-      auto const backendMuted = backendRaw->property(PropertyId::Muted);
+      auto const backendMutedRes = backendRaw->property(PropertyId::Muted);
 
-      REQUIRE(backendMuted);
-      CHECK(std::get<bool>(*backendMuted) == true);
+      REQUIRE(backendMutedRes);
+      CHECK(std::get<bool>(*backendMutedRes) == true);
     }
 
     SECTION("property controls survive backend open")
@@ -292,13 +292,13 @@ namespace ao::audio::test
       CHECK(engine.status().volume == Catch::Approx{0.37F});
       CHECK(engine.status().muted == true);
 
-      auto const backendVol = backendRaw->property(PropertyId::Volume);
-      auto const backendMuted = backendRaw->property(PropertyId::Muted);
+      auto const backendVolRes = backendRaw->property(PropertyId::Volume);
+      auto const backendMutedRes = backendRaw->property(PropertyId::Muted);
 
-      REQUIRE(backendVol);
-      REQUIRE(backendMuted);
-      CHECK(std::get<float>(*backendVol) == Catch::Approx{0.37F});
-      CHECK(std::get<bool>(*backendMuted) == true);
+      REQUIRE(backendVolRes);
+      REQUIRE(backendMutedRes);
+      CHECK(std::get<float>(*backendVolRes) == Catch::Approx{0.37F});
+      CHECK(std::get<bool>(*backendMutedRes) == true);
     }
   }
 } // namespace ao::audio::test

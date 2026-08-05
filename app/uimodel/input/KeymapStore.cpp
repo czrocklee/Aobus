@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/input/KeymapStore.h>
+
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/input/KeymapStore.h>
 #include <ao/yaml/Serialization.h>
 
 #include <string>
@@ -43,11 +44,11 @@ namespace ao::uimodel
     auto keymap = KeymapModel{std::move(defaults)};
     auto overrides = KeymapOverrides{};
 
-    if (auto const res = store.load(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !res)
+    if (auto const resRes = store.load(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !resRes)
     {
-      if (res.error().code != Error::Code::NotFound)
+      if (resRes.error().code != Error::Code::NotFound)
       {
-        APP_LOG_WARN("KeymapStore: failed to load keymap overrides: {}", res.error().message);
+        APP_LOG_WARN("KeymapStore: failed to load keymap overrides: {}", resRes.error().message);
       }
 
       return keymap; // defaults only
@@ -68,9 +69,9 @@ namespace ao::uimodel
   {
     auto const overrides = keymap.toOverrides();
 
-    if (auto const res = store.save(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !res)
+    if (auto const resRes = store.save(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !resRes)
     {
-      APP_LOG_ERROR("KeymapStore: failed to save keymap overrides: {}", res.error().message);
+      APP_LOG_ERROR("KeymapStore: failed to save keymap overrides: {}", resRes.error().message);
     }
   }
 } // namespace ao::uimodel

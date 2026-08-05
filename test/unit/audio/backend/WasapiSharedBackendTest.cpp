@@ -56,13 +56,13 @@ namespace ao::audio::backend::test
 
     REQUIRE(backend.set(props::kVolume, 0.25F));
     REQUIRE(backend.set(props::kMuted, true));
-    auto const volume = backend.get(props::kVolume);
-    auto const muted = backend.get(props::kMuted);
+    auto const volumeRes = backend.get(props::kVolume);
+    auto const mutedRes = backend.get(props::kMuted);
 
-    REQUIRE(volume);
-    REQUIRE(muted);
-    CHECK(*volume == 0.25F);
-    CHECK(*muted);
+    REQUIRE(volumeRes);
+    REQUIRE(mutedRes);
+    CHECK(*volumeRes == 0.25F);
+    CHECK(*mutedRes);
 
     auto const volumeInfo = backend.queryProperty(PropertyId::Volume);
     auto const mutedInfo = backend.queryProperty(PropertyId::Muted);
@@ -83,18 +83,18 @@ namespace ao::audio::backend::test
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
 
     REQUIRE(backend.set(props::kVolume, -0.5F));
-    auto volume = backend.get(props::kVolume);
-    REQUIRE(volume);
-    CHECK(*volume == 0.0F);
+    auto volumeRes = backend.get(props::kVolume);
+    REQUIRE(volumeRes);
+    CHECK(*volumeRes == 0.0F);
     REQUIRE(received.size() == 2);
     REQUIRE(received.back().nodes.size() == 2);
     CHECK_FALSE(received.back().nodes[1].softwareVolumeNotUnity);
     CHECK(received.back().nodes[1].maxSoftwareGain == 1.0F);
 
     REQUIRE(backend.set(props::kVolume, 1.5F));
-    volume = backend.get(props::kVolume);
-    REQUIRE(volume);
-    CHECK(*volume == 1.0F);
+    volumeRes = backend.get(props::kVolume);
+    REQUIRE(volumeRes);
+    CHECK(*volumeRes == 1.0F);
     REQUIRE(received.size() == 3);
     CHECK_FALSE(received.back().nodes[1].softwareVolumeNotUnity);
     CHECK(received.back().nodes[1].maxSoftwareGain == 1.0F);

@@ -280,33 +280,33 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const replyResult = cli.library().writer().previewUpdateMetadata(targetIds, patch);
+        auto const replyRes = cli.library().writer().previewUpdateMetadata(targetIds, patch);
 
-        if (!replyResult)
+        if (!replyRes)
         {
-          throwCommandError(replyResult.error());
+          throwCommandError(replyRes.error());
         }
 
         formatUpdateReply(
-          *replyResult, true, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
+          *replyRes, true, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
         return;
       }
 
-      auto const bindingResult = cli.library().bindTrackTargets(targetIds);
+      auto const bindingRes = cli.library().bindTrackTargets(targetIds);
 
-      if (!bindingResult)
+      if (!bindingRes)
       {
-        throwCommandError(bindingResult.error());
+        throwCommandError(bindingRes.error());
       }
 
-      auto const replyResult = cli.library().writer().updateMetadata(*bindingResult, patch);
+      auto const replyRes = cli.library().writer().updateMetadata(*bindingRes, patch);
 
-      if (!replyResult)
+      if (!replyRes)
       {
-        throwCommandError(replyResult.error());
+        throwCommandError(replyRes.error());
       }
 
-      switch (replyResult->status)
+      switch (replyRes->status)
       {
         case rt::TrackAuthoringStatus::Applied:
         case rt::TrackAuthoringStatus::NoOp: break;
@@ -317,7 +317,7 @@ namespace ao::cli
       }
 
       formatUpdateReply(
-        replyResult->reply, false, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
+        replyRes->reply, false, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
     }
   } // namespace
 
@@ -706,19 +706,19 @@ namespace ao::cli
           throwCommandError(Error::Code::InvalidInput, "track show --format supports only plain output");
         }
 
-        auto const expr = query::parse(formatExpression);
+        auto const exprRes = query::parse(formatExpression);
 
-        if (!expr)
+        if (!exprRes)
         {
-          auto const& error = expr.error();
+          auto const& error = exprRes.error();
           throwCommandError(error, "format error: {}{}", error.message, formatExpressionUsageHint());
         }
 
-        auto plan = query::compileFormat(*expr);
+        auto planRes = query::compileFormat(*exprRes);
 
-        if (!plan)
+        if (!planRes)
         {
-          auto const& error = plan.error();
+          auto const& error = planRes.error();
           throwCommandError(error, "format error: {}{}", error.message, formatExpressionUsageHint());
         }
 
@@ -733,7 +733,7 @@ namespace ao::cli
         auto const reader = ml.tracks().reader(transaction);
         auto dictionaryCache = library::DictionaryReadCache{ml.dictionary()};
         auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
-        auto binding = query::FormatBinding{*plan, dictionaryContext};
+        auto binding = query::FormatBinding{*planRes, dictionaryContext};
         std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
 
         for (std::size_t i = offset; i < end; ++i)
@@ -743,7 +743,7 @@ namespace ao::cli
 
           if (optView)
           {
-            if (!query::hasRequiredTrackData(plan->accessProfile, *optView))
+            if (!query::hasRequiredTrackData(planRes->accessProfile, *optView))
             {
               throwCommandError(Error::Code::CorruptData, "track {} contains invalid data required by the format", id);
             }
@@ -986,39 +986,34 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const trackResult = cli.library().writer().previewCreateTrackFromFile(pathValue);
+            auto const trackRes = cli.library().writer().previewCreateTrackFromFile(pathValue);
 
-            if (!trackResult)
+            if (!trackRes)
             {
-              auto const& error = trackResult.error();
+              auto const& error = trackRes.error();
               throwCommandError(error, "error adding track from: {}: {}", pathValue, error.message);
             }
 
-            formatTrackCreate(std::nullopt,
-                              trackResult->uri,
-                              trackResult->title,
-                              trackResult->artist,
-                              true,
-                              cli.options().format,
-                              cli.io().out);
+            formatTrackCreate(
+              std::nullopt, trackRes->uri, trackRes->title, trackRes->artist, true, cli.options().format, cli.io().out);
             return;
           }
 
-          auto const trackResult = cli.library().writer().createTrackFromFile(pathValue);
+          auto const trackRes = cli.library().writer().createTrackFromFile(pathValue);
 
-          if (trackResult)
+          if (trackRes)
           {
-            formatTrackCreate(std::optional<TrackId>{trackResult->trackId},
-                              trackResult->uri,
-                              trackResult->title,
-                              trackResult->artist,
+            formatTrackCreate(std::optional<TrackId>{trackRes->trackId},
+                              trackRes->uri,
+                              trackRes->title,
+                              trackRes->artist,
                               false,
                               cli.options().format,
                               cli.io().out);
           }
           else
           {
-            auto const& error = trackResult.error();
+            auto const& error = trackRes.error();
             throwCommandError(error, "error adding track from: {}: {}", pathValue, error.message);
           }
         });
@@ -1166,26 +1161,26 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const deleteResult = cli.library().writer().previewDeleteTrack(trackId);
+            auto const deleteRes = cli.library().writer().previewDeleteTrack(trackId);
 
-            if (!deleteResult)
+            if (!deleteRes)
             {
-              throwCommandError(deleteResult.error());
+              throwCommandError(deleteRes.error());
             }
 
-            formatTrackDelete(*deleteResult, true, cli.options().format, cli.io().out);
+            formatTrackDelete(*deleteRes, true, cli.options().format, cli.io().out);
             return;
           }
 
-          auto const deleteResult = cli.library().writer().deleteTrack(trackId);
+          auto const deleteRes = cli.library().writer().deleteTrack(trackId);
 
-          if (deleteResult)
+          if (deleteRes)
           {
-            formatTrackDelete(*deleteResult, false, cli.options().format, cli.io().out);
+            formatTrackDelete(*deleteRes, false, cli.options().format, cli.io().out);
           }
           else
           {
-            throwCommandError(deleteResult.error());
+            throwCommandError(deleteRes.error());
           }
         });
     }

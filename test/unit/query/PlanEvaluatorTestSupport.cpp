@@ -191,12 +191,12 @@ namespace ao::query::test
         builder.customMetadata().add(key, value);
       }
 
-      auto hotDataResult = builder.serializeHot(transaction);
-      REQUIRE(hotDataResult);
-      auto coldDataResult = builder.serializeCold(transaction, library.resources());
-      REQUIRE(coldDataResult);
-      hotData = *hotDataResult;
-      coldData = *coldDataResult;
+      auto hotDataRes = builder.serializeHot(transaction);
+      REQUIRE(hotDataRes);
+      auto coldDataRes = builder.serializeCold(transaction, library.resources());
+      REQUIRE(coldDataRes);
+      hotData = *hotDataRes;
+      coldData = *coldDataRes;
       REQUIRE(transaction.commit());
 
       auto* header = utility::layout::asMutablePtr<library::TrackHotHeader>(hotData);

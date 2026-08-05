@@ -21,9 +21,9 @@ namespace ao::audio::test
 
     SECTION("Creates FLAC runtime for .flac")
     {
-      auto runtime = createDecoderSession("song.flac", encoding);
-      REQUIRE(runtime);
-      CHECK(*runtime != nullptr);
+      auto runtimeRes = createDecoderSession("song.flac", encoding);
+      REQUIRE(runtimeRes);
+      CHECK(*runtimeRes != nullptr);
     }
 
     SECTION("Creates ALAC runtime for MP4 containers with alac sample entries")
@@ -31,13 +31,13 @@ namespace ao::audio::test
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".m4a"};
       auto const mp4 = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".mp4"};
 
-      auto session1 = createDecoderSession(m4a.path, encoding);
-      REQUIRE(session1);
-      CHECK(*session1 != nullptr);
+      auto session1Res = createDecoderSession(m4a.path, encoding);
+      REQUIRE(session1Res);
+      CHECK(*session1Res != nullptr);
 
-      auto session2 = createDecoderSession(mp4.path, encoding);
-      REQUIRE(session2);
-      CHECK(*session2 != nullptr);
+      auto session2Res = createDecoderSession(mp4.path, encoding);
+      REQUIRE(session2Res);
+      CHECK(*session2Res != nullptr);
     }
 
     SECTION("Creates ALAC runtime when a video track appears before the audio track")
@@ -52,18 +52,18 @@ namespace ao::audio::test
       ao::test::mp4::addAtom(data, "moov", moovBody);
       auto const m4a = ao::test::TempFile{data, ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, encoding);
-      REQUIRE(session);
-      CHECK(*session != nullptr);
+      auto sessionRes = createDecoderSession(m4a.path, encoding);
+      REQUIRE(sessionRes);
+      CHECK(*sessionRes != nullptr);
     }
 
     SECTION("Creates AAC runtime for MP4 containers with AAC sample entries")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("mp4a"), ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, encoding);
-      REQUIRE(session);
-      CHECK(*session != nullptr);
+      auto sessionRes = createDecoderSession(m4a.path, encoding);
+      REQUIRE(sessionRes);
+      CHECK(*sessionRes != nullptr);
     }
 
     SECTION("Creates MP4 runtime when an extended-size mdat follows the selected track")
@@ -73,9 +73,9 @@ namespace ao::audio::test
       data.insert(data.end(), mdat.begin(), mdat.end());
       auto const m4a = ao::test::TempFile{data, ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, encoding);
-      REQUIRE(session);
-      CHECK(*session != nullptr);
+      auto sessionRes = createDecoderSession(m4a.path, encoding);
+      REQUIRE(sessionRes);
+      CHECK(*sessionRes != nullptr);
     }
 
     SECTION("Creates MP4 runtime when an extended-size mdat precedes the selected track")
@@ -85,23 +85,23 @@ namespace ao::audio::test
       data.insert(data.end(), movie.begin(), movie.end());
       auto const m4a = ao::test::TempFile{data, ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, encoding);
-      REQUIRE(session);
-      CHECK(*session != nullptr);
+      auto sessionRes = createDecoderSession(m4a.path, encoding);
+      REQUIRE(sessionRes);
+      CHECK(*sessionRes != nullptr);
     }
 
     SECTION("Creates MP3 runtime for .mp3")
     {
-      auto session = createDecoderSession("song.mp3", encoding);
-      REQUIRE(session);
-      CHECK(*session != nullptr);
+      auto sessionRes = createDecoderSession("song.mp3", encoding);
+      REQUIRE(sessionRes);
+      CHECK(*sessionRes != nullptr);
     }
 
     SECTION("Creates WAV runtime for .wav")
     {
-      auto session = createDecoderSession("song.wav", encoding);
-      REQUIRE(session);
-      CHECK(*session != nullptr);
+      auto sessionRes = createDecoderSession("song.wav", encoding);
+      REQUIRE(sessionRes);
+      CHECK(*sessionRes != nullptr);
     }
 
     SECTION("Reports NotSupported for unsupported extensions")
@@ -158,10 +158,10 @@ namespace ao::audio::test
     SECTION("Normalizes MP4 extensions before probing the container")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".M4A"};
-      auto session = createDecoderSession(m4a.path, encoding);
+      auto sessionRes = createDecoderSession(m4a.path, encoding);
 
-      REQUIRE(session);
-      CHECK(*session != nullptr);
+      REQUIRE(sessionRes);
+      CHECK(*sessionRes != nullptr);
     }
   }
 } // namespace ao::audio::test

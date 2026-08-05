@@ -31,35 +31,35 @@ namespace ao::gtk::layout::test
       auto tree = ryml::Tree{};
       REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));
 
-      auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-      REQUIRE(decoded);
+      auto decodedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      REQUIRE(decodedRes);
 
-      CHECK(decoded->version == 1);
-      CHECK(decoded->root.type == "box");
-      REQUIRE(!decoded->root.children.empty());
+      CHECK(decodedRes->version == 1);
+      CHECK(decodedRes->root.type == "box");
+      REQUIRE(!decodedRes->root.children.empty());
 
       // Verify menu bar is a template
-      auto const& menuBar = decoded->root.children[0];
+      auto const& menuBar = decodedRes->root.children[0];
       CHECK(menuBar.type == "template");
       CHECK(menuBar.propertyOr<std::string>("templateId", "") == "app.defaultMenuBar");
 
       // Verify playback row is a template
-      REQUIRE(decoded->root.children.size() > 1);
-      auto const& playbackBar = decoded->root.children[1];
+      REQUIRE(decodedRes->root.children.size() > 1);
+      auto const& playbackBar = decodedRes->root.children[1];
       CHECK(playbackBar.id == "playback-bar");
       CHECK(playbackBar.type == "template");
       CHECK(playbackBar.propertyOr<std::string>("templateId", "") == "playback.defaultBar");
 
       // Verify main paned area is a template (shifted to index 3 due to separator)
-      REQUIRE(decoded->root.children.size() > 3);
-      auto const& mainPaned = decoded->root.children[3];
+      REQUIRE(decodedRes->root.children.size() > 3);
+      auto const& mainPaned = decodedRes->root.children[3];
       CHECK(mainPaned.id == "main-paned");
       CHECK(mainPaned.type == "template");
       CHECK(mainPaned.propertyOr<std::string>("templateId", "") == "app.defaultMainPaned");
 
       // Verify status bar region is a template (shifted to index 5 due to separator)
-      REQUIRE(decoded->root.children.size() > 5);
-      auto const& statusBar = decoded->root.children[5];
+      REQUIRE(decodedRes->root.children.size() > 5);
+      auto const& statusBar = decodedRes->root.children[5];
       CHECK(statusBar.type == "template");
       CHECK(statusBar.propertyOr<std::string>("templateId", "") == "status.defaultBar");
     }
@@ -93,10 +93,10 @@ namespace ao::gtk::layout::test
       for (auto const presetId : {LayoutPresetId::Classic, LayoutPresetId::Modern})
       {
         auto const doc = makeBuiltInLayout(presetId);
-        auto const prepared = prepareLayout(doc);
+        auto const preparedRes = prepareLayout(doc);
         auto missingStatefulIds = std::vector<std::string>{};
 
-        REQUIRE(prepared);
+        REQUIRE(preparedRes);
 
         visitLayoutDocumentNodes(doc,
                                  [&](LayoutNode const& node)
@@ -108,7 +108,7 @@ namespace ao::gtk::layout::test
                                  });
 
         CHECK(missingStatefulIds.empty());
-        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(*prepared)));
+        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(*preparedRes)));
       }
     }
 

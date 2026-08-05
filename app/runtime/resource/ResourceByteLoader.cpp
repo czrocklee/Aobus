@@ -137,11 +137,11 @@ namespace ao::rt
 
     try
     {
-      auto bytesResult = co_await std::invoke(*readBytesPtr, resourceId, stopToken);
+      auto bytesRes = co_await std::invoke(*readBytesPtr, resourceId, stopToken);
 
-      if (bytesResult && *bytesResult)
+      if (bytesRes && *bytesRes)
       {
-        bytes = std::move(**bytesResult);
+        bytes = std::move(**bytesRes);
       }
     }
     catch (...)

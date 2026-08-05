@@ -47,27 +47,27 @@ namespace ao::rt
         return makeError(Error::Code::InvalidInput, "Playback launch requires valid source and track identities");
       }
 
-      auto baseSourceResult = sources.acquire(launchSpec.sourceListId);
+      auto baseSourceRes = sources.acquire(launchSpec.sourceListId);
 
-      if (!baseSourceResult)
+      if (!baseSourceRes)
       {
-        return std::unexpected{baseSourceResult.error()};
+        return std::unexpected{baseSourceRes.error()};
       }
 
-      auto baseSourceLease = std::move(*baseSourceResult);
+      auto baseSourceLease = std::move(*baseSourceRes);
       auto projectionSourceLease = baseSourceLease;
 
       if (!launchSpec.quickFilterExpression.empty())
       {
-        auto filteredResult = sources.acquire(
+        auto filteredRes = sources.acquire(
           SourceSpec{.baseListId = launchSpec.sourceListId, .filterExpression = launchSpec.quickFilterExpression});
 
-        if (!filteredResult)
+        if (!filteredRes)
         {
-          return std::unexpected{filteredResult.error()};
+          return std::unexpected{filteredRes.error()};
         }
 
-        projectionSourceLease = std::move(*filteredResult);
+        projectionSourceLease = std::move(*filteredRes);
 
         if (auto const optError = sources.sourceError(projectionSourceLease); optError)
         {

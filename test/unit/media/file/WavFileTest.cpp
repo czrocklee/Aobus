@@ -64,10 +64,10 @@ namespace ao::media::file::wav::test
     auto const fixture = audio::test::requireAudioFixture("basic_metadata.wav");
     auto const bytes = audio::test::readFileBytes(fixture);
     auto const file = File{fixture};
-    auto rangeResult = file.audioPayload();
+    auto rangeRes = file.audioPayload();
 
-    REQUIRE(rangeResult);
-    auto const range = *rangeResult;
+    REQUIRE(rangeRes);
+    auto const range = *rangeRes;
     REQUIRE(range.offset > 0);
     REQUIRE(range.offset + range.bytes.size() <= bytes.size());
     CHECK(range.bytes.size() == static_cast<std::size_t>(44100U) * 2U * 2U);
@@ -90,12 +90,12 @@ namespace ao::media::file::wav::test
     auto const firstFile = File{firstTemp.path};
     auto const secondFile = File{secondTemp.path};
 
-    auto firstPayload = firstFile.audioPayload();
-    auto secondPayload = secondFile.audioPayload();
-    REQUIRE(firstPayload);
-    REQUIRE(secondPayload);
+    auto firstPayloadRes = firstFile.audioPayload();
+    auto secondPayloadRes = secondFile.audioPayload();
+    REQUIRE(firstPayloadRes);
+    REQUIRE(secondPayloadRes);
 
-    CHECK(utility::xxh3Hash128(firstPayload->bytes) == utility::xxh3Hash128(secondPayload->bytes));
+    CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
   TEST_CASE("WAV File - rejects malformed input", "[media][unit][wav][file]")

@@ -21,6 +21,7 @@
 #include "check/PointerNamingConventionCheck.h"
 #include "check/RedundantNamespaceQualificationCheck.h"
 #include "check/RedundantUsingDirectiveCheck.h"
+#include "check/ResultNamingConventionCheck.h"
 #include "check/SpdxLicenseHeaderCheck.h"
 #include "check/StdCLibraryQualificationCheck.h"
 #include "check/StrictForwardDeclarationCheck.h"
@@ -71,6 +72,7 @@ namespace clang::tidy::readability
         checkFactories.registerCheck<BracedInitializationCheck>("aobus-modernize-braced-initialization");
         checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");
         checkFactories.registerCheck<OptionalNamingAndUsageCheck>("aobus-readability-optional-naming-and-usage");
+        checkFactories.registerCheck<ResultNamingConventionCheck>("aobus-readability-result-naming-convention");
         checkFactories.registerCheck<RedundantNamespaceQualificationCheck>(
           "aobus-readability-redundant-namespace-qualification");
         checkFactories.registerCheck<RedundantUsingDirectiveCheck>("aobus-readability-redundant-using-directive");

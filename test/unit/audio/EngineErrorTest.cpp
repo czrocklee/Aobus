@@ -285,16 +285,16 @@ namespace ao::audio::test
     REQUIRE(backend->target() != nullptr);
 
     auto const candidateItem = makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"});
-    auto candidate = engine.stagePlayback(candidateItem);
-    REQUIRE(candidate);
+    auto candidateRes = engine.stagePlayback(candidateItem);
+    REQUIRE(candidateRes);
     auto failureFuture = captureNextFailure(engine);
     backend->setOpenResult(makeError(Error::Code::ResourceBusy, "device busy"));
 
-    auto const committed = engine.commitPlayback(std::move(*candidate));
-    REQUIRE(committed);
-    CHECK(committed->itemId == candidateItem.id);
-    CHECK_FALSE(committed->playbackStarted);
-    CHECK(committed->generation == committed->cancellationBarrier.generation);
+    auto const committedRes = engine.commitPlayback(std::move(*candidateRes));
+    REQUIRE(committedRes);
+    CHECK(committedRes->itemId == candidateItem.id);
+    CHECK_FALSE(committedRes->playbackStarted);
+    CHECK(committedRes->generation == committedRes->cancellationBarrier.generation);
 
     auto const failure = requireFailure(failureFuture);
     CHECK(failure.itemId == candidateItem.id);

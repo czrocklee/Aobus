@@ -280,21 +280,21 @@ namespace ao::cli
           Error::Code::InvalidInput, "restore requires --confirm-destructive-restore after reviewing --dry-run output");
       }
 
-      auto planResult = cli.runTask(cli.library().taskService().prepareLibraryImportAsync(path, mode));
+      auto planRes = cli.runTask(cli.library().taskService().prepareLibraryImportAsync(path, mode));
 
-      if (!planResult)
+      if (!planRes)
       {
-        auto const& error = planResult.error();
+        auto const& error = planRes.error();
         throwCommandError(error, "import failed: {}", error.message);
       }
 
       if (dryRun)
       {
-        printLibraryImport(os, format, path, modeStr, true, planResult->report());
+        printLibraryImport(os, format, path, modeStr, true, planRes->report());
         return;
       }
 
-      auto const result = cli.runTask(cli.library().taskService().applyLibraryImportPlanAsync(std::move(*planResult)));
+      auto const result = cli.runTask(cli.library().taskService().applyLibraryImportPlanAsync(std::move(*planRes)));
 
       if (!result)
       {
@@ -572,18 +572,18 @@ namespace ao::cli
     void verifyLibrary(library::MusicLibrary const& ml, OutputFormat format, std::ostream& os)
     {
       auto scanService = rt::LibraryScan{ml};
-      auto planResult = scanService.buildPlan();
+      auto planRes = scanService.buildPlan();
 
-      if (!planResult)
+      if (!planRes)
       {
-        auto const& error = planResult.error();
+        auto const& error = planRes.error();
         throwCommandError(error, "verify failed: {}", error.message);
       }
 
       auto issues = std::vector<rt::ScanItem>{};
       bool failed = false;
 
-      for (auto const& item : planResult->items())
+      for (auto const& item : planRes->items())
       {
         if (!isVerifyIssue(item.classification))
         {
@@ -615,23 +615,23 @@ namespace ao::cli
 
     RelinkIdentity readRelinkAudioIdentity(std::filesystem::path const& path)
     {
-      auto fileResult = media::file::File::open(path);
+      auto fileRes = media::file::File::open(path);
 
-      if (!fileResult)
+      if (!fileRes)
       {
-        auto const& error = fileResult.error();
+        auto const& error = fileRes.error();
         throwCommandError(error, "failed to open relink candidate: {}", error.message);
       }
 
-      auto payloadResult = fileResult->audioPayload();
+      auto payloadRes = fileRes->audioPayload();
 
-      if (!payloadResult)
+      if (!payloadRes)
       {
-        auto const& error = payloadResult.error();
+        auto const& error = payloadRes.error();
         throwCommandError(error, "failed to read relink candidate payload: {}", error.message);
       }
 
-      auto optIdentity = library::readAudioIdentity(payloadResult->bytes);
+      auto optIdentity = library::readAudioIdentity(payloadRes->bytes);
 
       if (!optIdentity)
       {
@@ -663,14 +663,14 @@ namespace ao::cli
       }
 
       path = path.lexically_normal();
-      auto uri = library::LibraryUri::parse(path.generic_string());
+      auto uriRes = library::LibraryUri::parse(path.generic_string());
 
-      if (!uri)
+      if (!uriRes)
       {
-        throwCommandError(uri.error(), "invalid library URI '{}': {}", input, uri.error().message);
+        throwCommandError(uriRes.error(), "invalid library URI '{}': {}", input, uriRes.error().message);
       }
 
-      return std::string{uri->value()};
+      return std::string{uriRes->value()};
     }
 
     std::vector<RelinkCandidateDto> relinkCandidates(rt::ScanPlan const& plan)
@@ -902,15 +902,15 @@ namespace ao::cli
     {
       auto const& ml = cli.musicLibrary();
       auto scanService = rt::LibraryScan{ml};
-      auto planResult = scanService.buildPlan();
+      auto planRes = scanService.buildPlan();
 
-      if (!planResult)
+      if (!planRes)
       {
-        auto const& error = planResult.error();
+        auto const& error = planRes.error();
         throwCommandError(error, "relink scan failed: {}", error.message);
       }
 
-      auto plan = std::move(*planResult);
+      auto plan = std::move(*planRes);
 
       if (!optOldUri && !optNewUri)
       {
@@ -926,15 +926,15 @@ namespace ao::cli
       auto const oldUri = normalizeRelinkUri(ml, *optOldUri);
       auto const newUri = normalizeRelinkUri(ml, *optNewUri);
       auto const candidate = validateRelink(plan, oldUri, newUri);
-      auto relinkPlanResult = std::move(plan).makeRelinkPlan(candidate.oldUri, candidate.newUri);
+      auto relinkPlanRes = std::move(plan).makeRelinkPlan(candidate.oldUri, candidate.newUri);
 
-      if (!relinkPlanResult)
+      if (!relinkPlanRes)
       {
-        auto const& error = relinkPlanResult.error();
+        auto const& error = relinkPlanRes.error();
         throwCommandError(error, "relink plan rejected: {}", error.message);
       }
 
-      applyRelink(cli, std::move(*relinkPlanResult), candidate, dryRun, format, os);
+      applyRelink(cli, std::move(*relinkPlanRes), candidate, dryRun, format, os);
     }
 
     void printBackfillFailure(rt::AudioIdentityIndexFailure const& failure, std::ostream& err)

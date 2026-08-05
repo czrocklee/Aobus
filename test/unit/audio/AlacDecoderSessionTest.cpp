@@ -30,27 +30,27 @@ namespace ao::audio::test
     REQUIRE(info.sourceFormat.sampleRate > 0);
     REQUIRE(info.duration > std::chrono::milliseconds{500});
 
-    auto const firstBlock = decoder.readNextBlock();
-    REQUIRE(firstBlock);
-    CHECK(firstBlock->firstFrameIndex == 0);
+    auto const firstBlockRes = decoder.readNextBlock();
+    REQUIRE(firstBlockRes);
+    CHECK(firstBlockRes->firstFrameIndex == 0);
 
     constexpr auto kSeekOffset = std::chrono::milliseconds{500};
     auto const targetFrame = (static_cast<std::uint64_t>(kSeekOffset.count()) * info.sourceFormat.sampleRate) / 1000U;
 
     REQUIRE(decoder.seek(kSeekOffset));
-    auto const soughtBlock = decoder.readNextBlock();
+    auto const soughtBlockRes = decoder.readNextBlock();
 
-    REQUIRE(soughtBlock);
-    REQUIRE(soughtBlock->frames > 0);
-    CHECK(soughtBlock->firstFrameIndex > 0);
-    CHECK(soughtBlock->firstFrameIndex <= targetFrame);
-    CHECK(soughtBlock->firstFrameIndex + soughtBlock->frames > targetFrame);
+    REQUIRE(soughtBlockRes);
+    REQUIRE(soughtBlockRes->frames > 0);
+    CHECK(soughtBlockRes->firstFrameIndex > 0);
+    CHECK(soughtBlockRes->firstFrameIndex <= targetFrame);
+    CHECK(soughtBlockRes->firstFrameIndex + soughtBlockRes->frames > targetFrame);
 
     REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
-    auto const resetBlock = decoder.readNextBlock();
+    auto const resetBlockRes = decoder.readNextBlock();
 
-    REQUIRE(resetBlock);
-    CHECK(resetBlock->firstFrameIndex == 0);
+    REQUIRE(resetBlockRes);
+    CHECK(resetBlockRes->firstFrameIndex == 0);
 
     decoder.flush();
     CHECK(decoder.readNextBlock());
@@ -69,9 +69,9 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.precisionBits == 24);
       CHECK(encodingContainerBits(info.outputFormat.encoding) == 32);
 
-      auto const block = decoder.readNextBlock();
-      REQUIRE(block);
-      CHECK(!block->bytes.empty());
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
+      CHECK(!blockRes->bytes.empty());
     }
 
     SECTION("Pads 16-bit ALAC samples into 32-bit output")
@@ -86,9 +86,9 @@ namespace ao::audio::test
       CHECK(sourceInfo.sourceFormat.channels == 2);
       CHECK(sourceInfo.sourceFormat.precisionBits == 16);
 
-      auto const sourceBlock = sourceDecoder.readNextBlock();
-      REQUIRE(sourceBlock);
-      REQUIRE(!sourceBlock->bytes.empty());
+      auto const sourceBlockRes = sourceDecoder.readNextBlock();
+      REQUIRE(sourceBlockRes);
+      REQUIRE(!sourceBlockRes->bytes.empty());
 
       auto targetDecoder = AlacDecoderSession{SampleEncoding::Signed32Le};
       REQUIRE(targetDecoder.open(testFile));
@@ -96,18 +96,18 @@ namespace ao::audio::test
       auto const targetInfo = targetDecoder.streamInfo();
       CHECK(encodingContainerBits(targetInfo.outputFormat.encoding) == 32);
 
-      auto const targetBlock = targetDecoder.readNextBlock();
-      REQUIRE(targetBlock);
-      REQUIRE(!targetBlock->bytes.empty());
+      auto const targetBlockRes = targetDecoder.readNextBlock();
+      REQUIRE(targetBlockRes);
+      REQUIRE(!targetBlockRes->bytes.empty());
 
-      auto const sourceSamples = sourceBlock->bytes.size() / sizeof(std::int16_t);
-      auto const targetSamples = targetBlock->bytes.size() / sizeof(std::int32_t);
+      auto const sourceSamples = sourceBlockRes->bytes.size() / sizeof(std::int16_t);
+      auto const targetSamples = targetBlockRes->bytes.size() / sizeof(std::int32_t);
       auto const samplesToCheck = std::min({sourceSamples, targetSamples, std::size_t{128}});
 
       REQUIRE(samplesToCheck > 0);
 
-      auto const* source = reinterpret_cast<std::int16_t const*>(sourceBlock->bytes.data());
-      auto const* target = reinterpret_cast<std::int32_t const*>(targetBlock->bytes.data());
+      auto const* source = reinterpret_cast<std::int16_t const*>(sourceBlockRes->bytes.data());
+      auto const* target = reinterpret_cast<std::int32_t const*>(targetBlockRes->bytes.data());
 
       for (std::size_t index = 0; index < samplesToCheck; ++index)
       {

@@ -172,10 +172,10 @@ namespace ao::gtk::test
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
     window.applyTheme(uimodel::ThemePreset::Modern);
 
-    auto const retired = window.retireForLibrarySwitch();
+    auto const retiredRes = window.retireForLibrarySwitch();
 
-    REQUIRE_FALSE(retired);
-    CHECK(retired.error().code == Error::Code::IoError);
+    REQUIRE_FALSE(retiredRes);
+    CHECK(retiredRes.error().code == Error::Code::IoError);
     CHECK(window.sessionPhase() == MainWindow::SessionPhase::Active);
     CHECK(window.musicRoot() == runtimePtr->musicRoot());
     CHECK_NOTHROW(window.playback());
@@ -266,31 +266,31 @@ namespace ao::gtk::test
       std::make_shared<AppConfigStore>(std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml");
     auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
 
-    auto activated = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
-    REQUIRE_FALSE(activated);
-    CHECK(activated.error().code == Error::Code::InvalidState);
+    auto activatedRes = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
+    REQUIRE_FALSE(activatedRes);
+    CHECK(activatedRes.error().code == Error::Code::InvalidState);
 
-    auto retired = window.retireForLibrarySwitch();
-    REQUIRE_FALSE(retired);
-    CHECK(retired.error().code == Error::Code::InvalidState);
+    auto retiredRes = window.retireForLibrarySwitch();
+    REQUIRE_FALSE(retiredRes);
+    CHECK(retiredRes.error().code == Error::Code::InvalidState);
 
     REQUIRE(window.prepareSession());
-    auto preparedAgain = window.prepareSession();
-    REQUIRE_FALSE(preparedAgain);
-    CHECK(preparedAgain.error().code == Error::Code::InvalidState);
+    auto preparedAgainRes = window.prepareSession();
+    REQUIRE_FALSE(preparedAgainRes);
+    CHECK(preparedAgainRes.error().code == Error::Code::InvalidState);
 
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
-    auto activatedAgain = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
-    REQUIRE_FALSE(activatedAgain);
-    CHECK(activatedAgain.error().code == Error::Code::InvalidState);
+    auto activatedAgainRes = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
+    REQUIRE_FALSE(activatedAgainRes);
+    CHECK(activatedAgainRes.error().code == Error::Code::InvalidState);
 
     REQUIRE(window.retireForLibrarySwitch());
     REQUIRE(window.retireForLibrarySwitch());
     CHECK(window.sessionPhase() == MainWindow::SessionPhase::Retired);
 
-    auto reactivated = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
-    REQUIRE_FALSE(reactivated);
-    CHECK(reactivated.error().code == Error::Code::InvalidState);
+    auto reactivatedRes = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
+    REQUIRE_FALSE(reactivatedRes);
+    CHECK(reactivatedRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("prepareLibraryWindow - prepared window activates once and finalizes after retirement",

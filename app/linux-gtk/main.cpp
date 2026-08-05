@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <glibmm/main.h>
+
 #include "app/AppConfigStore.h"
 #include "app/AppDialog.h"
 #include "app/GtkStyleRuntime.h"
@@ -27,7 +29,6 @@
 #include <giomm/simpleaction.h>
 #include <glib-unix.h>
 #include <glibmm/exceptionhandler.h>
-#include <glibmm/main.h>
 #include <glibmm/miscutils.h>
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
@@ -181,7 +182,7 @@ namespace
     auto retiredWindowPtr = Glib::RefPtr<MainWindow>{};
     auto const activeRoot = mainWindowPtr->musicRoot();
 
-    auto const opened = openLibraryWindow(
+    auto const openedRes = openLibraryWindow(
       activeRoot,
       requestedPath,
       scanAfterOpen,
@@ -230,9 +231,9 @@ namespace
         .presentActive = [&] { mainWindowPtr->present(); },
       });
 
-    if (!opened)
+    if (!openedRes)
     {
-      APP_LOG_ERROR("Failed to retire active library for replacement: {}", opened.error().message);
+      APP_LOG_ERROR("Failed to retire active library for replacement: {}", openedRes.error().message);
     }
   }
 

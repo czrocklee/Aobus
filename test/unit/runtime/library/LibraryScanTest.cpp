@@ -71,19 +71,19 @@ namespace ao::rt::test
     }
 
     {
-      auto environmentResult = lmdb::Environment::open(
+      auto environmentRes = lmdb::Environment::open(
         libraryFixture.root().string(),
         {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
-      REQUIRE(environmentResult);
-      auto environment = std::move(*environmentResult);
-      auto transactionResult = lmdb::WriteTransaction::begin(environment);
-      REQUIRE(transactionResult);
-      auto transaction = std::move(*transactionResult);
-      auto manifestResult = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
-      REQUIRE(manifestResult);
+      REQUIRE(environmentRes);
+      auto environment = std::move(*environmentRes);
+      auto transactionRes = lmdb::WriteTransaction::begin(environment);
+      REQUIRE(transactionRes);
+      auto transaction = std::move(*transactionRes);
+      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      REQUIRE(manifestRes);
       auto const malformedKey = utility::bytes::view(std::string_view{"zz"});
       auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{2}).serialize();
-      REQUIRE(manifestResult->writer(transaction).create(malformedKey, payload));
+      REQUIRE(manifestRes->writer(transaction).create(malformedKey, payload));
       REQUIRE(transaction.commit());
     }
 
@@ -113,10 +113,10 @@ namespace ao::rt::test
     REQUIRE(optTrack);
     CHECK(optTrack->metadata().title() == "Test Title");
 
-    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK(manifestResult->trackId() == result->insertedIds[0]);
-    CHECK(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
+    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK(manifestRes->trackId() == result->insertedIds[0]);
+    CHECK(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
   }
 
   TEST_CASE("LibraryScan - applyPlan can defer new audio identity", "[runtime][unit][library][scan]")
@@ -140,9 +140,9 @@ namespace ao::rt::test
     CHECK(result->failureCount == 0);
 
     auto transaction = libraryFixture.library().readTransaction();
-    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestResult);
-    CHECK_FALSE(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
+    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(manifestRes);
+    CHECK_FALSE(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
   }
 
   TEST_CASE("LibraryScan - applyPlan honors cancellation", "[runtime][unit][library][scan]")

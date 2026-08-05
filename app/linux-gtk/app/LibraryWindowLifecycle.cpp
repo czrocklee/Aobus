@@ -36,7 +36,7 @@ namespace ao::gtk
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
     auto workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspaceConfigPath);
 
-    auto runtimeResult = rt::AppRuntime::create(
+    auto runtimeRes = rt::AppRuntime::create(
       rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
                                  .musicRoot = std::move(paths.musicRoot),
                                  .databasePath = std::move(paths.databasePath),
@@ -44,12 +44,12 @@ namespace ao::gtk
                                  .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore(),
                                  .asyncExceptionHandler = std::move(asyncExceptionHandler)});
 
-    if (!runtimeResult)
+    if (!runtimeRes)
     {
-      throwException<Exception>("Failed to open library: {}", runtimeResult.error().message);
+      throwException<Exception>("Failed to open library: {}", runtimeRes.error().message);
     }
 
-    auto appRuntimePtr = std::move(*runtimeResult);
+    auto appRuntimePtr = std::move(*runtimeRes);
 
     registerPlatformAudioBackends(*appRuntimePtr);
 
@@ -63,9 +63,9 @@ namespace ao::gtk
                         new std::unique_ptr<rt::AppRuntime>{std::move(appRuntimePtr)},
                         [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
 
-    if (auto const prepared = windowPtr->prepareSession(); !prepared)
+    if (auto const preparedRes = windowPtr->prepareSession(); !preparedRes)
     {
-      throwException<Exception>(prepared.error().message);
+      throwException<Exception>(preparedRes.error().message);
     }
 
     return windowPtr;
@@ -77,10 +77,10 @@ namespace ao::gtk
   {
     app.add_window(*windowPtr);
 
-    if (auto const activated = windowPtr->activateSession(restoreMode); !activated)
+    if (auto const activatedRes = windowPtr->activateSession(restoreMode); !activatedRes)
     {
       app.remove_window(*windowPtr);
-      throwException<Exception>(activated.error().message);
+      throwException<Exception>(activatedRes.error().message);
     }
 
     windowPtr->present();
@@ -105,9 +105,9 @@ namespace ao::gtk
     callbacks.prepareCandidate();
     callbacks.configureCandidate();
 
-    if (auto const retired = callbacks.retireActive(); !retired)
+    if (auto const retiredRes = callbacks.retireActive(); !retiredRes)
     {
-      return std::unexpected<Error>{retired.error()};
+      return std::unexpected<Error>{retiredRes.error()};
     }
 
     callbacks.activateCandidate();

@@ -21,11 +21,11 @@ namespace ao::audio::backend::test
       .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
 
-    auto const opened = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, nullptr);
+    auto const openedRes = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, nullptr);
 
-    REQUIRE_FALSE(opened);
-    CHECK(opened.error().code == Error::Code::FormatRejected);
-    CHECK(opened.error().message.contains("direct hardware PCM"));
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().code == Error::Code::FormatRejected);
+    CHECK(openedRes.error().message.contains("direct hardware PCM"));
   }
 
   TEST_CASE("AlsaExclusiveBackend - unsupported signal is rejected before native device inspection",
@@ -35,11 +35,11 @@ namespace ao::audio::backend::test
       .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
 
-    auto const opened = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 33}, nullptr);
+    auto const openedRes = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 33}, nullptr);
 
-    REQUIRE_FALSE(opened);
-    CHECK(opened.error().code == Error::Code::NotSupported);
-    CHECK(opened.error().message == "No lossless PCM encoding is available for ALSA");
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().code == Error::Code::NotSupported);
+    CHECK(openedRes.error().message == "No lossless PCM encoding is available for ALSA");
   }
 
   TEST_CASE("AlsaExclusiveBackend - a missing device is reported as such, never as a format problem",
@@ -52,11 +52,11 @@ namespace ao::audio::backend::test
       .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
 
-    auto const opened = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, nullptr);
+    auto const openedRes = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, nullptr);
 
-    REQUIRE_FALSE(opened);
-    CHECK(opened.error().code != Error::Code::FormatRejected);
-    CHECK(opened.error().message.contains("Failed to open ALSA device"));
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().code != Error::Code::FormatRejected);
+    CHECK(openedRes.error().message.contains("Failed to open ALSA device"));
   }
 
   TEST_CASE("AlsaExclusiveBackend - a hint is never treated as an opened mode", "[audio][regression][alsa]")

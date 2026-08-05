@@ -748,14 +748,14 @@ namespace ao::audio
 
     void syncBackendStatus()
     {
-      if (auto const vol = backendPtr->get(props::kVolume); vol)
+      if (auto const volRes = backendPtr->get(props::kVolume); volRes)
       {
-        status.volume = *vol;
+        status.volume = *volRes;
       }
 
-      if (auto const mute = backendPtr->get(props::kMuted); mute)
+      if (auto const muteRes = backendPtr->get(props::kMuted); muteRes)
       {
-        status.muted = *mute;
+        status.muted = *muteRes;
       }
 
       auto const volProp = backendPtr->queryProperty(PropertyId::Volume);
@@ -1574,23 +1574,23 @@ namespace ao::audio
                                           std::uint64_t playbackGeneration,
                                           std::chrono::milliseconds initialOffset = {})
     {
-      auto prepared =
+      auto preparedRes =
         detail::TrackSession::prepare(item.input, inspection, backendFormat, decoderFactory, initialOffset);
 
-      if (!prepared)
+      if (!preparedRes)
       {
-        return std::unexpected{prepared.error()};
+        return std::unexpected{preparedRes.error()};
       }
 
-      auto session = detail::TrackSession::activate(
-        std::move(*prepared), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
+      auto sessionRes = detail::TrackSession::activate(
+        std::move(*preparedRes), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
 
-      if (!session)
+      if (!sessionRes)
       {
-        return std::unexpected{session.error()};
+        return std::unexpected{sessionRes.error()};
       }
 
-      return makeTrackNode(item, std::move(*session), sourceGeneration, playbackGeneration);
+      return makeTrackNode(item, std::move(*sessionRes), sourceGeneration, playbackGeneration);
     }
 
     void publishCurrentTrackState(TrackNode const& session)
@@ -1732,14 +1732,14 @@ namespace ao::audio
       return {};
     }
 
-    auto inspection = detail::TrackSession::inspect(_implPtr->item.input, _implPtr->decoderFactory);
+    auto inspectionRes = detail::TrackSession::inspect(_implPtr->item.input, _implPtr->decoderFactory);
 
-    if (!inspection)
+    if (!inspectionRes)
     {
-      return std::unexpected{inspection.error()};
+      return std::unexpected{inspectionRes.error()};
     }
 
-    _implPtr->optInspection.emplace(std::move(*inspection));
+    _implPtr->optInspection.emplace(std::move(*inspectionRes));
     return {};
   }
 
@@ -1840,23 +1840,23 @@ namespace ao::audio
       return makeError(Error::Code::InvalidState, "Track inspection result is missing");
     }
 
-    auto prepared = detail::TrackSession::prepare(_implPtr->item.input,
-                                                  *_implPtr->optInspection,
-                                                  *_implPtr->optPrewarmFormat,
-                                                  _implPtr->decoderFactory,
-                                                  _implPtr->initialOffset);
+    auto preparedRes = detail::TrackSession::prepare(_implPtr->item.input,
+                                                     *_implPtr->optInspection,
+                                                     *_implPtr->optPrewarmFormat,
+                                                     _implPtr->decoderFactory,
+                                                     _implPtr->initialOffset);
 
-    if (!prepared)
+    if (!preparedRes)
     {
       if (_implPtr->purpose == Purpose::ExplicitStart)
       {
         return {};
       }
 
-      return std::unexpected{prepared.error()};
+      return std::unexpected{preparedRes.error()};
     }
 
-    _implPtr->optPreparedTrack.emplace(std::move(*prepared));
+    _implPtr->optPreparedTrack.emplace(std::move(*preparedRes));
     return {};
   }
 
@@ -1945,9 +1945,9 @@ namespace ao::audio
 
   void Engine::Impl::playUnlocked(PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
-    auto inspection = detail::TrackSession::inspect(item.input, decoderFactory);
+    auto inspectionRes = detail::TrackSession::inspect(item.input, decoderFactory);
 
-    if (!inspection)
+    if (!inspectionRes)
     {
       auto notifications = Notifications{};
       auto failureCallback = OnPlaybackFailure{};
@@ -1963,7 +1963,7 @@ namespace ao::audio
                                           .itemId = item.id,
                                           .input = item.input,
                                           .generation = currentPlaybackGeneration.load(std::memory_order_acquire),
-                                          .error = inspection.error(),
+                                          .error = inspectionRes.error(),
                                           .recoverable = true,
                                         });
 
@@ -1977,7 +1977,7 @@ namespace ao::audio
 
     auto const playbackGeneration = reservePlaybackGeneration();
     acceptPlaybackGeneration(playbackGeneration);
-    std::ignore = startInspectedPlaybackUnlocked(item, *inspection, initialOffset, playbackGeneration);
+    std::ignore = startInspectedPlaybackUnlocked(item, *inspectionRes, initialOffset, playbackGeneration);
   }
 
   Result<bool> Engine::Impl::startInspectedPlaybackUnlocked(
@@ -2011,11 +2011,11 @@ namespace ao::audio
     }
 
     auto* const renderTarget = createRenderTarget(*backendPtr, playbackGeneration);
-    auto openedMode = backendPtr->open(inspection.info.sourceFormat, renderTarget);
+    auto openedModeRes = backendPtr->open(inspection.info.sourceFormat, renderTarget);
 
-    if (!openedMode)
+    if (!openedModeRes)
     {
-      auto const& error = openedMode.error();
+      auto const& error = openedModeRes.error();
       retireRenderTarget();
       closeBackendPlayback();
       resetTransitionState();
@@ -2034,9 +2034,10 @@ namespace ao::audio
       return std::unexpected{error};
     }
 
-    if (auto const validated = detail::validateOpenedMode(inspection.info.sourceFormat, *openedMode); !validated)
+    if (auto const validatedRes = detail::validateOpenedMode(inspection.info.sourceFormat, *openedModeRes);
+        !validatedRes)
     {
-      auto const& error = validated.error();
+      auto const& error = validatedRes.error();
       retireRenderTarget();
       closeBackendPlayback();
       resetTransitionState();
@@ -2055,31 +2056,31 @@ namespace ao::audio
       return std::unexpected{error};
     }
 
-    auto const& clientFormat = openedMode->clientFormat;
+    auto const& clientFormat = openedModeRes->clientFormat;
 
-    auto openedTrack = [&] -> Result<TrackNode>
+    auto openedTrackRes = [&] -> Result<TrackNode>
     {
       if (optPreparedTrack && samePcmMode(optPreparedTrack->backendFormat, clientFormat))
       {
-        auto session = detail::TrackSession::activate(
+        auto sessionRes = detail::TrackSession::activate(
           std::move(*optPreparedTrack), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
         optPreparedTrack.reset();
 
-        if (!session)
+        if (!sessionRes)
         {
-          return std::unexpected{session.error()};
+          return std::unexpected{sessionRes.error()};
         }
 
-        return makeTrackNode(item, std::move(*session), sourceGeneration, playbackGeneration);
+        return makeTrackNode(item, std::move(*sessionRes), sourceGeneration, playbackGeneration);
       }
 
       optPreparedTrack.reset();
       return prepareTrackSession(item, inspection, clientFormat, sourceGeneration, playbackGeneration, initialOffset);
     }();
 
-    if (!openedTrack)
+    if (!openedTrackRes)
     {
-      auto const& error = openedTrack.error();
+      auto const& error = openedTrackRes.error();
       retireRenderTarget();
       closeBackendPlayback();
       resetTransitionState();
@@ -2098,10 +2099,10 @@ namespace ao::audio
       return std::unexpected{error};
     }
 
-    publishCurrentTransitionState(*openedTrack);
-    publishCurrentTrackState(*openedTrack);
+    publishCurrentTransitionState(*openedTrackRes);
+    publishCurrentTrackState(*openedTrackRes);
     accumulatedFrames.store(
-      durationToSamples(initialOffset, openedTrack->info.outputFormat.sampleRate), std::memory_order_relaxed);
+      durationToSamples(initialOffset, openedTrackRes->info.outputFormat.sampleRate), std::memory_order_relaxed);
 
     {
       auto const lock = std::scoped_lock{stateMutex};
@@ -2110,7 +2111,7 @@ namespace ao::audio
       syncBackendStatus();
     }
 
-    auto openedNodePtr = std::make_unique<TrackNode>(std::move(*openedTrack));
+    auto openedNodePtr = std::make_unique<TrackNode>(std::move(*openedTrackRes));
     auto* const currentNode = openedNodePtr.get();
     publishCurrentNode(std::move(openedNodePtr));
 
@@ -2266,11 +2267,11 @@ namespace ao::audio
     backendPtr->flush();
     backendStarted = false;
 
-    if (auto const seekResult = sourcePtr->seek(offset); !seekResult)
+    if (auto const seekRes = sourcePtr->seek(offset); !seekRes)
     {
       auto const lock = std::scoped_lock{stateMutex};
       status.transport = Transport::Error;
-      status.statusText = seekResult.error().message;
+      status.statusText = seekRes.error().message;
       return;
     }
 
@@ -2590,18 +2591,18 @@ namespace ao::audio
       {
         auto const sourceGeneration = engine._implPtr->nextSourceGeneration++;
 
-        auto activated =
+        auto activatedRes =
           detail::TrackSession::activate(std::move(*preparationImpl->optPreparedTrack),
                                          engine._implPtr->makeSourceErrorHandler(sourceGeneration, currentGeneration));
         preparationImpl->optPreparedTrack.reset();
 
-        if (!activated)
+        if (!activatedRes)
         {
-          return std::unexpected{activated.error()};
+          return std::unexpected{activatedRes.error()};
         }
 
         nodePtr = std::make_unique<Engine::Impl::TrackNode>(Engine::Impl::makeTrackNode(
-          preparationImpl->item, std::move(*activated), sourceGeneration, currentGeneration));
+          preparationImpl->item, std::move(*activatedRes), sourceGeneration, currentGeneration));
       }
     }
 
@@ -2639,30 +2640,30 @@ namespace ao::audio
       return makeError(Error::Code::InvalidState, "Engine is shut down");
     }
 
-    auto preparation = detail::TrackPreparation::captureUnlocked(
+    auto preparationRes = detail::TrackPreparation::captureUnlocked(
       *this, item, initialOffset, detail::TrackPreparation::Purpose::ExplicitStart);
 
-    if (!preparation)
+    if (!preparationRes)
     {
-      return std::unexpected{preparation.error()};
+      return std::unexpected{preparationRes.error()};
     }
 
-    if (auto inspected = preparation->inspect(); !inspected)
+    if (auto inspectedRes = preparationRes->inspect(); !inspectedRes)
     {
-      return std::unexpected{inspected.error()};
+      return std::unexpected{inspectedRes.error()};
     }
 
-    if (auto selected = preparation->selectPrewarmFormatUnlocked(*this); !selected)
+    if (auto selectedRes = preparationRes->selectPrewarmFormatUnlocked(*this); !selectedRes)
     {
-      return std::unexpected{selected.error()};
+      return std::unexpected{selectedRes.error()};
     }
 
-    if (auto prepared = preparation->prepare(); !prepared)
+    if (auto preparedRes = preparationRes->prepare(); !preparedRes)
     {
-      return std::unexpected{prepared.error()};
+      return std::unexpected{preparedRes.error()};
     }
 
-    return std::move(*preparation).adoptStartUnlocked(*this);
+    return std::move(*preparationRes).adoptStartUnlocked(*this);
   }
 
   Result<Engine::PlaybackStartReceipt> Engine::commitPlayback(PreparedPlaybackStart&& preparedStart)
@@ -2702,12 +2703,12 @@ namespace ao::audio
         .generation = candidateGeneration,
         .cancellationBarrier = PreparedCancellationBarrier{.generation = candidateGeneration},
       };
-      auto started = _implPtr->startInspectedPlaybackUnlocked(preparedImpl->item,
-                                                              preparedImpl->inspection,
-                                                              preparedImpl->initialOffset,
-                                                              candidateGeneration,
-                                                              std::move(preparedImpl->optPreparedTrack));
-      receipt.playbackStarted = started.value_or(false);
+      auto startedRes = _implPtr->startInspectedPlaybackUnlocked(preparedImpl->item,
+                                                                 preparedImpl->inspection,
+                                                                 preparedImpl->initialOffset,
+                                                                 candidateGeneration,
+                                                                 std::move(preparedImpl->optPreparedTrack));
+      receipt.playbackStarted = startedRes.value_or(false);
 
       stagedStart._implPtr.reset();
     }
@@ -2819,30 +2820,30 @@ namespace ao::audio
     // synchronous decoder open.
     _implPtr->clearPreparedNext();
 
-    auto preparation =
+    auto preparationRes =
       detail::TrackPreparation::captureUnlocked(*this, item, {}, detail::TrackPreparation::Purpose::GaplessLookahead);
 
-    if (!preparation)
+    if (!preparationRes)
     {
-      return std::unexpected{preparation.error()};
+      return std::unexpected{preparationRes.error()};
     }
 
-    if (auto inspected = preparation->inspect(); !inspected)
+    if (auto inspectedRes = preparationRes->inspect(); !inspectedRes)
     {
-      return std::unexpected{inspected.error()};
+      return std::unexpected{inspectedRes.error()};
     }
 
-    if (auto selected = preparation->selectPrewarmFormatUnlocked(*this); !selected)
+    if (auto selectedRes = preparationRes->selectPrewarmFormatUnlocked(*this); !selectedRes)
     {
-      return std::unexpected{selected.error()};
+      return std::unexpected{selectedRes.error()};
     }
 
-    if (auto prepared = preparation->prepare(); !prepared)
+    if (auto preparedRes = preparationRes->prepare(); !preparedRes)
     {
-      return std::unexpected{prepared.error()};
+      return std::unexpected{preparedRes.error()};
     }
 
-    return std::move(*preparation).adoptNextUnlocked(*this);
+    return std::move(*preparationRes).adoptNextUnlocked(*this);
   }
 
   std::optional<Engine::PlaybackItemId> Engine::clearNext()

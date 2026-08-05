@@ -35,14 +35,14 @@ namespace ao::gtk::layout
         auto tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
         yaml::parseInArena(tree, std::string_view{data, size}, yamlErrorState);
 
-        auto doc = uimodel::LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutDocument{});
+        auto docRes = uimodel::LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutDocument{});
 
-        if (!doc)
+        if (!docRes)
         {
-          throwException<Exception>("Failed to deserialize built-in layout from {}: {}", path, doc.error().message);
+          throwException<Exception>("Failed to deserialize built-in layout from {}: {}", path, docRes.error().message);
         }
 
-        return std::move(*doc);
+        return std::move(*docRes);
       }
       catch (Glib::Error const& e)
       {

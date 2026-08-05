@@ -113,16 +113,16 @@ namespace ao::rt
         seenFields.push_back(term.field);
       }
 
-      auto parsed = query::parse(state.quickFilterExpression.empty() ? "true" : state.quickFilterExpression);
+      auto parsedRes = query::parse(state.quickFilterExpression.empty() ? "true" : state.quickFilterExpression);
 
-      if (!parsed)
+      if (!parsedRes)
       {
-        return std::unexpected{parsed.error()};
+        return std::unexpected{parsedRes.error()};
       }
 
-      if (auto compiled = query::compileQuery(*parsed); !compiled)
+      if (auto compiledRes = query::compileQuery(*parsedRes); !compiledRes)
       {
-        return std::unexpected{compiled.error()};
+        return std::unexpected{compiledRes.error()};
       }
 
       return {};
@@ -156,17 +156,17 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    auto schemaVersion = yaml::requireScalar<std::uint32_t>(node, "schemaVersion", kContext);
+    auto schemaVersionRes = yaml::requireScalar<std::uint32_t>(node, "schemaVersion", kContext);
 
-    if (!schemaVersion)
+    if (!schemaVersionRes)
     {
-      return std::unexpected{schemaVersion.error()};
+      return std::unexpected{schemaVersionRes.error()};
     }
 
-    if (*schemaVersion != kPlaybackSessionSchemaVersion)
+    if (*schemaVersionRes != kPlaybackSessionSchemaVersion)
     {
       return makeError(
-        Error::Code::NotSupported, std::format("Unsupported playback session schema version {}", *schemaVersion));
+        Error::Code::NotSupported, std::format("Unsupported playback session schema version {}", *schemaVersionRes));
     }
 
     constexpr auto kKeys = std::to_array<std::string_view>({"schemaVersion",
@@ -185,7 +185,7 @@ namespace ao::rt
     std::uint32_t currentTrackId = 0;
     std::int32_t shuffleMode = 0;
     std::int32_t repeatMode = 0;
-    auto state = PlaybackSessionState{.schemaVersion = *schemaVersion};
+    auto state = PlaybackSessionState{.schemaVersion = *schemaVersionRes};
     auto reader = yaml::MapReader{node, kKeys, kContext};
     reader.requiredScalar("sourceListId", sourceListId)
       .requiredScalar("quickFilterExpression", state.quickFilterExpression)

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/rt/source/SmartListSource.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/query/ExecutionPlan.h>
@@ -8,7 +10,6 @@
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -48,23 +49,23 @@ namespace ao::rt
       _optPending->planPtr.reset();
     };
 
-    auto parsed = query::parse(_optPending->expression.empty() ? "true" : _optPending->expression);
+    auto parsedRes = query::parse(_optPending->expression.empty() ? "true" : _optPending->expression);
 
-    if (!parsed)
+    if (!parsedRes)
     {
-      setError(std::move(parsed).error());
+      setError(std::move(parsedRes).error());
       return;
     }
 
-    auto plan = query::compileQuery(*parsed);
+    auto planRes = query::compileQuery(*parsedRes);
 
-    if (!plan)
+    if (!planRes)
     {
-      setError(std::move(plan).error());
+      setError(std::move(planRes).error());
       return;
     }
 
-    _optPending->planPtr = std::make_unique<query::ExecutionPlan>(*std::move(plan));
+    _optPending->planPtr = std::make_unique<query::ExecutionPlan>(*std::move(planRes));
     _optPending->optError.reset();
   }
 

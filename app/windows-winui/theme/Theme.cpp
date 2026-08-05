@@ -183,23 +183,23 @@ namespace ao::winui
         return result;
       }
 
-      auto parsedChrome = chromeFromId(chrome);
+      auto parsedChromeRes = chromeFromId(chrome);
 
-      if (!parsedChrome)
+      if (!parsedChromeRes)
       {
-        return std::unexpected{parsedChrome.error()};
+        return std::unexpected{parsedChromeRes.error()};
       }
 
-      result->chrome = *parsedChrome;
+      result->chrome = *parsedChromeRes;
       return result;
     }
   } // namespace
 
   Result<> ThemeYamlSchema::serialize(ryml::NodeRef node, Theme const& state) const
   {
-    if (auto const valid = validateTheme(state); !valid)
+    if (auto const validRes = validateTheme(state); !validRes)
     {
-      return valid;
+      return validRes;
     }
 
     auto writer = yaml::MapWriter{node};
@@ -224,9 +224,9 @@ namespace ao::winui
       return result;
     }
 
-    if (auto const valid = validateTheme(*result); !valid)
+    if (auto const validRes = validateTheme(*result); !validRes)
     {
-      return std::unexpected{valid.error()};
+      return std::unexpected{validRes.error()};
     }
 
     return result;
@@ -234,14 +234,14 @@ namespace ao::winui
 
   Result<> ThemeSessionModel::reload(ryml::ConstNodeRef node)
   {
-    auto candidate = ThemeYamlSchema{}.deserialize(node, _theme);
+    auto candidateRes = ThemeYamlSchema{}.deserialize(node, _theme);
 
-    if (!candidate)
+    if (!candidateRes)
     {
-      return std::unexpected{candidate.error()};
+      return std::unexpected{candidateRes.error()};
     }
 
-    _theme = std::move(*candidate);
+    _theme = std::move(*candidateRes);
     return {};
   }
 } // namespace ao::winui
