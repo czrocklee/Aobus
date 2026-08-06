@@ -23,6 +23,8 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -275,11 +277,9 @@ namespace ao::rt
     auto const publicSubjectMatches =
       snapshot.transport.nowPlaying.trackId == currentTrackId && snapshot.succession.currentTrackId == currentTrackId;
 
-    if (transportSession.trackId == kInvalidTrackId || transportSession.trackId != currentTrackId ||
-        (hasActiveSession() && !publicSubjectMatches))
-    {
-      return makeError(Error::Code::InvalidState, "Playback cursor and transport current tracks disagree during save");
-    }
+    gsl_Assert(transportSession.trackId != kInvalidTrackId && transportSession.trackId == currentTrackId &&
+               (!hasActiveSession() || publicSubjectMatches) &&
+               "Playback cursor and transport current tracks disagree during save");
 
     auto const session = snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, elapsed, snapshot);
 

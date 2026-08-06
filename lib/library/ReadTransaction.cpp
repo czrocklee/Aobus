@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "LibraryIdentity.h"
-#include <ao/Exception.h>
 #include <ao/library/ReadTransaction.h>
+
+#include "LibraryIdentity.h"
 #include <ao/lmdb/Transaction.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <utility>
 
@@ -17,15 +19,8 @@ namespace ao::library
 
   lmdb::ReadTransaction const& ReadTransaction::native(detail::LibraryIdentity const& identity) const
   {
-    if (_identity != &identity)
-    {
-      throwException<Exception>("Read transaction belongs to a different MusicLibrary");
-    }
-
-    if (!_transaction.isActive())
-    {
-      throwException<Exception>("Library read transaction is no longer active");
-    }
+    gsl_Expects(_identity == &identity && "Read transaction belongs to a different MusicLibrary");
+    gsl_Expects(_transaction.isActive() && "Library read transaction is no longer active");
 
     return _transaction;
   }

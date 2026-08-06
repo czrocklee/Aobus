@@ -5,23 +5,17 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryStoreTestSupport.h"
-#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
-#include <ao/lmdb/Environment.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <span>
-#include <tuple>
 #include <utility>
 
 namespace ao::library::test
@@ -35,18 +29,6 @@ namespace ao::library::test
       auto optView = writer.get(*result);
       REQUIRE(optView);
       return {*result, *optView};
-    }
-
-    void seedCorruptList(std::filesystem::path const& path)
-    {
-      using namespace ao::lmdb::test;
-
-      auto environment = openEnvironment(path, {.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
-      auto transaction = beginWriteTransaction(environment);
-      auto database = openDatabase(transaction, "lists");
-      auto const corruptPayload = std::array<std::byte, 4>{};
-      REQUIRE(database.writer(transaction).create(1, corruptPayload));
-      REQUIRE(transaction.commit());
     }
   } // namespace
 
@@ -152,34 +134,5 @@ namespace ao::library::test
     CHECK((*iterator).first == *createdRes);
     ++iterator;
     CHECK(iterator == reader.end());
-  }
-
-  TEST_CASE("ListStore - post-open corrupt records fail fast for point reads and iteration",
-            "[library][regression][list]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = makeTestMusicLibrary(temp.path(), temp.path());
-    seedCorruptList(temp.path());
-
-    SECTION("reader get")
-    {
-      auto transaction = library.readTransaction();
-      CHECK_THROWS_WITH(std::ignore = library.lists().reader(transaction).get(ListId{1}),
-                        "List 1 record is structurally corrupt after library validation");
-    }
-
-    SECTION("writer get")
-    {
-      auto transaction = writeTransaction(library);
-      CHECK_THROWS_WITH(std::ignore = library.lists().writer(transaction).get(ListId{1}),
-                        "List 1 record is structurally corrupt after library validation");
-    }
-
-    SECTION("iterator dereference")
-    {
-      auto transaction = library.readTransaction();
-      auto iterator = library.lists().reader(transaction).begin();
-      CHECK_THROWS_WITH(std::ignore = *iterator, "List 1 record is structurally corrupt after library validation");
-    }
   }
 } // namespace ao::library::test

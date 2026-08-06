@@ -18,8 +18,6 @@
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <array>
 #include <chrono>
@@ -151,35 +149,9 @@ namespace ao::rt::test
   TEST_CASE("LibraryChanges - only one replica may be bound at a time", "[runtime][unit][library][changeset]")
   {
     auto changes = makeStateOnlyLibraryChanges();
-    CHECK_THROWS_AS(changes.bindReplica("EmptyReplica", {}), Exception);
     auto binding = changes.bindReplica("FirstReplica", [](LibraryChangeSet const&) noexcept {});
 
-    CHECK_THROWS_AS(changes.bindReplica("SecondReplica", [](LibraryChangeSet const&) noexcept {}), Exception);
-
     binding.reset();
-    auto rebinding = async::Subscription{};
-    CHECK_NOTHROW(rebinding = changes.bindReplica("SecondReplica", [](LibraryChangeSet const&) noexcept {}));
-  }
-
-  TEST_CASE("LibraryChanges - a replica cannot be replaced during publication",
-            "[runtime][regression][library][changeset]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = ManualExecutor{};
-    auto changes = LibraryChanges{executor, 0};
-    auto mutationService = LibraryMutationService{
-      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
-    auto binding = changes.bindReplica("FirstReplica", [](LibraryChangeSet const&) noexcept {});
-    auto mutationRes = mutationService.beginInteractiveMutation();
-    REQUIRE(mutationRes);
-    REQUIRE(mutationRes->commit(LibraryChangeSet{}));
-    CHECK(executor.queuedCount() == 1);
-
-    binding.reset();
-    CHECK_THROWS_WITH(changes.bindReplica("SecondReplica", [](LibraryChangeSet const&) noexcept {}),
-                      Catch::Matchers::ContainsSubstring("during active publication"));
-
-    executor.runUntilIdle();
     auto rebinding = async::Subscription{};
     CHECK_NOTHROW(rebinding = changes.bindReplica("SecondReplica", [](LibraryChangeSet const&) noexcept {}));
   }

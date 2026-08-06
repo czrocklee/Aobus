@@ -5,7 +5,6 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
@@ -148,14 +147,6 @@ namespace ao::gtk::test
       CHECK(!std::filesystem::exists(layoutsDir / "classic.yaml"));
 
       REQUIRE(store.remove("classic"));
-    }
-
-    SECTION("filePath throws Exception on path traversal or empty presetId")
-    {
-      auto const store = ShellLayoutStore{layoutsDir};
-
-      CHECK_THROWS_AS(store.load("../traversal"), Exception);
-      CHECK_THROWS_AS(store.load(""), Exception);
     }
   }
 } // namespace ao::gtk::test

@@ -4,11 +4,13 @@
 #include <ao/rt/ConfigStore.h>
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
+
+#include <gsl-lite/gsl-lite.hpp>
+#include <ryml.hpp>
 
 #include <array>
 #include <cassert>
@@ -147,10 +149,7 @@ namespace ao::rt
 
   Result<ryml::Tree> ConfigStore::prepareWriteCandidate()
   {
-    if (_mode == OpenMode::ReadOnly)
-    {
-      throwException<Exception>("write called on ReadOnly ConfigStore");
-    }
+    gsl_Expects(_mode != OpenMode::ReadOnly && "write called on ReadOnly ConfigStore");
 
     if (auto const loadedRes = ensureLoaded(); !loadedRes)
     {

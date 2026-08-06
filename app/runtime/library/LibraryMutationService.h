@@ -11,6 +11,8 @@
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <condition_variable>
 #include <cstdint>
 #include <exception>
@@ -65,10 +67,7 @@ namespace ao::rt
         requires library::detail::IsResult<OperationResult>::value
       OperationResult apply(Function&& function)
       {
-        if (_owner == nullptr || _terminal)
-        {
-          return makeError(Error::Code::InvalidState, "Library mutation is already terminal");
-        }
+        gsl_Assert(_owner != nullptr && !_terminal && "Library mutation is already terminal");
 
         try
         {

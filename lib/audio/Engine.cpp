@@ -1720,10 +1720,7 @@ namespace ao::audio
 
   Result<> detail::TrackPreparation::inspect()
   {
-    if (!_implPtr || _implPtr->inspectionAttempted)
-    {
-      return makeError(Error::Code::InvalidState, "Track inspection may only run once");
-    }
+    gsl_Assert((_implPtr && !_implPtr->inspectionAttempted) && "Track inspection may only run once");
 
     _implPtr->inspectionAttempted = true;
 
@@ -1757,10 +1754,8 @@ namespace ao::audio
 
   Result<> detail::TrackPreparation::selectPrewarmFormatUnlocked(Engine& engine)
   {
-    if (!_implPtr || !_implPtr->inspectionAttempted || _implPtr->formatSelectionAttempted)
-    {
-      return makeError(Error::Code::InvalidState, "Track prewarm format may only be selected after inspection");
-    }
+    gsl_Assert((_implPtr && _implPtr->inspectionAttempted && !_implPtr->formatSelectionAttempted) &&
+               "Track prewarm format may only be selected after inspection");
 
     _implPtr->formatSelectionAttempted = true;
 
@@ -1769,10 +1764,7 @@ namespace ao::audio
       return {};
     }
 
-    if (!_implPtr->optInspection)
-    {
-      return makeError(Error::Code::InvalidState, "Track inspection result is missing");
-    }
+    gsl_Assert(_implPtr->optInspection && "Track inspection result is missing");
 
     auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
@@ -1822,11 +1814,9 @@ namespace ao::audio
 
   Result<> detail::TrackPreparation::prepare()
   {
-    if (!_implPtr || !_implPtr->inspectionAttempted || !_implPtr->formatSelectionAttempted ||
-        _implPtr->preparationAttempted)
-    {
-      return makeError(Error::Code::InvalidState, "Track preparation may only run once after format selection");
-    }
+    gsl_Assert((_implPtr && _implPtr->inspectionAttempted && _implPtr->formatSelectionAttempted &&
+                !_implPtr->preparationAttempted) &&
+               "Track preparation may only run once after format selection");
 
     _implPtr->preparationAttempted = true;
 
@@ -1835,10 +1825,7 @@ namespace ao::audio
       return {};
     }
 
-    if (!_implPtr->optInspection)
-    {
-      return makeError(Error::Code::InvalidState, "Track inspection result is missing");
-    }
+    gsl_Assert(_implPtr->optInspection && "Track inspection result is missing");
 
     auto preparedRes = detail::TrackSession::prepare(_implPtr->item.input,
                                                      *_implPtr->optInspection,
@@ -2510,11 +2497,9 @@ namespace ao::audio
     auto consumedPreparation = std::move(*this);
     auto* const preparationImpl = consumedPreparation._implPtr.get();
 
-    if (preparationImpl == nullptr || preparationImpl->purpose != Purpose::ExplicitStart ||
-        !preparationImpl->preparationAttempted || !preparationImpl->optInspection)
-    {
-      return makeError(Error::Code::InvalidState, "Explicit playback preparation is incomplete");
-    }
+    gsl_Assert((preparationImpl != nullptr && preparationImpl->purpose == Purpose::ExplicitStart &&
+                preparationImpl->preparationAttempted && preparationImpl->optInspection) &&
+               "Explicit playback preparation is incomplete");
 
     auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
@@ -2551,18 +2536,13 @@ namespace ao::audio
     auto consumedPreparation = std::move(*this);
     auto* const preparationImpl = consumedPreparation._implPtr.get();
 
-    if (preparationImpl == nullptr || preparationImpl->purpose != Purpose::GaplessLookahead ||
-        !preparationImpl->preparationAttempted)
-    {
-      return makeError(Error::Code::InvalidState, "Lookahead preparation is incomplete");
-    }
+    gsl_Assert((preparationImpl != nullptr && preparationImpl->purpose == Purpose::GaplessLookahead &&
+                preparationImpl->preparationAttempted) &&
+               "Lookahead preparation is incomplete");
 
     auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
-    if (!preparationImpl->optCurrentBackendFormat)
-    {
-      return makeError(Error::Code::InvalidState, "Lookahead preparation has no current backend format");
-    }
+    gsl_Assert(preparationImpl->optCurrentBackendFormat && "Lookahead preparation has no current backend format");
 
     auto const& currentBackendFormat = *preparationImpl->optCurrentBackendFormat;
     auto const currentMatches = engine._implPtr->currentTransitionMatches(
@@ -2573,10 +2553,8 @@ namespace ao::audio
       return makeError(Error::Code::Conflict, "Playback or output route changed during lookahead preparation");
     }
 
-    if (!preparationImpl->logicalDrainFallback && !preparationImpl->optPreparedTrack)
-    {
-      return makeError(Error::Code::InvalidState, "Lookahead source preparation is missing");
-    }
+    gsl_Assert((preparationImpl->logicalDrainFallback || preparationImpl->optPreparedTrack) &&
+               "Lookahead source preparation is missing");
 
     bool capable = false;
     auto nodePtr = std::unique_ptr<Engine::Impl::TrackNode>{};
@@ -2681,10 +2659,8 @@ namespace ao::audio
 
       auto* const preparedImpl = stagedStart._implPtr.get();
 
-      if (preparedImpl == nullptr || preparedImpl->owner != _implPtr.get())
-      {
-        return makeError(Error::Code::InvalidState, "Prepared playback belongs to a different engine");
-      }
+      gsl_Expects((preparedImpl != nullptr && preparedImpl->owner == _implPtr.get()) &&
+                  "Prepared playback belongs to a different engine");
 
       auto const currentGeneration = _implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 

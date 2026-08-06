@@ -5,12 +5,13 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/ListOrderSource.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -23,14 +24,12 @@ namespace ao::rt
 {
   CachedListSource::CachedListSource(CachedListSourceDefinition definition,
                                      std::unique_ptr<ListOrderSource> implementationPtr)
-    : _definition{std::move(definition)}, _implementationPtr{std::move(implementationPtr)}
+    : _definition{std::move(definition)}
+    , _implementationPtr{std::move(implementationPtr)}
+    , _lastPublishedSize{_implementationPtr ? _implementationPtr->size() : 0}
   {
-    if (_implementationPtr == nullptr)
-    {
-      throwException<Exception>("Cached list source requires an implementation");
-    }
+    gsl_Expects(_implementationPtr != nullptr && "Cached list source requires an implementation");
 
-    _lastPublishedSize = _implementationPtr->size();
     subscribeToImplementation();
   }
 
@@ -43,15 +42,8 @@ namespace ao::rt
   void CachedListSource::rebind(CachedListSourceDefinition definition,
                                 std::unique_ptr<ListOrderSource> implementationPtr)
   {
-    if (implementationPtr == nullptr)
-    {
-      throwException<Exception>("Cached list source rebind requires an implementation");
-    }
-
-    if (state() == TrackSourceState::Invalidated)
-    {
-      throwException<Exception>("Cannot rebind an invalidated cached list source");
-    }
+    gsl_Expects(implementationPtr != nullptr && "Cached list source rebind requires an implementation");
+    gsl_Expects(state() != TrackSourceState::Invalidated && "Cannot rebind an invalidated cached list source");
 
     auto const previousSize = _lastPublishedSize;
     _implementationSubscription.reset();

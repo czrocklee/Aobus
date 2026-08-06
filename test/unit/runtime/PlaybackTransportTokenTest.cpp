@@ -279,15 +279,6 @@ namespace ao::rt::test
     auto const firstToken = *firstRes;
     CHECK(fixture.playbackTransport.state().nowPlaying == beforePrepare);
 
-    auto const implicitReplacementRes = fixture.playbackTransport.prepareNext(successor, kSourceListId);
-    REQUIRE_FALSE(implicitReplacementRes);
-    CHECK(implicitReplacementRes.error().code == Error::Code::InvalidState);
-
-    // The rejected implicit replacement leaves the original commitment armed:
-    // clearing it returns the original token, and nothing remains afterward.
-    CHECK(fixture.playbackTransport.clearPreparedNext() == firstToken);
-    CHECK_FALSE(fixture.playbackTransport.clearPreparedNext());
-
     // Explicit session replacement does not reset the transport-lifetime token counter.
     REQUIRE(fixture.playbackTransport.play(current, ListId{8}));
     auto const secondRes = fixture.playbackTransport.prepareNext(successor, kSourceListId);

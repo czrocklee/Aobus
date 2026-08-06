@@ -25,8 +25,6 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -54,6 +52,7 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <glibmm/main.h>
+#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/dialog.h>
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/window.h>
@@ -157,11 +156,7 @@ namespace ao::gtk
         preparedRes = prepareValidatedLayout(doc, store.limits(), components, actions);
       }
 
-      if (!preparedRes)
-      {
-        throwException<Exception>(
-          "Built-in shell layout '{}' is invalid: {}", selection.presetId, preparedRes.error().message);
-      }
+      gsl_Assert(preparedRes && "Built-in shell layout is invalid");
 
       auto stateDoc = componentStateStore == nullptr
                         ? uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
@@ -176,20 +171,14 @@ namespace ao::gtk
 
     uimodel::PlaybackCommandSurface& commandSurface(uimodel::PlaybackCommandSurface* surface)
     {
-      if (surface == nullptr)
-      {
-        throwException<Exception>("ShellLayoutController: playback command surface is not bound");
-      }
+      gsl_Expects(surface != nullptr && "ShellLayoutController: playback command surface is not bound");
 
       return *surface;
     }
 
     ThemeCoordinator& requireThemeCoordinator(GtkUiDependencies const& dependencies)
     {
-      if (dependencies.themeCoordinator == nullptr)
-      {
-        throwException<Exception>("ShellLayoutController: theme coordinator is not bound");
-      }
+      gsl_Expects(dependencies.themeCoordinator != nullptr && "ShellLayoutController: theme coordinator is not bound");
 
       return *dependencies.themeCoordinator;
     }

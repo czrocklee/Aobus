@@ -537,10 +537,7 @@ namespace ao::library
 
   Result<> TrackBuilder::validateColdSerializable() const
   {
-    if (_baselineKind == BaselineKind::HotOnly)
-    {
-      return makeError(Error::Code::InvalidState, "A hot-only TrackBuilder cannot serialize cold data");
-    }
+    gsl_Expects(_baselineKind != BaselineKind::HotOnly && "A hot-only TrackBuilder cannot serialize cold data");
 
     auto uriRes = LibraryUri::parse(_propertyBuilder._uri);
 

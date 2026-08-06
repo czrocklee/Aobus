@@ -80,27 +80,6 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ListPresentationPreferenceYamlSchema - refuses to serialize noncanonical live state",
-            "[uimodel][unit][presentation-preference]")
-  {
-    auto state = ListPresentationPreferenceState{};
-
-    SECTION("Invalid list id")
-    {
-      state.presentations[kInvalidListId] = "albums";
-    }
-
-    SECTION("Empty presentation id")
-    {
-      state.presentations[ListId{10}] = "";
-    }
-
-    auto const result = toListPresentationPreferenceDocument(state);
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
-  }
-
   TEST_CASE("ListPresentationPreferenceYamlSchema - owns the exact YAML mapping",
             "[uimodel][unit][presentation-preference][yaml]")
   {

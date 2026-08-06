@@ -432,7 +432,6 @@ namespace ao::rt::test
     CHECK(cursor.currentTrackId() == kFourthTrack);
     CHECK(cursor.anchor() == frozenAnchor);
     CHECK(cursor.resolvePrevious(policy) == restartCurrent(kFourthTrack));
-    REQUIRE_THROWS_AS(cursor.applyProjectionBatch(resetBatch(), policy), Exception);
   }
 
   TEST_CASE("PlaybackCursor - repeat one overrides shuffle forward but not previous policy",

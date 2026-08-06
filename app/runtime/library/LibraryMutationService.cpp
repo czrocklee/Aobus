@@ -191,10 +191,7 @@ namespace ao::rt
 
   Result<LibraryMutationService::CommitInfo> LibraryMutationService::Mutation::commit(LibraryChangeSet changeSet)
   {
-    if (_owner == nullptr || _terminal)
-    {
-      return makeError(Error::Code::InvalidState, "Library mutation is already terminal");
-    }
+    gsl_Assert(_owner != nullptr && !_terminal && "Library mutation is already terminal");
 
     try
     {
@@ -558,10 +555,7 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "Library maintenance requires an operation kind");
     }
 
-    if (!_callbackExecutor.isCurrent())
-    {
-      return makeError(Error::Code::InvalidState, "Library maintenance must begin on the callback executor");
-    }
+    gsl_Expects(_callbackExecutor.isCurrent() && "Library maintenance must begin on the callback executor");
 
     auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "Library maintenance");
 
@@ -613,10 +607,8 @@ namespace ao::rt
   Result<LibraryMutationService::CommitInfo> LibraryMutationService::commit(Mutation& mutation,
                                                                             LibraryChangeSet changeSet)
   {
-    if (mutation._owner != this || !mutation._writerLock.owns_lock() || mutation._terminal)
-    {
-      return makeError(Error::Code::InvalidState, "Library mutation does not belong to this service");
-    }
+    gsl_Expects(mutation._owner == this && mutation._writerLock.owns_lock() && !mutation._terminal &&
+                "Library mutation does not belong to this service");
 
     auto finishTransaction = [&mutation]
     {

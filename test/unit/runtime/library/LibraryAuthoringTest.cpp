@@ -31,7 +31,6 @@
 #include <array>
 #include <cstddef>
 #include <functional>
-#include <future>
 #include <memory>
 #include <optional>
 #include <span>
@@ -197,10 +196,6 @@ namespace ao::rt::test
     REQUIRE_FALSE(failureRes);
     CHECK(failureRes.error().code == Error::Code::IoError);
 
-    auto commitRes = mutation.commit(LibraryChangeSet{});
-    REQUIRE_FALSE(commitRes);
-    CHECK(commitRes.error().code == Error::Code::InvalidState);
-
     // A failed mutation must release admission before its wrapper is destroyed.
     REQUIRE(mutationService.beginInteractiveMutation());
   }
@@ -308,28 +303,6 @@ namespace ao::rt::test
     CHECK(observed.front().maintenanceKind == LibraryMaintenanceKind::ScanApply);
     CHECK(observed.back().maintenanceKind == LibraryMaintenanceKind::None);
     CHECK(nestedMutationRejected);
-  }
-
-  TEST_CASE("Library authoring - foreign maintenance admission is neutral",
-            "[runtime][unit][library-authoring][concurrency]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto executor = QueuedExecutor{};
-    auto readTransaction = musicLibrary.readTransaction();
-    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
-    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
-    auto future =
-      std::async(std::launch::async,
-                 [&mutationService] { return mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply); });
-
-    auto result = future.get();
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
-    CHECK(mutationService.availability().state == LibraryAuthoringState::Available);
-    CHECK(mutationService.availability().maintenanceKind == LibraryMaintenanceKind::None);
   }
 
   TEST_CASE("Library authoring - foreign runtime binding is stale even during maintenance",

@@ -4,8 +4,9 @@
 #include "runtime/playback/ProjectionAnchor.h"
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/projection/TrackListProjection.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <concepts>
@@ -22,10 +23,8 @@ namespace ao::rt
   {
     std::size_t checkedRangeEnd(std::size_t const start, std::size_t const count)
     {
-      if (count == 0 || count > std::numeric_limits<std::size_t>::max() - start)
-      {
-        throwException<Exception>("Projection anchor received an invalid row range");
-      }
+      gsl_Expects(count != 0 && count <= std::numeric_limits<std::size_t>::max() - start &&
+                  "Projection anchor received an invalid row range");
 
       return start + count;
     }
@@ -35,10 +34,7 @@ namespace ao::rt
                                            std::size_t const anchorIndex,
                                            std::size_t const projectionSize)
   {
-    if (anchorIndex >= projectionSize)
-    {
-      throwException<Exception>("Bound projection anchor must address a projected row");
-    }
+    gsl_Expects(anchorIndex < projectionSize && "Bound projection anchor must address a projected row");
 
     return ProjectionAnchor{trackId, State::Bound, anchorIndex};
   }
@@ -53,27 +49,18 @@ namespace ao::rt
   ProjectionAnchor::ProjectionAnchor(TrackId const trackId, State const state, std::size_t const anchorIndex)
     : _trackId{trackId}, _state{state}, _anchorIndex{anchorIndex}
   {
-    if (trackId == kInvalidTrackId)
-    {
-      throwException<Exception>("Projection anchor requires a valid track identity");
-    }
+    gsl_Expects(trackId != kInvalidTrackId && "Projection anchor requires a valid track identity");
   }
 
   void ProjectionAnchor::applyBatch(TrackListProjectionDeltaBatch const& batch,
                                     std::size_t const projectionSize,
                                     std::optional<std::size_t> const optTrackIndex)
   {
-    if (batch.deltas.empty())
-    {
-      throwException<Exception>("Projection anchor requires a non-empty delta batch");
-    }
+    gsl_Expects(!batch.deltas.empty() && "Projection anchor requires a non-empty delta batch");
 
     if (std::holds_alternative<ProjectionReset>(batch.deltas.front()))
     {
-      if (batch.deltas.size() != 1)
-      {
-        throwException<Exception>("Projection reset must be the only delta in its batch");
-      }
+      gsl_Expects(batch.deltas.size() == 1 && "Projection reset must be the only delta in its batch");
 
       reconcile(projectionSize, optTrackIndex);
       return;
@@ -100,11 +87,11 @@ namespace ao::rt
           }
           else if constexpr (std::same_as<Value, ProjectionSourceInvalidated>)
           {
-            throwException<Exception>("Projection anchor cannot consume a source-invalidated projection");
+            gsl_Assert(false && "Projection anchor cannot consume a source-invalidated projection");
           }
           else
           {
-            throwException<Exception>("Projection reset must be the only delta in its batch");
+            gsl_Assert(false && "Projection reset must be the only delta in its batch");
           }
         },
         delta);
@@ -123,10 +110,8 @@ namespace ao::rt
       return;
     }
 
-    if (count > std::numeric_limits<std::size_t>::max() - _anchorIndex)
-    {
-      throwException<Exception>("Projection insertion overflows the anchor index");
-    }
+    gsl_Assert(count <= std::numeric_limits<std::size_t>::max() - _anchorIndex &&
+               "Projection insertion overflows the anchor index");
 
     _anchorIndex += count;
   }
@@ -156,10 +141,7 @@ namespace ao::rt
   {
     if (optTrackIndex)
     {
-      if (*optTrackIndex >= projectionSize)
-      {
-        throwException<Exception>("Projection identity index is outside the final projection");
-      }
+      gsl_Assert(*optTrackIndex < projectionSize && "Projection identity index is outside the final projection");
 
       _state = State::Bound;
       _anchorIndex = *optTrackIndex;

@@ -74,10 +74,6 @@ namespace ao::library::test
     CHECK(operationRes.error().code == Error::Code::Conflict);
     CHECK(operationRes.error().message == "reject staged write");
 
-    auto commitRes = transaction.commit();
-    REQUIRE_FALSE(commitRes);
-    CHECK(commitRes.error().code == Error::Code::InvalidState);
-
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();
 
@@ -155,37 +151,5 @@ namespace ao::library::test
 
     auto readTransaction = library.readTransaction();
     CHECK_FALSE(library.resources().reader(readTransaction).get(stagedId));
-  }
-
-  TEST_CASE("WriteTransaction - root operation cannot nest or commit", "[library][unit][write-transaction]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
-
-    SECTION("nested operation")
-    {
-      auto transaction = writable.writeTransaction();
-      auto operationRes = transaction.apply(
-        [](WriteTransaction& activeTransaction) -> Result<>
-        {
-          return activeTransaction.apply([](WriteTransaction&) -> Result<> { return {}; });
-        });
-
-      REQUIRE_FALSE(operationRes);
-      CHECK(operationRes.error().code == Error::Code::InvalidState);
-      CHECK_FALSE(transaction.commit());
-    }
-
-    SECTION("commit from operation")
-    {
-      auto transaction = writable.writeTransaction();
-      auto operationRes =
-        transaction.apply([](WriteTransaction& activeTransaction) { return activeTransaction.commit(); });
-
-      REQUIRE_FALSE(operationRes);
-      CHECK(operationRes.error().code == Error::Code::InvalidState);
-      CHECK_FALSE(transaction.commit());
-    }
   }
 } // namespace ao::library::test

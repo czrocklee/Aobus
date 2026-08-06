@@ -6,7 +6,6 @@
 #include "runtime/PlaybackSessionState.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
@@ -1453,15 +1452,8 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
-    if (!handler)
-    {
-      throwException<Exception>("Playback failure recovery handler must not be empty");
-    }
-
-    if (impl->playbackFailureRecoveryHandlerPtr)
-    {
-      throwException<Exception>("Playback failure recovery handler is already bound");
-    }
+    gsl_Expects(handler && "Playback failure recovery handler must not be empty");
+    gsl_Expects(!impl->playbackFailureRecoveryHandlerPtr && "Playback failure recovery handler is already bound");
 
     impl->playbackFailureRecoveryHandlerPtr = std::make_shared<PlaybackFailureRecoveryHandler>(std::move(handler));
   }
@@ -1545,11 +1537,7 @@ namespace ao::rt
     auto* const impl = checkedImpl();
     impl->ensureReady();
 
-    if (impl->optActivePreparedToken)
-    {
-      return makeError(
-        Error::Code::InvalidState, "Prepared-next request must be cleared before preparing a replacement");
-    }
+    gsl_Expects(!impl->optActivePreparedToken && "Implicit token replacement is prohibited");
 
     auto requestRes = playbackRequestForTrack(impl->library, trackId);
 
@@ -1676,10 +1664,7 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
-    if (!preparedStart._implPtr)
-    {
-      return makeError(Error::Code::InvalidState, "Prepared playback start was already consumed");
-    }
+    gsl_Expects(preparedStart._implPtr && "Start transition requires a valid prepared token");
 
     if (impl->isClosing())
     {
@@ -1771,11 +1756,7 @@ namespace ao::rt
 
     impl->ensureReady();
 
-    if (impl->optActivePreparedToken)
-    {
-      return makeError(
-        Error::Code::InvalidState, "Prepared-next request must be cleared before preparing a replacement");
-    }
+    gsl_Expects(!impl->optActivePreparedToken && "Implicit token replacement is prohibited");
 
     auto item = impl->makePlaybackItem(request.input);
     auto const result = impl->playerPtr->prepareNext(item);

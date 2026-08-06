@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/rt/source/TrackSource.h>
+
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -26,10 +26,7 @@ namespace ao::rt
 
   async::Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDelta const&) noexcept> handler)
   {
-    if (!handler)
-    {
-      throwException<Exception>("Track source subscription handler must not be empty");
-    }
+    gsl_Expects(static_cast<bool>(handler) && "Track source subscription handler must not be empty");
 
     if (_state == TrackSourceState::Invalidated)
     {

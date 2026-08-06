@@ -10,7 +10,6 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
@@ -414,9 +413,6 @@ namespace ao::library::test
 
       optTransaction->abort();
       REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
-      auto commitRes = optTransaction->commit();
-      REQUIRE_FALSE(commitRes);
-      CHECK(commitRes.error().code == Error::Code::InvalidState);
     }
 
     SECTION("commit failure")
@@ -457,81 +453,6 @@ namespace ao::library::test
       }
 
       REQUIRE(WritableMusicLibrary::acquire(secondSmallLibrary));
-    }
-  }
-
-  TEST_CASE("MusicLibrary - moved-from write transactions are inactive", "[library][unit][music-library]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = makeTestMusicLibrary(temp.path(), temp.path());
-    auto source = writeTransaction(library);
-    auto destination = std::move(source);
-
-    // The wrapper specifies an inactive moved-from state that is safe to query.
-    // NOLINTNEXTLINE(bugprone-use-after-move)
-    CHECK_THROWS_AS(source.dictionary(), Exception);
-    auto const sourceCommitRes = source.commit();
-    REQUIRE_FALSE(sourceCommitRes);
-    CHECK(sourceCommitRes.error().code == Error::Code::InvalidState);
-    REQUIRE(destination.commit());
-  }
-
-  TEST_CASE("MusicLibrary - write transaction commit is terminal", "[library][unit][music-library]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = makeTestMusicLibrary(temp.path(), temp.path());
-    auto transaction = writeTransaction(library);
-
-    REQUIRE(transaction.commit());
-    auto const repeatedCommitRes = transaction.commit();
-    REQUIRE_FALSE(repeatedCommitRes);
-    CHECK(repeatedCommitRes.error().code == Error::Code::InvalidState);
-    CHECK_THROWS_AS(transaction.dictionary(), Exception);
-  }
-
-  TEST_CASE("MusicLibrary - moved-from read transactions are inactive", "[library][unit][music-library]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = makeTestMusicLibrary(temp.path(), temp.path());
-    auto source = library.readTransaction();
-    auto destination = std::move(source);
-
-    // The wrapper specifies an inactive moved-from state that is safe to query.
-    // NOLINTNEXTLINE(bugprone-use-after-move)
-    CHECK_THROWS_AS(library.tracks().reader(source), Exception);
-    CHECK_NOTHROW(library.tracks().reader(destination));
-  }
-
-  TEST_CASE("MusicLibrary - rejects transactions from another library", "[library][unit][music-library]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto libraryA = makeTestMusicLibrary(temp.path() / "music-a", temp.path() / "db-a");
-    auto libraryB = makeTestMusicLibrary(temp.path() / "music-b", temp.path() / "db-b");
-    auto const libraryBHeader = libraryB.metadataHeader();
-
-    {
-      auto const transaction = libraryA.readTransaction();
-      CHECK_THROWS_AS(libraryB.tracks().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.lists().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.resources().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.manifest().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.metadata().load(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.libraryRevision(transaction), Exception);
-    }
-
-    {
-      auto transaction = writeTransaction(libraryA);
-      CHECK_THROWS_AS(libraryB.tracks().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.tracks().writer(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.lists().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.lists().writer(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.resources().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.resources().writer(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.manifest().reader(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.manifest().writer(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.metadata().load(transaction), Exception);
-      CHECK_THROWS_AS(libraryB.metadata().update(transaction, libraryBHeader), Exception);
-      CHECK_THROWS_AS(libraryB.libraryRevision(transaction), Exception);
     }
   }
 } // namespace ao::library::test

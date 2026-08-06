@@ -3,9 +3,10 @@
 
 #include "runtime/playback/PlaybackRestartDeadline.h"
 
-#include <ao/Exception.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -24,15 +25,8 @@ namespace ao::rt
       , liveElapsedReader{std::move(liveElapsedReader)}
       , availabilityChangedHandler{std::move(availabilityChangedHandler)}
     {
-      if (!this->liveElapsedReader)
-      {
-        throwException<Exception>("Playback restart deadline requires a live elapsed reader");
-      }
-
-      if (!this->availabilityChangedHandler)
-      {
-        throwException<Exception>("Playback restart deadline requires an availability handler");
-      }
+      gsl_Expects(this->liveElapsedReader && "Playback restart deadline requires a live elapsed reader");
+      gsl_Expects(this->availabilityChangedHandler && "Playback restart deadline requires an availability handler");
     }
 
     static Elapsed normalizeElapsed(Elapsed const elapsed) noexcept { return std::max(elapsed, Elapsed::zero()); }

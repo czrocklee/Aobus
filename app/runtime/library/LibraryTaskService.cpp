@@ -598,10 +598,7 @@ namespace ao::rt
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
-    if (!plan._implPtr)
-    {
-      co_return makeError(Error::Code::InvalidState, "Import plan has already been consumed");
-    }
+    gsl_Expects(plan._implPtr && "Import plan has already been consumed");
 
     auto maintenanceRes = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
 

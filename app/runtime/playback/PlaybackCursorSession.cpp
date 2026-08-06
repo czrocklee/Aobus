@@ -7,7 +7,6 @@
 #include "runtime/playback/ShuffleHistory.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
@@ -16,6 +15,8 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -163,15 +164,8 @@ namespace ao::rt
 
   void PlaybackCursorSession::startObserving(ProjectionBatchHandler handler)
   {
-    if (_projectionSubscription)
-    {
-      throwException<Exception>("Playback cursor session is already observing its projection");
-    }
-
-    if (!handler)
-    {
-      throwException<Exception>("Playback cursor session requires a projection batch handler");
-    }
+    gsl_Expects(!_projectionSubscription && "Playback cursor session is already observing its projection");
+    gsl_Expects(handler && "Playback cursor session requires a projection batch handler");
 
     _projectionBatchHandler = std::move(handler);
     _projectionSubscription = _projectionPtr->subscribe([this](TrackListProjectionDeltaBatch const& batch) noexcept
@@ -253,10 +247,8 @@ namespace ao::rt
 
     if (_cursor.sourceState() == PlaybackCursor::SourceState::Invalidated)
     {
-      if (optPreparedNextToken && !_preparedNextRegistry.resolveWinner(*optPreparedNextToken))
-      {
-        return makeError(Error::Code::InvalidState, "Prepared transition token is unknown to this playback session");
-      }
+      gsl_Assert((!optPreparedNextToken || _preparedNextRegistry.resolveWinner(*optPreparedNextToken)) &&
+                 "Prepared transition token is unknown to this playback session");
 
       if (!optPreparedNextToken)
       {
@@ -272,10 +264,7 @@ namespace ao::rt
     {
       optAnchor = _preparedNextRegistry.resolveWinner(*optPreparedNextToken);
 
-      if (!optAnchor)
-      {
-        return makeError(Error::Code::InvalidState, "Prepared transition token is unknown to this playback session");
-      }
+      gsl_Assert(optAnchor && "Prepared transition token is unknown to this playback session");
     }
     else
     {

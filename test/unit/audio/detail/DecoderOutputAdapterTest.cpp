@@ -17,17 +17,6 @@
 
 namespace ao::audio::detail::test
 {
-  TEST_CASE("DecoderOutputAdapter - conversion requires a configured format", "[audio][unit][decoder-output]")
-  {
-    auto adapter = DecoderOutputAdapter{std::nullopt};
-    auto const bytes = std::array{std::byte{0x00}, std::byte{0x00}};
-
-    auto const convertedRes = adapter.convert(bytes);
-
-    REQUIRE_FALSE(convertedRes);
-    CHECK(convertedRes.error().code == Error::Code::InvalidState);
-  }
-
   TEST_CASE("DecoderOutputAdapter - configure rejects precision loss", "[audio][unit][decoder-output]")
   {
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24};
@@ -116,9 +105,5 @@ namespace ao::audio::detail::test
 
     CHECK(adapter.nativeFormat() == PcmFormat{});
     CHECK(adapter.outputFormat() == PcmFormat{});
-    auto const bytes = std::array{std::byte{0x00}, std::byte{0x00}};
-    auto const convertedRes = adapter.convert(bytes);
-    REQUIRE_FALSE(convertedRes);
-    CHECK(convertedRes.error().code == Error::Code::InvalidState);
   }
 } // namespace ao::audio::detail::test

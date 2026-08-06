@@ -4,7 +4,6 @@
 #include "app/ShellLayoutComponentStateStore.h"
 
 #include "test/unit/TestFixtureSupport.h"
-#include <ao/Exception.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -162,15 +161,6 @@ namespace ao::gtk::test
       preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
       CHECK(store.prune("classic", *preparedRes));
-    }
-
-    SECTION("preset validation rejects path traversal, empty ids, and null bytes")
-    {
-      auto const store = ShellLayoutComponentStateStore{stateDir};
-
-      CHECK_THROWS_AS(store.load("../traversal"), Exception);
-      CHECK_THROWS_AS(store.load(""), Exception);
-      CHECK_THROWS_AS(store.load(std::string{"class\0ic", 9}), Exception);
     }
 
     SECTION("saved state file is readable only by owner")

@@ -12,6 +12,8 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/utility/ThreadName.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -82,10 +84,7 @@ namespace ao::audio
 
   Result<> StreamingSource::prepare()
   {
-    if (_prepared || _activated)
-    {
-      return makeError(Error::Code::InvalidState, "Streaming source preparation may only run once");
-    }
+    gsl_Expects((!_prepared && !_activated) && "Streaming source preparation may only run once");
 
     auto const seekToken = _seekStopSource.get_token();
 
@@ -123,10 +122,7 @@ namespace ao::audio
 
   Result<> StreamingSource::activate(std::function<void(Error const&)> onError)
   {
-    if (!_prepared || _activated)
-    {
-      return makeError(Error::Code::InvalidState, "Streaming source activation requires one prepared source");
-    }
+    gsl_Expects((_prepared && !_activated) && "Streaming source activation requires one prepared source");
 
     _onError = std::move(onError);
     _activated = true;
@@ -158,10 +154,7 @@ namespace ao::audio
   // streaming source intentionally fails fast if that escapes its noexcept contract.
   Result<> StreamingSource::seek(std::chrono::milliseconds offset) noexcept
   {
-    if (!_prepared || !_activated)
-    {
-      return makeError(Error::Code::InvalidState, "Streaming source seek requires an activated source");
-    }
+    gsl_Expects((_prepared && _activated) && "Streaming source seek requires an activated source");
 
     stopDecodeThread();
 

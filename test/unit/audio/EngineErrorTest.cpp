@@ -6,7 +6,6 @@
 #include "ScriptedDecoderSession.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -19,13 +18,11 @@
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <expected>
-#include <filesystem>
 #include <future>
 #include <memory>
 #include <optional>
@@ -53,39 +50,6 @@ namespace ao::audio::test
       return future.get();
     }
   } // namespace
-
-  TEST_CASE("Engine - unexpected decoder factory exceptions escape track preparation",
-            "[audio][regression][engine][error]")
-  {
-    SECTION("Inspection")
-    {
-      auto const factory = [](std::filesystem::path const&,
-                              std::optional<SampleEncoding>) -> std::unique_ptr<DecoderSession>
-      { throwException<Exception>("track inspection invariant"); };
-      auto engine = Engine{std::make_unique<FakeCapturingBackend>(), makeEngineTestDevice(), factory};
-
-      REQUIRE_THROWS_WITH(engine.stagePlayback(makePlaybackItem("inspection.flac")), "track inspection invariant");
-    }
-
-    SECTION("Optimistic decoder preparation")
-    {
-      auto const factory =
-        [scriptedFactory = makeScriptedEngineDecoderFactory()](
-          std::filesystem::path const& path,
-          std::optional<SampleEncoding> const optOutputEncoding) mutable -> std::unique_ptr<DecoderSession>
-      {
-        if (optOutputEncoding)
-        {
-          throwException<Exception>("track preparation invariant");
-        }
-
-        return scriptedFactory(path, optOutputEncoding);
-      };
-      auto engine = Engine{std::make_unique<FakeCapturingBackend>(), makeEngineTestDevice(), factory};
-
-      REQUIRE_THROWS_WITH(engine.stagePlayback(makePlaybackItem("preparation.flac")), "track preparation invariant");
-    }
-  }
 
   TEST_CASE("Engine - play reports decoder and backend setup failures", "[audio][unit][engine][error]")
   {

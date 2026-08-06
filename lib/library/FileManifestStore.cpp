@@ -5,13 +5,13 @@
 
 #include "FileManifestValidation.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/ByteView.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <cstddef>
@@ -32,15 +32,8 @@ namespace ao::library
     {
       auto parsedRes = LibraryUri::parse(uri);
 
-      if (!parsedRes)
-      {
-        throwException<Exception>("Invalid file manifest URI '{}': {}", uri, parsedRes.error().message);
-      }
-
-      if (parsedRes->value() != uri)
-      {
-        throwException<Exception>("File manifest URI '{}' is not canonical", uri);
-      }
+      gsl_Expects(parsedRes && "Invalid file manifest URI");
+      gsl_Expects(parsedRes->value() == uri && "File manifest URI is not canonical");
     }
 
     std::span<std::byte const> padUri(std::string_view uri, std::span<std::byte> buffer)
@@ -102,18 +95,11 @@ namespace ao::library
       return std::nullopt;
     }
 
-    if (auto const validationRes = validateFileManifestEntry(key.view(), *optData); !validationRes)
-    {
-      throwException<Exception>(
-        "File manifest entry for URI '{}' failed validation: {}", uri, validationRes.error().message);
-    }
+    auto const validationRes = validateFileManifestEntry(key.view(), *optData);
+    gsl_Assert(validationRes && "File manifest entry failed validation");
 
     auto view = FileManifestView{*optData};
-
-    if (!view.isValid())
-    {
-      throwException<Exception>("File manifest entry for URI '{}' is misaligned", uri);
-    }
+    gsl_Assert(view.isValid() && "File manifest entry is misaligned");
 
     return view;
   }
@@ -129,18 +115,10 @@ namespace ao::library
     auto const pair = *_it;
     auto validationRes = validateFileManifestEntry(pair.first, pair.second);
 
-    if (!validationRes)
-    {
-      throwException<Exception>(
-        "File manifest iterator encountered invalid data after library validation: {}", validationRes.error().message);
-    }
+    gsl_Assert(validationRes && "File manifest iterator encountered invalid data after library validation");
 
     auto view = FileManifestView{pair.second};
-
-    if (!view.isValid())
-    {
-      throwException<Exception>("File manifest iterator encountered a misaligned payload after library validation");
-    }
+    gsl_Assert(view.isValid() && "File manifest iterator encountered a misaligned payload after library validation");
 
     return {validationRes->uri, view};
   }
@@ -163,18 +141,11 @@ namespace ao::library
       return std::nullopt;
     }
 
-    if (auto const validationRes = validateFileManifestEntry(key.view(), *optData); !validationRes)
-    {
-      throwException<Exception>(
-        "File manifest entry for URI '{}' failed validation: {}", uri, validationRes.error().message);
-    }
+    auto const validationRes = validateFileManifestEntry(key.view(), *optData);
+    gsl_Assert(validationRes && "File manifest entry failed validation");
 
     auto view = FileManifestView{*optData};
-
-    if (!view.isValid())
-    {
-      throwException<Exception>("File manifest entry for URI '{}' is misaligned", uri);
-    }
+    gsl_Assert(view.isValid() && "File manifest entry is misaligned");
 
     return view;
   }
@@ -185,11 +156,8 @@ namespace ao::library
 
     auto const key = PaddedUriKey{uri};
 
-    if (auto const validationRes = validateFileManifestEntry(key.view(), payload); !validationRes)
-    {
-      throwException<Exception>(
-        "Cannot write invalid file manifest entry for URI '{}': {}", uri, validationRes.error().message);
-    }
+    auto const validationRes = validateFileManifestEntry(key.view(), payload);
+    gsl_Expects(validationRes && "Cannot write invalid file manifest entry");
 
     return _writer.update(key.view(), payload);
   }

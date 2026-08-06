@@ -13,9 +13,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
-#include <cstdint>
-#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -226,70 +223,6 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == expectedCode);
-  }
-
-  TEST_CASE("WorkspaceSessionYamlSchema - refuses to serialize invalid live state",
-            "[runtime][unit][workspace][session-schema]")
-  {
-    auto state = WorkspaceSessionState{
-      .openViews =
-        {
-          TrackListViewConfig{.listId = ListId{10}, .optPresentation = makePresentation()},
-        },
-    };
-
-    SECTION("Invalid list id")
-    {
-      state.openViews[0].listId = kInvalidListId;
-    }
-
-    SECTION("Nonempty workspace active index is out of bounds")
-    {
-      state.activeViewIndex = 1;
-    }
-
-    SECTION("Empty workspace active index is nonzero")
-    {
-      state.openViews.clear();
-      state.activeViewIndex = 1;
-    }
-
-    SECTION("Active index is not representable by the persistence DTO")
-    {
-      if constexpr (std::numeric_limits<std::size_t>::max() > std::numeric_limits<std::uint32_t>::max())
-      {
-        state.activeViewIndex = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) + 1;
-      }
-      else
-      {
-        state.activeViewIndex = state.openViews.size();
-      }
-    }
-
-    SECTION("Missing exact presentation")
-    {
-      state.openViews[0].optPresentation.reset();
-    }
-
-    SECTION("Empty presentation id")
-    {
-      state.openViews[0].optPresentation->id.clear();
-    }
-
-    SECTION("Duplicate sort field")
-    {
-      state.openViews[0].optPresentation->sortBy.push_back(state.openViews[0].optPresentation->sortBy[0]);
-    }
-
-    SECTION("Invalid field enum")
-    {
-      state.openViews[0].optPresentation->visibleFields[0] = static_cast<TrackField>(255);
-    }
-
-    auto const result = detail::toWorkspaceSessionDocument(state);
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("WorkspaceSessionYamlSchema - owns the exact YAML mapping", "[runtime][unit][workspace][session-schema]")

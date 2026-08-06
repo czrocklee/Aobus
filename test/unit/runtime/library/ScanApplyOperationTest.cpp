@@ -291,27 +291,6 @@ namespace ao::rt::test
     CHECK_FALSE(optNewManifest);
   }
 
-  TEST_CASE("ScanApplyOperation - apply requires prepared-file revalidation", "[runtime][unit][library][scan]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
-    std::filesystem::create_directories(musicRoot);
-    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), musicRoot / "song.flac");
-
-    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto plan = LibraryScan{ml}.buildPlan().value();
-    auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
-    REQUIRE(operation.prepare());
-
-    auto writableRes = library::WritableMusicLibrary::acquire(ml);
-    REQUIRE(writableRes);
-    auto transaction = writableRes->writeTransaction();
-    auto applyRes = operation.apply(transaction);
-
-    REQUIRE_FALSE(applyRes);
-    CHECK(applyRes.error().code == Error::Code::InvalidState);
-  }
-
   TEST_CASE("ScanApplyOperation - one revalidation permits exactly one apply", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
@@ -333,9 +312,6 @@ namespace ao::rt::test
     REQUIRE(firstApplyRes);
     REQUIRE(firstApplyRes->insertedIds.size() == 1);
 
-    auto secondApplyRes = operation.apply(transaction);
-    REQUIRE_FALSE(secondApplyRes);
-    CHECK(secondApplyRes.error().code == Error::Code::InvalidState);
     REQUIRE(transaction.commit());
 
     auto readTransaction = ml.readTransaction();

@@ -4,7 +4,6 @@
 #include "runtime/playback/ProjectionAnchor.h"
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -138,16 +137,6 @@ namespace ao::rt::test
     CHECK(present.anchorIndex() == 1);
   }
 
-  TEST_CASE("ProjectionAnchor - source invalidation is rejected as terminal", "[runtime][unit][playback-cursor]")
-  {
-    auto anchor = ProjectionAnchor::bound(kCurrentTrack, 1, 3);
-    auto const terminalBatch = TrackListProjectionDeltaBatch{
-      .deltas = {ProjectionSourceInvalidated{}},
-    };
-
-    REQUIRE_THROWS_AS(anchor.applyBatch(terminalBatch, 0, std::nullopt), Exception);
-  }
-
   TEST_CASE("ProjectionAnchor - empty and end gaps retain successor semantics", "[runtime][unit][playback-cursor]")
   {
     auto emptied = ProjectionAnchor::bound(kCurrentTrack, 0, 1);
@@ -166,8 +155,6 @@ namespace ao::rt::test
     auto const clamped = ProjectionAnchor::gap(kCurrentTrack, 99, 4);
     CHECK(clamped.state() == ProjectionAnchor::State::Gap);
     CHECK(clamped.anchorIndex() == 4);
-
-    REQUIRE_THROWS_AS(ProjectionAnchor::bound(kCurrentTrack, 4, 4), Exception);
-    REQUIRE_THROWS_AS(ProjectionAnchor::gap(kInvalidTrackId, 0, 0), Exception);
+    CHECK(ProjectionAnchor::gap(kCurrentTrack, 4, 3).anchorIndex() == 3);
   }
 } // namespace ao::rt::test

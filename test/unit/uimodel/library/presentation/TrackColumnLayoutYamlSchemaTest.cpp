@@ -118,38 +118,6 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackColumnLayoutYamlSchema - refuses to serialize noncanonical live state",
-            "[uimodel][unit][track-column-layout]")
-  {
-    auto state = TrackColumnLayoutState{};
-
-    SECTION("Column has neither a width nor a weight")
-    {
-      state.listLayouts[ListId{10}] = {
-        TrackColumnState{.field = rt::TrackField::Title},
-      };
-    }
-
-    SECTION("Flexible field uses fixed form")
-    {
-      state.listLayouts[ListId{10}] = {
-        TrackColumnState{.field = rt::TrackField::Title, .width = 200},
-      };
-    }
-
-    SECTION("Fixed field uses flexible form")
-    {
-      state.listLayouts[ListId{10}] = {
-        TrackColumnState{.field = rt::TrackField::Duration, .weight = 1.0},
-      };
-    }
-
-    auto const result = toTrackColumnLayoutDocument(state);
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
-  }
-
   TEST_CASE("TrackColumnLayoutYamlSchema - owns the exact YAML mapping", "[uimodel][unit][track-column-layout][yaml]")
   {
     auto state = TrackColumnLayoutState{};

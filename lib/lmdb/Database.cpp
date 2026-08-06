@@ -62,10 +62,7 @@ namespace ao::lmdb
 
   Result<Database> Database::open(WriteTransaction& txn, std::string const& name, KeyKind kind)
   {
-    if (!txn.isActive())
-    {
-      return makeError(Error::Code::InvalidState, "Cannot open a database with a finished write transaction");
-    }
+    gsl_Expects(txn.isActive() && "Cannot open a database with a finished write transaction");
 
     DbiHandle dbi = {};
     unsigned int flags = MDB_CREATE;
@@ -87,10 +84,7 @@ namespace ao::lmdb
 
   Result<Database> Database::open(ReadTransaction& txn, std::string const& name, KeyKind kind)
   {
-    if (!txn.isActive())
-    {
-      return makeError(Error::Code::InvalidState, "Cannot open a database with an inactive read transaction");
-    }
+    gsl_Expects(txn.isActive() && "Cannot open a database with an inactive read transaction");
 
     DbiHandle dbi = {};
     unsigned int flags = 0;

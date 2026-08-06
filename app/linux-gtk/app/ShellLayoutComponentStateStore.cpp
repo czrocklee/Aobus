@@ -3,13 +3,14 @@
 
 #include "ShellLayoutComponentStateStore.h"
 
-#include <ao/Exception.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <exception>
 #include <filesystem>
@@ -27,11 +28,9 @@ namespace ao::gtk
   {
     void validatePresetId(std::string_view presetId)
     {
-      if (presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains("..") ||
-          presetId.contains('\0'))
-      {
-        throwException<Exception>("Invalid preset ID: path traversal attempt or empty ID");
-      }
+      gsl_Expects(!(presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains("..") ||
+                    presetId.contains('\0')) &&
+                  "Invalid preset ID: path traversal attempt or empty ID");
     }
   } // namespace
   ShellLayoutComponentStateStore::ShellLayoutComponentStateStore(std::filesystem::path stateDir)

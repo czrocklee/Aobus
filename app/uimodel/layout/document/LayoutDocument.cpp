@@ -10,6 +10,8 @@
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <array>
 #include <cstdint>
 #include <expected>
@@ -132,10 +134,7 @@ namespace ao::uimodel
 
   Result<> writeLayoutNode(ryml::NodeRef node, LayoutNode const& value)
   {
-    if (value.type.empty())
-    {
-      return makeError(Error::Code::InvalidState, "Layout node type must not be empty");
-    }
+    gsl_Expects(!value.type.empty() && "Layout node type must not be empty");
 
     auto writer = yaml::MapWriter{node};
 

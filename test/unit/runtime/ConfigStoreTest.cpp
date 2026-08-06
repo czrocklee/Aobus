@@ -439,12 +439,5 @@ namespace ao::rt::test
       REQUIRE(store.removeGroup("missing"));
       CHECK_FALSE(std::filesystem::exists(configPath));
     }
-
-    SECTION("Read-only stores reject writes")
-    {
-      auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly};
-      CHECK_THROWS_AS(store.save("group", State{}, StateYamlSchema{}), Exception);
-      CHECK_THROWS_AS(store.removeGroup("group"), Exception);
-    }
   }
 } // namespace ao::rt::test

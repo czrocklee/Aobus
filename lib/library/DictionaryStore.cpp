@@ -6,7 +6,6 @@
 #include "detail/LibraryError.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
@@ -77,15 +76,9 @@ namespace ao::library
     auto index = id.raw();
 
     // 0 is null/invalid
-    if (index == 0)
-    {
-      ao::throwException<Exception>("Invalid dictionary ID");
-    }
+    gsl_Expects(index != 0 && "Invalid dictionary ID");
 
-    if (index - 1 >= _idToStringStorage.size())
-    {
-      ao::throwException<Exception>("Invalid dictionary ID");
-    }
+    gsl_Expects(index - 1 < _idToStringStorage.size() && "Invalid dictionary ID");
 
     return _idToStringStorage[index - 1];
   }
@@ -112,7 +105,8 @@ namespace ao::library
       return *it;
     }
 
-    ao::throwException<Exception>("String not found in dictionary");
+    gsl_Assert(false && "String not found in dictionary");
+    std::unreachable();
   }
 
   std::optional<DictionaryId> DictionaryStore::findId(std::string_view str) const
@@ -191,10 +185,7 @@ namespace ao::library
 
     Result<DictionaryId> intern(std::string_view value)
     {
-      if (!transaction->isActive())
-      {
-        return makeError(Error::Code::InvalidState, "Dictionary writer transaction is no longer active");
-      }
+      gsl_Expects(transaction->isActive() && "Dictionary writer transaction is no longer active");
 
       if (auto const optId = dictionary->findId(value); optId)
       {
@@ -252,10 +243,8 @@ namespace ao::library
 
       auto const expectedFirstId = static_cast<std::uint32_t>(dictionary->_idToStringStorage.size()) + 1;
 
-      if (delta.front().id.raw() != expectedFirstId)
-      {
-        throwException<Exception>("Dictionary publication order changed during a library write");
-      }
+      gsl_Assert(delta.front().id.raw() == expectedFirstId &&
+                 "Dictionary publication order changed during a library write");
 
       try
       {
@@ -271,10 +260,7 @@ namespace ao::library
         {
           auto const [it, inserted] = dictionary->_stringToId.insert(entry.id);
 
-          if (!inserted)
-          {
-            throwException<Exception>("Dictionary publication would rebind an existing string");
-          }
+          gsl_Assert(inserted && "Dictionary publication would rebind an existing string");
 
           insertedCount++;
         }

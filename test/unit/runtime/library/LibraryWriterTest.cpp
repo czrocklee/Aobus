@@ -9,7 +9,6 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
@@ -557,38 +556,6 @@ namespace ao::rt::test
     auto reader = musicLibrary.lists().reader(transaction);
     CHECK(reader.get(ListId{1}).has_value());
     CHECK(reader.get(ListId{2}).has_value());
-    CHECK(events.empty());
-  }
-
-  TEST_CASE("LibraryWriter - corrupt List iteration aborts subtree deletion without partial state",
-            "[runtime][regression][list-delete][delete-subtree]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto const rootPayload = ao::test::requireValue(library::ListBuilder::makeEmpty().name("Root").serialize());
-    auto const childPayload =
-      ao::test::requireValue(library::ListBuilder::makeEmpty().parentId(ListId{1}).name("Child").serialize());
-    auto const corruptPayload = std::array<std::byte, 4>{};
-    seedRawListRecords(temp.path(),
-                       std::array{RawListRecord{.listId = 1, .payload = rootPayload},
-                                  RawListRecord{.listId = 2, .payload = childPayload}});
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    appendRawListRecords(temp.path(), std::array{RawListRecord{.listId = 3, .payload = corruptPayload}});
-    auto changes = makeStateOnlyLibraryChanges(musicLibrary);
-    auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
-    auto events = std::vector<LibraryChangeSet>{};
-    auto subscription =
-      changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
-
-    CHECK_THROWS_AS(std::ignore = writerFixture.writer().deleteListAndDescendants(ListId{1}), Exception);
-
-    auto transaction = musicLibrary.readTransaction();
-    auto reader = musicLibrary.lists().reader(transaction);
-    auto const optRoot = reader.get(ListId{1});
-    auto const optChild = reader.get(ListId{2});
-    REQUIRE(optRoot);
-    REQUIRE(optChild);
-    CHECK(optRoot->name() == "Root");
-    CHECK(optChild->parentId() == ListId{1});
     CHECK(events.empty());
   }
 } // namespace ao::rt::test

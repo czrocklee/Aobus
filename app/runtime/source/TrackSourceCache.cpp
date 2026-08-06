@@ -6,8 +6,6 @@
 #include "runtime/source/CachedListSource.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
@@ -22,6 +20,7 @@
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <boost/container_hash/hash.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <concepts>
@@ -288,10 +287,7 @@ namespace ao::rt
 
     auto parentRes = acquire(resolveParentSourceId(definition.parentId));
 
-    if (!parentRes)
-    {
-      throwException<Exception>("Failed to resolve parent source for list {}: {}", listId, parentRes.error().message);
-    }
+    gsl_Assert(parentRes && "Failed to resolve parent source for list");
 
     auto implementationPtr = buildImplementation(*optView, *parentRes);
     auto const parentId = definition.parentId;

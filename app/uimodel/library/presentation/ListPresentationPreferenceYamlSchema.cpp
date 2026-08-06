@@ -9,6 +9,8 @@
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <array>
 #include <cstdint>
 #include <expected>
@@ -85,15 +87,8 @@ namespace ao::uimodel
 
     for (auto const& [listId, presentationId] : state.presentations)
     {
-      if (listId == kInvalidListId)
-      {
-        return makeError(Error::Code::InvalidState, "Cannot persist a presentation preference for the invalid list id");
-      }
-
-      if (presentationId.empty())
-      {
-        return makeError(Error::Code::InvalidState, "Cannot persist an empty presentation id");
-      }
+      gsl_Expects(listId != kInvalidListId && "Cannot persist a presentation preference for the invalid list id");
+      gsl_Expects(!presentationId.empty() && "Cannot persist an empty presentation id");
 
       document.preferences.push_back(StoredListPresentationPreference{
         .listId = listId.raw(),

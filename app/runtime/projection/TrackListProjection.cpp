@@ -4,7 +4,6 @@
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/DictionaryStore.h>
@@ -1392,10 +1391,7 @@ namespace ao::rt
                                            TrackOrderSpec const& order)
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library, order.sortBy)}
   {
-    if (viewId != kInvalidViewId)
-    {
-      throwException<Exception>("Detached track-list projection requires an invalid view id");
-    }
+    gsl_Expects(viewId == kInvalidViewId && "Detached track-list projection requires an invalid view id");
 
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
       [impl = _implPtr.get()](TrackSourceDelta const& batch) noexcept { impl->handleSourceBatch(batch); });
@@ -1544,10 +1540,7 @@ namespace ao::rt
   async::Subscription TrackListProjection::subscribe(
     std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler)
   {
-    if (!handler)
-    {
-      throwException<Exception>("Track-list projection subscription handler must not be empty");
-    }
+    gsl_Expects(static_cast<bool>(handler) && "Track-list projection subscription handler must not be empty");
 
     if (_implPtr->sourceInvalidated)
     {

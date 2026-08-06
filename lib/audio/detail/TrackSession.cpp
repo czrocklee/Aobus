@@ -14,6 +14,8 @@
 #include <ao/audio/StreamingSource.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <chrono>
 #include <expected>
 #include <filesystem>
@@ -137,10 +139,7 @@ namespace ao::audio::detail
 
   Result<TrackSession::OpenedTrack> TrackSession::activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError)
   {
-    if (!preparedTrack.sourcePtr)
-    {
-      return makeError(Error::Code::InvalidState, "Prepared track has no streaming source");
-    }
+    gsl_Assert(preparedTrack.sourcePtr && "Prepared track has no streaming source");
 
     if (auto activatedRes = preparedTrack.sourcePtr->activate(std::move(onSourceError)); !activatedRes)
     {

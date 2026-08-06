@@ -8,10 +8,11 @@
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Database.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstdint>
 #include <expected>
@@ -42,10 +43,8 @@ namespace ao::library::detail
         auto const hotBytes = hotRes->second;
         preparedHot.writeTo(hotBytes);
 
-        if (auto validationRes = validateSerializedHotTrack(hotBytes); !validationRes)
-        {
-          throwException<Exception>("Prepared hot Track record is not canonical");
-        }
+        auto const validationRes = validateSerializedHotTrack(hotBytes);
+        gsl_Assert(validationRes && "Prepared hot Track record is not canonical");
       }
 
       auto coldRes = writer._coldWriter.create(rawTrackId, preparedCold.size());
@@ -66,10 +65,8 @@ namespace ao::library::detail
       auto const coldBytes = *coldRes;
       preparedCold.writeTo(coldBytes);
 
-      if (auto validationRes = validateSerializedColdTrack(coldBytes); !validationRes)
-      {
-        throwException<Exception>("Prepared cold Track record is not canonical");
-      }
+      auto const validationRes = validateSerializedColdTrack(coldBytes);
+      gsl_Assert(validationRes && "Prepared cold Track record is not canonical");
 
       return TrackId{rawTrackId};
     }
@@ -143,10 +140,8 @@ namespace ao::library::detail
       auto const hotBytes = *hotRes;
       preparedHot.writeTo(hotBytes);
 
-      if (auto validationRes = validateSerializedHotTrack(hotBytes); !validationRes)
-      {
-        throwException<Exception>("Prepared hot Track record is not canonical");
-      }
+      auto const validationRes = validateSerializedHotTrack(hotBytes);
+      gsl_Assert(validationRes && "Prepared hot Track record is not canonical");
     }
 
     static void replaceCold(TrackStore::Writer& writer,
@@ -163,10 +158,8 @@ namespace ao::library::detail
       auto const coldBytes = *coldRes;
       preparedCold.writeTo(coldBytes);
 
-      if (auto validationRes = validateSerializedColdTrack(coldBytes); !validationRes)
-      {
-        throwException<Exception>("Prepared cold Track record is not canonical");
-      }
+      auto const validationRes = validateSerializedColdTrack(coldBytes);
+      gsl_Assert(validationRes && "Prepared cold Track record is not canonical");
     }
   };
 } // namespace ao::library::detail

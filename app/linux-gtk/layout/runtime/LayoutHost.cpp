@@ -9,6 +9,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/enums.h>
 
 #include <cstddef>
@@ -63,10 +64,7 @@ namespace ao::gtk::layout
     {
       auto rootComponentPtr = _runtime.build(buildContext, layout);
 
-      if (!rootComponentPtr)
-      {
-        return makeError(Error::Code::InvalidState, "Layout component factory returned no root component");
-      }
+      gsl_Assert(rootComponentPtr && "Layout component factory returned no root component");
 
       auto& activeWidget = rootComponentPtr->widget();
       activeWidget.set_hexpand(true);
@@ -79,12 +77,12 @@ namespace ao::gtk::layout
     }
     catch (std::exception const& error)
     {
-      return makeError(Error::Code::InvalidState,
+      return makeError(Error::Code::InitFailed,
                        std::format("Failed to build GTK layout tree: {}", boundedExceptionMessage(error.what())));
     }
     catch (...)
     {
-      return makeError(Error::Code::InvalidState, "Failed to build GTK layout tree with an unknown exception");
+      return makeError(Error::Code::InitFailed, "Failed to build GTK layout tree with an unknown exception");
     }
   }
 

@@ -257,42 +257,6 @@ namespace ao::gtk::test
     CHECK_FALSE(std::filesystem::exists(workspacePath));
   }
 
-  TEST_CASE("MainWindow - lifecycle rejects illegal transitions and retirement remains idempotent",
-            "[gtk][unit][main-window][session]")
-  {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto configStorePtr =
-      std::make_shared<AppConfigStore>(std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml");
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
-
-    auto activatedRes = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
-    REQUIRE_FALSE(activatedRes);
-    CHECK(activatedRes.error().code == Error::Code::InvalidState);
-
-    auto retiredRes = window.retireForLibrarySwitch();
-    REQUIRE_FALSE(retiredRes);
-    CHECK(retiredRes.error().code == Error::Code::InvalidState);
-
-    REQUIRE(window.prepareSession());
-    auto preparedAgainRes = window.prepareSession();
-    REQUIRE_FALSE(preparedAgainRes);
-    CHECK(preparedAgainRes.error().code == Error::Code::InvalidState);
-
-    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
-    auto activatedAgainRes = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
-    REQUIRE_FALSE(activatedAgainRes);
-    CHECK(activatedAgainRes.error().code == Error::Code::InvalidState);
-
-    REQUIRE(window.retireForLibrarySwitch());
-    REQUIRE(window.retireForLibrarySwitch());
-    CHECK(window.sessionPhase() == MainWindow::SessionPhase::Retired);
-
-    auto reactivatedRes = window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle);
-    REQUIRE_FALSE(reactivatedRes);
-    CHECK(reactivatedRes.error().code == Error::Code::InvalidState);
-  }
-
   TEST_CASE("prepareLibraryWindow - prepared window activates once and finalizes after retirement",
             "[gtk][regression][active-library]")
   {

@@ -478,10 +478,6 @@ namespace ao::rt::test
     CHECK(relinkItem.oldUri == "old/copy-a.flac");
     CHECK(relinkItem.uri == "disc-1/copy-a.flac");
     CHECK(relinkItem.trackId == TrackId{100});
-
-    auto consumedRes = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr}.run();
-    REQUIRE_FALSE(consumedRes);
-    CHECK(consumedRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities", "[runtime][unit][library][scan]")

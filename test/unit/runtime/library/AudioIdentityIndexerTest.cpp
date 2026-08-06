@@ -14,7 +14,6 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
@@ -22,13 +21,9 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/utility/ByteView.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Xxh3.h>
 
@@ -200,35 +195,6 @@ namespace ao::rt::test
     CHECK(result->skippedCount == 0);
     CHECK(result->failureCount == 0);
     CHECK(manifestHasIdentity(ml, "song.flac"));
-  }
-
-  TEST_CASE("AudioIdentityIndexer - post-open corrupt manifest iteration fails fast",
-            "[runtime][regression][audio-identity][integrity]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
-    auto const databasePath = std::filesystem::path{temp.path()} / "db";
-    std::filesystem::create_directories(musicRoot);
-    auto ml = library::test::makeTestMusicLibrary(musicRoot, databasePath);
-
-    {
-      auto environmentRes = lmdb::Environment::open(
-        databasePath.string(),
-        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
-      REQUIRE(environmentRes);
-      auto environment = std::move(*environmentRes);
-      auto transactionRes = lmdb::WriteTransaction::begin(environment);
-      REQUIRE(transactionRes);
-      auto transaction = std::move(*transactionRes);
-      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
-      REQUIRE(manifestRes);
-      auto const malformedKey = utility::bytes::view(std::string_view{"zz"});
-      auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
-      REQUIRE(manifestRes->writer(transaction).create(malformedKey, payload));
-      REQUIRE(transaction.commit());
-    }
-
-    CHECK_THROWS_AS(std::ignore = runIndexPending(ml), Exception);
   }
 
   TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows",

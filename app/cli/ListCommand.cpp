@@ -30,6 +30,7 @@
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -186,7 +187,8 @@ namespace ao::cli
       case rt::ListOrderAuthoringStatus::Unavailable: return makeError(Error::Code::InvalidState, "Library is busy");
     }
 
-    return makeError(Error::Code::InvalidState, "Unknown List order authoring status");
+    gsl_Assert(false && "Unknown List order authoring status");
+    std::unreachable();
   }
 
   namespace

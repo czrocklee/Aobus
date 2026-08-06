@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <lmdb.h>
 
 #include <cstdint>
@@ -58,10 +59,7 @@ namespace ao::lmdb
 
   Result<WriteTransaction> WriteTransaction::begin(WriteTransaction& parent)
   {
-    if (!parent.isActive())
-    {
-      return makeError(Error::Code::InvalidState, "Cannot begin a child transaction from a finished parent");
-    }
+    gsl_Expects(parent.isActive() && "Cannot begin a child transaction from a finished parent");
 
     auto txnPtrRes = create(::mdb_txn_env(parent.handle()), parent.handle(), 0);
 
@@ -75,10 +73,7 @@ namespace ao::lmdb
 
   Result<> WriteTransaction::commit()
   {
-    if (!isActive())
-    {
-      return makeError(Error::Code::InvalidState, "LMDB write transaction is already finished");
-    }
+    gsl_Expects(isActive() && "LMDB write transaction is already finished");
 
     int const rc = ::mdb_txn_commit(releaseHandle());
     return resultFromCode("mdb_txn_commit", rc);

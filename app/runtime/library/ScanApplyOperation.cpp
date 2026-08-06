@@ -23,6 +23,8 @@
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -109,10 +111,7 @@ namespace ao::rt
       return _result;
     }
 
-    if (_state != State::Revalidated)
-    {
-      return makeError(Error::Code::InvalidState, "Scan apply operation is not ready for database mutation");
-    }
+    gsl_Assert(_state == State::Revalidated && "Scan apply operation is not ready for database mutation");
 
     auto writableRes = library::WritableMusicLibrary::acquire(_ml);
 
@@ -157,10 +156,7 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanApplyOperation::prepare(std::stop_token stopToken)
   {
-    if (_state != State::Created)
-    {
-      return makeError(Error::Code::InvalidState, "Scan apply operation is already prepared");
-    }
+    gsl_Assert(_state == State::Created && "Scan apply operation is already prepared");
 
     if (auto const bindingRes = validatePlan(); !bindingRes)
     {
@@ -234,10 +230,7 @@ namespace ao::rt
 
   Result<> ScanApplyOperation::validatePlan() const
   {
-    if (!_plan._executable)
-    {
-      return makeError(Error::Code::InvalidState, "Scan plan has already been consumed");
-    }
+    gsl_Assert(_plan._executable && "Scan plan has already been consumed");
 
     auto const transaction = _ml.readTransaction();
     auto const headerRes = _ml.metadata().load(transaction);
@@ -274,10 +267,7 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanApplyOperation::revalidatePreparedFiles(std::stop_token stopToken)
   {
-    if (_state != State::Prepared)
-    {
-      return makeError(Error::Code::InvalidState, "Scan apply operation must be prepared before file revalidation");
-    }
+    gsl_Assert(_state == State::Prepared && "Scan apply operation must be prepared before file revalidation");
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
@@ -366,11 +356,8 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanApplyOperation::apply(library::WriteTransaction& transaction, std::stop_token stopToken)
   {
-    if (_state != State::Revalidated)
-    {
-      return makeError(
-        Error::Code::InvalidState, "Scan apply operation must be revalidated exactly once before database mutation");
-    }
+    gsl_Assert(_state == State::Revalidated &&
+               "Scan apply operation must be revalidated exactly once before database mutation");
 
     _state = State::Applied;
 
@@ -384,10 +371,7 @@ namespace ao::rt
       return _result;
     }
 
-    if (!_plan._executable)
-    {
-      return makeError(Error::Code::InvalidState, "Scan plan has already been consumed");
-    }
+    gsl_Assert(_plan._executable && "Scan plan has already been consumed");
 
     auto const headerRes = _ml.metadata().load(transaction);
 

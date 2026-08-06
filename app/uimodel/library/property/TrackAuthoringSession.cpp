@@ -11,6 +11,8 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <expected>
 #include <functional>
 #include <memory>
@@ -80,11 +82,7 @@ namespace ao::uimodel
       switch (completed.status)
       {
         case rt::TrackAuthoringStatus::Applied:
-          if (!completed.optNextTargets)
-          {
-            invalidate(rt::TrackAuthoringStatus::Unavailable);
-            return makeError(Error::Code::InvalidState, "Applied authoring result did not return a next binding");
-          }
+          gsl_Assert(completed.optNextTargets && "Applied authoring result did not return a next binding");
 
           targets = std::move(*completed.optNextTargets);
 

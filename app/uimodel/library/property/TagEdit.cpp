@@ -8,11 +8,14 @@
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <cstddef>
 #include <expected>
 #include <format>
 #include <span>
 #include <string>
+#include <utility>
 
 namespace ao::uimodel
 {
@@ -74,6 +77,7 @@ namespace ao::uimodel
         };
     }
 
-    return makeError(Error::Code::InvalidState, "Tag edit returned an unknown authoring status");
+    gsl_Assert(false && "Tag edit returned an unknown authoring status");
+    std::unreachable();
   }
 } // namespace ao::uimodel

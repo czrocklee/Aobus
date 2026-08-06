@@ -3,8 +3,6 @@
 
 #include "layout/document/LayoutPresets.h"
 
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
@@ -13,6 +11,7 @@
 #include <giomm/resource.h>
 #include <glib.h>
 #include <glibmm/error.h>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <map>
 #include <string>
@@ -37,10 +36,7 @@ namespace ao::gtk::layout
 
         auto docRes = uimodel::LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutDocument{});
 
-        if (!docRes)
-        {
-          throwException<Exception>("Failed to deserialize built-in layout from {}: {}", path, docRes.error().message);
-        }
+        gsl_Assert(docRes && "Failed to deserialize built-in layout");
 
         return std::move(*docRes);
       }

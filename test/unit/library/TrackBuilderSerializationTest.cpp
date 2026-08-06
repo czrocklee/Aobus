@@ -357,38 +357,6 @@ namespace ao::library::test
     CHECK(constBuilder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - hot-only baselines cannot write default cold data",
-            "[library][regression][track-builder][serialization]")
-  {
-    auto context = TrackSerializationFixture{};
-    auto original = TrackBuilder::makeEmpty();
-    original.metadata().title("Hot baseline");
-    auto hotDataRes = context.trySerializeHot(original);
-    REQUIRE(hotDataRes);
-    auto const hotView = TrackView{*hotDataRes, {}};
-
-    auto builder = TrackBuilder::fromHotView(hotView, context.dictionary());
-    auto serializedHotRes = builder.serializeHot(context.transaction());
-    REQUIRE(serializedHotRes);
-    CHECK(TrackView{*serializedHotRes, {}}.metadata().title() == "Hot baseline");
-
-    auto serializedColdRes = builder.serializeCold(context.transaction(), context.resources());
-    REQUIRE_FALSE(serializedColdRes);
-    CHECK(serializedColdRes.error().code == Error::Code::InvalidState);
-
-    auto serializedCompleteRes = builder.serialize(context.transaction(), context.resources());
-    REQUIRE_FALSE(serializedCompleteRes);
-    CHECK(serializedCompleteRes.error().code == Error::Code::InvalidState);
-
-    auto preparedColdRes = builder.prepareCold(context.transaction(), context.resources());
-    REQUIRE_FALSE(preparedColdRes);
-    CHECK(preparedColdRes.error().code == Error::Code::InvalidState);
-
-    auto preparedCompleteRes = builder.prepare(context.transaction(), context.resources());
-    REQUIRE_FALSE(preparedCompleteRes);
-    CHECK(preparedCompleteRes.error().code == Error::Code::InvalidState);
-  }
-
   TEST_CASE("TrackBuilder - serialized views expose property and metadata fields",
             "[library][unit][track-builder][serialization]")
   {

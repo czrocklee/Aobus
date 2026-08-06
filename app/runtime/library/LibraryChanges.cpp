@@ -3,8 +3,6 @@
 
 #include <ao/rt/library/LibraryChanges.h>
 
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
@@ -44,20 +42,9 @@ namespace ao::rt
     {
       auto const lock = std::scoped_lock{mutex};
 
-      if (!apply)
-      {
-        throwException<Exception>("Library change replica '{}' requires an apply callback", name);
-      }
-
-      if (publicationInProgress)
-      {
-        throwException<Exception>("Cannot bind library change replica '{}' during active publication", name);
-      }
-
-      if (replicaSlotPtr)
-      {
-        throwException<Exception>("Library change replica '{}' is already bound", replicaSlotPtr->name);
-      }
+      gsl_Expects(apply && "Library change replica '{}' requires an apply callback");
+      gsl_Expects(!publicationInProgress && "Cannot bind library change replica '{}' during active publication");
+      gsl_Expects(!replicaSlotPtr && "Library change replica '{}' is already bound");
 
       replicaSlotPtr = std::make_shared<ReplicaSlot>(std::move(name), std::move(apply));
     }
@@ -70,30 +57,15 @@ namespace ao::rt
 
     void publish(LibraryChangeSet changeSet, std::move_only_function<void() noexcept> completion)
     {
-      if (changeSet.libraryRevision == 0)
-      {
-        throwException<Exception>("Library changeset must carry a non-zero revision");
-      }
+      gsl_Expects(changeSet.libraryRevision != 0 && "Library changeset must carry a non-zero revision");
 
       auto const revision = changeSet.libraryRevision;
       {
         auto const lock = std::scoped_lock{mutex};
 
-        if (revision != expectedRevision)
-        {
-          throwException<Exception>(
-            "Out-of-sequence library changeset revision: expected {}, got {}", expectedRevision, revision);
-        }
-
-        if (publicationInProgress)
-        {
-          throwException<Exception>("Library changeset revision {} submitted during active publication", revision);
-        }
-
-        if (closing)
-        {
-          throwException<Exception>("Library changeset revision {} submitted while closing", revision);
-        }
+        gsl_Expects(revision == expectedRevision && "Out-of-sequence library changeset revision");
+        gsl_Expects(!publicationInProgress && "Library changeset revision {} submitted during active publication");
+        gsl_Expects(!closing && "Library changeset revision {} submitted while closing");
 
         optPendingPublication.emplace(
           PendingPublication{.changeSet = std::move(changeSet), .completion = std::move(completion)});

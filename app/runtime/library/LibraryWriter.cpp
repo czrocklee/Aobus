@@ -31,6 +31,8 @@
 #include <ao/utility/Path.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -902,8 +904,7 @@ namespace ao::rt
 
         if (record == records.end())
         {
-          return makeError(Error::Code::InvalidState,
-                           std::format("List disappeared while previewing subtree deletion: {}", currentId));
+          return makeError(Error::Code::InvalidState, "List disappeared while previewing subtree deletion");
         }
 
         deletedLists.push_back(record->second);
@@ -963,36 +964,21 @@ namespace ao::rt
 
       while (parentId != kInvalidListId)
       {
-        if (!visited.insert(parentId).second)
-        {
-          return makeError(Error::Code::InvalidState, "List parent cycle detected while validating membership");
-        }
+        gsl_Assert(visited.insert(parentId).second && "List parent cycle detected while validating membership");
 
         auto optParent = reader.get(parentId);
 
-        if (!optParent)
-        {
-          return makeError(
-            Error::Code::InvalidState, std::format("List parent is missing while validating membership: {}", parentId));
-        }
+        gsl_Assert(optParent && "List parent is missing while validating membership");
 
         if (!optParent->filter().empty())
         {
           auto expressionRes = query::parse(optParent->filter());
 
-          if (!expressionRes)
-          {
-            return makeError(
-              Error::Code::InvalidState, std::format("Stored parent List expression is invalid: {}", parentId));
-          }
+          gsl_Assert(expressionRes && "Stored parent List expression is invalid");
 
           auto planRes = query::compileQuery(*expressionRes);
 
-          if (!planRes)
-          {
-            return makeError(
-              Error::Code::InvalidState, std::format("Stored parent List expression cannot be compiled: {}", parentId));
-          }
+          gsl_Assert(planRes && "Stored parent List expression cannot be compiled");
 
           plans.push_back(ParentFilterPlan{.listId = parentId, .plan = std::move(*planRes)});
         }
@@ -1282,10 +1268,8 @@ namespace ao::rt
       {
         orderInsertion = std::ranges::find(nextOrderTrackIds, *optBeforeTrackId);
 
-        if (orderInsertion == nextOrderTrackIds.end())
-        {
-          return makeError(Error::Code::InvalidState, "Bound List order anchor is absent from materialized order");
-        }
+        gsl_Assert(orderInsertion != nextOrderTrackIds.end() &&
+                   "Bound List order anchor is absent from materialized order");
       }
 
       nextOrderTrackIds.insert(orderInsertion, selectedTrackIds.begin(), selectedTrackIds.end());
@@ -1301,10 +1285,8 @@ namespace ao::rt
         }
       }
 
-      if (!std::ranges::equal(projectedOrder, desiredEffectiveTrackIds))
-      {
-        return makeError(Error::Code::InvalidState, "Materialized List order does not represent the requested move");
-      }
+      gsl_Assert(std::ranges::equal(projectedOrder, desiredEffectiveTrackIds) &&
+                 "Materialized List order does not represent the requested move");
 
       auto payloadRes = listPayloadWithOrder(view, nextOrderTrackIds);
 

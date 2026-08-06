@@ -16,6 +16,7 @@
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/components/ContainerTestHelpers.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
+#include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -41,9 +42,9 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    std::unique_ptr<LayoutComponent> makeNullComponent(LayoutBuildContext& /*context*/, LayoutNode const& /*node*/)
+    std::unique_ptr<LayoutComponent> makeFailingComponent(LayoutBuildContext& /*context*/, LayoutNode const& /*node*/)
     {
-      return nullptr;
+      throwException<Exception>("Test exception");
     }
   } // namespace
 
@@ -56,7 +57,7 @@ namespace ao::gtk::layout::test
 
     auto registry = ComponentRegistry{};
     registerContainerComponents(registry);
-    registry.registerComponent({.type = "test.null", .displayName = "Null"}, makeNullComponent);
+    registry.registerComponent({.type = "test.null", .displayName = "Null"}, makeFailingComponent);
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};

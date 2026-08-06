@@ -4,10 +4,11 @@
 #include "ShellLayoutStore.h"
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <expected>
 #include <filesystem>
@@ -30,10 +31,8 @@ namespace ao::gtk
 
   std::filesystem::path ShellLayoutStore::filePath(std::string_view presetId) const
   {
-    if (presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains(".."))
-    {
-      ao::throwException<ao::Exception>("Invalid preset ID: path traversal attempt or empty ID");
-    }
+    gsl_Expects(!(presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains("..")) &&
+                "Invalid preset ID: path traversal attempt or empty ID");
 
     return _layoutsDir / std::format("{}.yaml", presetId);
   }

@@ -5,20 +5,14 @@
 
 #include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,7 +20,6 @@
 #include <filesystem>
 #include <stop_token>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -57,37 +50,6 @@ namespace ao::rt::test
     CHECK(result->items()[0].classification == ScanClassification::New);
     CHECK(std::ranges::any_of(
       progressPaths, [](std::filesystem::path const& path) { return path.filename() == "song.flac"; }));
-  }
-
-  TEST_CASE("LibraryScan - post-open corrupt manifest iteration fails fast", "[runtime][regression][scan][integrity]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-
-    {
-      auto transaction = library::test::writeTransaction(libraryFixture.library());
-      auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
-      REQUIRE(libraryFixture.library().manifest().writer(transaction).put("a.flac", payload));
-      REQUIRE(transaction.commit());
-    }
-
-    {
-      auto environmentRes = lmdb::Environment::open(
-        libraryFixture.root().string(),
-        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
-      REQUIRE(environmentRes);
-      auto environment = std::move(*environmentRes);
-      auto transactionRes = lmdb::WriteTransaction::begin(environment);
-      REQUIRE(transactionRes);
-      auto transaction = std::move(*transactionRes);
-      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
-      REQUIRE(manifestRes);
-      auto const malformedKey = utility::bytes::view(std::string_view{"zz"});
-      auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{2}).serialize();
-      REQUIRE(manifestRes->writer(transaction).create(malformedKey, payload));
-      REQUIRE(transaction.commit());
-    }
-
-    CHECK_THROWS_AS(std::ignore = LibraryScan{libraryFixture.library()}.buildPlan(), Exception);
   }
 
   TEST_CASE("LibraryScan - applyPlan imports new tracks", "[runtime][unit][library][scan]")

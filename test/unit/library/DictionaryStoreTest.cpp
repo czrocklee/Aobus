@@ -8,7 +8,6 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -58,7 +57,6 @@ namespace ao::library::test
     auto listWriter = library.lists().writer(transaction);
     auto resourceWriter = library.resources().writer(transaction);
     auto manifestWriter = library.manifest().writer(transaction);
-    auto& dictionaryWriter = transaction.dictionary();
     auto const id = requireIntern(transaction, "Bach");
 
     CHECK(id == DictionaryId{1});
@@ -74,15 +72,6 @@ namespace ao::library::test
     CHECK(dictionary.findId("Bach") == id);
     CHECK(dictionary.size() == 1);
     CHECK(dictionary.generation() == initialGeneration + 1);
-
-    CHECK_THROWS_AS(trackWriter.clear(), Exception);
-    CHECK_THROWS_AS(listWriter.clear(), Exception);
-    CHECK_THROWS_AS(resourceWriter.clear(), Exception);
-    CHECK_THROWS_AS(manifestWriter.clear(), Exception);
-    auto const lateInternRes = dictionaryWriter.intern("after-commit");
-    REQUIRE_FALSE(lateInternRes);
-    CHECK(lateInternRes.error().code == Error::Code::InvalidState);
-    CHECK_THROWS_AS(transaction.dictionary(), Exception);
   }
 
   TEST_CASE("DictionaryStore - discards an uncommitted overlay and reuses its ID", "[library][unit][dictionary]")
@@ -122,7 +111,6 @@ namespace ao::library::test
     auto listWriter = library.lists().writer(transaction);
     auto resourceWriter = library.resources().writer(transaction);
     auto manifestWriter = library.manifest().writer(transaction);
-    auto& dictionaryWriter = transaction.dictionary();
 
     auto const failedId = requireIntern(transaction, "failed");
     auto result = transaction.commit();
@@ -131,15 +119,6 @@ namespace ao::library::test
     CHECK_FALSE(dictionary.contains("failed"));
     CHECK(dictionary.size() == 0);
     CHECK(dictionary.generation() == initialGeneration);
-
-    CHECK_THROWS_AS(trackWriter.clear(), Exception);
-    CHECK_THROWS_AS(listWriter.clear(), Exception);
-    CHECK_THROWS_AS(resourceWriter.clear(), Exception);
-    CHECK_THROWS_AS(manifestWriter.clear(), Exception);
-    auto const lateInternRes = dictionaryWriter.intern("after-failure");
-    REQUIRE_FALSE(lateInternRes);
-    CHECK(lateInternRes.error().code == Error::Code::InvalidState);
-    CHECK_THROWS_AS(transaction.dictionary(), Exception);
 
     auto retry = writeTransaction(library);
     CHECK(requireIntern(retry, "retry") == failedId);
@@ -193,9 +172,6 @@ namespace ao::library::test
     CHECK(library.dictionary().getOrDefault(id) == "value");
     CHECK(library.dictionary().getOrDefault(kInvalidDictionaryId, "fallback") == "fallback");
     CHECK(library.dictionary().getOrDefault(DictionaryId{999}).empty());
-    CHECK_THROWS_AS(library.dictionary().get(kInvalidDictionaryId), Exception);
-    CHECK_THROWS_AS(library.dictionary().get(DictionaryId{999}), Exception);
-    CHECK_THROWS_AS(library.dictionary().lookupId("missing"), Exception);
   }
 
   TEST_CASE("DictionaryStore - keeps borrowed values stable across ten thousand committed inserts",

@@ -5,7 +5,6 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 
@@ -167,11 +166,6 @@ namespace ao::lmdb::test
     CHECK_FALSE(transaction.isActive());
     CHECK(transaction.isFinished());
     CHECK_NOTHROW(transaction.abort());
-
-    auto const commitRes = transaction.commit();
-    REQUIRE_FALSE(commitRes);
-    CHECK(commitRes.error().code == Error::Code::InvalidState);
-    CHECK_THROWS_AS(writer.get(1), Exception);
   }
 
   TEST_CASE("WriteTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
@@ -220,19 +214,6 @@ namespace ao::lmdb::test
     auto it = reader.begin();
     REQUIRE(it != reader.end());
     REQUIRE(it->first == 1);
-  }
-
-  TEST_CASE("NestedTransaction - begin rejects a finished parent", "[lmdb][unit][nested]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto parent = beginWriteTransaction(env);
-    REQUIRE(parent.commit());
-
-    auto const childRes = WriteTransaction::begin(parent);
-
-    REQUIRE_FALSE(childRes);
-    CHECK(childRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][unit][nested]")

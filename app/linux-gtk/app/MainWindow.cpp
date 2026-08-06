@@ -30,6 +30,7 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <gdkmm/enums.h>
+#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/eventcontroller.h>
@@ -185,10 +186,7 @@ namespace ao::gtk
       return {};
     }
 
-    if (_sessionPhase != SessionPhase::Active)
-    {
-      return makeError(Error::Code::InvalidState, "Only an active GTK session can be retired");
-    }
+    gsl_Expects(_sessionPhase == SessionPhase::Active && "Only an active GTK session can be retired");
 
     saveSession();
 
@@ -244,10 +242,7 @@ namespace ao::gtk
 
   Result<> MainWindow::prepareSession()
   {
-    if (_sessionPhase != SessionPhase::Constructed)
-    {
-      return makeError(Error::Code::InvalidState, "Only a constructed GTK session can be prepared");
-    }
+    gsl_Expects(_sessionPhase == SessionPhase::Constructed && "Only a constructed GTK session can be prepared");
 
     _mainWindowCoordinatorPtr->prepareSession();
 
@@ -260,10 +255,7 @@ namespace ao::gtk
 
   Result<> MainWindow::activateSession(PlaybackRestoreMode const restoreMode)
   {
-    if (_sessionPhase != SessionPhase::Prepared)
-    {
-      return makeError(Error::Code::InvalidState, "Only a prepared GTK session can be activated");
-    }
+    gsl_Expects(_sessionPhase == SessionPhase::Prepared && "Only a prepared GTK session can be activated");
 
     _sessionPhase = SessionPhase::Active;
 

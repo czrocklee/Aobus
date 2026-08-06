@@ -7,10 +7,11 @@
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <expected>
 #include <functional>
@@ -116,25 +117,18 @@ namespace ao::library
 
   DictionaryStore::Writer& WriteTransaction::dictionary()
   {
-    if (_implPtr == nullptr || !_implPtr->transaction.isActive())
-    {
-      throwException<Exception>("Library write transaction is no longer active");
-    }
+    gsl_Expects((_implPtr != nullptr && _implPtr->transaction.isActive()) &&
+                "Library write transaction is no longer active");
 
     return _implPtr->dictionaryWriter;
   }
 
   Result<> WriteTransaction::applyBoundary(std::move_only_function<Result<>(WriteTransaction&)> function)
   {
-    if (_implPtr == nullptr || !_implPtr->transaction.isActive())
-    {
-      return makeError(Error::Code::InvalidState, "Library write transaction is no longer active");
-    }
+    gsl_Expects((_implPtr != nullptr && _implPtr->transaction.isActive()) &&
+                "Library write transaction is no longer active");
 
-    if (_implPtr->operationActive)
-    {
-      return makeError(Error::Code::InvalidState, "Library write transaction already has an active operation");
-    }
+    gsl_Expects(!_implPtr->operationActive && "Library write transaction already has an active operation");
 
     _implPtr->operationActive = true;
 
@@ -146,11 +140,8 @@ namespace ao::library
         return std::unexpected{std::move(result.error())};
       }
 
-      if (_implPtr == nullptr || !_implPtr->transaction.isActive())
-      {
-        abort();
-        return makeError(Error::Code::InvalidState, "Library write operation terminated its transaction");
-      }
+      gsl_Assert((_implPtr != nullptr && _implPtr->transaction.isActive()) &&
+                 "Library write operation terminated its transaction");
 
       _implPtr->operationActive = false;
       return {};
@@ -169,23 +160,11 @@ namespace ao::library
 
   Result<> WriteTransaction::commit()
   {
-    if (_implPtr == nullptr)
-    {
-      return makeError(Error::Code::InvalidState, "Library write transaction is no longer active");
-    }
+    gsl_Expects(_implPtr != nullptr && "Library write transaction is no longer active");
 
-    if (!_implPtr->transaction.isActive())
-    {
-      // Explicit abort or a moved-from native transaction has already ended
-      // the LMDB scope; finish the outer dictionary and writer lifetime.
-      _implPtr->finishFailure();
-      return makeError(Error::Code::InvalidState, "Library write transaction is no longer active");
-    }
+    gsl_Expects(_implPtr->transaction.isActive() && "Library write transaction is no longer active");
 
-    if (_implPtr->operationActive)
-    {
-      return makeError(Error::Code::InvalidState, "Cannot commit during a library write operation");
-    }
+    gsl_Expects(!_implPtr->operationActive && "Cannot commit during a library write operation");
 
     auto result = Result<>{};
 
@@ -237,30 +216,18 @@ namespace ao::library
 
   lmdb::WriteTransaction& WriteTransaction::native(detail::LibraryIdentity const& identity)
   {
-    if (_implPtr == nullptr || _implPtr->identity != &identity)
-    {
-      throwException<Exception>("Write transaction belongs to a different MusicLibrary");
-    }
-
-    if (!_implPtr->transaction.isActive())
-    {
-      throwException<Exception>("Library write transaction is no longer active");
-    }
+    gsl_Expects((_implPtr != nullptr && _implPtr->identity == &identity) &&
+                "Write transaction belongs to a different MusicLibrary");
+    gsl_Expects(_implPtr->transaction.isActive() && "Library write transaction is no longer active");
 
     return _implPtr->transaction;
   }
 
   lmdb::WriteTransaction const& WriteTransaction::native(detail::LibraryIdentity const& identity) const
   {
-    if (_implPtr == nullptr || _implPtr->identity != &identity)
-    {
-      throwException<Exception>("Write transaction belongs to a different MusicLibrary");
-    }
-
-    if (!_implPtr->transaction.isActive())
-    {
-      throwException<Exception>("Library write transaction is no longer active");
-    }
+    gsl_Expects((_implPtr != nullptr && _implPtr->identity == &identity) &&
+                "Write transaction belongs to a different MusicLibrary");
+    gsl_Expects(_implPtr->transaction.isActive() && "Library write transaction is no longer active");
 
     return _implPtr->transaction;
   }

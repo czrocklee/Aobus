@@ -814,17 +814,6 @@ namespace ao::audio::test
       CHECK(candidateRes.error().code == Error::Code::NotSupported);
     }
 
-    SECTION("foreign commit")
-    {
-      auto candidateRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate.flac"}));
-      REQUIRE(candidateRes);
-      auto foreignEngine =
-        Engine{std::make_unique<FakeCapturingBackend>(), device, makePathScriptedDecoderFactory(tracks)};
-      auto committedRes = foreignEngine.commitPlayback(std::move(*candidateRes));
-      REQUIRE_FALSE(committedRes);
-      CHECK(committedRes.error().code == Error::Code::InvalidState);
-    }
-
     CHECK(engine.playbackGeneration() == originalGeneration);
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);

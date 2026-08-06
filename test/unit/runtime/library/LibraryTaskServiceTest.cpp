@@ -326,21 +326,6 @@ namespace ao::rt::test
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::Conflict);
     }
-
-    SECTION("consumed plan cannot be applied again")
-    {
-      auto plan = std::move(*planRes);
-      auto const firstApplicationRes =
-        runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(plan)));
-      REQUIRE(firstApplicationRes);
-
-      // LibraryImportPlan specifies an empty moved-from state so callers receive
-      // InvalidState when an already-consumed authorization is submitted again.
-      // NOLINTNEXTLINE(bugprone-use-after-move)
-      auto const reusedRes = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(plan)));
-      REQUIRE_FALSE(reusedRes);
-      CHECK(reusedRes.error().code == Error::Code::InvalidState);
-    }
   }
 
   TEST_CASE("LibraryTaskService - import plans reject a different runtime over the same library",
