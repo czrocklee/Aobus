@@ -6,7 +6,7 @@
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/lmdb/Database.h>
@@ -51,9 +51,30 @@ namespace ao::library::test
       REQUIRE(manifestRes->writer(transaction).create(malformedKey, payload));
       REQUIRE(transaction.commit());
     }
+
+    void seedCorruptManifestPayload(std::filesystem::path const& databasePath)
+    {
+      auto environmentRes = lmdb::Environment::open(
+        databasePath.string(), {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = kTestMusicLibraryMapSize});
+      REQUIRE(environmentRes);
+      auto environment = std::move(*environmentRes);
+      auto transactionRes = lmdb::WriteTransaction::begin(environment);
+      REQUIRE(transactionRes);
+      auto transaction = std::move(*transactionRes);
+      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      REQUIRE(manifestRes);
+      // Use a valid padded URI key but a corrupt payload (1 byte instead of
+      // the 48-byte FileManifestHeader).
+      auto paddedKey = std::string{"song.flac"};
+      paddedKey.resize((paddedKey.size() + 3U) & ~std::size_t{3U}, '\0');
+      auto const key = utility::bytes::view(std::string_view{paddedKey});
+      auto const corruptPayload = std::array<std::byte, 1>{std::byte{0x42}};
+      REQUIRE(manifestRes->writer(transaction).create(key, corruptPayload));
+      REQUIRE(transaction.commit());
+    }
   } // namespace
 
-  TEST_CASE("FileManifestStore - create returns ValueTooLarge for invalid URI length", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - put throws for an overlong URI", "[library][unit][manifest]")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -63,9 +84,7 @@ namespace ao::library::test
 
     auto const longUri = std::string(501, 'a');
 
-    auto const result = writer.put(longUri, std::span<std::byte const>{});
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::ValueTooLarge);
+    CHECK_THROWS_AS(writer.put(longUri, std::span<std::byte const>{}), ao::Exception);
   }
 
   TEST_CASE("FileManifestStore - writes and reads back manifests", "[library][unit][manifest]")
@@ -89,15 +108,15 @@ namespace ao::library::test
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
-    auto const viewRes = store.reader(rtxn).get("song.flac");
-    REQUIRE(viewRes);
-    CHECK(viewRes->trackId() == TrackId{42});
-    CHECK(viewRes->fileSize() == 12345);
-    CHECK(viewRes->mtime() == 67890);
-    CHECK(viewRes->audioPayloadLength() == 55555);
-    CHECK(viewRes->audioSignature() == signature);
-    CHECK(viewRes->status() == FileStatus::Available);
-    CHECK(std::ranges::equal(viewRes->rawData(), payload));
+    auto const optView = store.reader(rtxn).get("song.flac");
+    REQUIRE(optView);
+    CHECK(optView->trackId() == TrackId{42});
+    CHECK(optView->fileSize() == 12345);
+    CHECK(optView->mtime() == 67890);
+    CHECK(optView->audioPayloadLength() == 55555);
+    CHECK(optView->audioSignature() == signature);
+    CHECK(optView->status() == FileStatus::Available);
+    CHECK(std::ranges::equal(optView->rawData(), payload));
   }
 
   TEST_CASE("FileManifestStore - rejects non-canonical or root-escaping URI keys", "[library][unit][manifest]")
@@ -114,17 +133,10 @@ namespace ao::library::test
                            std::string_view{R"(album\song.flac)"}})
     {
       CAPTURE(uri);
-      auto const putRes = writer.put(uri, std::span<std::byte const>{});
-      REQUIRE_FALSE(putRes);
-      CHECK(putRes.error().code == Error::Code::InvalidInput);
+      CHECK_THROWS_AS(writer.put(uri, std::span<std::byte const>{}), ao::Exception);
 
-      auto const getRes = writer.get(uri);
-      REQUIRE_FALSE(getRes);
-      CHECK(getRes.error().code == Error::Code::InvalidInput);
-
-      auto const removeRes = writer.remove(uri);
-      REQUIRE_FALSE(removeRes);
-      CHECK(removeRes.error().code == Error::Code::InvalidInput);
+      CHECK_THROWS_AS(writer.get(uri), ao::Exception);
+      CHECK_THROWS_AS(writer.remove(uri), ao::Exception);
     }
   }
 
@@ -150,9 +162,9 @@ namespace ao::library::test
         auto const uri = std::string(uriLength, 'a');
         REQUIRE(writer.put(uri, payload));
 
-        auto const viewRes = writer.get(uri);
-        REQUIRE(viewRes);
-        CHECK(viewRes->trackId() == TrackId{42});
+        auto const optView = writer.get(uri);
+        REQUIRE(optView);
+        CHECK(optView->trackId() == TrackId{42});
       }
     }
 
@@ -164,9 +176,9 @@ namespace ao::library::test
 
       for (auto const uriLength : kUriLengths)
       {
-        auto const viewRes = reader.get(std::string(uriLength, 'a'));
-        REQUIRE(viewRes);
-        CHECK(viewRes->trackId() == TrackId{42});
+        auto const optView = reader.get(std::string(uriLength, 'a'));
+        REQUIRE(optView);
+        CHECK(optView->trackId() == TrackId{42});
       }
     }
 
@@ -177,37 +189,44 @@ namespace ao::library::test
       for (auto const uriLength : kUriLengths)
       {
         auto const uri = std::string(uriLength, 'a');
-        REQUIRE(writer.remove(uri));
+        CAPTURE(uriLength);
 
-        auto const viewRes = writer.get(uri);
-        REQUIRE_FALSE(viewRes);
-        CHECK(viewRes.error().code == Error::Code::NotFound);
+        auto const optView = writer.get(uri);
+        REQUIRE(optView);
+        REQUIRE(writer.remove(uri));
+        auto const optViewAgain = writer.get(uri);
+        CHECK_FALSE(optViewAgain);
+        CHECK_THROWS_AS(writer.put(uri, {}), ao::Exception);
       }
 
       REQUIRE(removeTxn.commit());
     }
 
-    auto const rtxn = library.readTransaction();
-    auto const reader = store.reader(rtxn);
-
-    for (auto const uriLength : kUriLengths)
     {
-      auto const viewRes = reader.get(std::string(uriLength, 'a'));
-      REQUIRE_FALSE(viewRes);
-      CHECK(viewRes.error().code == Error::Code::NotFound);
+      auto const rtxn = library.readTransaction();
+      auto const reader = store.reader(rtxn);
+
+      for (auto const uriLength : kUriLengths)
+      {
+        CAPTURE(uriLength);
+        auto const optView = reader.get(std::string(uriLength, 'a'));
+        CHECK_FALSE(optView);
+      }
     }
   }
 
-  TEST_CASE("FileManifestStore - get returns NotFound for missing URI", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - get returns nullopt for missing URI", "[library][unit][manifest]")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
     auto const& store = library.manifest();
 
-    auto rtxn = library.readTransaction();
-    auto const viewRes = store.reader(rtxn).get("nonexistent.flac");
-    REQUIRE_FALSE(viewRes);
-    CHECK(viewRes.error().code == Error::Code::NotFound);
+    SECTION("FileManifestStore::Reader returns nullopt for non-existent entry")
+    {
+      auto const rtxnObj = fixture.library.readTransaction();
+      auto const optView = store.reader(rtxnObj).get("nonexistent.flac");
+      CHECK_FALSE(optView);
+    }
   }
 
   TEST_CASE("FileManifestStore - remove is idempotent", "[library][unit][manifest]")
@@ -222,14 +241,13 @@ namespace ao::library::test
 
     auto writer = store.writer(wtxn);
     REQUIRE(writer.put("song.flac", builder.serialize()));
-    REQUIRE(writer.remove("song.flac"));
-    REQUIRE(writer.remove("song.flac"));
+    CHECK(writer.remove("song.flac"));
+    CHECK_FALSE(writer.remove("song.flac"));
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
-    auto const viewRes = store.reader(rtxn).get("song.flac");
-    REQUIRE_FALSE(viewRes);
-    CHECK(viewRes.error().code == Error::Code::NotFound);
+    auto const optView = store.reader(rtxn).get("song.flac");
+    CHECK_FALSE(optView);
   }
 
   TEST_CASE("FileManifestStore - rejects corrupt payloads before mutation", "[library][unit][manifest]")
@@ -240,15 +258,12 @@ namespace ao::library::test
     auto wtxn = writeTransaction(library);
     auto invalidPayload = std::vector{std::byte{0x42}};
 
-    auto const putRes = store.writer(wtxn).put("song.flac", invalidPayload);
-    REQUIRE_FALSE(putRes);
-    CHECK(putRes.error().code == Error::Code::CorruptData);
+    CHECK_THROWS_AS(store.writer(wtxn).put("song.flac", invalidPayload), ao::Exception);
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
-    auto const result = store.reader(rtxn).get("song.flac");
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    auto const optResult = store.reader(rtxn).get("song.flac");
+    CHECK_FALSE(optResult);
   }
 
   TEST_CASE("FileManifestStore - post-open corrupt iterator rows fail fast",
@@ -262,6 +277,24 @@ namespace ao::library::test
     CHECK_THROWS_WITH(std::ignore = *iterator,
                       "File manifest iterator encountered invalid data after library validation: File manifest key has "
                       "an invalid size");
+  }
+
+  TEST_CASE("FileManifestStore - get throws for post-open corrupt row", "[library][regression][manifest][integrity]")
+  {
+    auto fixture = LibraryStoreFixture{};
+    seedCorruptManifestPayload(fixture.temp.path() / "db");
+
+    SECTION("Reader::get throws on corrupt payload")
+    {
+      auto transaction = fixture.library.readTransaction();
+      CHECK_THROWS_AS(fixture.library.manifest().reader(transaction).get("song.flac"), ao::Exception);
+    }
+
+    SECTION("Writer::get throws on corrupt payload")
+    {
+      auto transaction = writeTransaction(fixture.library);
+      CHECK_THROWS_AS(fixture.library.manifest().writer(transaction).get("song.flac"), ao::Exception);
+    }
   }
 
   TEST_CASE("FileManifestStore - exact payload validation is item-relative atomic",
@@ -307,12 +340,9 @@ namespace ao::library::test
     {
       auto const uri = invalid.name + ".flac";
       CAPTURE(invalid.name);
-      auto const putRes = writer.put(uri, invalid.payload);
-      REQUIRE_FALSE(putRes);
-      CHECK(putRes.error().code == Error::Code::CorruptData);
-      auto const stagedReadRes = writer.get(uri);
-      REQUIRE_FALSE(stagedReadRes);
-      CHECK(stagedReadRes.error().code == Error::Code::NotFound);
+      CHECK_THROWS_AS(writer.put(uri, invalid.payload), ao::Exception);
+      auto const optStagedRead = writer.get(uri);
+      CHECK_FALSE(optStagedRead);
     }
 
     REQUIRE(transaction.commit());
@@ -321,9 +351,8 @@ namespace ao::library::test
 
     for (auto const& invalid : cases)
     {
-      auto const result = reader.get(invalid.name + ".flac");
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotFound);
+      auto const optResult = reader.get(invalid.name + ".flac");
+      CHECK_FALSE(optResult);
     }
   }
 } // namespace ao::library::test

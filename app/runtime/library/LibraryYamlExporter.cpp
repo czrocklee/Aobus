@@ -285,14 +285,10 @@ namespace ao::rt
       std::uint64_t fileSize = 0;
       std::uint64_t mtime = 0;
 
-      if (auto const manifestRes = manifestReader.get(property.uri()); manifestRes)
+      if (auto const optManifest = manifestReader.get(property.uri()); optManifest)
       {
-        fileSize = manifestRes->fileSize();
-        mtime = manifestRes->mtime();
-      }
-      else if (manifestRes.error().code != Error::Code::NotFound)
-      {
-        return std::unexpected{manifestRes.error()};
+        fileSize = optManifest->fileSize();
+        mtime = optManifest->mtime();
       }
 
       node.append_child() << ryml::key("fileSize") << fileSize;

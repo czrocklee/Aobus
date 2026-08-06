@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -53,7 +54,10 @@ namespace ao::library
   class FileManifestStore::Reader final
   {
   public:
-    Result<FileManifestView> get(std::string_view uri) const;
+    // Absence is the only recoverable miss: returns nullopt if no entry
+    // exists for the URI. Invalid/non-canonical URI, corrupt row data, and
+    // storage faults throw ao::Exception (see lmdb).
+    std::optional<FileManifestView> get(std::string_view uri) const;
 
     struct EndSentinel
     {};
@@ -110,9 +114,17 @@ namespace ao::library
   class [[nodiscard]] FileManifestStore::Writer final
   {
   public:
-    Result<FileManifestView> get(std::string_view uri) const;
+    // Absence is the only recoverable miss: returns nullopt if no entry
+    // exists for the URI. Invalid/non-canonical URI, corrupt row data, and
+    // storage faults throw ao::Exception (see lmdb).
+    std::optional<FileManifestView> get(std::string_view uri) const;
+    // URI and payload contract violations (invalid URI, corrupt payload)
+    // throw ao::Exception. Recoverable storage update faults use Result.
     Result<> put(std::string_view uri, std::span<std::byte const> payload);
-    Result<> remove(std::string_view uri);
+    // Returns true if a row was removed, false if the URI was absent.
+    // Invalid URI and storage faults throw ao::Exception.
+    bool remove(std::string_view uri);
+    // Storage faults use Result.
     Result<> clear();
 
   private:

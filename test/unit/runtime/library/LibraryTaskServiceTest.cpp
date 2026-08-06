@@ -658,9 +658,9 @@ namespace ao::rt::test
     REQUIRE(result);
     REQUIRE(result->insertedIds.size() == 1);
     auto transaction = libraryFixture.library().readTransaction();
-    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK_FALSE(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
+    auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK_FALSE(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
   TEST_CASE("LibraryTaskService - scan preparation keeps interactive authoring closed",
@@ -754,9 +754,9 @@ namespace ao::rt::test
     CHECK(backfillRes->failureCount == 0);
 
     auto transaction = libraryFixture.library().readTransaction();
-    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
+    auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
   TEST_CASE("LibraryTaskService - applyScanPlanAsync reports progress while applying plan",

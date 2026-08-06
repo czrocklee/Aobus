@@ -235,10 +235,10 @@ library:
 
     {
       auto transaction = ml.readTransaction();
-      auto const manifestRes = ml.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestRes);
+      auto const optManifest = ml.manifest().reader(transaction).get(uri);
+      REQUIRE(optManifest);
       auto const optView =
-        ml.tracks().reader(transaction).get(manifestRes->trackId(), TrackStore::Reader::LoadMode::Both);
+        ml.tracks().reader(transaction).get(optManifest->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       REQUIRE(optView->coverArt().count() == 1);
       CHECK(optView->coverArt().at(0).type == PictureType::BackCover);
@@ -267,10 +267,10 @@ library:
 
     {
       auto transaction = ml.readTransaction();
-      auto const manifestRes = ml.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestRes);
+      auto const optManifest = ml.manifest().reader(transaction).get(uri);
+      REQUIRE(optManifest);
       auto const optView =
-        ml.tracks().reader(transaction).get(manifestRes->trackId(), TrackStore::Reader::LoadMode::Both);
+        ml.tracks().reader(transaction).get(optManifest->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       CHECK(optView->coverArt().count() == 0);
     }

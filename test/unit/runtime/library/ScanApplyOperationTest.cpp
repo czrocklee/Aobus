@@ -134,10 +134,10 @@ namespace ao::rt::test
     REQUIRE(optView);
     CHECK(optView->metadata().title() == "Test Title");
 
-    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK(manifestRes->audioPayloadLength() > 0);
-    CHECK(manifestRes->audioSignature() != utility::Hash128{});
+    auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->audioPayloadLength() > 0);
+    CHECK(optManifest->audioSignature() != utility::Hash128{});
   }
 
   TEST_CASE("ScanApplyOperation - deferred new scans write pending audio identity", "[runtime][unit][library][scan]")
@@ -171,13 +171,13 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
-    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK(manifestRes->status() == library::FileStatus::Available);
-    CHECK(manifestRes->fileSize() == std::filesystem::file_size(targetFile));
-    CHECK(manifestRes->mtime() == fileMtime(targetFile));
-    CHECK(manifestRes->audioPayloadLength() == 0);
-    CHECK(manifestRes->audioSignature() == utility::Hash128{});
+    auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->status() == library::FileStatus::Available);
+    CHECK(optManifest->fileSize() == std::filesystem::file_size(targetFile));
+    CHECK(optManifest->mtime() == fileMtime(targetFile));
+    CHECK(optManifest->audioPayloadLength() == 0);
+    CHECK(optManifest->audioSignature() == utility::Hash128{});
   }
 
   TEST_CASE("ScanApplyOperation - exhausted Track ids abort later scan work", "[runtime][regression][scan][atomicity]")
@@ -234,12 +234,11 @@ namespace ao::rt::test
     CHECK(ml.libraryRevision(transaction) == revisionBefore);
     CHECK_FALSE(ml.dictionary().findId("Test Artist"));
     REQUIRE(ml.tracks().reader(transaction).get(TrackId{kLastTrackId}));
-    auto missingManifestRes = ml.manifest().reader(transaction).get("missing.flac");
-    REQUIRE(missingManifestRes);
-    CHECK(missingManifestRes->status() == library::FileStatus::Available);
-    auto newManifestRes = ml.manifest().reader(transaction).get("new.flac");
-    REQUIRE_FALSE(newManifestRes);
-    CHECK(newManifestRes.error().code == Error::Code::NotFound);
+    auto optMissingManifest = ml.manifest().reader(transaction).get("missing.flac");
+    REQUIRE(optMissingManifest);
+    CHECK(optMissingManifest->status() == library::FileStatus::Available);
+    auto optNewManifest = ml.manifest().reader(transaction).get("new.flac");
+    CHECK_FALSE(optNewManifest);
   }
 
   TEST_CASE("ScanApplyOperation - missing persisted Track evidence aborts every planned item",
@@ -288,9 +287,8 @@ namespace ao::rt::test
     CHECK(ml.libraryRevision(transaction) == revisionBefore);
     CHECK_FALSE(ml.tracks().reader(transaction).get(existingTrackId));
     CHECK(ml.manifest().reader(transaction).get("existing.flac"));
-    auto newManifestRes = ml.manifest().reader(transaction).get("later-new.flac");
-    REQUIRE_FALSE(newManifestRes);
-    CHECK(newManifestRes.error().code == Error::Code::NotFound);
+    auto optNewManifest = ml.manifest().reader(transaction).get("later-new.flac");
+    CHECK_FALSE(optNewManifest);
   }
 
   TEST_CASE("ScanApplyOperation - apply requires prepared-file revalidation", "[runtime][unit][library][scan]")
@@ -402,10 +400,10 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
-    auto const manifestRes = ml.manifest().reader(transaction).get("first-new.flac");
-    REQUIRE(manifestRes);
-    CHECK(manifestRes->audioPayloadLength() == cachedPayloadLength);
-    CHECK(manifestRes->audioSignature() == cachedSignature);
+    auto const optManifest = ml.manifest().reader(transaction).get("first-new.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->audioPayloadLength() == cachedPayloadLength);
+    CHECK(optManifest->audioSignature() == cachedSignature);
   }
 
   TEST_CASE("ScanApplyOperation - reports fingerprint progress while hashing audio payload",
@@ -642,10 +640,10 @@ namespace ao::rt::test
     auto oldSignature = utility::Hash128{};
     {
       auto transaction = ml.readTransaction();
-      auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
-      REQUIRE(manifestRes);
-      oldPayloadLength = manifestRes->audioPayloadLength();
-      oldSignature = manifestRes->audioSignature();
+      auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(optManifest);
+      oldPayloadLength = optManifest->audioPayloadLength();
+      oldSignature = optManifest->audioSignature();
     }
 
     // Modify targetFile and advance mtime
@@ -675,15 +673,15 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
-    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
+    auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
     auto const actualMtime =
       static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    std::filesystem::last_write_time(targetFile).time_since_epoch())
                                    .count());
-    CHECK(manifestRes->mtime() == actualMtime);
-    CHECK(manifestRes->audioPayloadLength() > oldPayloadLength);
-    CHECK(manifestRes->audioSignature() != oldSignature);
+    CHECK(optManifest->mtime() == actualMtime);
+    CHECK(optManifest->audioPayloadLength() > oldPayloadLength);
+    CHECK(optManifest->audioSignature() != oldSignature);
   }
 
   TEST_CASE("ScanApplyOperation - updates manifest status for missing files", "[runtime][unit][library][scan]")
@@ -720,9 +718,9 @@ namespace ao::rt::test
     REQUIRE(runRes);
 
     auto transaction = ml.readTransaction();
-    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK(manifestRes->status() == library::FileStatus::Missing);
+    auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->status() == library::FileStatus::Missing);
     CHECK(changedTrackIds(*runRes).empty());
     CHECK(runRes->missingCount == 1);
     CHECK(runRes->failureCount == 0);
@@ -757,10 +755,10 @@ namespace ao::rt::test
     auto originalSignature = utility::Hash128{};
     {
       auto transaction = ml.readTransaction();
-      auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
-      REQUIRE(manifestRes);
-      originalPayloadLength = manifestRes->audioPayloadLength();
-      originalSignature = manifestRes->audioSignature();
+      auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(optManifest);
+      originalPayloadLength = optManifest->audioPayloadLength();
+      originalSignature = optManifest->audioSignature();
     }
 
     updateTrackSpec(ml,
@@ -835,16 +833,15 @@ namespace ao::rt::test
     CHECK(hasCustomMetadata(spec, "catalog", "AOB-42"));
 
     auto manifestReader = ml.manifest().reader(transaction);
-    auto const oldManifestRes = manifestReader.get("song.flac");
-    REQUIRE_FALSE(oldManifestRes);
-    CHECK(oldManifestRes.error().code == Error::Code::NotFound);
+    auto const optOldManifest = manifestReader.get("song.flac");
+    CHECK_FALSE(optOldManifest);
 
-    auto const newManifestRes = manifestReader.get("renamed/song.flac");
-    REQUIRE(newManifestRes);
-    CHECK(newManifestRes->trackId() == originalTrackId);
-    CHECK(newManifestRes->status() == library::FileStatus::Available);
-    CHECK(newManifestRes->audioPayloadLength() == originalPayloadLength);
-    CHECK(newManifestRes->audioSignature() == originalSignature);
+    auto const optNewManifest = manifestReader.get("renamed/song.flac");
+    REQUIRE(optNewManifest);
+    CHECK(optNewManifest->trackId() == originalTrackId);
+    CHECK(optNewManifest->status() == library::FileStatus::Available);
+    CHECK(optNewManifest->audioPayloadLength() == originalPayloadLength);
+    CHECK(optNewManifest->audioSignature() == originalSignature);
 
     auto const optOrderedList = ml.lists().reader(transaction).get(orderedListId);
     REQUIRE(optOrderedList);
@@ -926,9 +923,8 @@ namespace ao::rt::test
 
     auto manifestReader = ml.manifest().reader(transaction);
     CHECK(manifestReader.get("song.flac"));
-    auto const newManifestRes = manifestReader.get("renamed.flac");
-    REQUIRE_FALSE(newManifestRes);
-    CHECK(newManifestRes.error().code == Error::Code::NotFound);
+    auto const optNewManifest = manifestReader.get("renamed.flac");
+    CHECK_FALSE(optNewManifest);
   }
 
   TEST_CASE("ScanApplyOperation - moved-file revalidation failure aborts co-planned inserts",
@@ -1098,9 +1094,9 @@ namespace ao::rt::test
     }
 
     CHECK(trackCount == 1);
-    auto const manifestRes = ml.manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK(manifestRes->trackId() == firstRes->insertedIds.front());
+    auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->trackId() == firstRes->insertedIds.front());
   }
 
   TEST_CASE("ScanApplyOperation - reports corrupted file failures", "[runtime][unit][library][scan]")

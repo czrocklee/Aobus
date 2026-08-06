@@ -2445,10 +2445,7 @@ namespace ao::rt
 
         if (!uri.empty())
         {
-          if (auto result = library.manifest().writer(transaction).remove(uri); !result)
-          {
-            return storageError("Failed to remove file manifest entry", result.error());
-          }
+          library.manifest().writer(transaction).remove(uri);
         }
 
         if (!writer.remove(trackId))
@@ -2514,16 +2511,9 @@ namespace ao::rt
         auto writer = library.tracks().writer(transaction);
         auto manifestWriter = library.manifest().writer(transaction);
 
-        auto existingManifestRes = manifestWriter.get(target.uri);
-
-        if (existingManifestRes)
+        if (auto const optExistingManifest = manifestWriter.get(target.uri); optExistingManifest)
         {
           return makeError(Error::Code::Conflict, std::format("track file is already imported: {}", target.uri));
-        }
-
-        if (existingManifestRes.error().code != Error::Code::NotFound)
-        {
-          return storageError("Failed to read file manifest", existingManifestRes.error());
         }
 
         auto& builder = mediaTrackRes->builder();

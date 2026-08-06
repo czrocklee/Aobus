@@ -72,10 +72,10 @@ namespace ao::rt::test
     ManifestIdentityState manifestIdentity(library::MusicLibrary& ml, std::string_view uri)
     {
       auto transaction = ml.readTransaction();
-      auto manifestRes = ml.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestRes);
+      auto optManifest = ml.manifest().reader(transaction).get(uri);
+      REQUIRE(optManifest);
       return ManifestIdentityState{
-        .audioPayloadLength = manifestRes->audioPayloadLength(), .audioSignature = manifestRes->audioSignature()};
+        .audioPayloadLength = optManifest->audioPayloadLength(), .audioSignature = optManifest->audioSignature()};
     }
 
     bool manifestHasIdentity(library::MusicLibrary& ml, std::string_view uri)
@@ -101,10 +101,10 @@ namespace ao::rt::test
     {
       auto transaction = library::test::writeTransaction(ml);
       auto writer = ml.manifest().writer(transaction);
-      auto currentRes = writer.get(uri);
-      REQUIRE(currentRes);
+      auto optCurrent = writer.get(uri);
+      REQUIRE(optCurrent);
 
-      auto builder = library::FileManifestBuilder::fromView(*currentRes);
+      auto builder = library::FileManifestBuilder::fromView(*optCurrent);
       builder.audioPayloadLength(1).audioSignature(utility::xxh3Hash128("test-identity"));
       REQUIRE(writer.put(uri, builder.serialize()));
       REQUIRE(transaction.commit());

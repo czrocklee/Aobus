@@ -694,18 +694,18 @@ library:
 
     CHECK(count == 3);
 
-    auto manifestRes = manifestReader.get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK(manifestRes->fileSize() == 13);
-    CHECK(manifestRes->mtime() > 0);
+    auto optManifest = manifestReader.get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->fileSize() == 13);
+    CHECK(optManifest->mtime() > 0);
 
-    auto manifestResult2Res = manifestReader.get("song2.flac");
-    REQUIRE(manifestResult2Res);
-    CHECK(manifestResult2Res->fileSize() == 0);
+    auto optManifest2 = manifestReader.get("song2.flac");
+    REQUIRE(optManifest2);
+    CHECK(optManifest2->fileSize() == 0);
 
-    auto manifestResult3Res = manifestReader.get("song3.flac");
-    REQUIRE(manifestResult3Res);
-    CHECK(manifestResult3Res->fileSize() == 0);
+    auto optManifest3 = manifestReader.get("song3.flac");
+    REQUIRE(optManifest3);
+    CHECK(optManifest3->fileSize() == 0);
 
     auto const listReader = ml.lists().reader(transaction);
     auto optList = listReader.get(ListId{1});

@@ -199,9 +199,9 @@ namespace ao::cli::test
       auto musicLibrary =
         library::test::makeTestMusicLibrary(fixture.root(), rt::LibraryPaths{fixture.root()}.databasePath());
       auto transaction = musicLibrary.readTransaction();
-      auto manifestRes = musicLibrary.manifest().reader(transaction).get(uri);
-      REQUIRE(manifestRes);
-      return library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature());
+      auto optManifest = musicLibrary.manifest().reader(transaction).get(uri);
+      REQUIRE(optManifest);
+      return library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature());
     }
   } // namespace
 
@@ -328,7 +328,7 @@ namespace ao::cli::test
     auto transaction = std::move(*transactionRes);
     auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
     REQUIRE(manifestRes);
-    auto manifest = std::move(*manifestRes);
+    auto& manifest = *manifestRes;
     auto const malformedKey = utility::bytes::view(std::string_view{"bad"});
     auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
     REQUIRE(manifest.writer(transaction).create(malformedKey, payload));

@@ -37,26 +37,21 @@ namespace ao::rt
 
     for (auto const& candidate : candidates)
     {
-      auto currentRes = writer.get(candidate.uri);
+      auto optCurrent = writer.get(candidate.uri);
 
-      if (!currentRes)
-      {
-        if (currentRes.error().code == Error::Code::NotFound)
-        {
-          ++result.skippedCount;
-          continue;
-        }
-
-        return std::unexpected{currentRes.error()};
-      }
-
-      if (!matchesCandidate(*currentRes, candidate))
+      if (!optCurrent)
       {
         ++result.skippedCount;
         continue;
       }
 
-      auto builder = library::FileManifestBuilder::fromView(*currentRes);
+      if (!matchesCandidate(*optCurrent, candidate))
+      {
+        ++result.skippedCount;
+        continue;
+      }
+
+      auto builder = library::FileManifestBuilder::fromView(*optCurrent);
       builder.audioPayloadLength(candidate.identity.payloadLength).audioSignature(candidate.identity.signature);
 
       if (auto putRes = writer.put(candidate.uri, builder.serialize()); !putRes)

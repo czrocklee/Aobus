@@ -590,20 +590,14 @@ namespace ao::rt
                                             library::WriteTransaction& transaction,
                                             library::FileManifestStore::Writer& manifestWriter)
   {
-    auto manifestRes = _ml.manifest().reader(transaction).get(item.uri);
+    auto optManifest = _ml.manifest().reader(transaction).get(item.uri);
 
-    if (!manifestRes)
+    if (!optManifest)
     {
-      if (manifestRes.error().code == Error::Code::NotFound)
-      {
-        return;
-      }
-
-      reportFailure(item.uri, "read manifest for", manifestRes.error().message);
       return;
     }
 
-    auto builder = library::FileManifestBuilder::fromView(*manifestRes);
+    auto builder = library::FileManifestBuilder::fromView(*optManifest);
     builder.status(library::FileStatus::Missing);
 
     if (writeManifest(manifestWriter, item.uri, builder))
@@ -818,9 +812,10 @@ namespace ao::rt
       return false;
     }
 
-    if (auto removeRes = manifestWriter.remove(item.oldUri); !removeRes)
+    if (!manifestWriter.remove(item.oldUri))
     {
-      reportFailure(item.uri, "remove old manifest for", removeRes.error().message);
+      reportFailure(
+        item.uri, "remove old manifest for", std::format("old manifest entry '{}' was not found", item.oldUri));
       return false;
     }
 

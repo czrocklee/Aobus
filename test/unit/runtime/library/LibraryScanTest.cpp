@@ -113,10 +113,10 @@ namespace ao::rt::test
     REQUIRE(optTrack);
     CHECK(optTrack->metadata().title() == "Test Title");
 
-    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK(manifestRes->trackId() == result->insertedIds[0]);
-    CHECK(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
+    auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->trackId() == result->insertedIds[0]);
+    CHECK(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
   TEST_CASE("LibraryScan - applyPlan can defer new audio identity", "[runtime][unit][library][scan]")
@@ -140,9 +140,9 @@ namespace ao::rt::test
     CHECK(result->failureCount == 0);
 
     auto transaction = libraryFixture.library().readTransaction();
-    auto manifestRes = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(manifestRes);
-    CHECK_FALSE(library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature()));
+    auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK_FALSE(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
   TEST_CASE("LibraryScan - applyPlan honors cancellation", "[runtime][unit][library][scan]")

@@ -17,7 +17,7 @@
 #include <cstddef>
 #include <cstring>
 #include <expected>
-#include <format>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -28,21 +28,19 @@ namespace ao::library
   {
     constexpr std::size_t kUriPaddingBufferSize = (LibraryUri::kMaxLength + 3U) & ~std::size_t{3U};
 
-    Result<> validateUri(std::string_view uri)
+    void validateUri(std::string_view uri)
     {
       auto parsedRes = LibraryUri::parse(uri);
 
       if (!parsedRes)
       {
-        return std::unexpected{parsedRes.error()};
+        throwException<Exception>("Invalid file manifest URI '{}': {}", uri, parsedRes.error().message);
       }
 
       if (parsedRes->value() != uri)
       {
-        return makeError(Error::Code::InvalidInput, std::format("File manifest URI '{}' is not canonical", uri));
+        throwException<Exception>("File manifest URI '{}' is not canonical", uri);
       }
-
-      return {};
     }
 
     std::span<std::byte const> padUri(std::string_view uri, std::span<std::byte> buffer)
@@ -91,12 +89,9 @@ namespace ao::library
     return Writer{_db.writer(transaction.native(*_identity))};
   }
 
-  Result<FileManifestView> FileManifestStore::Reader::get(std::string_view uri) const
+  std::optional<FileManifestView> FileManifestStore::Reader::get(std::string_view uri) const
   {
-    if (auto result = validateUri(uri); !result)
-    {
-      return std::unexpected{result.error()};
-    }
+    validateUri(uri);
 
     auto const key = PaddedUriKey{uri};
 
@@ -104,19 +99,20 @@ namespace ao::library
 
     if (!optData)
     {
-      return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
+      return std::nullopt;
     }
 
     if (auto const validationRes = validateFileManifestEntry(key.view(), *optData); !validationRes)
     {
-      return std::unexpected{validationRes.error()};
+      throwException<Exception>(
+        "File manifest entry for URI '{}' failed validation: {}", uri, validationRes.error().message);
     }
 
     auto view = FileManifestView{*optData};
 
     if (!view.isValid())
     {
-      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is misaligned", uri));
+      throwException<Exception>("File manifest entry for URI '{}' is misaligned", uri);
     }
 
     return view;
@@ -154,12 +150,9 @@ namespace ao::library
     return Iterator{_reader.begin()};
   }
 
-  Result<FileManifestView> FileManifestStore::Writer::get(std::string_view uri) const
+  std::optional<FileManifestView> FileManifestStore::Writer::get(std::string_view uri) const
   {
-    if (auto result = validateUri(uri); !result)
-    {
-      return std::unexpected{result.error()};
-    }
+    validateUri(uri);
 
     auto const key = PaddedUriKey{uri};
 
@@ -167,19 +160,20 @@ namespace ao::library
 
     if (!optData)
     {
-      return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
+      return std::nullopt;
     }
 
     if (auto const validationRes = validateFileManifestEntry(key.view(), *optData); !validationRes)
     {
-      return std::unexpected{validationRes.error()};
+      throwException<Exception>(
+        "File manifest entry for URI '{}' failed validation: {}", uri, validationRes.error().message);
     }
 
     auto view = FileManifestView{*optData};
 
     if (!view.isValid())
     {
-      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is misaligned", uri));
+      throwException<Exception>("File manifest entry for URI '{}' is misaligned", uri);
     }
 
     return view;
@@ -187,33 +181,24 @@ namespace ao::library
 
   Result<> FileManifestStore::Writer::put(std::string_view uri, std::span<std::byte const> payload)
   {
-    if (auto result = validateUri(uri); !result)
-    {
-      return std::unexpected{result.error()};
-    }
+    validateUri(uri);
 
     auto const key = PaddedUriKey{uri};
 
-    if (auto const result = validateFileManifestEntry(key.view(), payload); !result)
+    if (auto const validationRes = validateFileManifestEntry(key.view(), payload); !validationRes)
     {
-      return std::unexpected{result.error()};
+      throwException<Exception>(
+        "Cannot write invalid file manifest entry for URI '{}': {}", uri, validationRes.error().message);
     }
 
     return _writer.update(key.view(), payload);
   }
 
-  Result<> FileManifestStore::Writer::remove(std::string_view uri)
+  bool FileManifestStore::Writer::remove(std::string_view uri)
   {
-    if (auto result = validateUri(uri); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
+    validateUri(uri);
     auto const key = PaddedUriKey{uri};
-
-    // Idempotent: a missing row is success. Storage faults throw (see lmdb).
-    _writer.del(key.view());
-    return {};
+    return _writer.del(key.view());
   }
 
   Result<> FileManifestStore::Writer::clear()

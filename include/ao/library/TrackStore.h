@@ -110,7 +110,7 @@ namespace ao::library
      */
     template<typename Visitor>
       requires std::invocable<Visitor&, TrackId, TrackView const&>
-    void visitTracks(std::span<TrackId const> ids, LoadMode mode, Visitor& visitor) const;
+    void visitTracks(std::span<TrackId const> ids, LoadMode mode, Visitor visitor) const;
 
     auto hot() const;
     auto cold() const;
@@ -180,7 +180,7 @@ namespace ao::library
 
   template<typename Visitor>
     requires std::invocable<Visitor&, TrackId, TrackView const&>
-  void TrackStore::Reader::visitTracks(std::span<TrackId const> ids, LoadMode mode, Visitor& visitor) const
+  void TrackStore::Reader::visitTracks(std::span<TrackId const> ids, LoadMode mode, Visitor visitor) const
   {
     if (!shouldUseCursorScan(ids, mode))
     {
@@ -234,7 +234,7 @@ namespace ao::library
      * Get track by ID with specified load mode.
      * @return TrackView, or std::nullopt if the track is missing.
      */
-    std::optional<TrackView> get(TrackId id, Reader::LoadMode mode) const;
+    std::optional<TrackView> get(TrackId id, Reader::LoadMode mode = Reader::LoadMode::Both) const;
 
     /**
      * Delete both hot and cold track data.

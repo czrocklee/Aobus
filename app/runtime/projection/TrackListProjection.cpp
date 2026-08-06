@@ -764,14 +764,15 @@ namespace ao::rt
       }
 
       auto const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
-      auto visitTrack = [&](TrackId trackId, library::TrackView const& view)
-      {
-        if (!entriesDependOnTrackData || hasRequiredTrackData(view, loadMode))
-        {
-          orderIndex.push_back(buildOrderEntry(trackId, view, dictionary));
-        }
-      };
-      reader.visitTracks(sourceOrder, loadMode, visitTrack);
+      reader.visitTracks(sourceOrder,
+                         loadMode,
+                         [&](TrackId trackId, library::TrackView const& view)
+                         {
+                           if (!entriesDependOnTrackData || hasRequiredTrackData(view, loadMode))
+                           {
+                             orderIndex.push_back(buildOrderEntry(trackId, view, dictionary));
+                           }
+                         });
 
       if (comparator)
       {

@@ -1040,11 +1040,11 @@ namespace ao::rt
 
     for (auto const& importedTrack : prepared.tracks)
     {
-      auto const manifestRes = manifestReader.get(importedTrack.uri);
+      auto const optManifest = manifestReader.get(importedTrack.uri);
 
-      if (manifestRes && beforeTracks.contains(manifestRes->trackId()))
+      if (optManifest && beforeTracks.contains(optManifest->trackId()))
       {
-        changeSet.tracksMutated.push_back(manifestRes->trackId());
+        changeSet.tracksMutated.push_back(optManifest->trackId());
       }
     }
 
@@ -1428,9 +1428,9 @@ namespace ao::rt
 
       if (mode == ImportMode::Merge)
       {
-        if (auto const manifestRes = manifestReader.get(validatedTrack.uri); manifestRes)
+        if (auto const optManifest = manifestReader.get(validatedTrack.uri); optManifest)
         {
-          optExistingTrackId = manifestRes->trackId();
+          optExistingTrackId = optManifest->trackId();
         }
       }
 
@@ -1540,9 +1540,9 @@ namespace ao::rt
     {
       auto optCurrentTrackId = std::optional<TrackId>{};
 
-      if (auto const manifestRes = manifestReader.get(uri); manifestRes)
+      if (auto const optManifest = manifestReader.get(uri); optManifest)
       {
-        optCurrentTrackId = manifestRes->trackId();
+        optCurrentTrackId = optManifest->trackId();
       }
 
       if (optCurrentTrackId != optExistingTrackId)
@@ -1661,10 +1661,10 @@ namespace ao::rt
                                                         library::FileManifestStore::Reader const& manifestReader,
                                                         library::FileManifestBuilder& manifestBuilder) const
   {
-    if (auto const manifestRes = manifestReader.get(uriStr); manifestRes)
+    if (auto const optManifest = manifestReader.get(uriStr); optManifest)
     {
-      manifestBuilder.fileSize(manifestRes->fileSize());
-      manifestBuilder.mtime(manifestRes->mtime());
+      manifestBuilder.fileSize(optManifest->fileSize());
+      manifestBuilder.mtime(optManifest->mtime());
     }
     else
     {
@@ -2194,17 +2194,13 @@ namespace ao::rt
 
       auto const& uriReference = std::get<ValidatedListOrderUriReference>(orderReference);
 
-      if (auto const manifestRes = manifestReader.get(uriReference.uri); manifestRes)
+      if (auto const optManifest = manifestReader.get(uriReference.uri); optManifest)
       {
-        builder.orderTrackIds().add(manifestRes->trackId());
-      }
-      else if (manifestRes.error().code == Error::Code::NotFound)
-      {
-        ++report.danglingReferencesIgnored;
+        builder.orderTrackIds().add(optManifest->trackId());
       }
       else
       {
-        return std::unexpected{manifestRes.error()};
+        ++report.danglingReferencesIgnored;
       }
     }
 

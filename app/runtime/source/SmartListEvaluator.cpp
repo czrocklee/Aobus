@@ -455,21 +455,22 @@ namespace ao::rt
         }
       }
 
-      auto visitTrack = [&](TrackId trackId, library::TrackView const& view)
-      {
-        for (std::size_t index = 0; index < lists.size(); ++index)
-        {
-          if (auto* const list = lists[index];
-              list->state() == TrackSourceState::Live && !list->_current.optError &&
-              list->_current.planPtr != nullptr &&
-              query::hasRequiredTrackData(list->_current.planPtr->accessProfile, view) &&
-              list->_planEvaluator.matches(*bindings[index], view))
-          {
-            nextMembers[index].push_back(trackId);
-          }
-        }
-      };
-      reader.visitTracks(bucket.upstreamTracks.ids(), storeMode, visitTrack);
+      reader.visitTracks(bucket.upstreamTracks.ids(),
+                         storeMode,
+                         [&](TrackId trackId, library::TrackView const& view)
+                         {
+                           for (std::size_t index = 0; index < lists.size(); ++index)
+                           {
+                             if (auto* const list = lists[index];
+                                 list->state() == TrackSourceState::Live && !list->_current.optError &&
+                                 list->_current.planPtr != nullptr &&
+                                 query::hasRequiredTrackData(list->_current.planPtr->accessProfile, view) &&
+                                 list->_planEvaluator.matches(*bindings[index], view))
+                             {
+                               nextMembers[index].push_back(trackId);
+                             }
+                           }
+                         });
     }
 
     auto previousSizes = std::vector<std::size_t>{};

@@ -103,9 +103,9 @@ namespace ao::gtk::test
     bool manifestHasAudioIdentity(GtkRuntimeFixture& fixture, std::string_view uri)
     {
       auto transaction = fixture.runtime().musicLibrary().readTransaction();
-      auto manifestRes = fixture.runtime().musicLibrary().manifest().reader(transaction).get(uri);
-      REQUIRE(manifestRes);
-      return library::hasAudioIdentity(manifestRes->audioPayloadLength(), manifestRes->audioSignature());
+      auto optManifest = fixture.runtime().musicLibrary().manifest().reader(transaction).get(uri);
+      REQUIRE(optManifest);
+      return library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature());
     }
 
     std::vector<std::string> trackUris(GtkRuntimeFixture& fixture)

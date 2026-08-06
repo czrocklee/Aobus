@@ -122,20 +122,13 @@ namespace ao::rt
           item.classification = ScanClassification::Error;
           item.errorMessage = entryEc.message();
         }
-        else if (auto manifestRes = manifestReader.get(uri); !manifestRes)
+        else if (auto optManifest = manifestReader.get(uri); !optManifest)
         {
-          if (manifestRes.error().code == Error::Code::NotFound)
-          {
-            item.classification = ScanClassification::New;
-          }
-          else
-          {
-            return std::unexpected{manifestRes.error()};
-          }
+          item.classification = ScanClassification::New;
         }
         else
         {
-          auto const& view = *manifestRes;
+          auto const& view = *optManifest;
           item.trackId = view.trackId();
           item.audioPayloadLength = view.audioPayloadLength();
           item.audioSignature = view.audioSignature();

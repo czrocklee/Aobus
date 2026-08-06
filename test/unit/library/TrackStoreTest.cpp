@@ -221,12 +221,13 @@ namespace ao::library::test
     auto rtxn = fixture.library.readTransaction();
     auto const reader = fixture.store.reader(rtxn);
 
-    auto visitTrack = [&](TrackId id, TrackView const& view)
-    {
-      visitedIds.push_back(id);
-      titles.push_back(view.metadata().title());
-    };
-    reader.visitTracks(requested, TrackStore::Reader::LoadMode::Hot, visitTrack);
+    reader.visitTracks(requested,
+                       TrackStore::Reader::LoadMode::Hot,
+                       [&](TrackId id, TrackView const& view)
+                       {
+                         visitedIds.push_back(id);
+                         titles.push_back(view.metadata().title());
+                       });
 
     CHECK(visitedIds == std::vector<TrackId>{id3, id1, id3, id2});
     CHECK(titles == std::vector<std::string_view>{"Three", "One", "Three", "Two"});
@@ -248,13 +249,14 @@ namespace ao::library::test
     auto rtxn = fixture.library.readTransaction();
     auto const reader = fixture.store.reader(rtxn);
 
-    auto visitTrack = [&](TrackId id, TrackView const& view)
-    {
-      REQUIRE(view.isHotValid());
-      REQUIRE(view.isColdValid());
-      visitedIds.push_back(id);
-    };
-    reader.visitTracks(requested, TrackStore::Reader::LoadMode::Both, visitTrack);
+    reader.visitTracks(requested,
+                       TrackStore::Reader::LoadMode::Both,
+                       [&](TrackId id, TrackView const& view)
+                       {
+                         REQUIRE(view.isHotValid());
+                         REQUIRE(view.isColdValid());
+                         visitedIds.push_back(id);
+                       });
 
     CHECK(visitedIds == std::vector<TrackId>{id1, id2, id3});
   }

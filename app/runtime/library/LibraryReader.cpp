@@ -5,7 +5,6 @@
 
 #include "runtime/TrackFieldReaderInternal.h"
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
@@ -25,7 +24,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <format>
 #include <map>
 #include <memory>
 #include <optional>
@@ -111,17 +109,11 @@ namespace ao::rt
       {
         auto const manifestReader = library.manifest().reader(transaction);
 
-        if (auto manifestRes = manifestReader.get(uri); manifestRes)
+        if (auto optManifest = manifestReader.get(uri); optManifest)
         {
-          fileSize = manifestRes->fileSize();
-          modifiedTime = manifestRes->mtime();
-          status = manifestRes->status();
-        }
-        else if (manifestRes.error().code != Error::Code::NotFound)
-        {
-          auto const& error = manifestRes.error();
-          auto const message = std::format("Failed to load file manifest entry: {}", error.message);
-          throwException<Exception>(std::string_view{message}, error.location);
+          fileSize = optManifest->fileSize();
+          modifiedTime = optManifest->mtime();
+          status = optManifest->status();
         }
       }
 
