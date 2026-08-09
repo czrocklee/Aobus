@@ -4,7 +4,6 @@
 #include <ao/winui/app/DestructiveLibraryRestart.h>
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -67,57 +66,6 @@ namespace ao::winui::test
     CHECK(outcome == DestructiveLibraryRestartOutcome::LaunchFailed);
     CHECK(reportedCode == Error::Code::IoError);
     CHECK(events.values == std::vector<std::string_view>{"release", "launch", "report", "exit"});
-  }
-
-  TEST_CASE("DestructiveLibraryRestart - converts a throwing launcher to a reported failure and exits",
-            "[winui][unit][app]")
-  {
-    auto events = EventLog{};
-    auto reportedCode = Error::Code::Generic;
-    auto const outcome = executeDestructiveLibraryRestart({
-      .releaseActiveGraph = [&events] { events.add("release"); },
-      .launchSuccessor = [&events] -> Result<>
-      {
-        events.add("launch");
-        throwException<Exception>("native launcher failure");
-      },
-      .reportLaunchFailure =
-        [&events, &reportedCode](Error const& error) noexcept
-      {
-        events.add("report");
-        reportedCode = error.code;
-      },
-      .exitProcess = [&events] noexcept { events.add("exit"); },
-    });
-
-    CHECK(outcome == DestructiveLibraryRestartOutcome::LaunchFailed);
-    CHECK(reportedCode == Error::Code::InitFailed);
-    CHECK(events.values == std::vector<std::string_view>{"release", "launch", "report", "exit"});
-  }
-
-  TEST_CASE("DestructiveLibraryRestart - a throwing release still launches the successor", "[winui][unit][app]")
-  {
-    // The parent is exiting either way, so a half-released parent costs nothing
-    // a user can observe. A successor that never starts costs them their app.
-    auto events = EventLog{};
-    auto const outcome = executeDestructiveLibraryRestart({
-      .releaseActiveGraph =
-        [&events]
-      {
-        events.add("release");
-        throwException<Exception>("native teardown failure");
-      },
-      .launchSuccessor = [&events] -> Result<>
-      {
-        events.add("launch");
-        return {};
-      },
-      .reportLaunchFailure = [&events](Error const&) noexcept { events.add("report"); },
-      .exitProcess = [&events] noexcept { events.add("exit"); },
-    });
-
-    CHECK(outcome == DestructiveLibraryRestartOutcome::Launched);
-    CHECK(events.values == std::vector<std::string_view>{"release", "launch", "exit"});
   }
 
   TEST_CASE("DestructiveLibraryRestart - a missing required operation exits without releasing anything",

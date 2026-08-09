@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/detail/TrackColdReader.h>
+
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
 #include <ao/library/TrackLayout.h>
-#include <ao/library/detail/TrackColdReader.h>
 #include <ao/utility/ByteView.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -281,7 +281,7 @@ namespace ao::library::detail
 
   TrackColdHeader const& TrackColdReader::header() const noexcept
   {
-    gsl_Expects(_header != nullptr);
+    AO_EXPECTS(_header != nullptr);
     return *_header;
   }
 

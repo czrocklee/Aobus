@@ -8,13 +8,13 @@
 #include "runtime/playback/PlaybackTransport.h"
 #include "runtime/playback/ProjectionAnchor.h"
 #include "runtime/playback/ShuffleHistory.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -53,22 +53,6 @@ namespace ao::rt
     {
       return failure.recoverable &&
              (failure.kind == PlaybackFailureKind::TrackOpen || failure.kind == PlaybackFailureKind::Decode);
-    }
-
-    [[noreturn]] void failExecutorAffinity(std::source_location const& location)
-    {
-      APP_LOG_CRITICAL("PlaybackSuccession thread-affinity violation: '{}' invoked off the executor thread "
-                       "({}:{})",
-                       location.function_name(),
-                       location.file_name(),
-                       location.line());
-
-      if (auto const& loggerPtr = Log::appLogger(); loggerPtr)
-      {
-        loggerPtr->flush();
-      }
-
-      std::abort();
     }
   } // namespace
 
@@ -128,10 +112,7 @@ namespace ao::rt
 
     void ensureOnExecutor(std::source_location location = std::source_location::current()) const
     {
-      if (!executor.isCurrent()) [[unlikely]]
-      {
-        failExecutorAffinity(location);
-      }
+      AO_EXPECTS_AT(location, executor.isCurrent(), "PlaybackSuccession invoked off the executor thread");
     }
 
     ShuffleHistory::CandidateChooser makeCandidateChooser()
@@ -943,7 +924,7 @@ namespace ao::rt
           return PlaybackFailureDisposition::Unhandled;
         });
       idleSubscription = transport.onIdle(
-        [this] noexcept
+        [this]
         {
           if (!isClosing() && sessionPtr && !stoppingTransport && transport.state().transport == audio::Transport::Idle)
           {
@@ -951,7 +932,7 @@ namespace ao::rt
           }
         });
       nowPlayingSubscription = transport.onNowPlayingChanged(
-        [this](PlaybackTransport::NowPlayingChanged const& event) noexcept
+        [this](PlaybackTransport::NowPlayingChanged const& event)
         {
           if (!isClosing())
           {
@@ -959,7 +940,7 @@ namespace ao::rt
           }
         });
       outputSubscription = transport.onOutputDeviceChanged(
-        [this](OutputDeviceSelection const&) noexcept
+        [this](OutputDeviceSelection const&)
         {
           if (!isClosing())
           {
@@ -968,7 +949,7 @@ namespace ao::rt
           }
         });
       seekSubscription = transport.onSeekUpdate(
-        [this](PlaybackTransport::SeekUpdate const& event) noexcept
+        [this](PlaybackTransport::SeekUpdate const& event)
         {
           if (!isClosing() && sessionPtr && event.mode == PlaybackTransport::SeekMode::Final)
           {
@@ -982,7 +963,7 @@ namespace ao::rt
           }
         });
       startedSubscription = transport.onStarted(
-        [this] noexcept
+        [this]
         {
           if (!isClosing() && sessionPtr)
           {
@@ -990,7 +971,7 @@ namespace ao::rt
           }
         });
       pausedSubscription = transport.onPaused(
-        [this] noexcept
+        [this]
         {
           if (!isClosing() && sessionPtr)
           {
@@ -998,7 +979,7 @@ namespace ao::rt
           }
         });
       stoppedSubscription = transport.onStopped(
-        [this] noexcept
+        [this]
         {
           if (!isClosing() && !stoppingTransport)
           {
@@ -1253,27 +1234,27 @@ namespace ao::rt
   }
 
   async::Subscription PlaybackSuccession::onChanged(
-    std::move_only_function<void(PlaybackSuccessionState const&) noexcept> handler)
+    std::move_only_function<void(PlaybackSuccessionState const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->changedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackSuccession::onExplicitStartSettled(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackSuccession::onExplicitStartSettled(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->explicitStartSettledSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackSuccession::onShuffleModeChanged(
-    std::move_only_function<void(ShuffleModeChanged const&) noexcept> handler)
+    std::move_only_function<void(ShuffleModeChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->shuffleModeChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackSuccession::onRepeatModeChanged(
-    std::move_only_function<void(RepeatModeChanged const&) noexcept> handler)
+    std::move_only_function<void(RepeatModeChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->repeatModeChangedSignal.connect(std::move(handler));
@@ -1365,7 +1346,7 @@ namespace ao::rt
     impl->optLastRestorableSnapshot.reset();
   }
 
-  async::Subscription PlaybackSuccession::onRestorableStateChanged(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackSuccession::onRestorableStateChanged(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->restorableStateChangedSignal.connect(std::move(handler));

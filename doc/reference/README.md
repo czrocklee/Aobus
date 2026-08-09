@@ -23,6 +23,8 @@ Use the [reference template](../template/reference.md).
 ## Failure and reporting
 
 - [Error value](failure/error.md) enumerates the shared recoverable error fields, codes, result wrapper, and helper.
+- [Fatal facility](failure/fatal.md) enumerates AO fatal categories, macros, diagnostics, sink registration, and abort behavior.
+- [Exception carriers](failure/exception-carriers.md) enumerate the exact project carriers, throw regions, catch owners, and foreign exception boundaries.
 - [Notification model](reporting/notification.md) enumerates runtime reporting identities, fields, enums, defaults, commands, and canonical feed updates.
 
 ## Library

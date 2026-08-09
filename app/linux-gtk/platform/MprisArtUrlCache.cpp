@@ -5,7 +5,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
@@ -18,7 +17,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -154,7 +152,8 @@ namespace ao::gtk::platform
        resourceId,
        optCachedEntry = std::move(optCachedEntry),
        token = std::move(token)](std::stop_token const stopToken) mutable
-      { return validate(cache, runtime, resourceId, std::move(optCachedEntry), std::move(token), stopToken); });
+      { return validate(cache, runtime, resourceId, std::move(optCachedEntry), std::move(token), stopToken); },
+      "MPRIS cover-art cache validation");
   }
 
   async::Task<void> MprisArtUrlCache::validate(MprisArtUrlCache* const cache,
@@ -164,25 +163,17 @@ namespace ao::gtk::platform
                                                Requests::FlightToken token,
                                                std::stop_token const stopToken)
   {
-    try
+    if (optCachedEntry)
     {
-      if (optCachedEntry)
-      {
-        co_await runtime->resumeOnWorker(stopToken);
+      co_await runtime->resumeOnWorker(stopToken);
 
-        if (isCacheEntryValid(*optCachedEntry))
-        {
-          co_await runtime->resumeOnCallbackExecutor(stopToken);
-          cache->_cache[resourceId] = *optCachedEntry;
-          cache->_requests.complete(token, optCachedEntry->url);
-          co_return;
-        }
+      if (isCacheEntryValid(*optCachedEntry))
+      {
+        co_await runtime->resumeOnCallbackExecutor(stopToken);
+        cache->_cache[resourceId] = *optCachedEntry;
+        cache->_requests.complete(token, optCachedEntry->url);
+        co_return;
       }
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "MPRIS cover-art materialization workflow");
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
@@ -210,7 +201,8 @@ namespace ao::gtk::platform
       {
         return exportBytes(
           cache, runtime, std::move(cacheDir), resourceId, std::move(token), std::move(bytes), stopToken);
-      });
+      },
+      "MPRIS cover-art export");
   }
 
   async::Task<void> MprisArtUrlCache::exportBytes(MprisArtUrlCache* const cache,
@@ -223,19 +215,11 @@ namespace ao::gtk::platform
   {
     auto optResult = std::optional<CacheEntry>{};
 
-    try
-    {
-      co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorker(stopToken);
 
-      if (!bytes.empty())
-      {
-        optResult = exportResource(cacheDir, resourceId, bytes.view());
-      }
-    }
-    catch (...)
+    if (!bytes.empty())
     {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "MPRIS cover-art materialization workflow");
+      optResult = exportResource(cacheDir, resourceId, bytes.view());
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
@@ -262,7 +246,14 @@ namespace ao::gtk::platform
       return std::nullopt;
     }
 
-    std::filesystem::create_directories(cacheDir);
+    auto ec = std::error_code{};
+    std::filesystem::create_directories(cacheDir, ec);
+
+    if (ec)
+    {
+      return std::nullopt;
+    }
+
     auto const path = cacheDir / (std::to_string(resourceId.raw()) + std::string{extensionForBytes(bytes)});
     removeStaleResourceFiles(cacheDir, resourceId, path);
 
@@ -336,7 +327,14 @@ namespace ao::gtk::platform
 
   std::string MprisArtUrlCache::fileUriForPath(std::filesystem::path const& path)
   {
-    auto const filePtr = Gio::File::create_for_path(path.string());
-    return filePtr ? filePtr->get_uri() : std::string{};
+    try
+    {
+      auto const filePtr = Gio::File::create_for_path(path.string());
+      return filePtr ? filePtr->get_uri() : std::string{};
+    }
+    catch (Glib::Error const&)
+    {
+      return {};
+    }
   }
 } // namespace ao::gtk::platform

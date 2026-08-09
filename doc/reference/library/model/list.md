@@ -23,9 +23,9 @@ The persisted list model belongs to the **core libraries** layer in the [system 
 |---|---|---|
 | `ListId` | Unsigned 32-bit | Durable list identity; zero is invalid. |
 | `parentId` | `ListId` | Parent list; zero means the All Tracks root. |
-| `name` | UTF-8 text | User-visible list name. |
-| `description` | UTF-8 text | Optional description. |
-| `filter` | UTF-8 text | Local predicate applied to the parent source; empty is the identity expression `true`. |
+| `name` | Stored text bytes | User-visible list name. |
+| `description` | Stored text bytes | Optional description. |
+| `filter` | Opaque stored text bytes | Local predicate text interpreted by the application; empty is the identity expression `true`. |
 | `orderTrackIds` | Unique ordered `TrackId` sequence | Optional rank overlay; it never defines membership. |
 
 The All Tracks root uses the reserved runtime identity `kAllTracksListId` and is not a normal stored list row.
@@ -46,18 +46,25 @@ The exact filter text surface belongs to the [predicate language](../../../refer
 
 Each text field is limited to 65,535 bytes by product policy even though the physical length field is 32-bit.
 The stored order count must fit unsigned 32-bit, multiplication and aggregate record sizing use checked host-size arithmetic, and the record is padded canonically to a four-byte boundary.
-`ListBuilder::serialize()` returns `ValueTooLarge` instead of narrowing an out-of-range count or size.
+`ListBuilder` owns its text fields rather than retaining setter input views.
+`ListBuilder::prepare()` returns a recoverable error instead of narrowing an out-of-range count or size, snapshots the encoded bytes, and accepts no zero saved-order id.
+The same canonical row validator checks preparation and open-time row validation.
+The Store encoder's `AO_ENSURES` postcondition checks that its output exactly equals the validated immutable snapshot instead of allocating a second saved-order uniqueness set.
+This boundary does not claim complete UTF-8 validation.
 
 `ListBuilder::OrderTrackIdsBuilder` retains only the first occurrence of an id.
 Runtime mutation and YAML import require resolved order ids to identify existing tracks; an order id need not currently match the List expression.
 Parent relationships must identify an allowed root or existing list and must not create a cycle.
-An empty expression is valid identity behavior; every non-empty expression must parse and compile before a committing create or update.
+Those reference and topology rules belong above the local row validator.
+The core List builder and Store preserve every filter string within the byte-size limit without parsing or compiling it.
+Application authoring may reject an invalid expression for immediate feedback, while materializing invalid stored text exposes the empty-membership expression-error state defined by [track sources](../../../spec/library/source/track-source.md).
 
 ## Compatibility and versioning
 
 The physical version is owned by the [library database reference](../storage/database.md).
-The database version also gates how stored `filter` text parses, binds, and selects membership; the expression carries no separate language version.
-Changing hierarchy meaning, expression membership, rank-overlay semantics, or predicate behavior for existing filter text is a behavioral and storage compatibility change.
+The database version gates the List record layout and rank representation, not the query grammar accepted by the application.
+Stored `filter` bytes carry no nested language version and may become invalid when interpreted by a later application; that is an application expression outcome rather than database corruption.
+Changing hierarchy or rank-overlay persistence semantics remains a storage compatibility change.
 
 ## Implementation authority
 

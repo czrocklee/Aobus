@@ -131,42 +131,50 @@ namespace ao::gtk::layout::test
     auto coverTrackId = kInvalidTrackId;
     auto noCoverTrackId = kInvalidTrackId;
     auto corruptCoverTrackId = kInvalidTrackId;
+    auto coverResourceId = kInvalidResourceId;
     auto corruptCoverResourceId = kInvalidResourceId;
     auto fixture = LayoutRuntimeFixture{
       "io.github.aobus.playback_image_test",
       [&](library::MusicLibrary& musicLibrary)
       {
-        auto const fixtureUri =
+        auto const mutableCoverUri =
+          audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "mutable-cover.flac");
+        auto const coverUri =
           audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
-        mutableCoverTrackId = library::test::addTrack(musicLibrary,
-                                                      library::test::TrackSpec{
-                                                        .title = "Mutable Cover Track",
-                                                        .uri = fixtureUri,
-                                                        .coverArtId = ResourceId{42},
-                                                        .duration = std::chrono::seconds{1},
-                                                      });
-        coverTrackId = library::test::addTrack(musicLibrary,
-                                               library::test::TrackSpec{
-                                                 .title = "Cover Track",
-                                                 .uri = fixtureUri,
-                                                 .coverArtId = ResourceId{42},
-                                                 .duration = std::chrono::seconds{1},
-                                               });
-        noCoverTrackId = library::test::addTrack(musicLibrary,
-                                                 library::test::TrackSpec{
-                                                   .title = "No Cover Track",
-                                                   .uri = fixtureUri,
-                                                   .duration = std::chrono::seconds{1},
-                                                 });
+        auto const noCoverUri =
+          audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "no-cover-track.flac");
+        auto const corruptCoverUri =
+          audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "corrupt-cover-track.flac");
+        coverResourceId = ao::gtk::test::writeCoverResource(musicLibrary, 80);
+        mutableCoverTrackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary,
+                                                                          library::test::TrackSpec{
+                                                                            .title = "Mutable Cover Track",
+                                                                            .uri = mutableCoverUri,
+                                                                            .coverArtId = coverResourceId,
+                                                                            .duration = std::chrono::seconds{1},
+                                                                          });
+        coverTrackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary,
+                                                                   library::test::TrackSpec{
+                                                                     .title = "Cover Track",
+                                                                     .uri = coverUri,
+                                                                     .coverArtId = coverResourceId,
+                                                                     .duration = std::chrono::seconds{1},
+                                                                   });
+        noCoverTrackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary,
+                                                                     library::test::TrackSpec{
+                                                                       .title = "No Cover Track",
+                                                                       .uri = noCoverUri,
+                                                                       .duration = std::chrono::seconds{1},
+                                                                     });
         auto const corruptBytes = std::array{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}, std::byte{0x04}};
         corruptCoverResourceId = ao::gtk::test::writeRawResource(musicLibrary, corruptBytes);
-        corruptCoverTrackId = library::test::addTrack(musicLibrary,
-                                                      library::test::TrackSpec{
-                                                        .title = "Corrupt Cover Track",
-                                                        .uri = fixtureUri,
-                                                        .coverArtId = corruptCoverResourceId,
-                                                        .duration = std::chrono::seconds{1},
-                                                      });
+        corruptCoverTrackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary,
+                                                                          library::test::TrackSpec{
+                                                                            .title = "Corrupt Cover Track",
+                                                                            .uri = corruptCoverUri,
+                                                                            .coverArtId = corruptCoverResourceId,
+                                                                            .duration = std::chrono::seconds{1},
+                                                                          });
       }};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
     auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
@@ -259,8 +267,7 @@ namespace ao::gtk::layout::test
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
 
-      auto const coverArtId = ResourceId{42};
-      imageCachePtr->put(ImageCacheKey::full(coverArtId), ao::gtk::test::makePixbuf(80, 80));
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
 
       // An earlier snapshot observer must not delay the component's own update.
       bool earlierObserverEntered = false;
@@ -331,7 +338,7 @@ namespace ao::gtk::layout::test
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
-      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
       auto manualHoverTimeout = sigc::signal<bool()>{};
       ctx.timeoutScheduler = [&](std::chrono::milliseconds const interval, sigc::slot<bool()> callback)
       {
@@ -415,7 +422,7 @@ namespace ao::gtk::layout::test
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
-      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
       auto manualHoverTimeout = sigc::signal<bool()>{};
       ctx.timeoutScheduler = [&](std::chrono::milliseconds const /*interval*/, sigc::slot<bool()> callback)
       { return manualHoverTimeout.connect(std::move(callback)); };
@@ -464,7 +471,7 @@ namespace ao::gtk::layout::test
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
-      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
       auto manualHoverTimeout = sigc::signal<bool()>{};
       std::size_t scheduledHoverCount = 0;
       ctx.timeoutScheduler = [&](std::chrono::milliseconds const /*interval*/, sigc::slot<bool()> callback)
@@ -519,7 +526,7 @@ namespace ao::gtk::layout::test
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
-      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
 
       auto tooltipNode = LayoutNode{.type = "playback.image"};
       tooltipNode.layout["visible"] = LayoutValue{true};
@@ -553,7 +560,7 @@ namespace ao::gtk::layout::test
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
-      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
 
       auto node = LayoutNode{.type = "playback.image"};
       node.layout["visible"] = LayoutValue{false};
@@ -575,10 +582,7 @@ namespace ao::gtk::layout::test
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
 
-      auto const firstCoverArtId = ResourceId{42};
-      auto const secondCoverArtId = ResourceId{43};
-      imageCachePtr->put(ImageCacheKey::full(firstCoverArtId), ao::gtk::test::makePixbuf(80, 80));
-      imageCachePtr->put(ImageCacheKey::full(secondCoverArtId), ao::gtk::test::makePixbuf(96, 96));
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
 
       auto const node = LayoutNode{.type = "playback.image"};
       auto const compPtr = fixture.components().create(ctx, node);

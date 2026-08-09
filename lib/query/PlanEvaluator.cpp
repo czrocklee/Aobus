@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/PlanEvaluator.h>
+
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
-#include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -121,7 +121,7 @@ namespace ao::query
 
     std::int64_t& reg(std::vector<std::int64_t>& registers, std::int32_t index)
     {
-      gsl_Expects(index >= 0);
+      AO_INVARIANT(index >= 0);
       return registers[static_cast<std::size_t>(index)];
     }
 
@@ -361,7 +361,7 @@ namespace ao::query
 
       if (set.valueKind == InSetValueKind::Dictionary)
       {
-        gsl_Expects(setIndex < dictionarySets.size());
+        AO_INVARIANT(setIndex < dictionarySets.size());
       }
 
       auto const& values = set.valueKind == InSetValueKind::Dictionary ? dictionarySets[setIndex] : set.numericValues;
@@ -374,7 +374,7 @@ namespace ao::query
     explicit Impl(ExecutionPlan const& sourcePlan, library::DictionaryReadContext* readContext)
       : plan{&sourcePlan}, dictionary{readContext}, dictionarySets{sourcePlan.inSets.size()}
     {
-      gsl_Expects(!sourcePlan.requiresDictionary || readContext != nullptr);
+      AO_EXPECTS(!sourcePlan.requiresDictionary || readContext != nullptr);
 
       dictionaryIds.resize(sourcePlan.dictionarySymbols.size(), kInvalidDictionaryId);
 
@@ -455,7 +455,7 @@ namespace ao::query
   {
     auto const& state = *binding._implPtr;
     auto const& plan = *state.plan;
-    gsl_Expects(hasRequiredTrackData(plan.accessProfile, track));
+    AO_EXPECTS(hasRequiredTrackData(plan.accessProfile, track));
 
     if (plan.matchesAll)
     {
@@ -472,7 +472,7 @@ namespace ao::query
 
   bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
   {
-    gsl_Expects(!plan.requiresDictionary);
+    AO_EXPECTS(!plan.requiresDictionary);
     auto const binding = PlanBinding{plan};
     return matches(binding, track);
   }
@@ -481,7 +481,7 @@ namespace ao::query
   {
     auto const& state = *binding._implPtr;
     auto const& plan = *state.plan;
-    gsl_Expects(hasRequiredTrackData(plan.accessProfile, track));
+    AO_EXPECTS(hasRequiredTrackData(plan.accessProfile, track));
 
     if (plan.matchesAll)
     {
@@ -595,7 +595,7 @@ namespace ao::query
 
   bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const
   {
-    gsl_Expects(!plan.requiresDictionary);
+    AO_EXPECTS(!plan.requiresDictionary);
     auto const binding = PlanBinding{plan};
     return evaluateFull(binding, track);
   }

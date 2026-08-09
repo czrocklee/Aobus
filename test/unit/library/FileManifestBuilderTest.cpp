@@ -2,11 +2,18 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/library/FileManifestBuilder.h>
+
+#include "lib/library/FileManifestValidation.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <cstddef>
+#include <string>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -60,5 +67,35 @@ namespace ao::library::test
     CHECK(view2.audioPayloadLength() == 444);
     CHECK(view2.audioSignature() == signature);
     CHECK(view2.status() == FileStatus::Missing);
+  }
+
+  TEST_CASE("FileManifestBuilder - prepared value owns canonical URI and payload snapshots",
+            "[library][unit][manifest]")
+  {
+    auto uri = std::string{"snapshot.flac"};
+    auto builder = FileManifestBuilder::makeEmpty();
+    builder.trackId(TrackId{7}).fileSize(11).mtime(13).status(FileStatus::Missing);
+    auto const prepared = ao::test::requireValue(builder.prepare(uri));
+
+    uri = "mutated.flac";
+    builder.trackId(TrackId{9}).fileSize(17);
+    auto bytes = std::vector<std::byte>(prepared.size());
+    prepared.writeTo(bytes);
+    auto const view = FileManifestView{bytes};
+
+    CHECK(prepared.uri() == "snapshot.flac");
+    REQUIRE(validateFileManifestPayload(bytes));
+    CHECK(view.trackId() == TrackId{7});
+    CHECK(view.fileSize() == 11);
+    CHECK(view.mtime() == 13);
+    CHECK(view.status() == FileStatus::Missing);
+  }
+
+  TEST_CASE("FileManifestBuilder - preparation rejects a non-canonical URI", "[library][unit][manifest]")
+  {
+    auto const preparedRes = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).prepare("../outside.flac");
+
+    REQUIRE_FALSE(preparedRes);
+    CHECK(preparedRes.error().code == Error::Code::InvalidInput);
   }
 } // namespace ao::library::test

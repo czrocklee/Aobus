@@ -5,7 +5,6 @@
 #include "runtime/playback/ProjectionAnchor.h"
 #include "runtime/playback/ShuffleHistory.h"
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -21,6 +20,7 @@
 #include <iterator>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
@@ -140,7 +140,7 @@ namespace ao::rt::test
       {
         if (_queriesForbidden)
         {
-          throwException<Exception>("terminal cursor queried stale sequence state");
+          throw std::runtime_error{"terminal cursor queried stale sequence state"};
         }
 
         ++_queryCount;
@@ -254,14 +254,14 @@ namespace ao::rt::test
     {
       if (std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()))
       {
-        throwException<Exception>("reference anchor cannot consume a source-invalidated projection");
+        throw std::runtime_error{"reference anchor cannot consume a source-invalidated projection"};
       }
 
       if (std::holds_alternative<ProjectionReset>(batch.deltas.front()))
       {
         if (batch.deltas.size() != 1)
         {
-          throwException<Exception>("reference projection reset must be a singleton");
+          throw std::runtime_error{"reference projection reset must be a singleton"};
         }
 
         reconcileReferenceAnchor(anchor, currentTrackId, finalTracks);
@@ -295,11 +295,11 @@ namespace ao::rt::test
         }
         else if (std::holds_alternative<ProjectionSourceInvalidated>(delta))
         {
-          throwException<Exception>("reference anchor cannot consume a source-invalidated projection");
+          throw std::runtime_error{"reference anchor cannot consume a source-invalidated projection"};
         }
         else
         {
-          throwException<Exception>("reference projection reset must be a singleton");
+          throw std::runtime_error{"reference projection reset must be a singleton"};
         }
       }
 

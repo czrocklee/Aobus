@@ -3,9 +3,7 @@
 
 #include "common/UiWorkflow.h"
 
-#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -17,24 +15,19 @@
 #include <condition_variable>
 #include <mutex>
 #include <stop_token>
-#include <string_view>
 #include <thread>
 
 namespace ao::gtk::test
 {
   namespace
   {
-    using rt::test::AsyncExceptionRecorder;
     using rt::test::ManualExecutor;
-    using rt::test::requireSingleRecordedException;
-    constexpr auto kTestExceptionContext = std::string_view{"test UI workflow"};
 
     struct WorkflowOwner final
     {
       std::atomic<bool> bodyEntered{false};
       std::atomic<bool> bodyFinished{false};
-      std::atomic<int> handlerCalls{0};
-      std::atomic<std::thread::id> handlerThread{};
+      std::atomic<std::thread::id> bodyEntryThread{};
       std::mutex mutex;
       std::condition_variable cv;
 
@@ -51,139 +44,72 @@ namespace ao::gtk::test
       }
     };
 
-    // Worker-side bodies live as free coroutines (taking the runtime by pointer) so the spawn-site lambdas stay
-    // plain, non-coroutine adapters, matching the production workflow pattern and avoiding capturing-coroutine UB.
-    async::Task<void> failingWorkflowBody(async::Runtime* runtime,
-                                          WorkflowOwner* owner,
-                                          std::stop_token const stopToken)
-    {
-      owner->bodyEntered = true;
-      co_await runtime->resumeOnWorker(stopToken);
-      // Throw from worker code: the boundary must marshal back before presenting it.
-      throwException<Exception>("boom");
-    }
-
     async::Task<void> succeedingWorkflowBody(async::Runtime* runtime,
                                              WorkflowOwner* owner,
                                              std::stop_token const stopToken)
     {
       owner->bodyEntered = true;
+      owner->bodyEntryThread = std::this_thread::get_id();
       co_await runtime->resumeOnWorker(stopToken);
       owner->markBodyFinished();
     }
 
-    // Pumps the callback executor on the test thread until the predicate holds.
-    template<typename Predicate>
-    bool pumpUntil(ManualExecutor& executor, Predicate const& predicate)
+    async::Task<void> markUnexpectedEntry(WorkflowOwner* owner, std::stop_token /*stopToken*/)
     {
-      while (!predicate())
-      {
-        REQUIRE(executor.waitUntilQueued());
-        executor.runUntilIdle();
-      }
-
-      return true;
+      owner->bodyEntered = true;
+      co_return;
     }
   } // namespace
 
-  TEST_CASE("UiWorkflow - internal failure invokes the handler on the callback executor",
-            "[gtk][unit][uiworkflow][concurrency]")
+  TEST_CASE("UiWorkflow - body enters on the callback executor", "[gtk][unit][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
-    auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto runtime = async::Runtime{executor, exceptionRecorder.handler()};
+    auto runtime = async::Runtime{executor};
     auto scope = async::LifetimeScope{};
     auto owner = WorkflowOwner{};
 
-    spawnUiWorkflow(
-      runtime,
-      scope,
-      owner,
-      kTestExceptionContext,
-      [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
-      { return failingWorkflowBody(&runtime, self, stopToken); },
-      [](WorkflowOwner* self)
-      {
-        self->handlerThread = std::this_thread::get_id();
-        ++self->handlerCalls;
-      });
-
-    REQUIRE(pumpUntil(executor, [&owner] { return owner.handlerCalls.load() > 0; }));
-
-    CHECK(owner.bodyEntered.load());
-    CHECK(owner.handlerCalls.load() == 1);
-    CHECK(owner.handlerThread.load() == std::this_thread::get_id());
-
-    runtime.requestStop();
-    runtime.join();
-
-    requireSingleRecordedException<Exception>(exceptionRecorder, kTestExceptionContext);
-  }
-
-  TEST_CASE("UiWorkflow - successful body does not invoke the exception handler",
-            "[gtk][unit][uiworkflow][concurrency]")
-  {
-    auto executor = ManualExecutor{};
-    auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto runtime = async::Runtime{executor, exceptionRecorder.handler()};
-    auto scope = async::LifetimeScope{};
-    auto owner = WorkflowOwner{};
-
-    spawnUiWorkflow(
-      runtime,
-      scope,
-      owner,
-      kTestExceptionContext,
-      [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
-      { return succeedingWorkflowBody(&runtime, self, stopToken); },
-      [](WorkflowOwner* self) { ++self->handlerCalls; });
+    spawnUiWorkflow(runtime,
+                    scope,
+                    owner,
+                    "test UI workflow",
+                    [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
+                    { return succeedingWorkflowBody(&runtime, self, stopToken); });
 
     REQUIRE(executor.waitUntilQueued());
     executor.runUntilIdle();
     REQUIRE(owner.waitBodyFinished());
 
-    // Drain residual callback-executor work so a same-turn handler dispatch would still be observed.
-    executor.runUntilIdle();
-
-    CHECK(owner.bodyEntered.load());
-    CHECK(owner.handlerCalls.load() == 0);
-    CHECK(exceptionRecorder.snapshot().empty());
-
     runtime.requestStop();
     runtime.join();
+
+    CHECK(owner.bodyEntered.load());
+    CHECK(owner.bodyEntryThread.load() == std::this_thread::get_id());
+    CHECK(scope.empty());
   }
 
-  TEST_CASE("UiWorkflow - cancellation cannot erase a fault captured before presentation",
+  TEST_CASE("UiWorkflow - cancellation before callback admission suppresses the body",
             "[gtk][regression][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
-    auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto runtime = async::Runtime{executor, exceptionRecorder.handler()};
+    auto runtime = async::Runtime{executor};
     auto scope = async::LifetimeScope{};
     auto owner = WorkflowOwner{};
 
-    spawnUiWorkflow(
-      runtime,
-      scope,
-      owner,
-      kTestExceptionContext,
-      [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
-      { return failingWorkflowBody(&runtime, self, stopToken); },
-      [](WorkflowOwner* self) { ++self->handlerCalls; });
+    spawnUiWorkflow(runtime,
+                    scope,
+                    owner,
+                    "test UI workflow cancellation",
+                    [](WorkflowOwner* self, std::stop_token const stopToken)
+                    { return markUnexpectedEntry(self, stopToken); });
 
     REQUIRE(executor.waitUntilQueued());
-    REQUIRE(executor.runOne());
-    REQUIRE(exceptionRecorder.waitForCount(1));
-    REQUIRE(executor.waitUntilQueued());
-
     scope.cancelAll();
     executor.runUntilIdle();
-
-    CHECK(owner.handlerCalls.load() == 0);
 
     runtime.requestStop();
     runtime.join();
 
-    requireSingleRecordedException<Exception>(exceptionRecorder, kTestExceptionContext);
+    CHECK_FALSE(owner.bodyEntered.load());
+    CHECK(scope.empty());
   }
 } // namespace ao::gtk::test

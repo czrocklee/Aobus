@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Exception.h>
 #include <ao/async/RequestCoalescer.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -9,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -218,12 +218,12 @@ namespace ao::async::test
     bool laterCalled = false;
     auto throwing = coalescer.request(
       1,
-      [](std::int32_t) { throwException<Exception>("callback"); },
+      [](std::int32_t) { throw std::runtime_error{"callback"}; },
       [&](Coalescer::FlightToken value) { optToken = std::move(value); });
     auto later = coalescer.request(1, [&](std::int32_t) { laterCalled = true; }, [](Coalescer::FlightToken) {});
 
     REQUIRE(optToken);
-    CHECK_THROWS_AS(coalescer.complete(*optToken, 0), Exception);
+    CHECK_THROWS_AS(coalescer.complete(*optToken, 0), std::runtime_error);
     CHECK(laterCalled);
   }
 
@@ -241,9 +241,9 @@ namespace ao::async::test
                       [&](Coalescer::FlightToken)
                       {
                         ++starts;
-                        throwException<Exception>("start");
+                        throw std::runtime_error{"start"};
                       }),
-                    Exception);
+                    std::runtime_error);
 
     auto retry = coalescer.request(1, [](std::int32_t) {}, [&](Coalescer::FlightToken) { ++starts; });
 

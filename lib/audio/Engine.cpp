@@ -4,12 +4,15 @@
 #include <ao/audio/Engine.h>
 
 #include "detail/DecoderOutput.h"
+#include "detail/EngineEventQueueInvariants.h"
+#include "detail/EngineRtSignalRing.h"
 #include "detail/OpenedModeValidation.h"
 #include "detail/RenderPath.h"
 #include "detail/RenderTimeline.h"
 #include "detail/TrackPreparation.h"
 #include "detail/TrackSession.h"
 #include <ao/AudioCodec.h>
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/AudioTime.h>
 #include <ao/audio/Backend.h>
@@ -24,12 +27,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/audio/detail/RouteTracker.h>
 
-#include <boost/lockfree/policies.hpp>
-#include <boost/lockfree/spsc_queue.hpp>
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <atomic>
-#include <cassert>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -57,7 +55,7 @@ namespace ao::audio
   namespace
   {
     template<typename Action>
-    void terminateOnException(Action&& action) noexcept
+    void runOrAbort(std::string_view const context, Action&& action) noexcept
     {
       try
       {
@@ -65,7 +63,7 @@ namespace ao::audio
       }
       catch (...)
       {
-        std::terminate();
+        AO_FATAL_EXCEPTION(std::current_exception(), context);
       }
     }
   } // namespace
@@ -183,12 +181,10 @@ namespace ao::audio
 
       ~EngineEventQueue()
       {
-        assert(!_eventThread.joinable() && "EngineEventQueue owner must stop the queue before destruction");
-        assert(!_running.load(std::memory_order_acquire) &&
-               "EngineEventQueue worker must exit before queue destruction");
-        assert(_playbackEvents.empty() && "EngineEventQueue owner must clear playback events before destruction");
-        assert(_rtSignalRing.read_available() == 0 &&
-               "EngineEventQueue owner must drain RT signals before destruction");
+        detail::verifyEngineEventQueueDestruction({.workerJoinable = _eventThread.joinable(),
+                                                   .running = _running.load(std::memory_order_acquire),
+                                                   .playbackEventsEmpty = _playbackEvents.empty(),
+                                                   .rtSignalCount = _rtSignalRing.readAvailable()});
       }
 
       EngineEventQueue(EngineEventQueue const&) = delete;
@@ -207,7 +203,17 @@ namespace ao::audio
                           processNextRtSignal = std::move(processNextRtSignal),
                           processPlaybackEvent = std::move(processPlaybackEvent)](std::stop_token stopToken) mutable
                          {
-                           run(stopToken, processNextRtSignal, processPlaybackEvent);
+                           try
+                           {
+                             run(stopToken, processNextRtSignal, processPlaybackEvent);
+                           }
+                           catch (...)
+                           {
+                             _running.store(false, std::memory_order_release);
+                             _running.notify_all();
+                             AO_FATAL_EXCEPTION(std::current_exception(), "engine event thread");
+                           }
+
                            _running.store(false, std::memory_order_release);
                            _running.notify_all();
                          }};
@@ -216,7 +222,7 @@ namespace ao::audio
         {
           _running.store(false, std::memory_order_release);
           _running.notify_all();
-          throw;
+          AO_FATAL_EXCEPTION(std::current_exception(), "engine event-worker startup");
         }
       }
 
@@ -256,21 +262,15 @@ namespace ao::audio
         _eventSignal.release();
       }
 
-      bool enqueueRtSignal(RtSignal signal) noexcept
+      void enqueueRtSignal(RtSignal const& signal) noexcept
       {
-        if (!_rtSignalRing.push(signal))
-        {
-          assert(false && "RT signal ring overflow: event thread is not draining");
-          return false;
-        }
-
+        _rtSignalRing.push(signal);
         _eventSignal.release();
-        return true;
       }
 
       // Consumer-side only. Runtime consumers serialize pop+processing outside
       // this class because control commands also settle this ring.
-      bool tryPopRtSignal(RtSignal& signal) { return _rtSignalRing.pop(signal); }
+      bool tryPopRtSignal(RtSignal& signal) noexcept { return _rtSignalRing.pop(signal); }
 
       template<typename RtSignalConsumer>
       void drainRtSignals(RtSignalConsumer consume)
@@ -288,7 +288,7 @@ namespace ao::audio
       {
         if (_eventThread.joinable())
         {
-          gsl_Expects(!isCurrentThread());
+          AO_EXPECTS(!isCurrentThread());
           _eventThread.request_stop();
           _eventSignal.release();
           _eventThread.join();
@@ -303,11 +303,9 @@ namespace ao::audio
       }
 
     private:
-      static constexpr std::size_t kRtSignalCapacity = 64;
-
       mutable std::mutex _playbackEventMutex;
       std::deque<PlaybackEvent> _playbackEvents;
-      boost::lockfree::spsc_queue<RtSignal, boost::lockfree::capacity<kRtSignalCapacity>> _rtSignalRing;
+      detail::EngineRtSignalRing<RtSignal> _rtSignalRing;
       std::counting_semaphore<> _eventSignal{0};
       std::jthread _eventThread;
       std::atomic<bool> _running{false};
@@ -569,8 +567,9 @@ namespace ao::audio
 
     void shutdown() noexcept
     {
-      gsl_Expects(!eventQueue.isCurrentThread());
-      terminateOnException(
+      AO_EXPECTS(!eventQueue.isCurrentThread());
+      runOrAbort(
+        "audio engine shutdown",
         [this]
         {
           {
@@ -670,11 +669,27 @@ namespace ao::audio
       return optCurrentBackendFormat == optBackendFormat && optCurrentStreamInfo == optStreamInfo;
     }
 
-    void publishPreparedNext(std::unique_ptr<TrackNode> nodePtr)
+    // Requires controlMutex. This is the sole lookahead replacement operation:
+    // it closes a concurrent RT handoff, settles every signal currently
+    // visible to the control side, refreshes transition evidence, and only then
+    // publishes a new owner/cursor pair.
+    bool replacePreparedNext(std::unique_ptr<TrackNode> nodePtr,
+                             std::optional<PcmFormat> const& optExpectedBackendFormat,
+                             std::optional<DecodedStreamInfo> const& optExpectedStreamInfo)
     {
-      gsl_Expects(nodePtr != nullptr);
-      gsl_Expects(timeline.lookaheadNode() == nullptr);
-      timeline.armLookahead(std::move(nodePtr));
+      clearPreparedNext();
+
+      if (!currentTransitionMatches(optExpectedBackendFormat, optExpectedStreamInfo))
+      {
+        return false;
+      }
+
+      if (nodePtr)
+      {
+        timeline.armLookahead(std::move(nodePtr));
+      }
+
+      return true;
     }
 
     void resetTransitionState()
@@ -789,12 +804,11 @@ namespace ao::audio
     // render thread.
     void enqueuePlaybackEvent(PlaybackEvent event) { eventQueue.enqueuePlaybackEvent(std::move(event)); }
 
-    // Wait-free producer for the render thread. Pushes a trivially copyable
-    // signal onto the lock-free ring and releases the semaphore; no lock, no
-    // allocation, no unbounded work. Returns false only if the ring is full,
-    // which cannot happen in practice (the event thread drains on every wake and
-    // the render thread posts at most one signal per track).
-    bool enqueueRtSignal(RtSignal signal) noexcept { return eventQueue.enqueueRtSignal(signal); }
+    // Wait-free producer entry for the backend's serialized render/drain
+    // callback domain. The two-entry bound follows from the timeline owner and
+    // backend drain-admission protocols; a concurrent producer or third pending
+    // signal is a realtime invariant failure rather than a discardable result.
+    void enqueueRtSignal(RtSignal const& signal) noexcept { eventQueue.enqueueRtSignal(signal); }
 
     // Control-command entry point: acquires controlMutex and settles every
     // pending splice signal still in the ring before the command body runs.
@@ -820,7 +834,7 @@ namespace ao::audio
         {
           if (signal.kind == RtSignalKind::Drained)
           {
-            assert(signal.splicedNode == nullptr);
+            AO_INVARIANT(signal.splicedNode == nullptr, "Drained RT signals must not carry a splice node");
             enqueuePlaybackEvent(DrainCompleteEvent{.generation = signal.generation,
                                                     .drainEpoch = signal.drainEpoch,
                                                     .playbackGeneration = signal.playbackGeneration});
@@ -905,45 +919,46 @@ namespace ao::audio
           return;
         }
 
-        std::ignore = owner.enqueueRtSignal(RtSignal{.kind = RtSignalKind::Drained,
-                                                     .generation = generation,
-                                                     .drainEpoch = signalDrainEpoch,
-                                                     .playbackGeneration = playbackGeneration});
+        owner.enqueueRtSignal(RtSignal{.kind = RtSignalKind::Drained,
+                                       .generation = generation,
+                                       .drainEpoch = signalDrainEpoch,
+                                       .playbackGeneration = playbackGeneration});
       }
 
       void handleRouteReady(std::string_view routeAnchor) noexcept override
       {
-        terminateOnException(
-          [&]
-          {
-            if (!owner.isActiveRenderTarget(generation))
-            {
-              return;
-            }
+        runOrAbort("audio backend route-ready callback",
+                   [&]
+                   {
+                     if (!owner.isActiveRenderTarget(generation))
+                     {
+                       return;
+                     }
 
-            owner.enqueuePlaybackEvent(RouteReadyEvent{.generation = generation,
-                                                       .backendId = backendId,
-                                                       .routeAnchor = std::string{routeAnchor},
-                                                       .playbackGeneration = playbackGeneration});
-          });
+                     owner.enqueuePlaybackEvent(RouteReadyEvent{.generation = generation,
+                                                                .backendId = backendId,
+                                                                .routeAnchor = std::string{routeAnchor},
+                                                                .playbackGeneration = playbackGeneration});
+                   });
       }
 
       void handleFormatChanged(PcmFormat const& format) noexcept override
       {
-        terminateOnException(
-          [&]
-          {
-            if (owner.isActiveRenderTarget(generation))
-            {
-              owner.enqueuePlaybackEvent(FormatChangedEvent{
-                .generation = generation, .format = format, .playbackGeneration = playbackGeneration});
-            }
-          });
+        runOrAbort("audio backend format-change callback",
+                   [&]
+                   {
+                     if (owner.isActiveRenderTarget(generation))
+                     {
+                       owner.enqueuePlaybackEvent(FormatChangedEvent{
+                         .generation = generation, .format = format, .playbackGeneration = playbackGeneration});
+                     }
+                   });
       }
 
       void handlePropertyChanged(PropertySnapshot snapshot) noexcept override
       {
-        terminateOnException(
+        runOrAbort(
+          "audio backend property-change callback",
           [&]
           {
             if (!owner.isActiveRenderTarget(generation))
@@ -958,7 +973,8 @@ namespace ao::audio
 
       void handleBackendError(std::string_view message) noexcept override
       {
-        terminateOnException(
+        runOrAbort(
+          "audio backend error callback",
           [&]
           {
             if (!owner.isActiveRenderTarget(generation))
@@ -1000,7 +1016,7 @@ namespace ao::audio
         playbackDrainPending,
         [this](std::uint64_t signalGeneration, TrackNode* session) noexcept
         {
-          std::ignore = enqueueRtSignal(
+          enqueueRtSignal(
             RtSignal{.kind = RtSignalKind::Spliced, .generation = signalGeneration, .splicedNode = session});
         });
     }
@@ -1720,7 +1736,7 @@ namespace ao::audio
 
   Result<> detail::TrackPreparation::inspect()
   {
-    gsl_Assert((_implPtr && !_implPtr->inspectionAttempted) && "Track inspection may only run once");
+    AO_INVARIANT((_implPtr && !_implPtr->inspectionAttempted), "Track inspection may only run once");
 
     _implPtr->inspectionAttempted = true;
 
@@ -1754,8 +1770,8 @@ namespace ao::audio
 
   Result<> detail::TrackPreparation::selectPrewarmFormatUnlocked(Engine& engine)
   {
-    gsl_Assert((_implPtr && _implPtr->inspectionAttempted && !_implPtr->formatSelectionAttempted) &&
-               "Track prewarm format may only be selected after inspection");
+    AO_INVARIANT((_implPtr && _implPtr->inspectionAttempted && !_implPtr->formatSelectionAttempted),
+                 "Track prewarm format may only be selected after inspection");
 
     _implPtr->formatSelectionAttempted = true;
 
@@ -1764,7 +1780,7 @@ namespace ao::audio
       return {};
     }
 
-    gsl_Assert(_implPtr->optInspection && "Track inspection result is missing");
+    AO_INVARIANT(_implPtr->optInspection, "Track inspection result is missing");
 
     auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
@@ -1814,9 +1830,9 @@ namespace ao::audio
 
   Result<> detail::TrackPreparation::prepare()
   {
-    gsl_Assert((_implPtr && _implPtr->inspectionAttempted && _implPtr->formatSelectionAttempted &&
-                !_implPtr->preparationAttempted) &&
-               "Track preparation may only run once after format selection");
+    AO_INVARIANT((_implPtr && _implPtr->inspectionAttempted && _implPtr->formatSelectionAttempted &&
+                  !_implPtr->preparationAttempted),
+                 "Track preparation may only run once after format selection");
 
     _implPtr->preparationAttempted = true;
 
@@ -1825,7 +1841,7 @@ namespace ao::audio
       return {};
     }
 
-    gsl_Assert(_implPtr->optInspection && "Track inspection result is missing");
+    AO_INVARIANT(_implPtr->optInspection, "Track inspection result is missing");
 
     auto preparedRes = detail::TrackSession::prepare(_implPtr->item.input,
                                                      *_implPtr->optInspection,
@@ -2334,7 +2350,7 @@ namespace ao::audio
 
   Engine::~Engine()
   {
-    gsl_Expects(_implPtr != nullptr);
+    AO_INVARIANT(_implPtr != nullptr);
     shutdown();
   }
 
@@ -2497,9 +2513,11 @@ namespace ao::audio
     auto consumedPreparation = std::move(*this);
     auto* const preparationImpl = consumedPreparation._implPtr.get();
 
-    gsl_Assert((preparationImpl != nullptr && preparationImpl->purpose == Purpose::ExplicitStart &&
-                preparationImpl->preparationAttempted && preparationImpl->optInspection) &&
-               "Explicit playback preparation is incomplete");
+    AO_INVARIANT((preparationImpl != nullptr && preparationImpl->purpose == Purpose::ExplicitStart &&
+                  preparationImpl->preparationAttempted),
+                 "Explicit playback preparation is incomplete");
+
+    AO_INVARIANT(preparationImpl->optInspection, "Explicit playback preparation is incomplete");
 
     auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
@@ -2536,13 +2554,13 @@ namespace ao::audio
     auto consumedPreparation = std::move(*this);
     auto* const preparationImpl = consumedPreparation._implPtr.get();
 
-    gsl_Assert((preparationImpl != nullptr && preparationImpl->purpose == Purpose::GaplessLookahead &&
-                preparationImpl->preparationAttempted) &&
-               "Lookahead preparation is incomplete");
+    AO_INVARIANT((preparationImpl != nullptr && preparationImpl->purpose == Purpose::GaplessLookahead &&
+                  preparationImpl->preparationAttempted),
+                 "Lookahead preparation is incomplete");
 
     auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
-    gsl_Assert(preparationImpl->optCurrentBackendFormat && "Lookahead preparation has no current backend format");
+    AO_INVARIANT(preparationImpl->optCurrentBackendFormat, "Lookahead preparation has no current backend format");
 
     auto const& currentBackendFormat = *preparationImpl->optCurrentBackendFormat;
     auto const currentMatches = engine._implPtr->currentTransitionMatches(
@@ -2553,8 +2571,8 @@ namespace ao::audio
       return makeError(Error::Code::Conflict, "Playback or output route changed during lookahead preparation");
     }
 
-    gsl_Assert((preparationImpl->logicalDrainFallback || preparationImpl->optPreparedTrack) &&
-               "Lookahead source preparation is missing");
+    AO_INVARIANT((preparationImpl->logicalDrainFallback || preparationImpl->optPreparedTrack),
+                 "Lookahead source preparation is missing");
 
     bool capable = false;
     auto nodePtr = std::unique_ptr<Engine::Impl::TrackNode>{};
@@ -2584,13 +2602,8 @@ namespace ao::audio
       }
     }
 
-    // Once the old cursor is disarmed, clearPreparedNext settles a splice that
-    // raced adoption. With no armed lookahead left, the refreshed transition
-    // snapshot cannot change again before this control command publishes.
-    engine._implPtr->clearPreparedNext();
-
-    if (!engine._implPtr->currentTransitionMatches(
-          preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo))
+    if (!engine._implPtr->replacePreparedNext(
+          std::move(nodePtr), preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo))
     {
       return makeError(Error::Code::Conflict, "Playback changed while adopting lookahead preparation");
     }
@@ -2602,7 +2615,6 @@ namespace ao::audio
                                         .generation = currentGeneration};
     }
 
-    engine._implPtr->publishPreparedNext(std::move(nodePtr));
     return Engine::PreparedNextResult{.itemId = preparationImpl->item.id,
                                       .transition = Engine::PreparedTransitionMode::Gapless,
                                       .generation = currentGeneration};
@@ -2659,8 +2671,8 @@ namespace ao::audio
 
       auto* const preparedImpl = stagedStart._implPtr.get();
 
-      gsl_Expects((preparedImpl != nullptr && preparedImpl->owner == _implPtr.get()) &&
-                  "Prepared playback belongs to a different engine");
+      AO_EXPECTS((preparedImpl != nullptr && preparedImpl->owner == _implPtr.get()),
+                 "Prepared playback belongs to a different engine");
 
       auto const currentGeneration = _implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 

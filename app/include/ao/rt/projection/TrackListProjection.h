@@ -146,7 +146,7 @@ namespace ao::rt
     TrackListProjectionOperationCounts operationCounts() const noexcept;
     void setPresentation(TrackPresentationSpec const& presentation);
 
-    async::Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler);
+    async::Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler);
 
   private:
     struct Impl;

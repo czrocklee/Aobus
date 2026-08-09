@@ -12,12 +12,12 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/library/TrackWrite.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 
@@ -38,27 +38,6 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  namespace
-  {
-    std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
-                                                                                  WriteTransaction& transaction,
-                                                                                  ResourceStore const& resources)
-    {
-      auto result = builder.prepare(transaction, resources);
-      REQUIRE(result);
-      return *result;
-    }
-
-    TrackId createPreparedTrack(TrackStore::Writer& writer,
-                                TrackBuilder::PreparedHot const& preparedHot,
-                                TrackBuilder::PreparedCold const& preparedCold)
-    {
-      auto result = createPreparedTrackRecord(writer, preparedHot, preparedCold);
-      REQUIRE(result);
-      return *result;
-    }
-  } // namespace
-
   TEST_CASE("LibraryYaml - round trip deduplicates shared cover art resources",
             "[runtime][workflow][import-export][cover]")
   {
@@ -73,10 +52,10 @@ namespace ao::rt::test
     // 1. Setup initial library with shared cover art
     {
       auto transaction = library::test::writeTransaction(ml1);
-      auto resIdRes = ml1.resources().writer(transaction).create(coverData);
+      auto resIdRes = library::test::physicalWriter(ml1.resources(), transaction).create(coverData);
       REQUIRE(resIdRes);
       resId = *resIdRes;
-      auto backResIdRes = ml1.resources().writer(transaction).create(backCoverData);
+      auto backResIdRes = library::test::physicalWriter(ml1.resources(), transaction).create(backCoverData);
       REQUIRE(backResIdRes);
       backResId = *backResIdRes;
 
@@ -91,13 +70,14 @@ namespace ao::rt::test
       trackBuilder2.metadata().title("Song 2");
       trackBuilder2.coverArt().add(PictureType::FrontCover, resId);
 
-      auto trackWriter = ml1.tracks().writer(transaction);
-
-      auto const [p1h, p1c] = prepareTrack(trackBuilder1, transaction, ml1.resources());
-      createPreparedTrack(trackWriter, p1h, p1c);
-
-      auto const [p2h, p2c] = prepareTrack(trackBuilder2, transaction, ml1.resources());
-      createPreparedTrack(trackWriter, p2h, p2c);
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write) -> Result<>
+        {
+          auto trackWriter = write.tracks();
+          REQUIRE(trackWriter.create(trackBuilder1, FileManifestBuilder::makeEmpty()));
+          REQUIRE(trackWriter.create(trackBuilder2, FileManifestBuilder::makeEmpty()));
+          return {};
+        }));
 
       REQUIRE(transaction.commit());
     }
@@ -159,32 +139,6 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - export rejects a track with a missing cover resource",
-            "[runtime][workflow][import-export][cover]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-
-    {
-      auto transaction = library::test::writeTransaction(ml);
-      auto resourceIdRes = ml.resources().writer(transaction).create(lmdb::test::createTestData(8));
-      REQUIRE(resourceIdRes);
-
-      auto builder = TrackBuilder::makeEmpty();
-      builder.property().uri("song.flac");
-      builder.coverArt().add(PictureType::FrontCover, *resourceIdRes);
-      auto const [hot, cold] = prepareTrack(builder, transaction, ml.resources());
-      auto trackWriter = ml.tracks().writer(transaction);
-      createPreparedTrack(trackWriter, hot, cold);
-      REQUIRE(ml.resources().writer(transaction).remove(*resourceIdRes));
-      REQUIRE(transaction.commit());
-    }
-
-    auto const result = LibraryYamlExporter{ml}.exportToYaml(temp.path() / "covers.yaml", ExportMode::Full);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
-  }
-
   TEST_CASE("LibraryYaml - merge replaces and removes cover art", "[runtime][workflow][import-export][cover]")
   {
     auto const temp = ao::test::TempDir{};
@@ -193,7 +147,7 @@ namespace ao::rt::test
 
     {
       auto transaction = library::test::writeTransaction(ml);
-      auto resWriter = ml.resources().writer(transaction);
+      auto resWriter = library::test::physicalWriter(ml.resources(), transaction);
       auto frontIdRes = resWriter.create(lmdb::test::createTestData(8));
       REQUIRE(frontIdRes);
       auto const frontId = *frontIdRes;
@@ -205,13 +159,8 @@ namespace ao::rt::test
       builder.property().uri(uri);
       builder.coverArt().add(PictureType::FrontCover, frontId);
       builder.coverArt().add(PictureType::BackCover, backId);
-      auto const [hot, cold] = prepareTrack(builder, transaction, ml.resources());
-      auto trackWriter = ml.tracks().writer(transaction);
-      auto const trackId = createPreparedTrack(trackWriter, hot, cold);
-
-      auto manifest = FileManifestBuilder::makeEmpty();
-      manifest.trackId(trackId);
-      REQUIRE(ml.manifest().writer(transaction).put(uri, manifest.serialize()));
+      REQUIRE(transaction.apply([&](LibraryWrite& write)
+                                { return write.tracks().create(builder, FileManifestBuilder::makeEmpty()); }));
       REQUIRE(transaction.commit());
     }
 

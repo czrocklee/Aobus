@@ -6,6 +6,7 @@
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "pch.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/Log.h>
 #include <ao/winui/app/StartupOptions.h>
@@ -17,6 +18,7 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <new>
 #include <string_view>
 #include <utility>
 
@@ -27,14 +29,10 @@ namespace ao::winui
     using Window = winrt::Microsoft::UI::Xaml::Window;
     using MainWindow = winrt::Aobus::implementation::MainWindow;
 
-    Error exceptionError(std::string_view const operation, std::exception const& error)
+    Error hresultError(std::string_view const operation, winrt::hresult_error const& error)
     {
-      return Error{.code = Error::Code::InitFailed, .message = std::format("{}: {}", operation, error.what())};
-    }
-
-    Error unknownExceptionError(std::string_view const operation)
-    {
-      return Error{.code = Error::Code::InitFailed, .message = std::format("{}: unknown exception", operation)};
+      return Error{.code = Error::Code::InitFailed,
+                   .message = std::format("{}: {}", operation, winrt::to_string(error.message()))};
     }
   } // namespace
 
@@ -69,7 +67,15 @@ namespace ao::winui
 
     try
     {
-      _sessionPtr = std::make_unique<LibrarySession>(_stateRoot, _dispatcher, std::move(options));
+      auto sessionRes = LibrarySession::create(_stateRoot, _dispatcher, std::move(options));
+
+      if (!sessionRes)
+      {
+        retire();
+        return std::unexpected{sessionRes.error()};
+      }
+
+      _sessionPtr = std::move(*sessionRes);
       _window = winrt::make<MainWindow>();
       auto* implementation = winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>());
       implementation->initialize(*_sessionPtr, std::move(requestRestart));
@@ -105,15 +111,15 @@ namespace ao::winui
 
       return {};
     }
-    catch (std::exception const& error)
+    catch (std::bad_alloc const&)
     {
       retire();
-      return std::unexpected{exceptionError("Failed to start the WinUI library window session", error)};
+      throw;
     }
-    catch (...)
+    catch (winrt::hresult_error const& error)
     {
       retire();
-      return std::unexpected{unknownExceptionError("Failed to start the WinUI library window session")};
+      return std::unexpected{hresultError("Failed to start the WinUI library window session", error)};
     }
   }
 
@@ -161,23 +167,30 @@ namespace ao::winui
 
   void LibraryWindowSession::handleClosed() noexcept
   {
-    if (!_window)
+    try
     {
-      return;
+      if (!_window)
+      {
+        return;
+      }
+
+      _windowClosedRevoker.revoke();
+      auto closedWindow = std::move(_window);
+
+      auto* const implementation = winrt::get_self<MainWindow>(closedWindow.as<winrt::Aobus::MainWindow>());
+      implementation->retire();
+
+      closedWindow = nullptr;
+      releaseSession();
+
+      if (auto onClosed = std::move(_onClosed); onClosed)
+      {
+        onClosed();
+      }
     }
-
-    _windowClosedRevoker.revoke();
-    auto closedWindow = std::move(_window);
-
-    auto* const implementation = winrt::get_self<MainWindow>(closedWindow.as<winrt::Aobus::MainWindow>());
-    implementation->retire();
-
-    closedWindow = nullptr;
-    releaseSession();
-
-    if (auto onClosed = std::move(_onClosed); onClosed)
+    catch (...)
     {
-      onClosed();
+      AO_FATAL_EXCEPTION(std::current_exception(), "WinUI library window close callback");
     }
   }
 } // namespace ao::winui

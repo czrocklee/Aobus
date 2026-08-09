@@ -3,13 +3,12 @@
 
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <cstdint>
@@ -87,8 +86,8 @@ namespace ao::uimodel
 
     for (auto const& [listId, presentationId] : state.presentations)
     {
-      gsl_Expects(listId != kInvalidListId && "Cannot persist a presentation preference for the invalid list id");
-      gsl_Expects(!presentationId.empty() && "Cannot persist an empty presentation id");
+      AO_EXPECTS(listId != kInvalidListId, "Cannot persist a presentation preference for the invalid list id");
+      AO_EXPECTS(!presentationId.empty(), "Cannot persist an empty presentation id");
 
       document.preferences.push_back(StoredListPresentationPreference{
         .listId = listId.raw(),

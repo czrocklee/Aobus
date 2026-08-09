@@ -8,6 +8,7 @@
 #include "platform/StringResources.h"
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/Path.h>
@@ -160,13 +161,13 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::saveWindowState() noexcept
   {
-    if (_session == nullptr)
-    {
-      return;
-    }
-
     try
     {
+      if (_session == nullptr)
+      {
+        return;
+      }
+
       auto& placement = _session->settings().window;
       auto nativePlacement = WINDOWPLACEMENT{};
       nativePlacement.length = sizeof(nativePlacement);
@@ -185,37 +186,15 @@ namespace winrt::Aobus::implementation
       {
         APP_LOG_WARN("MainWindow: failed to read native window placement: {}", ::GetLastError());
       }
-    }
-    catch (std::exception const& error)
-    {
-      APP_LOG_WARN("MainWindow: failed to capture native window placement: {}", error.what());
-    }
-    catch (...)
-    {
-      APP_LOG_WARN("MainWindow: failed to capture native window placement: unknown exception");
-    }
 
-    try
-    {
       if (auto const savedRes = _session->saveSettings(); !savedRes)
       {
-        try
-        {
-          updateStatus(ao::winui::formatResource("SaveSettingsFailedFormat", savedRes.error().message));
-        }
-        catch (...)
-        {
-          APP_LOG_WARN("MainWindow: failed to report settings checkpoint failure");
-        }
+        updateStatus(ao::winui::formatResource("SaveSettingsFailedFormat", savedRes.error().message));
       }
-    }
-    catch (std::exception const& error)
-    {
-      APP_LOG_WARN("MainWindow: settings checkpoint failed: {}", error.what());
     }
     catch (...)
     {
-      APP_LOG_WARN("MainWindow: settings checkpoint failed: unknown exception");
+      AO_FATAL_EXCEPTION(std::current_exception(), "WinUI window-state checkpoint");
     }
   }
 

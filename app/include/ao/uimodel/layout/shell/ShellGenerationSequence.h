@@ -61,8 +61,9 @@ namespace ao::uimodel
    * A candidate is staged while the current generation stays live, so all
    * fallible construction and binding happens behind a closed gate. Publication
    * changes the active generation exactly once. If the caller's native
-   * attachment unexpectedly fails, the previous generation and token are
-   * restored before the failure is reported, and the candidate is discarded.
+   * attachment reports failure, the previous generation and token are restored
+   * before that value is returned. An unexpected exception is rethrown only
+   * after the same rollback.
    *
    * The sequence does not own native trees. It reports which generation the
    * caller must now destroy; destruction order stays with the frontend.
@@ -89,7 +90,7 @@ namespace ao::uimodel
      * @return The generation the caller must now retire, or `None` for the first
      *         publication. On failure the active generation is unchanged and
      *         @p candidate has been discarded. An unexpected attachment
-     *         exception is converted to `InitFailed` under the same rollback.
+     *         exception is rethrown after the same rollback.
      */
     Result<ShellGenerationId> publish(ShellGenerationId candidate, std::move_only_function<Result<>()> attach);
 

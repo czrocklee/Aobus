@@ -21,12 +21,14 @@
 namespace ao::library
 {
   class ReadTransaction;
+  class LibraryWrite;
   class WriteTransaction;
   class MusicLibrary;
 
   namespace detail
   {
     class LibraryIdentity;
+    class PhysicalStoreAccess;
     class TrackWriteAccess;
   }
 
@@ -45,10 +47,11 @@ namespace ao::library
     class Writer;
 
     Reader reader(ReadTransaction const& transaction) const;
+    Reader reader(LibraryWrite const& write) const;
     Reader reader(WriteTransaction const& transaction) const;
-    Writer writer(WriteTransaction& transaction) const;
 
   private:
+    Writer writer(WriteTransaction& transaction) const;
     TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity);
 
     lmdb::Database _hotDb;
@@ -56,6 +59,9 @@ namespace ao::library
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
+    friend class TrackWriter;
+    friend class WriteTransaction;
+    friend class detail::PhysicalStoreAccess;
   };
 
   /**
@@ -84,11 +90,12 @@ namespace ao::library
 
     /**
      * Get a track by ID.
-     * @return TrackView, or std::nullopt if the track is missing. Storage
-     *         faults throw (see lmdb). A structurally corrupt record is
-     *         still returned with the corresponding validity query false.
-     *         Callers must check the loaded side before invoking its decoded
-     *         accessors; doing otherwise violates the TrackView contract.
+     * @return TrackView, or std::nullopt only when the requested Track is
+     *         absent. A post-open native read fault is fatal, and a loaded
+     *         side that violates the open-time structural proof fails an
+     *         invariant before this method returns. In Both mode, neither
+     *         side present is absence; exactly one side present violates the
+     *         validated Track-pair invariant.
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
@@ -99,14 +106,12 @@ namespace ao::library
      * Visit tracks selected by ID, preserving the requested order.
      *
      * Missing rows are skipped. Duplicate IDs therefore produce duplicate
-     * visits when the row exists. A structurally malformed loaded side is
-     * delivered as a TrackView whose corresponding validity query is false;
-     * the visitor must check that query before using decoded accessors. Such a
-     * visitor-side contract failure is not converted into a missing row, and
-     * earlier visitor side effects are not rolled back. Views remain
-     * transaction-scoped, like get(). Strictly ascending dense selections may
-     * use cursor traversal internally; sparse or arbitrarily ordered
-     * selections retain point-lookup behavior.
+     * visits when the row exists. A loaded side that violates the open-time
+     * structural proof fails an invariant before visitor invocation; it is
+     * never converted into a miss or delivered as a poisoned Store row.
+     * Views remain transaction-scoped, like get(). Strictly ascending dense
+     * selections may use cursor traversal internally; sparse or arbitrarily
+     * ordered selections retain point-lookup behavior.
      */
     template<typename Visitor>
       requires std::invocable<Visitor&, TrackId, TrackView const&>
@@ -222,7 +227,7 @@ namespace ao::library
   /**
    * TrackStore::Writer - Write access to tracks.
    *
-   * Record creation and replacement live in TrackWrite.h and take
+   * Physical record creation and replacement live inside ao_library and take
    * TrackBuilder::PreparedHot/PreparedCold: the record is serialized straight
    * into storage-owned bytes and validated there, so no entry point here
    * accepts caller-supplied record bytes.
@@ -232,7 +237,9 @@ namespace ao::library
   public:
     /**
      * Get track by ID with specified load mode.
-     * @return TrackView, or std::nullopt if the track is missing.
+     * @return TrackView, or std::nullopt if the selected row is missing. In
+     *         Both mode, exactly one side present violates the validated
+     *         Track-pair invariant.
      */
     std::optional<TrackView> get(TrackId id, Reader::LoadMode mode = Reader::LoadMode::Both) const;
 

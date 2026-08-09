@@ -23,9 +23,9 @@
 #include "track/TrackOrderActions.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackViewPage.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/AppPrefsState.h>
@@ -52,7 +52,6 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <glibmm/main.h>
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/dialog.h>
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/window.h>
@@ -60,7 +59,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <functional>
 #include <map>
@@ -156,7 +154,7 @@ namespace ao::gtk
         preparedRes = prepareValidatedLayout(doc, store.limits(), components, actions);
       }
 
-      gsl_Assert(preparedRes && "Built-in shell layout is invalid");
+      AO_INVARIANT(preparedRes, "Built-in shell layout is invalid");
 
       auto stateDoc = componentStateStore == nullptr
                         ? uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
@@ -171,14 +169,14 @@ namespace ao::gtk
 
     uimodel::PlaybackCommandSurface& commandSurface(uimodel::PlaybackCommandSurface* surface)
     {
-      gsl_Expects(surface != nullptr && "ShellLayoutController: playback command surface is not bound");
+      AO_EXPECTS(surface != nullptr, "ShellLayoutController: playback command surface is not bound");
 
       return *surface;
     }
 
     ThemeCoordinator& requireThemeCoordinator(GtkUiDependencies const& dependencies)
     {
-      gsl_Expects(dependencies.themeCoordinator != nullptr && "ShellLayoutController: theme coordinator is not bound");
+      AO_EXPECTS(dependencies.themeCoordinator != nullptr, "ShellLayoutController: theme coordinator is not bound");
 
       return *dependencies.themeCoordinator;
     }
@@ -229,20 +227,22 @@ namespace ao::gtk
     registerWorkspaceActions(registerAction, hasActiveSequence);
     registerTrackActions(registerAction);
 
-    _actionStateSubscriptions.push_back(commandSurface(_dependencies.playbackCommandSurface)
-                                          .onAvailabilityChanged([this] noexcept { refreshExportedActions(); }));
-    _actionStateSubscriptions.push_back(_runtime.views().onSelectionChanged(
-      [this](rt::ViewService::SelectionChanged const&) noexcept { refreshExportedActions(); }));
-    _actionStateSubscriptions.push_back(_runtime.views().onPresentationChanged(
-      [this](rt::ViewService::PresentationChanged const&) noexcept { refreshExportedActions(); }));
-    _actionStateSubscriptions.push_back(_runtime.views().onProjectionChanged(
-      [this](rt::TrackListProjectionChanged const&) noexcept { refreshExportedActions(); }));
-    _actionStateSubscriptions.push_back(_runtime.views().onViewDestroyed(
-      [this](rt::ViewService::ViewDestroyed const&) noexcept { refreshExportedActions(); }));
     _actionStateSubscriptions.push_back(
-      _runtime.workspace().onChanged([this](rt::WorkspaceChanged const&) noexcept { refreshExportedActions(); }));
+      commandSurface(_dependencies.playbackCommandSurface).onAvailabilityChanged([this] { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onSelectionChanged(
+      [this](rt::ViewService::SelectionChanged const&) { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onPresentationChanged(
+      [this](rt::ViewService::PresentationChanged const&) { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onProjectionChanged(
+      [this](rt::TrackListProjectionChanged const&) { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onFilterErrorChanged(
+      [this](rt::ViewService::FilterErrorChanged const&) { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(
+      _runtime.views().onViewDestroyed([this](rt::ViewService::ViewDestroyed const&) { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(
+      _runtime.workspace().onChanged([this](rt::WorkspaceChanged const&) { refreshExportedActions(); }));
     _actionStateSubscriptions.push_back(_runtime.library().onAuthoringAvailabilityChanged(
-      [this](rt::LibraryAuthoringAvailability const&) noexcept { refreshExportedActions(); }));
+      [this](rt::LibraryAuthoringAvailability const&) { refreshExportedActions(); }));
   }
 
   ShellLayoutController::~ShellLayoutController()
@@ -644,24 +644,26 @@ namespace ao::gtk
     auto componentCatalog = _registry.catalog();
     auto actionCatalog = _actionRegistry.catalog();
 
-    asyncRuntime->spawnWithLifetime(&_tasks,
-                                    [controller = this,
-                                     asyncRuntime,
-                                     storePtr = _layoutStorePtr,
-                                     componentStateStorePtr = _componentStateStorePtr,
-                                     configStorePtr = _configStorePtr,
-                                     componentCatalog = std::move(componentCatalog),
-                                     actionCatalog = std::move(actionCatalog)](std::stop_token const stopToken) mutable
-                                    {
-                                      return loadLayoutWorkflow(controller,
-                                                                asyncRuntime,
-                                                                std::move(storePtr),
-                                                                std::move(componentStateStorePtr),
-                                                                std::move(configStorePtr),
-                                                                std::move(componentCatalog),
-                                                                std::move(actionCatalog),
-                                                                stopToken);
-                                    });
+    asyncRuntime->spawnWithLifetime(
+      &_tasks,
+      [controller = this,
+       asyncRuntime,
+       storePtr = _layoutStorePtr,
+       componentStateStorePtr = _componentStateStorePtr,
+       configStorePtr = _configStorePtr,
+       componentCatalog = std::move(componentCatalog),
+       actionCatalog = std::move(actionCatalog)](std::stop_token const stopToken) mutable
+      {
+        return loadLayoutWorkflow(controller,
+                                  asyncRuntime,
+                                  std::move(storePtr),
+                                  std::move(componentStateStorePtr),
+                                  std::move(configStorePtr),
+                                  std::move(componentCatalog),
+                                  std::move(actionCatalog),
+                                  stopToken);
+      },
+      "shell layout load workflow");
   }
 
   async::Task<void> ShellLayoutController::loadLayoutWorkflow(
@@ -677,32 +679,16 @@ namespace ao::gtk
     APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started");
 
     auto optRes = std::optional<LayoutLoadResult>{};
-    bool failed = false;
+    co_await asyncRuntime->resumeOnWorker(stopToken);
+    APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
 
-    try
+    if (layoutStorePtr && configStorePtr)
     {
-      co_await asyncRuntime->resumeOnWorker(stopToken);
-      APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
-
-      if (layoutStorePtr && configStorePtr)
-      {
-        optRes = loadLayoutOnWorker(
-          *layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, componentCatalog, actionCatalog);
-      }
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
-      asyncRuntime->reportUnhandledException(std::current_exception(), "shell layout load workflow");
-      failed = true;
+      optRes = loadLayoutOnWorker(
+        *layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, componentCatalog, actionCatalog);
     }
 
     co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
-
-    if (failed)
-    {
-      co_return;
-    }
 
     if (!optRes)
     {
@@ -710,26 +696,10 @@ namespace ao::gtk
     }
 
     APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-    controller->applyLoadedLayoutWithFaultReporting(std::move(optRes->presetId),
-                                                    std::move(optRes->document),
-                                                    std::move(optRes->preparedLayout),
-                                                    std::move(optRes->componentState));
-  }
-
-  void ShellLayoutController::applyLoadedLayoutWithFaultReporting(std::string presetId,
-                                                                  uimodel::LayoutDocument document,
-                                                                  uimodel::PreparedLayout preparedLayout,
-                                                                  uimodel::LayoutComponentStateDocument componentState)
-  {
-    try
-    {
-      applyLoadedLayout(std::move(presetId), std::move(document), std::move(preparedLayout), std::move(componentState));
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
-      _runtime.async().reportUnhandledException(std::current_exception(), "shell layout apply workflow");
-    }
+    controller->applyLoadedLayout(std::move(optRes->presetId),
+                                  std::move(optRes->document),
+                                  std::move(optRes->preparedLayout),
+                                  std::move(optRes->componentState));
   }
 
   void ShellLayoutController::applyLoadedLayout(std::string presetId,

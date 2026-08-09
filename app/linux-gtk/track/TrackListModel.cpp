@@ -5,6 +5,7 @@
 
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -16,7 +17,6 @@
 #include <glibmm/main.h>
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/sectionmodel.h>
 
 #include <cstddef>
@@ -116,7 +116,7 @@ namespace ao::gtk
       return;
     }
 
-    gsl_Expects(_projectionPtr->groupCount() == 0);
+    AO_INVARIANT(_projectionPtr->groupCount() == 0);
     outStart = 0;
     outEnd = size;
   }
@@ -137,12 +137,12 @@ namespace ao::gtk
     _playingChanged.emit();
   }
 
-  void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch) noexcept
+  void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch)
   {
     auto const timer = rt::ScopedTimer{"TrackListModel::applyDeltas"};
 
-    gsl_Expects(_projectionPtr != nullptr);
-    gsl_Expects(rt::validateTrackListProjectionDeltaBatch(batch, _modelSize));
+    AO_INVARIANT(_projectionPtr != nullptr);
+    AO_INVARIANT(rt::validateTrackListProjectionDeltaBatch(batch, _modelSize));
 
     if (std::holds_alternative<rt::ProjectionSourceInvalidated>(batch.deltas.front()))
     {
@@ -152,15 +152,17 @@ namespace ao::gtk
 
     for (auto const& delta : batch.deltas)
     {
-      std::visit(utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
-                                      std::bind_front(&TrackListModel::applyInsertRange, this),
-                                      std::bind_front(&TrackListModel::applyRemoveRange, this),
-                                      std::bind_front(&TrackListModel::applyUpdateRange, this),
-                                      [](rt::ProjectionSourceInvalidated const&) { gsl_Expects(false); }),
-                 delta);
+      std::visit(
+        utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
+                             std::bind_front(&TrackListModel::applyInsertRange, this),
+                             std::bind_front(&TrackListModel::applyRemoveRange, this),
+                             std::bind_front(&TrackListModel::applyUpdateRange, this),
+                             [](rt::ProjectionSourceInvalidated const&)
+                             { AO_FATAL("TrackListModel cannot apply source invalidation as a regular delta"); }),
+        delta);
     }
 
-    gsl_Expects(_modelSize == _projectionPtr->size());
+    AO_ENSURES(_modelSize == _projectionPtr->size());
   }
 
   void TrackListModel::applyResetDelta()

@@ -22,12 +22,12 @@ namespace ao::rt::test
   {
     void addMetadataValueTrack(MusicLibraryFixture& libraryFixture, std::string artist, std::string album)
     {
-      library::test::addTrack(libraryFixture.library(),
-                              library::test::TrackSpec{.title = "Metadata Value Track",
-                                                       .artist = std::move(artist),
-                                                       .album = std::move(album),
-                                                       .uri = "metadata-value-completion.flac",
-                                                       .duration = std::chrono::seconds{120}});
+      library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                  library::test::TrackSpec{.title = "Metadata Value Track",
+                                                                           .artist = std::move(artist),
+                                                                           .album = std::move(album),
+                                                                           .uri = "metadata-value-completion.flac",
+                                                                           .duration = std::chrono::seconds{120}});
     }
 
     std::vector<std::string> insertTexts(std::vector<CompletionItem> const& items)

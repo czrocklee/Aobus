@@ -9,6 +9,7 @@
 #include "DumpOutput.h"
 #include "Output.h"
 #include "QueryHelp.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
@@ -30,7 +31,6 @@
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -187,8 +187,7 @@ namespace ao::cli
       case rt::ListOrderAuthoringStatus::Unavailable: return makeError(Error::Code::InvalidState, "Library is busy");
     }
 
-    gsl_Assert(false && "Unknown List order authoring status");
-    std::unreachable();
+    AO_FATAL("Unknown List order authoring status");
   }
 
   namespace

@@ -95,7 +95,7 @@ namespace ao::gtk
     void bindTrackPage(TrackPageEntry& entry);
     void handleTrackSelectionChanged(TrackViewPage& page, rt::ViewId viewId);
     void syncLayout();
-    void handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev) noexcept;
+    void handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev);
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
@@ -108,6 +108,7 @@ namespace ao::gtk
     async::Subscription _focusSub;
     async::Subscription _projectionChangedSub;
     async::Subscription _presentationChangedSub;
+    async::Subscription _filterErrorChangedSub;
 
     // Dedicated cache for section-header cover thumbnails (small, decode-at-scale
     // results). Destruction order is reverse declaration order:

@@ -36,15 +36,17 @@ namespace ao::gtk::test
                                        spec1.album = "Album 1";
                                        spec1.title = "Track 1";
                                        spec1.genre = "Genre 1";
+                                       spec1.uri = "track-1.flac";
                                        spec1.year = 2021;
                                        spec1.trackNumber = 1;
                                        spec1.duration = std::chrono::minutes{3};
-                                       basicId1 = library::test::addTrack(musicLibrary, spec1);
+                                       basicId1 = library::test::addTrackWithUniqueFixtureUri(musicLibrary, spec1);
 
                                        auto spec2 = library::test::TrackSpec{};
                                        spec2.title = "Track 2";
+                                       spec2.uri = "track-2.flac";
                                        spec2.duration = std::chrono::minutes{4};
-                                       basicId2 = library::test::addTrack(musicLibrary, spec2);
+                                       basicId2 = library::test::addTrackWithUniqueFixtureUri(musicLibrary, spec2);
 
                                        auto utf8Spec = library::test::TrackSpec{};
                                        utf8Spec.title = "東京の歌";
@@ -58,14 +60,18 @@ namespace ao::gtk::test
                                        utf8Spec.work = "作品一";
                                        utf8Spec.movement = "第一楽章";
                                        utf8Spec.soloist = "独奏者";
+                                       utf8Spec.uri = "utf8.flac";
                                        utf8Spec.tags = {"夜", "ライブ"};
-                                       utf8Id = library::test::addTrack(musicLibrary, utf8Spec);
+                                       utf8Id = library::test::addTrackWithUniqueFixtureUri(musicLibrary, utf8Spec);
 
                                        auto helperSpec = library::test::TrackSpec{};
+                                       helperSpec.uri = "test.flac";
                                        helperSpec.duration = std::chrono::minutes{2};
-                                       helperId = library::test::addTrack(musicLibrary, helperSpec);
-                                       cachingId = library::test::addTrack(musicLibrary, {});
-                                       invalidationId = library::test::addTrack(musicLibrary, {});
+                                       helperId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, helperSpec);
+                                       cachingId = library::test::addTrackWithUniqueFixtureUri(
+                                         musicLibrary, library::test::TrackSpec{.uri = "cache.flac"});
+                                       invalidationId = library::test::addTrackWithUniqueFixtureUri(
+                                         musicLibrary, library::test::TrackSpec{.uri = "invalidation.flac"});
                                      }};
     auto& runtime = fixture.runtime();
 

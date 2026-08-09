@@ -17,7 +17,6 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
@@ -57,6 +56,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -67,12 +67,6 @@ namespace ao::gtk::platform::test
 {
   namespace
   {
-    class InjectedMprisResourceLoadFailure final : public Exception
-    {
-    public:
-      using Exception::Exception;
-    };
-
     async::Task<Result<std::optional<std::vector<std::byte>>>> loadEmptyMprisResourceAfterOneFailure(
       std::shared_ptr<std::atomic_bool> failNextPtr,
       rt::test::AsyncTestState<std::size_t> loadCount,
@@ -83,7 +77,7 @@ namespace ao::gtk::platform::test
 
       if (failNextPtr->exchange(false))
       {
-        throwException<InjectedMprisResourceLoadFailure>("injected MPRIS resource load failure");
+        co_return makeError(Error::Code::IoError, "injected MPRIS resource load failure");
       }
 
       co_return std::optional<std::vector<std::byte>>{};
@@ -102,7 +96,7 @@ namespace ao::gtk::platform::test
     ResourceId addResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
       auto transaction = library::test::writeTransaction(library);
-      auto writer = library.resources().writer(transaction);
+      auto writer = library::test::physicalWriter(library.resources(), transaction);
       auto resourceIdRes = writer.create(bytes);
       REQUIRE(resourceIdRes);
       REQUIRE(transaction.commit());
@@ -291,8 +285,7 @@ namespace ao::gtk::platform::test
     CHECK(cancellationCount == 2);
   }
 
-  TEST_CASE("MprisBridge - art requester exceptions do not escape snapshot publication",
-            "[gtk][regression][mpris][concurrency]")
+  TEST_CASE("MprisBridge - art requester exceptions reach the snapshot owner", "[gtk][regression][mpris][concurrency]")
   {
     constexpr auto kTrackId = TrackId{3};
     constexpr auto kResourceId = ResourceId{33};
@@ -310,18 +303,14 @@ namespace ao::gtk::platform::test
                                 {
                                   CHECK(resourceId == kResourceId);
                                   capturedCompletion = std::move(complete);
-                                  throwException<Exception>("request failed");
+                                  throw std::runtime_error{"request failed"};
                                 },
                               },
                               playbackSource.source()};
     bridge.start();
 
-    CHECK_NOTHROW(playbackSource.publish(playbackSnapshot(kTrackId, kResourceId)));
+    CHECK_THROWS_AS(playbackSource.publish(playbackSnapshot(kTrackId, kResourceId)), std::runtime_error);
     REQUIRE(capturedCompletion);
-    CHECK(bridge.metadataSnapshot().artUrl.empty());
-
-    capturedCompletion("file:///tmp/late.png");
-    CHECK(bridge.metadataSnapshot().artUrl.empty());
   }
 
   TEST_CASE("toUString - UTF-8 conversion preserves multibyte metadata", "[gtk][regression][mpris]")
@@ -358,7 +347,7 @@ namespace ao::gtk::platform::test
         auto const fixtureUri =
           audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
         resourceId = addResource(musicLibrary, kPngBytes);
-        trackId = library::test::addTrack(
+        trackId = library::test::addTrackWithUniqueFixtureUri(
           musicLibrary, library::test::TrackSpec{.title = "Cover Track", .uri = fixtureUri, .coverArtId = resourceId});
       }};
     auto& runtime = fixture.runtime();
@@ -441,16 +430,15 @@ namespace ao::gtk::platform::test
     CHECK(cancelledCallbackCount == 0);
   }
 
-  TEST_CASE("MprisArtUrlCache - exceptional resource loads terminate their request flight",
+  TEST_CASE("MprisArtUrlCache - failed resource loads terminate their request flight",
             "[gtk][unit][mpris][concurrency]")
   {
     auto executor = rt::test::QueuedExecutor{};
-    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
-    auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
+    auto runtime = async::Runtime{executor, 1};
     auto tempDir = ao::test::TempDir{};
     constexpr auto kMissingResourceId = ResourceId{999997};
 
-    SECTION("a non-cancellation fault reports once, completes empty, and permits retry")
+    SECTION("a Result failure completes empty and permits retry")
     {
       auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
       auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
@@ -469,9 +457,6 @@ namespace ao::gtk::platform::test
       REQUIRE(request);
       REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 1; }));
       CHECK_FALSE(receivedNonEmptyUrl.load());
-      REQUIRE(exceptionRecorder.waitForCount(1));
-      rt::test::requireSingleRecordedException<InjectedMprisResourceLoadFailure>(
-        exceptionRecorder, "resource byte delivery");
 
       auto retryReceivedNonEmptyUrl = rt::test::AsyncTestState<bool>::create(true);
       auto retry = cache.requestUrl(kMissingResourceId,
@@ -484,7 +469,6 @@ namespace ao::gtk::platform::test
       REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 2; }));
       CHECK(loadCount.load() == 2);
       CHECK_FALSE(retryReceivedNonEmptyUrl.load());
-      CHECK(exceptionRecorder.snapshot().size() == 1);
 
       runtime.requestStop();
       runtime.join();
@@ -504,7 +488,6 @@ namespace ao::gtk::platform::test
       runtime.requestStop();
       runtime.join();
       CHECK(callbackCount.load() == 0);
-      CHECK(exceptionRecorder.snapshot().empty());
     }
   }
 

@@ -6,6 +6,7 @@
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -14,7 +15,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -27,10 +27,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <memory>
-#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -50,19 +50,6 @@ namespace ao::rt
       }
 
       return PlaybackSourceState::Inactive;
-    }
-
-    void logDeferredAdmissionFailure(std::string_view const operation) noexcept
-    {
-      try
-      {
-        APP_LOG_WARN("PlaybackService could not schedule deferred {}; a later event will retry", operation);
-      }
-      catch (...)
-      {
-        // Logging cannot escape the noexcept observation path.
-        return;
-      }
     }
   } // namespace
 
@@ -114,14 +101,13 @@ namespace ao::rt
       return snapshotSignal.connect(std::move(observer));
     }
 
-    async::Subscription onSeekPreview(
-      std::move_only_function<void(std::chrono::milliseconds) noexcept> handler) override
+    async::Subscription onSeekPreview(std::move_only_function<void(std::chrono::milliseconds)> handler) override
     {
       return seekPreviewSignal.connect(std::move(handler));
     }
 
     async::Subscription onRevealTrackRequested(
-      std::move_only_function<void(PlaybackRevealTrackRequest const&) noexcept> handler) override
+      std::move_only_function<void(PlaybackRevealTrackRequest const&)> handler) override
     {
       return revealTrackSignal.connect(std::move(handler));
     }
@@ -386,10 +372,8 @@ namespace ao::rt
       }
       catch (...)
       {
-        // Executor::defer guarantees that a throwing admission retained no
-        // task. Keep the FIFO and let the next admission retry this drain.
         commandDrainScheduled = false;
-        logDeferredAdmissionFailure("command drain");
+        AO_FATAL_EXCEPTION(std::current_exception(), "playback command-drain admission");
       }
     }
 
@@ -414,34 +398,33 @@ namespace ao::rt
 
     void connectSources()
     {
-      auto const markChanged = [this] noexcept { onSourceChanged(); };
+      auto const markChanged = [this] { onSourceChanged(); };
 
       subscriptions.push_back(transport.onPreparing(markChanged));
       subscriptions.push_back(transport.onStarted(markChanged));
       subscriptions.push_back(transport.onPaused(markChanged));
-      subscriptions.push_back(transport.onIdle([this] noexcept { onTransportIdle(); }));
+      subscriptions.push_back(transport.onIdle([this] { onTransportIdle(); }));
       subscriptions.push_back(transport.onStopped(markChanged));
       subscriptions.push_back(transport.onOutputDevicesChanged(markChanged));
-      subscriptions.push_back(transport.onNowPlayingChanged(
-        [this](PlaybackTransport::NowPlayingChanged const& event) noexcept { onPositionAnchorChanged(event); }));
-      subscriptions.push_back(transport.onOutputDeviceChanged([this](auto const&) noexcept { onSourceChanged(); }));
-      subscriptions.push_back(transport.onQualityChanged([this](auto const&) noexcept { onSourceChanged(); }));
-      subscriptions.push_back(transport.onVolumeChanged([this](float) noexcept { onSourceChanged(); }));
-      subscriptions.push_back(transport.onMutedChanged([this](bool) noexcept { onSourceChanged(); }));
+      subscriptions.push_back(transport.onNowPlayingChanged([this](PlaybackTransport::NowPlayingChanged const& event)
+                                                            { onPositionAnchorChanged(event); }));
+      subscriptions.push_back(transport.onOutputDeviceChanged([this](auto const&) { onSourceChanged(); }));
+      subscriptions.push_back(transport.onQualityChanged([this](auto const&) { onSourceChanged(); }));
+      subscriptions.push_back(transport.onVolumeChanged([this](float) { onSourceChanged(); }));
+      subscriptions.push_back(transport.onMutedChanged([this](bool) { onSourceChanged(); }));
       subscriptions.push_back(
-        transport.onSeekUpdate([this](PlaybackTransport::SeekUpdate const& update) noexcept { onSeekUpdate(update); }));
+        transport.onSeekUpdate([this](PlaybackTransport::SeekUpdate const& update) { onSeekUpdate(update); }));
       subscriptions.push_back(transport.onRevealTrackRequested(
-        [this](PlaybackTransport::RevealTrackRequested const& request) noexcept
+        [this](PlaybackTransport::RevealTrackRequested const& request)
         {
           onRevealTrackRequested(PlaybackRevealTrackRequest{.trackId = request.trackId,
                                                             .preferredViewId = request.preferredViewId,
                                                             .preferredListId = request.preferredListId});
         }));
 
-      subscriptions.push_back(
-        succession.onChanged([this](PlaybackSuccessionState const&) noexcept { onSourceChanged(); }));
+      subscriptions.push_back(succession.onChanged([this](PlaybackSuccessionState const&) { onSourceChanged(); }));
       subscriptions.push_back(succession.onExplicitStartSettled(
-        [this] noexcept
+        [this]
         {
           if (commitDepth == 0)
           {
@@ -450,10 +433,10 @@ namespace ao::rt
 
           onSourceChanged();
         }));
-      subscriptions.push_back(succession.onShuffleModeChanged(
-        [this](PlaybackSuccession::ShuffleModeChanged const&) noexcept { onSourceChanged(); }));
-      subscriptions.push_back(succession.onRepeatModeChanged(
-        [this](PlaybackSuccession::RepeatModeChanged const&) noexcept { onSourceChanged(); }));
+      subscriptions.push_back(
+        succession.onShuffleModeChanged([this](PlaybackSuccession::ShuffleModeChanged const&) { onSourceChanged(); }));
+      subscriptions.push_back(
+        succession.onRepeatModeChanged([this](PlaybackSuccession::RepeatModeChanged const&) { onSourceChanged(); }));
     }
 
     void onSourceChanged()
@@ -561,10 +544,8 @@ namespace ao::rt
       }
       catch (...)
       {
-        // The current lower state remains authoritative. A later observation
-        // retries publication after this pre-admission rejection.
         publishScheduled = false;
-        logDeferredAdmissionFailure("snapshot publication");
+        AO_FATAL_EXCEPTION(std::current_exception(), "playback snapshot-publication admission");
       }
     }
 

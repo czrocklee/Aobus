@@ -7,8 +7,6 @@
 
 #include <ftxui/component/screen_interactive.hpp>
 
-#include <functional>
-
 namespace ao::tui
 {
   class Executor final : public async::QueuedExecutorBase
@@ -26,7 +24,6 @@ namespace ao::tui
 
   private:
     void wake() noexcept override;
-    void executeTask(std::move_only_function<void()>& task) override;
 
     ftxui::ScreenInteractive& _screen;
   };

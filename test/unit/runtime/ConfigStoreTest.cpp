@@ -5,7 +5,6 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/yaml/Serialization.h>
 
 #include <catch2/catch_message.hpp>
@@ -16,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -92,12 +92,12 @@ namespace ao::rt::test
     {
       Result<> serialize(ryml::NodeRef /*node*/, State const& /*state*/) const
       {
-        throwException<Exception>("intentional serializer exception");
+        throw std::runtime_error{"intentional serializer exception"};
       }
 
       Result<State> deserialize(ryml::ConstNodeRef /*node*/, State const& /*seed*/) const
       {
-        throwException<Exception>("intentional deserializer exception");
+        throw std::runtime_error{"intentional deserializer exception"};
       }
     };
 
@@ -235,16 +235,13 @@ namespace ao::rt::test
       CHECK(target.enabled);
     }
 
-    SECTION("A schema exception is contained")
+    SECTION("An unexpected schema exception escapes without changing the target")
     {
       writeFile(configPath, "owned: {}\n");
       auto store = ConfigStore{configPath};
       auto target = State{.count = 99};
-      auto const loadedRes = store.load("owned", target, ThrowingYamlSchema{});
 
-      REQUIRE_FALSE(loadedRes);
-      CHECK(loadedRes.error().code == Error::Code::FormatRejected);
-      CHECK(loadedRes.error().message.contains("intentional deserializer exception"));
+      CHECK_THROWS_AS(store.load("owned", target, ThrowingYamlSchema{}), std::runtime_error);
       CHECK(target.count == 99);
     }
 
@@ -284,12 +281,9 @@ namespace ao::rt::test
 
     SECTION("A thrown serialization error commits no groups")
     {
-      auto const result = store.saveTogether(configWrite("staged", State{.count = 22}, StateYamlSchema{}),
-                                             configWrite("broken", State{}, ThrowingYamlSchema{}));
-
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidState);
-      CHECK(result.error().message.contains("intentional serializer exception"));
+      CHECK_THROWS_AS(store.saveTogether(configWrite("staged", State{.count = 22}, StateYamlSchema{}),
+                                         configWrite("broken", State{}, ThrowingYamlSchema{})),
+                      std::runtime_error);
       CHECK(ao::test::readFile(configPath) == originalContents);
     }
 

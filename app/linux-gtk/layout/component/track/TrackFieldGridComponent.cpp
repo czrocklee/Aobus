@@ -1131,7 +1131,7 @@ namespace ao::gtk::layout
         _optEditSnapshot.emplace(std::move(snapshot));
         _editSessionPtr = std::move(*sessionRes);
         _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated(
-          [this] noexcept
+          [this]
           {
             Glib::signal_idle().connect_once(sigc::track_object(
               [this]

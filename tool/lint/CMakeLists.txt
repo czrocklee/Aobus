@@ -45,6 +45,7 @@ set(AOBUS_LINT_PLUGIN_SOURCES
   check/IncludeConventionCheck.cpp
   check/NodiscardUsageCheck.cpp
   check/ForbidTrailingReturnCheck.cpp
+  check/ForbidRawFatalCheck.cpp
   check/ForbidRawThrowCheck.cpp
   check/HeaderFunctionDefinitionCheck.cpp
   check/IdentifierNamingExtensionsCheck.cpp

@@ -15,7 +15,6 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
-#include <exception>
 #include <memory>
 #include <ostream>
 #include <utility>
@@ -52,22 +51,10 @@ namespace ao::cli
       return;
     }
 
-    auto& asyncRuntime = _runtimePtr->async();
     _runtimePtr->shutdown();
 
-    while (true)
+    while (_loopExecutor->runReadyTurn())
     {
-      try
-      {
-        if (!_loopExecutor->runReadyTurn())
-        {
-          break;
-        }
-      }
-      catch (...)
-      {
-        asyncRuntime.reportUnhandledException(std::current_exception(), "CLI callback executor shutdown");
-      }
     }
 
     _runtimePtr.reset();
@@ -113,44 +100,12 @@ namespace ao::cli
     auto completionStatePtr = std::make_shared<TaskCompletionState>();
     auto completionFuture =
       asyncRuntime.spawn(publishTaskCompletion(&asyncRuntime.callbackExecutor(), std::move(task), completionStatePtr));
-    auto callbackExceptionPtr = std::exception_ptr{};
 
     while (!completionStatePtr->completed)
     {
-      try
-      {
-        _loopExecutor->runOneTurn();
-      }
-      catch (...)
-      {
-        if (!callbackExceptionPtr)
-        {
-          callbackExceptionPtr = std::current_exception();
-        }
-        else
-        {
-          asyncRuntime.reportUnhandledException(std::current_exception(), "CLI callback executor");
-        }
-      }
+      _loopExecutor->runOneTurn();
     }
 
-    try
-    {
-      completionFuture.get();
-    }
-    catch (...)
-    {
-      if (callbackExceptionPtr)
-      {
-        asyncRuntime.reportUnhandledException(callbackExceptionPtr, "CLI callback executor");
-      }
-
-      throw;
-    }
-
-    if (callbackExceptionPtr)
-    {
-      std::rethrow_exception(callbackExceptionPtr);
-    }
+    completionFuture.get();
   }
 } // namespace ao::cli

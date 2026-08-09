@@ -42,7 +42,7 @@ namespace ao::library::test
 
     DictionaryId requireIntern(WriteTransaction& transaction, std::string_view value)
     {
-      return ao::test::requireValue(transaction.dictionary().intern(value));
+      return ao::test::requireValue(physicalDictionary(transaction).intern(value));
     }
   } // namespace
 
@@ -53,10 +53,10 @@ namespace ao::library::test
     auto const& dictionary = library.dictionary();
     auto const initialGeneration = dictionary.generation();
     auto transaction = writeTransaction(library);
-    auto trackWriter = library.tracks().writer(transaction);
-    auto listWriter = library.lists().writer(transaction);
-    auto resourceWriter = library.resources().writer(transaction);
-    auto manifestWriter = library.manifest().writer(transaction);
+    auto trackWriter = physicalWriter(library.tracks(), transaction);
+    auto listWriter = physicalWriter(library.lists(), transaction);
+    auto resourceWriter = physicalWriter(library.resources(), transaction);
+    auto manifestWriter = physicalWriter(library.manifest(), transaction);
     auto const id = requireIntern(transaction, "Bach");
 
     CHECK(id == DictionaryId{1});
@@ -107,10 +107,10 @@ namespace ao::library::test
       WriteTransaction::Options{
         .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected commit failure"},
       });
-    auto trackWriter = library.tracks().writer(transaction);
-    auto listWriter = library.lists().writer(transaction);
-    auto resourceWriter = library.resources().writer(transaction);
-    auto manifestWriter = library.manifest().writer(transaction);
+    auto trackWriter = physicalWriter(library.tracks(), transaction);
+    auto listWriter = physicalWriter(library.lists(), transaction);
+    auto resourceWriter = physicalWriter(library.resources(), transaction);
+    auto manifestWriter = physicalWriter(library.manifest(), transaction);
 
     auto const failedId = requireIntern(transaction, "failed");
     auto result = transaction.commit();
@@ -250,35 +250,36 @@ namespace ao::library::test
     auto failed = std::atomic{false};
     auto writerDone = std::atomic{false};
 
-    auto writer = std::jthread{[&]
-                               {
-                                 start.arrive_and_wait();
+    auto writer = std::jthread{
+      [&]
+      {
+        start.arrive_and_wait();
 
-                                 for (std::int32_t batch = 0; batch < 128; ++batch)
-                                 {
-                                   auto transaction = writeTransaction(library);
+        for (std::int32_t batch = 0; batch < 128; ++batch)
+        {
+          auto transaction = writeTransaction(library);
 
-                                   for (std::int32_t index = 0; index < 8; ++index)
-                                   {
-                                     auto const result = transaction.dictionary().intern(
-                                       "batch_" + std::to_string(batch) + "_" + std::to_string(index));
+          for (std::int32_t index = 0; index < 8; ++index)
+          {
+            auto const result =
+              physicalDictionary(transaction).intern("batch_" + std::to_string(batch) + "_" + std::to_string(index));
 
-                                     if (!result)
-                                     {
-                                       failed.store(true, std::memory_order_relaxed);
-                                       break;
-                                     }
-                                   }
+            if (!result)
+            {
+              failed.store(true, std::memory_order_relaxed);
+              break;
+            }
+          }
 
-                                   if (failed.load(std::memory_order_relaxed) || !transaction.commit())
-                                   {
-                                     failed.store(true, std::memory_order_relaxed);
-                                     break;
-                                   }
-                                 }
+          if (failed.load(std::memory_order_relaxed) || !transaction.commit())
+          {
+            failed.store(true, std::memory_order_relaxed);
+            break;
+          }
+        }
 
-                                 writerDone.store(true, std::memory_order_release);
-                               }};
+        writerDone.store(true, std::memory_order_release);
+      }};
 
     auto reader = [&]
     {

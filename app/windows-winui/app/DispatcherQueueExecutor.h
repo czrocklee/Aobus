@@ -8,7 +8,6 @@
 #include <winrt/Microsoft.UI.Dispatching.h>
 
 #include <atomic>
-#include <functional>
 #include <memory>
 
 namespace ao::winui
@@ -31,7 +30,6 @@ namespace ao::winui
     };
 
     void wake() noexcept override;
-    void executeTask(std::move_only_function<void()>& task) override;
 
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     std::shared_ptr<DispatchState> _dispatchStatePtr;

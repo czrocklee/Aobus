@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <format>
 #include <functional>
@@ -94,16 +93,10 @@ namespace ao::uimodel
     {
       attachedRes = attach ? attach() : Result<>{};
     }
-    catch (std::exception const& error)
-    {
-      restorePrevious();
-      return makeError(
-        Error::Code::InitFailed, std::format("Shell generation attachment threw an exception: {}", error.what()));
-    }
     catch (...)
     {
       restorePrevious();
-      return makeError(Error::Code::InitFailed, "Shell generation attachment threw an unknown exception");
+      throw;
     }
 
     if (!attachedRes)

@@ -7,6 +7,7 @@
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
@@ -17,8 +18,6 @@
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/ByteView.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -72,23 +71,6 @@ namespace ao::library
       return byteCount;
     }
 
-    DictionaryId resolveDictionaryId(std::string_view value, WriteTransaction& transaction)
-    {
-      if (value.empty())
-      {
-        return kInvalidDictionaryId;
-      }
-
-      auto idRes = transaction.dictionary().intern(value);
-
-      if (!idRes)
-      {
-        lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
-      }
-
-      return *idRes;
-    }
-
     template<typename T>
     void writePod(std::span<std::byte> out, std::size_t offset, T const& value)
     {
@@ -96,8 +78,8 @@ namespace ao::library
       static_assert(std::is_standard_layout_v<T>);
       static_assert(alignof(T) <= kSerializedAlignmentBytes);
 
-      gsl_Expects((offset % alignof(T)) == 0);
-      gsl_Expects(offset + sizeof(T) <= out.size());
+      AO_INVARIANT((offset % alignof(T)) == 0);
+      AO_INVARIANT(offset + sizeof(T) <= out.size());
 
       std::memcpy(out.data() + offset, &value, sizeof(T));
     }
@@ -114,7 +96,7 @@ namespace ao::library
 
   TrackBuilder TrackBuilder::fromHotView(TrackView const& view, DictionaryStore const& dictionary)
   {
-    gsl_Expects(view.isHotValid());
+    AO_EXPECTS(view.isHotValid());
 
     auto builder = TrackBuilder{};
     builder._baselineKind = BaselineKind::HotOnly;
@@ -160,8 +142,8 @@ namespace ao::library
 
   TrackBuilder TrackBuilder::fromCompleteView(TrackView const& view, DictionaryStore const& dictionary)
   {
-    gsl_Expects(view.isHotValid());
-    gsl_Expects(view.isColdValid());
+    AO_EXPECTS(view.isHotValid());
+    AO_EXPECTS(view.isColdValid());
     auto builder = fromHotView(view, dictionary);
     builder._baselineKind = BaselineKind::Complete;
     auto prop = view.property();
@@ -471,7 +453,7 @@ namespace ao::library
 
   TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::erase(std::size_t index)
   {
-    gsl_Expects(index < _entries.size());
+    AO_EXPECTS(index < _entries.size());
     _entries.erase(_entries.begin() + static_cast<std::ptrdiff_t>(index));
     return *this;
   }
@@ -521,6 +503,35 @@ namespace ao::library
     return bloom;
   }
 
+  DictionaryId TrackBuilder::internDictionaryId(std::string_view const value, WriteTransaction& transaction)
+  {
+    auto idRes = transaction.dictionary().intern(value);
+
+    if (!idRes)
+    {
+      lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
+    }
+
+    return *idRes;
+  }
+
+  DictionaryId TrackBuilder::resolveDictionaryId(std::string_view const value, WriteTransaction& transaction)
+  {
+    if (value.empty())
+    {
+      return kInvalidDictionaryId;
+    }
+
+    return internDictionaryId(value, transaction);
+  }
+
+  Result<ResourceId> TrackBuilder::createResource(std::span<std::byte const> const data,
+                                                  WriteTransaction& transaction,
+                                                  ResourceStore const& resources)
+  {
+    return transaction.resourceStoreWriter(resources).create(data);
+  }
+
   Result<> TrackBuilder::validateHotSerializable() const
   {
     try
@@ -537,7 +548,7 @@ namespace ao::library
 
   Result<> TrackBuilder::validateColdSerializable() const
   {
-    gsl_Expects(_baselineKind != BaselineKind::HotOnly && "A hot-only TrackBuilder cannot serialize cold data");
+    AO_EXPECTS(_baselineKind != BaselineKind::HotOnly, "A hot-only TrackBuilder cannot serialize cold data");
 
     auto uriRes = LibraryUri::parse(_propertyBuilder._uri);
 
@@ -723,23 +734,16 @@ namespace ao::library
 
     for (auto const& name : builder->_tagsBuilder._tagNames)
     {
-      auto idRes = transaction.dictionary().intern(name);
-
-      if (!idRes)
-      {
-        lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
-      }
-
-      prepared._tagIds.push_back(*idRes);
+      prepared._tagIds.push_back(TrackBuilder::internDictionaryId(name, transaction));
     }
 
     // Resolve metadata strings to DictionaryIds for header
     auto const& metadata = builder->_metadataBuilder;
-    prepared._artistId = resolveDictionaryId(metadata._artist, transaction);
-    prepared._albumId = resolveDictionaryId(metadata._album, transaction);
-    prepared._genreId = resolveDictionaryId(metadata._genre, transaction);
-    prepared._albumArtistId = resolveDictionaryId(metadata._albumArtist, transaction);
-    prepared._composerId = resolveDictionaryId(metadata._composer, transaction);
+    prepared._artistId = TrackBuilder::resolveDictionaryId(metadata._artist, transaction);
+    prepared._albumId = TrackBuilder::resolveDictionaryId(metadata._album, transaction);
+    prepared._genreId = TrackBuilder::resolveDictionaryId(metadata._genre, transaction);
+    prepared._albumArtistId = TrackBuilder::resolveDictionaryId(metadata._albumArtist, transaction);
+    prepared._composerId = TrackBuilder::resolveDictionaryId(metadata._composer, transaction);
 
     prepared._bloomFilter = computeBloomFilter(prepared._tagIds);
 
@@ -770,8 +774,8 @@ namespace ao::library
   void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const noexcept
   {
     // Exact size validation and alignment check
-    gsl_Expects(out.size() == _size);
-    gsl_Expects(utility::bytes::isAligned(out.data(), kSerializedAlignmentBytes));
+    AO_EXPECTS(out.size() == _size);
+    AO_EXPECTS(utility::bytes::isAligned(out.data(), kSerializedAlignmentBytes));
 
     writePod(out,
              0,
@@ -832,11 +836,11 @@ namespace ao::library
   void TrackBuilder::PreparedCold::resolveClassicalIds(TrackBuilder const* builder, WriteTransaction& transaction)
   {
     auto const& metadata = builder->_metadataBuilder;
-    _workId = resolveDictionaryId(metadata._work, transaction);
-    _movementId = resolveDictionaryId(metadata._movement, transaction);
-    _conductorId = resolveDictionaryId(metadata._conductor, transaction);
-    _ensembleId = resolveDictionaryId(metadata._ensemble, transaction);
-    _soloistId = resolveDictionaryId(metadata._soloist, transaction);
+    _workId = TrackBuilder::resolveDictionaryId(metadata._work, transaction);
+    _movementId = TrackBuilder::resolveDictionaryId(metadata._movement, transaction);
+    _conductorId = TrackBuilder::resolveDictionaryId(metadata._conductor, transaction);
+    _ensembleId = TrackBuilder::resolveDictionaryId(metadata._ensemble, transaction);
+    _soloistId = TrackBuilder::resolveDictionaryId(metadata._soloist, transaction);
   }
 
   std::vector<std::pair<DictionaryId, std::string_view>> TrackBuilder::PreparedCold::resolveCustomMetadata(
@@ -848,14 +852,7 @@ namespace ao::library
 
     for (auto const& [key, value] : builder->_customMetadataBuilder._customPairs)
     {
-      auto idRes = transaction.dictionary().intern(key);
-
-      if (!idRes)
-      {
-        lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
-      }
-
-      resolvedPairs.emplace_back(*idRes, value);
+      resolvedPairs.emplace_back(TrackBuilder::internDictionaryId(key, transaction), value);
     }
 
     std::ranges::sort(resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
@@ -866,7 +863,6 @@ namespace ao::library
                                                    WriteTransaction& transaction,
                                                    ResourceStore const& resources)
   {
-    auto writer = resources.writer(transaction);
     _coverArt.reserve(builder->_coverArtBuilder._entries.size());
 
     for (auto const& pending : builder->_coverArtBuilder._entries)
@@ -878,7 +874,7 @@ namespace ao::library
       }
 
       auto const data = std::get<std::span<std::byte const>>(pending.source);
-      auto resourceRes = writer.create(data);
+      auto resourceRes = TrackBuilder::createResource(data, transaction, resources);
 
       if (!resourceRes)
       {
@@ -1014,7 +1010,7 @@ namespace ao::library
     for (auto const& block : _blocks)
     {
       auto const slotIndex = trackColdBlockSlotIndex(block.slot);
-      gsl_Expects(slotIndex < kTrackColdKnownBlockSlotCount);
+      AO_INVARIANT(slotIndex < kTrackColdKnownBlockSlotCount);
       _blockOffsets[slotIndex] = checkedUint16(offset, "Cold block offset");
 
       auto const rawBlockLength = block.payload.size();
@@ -1062,8 +1058,8 @@ namespace ao::library
   void TrackBuilder::PreparedCold::writeTo(std::span<std::byte> out) const noexcept
   {
     // Exact size validation and alignment check
-    gsl_Expects(out.size() == _size);
-    gsl_Expects(utility::bytes::isAligned(out.data(), kSerializedAlignmentBytes));
+    AO_EXPECTS(out.size() == _size);
+    AO_EXPECTS(utility::bytes::isAligned(out.data(), kSerializedAlignmentBytes));
 
     std::ranges::fill(out, std::byte{0});
 
@@ -1087,7 +1083,7 @@ namespace ao::library
 
     for (auto const& block : _blocks)
     {
-      gsl_Assert(offset == _blockOffsets[trackColdBlockSlotIndex(block.slot)]);
+      AO_INVARIANT(offset == _blockOffsets[trackColdBlockSlotIndex(block.slot)]);
 
       if (!block.payload.empty())
       {
@@ -1098,7 +1094,7 @@ namespace ao::library
       offset = align4(offset);
     }
 
-    gsl_Assert(offset == _uriOffset);
+    AO_INVARIANT(offset == _uriOffset);
 
     // Write uri
     if (_uriLength > 0)

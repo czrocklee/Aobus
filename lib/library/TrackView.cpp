@@ -3,13 +3,12 @@
 
 #include <ao/library/TrackView.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -28,7 +27,7 @@ namespace ao::library
 
   CoverArt CoverArtProxy::at(std::uint16_t index) const noexcept
   {
-    gsl_Expects(index < count());
+    AO_EXPECTS(index < count());
     auto const& entry = _entries[index];
     return {.resourceId = entry.id, .type = static_cast<PictureType>(entry.type)};
   }
@@ -157,7 +156,7 @@ namespace ao::library
 
   DictionaryId TrackView::TagProxy::id(std::uint16_t index) const noexcept
   {
-    gsl_Expects(index < count());
+    AO_EXPECTS(index < count());
     return _tagIds[index];
   }
 
@@ -190,7 +189,7 @@ namespace ao::library
 
   TrackHotHeader const& TrackView::hotHeader() const noexcept
   {
-    gsl_Expects(_hotHeader != nullptr);
+    AO_EXPECTS(_hotHeader != nullptr);
     return *_hotHeader;
   }
 
@@ -202,7 +201,7 @@ namespace ao::library
   TrackView::ColdIndex const& TrackView::requiredColdIndex() const noexcept
   {
     auto const& index = coldIndex();
-    gsl_Expects(index.header != nullptr);
+    AO_EXPECTS(index.header != nullptr);
     return index;
   }
 

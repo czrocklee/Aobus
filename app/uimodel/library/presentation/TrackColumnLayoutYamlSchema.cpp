@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
@@ -10,8 +11,6 @@
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -134,7 +133,7 @@ namespace ao::uimodel
 
     for (auto const& [listId, columns] : state.listLayouts)
     {
-      gsl_Expects(listId != kInvalidListId && "Cannot persist a track column layout for the invalid list id");
+      AO_EXPECTS(listId != kInvalidListId, "Cannot persist a track column layout for the invalid list id");
 
       auto stored = StoredTrackColumnLayout{.listId = listId.raw()};
       stored.columns.reserve(columns.size());
@@ -148,8 +147,8 @@ namespace ao::uimodel
 
         auto const field = rt::trackFieldId(column.field);
 
-        gsl_Expects(!std::ranges::contains(stored.columns, field, &StoredTrackColumn::field) &&
-                    "Cannot persist duplicate track column");
+        AO_EXPECTS(!std::ranges::contains(stored.columns, field, &StoredTrackColumn::field),
+                   "Cannot persist duplicate track column");
 
         stored.columns.push_back(StoredTrackColumn{
           .field = std::string{field},

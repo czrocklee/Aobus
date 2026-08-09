@@ -86,7 +86,7 @@ Preparation rebuilds library pages, restores workspace, creates a default All Tr
 It does not restore playback, start MPRIS, join the application, present the window, or request app/workspace/playback lifecycle checkpoints.
 
 GTK first adds the prepared startup window to the application, then activates it by restoring playback intent and starting MPRIS best-effort, and finally presents it.
-Playback restoration retains its existing log-and-continue failure policy.
+An expected playback-restore `Result` failure, including contextual `FormatRejected` from an invalid retained saved-List filter, is logged and leaves playback at its default state; unexpected exceptions are not contained by that recoverable branch.
 
 ### Open the active root
 
@@ -138,9 +138,11 @@ Selecting the active root can still request a scan; scan failure and progress be
 Playback-session discard failure aborts replacement and keeps the old pair active.
 The old window presents the discard diagnostic in a parent-bound transient message and returns the same failure to the replacement callback.
 Runtime-factory Errors and later candidate preparation/configuration exceptions destroy the candidate and reach the existing GLib signal boundary, which presents the diagnostic against the still-active old window.
-Current global, workspace, layout, and several other save wrappers contain void or best-effort paths, so their failure does not currently abort replacement or shutdown.
+The application-session save exposes a typed result to its lifecycle caller, which logs a recoverable persistence failure and keeps the committed replacement active.
+Workspace, layout, and several other save wrappers remain void or best-effort paths, so their failure does not currently abort replacement or shutdown.
 Playback checkpoint failure is logged by the coordinator.
-After retirement succeeds, playback restore and MPRIS activation retain their expected log-and-continue behavior and cannot roll the lifecycle back.
+After retirement succeeds, an expected playback-restore `Result` failure and an exact `Glib::Error` from optional MPRIS activation are logged and cannot roll the lifecycle back.
+Every other escaping exception enters the owning frontend fatal boundary.
 There is no rollback contract for an unexpected invariant or platform exception after retirement: the old playback payload has already been discarded, so the old pair cannot be made active again reliably.
 Selected-path persistence failure is logged after commit; the new pair remains active while disk retains the previous path.
 
@@ -177,6 +179,7 @@ Bootstrap scanning reports through the runtime library task and notification sur
 - [`LibraryWindowLifecycle`](../../../app/linux-gtk/app/LibraryWindowLifecycle.h) owns pair preparation, application activation, same-root reuse, and different-root replacement ordering through narrow callbacks.
 - [`MainWindow`](../../../app/linux-gtk/app/MainWindow.h) and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) own lifecycle phases, activation mode, retirement, hide, and destruction save triggers.
 - [`MainWindowCoordinator`](../../../app/linux-gtk/app/MainWindowCoordinator.h) and [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) own prepare, optional playback restore, and checkpoint sequencing inside a pair.
+- [`AppConfigStore`](../../../app/linux-gtk/app/AppConfigStore.h) exposes selected application-session persistence as a typed result so lifecycle code can distinguish an expected write failure from an escaping exception.
 - [`AppRuntime`](../../../app/include/ao/rt/AppRuntime.h) owns the interactive runtime graph and playback-session discard command.
 - [`ImportExportCoordinator`](../../../app/linux-gtk/portal/ImportExportCoordinator.h) owns the platform file-dialog entry and callback handoff.
 - [`ImportExportCoordinatorPolicy`](../../../app/linux-gtk/portal/ImportExportCoordinatorPolicy.h) owns default database paths and bootstrap-scan selection.
@@ -184,7 +187,7 @@ Bootstrap scanning reports through the runtime library task and notification sur
 ## Test map
 
 - [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) proves phase transitions, candidate isolation, activation, finalization, save triggers, retirement, discard failure, and prevention of stale path writes.
-- [`LibraryWindowLifecycleTest.cpp`](../../../test/unit/linux-gtk/app/LibraryWindowLifecycleTest.cpp) proves candidate failure isolation, exact replacement order, same-root reuse, persistence timing/failure, idle activation, and scan timing.
+- [`LibraryWindowLifecycleTest.cpp`](../../../test/unit/linux-gtk/app/LibraryWindowLifecycleTest.cpp) proves candidate failure isolation, exact replacement order, same-root reuse, recoverable persistence failure after commit, unexpected exception escape, idle activation, and scan timing.
 - [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) proves global session preservation, workspace/playback initialization, and checkpoint composition.
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) proves global session storage behavior.
 - [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects callback-scope teardown, native cancellation, default database paths, bootstrap-scan policy, and open-callback forwarding.

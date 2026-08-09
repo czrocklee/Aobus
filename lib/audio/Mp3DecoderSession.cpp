@@ -8,6 +8,7 @@
 #include "detail/MappedFileCursor.h"
 #include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -30,6 +31,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -40,7 +42,7 @@ namespace ao::audio
     constexpr std::uint8_t kMp3PcmBitDepth = 16;
 
     template<typename Action>
-    decltype(auto) terminateOnException(Action&& action) noexcept
+    decltype(auto) runOrAbort(std::string_view const context, Action&& action) noexcept
     {
       try
       {
@@ -48,7 +50,7 @@ namespace ao::audio
       }
       catch (...)
       {
-        std::terminate();
+        AO_FATAL_EXCEPTION(std::current_exception(), context);
       }
     }
 
@@ -390,7 +392,8 @@ namespace ao::audio
 
   Result<> Mp3DecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
-    return terminateOnException(
+    return runOrAbort(
+      "MP3 decoder seek",
       [this, offset] -> Result<>
       {
         if (!_implPtr->fileCursor.isOpen())
@@ -434,7 +437,7 @@ namespace ao::audio
 
   Result<PcmBlock> Mp3DecoderSession::readNextBlock() noexcept
   {
-    return terminateOnException([this] { return _implPtr->readNextBlock(); });
+    return runOrAbort("MP3 decoder read", [this] { return _implPtr->readNextBlock(); });
   }
 
   DecodedStreamInfo Mp3DecoderSession::streamInfo() const noexcept

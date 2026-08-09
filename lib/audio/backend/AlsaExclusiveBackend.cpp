@@ -7,6 +7,7 @@
 #include "backend/detail/AlsaPcmFormat.h"
 #include "backend/detail/AlsaPrewarmCache.h"
 #include "detail/DecoderOutput.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -23,7 +24,6 @@
 #include <ao/audio/backend/detail/AudioBackendRenderProgress.h>
 #include <ao/utility/ThreadName.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <poll.h>
 
 #include <cerrno>
@@ -39,6 +39,7 @@ extern "C"
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <format>
 #include <limits>
@@ -584,7 +585,7 @@ namespace ao::audio::backend
 
     bufferSize = std::max(bufferSize, periodSize);
 
-    gsl_Expects(optOpenedMode);
+    AO_INVARIANT(optOpenedMode);
     auto const clientFormat = optOpenedMode->clientFormat;
     std::size_t const bytesPerFrame = frameBytes(clientFormat);
 
@@ -919,7 +920,7 @@ namespace ao::audio::backend
 
     auto const clientFormat = pcmFormat(sourceFormat, selectedRes->encoding);
     auto const optAlsaFormat = detail::alsaFormatFromSampleEncoding(selectedRes->encoding);
-    gsl_Expects(optAlsaFormat);
+    AO_INVARIANT(optAlsaFormat);
 
     ::snd_pcm_hw_params_t* applied = nullptr;
     snd_pcm_hw_params_alloca(&applied); // macro
@@ -1111,7 +1112,15 @@ namespace ao::audio::backend
       _implPtr->thread = std::jthread{[this](std::stop_token const& st)
                                       {
                                         setCurrentThreadName("AlsaPlayback");
-                                        _implPtr->playbackLoop(st);
+
+                                        try
+                                        {
+                                          _implPtr->playbackLoop(st);
+                                        }
+                                        catch (...)
+                                        {
+                                          AO_FATAL_EXCEPTION(std::current_exception(), "ALSA playback thread");
+                                        }
                                       }};
     }
 

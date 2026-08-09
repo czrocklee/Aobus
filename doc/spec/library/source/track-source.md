@@ -64,6 +64,8 @@ parent source
 `SmartListSource` preserves the stable subsequence of parent order that matches the local expression.
 An empty expression matches all upstream tracks.
 An invalid expression exposes empty membership and an expression error without invalidating sibling sources.
+The error identifies the saved List whose stored expression failed.
+A child whose own expression is valid but whose parent chain contains that failure also exposes empty membership and propagates the originating parent error unchanged.
 
 For filtered membership `M` and raw order `R`, `ListOrderSource` exposes:
 
@@ -92,6 +94,7 @@ Membership transitions are published as one atomic batch after the final state i
 
 `TrackSourceCache` acquires ad-hoc smart sources by `SourceSpec`, consisting of a base list and expression.
 Equal specs share one weak-cached source identity while leased.
+An ad-hoc source reports its own expression error first; when its expression is valid, it propagates any error from its saved-List base source.
 
 ## Cache and dependency behavior
 
@@ -107,6 +110,8 @@ Recreating the same numeric list id creates a new source identity; an old invali
 For each committed library changeset the cache applies deletions, raw order changes, List definition upserts, and track metadata changes in the order required to expose one coherent derived result.
 Reentrant mutations are rejected while the cache applies a committed revision.
 Only refresh requests discovered during that application are queued and drained afterward, so observers never see a half-rebound graph.
+After the cache applies the revision as the publication replica, live views recompute source errors from their retained leases.
+Repairing an invalid saved ancestor therefore clears the contextual error in every affected descendant view without rebuilding that view.
 
 ## Edit algebra
 
@@ -119,11 +124,14 @@ Malformed coordinates, empty ranges, divergent reducer state, and a final sequen
 ## Failure and lifetime
 
 Expected query compilation failures remain recoverable at their owning boundary.
-Library read failures are exceptional and are not translated while consuming a `noexcept` source callback.
+Stored expression failures remain application source state rather than library-integrity faults: views expose the contextual error with an empty projection, playback launch returns it as `FormatRejected`, and a mutation that must interpret a stored parent expression returns contextual `FormatRejected` before committing any change.
+Library read failures are exceptional and are not translated while consuming a source update.
+Source handlers are ordinary callables; the owning signal emission diagnoses and aborts an escaping exception.
 Delta-shape and internal-mirror violations use fail-fast contracts.
 
 The cache is the library's [change-publication replica](../runtime/change-publication.md).
-It applies each committed revision before phase-two observers run, and that application is a `noexcept` contract rather than a recoverable replica transaction.
+It applies each committed revision before phase-two observers run. The publication owner contains replica exceptions
+and treats an escape as fatal rather than exposing a recoverable replica transaction.
 Invalidation clears each source snapshot before publishing its terminal event, so an outstanding lease cannot read old size or ids.
 
 Source delivery is synchronous on the callback side.
@@ -133,11 +141,13 @@ Subscriptions release before their source or changes owner; source destruction d
 
 - [`TrackSource.h`](../../../../app/include/ao/rt/source/TrackSource.h), [`TrackSourceDelta.h`](../../../../app/include/ao/rt/source/TrackSourceDelta.h), and [`TrackSourceLease.h`](../../../../app/include/ao/rt/source/TrackSourceLease.h) define source identity and batches.
 - [`TrackSourceCache.h`](../../../../app/include/ao/rt/source/TrackSourceCache.h) owns cache and dependency composition.
+- [`CachedListSource.h`](../../../../app/runtime/source/CachedListSource.h) retains stable saved-List identity and resolves local or inherited source errors.
 - [`SmartListSource.h`](../../../../app/include/ao/rt/source/SmartListSource.h), [`ListOrderSource.h`](../../../../app/include/ao/rt/source/ListOrderSource.h), and their implementations own expression membership and rank-overlay behavior.
 
 ## Test map
 
-Source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) prove edit validation, leases, cache identity, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
+- [`TrackSourceCacheTest.cpp`](../../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, dependency composition, and contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership.
+- Source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) prove edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
 
 ## Related documents
 

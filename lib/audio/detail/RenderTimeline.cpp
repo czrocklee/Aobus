@@ -3,6 +3,7 @@
 
 #include "RenderTimeline.h"
 
+#include <ao/Contract.h>
 #include <ao/audio/PcmSource.h>
 
 #include <atomic>
@@ -41,9 +42,15 @@ namespace ao::audio::detail
 
   void RenderTimeline::armLookahead(std::unique_ptr<Node> nodePtr)
   {
+    AO_EXPECTS(nodePtr != nullptr, "RenderTimeline lookahead node must be present");
+
     auto const lock = std::scoped_lock{_mutex};
-    _lookahead.store(nodePtr.get(), std::memory_order_release);
+    AO_INVARIANT(_lookahead.load(std::memory_order_acquire) == nullptr,
+                 "RenderTimeline lookahead cursor must be empty before arm");
+    AO_INVARIANT(_lookaheadNodePtr == nullptr, "RenderTimeline lookahead owner must be empty before arm");
+
     _lookaheadNodePtr = std::move(nodePtr);
+    _lookahead.store(_lookaheadNodePtr.get(), std::memory_order_release);
   }
 
   void RenderTimeline::retireCursor() noexcept

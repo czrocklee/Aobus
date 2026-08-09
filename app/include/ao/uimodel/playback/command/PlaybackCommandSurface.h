@@ -35,9 +35,8 @@ namespace ao::uimodel
     bool isEnabled(PlaybackCommand command) const;
     bool isCapable(PlaybackCommand command) const;
 
-    async::Subscription onAvailabilityChanged(std::move_only_function<void() noexcept> handler);
-    async::Subscription onAvailabilityChanged(PlaybackCommand command,
-                                              std::move_only_function<void() noexcept> handler);
+    async::Subscription onAvailabilityChanged(std::move_only_function<void()> handler);
+    async::Subscription onAvailabilityChanged(PlaybackCommand command, std::move_only_function<void()> handler);
 
   private:
     static constexpr std::size_t kCommandCount = 8;

@@ -4,13 +4,13 @@
 #include "app/LibraryWindowLifecycle.h"
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -42,22 +42,27 @@ namespace ao::gtk::test
   {
     auto events = std::vector<std::string>{};
     auto const unexpected = [&] { FAIL("replacement callback must not run for the active root"); };
+    auto const unexpectedResult = [&] -> Result<>
+    {
+      unexpected();
+      return {};
+    };
 
     auto const openedRes = openLibraryWindow("/music/current",
                                              "/music/current",
                                              true,
                                              LibraryWindowReplacementCallbacks{
-                                               .prepareCandidate = unexpected,
+                                               .prepareCandidate = unexpectedResult,
                                                .configureCandidate = unexpected,
                                                .retireActive = [&] -> Result<>
                                                {
                                                  unexpected();
                                                  return {};
                                                },
-                                               .activateCandidate = unexpected,
+                                               .activateCandidate = unexpectedResult,
                                                .replaceActiveSlot = unexpected,
                                                .releaseRetired = unexpected,
-                                               .persistSelectedPath = unexpected,
+                                               .persistSelectedPath = unexpectedResult,
                                                .scanActive = [&] { events.emplace_back("scan"); },
                                                .presentActive = [&] { events.emplace_back("present"); },
                                              });
@@ -84,11 +89,10 @@ namespace ao::gtk::test
                                       "/music/new",
                                       false,
                                       LibraryWindowReplacementCallbacks{
-                                        .prepareCandidate =
-                                          [&]
+                                        .prepareCandidate = [&] -> Result<>
                                         {
                                           candidatePtr = std::make_unique<CandidateSentinel>(candidateDestructionCount);
-                                          throwException<Exception>("database open failed");
+                                          throw std::runtime_error{"database open failed"};
                                         },
                                         .configureCandidate = [&] { applicationWindows.emplace_back("configured"); },
                                         .retireActive = [&] -> Result<>
@@ -96,16 +100,24 @@ namespace ao::gtk::test
                                           activePlaybackTrack = 0;
                                           return {};
                                         },
-                                        .activateCandidate = [&] { applicationWindows.emplace_back("new"); },
+                                        .activateCandidate = [&] -> Result<>
+                                        {
+                                          applicationWindows.emplace_back("new");
+                                          return {};
+                                        },
                                         .replaceActiveSlot = [&] { activeSlot = "new"; },
                                         .releaseRetired = [&] { activeVisible = false; },
-                                        .persistSelectedPath = [&] { selectedPath = "/music/new"; },
+                                        .persistSelectedPath = [&] -> Result<>
+                                        {
+                                          selectedPath = "/music/new";
+                                          return {};
+                                        },
                                         .scanActive = [] {},
                                         .presentActive = [] {},
                                       });
     };
 
-    CHECK_THROWS_AS(open(), Exception);
+    CHECK_THROWS_AS(open(), std::runtime_error);
     CHECK(activeSlot == "old");
     CHECK(applicationWindows == std::vector<std::string>{"old"});
     CHECK(activeVisible);
@@ -127,28 +139,40 @@ namespace ao::gtk::test
     auto const open = [&]
     {
       auto candidatePtr = std::unique_ptr<CandidateSentinel>{};
-      std::ignore = openLibraryWindow(
-        "/music/old",
-        "/music/new",
-        false,
-        LibraryWindowReplacementCallbacks{
-          .prepareCandidate = [&] { candidatePtr = std::make_unique<CandidateSentinel>(candidateDestructionCount); },
-          .configureCandidate = [] { throwException<Exception>("callback installation failed"); },
-          .retireActive = [&] -> Result<>
-          {
-            activePlaybackTrack = 0;
-            return {};
-          },
-          .activateCandidate = [&] { applicationWindows.emplace_back("new"); },
-          .replaceActiveSlot = [&] { activeSlot = "new"; },
-          .releaseRetired = [&] { activeVisible = false; },
-          .persistSelectedPath = [&] { selectedPath = "/music/new"; },
-          .scanActive = [] {},
-          .presentActive = [] {},
-        });
+      std::ignore =
+        openLibraryWindow("/music/old",
+                          "/music/new",
+                          false,
+                          LibraryWindowReplacementCallbacks{
+                            .prepareCandidate = [&] -> Result<>
+                            {
+                              candidatePtr = std::make_unique<CandidateSentinel>(candidateDestructionCount);
+                              return {};
+                            },
+                            .configureCandidate = [] { throw std::runtime_error{"callback installation failed"}; },
+                            .retireActive = [&] -> Result<>
+                            {
+                              activePlaybackTrack = 0;
+                              return {};
+                            },
+                            .activateCandidate = [&] -> Result<>
+                            {
+                              applicationWindows.emplace_back("new");
+                              return {};
+                            },
+                            .replaceActiveSlot = [&] { activeSlot = "new"; },
+                            .releaseRetired = [&] { activeVisible = false; },
+                            .persistSelectedPath = [&] -> Result<>
+                            {
+                              selectedPath = "/music/new";
+                              return {};
+                            },
+                            .scanActive = [] {},
+                            .presentActive = [] {},
+                          });
     };
 
-    CHECK_THROWS_AS(open(), Exception);
+    CHECK_THROWS_AS(open(), std::runtime_error);
     CHECK(activeSlot == "old");
     CHECK(applicationWindows == std::vector<std::string>{"old"});
     CHECK(activeVisible);
@@ -170,12 +194,12 @@ namespace ao::gtk::test
                                                "/music/new",
                                                true,
                                                LibraryWindowReplacementCallbacks{
-                                                 .prepareCandidate =
-                                                   [&]
+                                                 .prepareCandidate = [&] -> Result<>
                                                  {
                                                    events.emplace_back("prepare");
                                                    candidatePtr =
                                                      std::make_unique<CandidateSentinel>(candidateDestructionCount);
+                                                   return {};
                                                  },
                                                  .configureCandidate = [&] { events.emplace_back("configure"); },
                                                  .retireActive = [&] -> Result<>
@@ -183,10 +207,18 @@ namespace ao::gtk::test
                                                    events.emplace_back("discard");
                                                    return makeError(Error::Code::IoError, "discard failed");
                                                  },
-                                                 .activateCandidate = [&] { events.emplace_back("activate"); },
+                                                 .activateCandidate = [&] -> Result<>
+                                                 {
+                                                   events.emplace_back("activate");
+                                                   return {};
+                                                 },
                                                  .replaceActiveSlot = [&] { activeSlot = "new"; },
                                                  .releaseRetired = [&] { events.emplace_back("release"); },
-                                                 .persistSelectedPath = [&] { events.emplace_back("persist"); },
+                                                 .persistSelectedPath = [&] -> Result<>
+                                                 {
+                                                   events.emplace_back("persist");
+                                                   return {};
+                                                 },
                                                  .scanActive = [&] { events.emplace_back("scan"); },
                                                  .presentActive = [] {},
                                                });
@@ -213,19 +245,23 @@ namespace ao::gtk::test
                                              "/music/new",
                                              true,
                                              LibraryWindowReplacementCallbacks{
-                                               .prepareCandidate = [&] { events.emplace_back("prepare"); },
+                                               .prepareCandidate = [&] -> Result<>
+                                               {
+                                                 events.emplace_back("prepare");
+                                                 return {};
+                                               },
                                                .configureCandidate = [&] { events.emplace_back("configure"); },
                                                .retireActive = [&] -> Result<>
                                                {
                                                  events.emplace_back("checkpoint-discard");
                                                  return {};
                                                },
-                                               .activateCandidate =
-                                                 [&]
+                                               .activateCandidate = [&] -> Result<>
                                                {
                                                  events.emplace_back("activate-idle");
                                                  candidatePlaybackIdle = true;
                                                  applicationWindows.emplace_back("new");
+                                                 return {};
                                                },
                                                .replaceActiveSlot =
                                                  [&]
@@ -240,13 +276,13 @@ namespace ao::gtk::test
                                                  applicationWindows.erase(applicationWindows.begin());
                                                  oldReleased = true;
                                                },
-                                               .persistSelectedPath =
-                                                 [&]
+                                               .persistSelectedPath = [&] -> Result<>
                                                {
                                                  events.emplace_back("persist");
                                                  CHECK(activeSlot == "new");
                                                  CHECK(oldReleased);
                                                  CHECK(applicationWindows == std::vector<std::string>{"new"});
+                                                 return {};
                                                },
                                                .scanActive = [&] { events.emplace_back("scan"); },
                                                .presentActive = [] {},
@@ -267,30 +303,58 @@ namespace ao::gtk::test
                                              "scan"});
   }
 
-  TEST_CASE("LibraryWindowLifecycle - persistence failure keeps replacement active and starts scan",
+  TEST_CASE("LibraryWindowLifecycle - persistence Result failure keeps replacement active and starts scan",
             "[gtk][regression][active-library]")
   {
     auto activeSlot = std::string{"old"};
     bool scanned = false;
 
-    auto const openedRes = openLibraryWindow("/music/old",
-                                             "/music/new",
-                                             true,
-                                             LibraryWindowReplacementCallbacks{
-                                               .prepareCandidate = [] {},
-                                               .configureCandidate = [] {},
-                                               .retireActive = [] { return Result<>{}; },
-                                               .activateCandidate = [] {},
-                                               .replaceActiveSlot = [&] { activeSlot = "new"; },
-                                               .releaseRetired = [] {},
-                                               .persistSelectedPath = [] { throwException<Exception>("disk full"); },
-                                               .scanActive = [&] { scanned = true; },
-                                               .presentActive = [] {},
-                                             });
+    auto const result =
+      openLibraryWindow("/music/old",
+                        "/music/new",
+                        true,
+                        LibraryWindowReplacementCallbacks{
+                          .prepareCandidate = [] { return Result<>{}; },
+                          .configureCandidate = [] {},
+                          .retireActive = [] { return Result<>{}; },
+                          .activateCandidate = [] { return Result<>{}; },
+                          .replaceActiveSlot = [&] { activeSlot = "new"; },
+                          .releaseRetired = [] {},
+                          .persistSelectedPath = [] { return makeError(Error::Code::IoError, "disk full"); },
+                          .scanActive = [&] { scanned = true; },
+                          .presentActive = [] {},
+                        });
 
-    REQUIRE(openedRes);
-    CHECK(*openedRes == LibraryWindowOpenOutcome::Replaced);
+    REQUIRE(result);
+    CHECK(*result == LibraryWindowOpenOutcome::Replaced);
     CHECK(activeSlot == "new");
     CHECK(scanned);
+  }
+
+  TEST_CASE("LibraryWindowLifecycle - unexpected persistence exception escapes after replacement",
+            "[gtk][regression][active-library]")
+  {
+    auto activeSlot = std::string{"old"};
+    bool scanned = false;
+
+    CHECK_THROWS_AS(
+      openLibraryWindow("/music/old",
+                        "/music/new",
+                        true,
+                        LibraryWindowReplacementCallbacks{
+                          .prepareCandidate = [] { return Result<>{}; },
+                          .configureCandidate = [] {},
+                          .retireActive = [] { return Result<>{}; },
+                          .activateCandidate = [] { return Result<>{}; },
+                          .replaceActiveSlot = [&] { activeSlot = "new"; },
+                          .releaseRetired = [] {},
+                          .persistSelectedPath = [] -> Result<> { throw std::runtime_error{"unexpected failure"}; },
+                          .scanActive = [&] { scanned = true; },
+                          .presentActive = [] {},
+                        }),
+      std::runtime_error);
+
+    CHECK(activeSlot == "new");
+    CHECK_FALSE(scanned);
   }
 } // namespace ao::gtk::test

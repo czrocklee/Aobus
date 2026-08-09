@@ -4,6 +4,7 @@
 #include "FileManifestValidation.h"
 
 #include "LibraryUriValidation.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestLayout.h>
@@ -54,6 +55,18 @@ namespace ao::library
       return uri;
     }
   } // namespace
+
+  detail::PaddedFileManifestKey::PaddedFileManifestKey(std::string_view const uri)
+  {
+    AO_EXPECTS(uri.size() <= _bytes.size(), "File manifest URI exceeds the padded key buffer");
+
+    _size = paddedUriSize(uri.size());
+
+    if (!uri.empty())
+    {
+      std::memcpy(_bytes.data(), uri.data(), uri.size());
+    }
+  }
 
   Result<> validateFileManifestPayload(std::span<std::byte const> const payload)
   {

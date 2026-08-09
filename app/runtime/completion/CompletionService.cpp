@@ -3,6 +3,7 @@
 
 #include <ao/rt/completion/CompletionService.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -13,11 +14,9 @@
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -103,8 +102,8 @@ namespace ao::rt
         auto const field = fields[index];
         auto const optQueryField = trackFieldQueryField(field);
         auto const precedingFields = fields.first(index);
-        gsl_Expects(optQueryField && (field == TrackField::Title || query::isDictionaryField(*optQueryField)));
-        gsl_Expects(std::ranges::find(precedingFields, field) == precedingFields.end());
+        AO_INVARIANT(optQueryField && (field == TrackField::Title || query::isDictionaryField(*optQueryField)));
+        AO_INVARIANT(std::ranges::find(precedingFields, field) == precedingFields.end());
       }
     }
   } // namespace
@@ -113,7 +112,7 @@ namespace ao::rt
     : _library{library}
     , _ownerThread{std::this_thread::get_id()}
     , _libraryChangeSubscription{changes.onChanged(
-        [this](LibraryChangeSet const& changeSet) noexcept
+        [this](LibraryChangeSet const& changeSet)
         {
           if (changeSet.libraryReset || !changeSet.tracksInserted.empty() || !changeSet.tracksDeleted.empty() ||
               !changeSet.tracksMutated.empty())
@@ -124,21 +123,21 @@ namespace ao::rt
   {
     for (auto const& definition : trackFieldDefinitions())
     {
-      gsl_Assert(!definition.valueCompletion || supportsTrackFieldValueCompletion(definition.field));
+      AO_INVARIANT(!definition.valueCompletion || supportsTrackFieldValueCompletion(definition.field));
     }
   }
 
   CompletionService::~CompletionService() = default;
 
-  void CompletionService::assertOwnerThread() const
+  void CompletionService::requireOwnerThread() const
   {
-    assert(std::this_thread::get_id() == _ownerThread &&
-           "CompletionService accessed off its owning thread; vocabulary caches are not synchronized");
+    AO_EXPECTS(std::this_thread::get_id() == _ownerThread,
+               "CompletionService accessed off its owning thread; vocabulary caches are not synchronized");
   }
 
   std::span<VocabularyEntry const> CompletionService::tags()
   {
-    assertOwnerThread();
+    requireOwnerThread();
     ensureSnapshot();
 
     if (!_tagsReady)
@@ -151,7 +150,7 @@ namespace ao::rt
 
   std::span<VocabularyEntry const> CompletionService::customKeys()
   {
-    assertOwnerThread();
+    requireOwnerThread();
     ensureSnapshot();
 
     if (!_customKeysReady)
@@ -164,7 +163,7 @@ namespace ao::rt
 
   std::span<VocabularyEntry const> CompletionService::valuesFor(TrackField field)
   {
-    assertOwnerThread();
+    requireOwnerThread();
 
     auto const* const definition = trackFieldDefinition(field);
 
@@ -186,7 +185,7 @@ namespace ao::rt
 
   std::span<VocabularyEntry const> CompletionService::aggregateValues(TrackValueVocabularySpec spec)
   {
-    assertOwnerThread();
+    requireOwnerThread();
 
     if (!std::ranges::equal(spec.fields, _aggregateFields) || spec.includeTags != _aggregateIncludesTags)
     {
@@ -215,7 +214,7 @@ namespace ao::rt
 
   void CompletionService::invalidate()
   {
-    assertOwnerThread();
+    requireOwnerThread();
     _snapshotDirty = true;
   }
 

@@ -329,7 +329,7 @@ library:
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto const originalTrackId = library::test::addTrack(
+    auto const originalTrackId = library::test::addTrackWithUniqueFixtureUri(
       library,
       library::test::TrackSpec{.title = "Original Track", .artist = "Original Artist", .uri = "original.flac"});
     auto const originalDictionaryGeneration = library.dictionary().generation();

@@ -13,11 +13,10 @@
 #endif
 #include <windows.h>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
-#include <limits>
-#include <string>
 #include <string_view>
 #include <tuple>
 
@@ -25,35 +24,15 @@ namespace ao
 {
   void setCurrentThreadName(std::string_view name) noexcept
   {
-    try
+    auto wideName = std::array<wchar_t, 64>{};
+    auto const sourceSize = static_cast<std::int32_t>(std::min(name.size(), wideName.size() - 1));
+    auto const convertedSize = ::MultiByteToWideChar(
+      CP_UTF8, 0, name.data(), sourceSize, wideName.data(), static_cast<std::int32_t>(wideName.size() - 1));
+
+    if (convertedSize > 0)
     {
-      if (name.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
-      {
-        return;
-      }
-
-      auto const utf8Name = std::string{name};
-      auto const sourceSize = static_cast<std::int32_t>(utf8Name.size());
-      auto const wideSize = ::MultiByteToWideChar(CP_UTF8, 0, utf8Name.c_str(), sourceSize, nullptr, 0);
-
-      if (wideSize <= 0)
-      {
-        return;
-      }
-
-      auto wideName = std::wstring(static_cast<std::size_t>(wideSize), L'\0');
-      auto const convertedSize =
-        ::MultiByteToWideChar(CP_UTF8, 0, utf8Name.c_str(), sourceSize, wideName.data(), wideSize);
-
-      if (convertedSize == wideSize)
-      {
-        std::ignore = ::SetThreadDescription(::GetCurrentThread(), wideName.c_str());
-      }
-    }
-    catch (std::exception const&)
-    {
-      // Thread naming is best-effort; allocation failure must not affect the worker.
-      return;
+      wideName[static_cast<std::size_t>(convertedSize)] = L'\0';
+      std::ignore = ::SetThreadDescription(::GetCurrentThread(), wideName.data());
     }
   }
 } // namespace ao

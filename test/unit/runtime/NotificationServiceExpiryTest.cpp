@@ -21,7 +21,7 @@ namespace ao::rt::test
     struct NotificationExpiryFixture final
     {
       NotificationExpiryFixture()
-        : runtime{executor, 1, exceptions.handler(), &sleeper}
+        : runtime{executor, 1, &sleeper}
         , service{runtime}
         , updateSub{
             service.onFeedUpdated([this](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); })}
@@ -30,7 +30,6 @@ namespace ao::rt::test
 
       ControlledSleeper sleeper;
       QueuedExecutor executor;
-      AsyncExceptionRecorder exceptions;
       async::Runtime runtime;
       NotificationService service;
       std::vector<NotificationFeedUpdate> updates;
@@ -62,7 +61,6 @@ namespace ao::rt::test
     REQUIRE(fixture.updates.size() == 2);
     CHECK(fixture.updates.back().mutationKind == NotificationFeedMutationKind::Expired);
     CHECK(fixture.updates.back().id == id);
-    CHECK(fixture.exceptions.snapshot().empty());
   }
 
   TEST_CASE("NotificationService expiry - retained lifetimes do not schedule expiry", "[runtime][unit][notification]")
@@ -168,7 +166,7 @@ namespace ao::rt::test
   {
     auto sleeper = ControlledSleeper{};
     auto executor = QueuedExecutor{};
-    auto runtime = async::Runtime{executor, 1, {}, &sleeper};
+    auto runtime = async::Runtime{executor, 1, &sleeper};
 
     {
       auto service = NotificationService{runtime};

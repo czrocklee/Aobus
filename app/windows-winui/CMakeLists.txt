@@ -151,6 +151,16 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
 add_library(aobus-winui-lib STATIC ${AOBUS_WINUI_LIBRARY_SOURCES})
 target_precompile_headers(aobus-winui-lib PRIVATE pch.h)
 target_compile_options(aobus-winui-lib PRIVATE /bigobj)
+if(MSVC AND MSVC_VERSION EQUAL 1951)
+  # MSVC 14.51 ICEs in Boost.Asio's any_io_executor machinery when this
+  # translation unit is compiled with /GL. Keep IPO enabled for the rest of
+  # the Release graph. The source must also skip the /GL-built PCH to avoid
+  # C4652; remove both overrides after the toolset is fixed.
+  set_property(SOURCE app/UiCoordinator.cpp APPEND PROPERTY
+    COMPILE_OPTIONS "$<$<CONFIG:Release>:/GL->")
+  set_property(SOURCE app/UiCoordinator.cpp PROPERTY
+    SKIP_PRECOMPILE_HEADERS ON)
+endif()
 target_include_directories(aobus-winui-lib PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/include")

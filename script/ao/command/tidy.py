@@ -44,7 +44,9 @@ examples:
 
 ALL_FOLDERS = ["lib", "app", "include", "script", "test", "tool"]
 WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
-WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = ("/Zc:preprocessor", "/c", "/ZW:nostdlib", "/GL")
+# Clang tooling does not consume MSVC code-generation toggles. Strip both IPO
+# spellings because individual MSVC 14.51 workarounds may override /GL with /GL-.
+WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = ("/Zc:preprocessor", "/c", "/ZW:nostdlib", "/GL", "/GL-")
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
 
 # Check groups: start from nothing, enable curated groups, then disable known false
@@ -133,6 +135,7 @@ EXPECTED_AOBUS_CHECKS = frozenset(
         "aobus-readability-c-api-global-qualification",
         "aobus-readability-chrono-naming-convention",
         "aobus-readability-control-block-spacing",
+        "aobus-readability-forbid-raw-fatal",
         "aobus-readability-forbid-raw-throw",
         "aobus-readability-header-function-definition",
         "aobus-readability-identifier-naming-extensions",

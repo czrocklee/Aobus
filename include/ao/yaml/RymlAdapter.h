@@ -38,21 +38,13 @@ namespace ao::yaml
     std::string _filename;
   };
 
-  void throwOnErrorWithContext(c4::basic_substring<char const> msg, c4::yml::ErrorDataBasic const& dat, void* userData);
-  void throwOnParseErrorWithContext(c4::basic_substring<char const> msg,
-                                    c4::yml::ErrorDataParse const& dat,
-                                    void* userData);
-  void throwOnVisitErrorWithContext(c4::basic_substring<char const> msg,
-                                    c4::yml::ErrorDataVisit const& dat,
-                                    void* userData);
-
   ryml::Callbacks callbacks();
-  ryml::Callbacks callbacks(ErrorCallbackState& state);
 
   ryml::csubstr toCsubstr(std::string_view value) noexcept;
   ryml::substr toSubstr(std::vector<char>& buffer) noexcept;
-  void parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state);
-  void parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state);
+  Result<> parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state);
+  Result<> parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state);
+  Result<> resolve(ryml::Tree& tree, ErrorCallbackState& state);
   ryml::csubstr copyToArena(ryml::Tree& tree, std::string_view value);
   ryml::csubstr copyToArena(ryml::NodeRef node, std::string_view value);
   ryml::ConstNodeRef findChild(ryml::ConstNodeRef node, std::string_view key) noexcept;
@@ -66,11 +58,6 @@ namespace ao::yaml
    */
   Result<std::vector<char>> readFileResult(std::filesystem::path const& path,
                                            std::optional<std::size_t> optMaxBytes = std::nullopt);
-
-  /**
-   * @brief Throwing compatibility wrapper around readFileResult().
-   */
-  std::vector<char> readFile(std::filesystem::path const& path);
 
   /**
    * @brief Returns a std::string_view for a ryml node's scalar value.

@@ -3,19 +3,17 @@
 
 #include <ao/uimodel/library/property/TagEdit.h>
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <expected>
 #include <format>
 #include <span>
 #include <string>
-#include <utility>
 
 namespace ao::uimodel
 {
@@ -77,7 +75,6 @@ namespace ao::uimodel
         };
     }
 
-    gsl_Assert(false && "Tag edit returned an unknown authoring status");
-    std::unreachable();
+    AO_FATAL("Tag edit returned an unknown authoring status");
   }
 } // namespace ao::uimodel

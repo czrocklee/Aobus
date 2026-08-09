@@ -10,9 +10,8 @@
 // here (guarded by the size static_assert below) instead of silently leaving one
 // switch stale.
 
+#include <ao/Contract.h>
 #include <ao/query/Expression.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <cstddef>
@@ -58,7 +57,7 @@ namespace ao::query::detail
   constexpr OperatorDescriptor const& operatorDescriptor(Operator op)
   {
     auto const index = static_cast<std::size_t>(op);
-    gsl_Expects(index < kOperatorTable.size());
+    AO_EXPECTS(index < kOperatorTable.size());
     return kOperatorTable[index];
   }
 } // namespace ao::query::detail

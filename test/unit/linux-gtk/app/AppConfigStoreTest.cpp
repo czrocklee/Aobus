@@ -81,7 +81,7 @@ namespace ao::gtk::test
       saveSession.lastOutputBackendId = "session-backend";
       saveSession.lastOutputDeviceId = "session-device";
       saveSession.lastOutputProfileId = "session-profile";
-      configStore.saveAppSession(saveSession);
+      REQUIRE(configStore.saveAppSession(saveSession));
 
       auto const restoredStore = AppConfigStore{configPath};
       auto loadSession = rt::AppSessionState{};

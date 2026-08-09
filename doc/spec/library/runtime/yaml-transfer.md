@@ -50,7 +50,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - A List filter and saved order are independent: the filter determines local membership, while order references preserve rank only.
 - Complete Track preparation validates both hot and cold record size/canonicality before interning dictionary text or creating cover resources; no rejected Track leaves an item-relative staged delta.
 - A post-effect Track, manifest, List, identifier, or storage failure reaches the root transaction boundary, which aborts the whole import before returning the error; import never catches a private mutation marker to continue with another payload item.
-- Only manifest point-read `NotFound` means an absent merge baseline or dangling URI reference; malformed data found by a point read fails the enclosing preparation or apply operation with `CorruptData`, while a post-open iterator integrity breach raises the general infrastructure exception.
+- Only manifest point-read `NotFound` means an absent merge baseline or dangling URI reference; a post-open malformed row is an `AO_INVARIANT` fault and a non-miss native read failure is `AO_FATAL`, so neither becomes partial import or export output.
 
 ## State model
 

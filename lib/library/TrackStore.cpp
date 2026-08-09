@@ -4,14 +4,14 @@
 #include <ao/library/TrackStore.h>
 
 #include "lmdb/detail/TransactionFailure.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -23,6 +23,22 @@
 
 namespace ao::library
 {
+  namespace
+  {
+    void validateLoadedTrack(TrackView const& view, TrackStore::Reader::LoadMode const mode)
+    {
+      if (mode == TrackStore::Reader::LoadMode::Hot || mode == TrackStore::Reader::LoadMode::Both)
+      {
+        AO_INVARIANT(view.isHotValid(), "Hot Track record is structurally corrupt after library validation");
+      }
+
+      if (mode == TrackStore::Reader::LoadMode::Cold || mode == TrackStore::Reader::LoadMode::Both)
+      {
+        AO_INVARIANT(view.isColdValid(), "Cold Track record is structurally corrupt after library validation");
+      }
+    }
+  } // namespace
+
   // TrackStore implementation
   TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity)
     : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}, _identity{&identity}
@@ -41,6 +57,12 @@ namespace ao::library
     return Reader{_hotDb.reader(native), _coldDb.reader(native)};
   }
 
+  TrackStore::Reader TrackStore::reader(LibraryWrite const& write) const
+  {
+    auto const& native = write.native(*_identity);
+    return Reader{_hotDb.reader(native), _coldDb.reader(native)};
+  }
+
   TrackStore::Writer TrackStore::writer(WriteTransaction& transaction) const
   {
     auto& native = transaction.native(*_identity);
@@ -55,34 +77,37 @@ namespace ao::library
 
   std::optional<TrackView> TrackStore::Reader::get(TrackId id, LoadMode mode) const
   {
+    auto optHotBytes = std::optional<std::span<std::byte const>>{};
+    auto optColdBytes = std::optional<std::span<std::byte const>>{};
     auto hotBuffer = std::span<std::byte const>{};
     auto coldBuffer = std::span<std::byte const>{};
 
     if (mode == LoadMode::Hot || mode == LoadMode::Both)
     {
-      auto optHotBytes = _hotReader.get(id.raw());
-
-      if (!optHotBytes)
-      {
-        return std::nullopt;
-      }
-
-      hotBuffer = *optHotBytes;
+      optHotBytes = _hotReader.get(id.raw());
     }
 
     if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
     {
-      auto optColdBytes = _coldReader.get(id.raw());
-
-      if (!optColdBytes)
-      {
-        return std::nullopt;
-      }
-
-      coldBuffer = *optColdBytes;
+      optColdBytes = _coldReader.get(id.raw());
     }
 
-    return TrackView{hotBuffer, coldBuffer};
+    if (mode == LoadMode::Both)
+    {
+      AO_INVARIANT(optHotBytes.has_value() == optColdBytes.has_value(),
+                   "Track hot/cold presence diverged after library validation");
+    }
+
+    if ((mode != LoadMode::Cold && !optHotBytes) || (mode != LoadMode::Hot && !optColdBytes))
+    {
+      return std::nullopt;
+    }
+
+    hotBuffer = optHotBytes.value_or(hotBuffer);
+    coldBuffer = optColdBytes.value_or(coldBuffer);
+    auto view = TrackView{hotBuffer, coldBuffer};
+    validateLoadedTrack(view, mode);
+    return view;
   }
 
   bool TrackStore::Reader::shouldUseCursorScan(std::span<TrackId const> ids, LoadMode mode) const
@@ -116,7 +141,7 @@ namespace ao::library
       {
         auto const hotCount = _hotReader.entryCount();
         auto const coldCount = _coldReader.entryCount();
-        gsl_Expects(hotCount == coldCount);
+        AO_INVARIANT(hotCount == coldCount);
         return hotCount;
       }
     }
@@ -164,13 +189,13 @@ namespace ao::library
     auto const end = lmdb::Database::Reader::Iterator{};
     auto const hotAtEnd = _hotIter == end;
     auto const coldAtEnd = _coldIter == end;
-    gsl_Expects(hotAtEnd == coldAtEnd);
+    AO_INVARIANT(hotAtEnd == coldAtEnd);
 
     if (!hotAtEnd)
     {
       auto const hotId = static_cast<std::uint32_t>((*_hotIter).first);
       auto const coldId = static_cast<std::uint32_t>((*_coldIter).first);
-      gsl_Expects(hotId == coldId);
+      AO_INVARIANT(hotId == coldId);
     }
   }
 
@@ -262,6 +287,7 @@ namespace ao::library
     }
 
     auto view = TrackView{hotBuffer, coldBuffer};
+    validateLoadedTrack(view, _mode);
 
     return {trackId, view};
   }
@@ -274,34 +300,37 @@ namespace ao::library
 
   std::optional<TrackView> TrackStore::Writer::get(TrackId id, Reader::LoadMode mode) const
   {
+    auto optHotBytes = std::optional<std::span<std::byte const>>{};
+    auto optColdBytes = std::optional<std::span<std::byte const>>{};
     auto hotBuffer = std::span<std::byte const>{};
     auto coldBuffer = std::span<std::byte const>{};
 
     if (mode == Reader::LoadMode::Hot || mode == Reader::LoadMode::Both)
     {
-      auto optHotBytes = _hotWriter.get(id.raw());
-
-      if (!optHotBytes)
-      {
-        return std::nullopt;
-      }
-
-      hotBuffer = *optHotBytes;
+      optHotBytes = _hotWriter.get(id.raw());
     }
 
     if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
     {
-      auto optColdBytes = _coldWriter.get(id.raw());
-
-      if (!optColdBytes)
-      {
-        return std::nullopt;
-      }
-
-      coldBuffer = *optColdBytes;
+      optColdBytes = _coldWriter.get(id.raw());
     }
 
-    return TrackView{hotBuffer, coldBuffer};
+    if (mode == Reader::LoadMode::Both)
+    {
+      AO_INVARIANT(optHotBytes.has_value() == optColdBytes.has_value(),
+                   "Track hot/cold presence diverged after library validation");
+    }
+
+    if ((mode != Reader::LoadMode::Cold && !optHotBytes) || (mode != Reader::LoadMode::Hot && !optColdBytes))
+    {
+      return std::nullopt;
+    }
+
+    hotBuffer = optHotBytes.value_or(hotBuffer);
+    coldBuffer = optColdBytes.value_or(coldBuffer);
+    auto view = TrackView{hotBuffer, coldBuffer};
+    validateLoadedTrack(view, mode);
+    return view;
   }
 
   bool TrackStore::Writer::remove(TrackId id)

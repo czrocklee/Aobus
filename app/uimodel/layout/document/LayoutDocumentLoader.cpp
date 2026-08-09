@@ -13,7 +13,6 @@
 
 #include <ryml.hpp>
 
-#include <exception>
 #include <expected>
 #include <format>
 #include <string>
@@ -40,34 +39,30 @@ namespace ao::uimodel
                                    kLimits.maxFileBytes));
     }
 
-    auto document = LayoutDocument{};
+    auto errorState = yaml::ErrorCallbackState{std::string{sourceName}};
+    auto tree = ryml::Tree{yaml::callbacks()};
 
-    try
-    {
-      auto errorState = yaml::ErrorCallbackState{std::string{sourceName}};
-      auto tree = ryml::Tree{yaml::callbacks(errorState)};
-      yaml::parseInArena(tree, yaml, errorState);
-
-      auto deserializedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
-
-      if (!deserializedRes)
-      {
-        // Keep the schema's code: an unsupported version is a different defect
-        // from a malformed node, even though both reject the whole candidate.
-        return makeError(
-          deserializedRes.error().code,
-          std::format(
-            "Failed to read {} layout document '{}': {}", dialect.name, sourceName, deserializedRes.error().message));
-      }
-
-      document = std::move(*deserializedRes);
-    }
-    catch (std::exception const& exception)
+    if (auto const parsedRes = yaml::parseInArena(tree, yaml, errorState); !parsedRes)
     {
       return makeError(
         Error::Code::FormatRejected,
-        std::format("Failed to parse {} layout document '{}': {}", dialect.name, sourceName, exception.what()));
+        std::format(
+          "Failed to parse {} layout document '{}': {}", dialect.name, sourceName, parsedRes.error().message));
     }
+
+    auto deserializedRes = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+
+    if (!deserializedRes)
+    {
+      // Keep the schema's code: an unsupported version is a different defect
+      // from a malformed node, even though both reject the whole candidate.
+      return makeError(
+        deserializedRes.error().code,
+        std::format(
+          "Failed to read {} layout document '{}': {}", dialect.name, sourceName, deserializedRes.error().message));
+    }
+
+    auto document = std::move(*deserializedRes);
 
     auto preparedRes = prepareLayout(document, kLimits);
 

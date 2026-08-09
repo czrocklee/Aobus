@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/async/LifetimeScope.h>
+
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
@@ -9,6 +10,8 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -59,23 +62,22 @@ namespace ao::async
     return _statePtr->tasks.empty();
   }
 
-  void Runtime::spawnWithLifetime(LifetimeScope* scope, CancellableTask task)
+  void Runtime::spawnWithLifetime(LifetimeScope* scope, CancellableTask task, std::string_view const fatalContext)
   {
     auto statePtr = scope->_statePtr;
     auto taskPtr = std::make_shared<LifetimeScopeTask>();
-    auto diagnosticStatePtr = _diagnosticStatePtr;
-    taskPtr->cancel = startCancellable(
-      std::move(task),
-      [diagnosticStatePtr = std::move(diagnosticStatePtr), statePtr, taskPtr](std::exception_ptr exceptionPtr)
-      {
-        {
-          auto lock = std::scoped_lock{statePtr->mutex};
-          taskPtr->completed = true;
-          std::erase(statePtr->tasks, taskPtr);
-        }
+    taskPtr->cancel =
+      startCancellable(std::move(task),
+                       [statePtr, taskPtr, fatalContext = std::string{fatalContext}](std::exception_ptr exceptionPtr)
+                       {
+                         {
+                           auto lock = std::scoped_lock{statePtr->mutex};
+                           taskPtr->completed = true;
+                           std::erase(statePtr->tasks, taskPtr);
+                         }
 
-        handleUnhandledException(*diagnosticStatePtr, std::move(exceptionPtr), "lifetime-bound coroutine");
-      });
+                         finishFireAndForget(std::move(exceptionPtr), fatalContext);
+                       });
 
     bool cancelImmediately = false;
 

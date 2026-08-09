@@ -48,7 +48,7 @@ namespace ao::uimodel
       , projectionPtr{std::move(projectionValuePtr)}
     {
       availabilitySubscription = library.onAuthoringAvailabilityChanged(
-        [this](rt::LibraryAuthoringAvailability const& availability) noexcept
+        [this](rt::LibraryAuthoringAvailability const& availability)
         {
           if (availability.state == rt::LibraryAuthoringState::Maintenance)
           {
@@ -64,7 +64,7 @@ namespace ao::uimodel
           }
         });
       presentationSubscription = views.onPresentationChanged(
-        [this](rt::ViewService::PresentationChanged const& event) noexcept
+        [this](rt::ViewService::PresentationChanged const& event)
         {
           if (event.viewId == viewId)
           {
@@ -72,7 +72,7 @@ namespace ao::uimodel
           }
         });
       projectionReplacementSubscription = views.onProjectionChanged(
-        [this](rt::TrackListProjectionChanged const& event) noexcept
+        [this](rt::TrackListProjectionChanged const& event)
         {
           if (event.viewId == viewId)
           {
@@ -80,7 +80,7 @@ namespace ao::uimodel
           }
         });
       viewDestroyedSubscription = views.onViewDestroyed(
-        [this](rt::ViewService::ViewDestroyed const& event) noexcept
+        [this](rt::ViewService::ViewDestroyed const& event)
         {
           if (event.viewId == viewId)
           {
@@ -88,7 +88,7 @@ namespace ao::uimodel
           }
         });
       projectionSubscription = projectionPtr->subscribe(
-        [this](rt::TrackListProjectionDeltaBatch const&) noexcept
+        [this](rt::TrackListProjectionDeltaBatch const&)
         {
           if (projectionEventsArmed)
           {
@@ -310,7 +310,7 @@ namespace ao::uimodel
     return _implPtr->order.effectiveTrackIds();
   }
 
-  async::Subscription ListOrderAuthoringSession::onInvalidated(std::move_only_function<void() noexcept> handler) const
+  async::Subscription ListOrderAuthoringSession::onInvalidated(std::move_only_function<void()> handler) const
   {
     return _implPtr->invalidated.connect(std::move(handler));
   }

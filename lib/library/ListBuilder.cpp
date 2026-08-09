@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/ListBuilder.h>
+
+#include "ListRecordValidation.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
 #include <ao/utility/ByteView.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <expected>
 #include <format>
 #include <limits>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::library
@@ -38,6 +44,8 @@ namespace ao::library
 
   ListBuilder ListBuilder::fromView(ListView const& view)
   {
+    AO_EXPECTS(view.isValid(), "Cannot prepare a List from an invalid view");
+
     auto builder = ListBuilder{};
     builder._parentId = view.parentId();
     builder._name = view.name();
@@ -105,7 +113,47 @@ namespace ao::library
     return *this;
   }
 
+  ListBuilder::Prepared::Prepared(std::vector<std::byte> bytes)
+    : _bytes{std::move(bytes)}
+  {
+  }
+
+  void ListBuilder::Prepared::writeTo(std::span<std::byte> out) const noexcept
+  {
+    AO_EXPECTS(out.size() == _bytes.size(), "Prepared List output size does not match its snapshot");
+    std::memcpy(out.data(), _bytes.data(), _bytes.size());
+  }
+
+  Result<ListBuilder::Prepared> ListBuilder::prepare() const
+  {
+    auto bytesRes = serializeCandidate();
+
+    if (!bytesRes)
+    {
+      return std::unexpected{bytesRes.error()};
+    }
+
+    if (auto validationRes = validateSerializedList(*bytesRes); !validationRes)
+    {
+      return std::unexpected{validationRes.error()};
+    }
+
+    return Prepared{std::move(*bytesRes)};
+  }
+
   Result<std::vector<std::byte>> ListBuilder::serialize() const
+  {
+    auto preparedRes = prepare();
+
+    if (!preparedRes)
+    {
+      return std::unexpected{preparedRes.error()};
+    }
+
+    return std::move(preparedRes->_bytes);
+  }
+
+  Result<std::vector<std::byte>> ListBuilder::serializeCandidate() const
   {
     auto const& name = _name;
     auto const& description = _description;

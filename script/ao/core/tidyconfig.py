@@ -38,7 +38,8 @@ CONFIG_BASE = """
   {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'},
   {key: 'readability-function-cognitive-complexity.Threshold', value: 30},
   {key: 'readability-function-cognitive-complexity.IgnoreMacros', value: true},
-  {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+$'},
+  {key: 'readability-simplify-boolean-expr.IgnoreMacros', value: true},
+  {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+$|^AO_(EXPECTS|ENSURES|INVARIANT|FATAL|RT_INVARIANT)$'},
   {key: 'misc-use-internal-linkage.AnalyzeTypes', value: false},
   {key: 'bugprone-suspicious-include.IgnoredRegex', value: '.*\\.g\\.cpp$'},
   {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4[/\\\\].*;.*boost[/\\\\]asio[/\\\\].*;.*boost[/\\\\]interprocess[/\\\\].*;.*boost[/\\\\]system[/\\\\].*;.*boost[/\\\\]unordered[/\\\\].*;.*boost[/\\\\]pfr.*;.*[/\\\\]flat_(set|map);.*[/\\\\]errno.h;.*glib.*;.*Windows Kits.*;.*windows\\.h;.*[/\\\\]pch\\.h;.*[/\\\\]winrt[/\\\\].*;.*ao[/\\\\]utility[/\\\\]StrongTypeFormatter\\.h$;.*\\.g\\.h'}

@@ -30,14 +30,15 @@ namespace ao::gtk
     std::filesystem::path databasePath;
   };
 
-  Glib::RefPtr<MainWindow> prepareLibraryWindow(LibraryWindowPaths paths,
-                                                std::shared_ptr<AppConfigStore> appConfigStorePtr,
-                                                std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                                                std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr);
+  Result<Glib::RefPtr<MainWindow>> prepareLibraryWindow(
+    LibraryWindowPaths paths,
+    std::shared_ptr<AppConfigStore> appConfigStorePtr,
+    std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr);
 
-  void activateLibraryWindow(Gtk::Application& app,
-                             Glib::RefPtr<MainWindow> const& windowPtr,
-                             MainWindow::PlaybackRestoreMode restoreMode);
+  Result<> activateLibraryWindow(Gtk::Application& app,
+                                 Glib::RefPtr<MainWindow> const& windowPtr,
+                                 MainWindow::PlaybackRestoreMode restoreMode);
 
   enum class LibraryWindowOpenOutcome : std::uint8_t
   {
@@ -47,13 +48,13 @@ namespace ao::gtk
 
   struct LibraryWindowReplacementCallbacks final
   {
-    std::function<void()> prepareCandidate;
+    std::function<Result<>()> prepareCandidate;
     std::function<void()> configureCandidate;
     std::function<Result<>()> retireActive;
-    std::function<void()> activateCandidate;
+    std::function<Result<>()> activateCandidate;
     std::function<void()> replaceActiveSlot;
     std::function<void()> releaseRetired;
-    std::function<void()> persistSelectedPath;
+    std::function<Result<>()> persistSelectedPath;
     std::function<void()> scanActive;
     std::function<void()> presentActive;
   };

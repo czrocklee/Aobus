@@ -8,7 +8,6 @@
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/app/StartupOptions.h>
 
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -94,11 +93,7 @@ namespace ao::winui
           return *normalizedRes;
         }
       }
-      catch (std::exception const&)
-      {
-        return std::nullopt;
-      }
-      catch (...)
+      catch (std::filesystem::filesystem_error const&)
       {
         return std::nullopt;
       }

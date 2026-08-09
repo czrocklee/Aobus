@@ -3,22 +3,20 @@
 
 #include <ao/async/LoopExecutor.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
-#include <functional>
+#include <ao/Contract.h>
 
 namespace ao::async
 {
   void LoopExecutor::runOneTurn()
   {
-    gsl_Expects(isCurrent());
+    AO_EXPECTS(isCurrent());
     _wakeSignal.acquire();
     drainQueuedTasks();
   }
 
   bool LoopExecutor::runReadyTurn()
   {
-    gsl_Expects(isCurrent());
+    AO_EXPECTS(isCurrent());
 
     if (!_wakeSignal.try_acquire())
     {
@@ -32,13 +30,5 @@ namespace ao::async
   void LoopExecutor::wake() noexcept
   {
     _wakeSignal.release();
-  }
-
-  void LoopExecutor::executeTask(std::move_only_function<void()>& task)
-  {
-    if (task)
-    {
-      task();
-    }
   }
 } // namespace ao::async

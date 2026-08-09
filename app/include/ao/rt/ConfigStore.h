@@ -10,10 +10,8 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <filesystem>
-#include <format>
 #include <optional>
 #include <string_view>
 #include <type_traits>
@@ -96,25 +94,15 @@ namespace ao::rt
         return false;
       }
 
-      try
-      {
-        auto deserializedRes = schema.deserialize(child, value);
+      auto deserializedRes = schema.deserialize(child, value);
 
-        if (!deserializedRes)
-        {
-          return std::unexpected{withGroupContext(deserializedRes.error(), "deserialize", group)};
-        }
-
-        value = std::move(*deserializedRes);
-        return true;
-      }
-      catch (std::exception const& error)
+      if (!deserializedRes)
       {
-        return makeError(Error::Code::FormatRejected,
-                         std::format("Failed to deserialize config group '{}': {}",
-                                     yaml::boundedErrorContext(group),
-                                     yaml::boundedErrorContext(error.what())));
+        return std::unexpected{withGroupContext(deserializedRes.error(), "deserialize", group)};
       }
+
+      value = std::move(*deserializedRes);
+      return true;
     }
 
   private:
@@ -123,28 +111,18 @@ namespace ao::rt
     template<typename T, ConfigSchema<T> Schema>
     static Result<> serializeGroup(ryml::Tree& candidate, std::string_view group, T const& value, Schema const& schema)
     {
-      try
+      auto root = candidate.rootref();
+
+      if (auto const groupName = yaml::toCsubstr(group); root[groupName].readable())
       {
-        auto root = candidate.rootref();
-
-        if (auto const groupName = yaml::toCsubstr(group); root[groupName].readable())
-        {
-          root.remove_child(groupName);
-        }
-
-        auto output = yaml::appendChild(root, group);
-
-        if (auto const result = schema.serialize(output, value); !result)
-        {
-          return std::unexpected{withGroupContext(result.error(), "serialize", group)};
-        }
+        root.remove_child(groupName);
       }
-      catch (std::exception const& error)
+
+      auto output = yaml::appendChild(root, group);
+
+      if (auto const result = schema.serialize(output, value); !result)
       {
-        return makeError(Error::Code::InvalidState,
-                         std::format("Failed to serialize config group '{}': {}",
-                                     yaml::boundedErrorContext(group),
-                                     yaml::boundedErrorContext(error.what())));
+        return std::unexpected{withGroupContext(result.error(), "serialize", group)};
       }
 
       return {};
@@ -162,31 +140,22 @@ namespace ao::rt
 
       auto candidate = std::move(*candidateRes);
 
-      try
+      auto serializedRes = Result<>{};
+      auto const serialize = [&candidate, &serializedRes](auto const& write)
       {
-        auto serializedRes = Result<>{};
-        auto const serialize = [&candidate, &serializedRes](auto const& write)
+        if (serializedRes)
         {
-          if (serializedRes)
-          {
-            serializedRes = serializeGroup(candidate, write.group, write.value, write.schema);
-          }
-        };
-        (serialize(writes), ...);
-
-        if (!serializedRes)
-        {
-          return serializedRes;
+          serializedRes = serializeGroup(candidate, write.group, write.value, write.schema);
         }
+      };
+      (serialize(writes), ...);
 
-        return commitCandidate(std::move(candidate));
-      }
-      catch (std::exception const& error)
+      if (!serializedRes)
       {
-        return makeError(
-          Error::Code::InvalidState,
-          std::format("Failed to assemble config write candidate: {}", yaml::boundedErrorContext(error.what())));
+        return serializedRes;
       }
+
+      return commitCandidate(std::move(candidate));
     }
 
     Result<> ensureLoaded();

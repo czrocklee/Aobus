@@ -13,7 +13,7 @@
 
 namespace ao::rt
 {
-  using PlaybackSnapshotObserver = std::move_only_function<void(PlaybackSnapshot const&) noexcept>;
+  using PlaybackSnapshotObserver = std::move_only_function<void(PlaybackSnapshot const&)>;
 
   /** Transient application-navigation request emitted by the playback boundary. */
   struct PlaybackRevealTrackRequest final
@@ -44,10 +44,9 @@ namespace ao::rt
     PlaybackEvents& operator=(PlaybackEvents&&) = delete;
 
     virtual async::Subscription onSnapshot(PlaybackSnapshotObserver observer) = 0;
-    virtual async::Subscription onSeekPreview(
-      std::move_only_function<void(std::chrono::milliseconds) noexcept> handler) = 0;
+    virtual async::Subscription onSeekPreview(std::move_only_function<void(std::chrono::milliseconds)> handler) = 0;
     virtual async::Subscription onRevealTrackRequested(
-      std::move_only_function<void(PlaybackRevealTrackRequest const&) noexcept> handler) = 0;
+      std::move_only_function<void(PlaybackRevealTrackRequest const&)> handler) = 0;
 
   protected:
     PlaybackEvents() = default;

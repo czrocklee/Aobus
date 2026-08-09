@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/track/TrackFilterResolver.h>
+
 #include "TrackFilterPolicy.h"
+#include <ao/Contract.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/track/TrackFilterResolver.h>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/trim.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <cstddef>
@@ -31,7 +32,7 @@ namespace ao::uimodel
         for (std::size_t index = 0; index < detail::kQuickFilterFields.size(); ++index)
         {
           variables[index] = rt::trackFieldFilterExpressionVariable(detail::kQuickFilterFields[index]);
-          gsl_Assert(!variables[index].empty());
+          AO_INVARIANT(!variables[index].empty());
         }
 
         return variables;

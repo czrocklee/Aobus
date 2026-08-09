@@ -3,7 +3,7 @@
 
 #include <ao/async/QueuedExecutorBase.h>
 
-#include <gsl-lite/gsl-lite.hpp>
+#include <ao/Contract.h>
 
 #include <exception>
 #include <functional>
@@ -33,7 +33,15 @@ namespace ao::async
 
     if (isCurrent())
     {
-      executeTask(task);
+      try
+      {
+        task();
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), "queued executor callback");
+      }
+
       return;
     }
 
@@ -47,7 +55,7 @@ namespace ao::async
 
   void QueuedExecutorBase::drainQueuedTasks()
   {
-    gsl_Expects(isCurrent());
+    AO_EXPECTS(isCurrent());
 
     {
       auto const lock = std::scoped_lock{_mutex};
@@ -76,7 +84,7 @@ namespace ao::async
 
         if (task)
         {
-          executeTask(task);
+          task();
         }
       }
     }
@@ -106,7 +114,7 @@ namespace ao::async
 
     if (taskException)
     {
-      std::rethrow_exception(taskException);
+      AO_FATAL_EXCEPTION(std::move(taskException), "queued executor callback");
     }
   }
 

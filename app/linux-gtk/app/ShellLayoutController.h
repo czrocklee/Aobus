@@ -147,11 +147,6 @@ namespace ao::gtk
                                                 uimodel::LayoutComponentCatalog componentCatalog,
                                                 uimodel::LayoutActionCatalog actionCatalog,
                                                 std::stop_token stopToken);
-    void applyLoadedLayoutWithFaultReporting(std::string presetId,
-                                             uimodel::LayoutDocument document,
-                                             uimodel::PreparedLayout preparedLayout,
-                                             uimodel::LayoutComponentStateDocument componentState);
-
     Result<> handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 
     Result<layout::LayoutHost::PreparedTree> prepareHost(uimodel::PreparedLayout const& layout,

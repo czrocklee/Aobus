@@ -61,9 +61,9 @@ namespace ao::rt
     // The cached vocabularies carry no synchronization: every access (lazy rebuilds and dirty
     // invalidation) must happen on the thread that constructed the service. This holds today because
     // every LibraryChanges delivery is marshalled onto the main thread before the subscription
-    // fires. The assert turns a future off-thread delivery into a loud failure instead of a silent
-    // data race.
-    void assertOwnerThread() const;
+    // fires. The always-active precondition turns a future off-thread delivery into a fatal
+    // contract failure instead of a silent data race.
+    void requireOwnerThread() const;
     void invalidate();
     void ensureSnapshot();
     void rebuildSnapshot();

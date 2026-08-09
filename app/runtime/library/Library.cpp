@@ -134,7 +134,7 @@ namespace ao::rt
   }
 
   async::Subscription Library::onAuthoringAvailabilityChanged(
-    std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const
+    std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const
   {
     return _implPtr->mutationService.onAvailabilityChanged(std::move(handler));
   }

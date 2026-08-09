@@ -14,7 +14,6 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -45,12 +44,6 @@ namespace ao::gtk::test
 {
   namespace
   {
-    class InjectedResourceLoadFailure final : public Exception
-    {
-    public:
-      using Exception::Exception;
-    };
-
     async::Task<Result<std::optional<std::vector<std::byte>>>> loadEmptyAfterOneFailure(
       std::shared_ptr<std::atomic_bool> failNextPtr,
       rt::test::AsyncTestState<std::size_t> loadCount,
@@ -61,7 +54,7 @@ namespace ao::gtk::test
 
       if (failNextPtr->exchange(false))
       {
-        throwException<InjectedResourceLoadFailure>("injected resource load failure");
+        co_return makeError(Error::Code::IoError, "injected resource load failure");
       }
 
       co_return std::optional<std::vector<std::byte>>{};
@@ -428,17 +421,16 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceImageLoader - exceptional resource loads terminate their request flight",
+  TEST_CASE("ResourceImageLoader - failed resource loads terminate their request flight",
             "[gtk][unit][resource-image][concurrency]")
   {
     auto executor = rt::test::QueuedExecutor{};
-    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
-    auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
+    auto runtime = async::Runtime{executor, 1};
     auto cache = ImageCache{200};
     constexpr auto kMissingResourceId = ResourceId{987655};
     constexpr std::int32_t kPixelSize = 48;
 
-    SECTION("a non-cancellation fault reports once, completes empty, and permits retry")
+    SECTION("a Result failure completes empty and permits retry")
     {
       auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
       auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
@@ -458,9 +450,6 @@ namespace ao::gtk::test
       REQUIRE(request);
       REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 1; }));
       CHECK_FALSE(receivedImage.load());
-      REQUIRE(exceptionRecorder.waitForCount(1));
-      rt::test::requireSingleRecordedException<InjectedResourceLoadFailure>(
-        exceptionRecorder, "resource byte delivery");
 
       auto retryReceivedImage = rt::test::AsyncTestState<bool>::create(true);
       auto retry =
@@ -475,7 +464,6 @@ namespace ao::gtk::test
       REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 2; }));
       CHECK(loadCount.load() == 2);
       CHECK_FALSE(retryReceivedImage.load());
-      CHECK(exceptionRecorder.snapshot().size() == 1);
 
       runtime.requestStop();
       runtime.join();
@@ -498,7 +486,6 @@ namespace ao::gtk::test
       runtime.requestStop();
       runtime.join();
       CHECK(callbackCount.load() == 0);
-      CHECK(exceptionRecorder.snapshot().empty());
     }
   }
 
@@ -507,8 +494,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
-    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
-    auto runtime = async::Runtime{executor, 4, exceptionRecorder.handler()};
+    auto runtime = async::Runtime{executor, 4};
     auto const ownerThread = std::this_thread::get_id();
     auto release = rt::test::AsyncBarrier{};
     auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
@@ -585,7 +571,6 @@ namespace ao::gtk::test
     CHECK(nonEmptyUrlCount.load() == 1);
     CHECK(nonEmptyImageCount.load() == 2);
     CHECK(loadCount.load() == 1);
-    CHECK(exceptionRecorder.snapshot().empty());
     CHECK(executor.queuedCount() == 0);
   }
 } // namespace ao::gtk::test

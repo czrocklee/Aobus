@@ -3,9 +3,9 @@
 
 #include <ao/rt/resource/ResourceByteLoader.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/CoreRuntime.h>
@@ -13,10 +13,7 @@
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/resource/ResourceByteCache.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <cstddef>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -45,7 +42,7 @@ namespace ao::rt
 
   void ResourceByteLoader::bind(std::shared_ptr<CoreRuntime> runtimePtr)
   {
-    gsl_Expects(runtimePtr);
+    AO_EXPECTS(runtimePtr);
     auto& asyncRuntime = runtimePtr->async();
     bind(asyncRuntime,
          [runtimePtr = std::move(runtimePtr)](ResourceId const resourceId, std::stop_token const stopToken)
@@ -61,7 +58,7 @@ namespace ao::rt
 
   void ResourceByteLoader::bind(async::Runtime& runtime, ReadBytes readBytes)
   {
-    gsl_Expects(readBytes);
+    AO_EXPECTS(readBytes);
     auto readBytesPtr = std::make_shared<ReadBytes const>(std::move(readBytes));
     auto scopePtr = std::make_unique<async::LifetimeScope>();
 
@@ -109,7 +106,8 @@ namespace ao::rt
       _scopePtr.get(),
       [loader = this, asyncRuntime, readBytesPtr = std::move(readBytesPtr), resourceId, token = std::move(token)](
         std::stop_token const stopToken) mutable
-      { return read(loader, asyncRuntime, readBytesPtr, resourceId, std::move(token), stopToken); });
+      { return read(loader, asyncRuntime, readBytesPtr, resourceId, std::move(token), stopToken); },
+      "resource byte delivery");
   }
 
   void ResourceByteLoader::complete(ResourceId const resourceId,
@@ -135,19 +133,11 @@ namespace ao::rt
   {
     auto bytes = std::vector<std::byte>{};
 
-    try
-    {
-      auto bytesRes = co_await std::invoke(*readBytesPtr, resourceId, stopToken);
+    auto bytesRes = co_await std::invoke(*readBytesPtr, resourceId, stopToken);
 
-      if (bytesRes && *bytesRes)
-      {
-        bytes = std::move(**bytesRes);
-      }
-    }
-    catch (...)
+    if (bytesRes && *bytesRes)
     {
-      async::rethrowIfOperationCancelled();
-      asyncRuntime->reportUnhandledException(std::current_exception(), "resource byte delivery");
+      bytes = std::move(**bytesRes);
     }
 
     co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);

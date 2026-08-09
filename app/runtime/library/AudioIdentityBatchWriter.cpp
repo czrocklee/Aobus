@@ -7,9 +7,8 @@
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
-#include <ao/library/FileManifestStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/WriteTransaction.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 
 #include <expected>
@@ -28,16 +27,15 @@ namespace ao::rt
   } // namespace
 
   Result<AudioIdentityBatchCommitResult> applyAudioIdentityBatch(
-    library::MusicLibrary& library,
-    library::WriteTransaction& transaction,
+    library::LibraryWrite& write,
     std::span<AudioIdentityWriteCandidate const> candidates)
   {
-    auto writer = library.manifest().writer(transaction);
+    auto writer = write.tracks();
     auto result = AudioIdentityBatchCommitResult{};
 
     for (auto const& candidate : candidates)
     {
-      auto optCurrent = writer.get(candidate.uri);
+      auto optCurrent = writer.manifest(candidate.uri);
 
       if (!optCurrent)
       {
@@ -54,7 +52,7 @@ namespace ao::rt
       auto builder = library::FileManifestBuilder::fromView(*optCurrent);
       builder.audioPayloadLength(candidate.identity.payloadLength).audioSignature(candidate.identity.signature);
 
-      if (auto putRes = writer.put(candidate.uri, builder.serialize()); !putRes)
+      if (auto putRes = writer.updateManifest(optCurrent->trackId(), builder); !putRes)
       {
         return std::unexpected{putRes.error()};
       }

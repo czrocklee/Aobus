@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/TransportButton.h"
+#include <ao/Contract.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
@@ -18,7 +19,6 @@
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
@@ -37,8 +37,8 @@ namespace ao::gtk::layout
 
     uimodel::PlaybackCommandSurface& commandSurface(LayoutBuildContext& ctx)
     {
-      gsl_Expects(ctx.dependencies.playbackCommandSurface != nullptr &&
-                  "SoulTransportButtonComponent: playback command surface is not bound");
+      AO_EXPECTS(ctx.dependencies.playbackCommandSurface != nullptr,
+                 "SoulTransportButtonComponent: playback command surface is not bound");
 
       return *ctx.dependencies.playbackCommandSurface;
     }

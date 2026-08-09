@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/lmdb/Database.h>
 
@@ -11,7 +12,6 @@
 #include <cstdint>
 #include <iterator>
 #include <optional>
-#include <span>
 #include <string_view>
 #include <utility>
 
@@ -20,9 +20,11 @@ namespace ao::library
   namespace detail
   {
     class LibraryIdentity;
+    class PhysicalStoreAccess;
   }
 
   class ReadTransaction;
+  class LibraryWrite;
   class WriteTransaction;
   class MusicLibrary;
 
@@ -36,10 +38,11 @@ namespace ao::library
     class Writer;
 
     Reader reader(ReadTransaction const& transaction) const;
+    Reader reader(LibraryWrite const& write) const;
     Reader reader(WriteTransaction const& transaction) const;
-    Writer writer(WriteTransaction& transaction) const;
 
   private:
+    Writer writer(WriteTransaction& transaction) const;
     FileManifestStore(lmdb::Database db, detail::LibraryIdentity const& identity)
       : _db{std::move(db)}, _identity{&identity}
     {
@@ -49,14 +52,17 @@ namespace ao::library
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
+    friend class TrackWriter;
+    friend class WriteTransaction;
+    friend class detail::PhysicalStoreAccess;
   };
 
   class FileManifestStore::Reader final
   {
   public:
     // Absence is the only recoverable miss: returns nullopt if no entry
-    // exists for the URI. Invalid/non-canonical URI, corrupt row data, and
-    // storage faults throw ao::Exception (see lmdb).
+    // exists for the URI. URI misuse is a caller contract fault; post-open row
+    // corruption and native read faults abort through the owned fatal channel.
     std::optional<FileManifestView> get(std::string_view uri) const;
 
     struct EndSentinel
@@ -67,7 +73,7 @@ namespace ao::library
      * Yields entries in strictly increasing lexicographic byte order of the
      * URI key (the manifest database uses LMDB's default memcmp comparator).
      * URI-cursor pagination over the manifest depends on this ordering.
-     * A row that violates the open-time storage invariant throws ao::Exception;
+     * A row that violates the open-time storage invariant aborts;
      * iteration never yields a corrupt-row variant or a partial-success result.
      */
     class Iterator final
@@ -115,14 +121,12 @@ namespace ao::library
   {
   public:
     // Absence is the only recoverable miss: returns nullopt if no entry
-    // exists for the URI. Invalid/non-canonical URI, corrupt row data, and
-    // storage faults throw ao::Exception (see lmdb).
+    // exists for the URI. URI misuse is a caller contract fault; a read fault
+    // aborts the write root and a row breach is an invariant fault.
     std::optional<FileManifestView> get(std::string_view uri) const;
-    // URI and payload contract violations (invalid URI, corrupt payload)
-    // throw ao::Exception. Recoverable storage update faults use Result.
-    Result<> put(std::string_view uri, std::span<std::byte const> payload);
+    Result<> put(FileManifestBuilder::Prepared const& prepared);
     // Returns true if a row was removed, false if the URI was absent.
-    // Invalid URI and storage faults throw ao::Exception.
+    // Invalid URI is a caller contract fault; storage faults abort the write root.
     bool remove(std::string_view uri);
     // Storage faults use Result.
     Result<> clear();

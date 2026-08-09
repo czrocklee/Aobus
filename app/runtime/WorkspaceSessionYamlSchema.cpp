@@ -3,6 +3,7 @@
 
 #include "WorkspaceSessionYamlSchema.h"
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
@@ -11,8 +12,6 @@
 #include <ao/rt/WorkspaceSessionState.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -50,7 +49,7 @@ namespace ao::rt::detail
     {
       auto const id = idFunction(value);
 
-      gsl_Expects(!id.empty() && "Cannot serialize invalid id");
+      AO_EXPECTS(!id.empty(), "Cannot serialize invalid id");
       return std::string{id};
     }
 
@@ -69,7 +68,7 @@ namespace ao::rt::detail
           return std::unexpected{storedIdRes.error()};
         }
 
-        gsl_Expects(!std::ranges::contains(stored, *storedIdRes) && "Cannot serialize duplicate field");
+        AO_EXPECTS(!std::ranges::contains(stored, *storedIdRes), "Cannot serialize duplicate field");
         stored.push_back(std::move(*storedIdRes));
       }
 
@@ -78,7 +77,7 @@ namespace ao::rt::detail
 
     Result<StoredTrackPresentationSpec> toStoredPresentation(TrackPresentationSpec const& spec)
     {
-      gsl_Expects(!spec.id.empty() && "Cannot serialize a presentation with an empty id");
+      AO_EXPECTS(!spec.id.empty(), "Cannot serialize a presentation with an empty id");
       auto const normalized = normalizeTrackPresentationSpec(spec);
       auto groupRes = storedIdFor(normalized.groupBy, trackGroupKeyId, "track group key");
 
@@ -99,8 +98,8 @@ namespace ao::rt::detail
           return std::unexpected{fieldRes.error()};
         }
 
-        gsl_Expects(!std::ranges::contains(stored.sort, *fieldRes, &StoredTrackSortTerm::field) &&
-                    "Cannot serialize duplicate sort field");
+        AO_EXPECTS(!std::ranges::contains(stored.sort, *fieldRes, &StoredTrackSortTerm::field),
+                   "Cannot serialize duplicate sort field");
         stored.sort.push_back(StoredTrackSortTerm{
           .field = std::move(*fieldRes),
           .direction = std::string{term.ascending ? kAscending : kDescending},
@@ -343,12 +342,12 @@ namespace ao::rt::detail
 
   Result<WorkspaceSessionDocument> toWorkspaceSessionDocument(WorkspaceSessionState const& state)
   {
-    gsl_Expects(state.activeViewIndex <= std::numeric_limits<std::uint32_t>::max() &&
-                "Workspace active view index is not representable");
+    AO_EXPECTS(state.activeViewIndex <= std::numeric_limits<std::uint32_t>::max(),
+               "Workspace active view index is not representable");
 
-    gsl_Expects((!state.openViews.empty() || state.activeViewIndex == 0) &&
-                (state.openViews.empty() || state.activeViewIndex < state.openViews.size()) &&
-                "Workspace active view index is out of bounds");
+    AO_EXPECTS((!state.openViews.empty() || state.activeViewIndex == 0) &&
+                 (state.openViews.empty() || state.activeViewIndex < state.openViews.size()),
+               "Workspace active view index is out of bounds");
 
     auto document = WorkspaceSessionDocument{
       .presentationVersion = kWorkspacePresentationVersion,
@@ -358,8 +357,8 @@ namespace ao::rt::detail
 
     for (auto const& view : state.openViews)
     {
-      gsl_Expects(view.listId != kInvalidListId && "Workspace view uses the invalid list id");
-      gsl_Expects(view.optPresentation && "Workspace view has no exact presentation to persist");
+      AO_EXPECTS(view.listId != kInvalidListId, "Workspace view uses the invalid list id");
+      AO_EXPECTS(view.optPresentation, "Workspace view has no exact presentation to persist");
 
       auto presentationRes = toStoredPresentation(*view.optPresentation);
 

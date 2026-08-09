@@ -3,9 +3,10 @@
 
 #pragma once
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 
+#include <exception>
 #include <format>
 #include <source_location>
 #include <string>
@@ -26,19 +27,20 @@ namespace ao::query::detail
   // so a non-domain fault (e.g. std::bad_alloc or a real invariant throw from
   // a transitive helper) fail-fast terminates instead of being laundered into
   // FormatRejected.
-  class QueryException final : public Exception
+  class QueryException final : public std::exception
   {
   public:
     explicit QueryException(Error error)
-      : Exception{error.message, error.location}, _error{std::move(error)}
+      : _error{std::move(error)}
     {
     }
 
     QueryException(Error::Code code, std::string message, std::source_location loc = std::source_location::current())
-      : Exception{message, loc}, _error{.code = code, .message = std::move(message), .location = loc}
+      : _error{.code = code, .message = std::move(message), .location = loc}
     {
     }
 
+    char const* what() const noexcept override { return _error.message.c_str(); }
     Error const& error() const noexcept { return _error; }
 
   private:
@@ -48,13 +50,9 @@ namespace ao::query::detail
   // Re-throws an already-constructed Error, preserving its original source
   // location. Use when propagating an Error from an inner Result; the
   // format-string overloads below capture the call site for a fresh failure.
-  [[noreturn]] inline void throwQueryError(Error error)
-  {
-    throw QueryException{std::move(error)};
-  }
+  [[noreturn]] void throwQueryError(Error error);
 
-  // Format-string capture helper (mirrors ao::FormatWithLocation in
-  // <ao/Exception.h>). The consteval ctor forces compile-time format
+  // Format-string capture helper. The consteval ctor forces compile-time format
   // verification and lets the embedded std::format_string<Args...> bypass
   // GCC's explicit-ctor copy-init issue that arises when a format_string
   // is matched as a function parameter.
@@ -75,11 +73,7 @@ namespace ao::query::detail
   // format overload below is selected only when extra format args are
   // provided, so the two never overlap. Uses std::string_view rather than
   // std::format_string<> to avoid the explicit-ctor copy-init issue.
-  [[noreturn]] inline void throwQueryError(std::string_view what,
-                                           std::source_location loc = std::source_location::current())
-  {
-    throw QueryException{Error::Code::FormatRejected, std::string{what}, loc};
-  }
+  [[noreturn]] void throwQueryError(std::string_view what, std::source_location loc = std::source_location::current());
 
   // Format-string overload. The query layer only ever raises
   // FormatRejected, so the code is hard-coded here; callers pass the format
@@ -90,6 +84,7 @@ namespace ao::query::detail
     requires(sizeof...(Args) > 0)
   [[noreturn]] inline void throwQueryError(FormatWithLocation<std::type_identity_t<Args>...> fmt, Args&&... args)
   {
+    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
     throw QueryException{Error::Code::FormatRejected, std::format(fmt.fmt, std::forward<Args>(args)...), fmt.loc};
   }
 } // namespace ao::query::detail

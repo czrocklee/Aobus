@@ -5,6 +5,7 @@
 
 #include "CompletionTokenRules.h"
 #include "Lexical.h"
+#include <ao/Contract.h>
 
 #include <lexy/action/scan.hpp>
 #include <lexy/callback/noop.hpp>
@@ -18,7 +19,6 @@
 #include <lexy/input/string_input.hpp>
 #include <lexy/lexeme.hpp>
 
-#include <cassert>
 #include <cstddef>
 #include <string_view>
 #include <type_traits>
@@ -238,7 +238,8 @@ namespace ao::query::detail
 
   std::string_view tokenText(std::string_view text, CompletionToken token)
   {
-    assert(token.begin <= token.end && token.end <= text.size());
+    AO_EXPECTS(
+      token.begin <= token.end && token.end <= text.size(), "Completion token range must belong to the supplied text");
     return text.substr(token.begin, token.end - token.begin);
   }
 } // namespace ao::query::detail

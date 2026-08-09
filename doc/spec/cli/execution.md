@@ -102,15 +102,15 @@ Callers parse JSON rather than relying on byte-exact whitespace from the ryml em
 
 Query/format compilation, unknown ids, invalid list ancestry, unsupported operation, storage, import/export, resource IO, scan, and verification failures become `CommandError`, print one diagnostic, and exit `1`.
 Safely detected malformed dictionary, Track, List, or manifest state present during runtime construction rejects it as `CorruptData`.
-A later validated-store iterator integrity breach is an internal Aobus exception rather than a command error; neither case is skipped by stats, dump, scan, export, or identity commands, and the invocation exits nonzero.
-Unexpected Aobus invariant exceptions are labeled internal errors; other exceptions use the generic CLI error leaf.
+A later validated-store integrity breach aborts through the AO fatal boundary rather than becoming a command error; neither case is skipped by stats, dump, scan, export, or identity commands.
+An unexpected exception that escapes ordinary command execution reaches the CLI process root and aborts with AO diagnostics rather than being relabeled as a recoverable command failure.
 
 The CLI command invocation is synchronous at its adapter boundary.
 Runtime operations that internally use bounded workers follow their own cancellation/lifetime contracts; the CLI does not invent a second partial-commit policy.
 An asynchronous command is not complete until its terminal marker has run on the callback executor.
 Its result or escaping exception is then returned or rethrown on the invocation thread.
-If a callback throws during pumping, `runTask()` retains the first callback exception and continues until the terminal marker before consuming the spawned future.
-A task failure remains primary and the callback failure is reported; if the task succeeds, the callback failure is rethrown on the invocation thread.
+An escaping executor callback completes mandatory queue bookkeeping and enters AO fatal handling at the executor boundary.
+The command task remains caller-owned: `runTask()` pumps until the terminal marker, consumes the spawned future, and rethrows that task exception on the invocation thread.
 
 During teardown, CLI stops and joins runtime workers before draining already-ready callback turns while their `CoreRuntime` targets remain alive.
 

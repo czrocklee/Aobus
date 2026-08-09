@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
 
@@ -12,7 +13,6 @@
 #include <cstdint>
 #include <iterator>
 #include <optional>
-#include <span>
 #include <utility>
 
 namespace ao::library
@@ -20,9 +20,11 @@ namespace ao::library
   namespace detail
   {
     class LibraryIdentity;
+    class PhysicalStoreAccess;
   }
 
   class ReadTransaction;
+  class LibraryWrite;
   class WriteTransaction;
   class MusicLibrary;
 
@@ -36,16 +38,20 @@ namespace ao::library
     class Writer;
 
     Reader reader(ReadTransaction const& transaction) const;
+    Reader reader(LibraryWrite const& write) const;
     Reader reader(WriteTransaction const& transaction) const;
-    Writer writer(WriteTransaction& transaction) const;
 
   private:
+    Writer writer(WriteTransaction& transaction) const;
     ListStore(lmdb::Database db, detail::LibraryIdentity const& identity);
 
     lmdb::Database _database;
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
+    friend class ListWriter;
+    friend class WriteTransaction;
+    friend class detail::PhysicalStoreAccess;
   };
 
   /**
@@ -61,8 +67,8 @@ namespace ao::library
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
-    // Absence is the only recoverable miss. Storage faults and a post-open
-    // structural invariant breach throw ao::Exception (see lmdb).
+    // Absence is the only normal miss. Native storage faults are fatal on a
+    // read snapshot, and a post-open structural breach is an invariant fault.
     std::optional<ListView> get(ListId id) const;
 
   private:
@@ -93,7 +99,7 @@ namespace ao::library
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
     Iterator& operator++();
     void operator++(std::int32_t) { ++*this; }
-    // Throws ao::Exception when a row violates the open-time storage invariant.
+    // Aborts through AO_INVARIANT when a row violates the open-time proof.
     value_type operator*() const;
 
   private:
@@ -109,15 +115,14 @@ namespace ao::library
   class [[nodiscard]] ListStore::Writer final
   {
   public:
-    // Invalid serialized records are rejected with CorruptData before mutation.
-    Result<ListId> create(std::span<std::byte const> data);
-    Result<> update(ListId id, std::span<std::byte const> data);
+    Result<ListId> create(ListBuilder::Prepared const& prepared);
+    Result<> update(ListId id, ListBuilder::Prepared const& prepared);
     // Returns true if a row was removed, false if the id was absent.
     bool remove(ListId id);
     Result<> clear();
 
-    // Absence is the only recoverable miss. Storage faults and a post-open
-    // structural invariant breach throw ao::Exception.
+    // Absence is the only normal miss. Write-snapshot faults abort the root
+    // transaction; a post-open structural breach is an invariant fault.
     std::optional<ListView> get(ListId id) const;
 
   private:

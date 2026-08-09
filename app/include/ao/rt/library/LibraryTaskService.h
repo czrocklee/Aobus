@@ -79,9 +79,8 @@ namespace ao::rt
     // presentation pulse occurs exactly once on every ordinary terminal path
     // while the owner remains live. Task values, errors, and cancellation
     // remain exclusively on the awaited task channel.
-    async::Subscription onProgressFinished(std::move_only_function<void() noexcept> handler) const;
-    async::Subscription onProgress(
-      std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const;
+    async::Subscription onProgressFinished(std::move_only_function<void()> handler) const;
+    async::Subscription onProgress(std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
 
     LibraryTaskService(LibraryTaskService const&) = delete;
     LibraryTaskService& operator=(LibraryTaskService const&) = delete;

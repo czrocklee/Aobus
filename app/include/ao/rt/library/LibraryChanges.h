@@ -53,7 +53,9 @@ namespace ao::rt
   class [[nodiscard]] LibraryChanges final
   {
   public:
-    LibraryChanges(async::Executor& callbackExecutor, std::uint64_t lastPublishedRevision);
+    // libraryIdentity is an immutable diagnostic label for post-commit fatal
+    // paths. CoreRuntime supplies the physical database path.
+    LibraryChanges(async::Executor& callbackExecutor, std::uint64_t lastPublishedRevision, std::string libraryIdentity);
     ~LibraryChanges();
 
     LibraryChanges(LibraryChanges const&) = delete;
@@ -68,23 +70,26 @@ namespace ao::rt
     //
     // Phase one delivers the revision to the single bound replica -- the one
     // consumer that keeps derived state the rest of the runtime reads from.
-    // Applying a committed revision is a noexcept contract: failure is fatal,
-    // not a recoverable publication result. At most one replica may be bound;
+    // An escaping apply exception is diagnosed and aborted by the publication
+    // boundary; it is not a recoverable publication result. At most one replica may be bound;
     // the returned handle unbinds. A new binding is rejected while publication
     // is active. Unbinding does not interrupt a replica already pinned for the
     // current delivery; it only prevents later deliveries.
     async::Subscription bindReplica(std::string replicaName,
-                                    std::move_only_function<void(LibraryChangeSet const&) noexcept> apply) const;
+                                    std::move_only_function<void(LibraryChangeSet const&)> apply) const;
 
     // Phase two announces an applied revision. Reaching an observer means
     // the replica applied the revision and the library is readable at it.
-    // Observers are noexcept notifications.
-    async::Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&) noexcept> handler) const;
+    // Escaping observer exceptions are diagnosed by this publication boundary
+    // with the pinned replica and revision context.
+    async::Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const;
 
   private:
     friend class LibraryMutationService;
 
-    void publishFromCoordinator(LibraryChangeSet changeSet, std::move_only_function<void() noexcept> completion);
+    void publishFromCoordinator(
+      LibraryChangeSet changeSet,
+      std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept;
     void retireFromCoordinator() noexcept;
 
     struct Impl;

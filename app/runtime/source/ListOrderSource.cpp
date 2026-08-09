@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/source/ListOrderSource.h>
+
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/ListOrderSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -26,8 +27,8 @@ namespace ao::rt
     : _filteredParentLease{std::move(filteredParentLease)}, _orderTrackIds{orderTrackIds}
   {
     rebuildEffectiveTrackIds();
-    _filteredParentSubscription = _filteredParentLease->subscribe([this](TrackSourceDelta const& batch) noexcept
-                                                                  { handleFilteredParentBatch(batch); });
+    _filteredParentSubscription =
+      _filteredParentLease->subscribe([this](TrackSourceDelta const& batch) { handleFilteredParentBatch(batch); });
   }
 
   ListOrderSource::~ListOrderSource()
@@ -38,7 +39,7 @@ namespace ao::rt
   void ListOrderSource::applyOrderEditScript(delta::RegularTrackEditScript const& script)
   {
     ensureLive();
-    gsl_Assert(!script.edits.empty() && delta::validate(script, _orderTrackIds.size()));
+    AO_INVARIANT(!script.edits.empty() && delta::validate(script, _orderTrackIds.size()));
 
     auto const previousEffective = _effectiveTrackIds.vector();
     auto removedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
@@ -86,7 +87,7 @@ namespace ao::rt
 
   void ListOrderSource::ensureLive() const
   {
-    gsl_Assert(state() != TrackSourceState::Invalidated);
+    AO_INVARIANT(state() != TrackSourceState::Invalidated);
   }
 
   void ListOrderSource::rebuildEffectiveTrackIds()

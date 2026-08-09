@@ -5,6 +5,7 @@
 
 #include "MediaTrack.h"
 #include "TrackBuilderSnapshot.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
@@ -13,17 +14,15 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -111,7 +110,7 @@ namespace ao::rt
       return _result;
     }
 
-    gsl_Assert(_state == State::Revalidated && "Scan apply operation is not ready for database mutation");
+    AO_INVARIANT(_state == State::Revalidated, "Scan apply operation is not ready for database mutation");
 
     auto writableRes = library::WritableMusicLibrary::acquire(_ml);
 
@@ -121,8 +120,8 @@ namespace ao::rt
     }
 
     auto transaction = writableRes->writeTransaction();
-    auto result = transaction.apply([this, stopToken](library::WriteTransaction& activeTransaction)
-                                    { return apply(activeTransaction, stopToken); });
+    auto result =
+      transaction.apply([this, stopToken](library::LibraryWrite& write) { return apply(write, stopToken); });
 
     if (!result)
     {
@@ -156,7 +155,7 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanApplyOperation::prepare(std::stop_token stopToken)
   {
-    gsl_Assert(_state == State::Created && "Scan apply operation is already prepared");
+    AO_INVARIANT(_state == State::Created, "Scan apply operation is already prepared");
 
     if (auto const bindingRes = validatePlan(); !bindingRes)
     {
@@ -230,17 +229,11 @@ namespace ao::rt
 
   Result<> ScanApplyOperation::validatePlan() const
   {
-    gsl_Assert(_plan._executable && "Scan plan has already been consumed");
+    AO_INVARIANT(_plan._executable, "Scan plan has already been consumed");
 
     auto const transaction = _ml.readTransaction();
-    auto const headerRes = _ml.metadata().load(transaction);
 
-    if (!headerRes)
-    {
-      return std::unexpected{headerRes.error()};
-    }
-
-    if (headerRes->libraryId != _plan._libraryId)
+    if (auto const header = _ml.metadataHeader(transaction); header.libraryId != _plan._libraryId)
     {
       return makeError(Error::Code::InvalidInput, "Scan plan belongs to another library");
     }
@@ -267,7 +260,7 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanApplyOperation::revalidatePreparedFiles(std::stop_token stopToken)
   {
-    gsl_Assert(_state == State::Prepared && "Scan apply operation must be prepared before file revalidation");
+    AO_INVARIANT(_state == State::Prepared, "Scan apply operation must be prepared before file revalidation");
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
@@ -354,10 +347,10 @@ namespace ao::rt
     return _result;
   }
 
-  Result<ScanApplyResult> ScanApplyOperation::apply(library::WriteTransaction& transaction, std::stop_token stopToken)
+  Result<ScanApplyResult> ScanApplyOperation::apply(library::LibraryWrite& write, std::stop_token stopToken)
   {
-    gsl_Assert(_state == State::Revalidated &&
-               "Scan apply operation must be revalidated exactly once before database mutation");
+    AO_INVARIANT(
+      _state == State::Revalidated, "Scan apply operation must be revalidated exactly once before database mutation");
 
     _state = State::Applied;
 
@@ -371,29 +364,20 @@ namespace ao::rt
       return _result;
     }
 
-    gsl_Assert(_plan._executable && "Scan plan has already been consumed");
+    AO_INVARIANT(_plan._executable, "Scan plan has already been consumed");
 
-    auto const headerRes = _ml.metadata().load(transaction);
-
-    if (!headerRes)
-    {
-      return std::unexpected{headerRes.error()};
-    }
-
-    if (headerRes->libraryId != _plan._libraryId)
+    if (auto const header = _ml.metadataHeader(write); header.libraryId != _plan._libraryId)
     {
       return makeError(Error::Code::InvalidInput, "Scan plan belongs to another library");
     }
 
-    auto const transactionRevision = _ml.libraryRevision(transaction);
-
-    if (transactionRevision == 0 || transactionRevision - 1U != _plan._libraryRevision)
+    if (auto const transactionRevision = _ml.libraryRevision(write);
+        transactionRevision == 0 || transactionRevision - 1U != _plan._libraryRevision)
     {
       return makeError(Error::Code::Conflict, "Library changed since the scan plan was built");
     }
 
-    auto trackWriter = _ml.tracks().writer(transaction);
-    auto manifestWriter = _ml.manifest().writer(transaction);
+    auto trackWriter = write.tracks();
     auto const& dictionary = _ml.dictionary();
 
     if (auto validationRes = validatePersistedTrackEvidence(trackWriter); !validationRes)
@@ -409,9 +393,7 @@ namespace ao::rt
         break;
       }
 
-      if (auto itemRes =
-            applyScanItem(i, _preparedItems[i].get(), transaction, trackWriter, manifestWriter, dictionary);
-          !itemRes)
+      if (auto itemRes = applyScanItem(i, _preparedItems[i].get(), trackWriter, dictionary); !itemRes)
       {
         return std::unexpected{std::move(itemRes.error())};
       }
@@ -445,7 +427,7 @@ namespace ao::rt
     return _result;
   }
 
-  Result<> ScanApplyOperation::validatePersistedTrackEvidence(library::TrackStore::Writer const& trackWriter) const
+  Result<> ScanApplyOperation::validatePersistedTrackEvidence(library::TrackWriter const& trackWriter) const
   {
     for (auto const& item : _plan.items())
     {
@@ -454,15 +436,9 @@ namespace ao::rt
         continue;
       }
 
-      auto const optHot = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Hot);
-      auto const optCold = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Cold);
-
-      if (!optHot || !optCold || !optHot->isHotValid() || !optCold->isColdValid())
-      {
-        return makeError(
-          Error::Code::CorruptData,
-          std::format("Scan item '{}' refers to missing or invalid Track {}", item.uri, item.trackId.raw()));
-      }
+      auto const optTrack = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
+      AO_INVARIANT(
+        optTrack, "Revision-matched scan item '{}' refers to missing Track {}", item.uri, item.trackId.raw());
     }
 
     return {};
@@ -487,9 +463,7 @@ namespace ao::rt
 
   Result<> ScanApplyOperation::applyScanItem(std::size_t itemIndex,
                                              PreparedScanItem const* preparedItem,
-                                             library::WriteTransaction& transaction,
-                                             library::TrackStore::Writer& trackWriter,
-                                             library::FileManifestStore::Writer& manifestWriter,
+                                             library::TrackWriter& trackWriter,
                                              library::DictionaryStore const& dictionary)
   {
     auto const& item = _plan.items()[itemIndex];
@@ -501,7 +475,7 @@ namespace ao::rt
 
     if (item.classification == ScanClassification::Missing)
     {
-      applyMissingItem(item, transaction, manifestWriter);
+      applyMissingItem(item, trackWriter);
       return {};
     }
 
@@ -521,15 +495,14 @@ namespace ao::rt
         return {};
       }
 
-      return applyChangedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optIdentity);
+      return applyChangedItem(item, trackWriter, dictionary, builder, *optIdentity);
     }
 
     if (item.classification == ScanClassification::Moved)
     {
       _abortTransaction = true;
 
-      if (optIdentity &&
-          applyMovedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optIdentity))
+      if (optIdentity && applyMovedItem(item, trackWriter, dictionary, builder, *optIdentity))
       {
         _abortTransaction = false;
       }
@@ -537,7 +510,7 @@ namespace ao::rt
       return {};
     }
 
-    return applyNewItem(item, transaction, trackWriter, manifestWriter, builder, optIdentity);
+    return applyNewItem(item, trackWriter, builder, optIdentity);
   }
 
   bool ScanApplyOperation::skipNonActionableItem(ScanItem const& item)
@@ -570,11 +543,9 @@ namespace ao::rt
     }
   }
 
-  void ScanApplyOperation::applyMissingItem(ScanItem const& item,
-                                            library::WriteTransaction& transaction,
-                                            library::FileManifestStore::Writer& manifestWriter)
+  void ScanApplyOperation::applyMissingItem(ScanItem const& item, library::TrackWriter& trackWriter)
   {
-    auto optManifest = _ml.manifest().reader(transaction).get(item.uri);
+    auto optManifest = trackWriter.manifest(item.uri);
 
     if (!optManifest)
     {
@@ -584,7 +555,7 @@ namespace ao::rt
     auto builder = library::FileManifestBuilder::fromView(*optManifest);
     builder.status(library::FileStatus::Missing);
 
-    if (writeManifest(manifestWriter, item.uri, builder))
+    if (writeManifest(trackWriter, optManifest->trackId(), item.uri, builder))
     {
       ++_result.missingCount;
     }
@@ -687,20 +658,16 @@ namespace ao::rt
   }
 
   Result<> ScanApplyOperation::applyChangedItem(ScanItem const& item,
-                                                library::WriteTransaction& transaction,
-                                                library::TrackStore::Writer& trackWriter,
-                                                library::FileManifestStore::Writer& manifestWriter,
+                                                library::TrackWriter& trackWriter,
                                                 library::DictionaryStore const& dictionary,
                                                 library::TrackBuilder& builder,
                                                 library::AudioIdentity const& identity)
   {
     auto optExisting = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
-
-    if (!optExisting)
-    {
-      return makeError(Error::Code::CorruptData,
-                       std::format("Changed scan item '{}' refers to missing Track {}", item.uri, item.trackId.raw()));
-    }
+    AO_INVARIANT(optExisting,
+                 "Prevalidated changed scan item '{}' lost Track {} inside one write transaction",
+                 item.uri,
+                 item.trackId.raw());
 
     auto merged = library::TrackBuilder::fromCompleteView(*optExisting, dictionary);
     merged.property()
@@ -711,27 +678,16 @@ namespace ao::rt
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
 
-    auto optPrepared = prepareTrack(merged, transaction, item.uri);
-
-    if (!optPrepared)
+    if (!validateTrack(merged, trackWriter, item.uri))
     {
       return {};
     }
 
-    auto const& [preparedHot, preparedCold] = *optPrepared;
+    auto manifestBuilder = makeAvailableManifest(item, std::optional<library::AudioIdentity>{identity});
 
-    auto updateRes = library::updatePreparedTrackRecord(trackWriter, item.trackId, preparedHot, preparedCold);
-
-    if (!updateRes)
+    if (auto replaceRes = trackWriter.replace(item.trackId, merged, manifestBuilder); !replaceRes)
     {
-      return std::unexpected{std::move(updateRes.error())};
-    }
-
-    auto manifestBuilder = makeAvailableManifest(item, item.trackId, std::optional<library::AudioIdentity>{identity});
-
-    if (auto manifestRes = writeManifestForStagedTrack(manifestWriter, item.uri, manifestBuilder); !manifestRes)
-    {
-      return std::unexpected{std::move(manifestRes.error())};
+      return std::unexpected{std::move(replaceRes.error())};
     }
 
     _result.mutatedIds.push_back(item.trackId);
@@ -739,9 +695,7 @@ namespace ao::rt
   }
 
   bool ScanApplyOperation::applyMovedItem(ScanItem const& item,
-                                          library::WriteTransaction& transaction,
-                                          library::TrackStore::Writer& trackWriter,
-                                          library::FileManifestStore::Writer& manifestWriter,
+                                          library::TrackWriter& trackWriter,
                                           library::DictionaryStore const& dictionary,
                                           library::TrackBuilder& builder,
                                           library::AudioIdentity const& identity)
@@ -772,6 +726,12 @@ namespace ao::rt
       return false;
     }
 
+    if (optExisting->property().uri() != item.oldUri)
+    {
+      reportFailure(item.uri, "relink", "stored Track URI no longer matches the planned source");
+      return false;
+    }
+
     auto merged = library::TrackBuilder::fromCompleteView(*optExisting, dictionary);
     merged.property()
       .uri(item.uri)
@@ -782,31 +742,16 @@ namespace ao::rt
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
 
-    auto optPrepared = prepareTrack(merged, transaction, item.uri);
-
-    if (!optPrepared)
+    if (!validateTrack(merged, trackWriter, item.uri))
     {
       return false;
     }
 
-    auto const& [preparedHot, preparedCold] = *optPrepared;
+    auto manifestBuilder = makeAvailableManifest(item, std::optional<library::AudioIdentity>{identity});
 
-    if (!updateTrack(trackWriter, item.trackId, item.uri, preparedHot, preparedCold))
+    if (auto relinkRes = trackWriter.relink(item.trackId, merged, manifestBuilder); !relinkRes)
     {
-      return false;
-    }
-
-    if (!manifestWriter.remove(item.oldUri))
-    {
-      reportFailure(
-        item.uri, "remove old manifest for", std::format("old manifest entry '{}' was not found", item.oldUri));
-      return false;
-    }
-
-    auto manifestBuilder = makeAvailableManifest(item, item.trackId, std::optional<library::AudioIdentity>{identity});
-
-    if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
-    {
+      reportFailure(item.uri, "relink", relinkRes.error().message);
       return false;
     }
 
@@ -815,62 +760,46 @@ namespace ao::rt
   }
 
   Result<> ScanApplyOperation::applyNewItem(ScanItem const& item,
-                                            library::WriteTransaction& transaction,
-                                            library::TrackStore::Writer& trackWriter,
-                                            library::FileManifestStore::Writer& manifestWriter,
+                                            library::TrackWriter& trackWriter,
                                             library::TrackBuilder& builder,
                                             std::optional<library::AudioIdentity> const& optIdentity)
   {
-    auto optPrepared = prepareTrack(builder, transaction, item.uri);
-
-    if (!optPrepared)
+    if (!validateTrack(builder, trackWriter, item.uri))
     {
       return {};
     }
 
-    auto const& [preparedHot, preparedCold] = *optPrepared;
-
-    auto newTrackIdRes = library::createPreparedTrackRecord(trackWriter, preparedHot, preparedCold);
+    auto manifestBuilder = makeAvailableManifest(item, optIdentity);
+    auto newTrackIdRes = trackWriter.create(builder, manifestBuilder);
 
     if (!newTrackIdRes)
     {
       return std::unexpected{std::move(newTrackIdRes.error())};
     }
 
-    auto manifestBuilder = makeAvailableManifest(item, *newTrackIdRes, optIdentity);
-
-    if (auto manifestRes = writeManifestForStagedTrack(manifestWriter, item.uri, manifestBuilder); !manifestRes)
-    {
-      return std::unexpected{std::move(manifestRes.error())};
-    }
-
     _result.insertedIds.push_back(*newTrackIdRes);
     return {};
   }
 
-  std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>
-  ScanApplyOperation::prepareTrack(library::TrackBuilder const& builder,
-                                   library::WriteTransaction& transaction,
-                                   std::string const& uri)
+  bool ScanApplyOperation::validateTrack(library::TrackBuilder const& builder,
+                                         library::TrackWriter const& trackWriter,
+                                         std::string const& uri)
   {
-    auto preparedRes = builder.prepare(transaction, _ml.resources());
-
-    if (!preparedRes)
+    if (auto validationRes = trackWriter.validate(builder); !validationRes)
     {
-      reportFailure(uri, "serialize", preparedRes.error().message);
-      return std::nullopt;
+      reportFailure(uri, "serialize", validationRes.error().message);
+      return false;
     }
 
-    return *preparedRes;
+    return true;
   }
 
   library::FileManifestBuilder ScanApplyOperation::makeAvailableManifest(
     ScanItem const& item,
-    TrackId trackId,
     std::optional<library::AudioIdentity> const& optIdentity)
   {
     auto builder = library::FileManifestBuilder::makeEmpty();
-    builder.trackId(trackId).status(library::FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+    builder.status(library::FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
 
     if (optIdentity)
     {
@@ -880,45 +809,17 @@ namespace ao::rt
     return builder;
   }
 
-  bool ScanApplyOperation::updateTrack(library::TrackStore::Writer& trackWriter,
-                                       TrackId trackId,
-                                       std::string const& uri,
-                                       library::TrackBuilder::PreparedHot const& hot,
-                                       library::TrackBuilder::PreparedCold const& cold)
-  {
-    auto result = library::updatePreparedTrackRecord(trackWriter, trackId, hot, cold);
-
-    if (!result)
-    {
-      reportFailure(uri, "update track data for", result.error().message);
-      return false;
-    }
-
-    return true;
-  }
-
-  bool ScanApplyOperation::writeManifest(library::FileManifestStore::Writer& writer,
+  bool ScanApplyOperation::writeManifest(library::TrackWriter& writer,
+                                         TrackId const trackId,
                                          std::string const& uri,
                                          library::FileManifestBuilder& builder)
   {
-    if (auto putRes = writer.put(uri, builder.serialize()); !putRes)
+    if (auto putRes = writer.updateManifest(trackId, builder); !putRes)
     {
       reportFailure(uri, "update manifest for", putRes.error().message);
       return false;
     }
 
     return true;
-  }
-
-  Result<> ScanApplyOperation::writeManifestForStagedTrack(library::FileManifestStore::Writer& writer,
-                                                           std::string const& uri,
-                                                           library::FileManifestBuilder& builder)
-  {
-    if (auto putRes = writer.put(uri, builder.serialize()); !putRes)
-    {
-      return std::unexpected{std::move(putRes.error())};
-    }
-
-    return {};
   }
 } // namespace ao::rt

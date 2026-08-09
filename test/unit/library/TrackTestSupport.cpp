@@ -5,23 +5,76 @@
 
 #include "WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/library/TrackWrite.h>
+#include <ao/library/TrackWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <filesystem>
+#include <format>
 #include <functional>
 #include <string_view>
-#include <utility>
 
 namespace ao::library::test
 {
+  namespace
+  {
+    TrackId addTrackImpl(LibraryWrite& write, TrackSpec const& spec)
+    {
+      auto builder = TrackBuilder::makeEmpty();
+      applyTrackSpec(builder, spec);
+
+      auto createRes = write.tracks().create(builder, FileManifestBuilder::makeEmpty());
+      REQUIRE(createRes);
+      return *createRes;
+    }
+
+    TrackSpec withUniqueFixtureUri(MusicLibrary& library, LibraryWrite& write, TrackSpec const& spec)
+    {
+      auto effectiveSpec = spec;
+      auto writer = write.tracks();
+
+      if (!writer.manifest(effectiveSpec.uri))
+      {
+        return effectiveSpec;
+      }
+
+      auto const sourcePath = library.rootPath() / std::filesystem::path{effectiveSpec.uri};
+      auto const extension = sourcePath.extension().string();
+      std::uint64_t sequence = 1;
+      auto alias = std::filesystem::path{};
+
+      while (true)
+      {
+        alias = std::filesystem::path{std::format(".aobus-test/track-{}{}", sequence, extension)};
+        ++sequence;
+
+        if (!writer.manifest(alias.generic_string()))
+        {
+          break;
+        }
+      }
+
+      if (auto const aliasPath = library.rootPath() / alias; std::filesystem::is_regular_file(sourcePath))
+      {
+        std::filesystem::create_directories(aliasPath.parent_path());
+        std::filesystem::copy_file(sourcePath, aliasPath, std::filesystem::copy_options::overwrite_existing);
+      }
+
+      effectiveSpec.uri = alias.generic_string();
+      return effectiveSpec;
+    }
+  } // namespace
+
   TrackSpec makeTrackSpec(std::string_view title, std::uint16_t year)
   {
     return TrackSpec{.title = std::string{title}, .year = year};
@@ -142,41 +195,62 @@ namespace ao::library::test
     return spec;
   }
 
-  TrackId addTrack(MusicLibrary& library, WriteTransaction& transaction, TrackSpec const& spec)
+  TrackId addTrack([[maybe_unused]] MusicLibrary& library, LibraryWrite& write, TrackSpec const& spec)
   {
-    auto writer = library.tracks().writer(transaction);
-    auto builder = TrackBuilder::makeEmpty();
-    applyTrackSpec(builder, spec);
-
-    auto preparedRes = builder.prepare(transaction, library.resources());
-    REQUIRE(preparedRes);
-    auto createRes = createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
-    REQUIRE(createRes);
-    return *createRes;
+    return addTrackImpl(write, spec);
   }
 
   TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
   {
     auto transaction = writeTransaction(library);
-    auto const id = addTrack(library, transaction, spec);
+    auto idRes = transaction.apply([&library, &spec](LibraryWrite& write) -> Result<TrackId>
+                                   { return addTrack(library, write, spec); });
+    REQUIRE(idRes);
     REQUIRE(transaction.commit());
-    return id;
+    return *idRes;
+  }
+
+  TrackId addTrackWithUniqueFixtureUri(MusicLibrary& library, LibraryWrite& write, TrackSpec const& spec)
+  {
+    auto const effectiveSpec = withUniqueFixtureUri(library, write, spec);
+    return addTrackImpl(write, effectiveSpec);
+  }
+
+  TrackId addTrackWithUniqueFixtureUri(MusicLibrary& library, TrackSpec const& spec)
+  {
+    auto transaction = writeTransaction(library);
+    auto idRes = transaction.apply([&library, &spec](LibraryWrite& write) -> Result<TrackId>
+                                   { return addTrackWithUniqueFixtureUri(library, write, spec); });
+    REQUIRE(idRes);
+    REQUIRE(transaction.commit());
+    return *idRes;
   }
 
   void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate)
   {
     auto transaction = writeTransaction(library);
-    auto reader = library.tracks().reader(transaction);
-    auto writer = library.tracks().writer(transaction);
-    auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
-    REQUIRE(optView);
+    auto mutationRes = transaction.apply(
+      [&library, id, &mutate](LibraryWrite& write) -> Result<>
+      {
+        auto writer = write.tracks();
+        auto optView = writer.get(id, TrackStore::Reader::LoadMode::Both);
+        REQUIRE(optView);
 
-    auto builder = TrackBuilder::fromCompleteView(*optView, library.dictionary());
-    mutate(builder);
+        auto const oldUri = std::string{optView->property().uri()};
+        auto const optManifest = writer.manifest(oldUri);
+        REQUIRE(optManifest);
+        auto builder = TrackBuilder::fromCompleteView(*optView, library.dictionary());
+        mutate(builder);
 
-    auto preparedRes = builder.prepare(transaction, library.resources());
-    REQUIRE(preparedRes);
-    REQUIRE(updatePreparedTrackRecord(writer, id, preparedRes->first, preparedRes->second));
+        if (builder.property().uri() == oldUri)
+        {
+          return writer.update(id, builder);
+        }
+
+        return writer.relink(id, builder, FileManifestBuilder::fromView(*optManifest));
+      });
+    REQUIRE(mutationRes);
+
     REQUIRE(transaction.commit());
   }
 

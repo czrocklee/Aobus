@@ -12,8 +12,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
-#include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/media/file/File.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/rt/library/LibraryScan.h>
@@ -33,6 +34,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -149,13 +151,17 @@ namespace ao::rt::test
                            .signature = utility::xxh3Hash128(payloadRes->bytes)};
     }
 
-    void putManifestEntry(library::MusicLibrary& ml, std::string_view uri, TrackId trackId, AudioIdentity identity)
+    TrackId putManifestEntry(library::MusicLibrary& ml, std::string_view uri, AudioIdentity identity)
     {
       auto transaction = library::test::writeTransaction(ml);
-      auto builder = library::FileManifestBuilder::makeEmpty();
-      builder.trackId(trackId).audioPayloadLength(identity.payloadLength).audioSignature(identity.signature);
-      REQUIRE(ml.manifest().writer(transaction).put(uri, builder.serialize()));
+      auto track = library::TrackBuilder::makeEmpty();
+      track.property().uri(uri);
+      auto manifest = library::FileManifestBuilder::makeEmpty();
+      manifest.audioPayloadLength(identity.payloadLength).audioSignature(identity.signature);
+      auto const trackId = ao::test::requireValue(
+        transaction.apply([&](library::LibraryWrite& write) { return write.tracks().create(track, manifest); }));
       REQUIRE(transaction.commit());
+      return trackId;
     }
   } // namespace
 
@@ -176,30 +182,39 @@ namespace ao::rt::test
     // Setup manifest for existing files
     {
       auto transaction = library::test::writeTransaction(ml);
-      auto manifestWriter = ml.manifest().writer(transaction);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto trackWriter = write.tracks();
 
-      // Unchanged
-      char const* const unchangedUri = "unchanged.mp3";
-      auto builder1 = library::FileManifestBuilder::makeEmpty();
-      builder1.trackId(TrackId{1})
-        .fileSize(std::filesystem::file_size(musicRoot / unchangedUri))
-        .mtime(
-          static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                       std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
-                                       .count()));
-      REQUIRE(manifestWriter.put(unchangedUri, builder1.serialize()));
+          // Unchanged
+          char const* const unchangedUri = "unchanged.mp3";
+          auto builder1 = library::FileManifestBuilder::makeEmpty();
+          builder1.fileSize(std::filesystem::file_size(musicRoot / unchangedUri))
+            .mtime(static_cast<std::uint64_t>(
+              std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
+                .count()));
+          auto track1 = library::TrackBuilder::makeEmpty();
+          track1.property().uri(unchangedUri);
+          REQUIRE(trackWriter.create(track1, builder1));
 
-      // Changed (different size)
-      char const* const changedUri = "changed.m4a";
-      auto builder2 = library::FileManifestBuilder::makeEmpty();
-      builder2.trackId(TrackId{2}).fileSize(99999).mtime(0);
-      REQUIRE(manifestWriter.put(changedUri, builder2.serialize()));
+          // Changed (different size)
+          char const* const changedUri = "changed.m4a";
+          auto builder2 = library::FileManifestBuilder::makeEmpty();
+          builder2.fileSize(99999).mtime(0);
+          auto track2 = library::TrackBuilder::makeEmpty();
+          track2.property().uri(changedUri);
+          REQUIRE(trackWriter.create(track2, builder2));
 
-      // Missing (in manifest but not on disk)
-      char const* const missingUri = "missing.flac";
-      auto builder3 = library::FileManifestBuilder::makeEmpty();
-      builder3.trackId(TrackId{3});
-      REQUIRE(manifestWriter.put(missingUri, builder3.serialize()));
+          // Missing (in manifest but not on disk)
+          char const* const missingUri = "missing.flac";
+          auto builder3 = library::FileManifestBuilder::makeEmpty();
+          auto track3 = library::TrackBuilder::makeEmpty();
+          track3.property().uri(missingUri);
+          REQUIRE(trackWriter.create(track3, builder3));
+          return {};
+        }));
 
       REQUIRE(transaction.commit());
     }
@@ -331,7 +346,7 @@ namespace ao::rt::test
     auto const identity = requireAudioIdentity(movedFile);
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
-    putManifestEntry(ml, "old-name.flac", TrackId{42}, identity);
+    auto const trackId = putManifestEntry(ml, "old-name.flac", identity);
 
     auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
@@ -341,7 +356,7 @@ namespace ao::rt::test
     CHECK(item.classification == ScanClassification::Moved);
     CHECK(item.uri == "renamed.flac");
     CHECK(item.oldUri == "old-name.flac");
-    CHECK(item.trackId == TrackId{42});
+    CHECK(item.trackId == trackId);
     CHECK(item.audioPayloadLength == identity.payloadLength);
     CHECK(item.audioSignature == identity.signature);
     CHECK(plan.count(ScanClassification::Missing) == 0);
@@ -363,7 +378,7 @@ namespace ao::rt::test
                                         .signature = utility::xxh3Hash128(std::as_bytes(std::span{audioPayload}))};
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
-    putManifestEntry(ml, "old-title.flac", TrackId{42}, identity);
+    auto const trackId = putManifestEntry(ml, "old-title.flac", identity);
 
     auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
@@ -373,7 +388,7 @@ namespace ao::rt::test
     CHECK(item.classification == ScanClassification::Moved);
     CHECK(item.uri == "retagged.flac");
     CHECK(item.oldUri == "old-title.flac");
-    CHECK(item.trackId == TrackId{42});
+    CHECK(item.trackId == trackId);
     CHECK(item.audioPayloadLength == identity.payloadLength);
     CHECK(item.audioSignature == identity.signature);
   }
@@ -394,10 +409,8 @@ namespace ao::rt::test
     wrongSignature.bytes[0] = static_cast<std::byte>(std::to_integer<std::uint8_t>(wrongSignature.bytes[0]) ^ 0xFFU);
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
-    putManifestEntry(ml,
-                     "old-name.flac",
-                     TrackId{42},
-                     AudioIdentity{.payloadLength = actualIdentity.payloadLength, .signature = wrongSignature});
+    std::ignore = putManifestEntry(
+      ml, "old-name.flac", AudioIdentity{.payloadLength = actualIdentity.payloadLength, .signature = wrongSignature});
 
     auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
@@ -449,8 +462,8 @@ namespace ao::rt::test
     auto const identity = requireAudioIdentity(firstMovedFile);
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
-    putManifestEntry(ml, "old/copy-a.flac", TrackId{100}, identity);
-    putManifestEntry(ml, "old/copy-b.flac", TrackId{200}, identity);
+    auto const firstTrackId = putManifestEntry(ml, "old/copy-a.flac", identity);
+    std::ignore = putManifestEntry(ml, "old/copy-b.flac", identity);
 
     auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
@@ -477,7 +490,7 @@ namespace ao::rt::test
     CHECK(relinkItem.classification == ScanClassification::Moved);
     CHECK(relinkItem.oldUri == "old/copy-a.flac");
     CHECK(relinkItem.uri == "disc-1/copy-a.flac");
-    CHECK(relinkItem.trackId == TrackId{100});
+    CHECK(relinkItem.trackId == firstTrackId);
   }
 
   TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities", "[runtime][unit][library][scan]")
@@ -490,7 +503,7 @@ namespace ao::rt::test
       std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), musicRoot / "new.flac");
 
       auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-      putManifestEntry(ml, "old.flac", TrackId{100}, AudioIdentity{});
+      std::ignore = putManifestEntry(ml, "old.flac", AudioIdentity{});
       auto plan = LibraryScan{ml}.buildPlan().value();
 
       auto result = std::move(plan).makeRelinkPlan("old.flac", "new.flac");
@@ -510,8 +523,8 @@ namespace ao::rt::test
       auto const basicIdentity = requireAudioIdentity(audio::test::requireAudioFixture("basic_metadata.flac"));
       auto competingIdentity = requireAudioIdentity(newFile);
       competingIdentity.signature.bytes.front() ^= std::byte{1};
-      putManifestEntry(ml, "old-basic.flac", TrackId{100}, basicIdentity);
-      putManifestEntry(ml, "old-competing.flac", TrackId{200}, competingIdentity);
+      std::ignore = putManifestEntry(ml, "old-basic.flac", basicIdentity);
+      std::ignore = putManifestEntry(ml, "old-competing.flac", competingIdentity);
       auto plan = LibraryScan{ml}.buildPlan().value();
 
       REQUIRE(plan.count(ScanClassification::New) == 1);
@@ -577,7 +590,7 @@ namespace ao::rt::test
     auto const symlink = ao::test::SymlinkFixture{outsideFile, musicRoot / "alias.flac", ao::test::SymlinkType::File};
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
-    putManifestEntry(library, "alias.flac", TrackId{42}, AudioIdentity{});
+    std::ignore = putManifestEntry(library, "alias.flac", AudioIdentity{});
     auto const plan = LibraryScan{library}.buildPlan().value();
 
     REQUIRE(plan.size() == 1);
@@ -618,7 +631,7 @@ namespace ao::rt::test
     auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
-    putManifestEntry(library, "alias/song.flac", TrackId{42}, AudioIdentity{});
+    std::ignore = putManifestEntry(library, "alias/song.flac", AudioIdentity{});
     auto const plan = LibraryScan{library}.buildPlan().value();
 
     REQUIRE(plan.size() == 1);

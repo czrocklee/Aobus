@@ -3,6 +3,7 @@
 
 #include "ShellLayoutComponentStateStore.h"
 
+#include <ao/Contract.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
@@ -10,9 +11,6 @@
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
-#include <exception>
 #include <filesystem>
 #include <format>
 #include <mutex>
@@ -28,9 +26,9 @@ namespace ao::gtk
   {
     void validatePresetId(std::string_view presetId)
     {
-      gsl_Expects(!(presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains("..") ||
-                    presetId.contains('\0')) &&
-                  "Invalid preset ID: path traversal attempt or empty ID");
+      AO_EXPECTS(!(presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains("..") ||
+                   presetId.contains('\0')),
+                 "Invalid preset ID: path traversal attempt or empty ID");
     }
   } // namespace
   ShellLayoutComponentStateStore::ShellLayoutComponentStateStore(std::filesystem::path stateDir)
@@ -56,59 +54,56 @@ namespace ao::gtk
   {
     auto const path = filePath(presetId);
 
-    try
+    auto const fileName = path.string();
+    auto bufferRes = yaml::readFileResult(path);
+
+    if (!bufferRes)
     {
-      auto const fileName = path.string();
-      auto bufferRes = yaml::readFileResult(path);
+      auto existsEc = std::error_code{};
 
-      if (!bufferRes)
+      if (auto const exists = std::filesystem::exists(path, existsEc);
+          bufferRes.error().code != Error::Code::IoError || existsEc || exists)
       {
-        if (bufferRes.error().code != Error::Code::IoError || std::filesystem::exists(path))
-        {
-          APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to load state file ({}): {}",
-                       path.string(),
-                       bufferRes.error().message);
-        }
-
-        return std::nullopt;
-      }
-
-      auto buffer = std::move(*bufferRes);
-      auto yamlErrorState = yaml::ErrorCallbackState{fileName};
-      auto tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
-      yaml::parseInPlace(tree, buffer, yamlErrorState);
-
-      auto docRes =
-        uimodel::LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutComponentStateDocument{});
-
-      if (!docRes)
-      {
-        APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to deserialize state file ({}): {}",
+        APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to load state file ({}): {}",
                      path.string(),
-                     docRes.error().message);
-        return std::nullopt;
-      }
-
-      if (docRes->preset != presetId)
-      {
-        APP_LOG_WARN("ShellLayoutComponentStateStore: Ignoring state file ({}) with mismatched preset '{}'",
-                     path.string(),
-                     docRes->preset);
-        return std::nullopt;
-      }
-
-      return std::move(*docRes);
-    }
-    catch (std::exception const& e)
-    {
-      // Missing files are normal (no runtime state yet); log others as warnings.
-      if (std::filesystem::exists(path))
-      {
-        APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to load state file ({}): {}", path.string(), e.what());
+                     bufferRes.error().message);
       }
 
       return std::nullopt;
     }
+
+    auto buffer = std::move(*bufferRes);
+    auto yamlErrorState = yaml::ErrorCallbackState{fileName};
+    auto tree = ryml::Tree{yaml::callbacks()};
+
+    if (auto const parsedRes = yaml::parseInPlace(tree, buffer, yamlErrorState); !parsedRes)
+    {
+      APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to parse state file ({}): {}",
+                   path.string(),
+                   parsedRes.error().message);
+      return std::nullopt;
+    }
+
+    auto docRes =
+      uimodel::LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutComponentStateDocument{});
+
+    if (!docRes)
+    {
+      APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to deserialize state file ({}): {}",
+                   path.string(),
+                   docRes.error().message);
+      return std::nullopt;
+    }
+
+    if (docRes->preset != presetId)
+    {
+      APP_LOG_WARN("ShellLayoutComponentStateStore: Ignoring state file ({}) with mismatched preset '{}'",
+                   path.string(),
+                   docRes->preset);
+      return std::nullopt;
+    }
+
+    return std::move(*docRes);
   }
 
   void ShellLayoutComponentStateStore::save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc)
@@ -124,35 +119,27 @@ namespace ao::gtk
     auto stored = doc;
     stored.preset = presetId;
 
-    try
+    auto tree = ryml::Tree{yaml::callbacks()};
+
+    if (auto const serializedRes = uimodel::LayoutComponentStateYamlSchema{}.serialize(tree.rootref(), stored);
+        !serializedRes)
     {
-      auto tree = ryml::Tree{yaml::callbacks()};
-
-      if (auto const serializedRes = uimodel::LayoutComponentStateYamlSchema{}.serialize(tree.rootref(), stored);
-          !serializedRes)
-      {
-        APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to serialize state file ({}): {}",
-                      path.string(),
-                      serializedRes.error().message);
-        return false;
-      }
-
-      auto const text = ryml::emitrs_yaml<std::string>(tree);
-
-      if (auto const result = utility::writeAtomically(path, text); !result)
-      {
-        APP_LOG_ERROR(
-          "ShellLayoutComponentStateStore: Failed to save state file ({}): {}", path.string(), result.error().message);
-        return false;
-      }
-
-      return true;
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to save state file ({}): {}", path.string(), e.what());
+      APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to serialize state file ({}): {}",
+                    path.string(),
+                    serializedRes.error().message);
       return false;
     }
+
+    auto const text = ryml::emitrs_yaml<std::string>(tree);
+
+    if (auto const result = utility::writeAtomically(path, text); !result)
+    {
+      APP_LOG_ERROR(
+        "ShellLayoutComponentStateStore: Failed to save state file ({}): {}", path.string(), result.error().message);
+      return false;
+    }
+
+    return true;
   }
 
   bool ShellLayoutComponentStateStore::prune(std::string_view presetId, uimodel::PreparedLayout const& layout)

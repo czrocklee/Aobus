@@ -7,12 +7,13 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Runtime.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
@@ -34,6 +35,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,10 +51,11 @@ namespace ao::rt::test
         : _musicLibrary{library::test::makeTestMusicLibrary(_temp.path(), _temp.path() / "db")}
         , _asyncRuntime{_executor}
       {
-        _trackId = library::test::addTrack(_musicLibrary, library::test::TrackSpec{.title = "Before"});
+        _trackId =
+          library::test::addTrackWithUniqueFixtureUri(_musicLibrary, library::test::TrackSpec{.title = "Before"});
         auto readTransaction = _musicLibrary.readTransaction();
         auto const revision = _musicLibrary.libraryRevision(readTransaction);
-        _changesPtr = std::make_unique<LibraryChanges>(_executor, revision);
+        _changesPtr = std::make_unique<LibraryChanges>(_executor, revision, "test-library");
         _libraryPtr = ao::test::requireValue(Library::create(_asyncRuntime, _musicLibrary, *_changesPtr));
       }
 
@@ -152,28 +155,27 @@ namespace ao::rt::test
     CHECK(nestedMutationRejected);
   }
 
-  TEST_CASE("Library authoring - commit retains the transaction wrapper for existing store writers",
+  TEST_CASE("Library authoring - retained store writers remain safely destructible after commit",
             "[runtime][unit][library-authoring]")
   {
     auto temp = ao::test::TempDir{};
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto executor = InlineExecutor{};
     auto readTransaction = musicLibrary.readTransaction();
-    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
     auto optListWriter = std::optional<library::ListStore::Writer>{};
     REQUIRE(mutation.apply(
-      [&musicLibrary, &optListWriter](library::WriteTransaction& transaction) -> Result<>
+      [&musicLibrary, &optListWriter](library::LibraryWrite& write) -> Result<>
       {
-        optListWriter.emplace(musicLibrary.lists().writer(transaction));
+        optListWriter.emplace(library::test::physicalWriter(musicLibrary.lists(), write));
         return {};
       }));
 
     REQUIRE(mutation.commit(LibraryChangeSet{}));
-
-    CHECK_THROWS_AS(optListWriter->get(ListId{1}), Exception);
+    CHECK(optListWriter);
   }
 
   TEST_CASE("Library authoring - storage mutation failure unwinds the mutation scope",
@@ -185,13 +187,14 @@ namespace ao::rt::test
       temp.path(), temp.path() / "db", library::MusicLibrary::Options{.mapSize = kMapSize}));
     auto executor = InlineExecutor{};
     auto readTransaction = musicLibrary.readTransaction();
-    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
     auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
-    auto failureRes = mutation.apply([&musicLibrary, &oversizedValue](library::WriteTransaction& transaction)
-                                     { return musicLibrary.resources().writer(transaction).create(oversizedValue); });
+    auto failureRes =
+      mutation.apply([&musicLibrary, &oversizedValue](library::LibraryWrite& write)
+                     { return library::test::physicalWriter(musicLibrary.resources(), write).create(oversizedValue); });
 
     REQUIRE_FALSE(failureRes);
     CHECK(failureRes.error().code == Error::Code::IoError);
@@ -207,15 +210,15 @@ namespace ao::rt::test
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto executor = InlineExecutor{};
     auto readTransaction = musicLibrary.readTransaction();
-    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
 
     SECTION("Result error")
     {
       auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-      auto failureRes = mutation.apply([](library::WriteTransaction&) -> Result<>
-                                       { return makeError(Error::Code::Conflict, "rejected"); });
+      auto failureRes =
+        mutation.apply([](library::LibraryWrite&) -> Result<> { return makeError(Error::Code::Conflict, "rejected"); });
 
       REQUIRE_FALSE(failureRes);
       CHECK(failureRes.error().code == Error::Code::Conflict);
@@ -226,9 +229,9 @@ namespace ao::rt::test
     {
       auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
 
-      CHECK_THROWS_WITH(
-        mutation.apply([](library::WriteTransaction&) -> Result<> { throw Exception{"unexpected mutation failure"}; }),
-        "unexpected mutation failure");
+      CHECK_THROWS_WITH(mutation.apply([](library::LibraryWrite&) -> Result<>
+                                       { throw std::runtime_error{"unexpected mutation failure"}; }),
+                        "unexpected mutation failure");
       REQUIRE(mutationService.beginInteractiveMutation());
     }
   }
@@ -262,7 +265,7 @@ namespace ao::rt::test
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto executor = InlineExecutor{};
     auto readTransaction = musicLibrary.readTransaction();
-    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto observed = std::vector<LibraryAuthoringAvailability>{};
@@ -310,16 +313,17 @@ namespace ao::rt::test
   {
     auto firstTemp = ao::test::TempDir{};
     auto firstLibrary = library::test::makeTestMusicLibrary(firstTemp.path(), firstTemp.path() / "db");
-    auto const firstTrackId = library::test::addTrack(firstLibrary, library::test::TrackSpec{.title = "First runtime"});
+    auto const firstTrackId =
+      library::test::addTrackWithUniqueFixtureUri(firstLibrary, library::test::TrackSpec{.title = "First runtime"});
     auto secondTemp = ao::test::TempDir{};
     auto secondLibrary = library::test::makeTestMusicLibrary(secondTemp.path(), secondTemp.path() / "db");
-    REQUIRE(library::test::addTrack(secondLibrary, library::test::TrackSpec{.title = "Second runtime"}) !=
-            kInvalidTrackId);
+    REQUIRE(library::test::addTrackWithUniqueFixtureUri(
+              secondLibrary, library::test::TrackSpec{.title = "Second runtime"}) != kInvalidTrackId);
     auto executor = InlineExecutor{};
     auto firstRead = firstLibrary.readTransaction();
     auto secondRead = secondLibrary.readTransaction();
-    auto firstChanges = LibraryChanges{executor, firstLibrary.libraryRevision(firstRead)};
-    auto secondChanges = LibraryChanges{executor, secondLibrary.libraryRevision(secondRead)};
+    auto firstChanges = LibraryChanges{executor, firstLibrary.libraryRevision(firstRead), "first-test-library"};
+    auto secondChanges = LibraryChanges{executor, secondLibrary.libraryRevision(secondRead), "second-test-library"};
     auto firstWritable = ao::test::requireValue(library::WritableMusicLibrary::acquire(firstLibrary));
     auto secondWritable = ao::test::requireValue(library::WritableMusicLibrary::acquire(secondLibrary));
     auto firstMutationService = LibraryMutationService{executor, std::move(firstWritable), firstChanges};

@@ -155,12 +155,12 @@ Repeated removal is idempotent.
 | Backing file is missing in `ReadWrite` mode | Successful initialization of an empty document. |
 | Backing file is missing in `ReadOnly` mode | `Result` with `NotFound`. |
 | Existing or emitted complete file exceeds the configured byte ceiling | `Result` with `ValueTooLarge`; the live document and backing file remain unchanged. |
-| YAML syntax parsing throws or the root is not a mapping | `Result` with `FormatRejected` and backing-file context. |
+| YAML syntax parsing or root mapping validation fails | `Result` with `FormatRejected` and backing-file context. |
 | A schema returns an error | That error code with bounded group/operation context. |
 | A standard exception escapes deserialization | `Result` with `FormatRejected`; the seeded value remains unchanged. |
 | A standard exception escapes serialization, candidate assembly, or emission | `Result` with `InvalidState`; the live document and backing file remain unchanged. |
 | Atomic replacement fails | The helper's recoverable error, currently `IoError`; the live document remains unchanged. |
-| Save or removal is called on a `ReadOnly` store | `ao::Exception` invariant fault. |
+| Save or removal is called on a `ReadOnly` store | `AO_EXPECTS` precondition fault. |
 
 Candidate preparation and non-standard exceptions are not broadly translated.
 All operations are synchronous and expose no cancellation point.

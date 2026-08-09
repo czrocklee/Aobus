@@ -19,9 +19,11 @@ namespace ao::library
   namespace detail
   {
     class LibraryIdentity;
+    class PhysicalStoreAccess;
   }
 
   class ReadTransaction;
+  class LibraryWrite;
   class WriteTransaction;
   class MusicLibrary;
 
@@ -32,10 +34,11 @@ namespace ao::library
     class Writer;
 
     Reader reader(ReadTransaction const& transaction) const;
+    Reader reader(LibraryWrite const& write) const;
     Reader reader(WriteTransaction const& transaction) const;
-    Writer writer(WriteTransaction& transaction) const;
 
   private:
+    Writer writer(WriteTransaction& transaction) const;
     ResourceStore(lmdb::Database db, detail::LibraryIdentity const& identity)
       : _database{std::move(db)}, _identity{&identity}
     {
@@ -45,6 +48,8 @@ namespace ao::library
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
+    friend class WriteTransaction;
+    friend class detail::PhysicalStoreAccess;
   };
 
   class ResourceStore::Reader final
@@ -58,8 +63,9 @@ namespace ao::library
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
-    // Absence is the only recoverable miss; storage faults throw (see lmdb).
-    std::optional<std::span<std::byte const>> get(ResourceId id) const { return _reader.get(id.raw()); }
+    // Absence is the only normal miss. Native read faults are fatal and a
+    // post-open empty Resource value is an invariant fault.
+    std::optional<std::span<std::byte const>> get(ResourceId id) const;
 
     ResourceId maxKey() const { return ResourceId{_reader.maxKey()}; }
 
@@ -97,7 +103,7 @@ namespace ao::library
     {
     }
 
-    void refresh() const { _value = {ResourceId{static_cast<std::uint32_t>(_iterator->first)}, _iterator->second}; }
+    void refresh() const;
 
     lmdb::Database::Reader::Iterator _iterator;
     mutable value_type _value{};
@@ -113,7 +119,7 @@ namespace ao::library
   class [[nodiscard]] ResourceStore::Writer
   {
   public:
-    std::optional<std::span<std::byte const>> get(ResourceId id) const { return _writer.get(id.raw()); }
+    std::optional<std::span<std::byte const>> get(ResourceId id) const;
     Result<ResourceId> create(std::span<std::byte const> data);
     // Returns true if a row was removed, false if the id was absent.
     bool remove(ResourceId id) { return _writer.del(id.raw()); }

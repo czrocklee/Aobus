@@ -1,16 +1,26 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "runtime/library/LibraryMutationService.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
+#include <ao/rt/WorkspaceService.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -90,5 +100,96 @@ namespace ao::rt::test
       REQUIRE_FALSE(missingViewRes);
       CHECK(missingViewRes.error().code == Error::Code::NotFound);
     }
+  }
+
+  TEST_CASE("ViewService - stored parent filter error reaches child view state", "[runtime][unit][view][filter]")
+  {
+    auto env = ViewServiceFixture{};
+    auto parentId = kInvalidListId;
+    auto childId = kInvalidListId;
+
+    {
+      auto transaction = library::test::writeTransaction(env.libraryFixture.library());
+      auto parentBuilder = library::ListBuilder::makeEmpty().name("Invalid parent").filter("(");
+      parentId = ao::test::requireValue(transaction.apply([&parentBuilder](library::LibraryWrite& write)
+                                                          { return write.lists().create(parentBuilder); }));
+      auto childBuilder = library::ListBuilder::makeEmpty().name("Child").parentId(parentId);
+      childId = ao::test::requireValue(transaction.apply([&childBuilder](library::LibraryWrite& write)
+                                                         { return write.lists().create(childBuilder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const viewId = env.requireView(TrackListViewConfig{.listId = childId});
+    auto const state = env.service.trackListState(viewId);
+    auto const projectionPtr = env.requireProjection(viewId);
+
+    REQUIRE(state.optFilterError);
+    CHECK(state.optFilterError->code == Error::Code::FormatRejected);
+    CHECK(state.optFilterError->message.contains("List " + std::to_string(parentId.raw()) + " stored filter"));
+    REQUIRE(projectionPtr != nullptr);
+    CHECK(projectionPtr->size() == 0);
+  }
+
+  TEST_CASE("ViewService - stored parent filter mutations refresh live child error state",
+            "[runtime][unit][view][filter]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto parentId = kInvalidListId;
+    auto childId = kInvalidListId;
+
+    {
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto parentBuilder = library::ListBuilder::makeEmpty().name("Parent").filter("true");
+      parentId = ao::test::requireValue(transaction.apply([&parentBuilder](library::LibraryWrite& write)
+                                                          { return write.lists().create(parentBuilder); }));
+      auto childBuilder = library::ListBuilder::makeEmpty().name("Child").parentId(parentId);
+      childId = ao::test::requireValue(transaction.apply([&childBuilder](library::LibraryWrite& write)
+                                                         { return write.lists().create(childBuilder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto executor = InlineExecutor{};
+    auto readTransaction = libraryFixture.library().readTransaction();
+    auto changes = LibraryChanges{executor, libraryFixture.library().libraryRevision(readTransaction), "test-library"};
+    auto mutationService =
+      LibraryMutationService{executor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
+    auto sources = TrackSourceCache{libraryFixture.library(), changes};
+    auto service = ViewService{executor, libraryFixture.library(), sources, changes};
+    auto workspace = WorkspaceService{executor, service, changes};
+    auto const viewId = ao::test::requireValue(workspace.navigate(NavigationRequest{
+      .target = FilteredListTarget{.listId = childId, .filterExpression = {}},
+    }));
+
+    auto changedErrors = std::vector<ViewService::FilterErrorChanged>{};
+    auto subscription = service.onFilterErrorChanged([&changedErrors](ViewService::FilterErrorChanged const& changed)
+                                                     { changedErrors.push_back(changed); });
+
+    auto updateParentFilter = [&](std::string filter)
+    {
+      auto mutationRes = mutationService.beginInteractiveMutation();
+      REQUIRE(mutationRes);
+      auto builder = library::ListBuilder::makeEmpty().name("Parent").filter(std::move(filter));
+      REQUIRE(
+        mutationRes->apply([&](library::LibraryWrite& write) { return write.lists().update(parentId, builder); }));
+      REQUIRE(mutationRes->commit(LibraryChangeSet{.listsUpserted = {parentId}}));
+    };
+
+    updateParentFilter("(");
+
+    auto state = service.trackListState(viewId);
+    REQUIRE(state.optFilterError);
+    CHECK(state.optFilterError->code == Error::Code::FormatRejected);
+    REQUIRE(changedErrors.size() == 1);
+    CHECK(changedErrors.front().viewId == viewId);
+    REQUIRE(changedErrors.front().optFilterError);
+    CHECK(changedErrors.front().optFilterError->code == Error::Code::FormatRejected);
+
+    updateParentFilter("true");
+
+    state = service.trackListState(viewId);
+    CHECK_FALSE(state.optFilterError);
+    REQUIRE(changedErrors.size() == 2);
+    CHECK(changedErrors.back().viewId == viewId);
+    CHECK_FALSE(changedErrors.back().optFilterError);
   }
 } // namespace ao::rt::test

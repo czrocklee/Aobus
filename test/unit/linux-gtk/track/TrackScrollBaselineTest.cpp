@@ -18,10 +18,12 @@
 #include "track/TrackRowObject.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -33,6 +35,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <ranges>
 #include <vector>
 
 namespace ao::gtk::test
@@ -61,41 +64,44 @@ namespace ao::gtk::test
       ids.reserve(count);
 
       auto transaction = library::test::writeTransaction(library);
-      auto writer = library.tracks().writer(transaction);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
 
-      for (std::size_t i = 0; i < count; ++i)
-      {
-        auto const title = std::format("Track {}", i);
-        auto const artist = std::format("Artist {}", i % 500);
-        auto const album = std::format("Album {}", i % 1000);
-        auto const albumArtist = std::format("AlbumArtist {}", i % 400);
-        auto const genre = std::format("Genre {}", i % 40);
-        auto const uri = std::format("music/track_{}.flac", i);
+          for (std::size_t const i : std::views::iota(std::size_t{0}, count))
+          {
+            auto const title = std::format("Track {}", i);
+            auto const artist = std::format("Artist {}", i % 500);
+            auto const album = std::format("Album {}", i % 1000);
+            auto const albumArtist = std::format("AlbumArtist {}", i % 400);
+            auto const genre = std::format("Genre {}", i % 40);
+            auto const uri = std::format("music/track_{}.flac", i);
 
-        auto builder = library::TrackBuilder::makeEmpty();
-        // Spread metadata across many distinct dictionary strings so resolution
-        // and the sort/text caches see realistic cardinality rather than one value.
-        builder.metadata()
-          .title(title)
-          .artist(artist)
-          .album(album)
-          .albumArtist(albumArtist)
-          .genre(genre)
-          .year(static_cast<std::uint16_t>(1950 + (i % 70)))
-          .trackNumber(static_cast<std::uint16_t>(1 + (i % 30)));
-        builder.property()
-          .uri(uri)
-          .duration(std::chrono::milliseconds{120000 + static_cast<std::ptrdiff_t>(i % 200000)})
-          .bitrate(Bitrate{320000})
-          .sampleRate(SampleRate{44100})
-          .channels(Channels{2})
-          .bitDepth(BitDepth{16});
+            auto builder = library::TrackBuilder::makeEmpty();
+            // Spread metadata across many distinct dictionary strings so resolution
+            // and the sort/text caches see realistic cardinality rather than one value.
+            builder.metadata()
+              .title(title)
+              .artist(artist)
+              .album(album)
+              .albumArtist(albumArtist)
+              .genre(genre)
+              .year(static_cast<std::uint16_t>(1950 + (i % 70)))
+              .trackNumber(static_cast<std::uint16_t>(1 + (i % 30)));
+            builder.property()
+              .uri(uri)
+              .duration(std::chrono::milliseconds{120000 + static_cast<std::ptrdiff_t>(i % 200000)})
+              .bitrate(Bitrate{320000})
+              .sampleRate(SampleRate{44100})
+              .channels(Channels{2})
+              .bitDepth(BitDepth{16});
 
-        auto preparedRes = builder.prepare(transaction, library.resources());
-        REQUIRE(preparedRes);
-        ids.push_back(
-          ao::test::requireValue(library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second)));
-      }
+            ids.push_back(ao::test::requireValue(writer.create(builder, library::FileManifestBuilder::makeEmpty())));
+          }
+
+          return {};
+        }));
 
       REQUIRE(transaction.commit());
       return ids;

@@ -35,6 +35,12 @@ namespace ao::audio
    *   render admission and does not return until every in-flight render cycle,
    *   including its RenderTarget render notifications, has returned. No new
    *   render cycle begins until start() reactivates the backend.
+   * - All render notifications and the corresponding drain-complete callback
+   *   form one serialized producer domain for an active target. They may run on
+   *   different backend threads only when backend synchronization orders them
+   *   without overlap. After renderPcm() reports drained, no new render cycle is
+   *   admitted until start(), and at most one ordered drain-complete callback is
+   *   emitted for that run.
    *   Non-render route, property, and error callbacks remain governed by their
    *   existing generation checks and the close() lifetime boundary.
    * - close() is the render-target lifetime boundary. After close() returns, the

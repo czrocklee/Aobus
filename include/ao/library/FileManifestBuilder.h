@@ -4,11 +4,15 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <string_view>
 #include <vector>
 
 namespace ao::library
@@ -31,6 +35,29 @@ namespace ao::library
     FileManifestBuilder& audioSignature(utility::Hash128 val);
     FileManifestBuilder& status(FileStatus val);
 
+    /** Immutable, canonically validated key and value for one Store write. */
+    class Prepared final
+    {
+    public:
+      std::string_view uri() const noexcept { return _uri.value(); }
+      std::size_t size() const noexcept { return sizeof(FileManifestHeader); }
+      std::span<std::byte const> bytes() const noexcept { return std::as_bytes(std::span{&_header, std::size_t{1}}); }
+      void writeTo(std::span<std::byte> out) const noexcept;
+
+    private:
+      Prepared(LibraryUri uri, FileManifestHeader header);
+
+      LibraryUri _uri;
+      FileManifestHeader _header;
+
+      friend class FileManifestBuilder;
+    };
+
+    Result<Prepared> prepare(std::string_view uri) const;
+    Result<Prepared> prepare(LibraryUri uri) const;
+
+    // Raw serialization remains available for binary-layout and corruption
+    // diagnostics; production Store writers accept Prepared only.
     std::vector<std::byte> serialize() const;
 
   private:

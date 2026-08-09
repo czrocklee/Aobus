@@ -256,7 +256,7 @@ namespace ao::media::file::test
     auto const tempDir = ao::test::TempDir{};
     auto musicLibrary = library::test::makeTestMusicLibrary(tempDir.path(), tempDir.path() / "db");
     auto transaction = library::test::writeTransaction(musicLibrary);
-    auto serializeRes = builder.serialize(transaction, musicLibrary.resources());
+    auto serializeRes = library::test::physicalSerializeTrack(builder, transaction, musicLibrary.resources());
     REQUIRE(serializeRes);
     auto const [hotData, coldData] = *serializeRes;
 
@@ -276,7 +276,8 @@ namespace ao::media::file::test
     CHECK(optPrimary->type == cover.type);
     CHECK(optPrimary->resourceId == cover.resourceId);
 
-    auto const optStoredBytes = musicLibrary.resources().writer(transaction).get(cover.resourceId);
+    auto const optStoredBytes =
+      library::test::physicalWriter(musicLibrary.resources(), transaction).get(cover.resourceId);
     REQUIRE(optStoredBytes);
     CHECK_FALSE(optStoredBytes->empty());
     checkOnePixelPng(*optStoredBytes);

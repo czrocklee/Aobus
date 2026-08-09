@@ -49,16 +49,16 @@ namespace ao::uimodel::test
             "[uimodel][unit][track-filter-completion]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "Title Match",
-                                                     .artist = "Artist Match",
-                                                     .album = "Album Match",
-                                                     .albumArtist = "Album Artist Match",
-                                                     .genre = "Genre Match",
-                                                     .composer = "Composer Match",
-                                                     .conductor = "Conductor Match",
-                                                     .work = "Work Match",
-                                                     .tags = {"Tag Match"}});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "Title Match",
+                                                                         .artist = "Artist Match",
+                                                                         .album = "Album Match",
+                                                                         .albumArtist = "Album Artist Match",
+                                                                         .genre = "Genre Match",
+                                                                         .composer = "Composer Match",
+                                                                         .conductor = "Conductor Match",
+                                                                         .work = "Work Match",
+                                                                         .tags = {"Tag Match"}});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
@@ -87,12 +87,13 @@ namespace ao::uimodel::test
             "[uimodel][unit][track-filter-completion][ranking]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    library::test::addTrack(
+    library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(),
       library::test::TrackSpec{.title = "Alpine", .artist = "Alpha", .album = "", .tags = {"Alpha"}});
-    library::test::addTrack(
+    library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(), library::test::TrackSpec{.title = "Second", .artist = "Alpha", .album = ""});
-    library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "Third", .album = "Albatross"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Third", .album = "Albatross"});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
@@ -113,7 +114,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][track-filter-completion][replacement]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    library::test::addTrack(
+    library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(), library::test::TrackSpec{.title = "Track", .artist = "Alpha", .album = ""});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
@@ -132,7 +133,7 @@ namespace ao::uimodel::test
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto const value = std::string{R"(C:\Music "Live")"};
-    library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = value});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(), library::test::TrackSpec{.title = value});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
@@ -152,7 +153,8 @@ namespace ao::uimodel::test
             "[uimodel][unit][track-filter-completion][mode]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "P!nk Live", .artist = "P!nk"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "P!nk Live", .artist = "P!nk"});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};

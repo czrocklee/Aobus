@@ -3,9 +3,8 @@
 
 #include <ao/library/AudioIdentity.h>
 
+#include <ao/Contract.h>
 #include <ao/utility/Xxh3.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -25,7 +24,7 @@ namespace ao::library
                                                  AudioIdentityProgressCallback progress,
                                                  std::stop_token stopToken)
   {
-    gsl_Expects(!audioPayload.empty());
+    AO_EXPECTS(!audioPayload.empty());
 
     auto accumulator = utility::Xxh3Accumulator128{};
     std::size_t processed = 0;

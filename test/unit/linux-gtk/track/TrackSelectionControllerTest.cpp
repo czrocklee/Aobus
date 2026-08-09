@@ -72,13 +72,13 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{
       [&](library::MusicLibrary& musicLibrary)
       {
-        trackId1 = library::test::addTrack(
+        trackId1 = library::test::addTrackWithUniqueFixtureUri(
           musicLibrary, library::test::TrackSpec{.title = "Track 1", .duration = std::chrono::minutes{2}});
-        trackId2 = library::test::addTrack(
+        trackId2 = library::test::addTrackWithUniqueFixtureUri(
           musicLibrary, library::test::TrackSpec{.title = "Track 2", .duration = std::chrono::minutes{3}});
-        trackId3 = library::test::addTrack(
+        trackId3 = library::test::addTrackWithUniqueFixtureUri(
           musicLibrary, library::test::TrackSpec{.title = "Track 3", .duration = std::chrono::minutes{5}});
-        trackId4 = library::test::addTrack(
+        trackId4 = library::test::addTrackWithUniqueFixtureUri(
           musicLibrary, library::test::TrackSpec{.title = "Track 4", .duration = std::chrono::minutes{4}});
       }};
     auto const& library = fixture.runtime().musicLibrary();

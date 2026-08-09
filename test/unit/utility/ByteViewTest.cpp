@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -81,24 +80,23 @@ namespace ao::utility::test
       CHECK(static_cast<char>(unsignedChars[0]) == 'H');
     }
 
-    SECTION("bytes::tryLayout / requireLayout are always checked")
+    SECTION("bytes::tryLayout is always checked")
     {
       auto const record = LayoutRecord{.a = 7, .b = 9};
       auto const full = bytes::view(record); // aligned, exact size
 
-      CHECK(bytes::tryLayout<LayoutRecord>(full) != nullptr);
-      CHECK(bytes::requireLayout<LayoutRecord>(full)->a == 7);
+      auto const* const fullRecord = bytes::tryLayout<LayoutRecord>(full);
+      REQUIRE(fullRecord != nullptr);
+      CHECK(fullRecord->a == 7);
 
       // Too short for the target type.
       auto const shortSpan = full.subspan(0, sizeof(LayoutRecord) - 1);
       CHECK(bytes::tryLayout<LayoutRecord>(shortSpan) == nullptr);
-      CHECK_THROWS_AS(bytes::requireLayout<LayoutRecord>(shortSpan), std::out_of_range);
 
       // Misaligned for the target type (offset by one from an aligned buffer).
       alignas(LayoutRecord) auto aligned = std::array<std::byte, sizeof(LayoutRecord) + alignof(LayoutRecord)>{};
       auto const misaligned = std::span<std::byte const>{aligned.data() + 1, sizeof(LayoutRecord)};
       CHECK(bytes::tryLayout<LayoutRecord>(misaligned) == nullptr);
-      CHECK_THROWS_AS(bytes::requireLayout<LayoutRecord>(misaligned), std::out_of_range);
     }
 
     SECTION("layout:: functions")

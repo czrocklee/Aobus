@@ -3,13 +3,12 @@
 
 #pragma once
 
-#include <gsl-lite/gsl-lite.hpp>
+#include <ao/Contract.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -115,23 +114,6 @@ namespace ao::utility
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return reinterpret_cast<T const*>(span.data());
     }
-
-    /**
-     * Always-checked typed view that throws std::out_of_range when the span is too
-     * short for T or misaligned. Use tryLayout for the non-throwing variant.
-     */
-    template<typename T>
-    inline T const* requireLayout(std::span<std::byte const> span)
-    {
-      if (auto const* const ptr = tryLayout<T>(span); ptr != nullptr)
-      {
-        return ptr;
-      }
-
-      // This low-level utility intentionally reports standard bounds/alignment errors directly.
-      // NOLINTNEXTLINE(aobus-readability-forbid-raw-throw)
-      throw std::out_of_range{"ByteView requireLayout: span too small or misaligned for target type"};
-    }
   } // namespace bytes
 
   namespace layout
@@ -144,8 +126,8 @@ namespace ao::utility
     inline T const* view(std::span<std::byte const> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      gsl_Expects(span.size() >= sizeof(T));
-      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      AO_EXPECTS(span.size() >= sizeof(T));
+      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return reinterpret_cast<T const*>(span.data());
     }
@@ -154,8 +136,8 @@ namespace ao::utility
     inline T* viewMutable(std::span<std::byte> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      gsl_Expects(span.size() >= sizeof(T));
-      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      AO_EXPECTS(span.size() >= sizeof(T));
+      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return reinterpret_cast<T*>(span.data());
     }
@@ -164,8 +146,8 @@ namespace ao::utility
     inline T const* asPtr(std::span<std::byte const> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      gsl_Expects(span.size() >= sizeof(T));
-      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      AO_EXPECTS(span.size() >= sizeof(T));
+      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return reinterpret_cast<T const*>(span.data());
     }
@@ -202,8 +184,8 @@ namespace ao::utility
     inline T* asMutablePtr(std::span<std::byte> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      gsl_Expects(span.size() >= sizeof(T));
-      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      AO_EXPECTS(span.size() >= sizeof(T));
+      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return reinterpret_cast<T*>(span.data());
     }
@@ -212,8 +194,8 @@ namespace ao::utility
     inline std::span<T const> viewArray(std::span<std::byte const> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      gsl_Expects(span.size() % sizeof(T) == 0);
-      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      AO_EXPECTS(span.size() % sizeof(T) == 0);
+      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)};
     }
@@ -222,8 +204,8 @@ namespace ao::utility
     inline std::span<T> viewArrayMutable(std::span<std::byte> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      gsl_Expects(span.size() % sizeof(T) == 0);
-      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      AO_EXPECTS(span.size() % sizeof(T) == 0);
+      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return {reinterpret_cast<T*>(span.data()), span.size() / sizeof(T)};
     }
@@ -234,7 +216,7 @@ namespace ao::utility
       detail::requireTrivialLayout<T>();
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       auto const* const data = reinterpret_cast<std::byte const*>(base) + offset;
-      gsl_Expects(detail::isAligned(data, alignof(T)));
+      AO_EXPECTS(detail::isAligned(data, alignof(T)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       return reinterpret_cast<T const*>(data);
     }
@@ -270,7 +252,7 @@ namespace ao::utility
   inline T* unsafeDowncast(U* ptr) noexcept
   {
     static_assert(std::is_void_v<U> || std::is_base_of_v<U, T>, "T must be derived from U for unsafeDowncast");
-    gsl_Expects(ptr != nullptr);
+    AO_EXPECTS(ptr != nullptr);
     return static_cast<T*>(ptr);
   }
 

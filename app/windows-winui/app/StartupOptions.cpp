@@ -7,7 +7,7 @@
 #include <ao/utility/Path.h>
 
 #include <cstddef>
-#include <exception>
+#include <filesystem>
 #include <format>
 #include <span>
 #include <string_view>
@@ -52,14 +52,10 @@ namespace ao::winui
 
         options.optLibraryRoot = std::move(root);
       }
-      catch (std::exception const& error)
+      catch (std::filesystem::filesystem_error const& error)
       {
         return makeError(
           Error::Code::InvalidInput, std::format("Invalid UTF-8 library root '{}': {}", value, error.what()));
-      }
-      catch (...)
-      {
-        return makeError(Error::Code::InvalidInput, std::format("Invalid UTF-8 library root '{}'", value));
       }
     }
 

@@ -21,8 +21,17 @@ namespace ao::uimodel
                                              std::function<void(TrackFilterViewState const&)> onRender)
     : _viewService{viewService}, _workspaceService{workspaceService}, _onRender{std::move(onRender)}
   {
+    _filterErrorSub = _viewService.onFilterErrorChanged(
+      [this](rt::ViewService::FilterErrorChanged const& changed)
+      {
+        if (changed.viewId == _viewId)
+        {
+          _optFilterError = changed.optFilterError;
+          refresh();
+        }
+      });
     _focusSub = _workspaceService.onChanged(
-      [this](rt::WorkspaceChanged const& changed) noexcept
+      [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.snapshot.activeViewId != _viewId)
         {

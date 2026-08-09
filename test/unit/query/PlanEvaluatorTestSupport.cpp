@@ -131,7 +131,7 @@ namespace ao::query::test
   DictionaryId DictionaryFixture::intern(std::string_view text)
   {
     auto transaction = writeTransaction();
-    auto const id = ao::test::requireValue(transaction.dictionary().intern(text));
+    auto const id = ao::test::requireValue(physicalDictionary(transaction).intern(text));
     REQUIRE(transaction.commit());
     return id;
   }
@@ -191,9 +191,9 @@ namespace ao::query::test
         builder.customMetadata().add(key, value);
       }
 
-      auto hotDataRes = builder.serializeHot(transaction);
+      auto hotDataRes = library::test::physicalSerializeHotTrack(builder, transaction);
       REQUIRE(hotDataRes);
-      auto coldDataRes = builder.serializeCold(transaction, library.resources());
+      auto coldDataRes = library::test::physicalSerializeColdTrack(builder, transaction, library.resources());
       REQUIRE(coldDataRes);
       hotData = *hotDataRes;
       coldData = *coldDataRes;

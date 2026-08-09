@@ -5,14 +5,12 @@
 
 #include "CoverArt.h"
 #include <ao/CoreIds.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Task.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/resource/ResourceBytes.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <optional>
 #include <stop_token>
 #include <utility>
@@ -70,7 +68,8 @@ namespace ao::tui
       {
         _task = _runtime.spawnCancellable(
           [loader = this, runtime = &_runtime, mode, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
-          { return load(loader, runtime, mode, std::move(bytes), stopToken); });
+          { return load(loader, runtime, mode, std::move(bytes), stopToken); },
+          "TUI cover-art decode workflow");
       });
   }
 
@@ -108,23 +107,15 @@ namespace ao::tui
     auto optPreview = std::optional<CoverArtRows>{};
     auto optKittyPng = std::optional<std::vector<std::byte>>{};
 
-    try
-    {
-      co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorker(stopToken);
 
-      if (mode == CoverArtDeliveryMode::Blocks)
-      {
-        optPreview = decodeCoverArtPreview(bytes.view(), kBlockCoverArtColumns, kBlockCoverArtRows);
-      }
-      else if (mode == CoverArtDeliveryMode::Kitty)
-      {
-        optKittyPng = decodeCoverArtPng(bytes.view(), kKittyCoverArtWidth, kKittyCoverArtHeight);
-      }
-    }
-    catch (...)
+    if (mode == CoverArtDeliveryMode::Blocks)
     {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "TUI cover-art decode workflow");
+      optPreview = decodeCoverArtPreview(bytes.view(), kBlockCoverArtColumns, kBlockCoverArtRows);
+    }
+    else if (mode == CoverArtDeliveryMode::Kitty)
+    {
+      optKittyPng = decodeCoverArtPng(bytes.view(), kKittyCoverArtWidth, kKittyCoverArtHeight);
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);

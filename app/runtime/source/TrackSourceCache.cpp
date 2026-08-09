@@ -4,6 +4,7 @@
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include "runtime/source/CachedListSource.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
@@ -20,7 +21,6 @@
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <boost/container_hash/hash.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <concepts>
@@ -49,9 +49,10 @@ namespace ao::rt
 
   namespace
   {
-    CachedListSourceDefinition definitionOf(library::ListView const& view)
+    CachedListSourceDefinition definitionOf(ListId const listId, library::ListView const& view)
     {
       auto definition = CachedListSourceDefinition{
+        .listId = listId,
         .parentId = view.parentId(),
         .expression = std::string{view.filter()},
       };
@@ -67,11 +68,11 @@ namespace ao::rt
     // The cache is the library's one replica: everything the runtime reads
     // tracks through is derived here, so it applies each revision before the
     // revision is announced to anyone else.
-    _replicaBinding = changes.bindReplica(
-      "TrackSourceCache", [this](LibraryChangeSet const& event) noexcept { handleLibraryChange(event); });
+    _replicaBinding =
+      changes.bindReplica("TrackSourceCache", [this](LibraryChangeSet const& event) { handleLibraryChange(event); });
   }
 
-  void TrackSourceCache::handleLibraryChange(LibraryChangeSet const& event) noexcept
+  void TrackSourceCache::handleLibraryChange(LibraryChangeSet const& event)
   {
     if (event.libraryReset)
     {
@@ -226,17 +227,7 @@ namespace ao::rt
 
   std::optional<Error> TrackSourceCache::sourceError(TrackSourceLease const& lease) const
   {
-    if (auto const* source = dynamic_cast<SmartListSource const*>(&lease.source()); source != nullptr)
-    {
-      return source->error();
-    }
-
-    if (auto const* source = dynamic_cast<CachedListSource const*>(&lease.source()); source != nullptr)
-    {
-      return source->filterError();
-    }
-
-    return std::nullopt;
+    return trackSourceError(lease.source());
   }
 
   void TrackSourceCache::reloadAllTracks()
@@ -278,7 +269,7 @@ namespace ao::rt
       return;
     }
 
-    auto definition = definitionOf(*optView);
+    auto definition = definitionOf(listId, *optView);
 
     if (definition == sourcePtr->definition() || sourcePtr->trySynchronizeOrderDefinition(definition))
     {
@@ -287,7 +278,7 @@ namespace ao::rt
 
     auto parentRes = acquire(resolveParentSourceId(definition.parentId));
 
-    gsl_Assert(parentRes && "Failed to resolve parent source for list");
+    AO_INVARIANT(parentRes, "Failed to resolve parent source for list");
 
     auto implementationPtr = buildImplementation(*optView, *parentRes);
     auto const parentId = definition.parentId;
@@ -399,7 +390,7 @@ namespace ao::rt
       return std::unexpected{parentRes.error()};
     }
 
-    auto definition = definitionOf(*optView);
+    auto definition = definitionOf(listId, *optView);
     auto const parentId = definition.parentId;
     auto implementationPtr = buildImplementation(*optView, *parentRes);
     auto sourcePtr = std::make_shared<CachedListSource>(std::move(definition), std::move(implementationPtr));

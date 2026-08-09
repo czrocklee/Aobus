@@ -11,6 +11,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -48,9 +49,9 @@ namespace ao::rt::test
 
   namespace
   {
-    ListId createList(ListStore::Writer writer, std::span<std::byte const> payload)
+    ListId createList(WriteTransaction& transaction, ListBuilder const& list)
     {
-      auto result = writer.create(payload);
+      auto result = transaction.apply([&list](LibraryWrite& write) { return write.lists().create(list); });
       REQUIRE(result);
       return *result;
     }
@@ -126,40 +127,41 @@ namespace ao::rt::test
     {
       auto transaction = library::test::writeTransaction(ml1);
 
-      auto resWriter = ml1.resources().writer(transaction);
+      auto resWriter = library::test::physicalWriter(ml1.resources(), transaction);
       auto resIdRes = resWriter.create(lmdb::test::createTestData(100));
       REQUIRE(resIdRes);
       auto const resId = *resIdRes;
       REQUIRE(resWriter.create(lmdb::test::createTestData(64)));
       REQUIRE(transaction.commit());
-      auto const trackId = library::test::addTrack(ml1,
-                                                   library::test::TrackSpec{.title = "Test Title",
-                                                                            .artist = "Test Artist",
-                                                                            .album = "",
-                                                                            .uri = "song.flac",
-                                                                            .tags = {"rock", "favorite"},
-                                                                            .customMetadata = {{"mood", "happy"}},
-                                                                            .coverArtId = resId,
-                                                                            .year = 0,
-                                                                            .discNumber = 0,
-                                                                            .trackNumber = 0,
-                                                                            .duration = std::chrono::minutes{3},
-                                                                            .bitrate = Bitrate{},
-                                                                            .sampleRate = SampleRate{96000},
-                                                                            .channels = Channels{},
-                                                                            .bitDepth = BitDepth{24},
-                                                                            .codec = AudioCodec::Flac});
+      auto const trackId =
+        library::test::addTrackWithUniqueFixtureUri(ml1,
+                                                    library::test::TrackSpec{.title = "Test Title",
+                                                                             .artist = "Test Artist",
+                                                                             .album = "",
+                                                                             .uri = "song.flac",
+                                                                             .tags = {"rock", "favorite"},
+                                                                             .customMetadata = {{"mood", "happy"}},
+                                                                             .coverArtId = resId,
+                                                                             .year = 0,
+                                                                             .discNumber = 0,
+                                                                             .trackNumber = 0,
+                                                                             .duration = std::chrono::minutes{3},
+                                                                             .bitrate = Bitrate{},
+                                                                             .sampleRate = SampleRate{96000},
+                                                                             .channels = Channels{},
+                                                                             .bitDepth = BitDepth{24},
+                                                                             .codec = AudioCodec::Flac});
       auto listTransaction = library::test::writeTransaction(ml1);
 
       auto filteredListBuilder = ListBuilder::makeEmpty().name(filteredListName).filter(filteredListExpression);
-      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(filteredListBuilder.serialize()));
+      createList(listTransaction, filteredListBuilder);
 
       auto orderedListBuilder = ListBuilder::makeEmpty()
                                   .name(orderedListName)
                                   .description(orderedListDescription)
                                   .filter(orderedListExpression);
       orderedListBuilder.orderTrackIds().add(trackId);
-      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(orderedListBuilder.serialize()));
+      createList(listTransaction, orderedListBuilder);
 
       REQUIRE(listTransaction.commit());
     }
@@ -183,7 +185,7 @@ namespace ao::rt::test
 
     // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
     {
-      library::test::addTrack(ml2, library::test::makeEmptyTrackSpec("song.flac"));
+      library::test::addTrackWithUniqueFixtureUri(ml2, library::test::makeEmptyTrackSpec("song.flac"));
     }
 
     auto importer = LibraryYamlImporter{ml2};
@@ -276,22 +278,22 @@ namespace ao::rt::test
   {
     auto const sourceTemp = ao::test::TempDir{};
     auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
-    auto const visible = library::test::addTrack(source,
-                                                 library::test::TrackSpec{
-                                                   .title = "Visible",
-                                                   .uri = "visible.flac",
-                                                   .tags = {"roadtrip"},
-                                                 });
-    auto const hidden = library::test::addTrack(source,
-                                                library::test::TrackSpec{
-                                                  .title = "Temporarily hidden",
-                                                  .uri = "hidden.flac",
-                                                });
+    auto const visible = library::test::addTrackWithUniqueFixtureUri(source,
+                                                                     library::test::TrackSpec{
+                                                                       .title = "Visible",
+                                                                       .uri = "visible.flac",
+                                                                       .tags = {"roadtrip"},
+                                                                     });
+    auto const hidden = library::test::addTrackWithUniqueFixtureUri(source,
+                                                                    library::test::TrackSpec{
+                                                                      .title = "Temporarily hidden",
+                                                                      .uri = "hidden.flac",
+                                                                    });
     {
       auto transaction = library::test::writeTransaction(source);
       auto builder = ListBuilder::makeEmpty().name("Road Trip").filter("#roadtrip");
       builder.orderTrackIds().add(hidden).add(visible);
-      createList(source.lists().writer(transaction), ao::test::requireValue(builder.serialize()));
+      createList(transaction, builder);
       REQUIRE(transaction.commit());
     }
     auto const yamlPath = sourceTemp.path() / "hidden-rank.yaml";
@@ -299,8 +301,10 @@ namespace ao::rt::test
 
     auto const targetTemp = ao::test::TempDir{};
     auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
-    REQUIRE(library::test::addTrack(target, library::test::makeEmptyTrackSpec("visible.flac")) != kInvalidTrackId);
-    REQUIRE(library::test::addTrack(target, library::test::makeEmptyTrackSpec("hidden.flac")) != kInvalidTrackId);
+    REQUIRE(library::test::addTrackWithUniqueFixtureUri(target, library::test::makeEmptyTrackSpec("visible.flac")) !=
+            kInvalidTrackId);
+    REQUIRE(library::test::addTrackWithUniqueFixtureUri(target, library::test::makeEmptyTrackSpec("hidden.flac")) !=
+            kInvalidTrackId);
 
     REQUIRE(LibraryYamlImporter{target}.importFromYamlOffline(yamlPath, ImportMode::Restore));
 
@@ -327,32 +331,32 @@ namespace ao::rt::test
 
     // 1. Setup initial library with new fields
     {
-      auto const trackId = library::test::addTrack(ml1,
-                                                   library::test::TrackSpec{.title = "Test Title",
-                                                                            .artist = "Test Artist",
-                                                                            .album = "",
-                                                                            .composer = "Test Composer",
-                                                                            .conductor = "Test Conductor",
-                                                                            .ensemble = "Test Ensemble",
-                                                                            .work = "Test Work",
-                                                                            .movement = "Test Movement",
-                                                                            .soloist = "Test Soloist",
-                                                                            .uri = "full-fields.flac",
-                                                                            .year = 0,
-                                                                            .discNumber = 0,
-                                                                            .trackNumber = 0,
-                                                                            .movementNumber = 2,
-                                                                            .movementTotal = 4,
-                                                                            .duration = std::chrono::minutes{4},
-                                                                            .bitrate = Bitrate{},
-                                                                            .sampleRate = SampleRate{},
-                                                                            .channels = Channels{},
-                                                                            .bitDepth = BitDepth{}});
+      auto const trackId =
+        library::test::addTrackWithUniqueFixtureUri(ml1,
+                                                    library::test::TrackSpec{.title = "Test Title",
+                                                                             .artist = "Test Artist",
+                                                                             .album = "",
+                                                                             .composer = "Test Composer",
+                                                                             .conductor = "Test Conductor",
+                                                                             .ensemble = "Test Ensemble",
+                                                                             .work = "Test Work",
+                                                                             .movement = "Test Movement",
+                                                                             .soloist = "Test Soloist",
+                                                                             .uri = "full-fields.flac",
+                                                                             .year = 0,
+                                                                             .discNumber = 0,
+                                                                             .trackNumber = 0,
+                                                                             .movementNumber = 2,
+                                                                             .movementTotal = 4,
+                                                                             .duration = std::chrono::minutes{4},
+                                                                             .bitrate = Bitrate{},
+                                                                             .sampleRate = SampleRate{},
+                                                                             .channels = Channels{},
+                                                                             .bitDepth = BitDepth{}});
       auto transaction = library::test::writeTransaction(ml1);
-      auto manifestWriter = ml1.manifest().writer(transaction);
       auto builder = FileManifestBuilder::makeEmpty();
-      builder.trackId(trackId).mtime(123456789);
-      REQUIRE(manifestWriter.put("full-fields.flac", builder.serialize()));
+      builder.mtime(123456789);
+      REQUIRE(transaction.apply([&](LibraryWrite& write) { return write.tracks().updateManifest(trackId, builder); }));
 
       REQUIRE(transaction.commit());
     }
@@ -415,24 +419,20 @@ namespace ao::rt::test
 
     // 1. Setup initial library with track 1
     {
-      auto const tid = library::test::addTrack(ml,
-                                               library::test::TrackSpec{.title = "Original Title",
-                                                                        .artist = "",
-                                                                        .album = "",
-                                                                        .uri = uri1,
-                                                                        .year = 0,
-                                                                        .discNumber = 0,
-                                                                        .trackNumber = 0,
-                                                                        .duration = std::chrono::milliseconds{0},
-                                                                        .bitrate = Bitrate{},
-                                                                        .sampleRate = SampleRate{},
-                                                                        .channels = Channels{},
-                                                                        .bitDepth = BitDepth{}});
-      auto transaction = library::test::writeTransaction(ml);
-      auto builder = FileManifestBuilder::makeEmpty();
-      builder.trackId(tid);
-      REQUIRE(ml.manifest().writer(transaction).put(uri1, builder.serialize()));
-      REQUIRE(transaction.commit());
+      std::ignore =
+        library::test::addTrackWithUniqueFixtureUri(ml,
+                                                    library::test::TrackSpec{.title = "Original Title",
+                                                                             .artist = "",
+                                                                             .album = "",
+                                                                             .uri = uri1,
+                                                                             .year = 0,
+                                                                             .discNumber = 0,
+                                                                             .trackNumber = 0,
+                                                                             .duration = std::chrono::milliseconds{0},
+                                                                             .bitrate = Bitrate{},
+                                                                             .sampleRate = SampleRate{},
+                                                                             .channels = Channels{},
+                                                                             .bitDepth = BitDepth{}});
     }
 
     // 2. Prepare YAML with update for track 1 and addition of track 2
@@ -485,18 +485,10 @@ library:
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const uri = std::string{"track.flac"};
-    auto const trackId = library::test::addTrack(
+    auto const trackId = library::test::addTrackWithUniqueFixtureUri(
       ml,
       library::test::TrackSpec{
         .title = "Original", .uri = uri, .tags = {"favorite"}, .customMetadata = {{"mood", "focused"}}});
-    {
-      auto transaction = library::test::writeTransaction(ml);
-      auto builder = FileManifestBuilder::makeEmpty();
-      builder.trackId(trackId);
-      REQUIRE(ml.manifest().writer(transaction).put(uri, builder.serialize()));
-      REQUIRE(transaction.commit());
-    }
-
     auto const yamlPath = std::filesystem::path{temp.path()} / "overlay.yaml";
     auto importer = LibraryYamlImporter{ml};
 
@@ -553,13 +545,13 @@ library:
     {
       auto const sourceTemp = ao::test::TempDir{};
       auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
-      auto const trackId =
-        library::test::addTrack(source, library::test::TrackSpec{.title = "Source", .uri = "source.flac"});
+      auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+        source, library::test::TrackSpec{.title = "Source", .uri = "source.flac"});
 
       auto listTransaction = library::test::writeTransaction(source);
       auto listBuilder = ListBuilder::makeEmpty().name("Source List");
       listBuilder.orderTrackIds().add(trackId);
-      createList(source.lists().writer(listTransaction), ao::test::requireValue(listBuilder.serialize()));
+      createList(listTransaction, listBuilder);
       REQUIRE(listTransaction.commit());
 
       auto const yamlPath = std::filesystem::path{sourceTemp.path()} / "restore.yaml";
@@ -584,16 +576,8 @@ library:
     {
       auto const temp = ao::test::TempDir{};
       auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-      auto const existingTrackId =
-        library::test::addTrack(ml, library::test::TrackSpec{.title = "Original", .uri = "track1.flac"});
-
-      {
-        auto transaction = library::test::writeTransaction(ml);
-        auto builder = FileManifestBuilder::makeEmpty();
-        builder.trackId(existingTrackId);
-        REQUIRE(ml.manifest().writer(transaction).put("track1.flac", builder.serialize()));
-        REQUIRE(transaction.commit());
-      }
+      std::ignore = library::test::addTrackWithUniqueFixtureUri(
+        ml, library::test::TrackSpec{.title = "Original", .uri = "track1.flac"});
 
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
       {

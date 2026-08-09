@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/CoreIds.h>
-#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/IndexedTrackSequence.h>
 
-#include <gsl-lite/gsl-lite.hpp>
+#include <ao/Contract.h>
+#include <ao/CoreIds.h>
+#include <ao/rt/TrackEditScript.h>
 
 #include <cstddef>
 #include <optional>
@@ -34,7 +34,7 @@ namespace ao::rt
   void IndexedTrackSequence::applyScript(delta::RegularTrackEditScript const& script)
   {
     auto result = delta::apply(_trackIds, script);
-    gsl_Assert(result);
+    AO_INVARIANT(result);
     replace(std::move(*result));
   }
 
@@ -56,7 +56,7 @@ namespace ao::rt
     for (std::size_t index = 0; index < trackIds.size(); ++index)
     {
       auto const inserted = indexByTrackId.emplace(trackIds[index], index).second;
-      gsl_Assert(inserted);
+      AO_INVARIANT(inserted);
     }
 
     _trackIds = std::move(trackIds);

@@ -3,6 +3,7 @@
 
 #include <ao/rt/projection/TrackListProjection.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
@@ -24,7 +25,6 @@
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -1210,8 +1210,8 @@ namespace ao::rt
         return;
       }
 
-      gsl_Assert(!batch.deltas.empty() && validateTrackListProjectionDeltaBatch(batch, previousSize) &&
-                 !std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()));
+      AO_INVARIANT(!batch.deltas.empty() && validateTrackListProjectionDeltaBatch(batch, previousSize) &&
+                   !std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()));
 
       changedSignal.emit(batch);
     }
@@ -1382,7 +1382,7 @@ namespace ao::rt
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library)}
   {
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
-      [impl = _implPtr.get()](TrackSourceDelta const& batch) noexcept { impl->handleSourceBatch(batch); });
+      [impl = _implPtr.get()](TrackSourceDelta const& batch) { impl->handleSourceBatch(batch); });
   }
 
   TrackListProjection::TrackListProjection(ViewId viewId,
@@ -1391,10 +1391,10 @@ namespace ao::rt
                                            TrackOrderSpec const& order)
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library, order.sortBy)}
   {
-    gsl_Expects(viewId == kInvalidViewId && "Detached track-list projection requires an invalid view id");
+    AO_EXPECTS(viewId == kInvalidViewId, "Detached track-list projection requires an invalid view id");
 
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
-      [impl = _implPtr.get()](TrackSourceDelta const& batch) noexcept { impl->handleSourceBatch(batch); });
+      [impl = _implPtr.get()](TrackSourceDelta const& batch) { impl->handleSourceBatch(batch); });
   }
 
   TrackListProjection::~TrackListProjection() = default;
@@ -1538,9 +1538,9 @@ namespace ao::rt
   }
 
   async::Subscription TrackListProjection::subscribe(
-    std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler)
+    std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler)
   {
-    gsl_Expects(static_cast<bool>(handler) && "Track-list projection subscription handler must not be empty");
+    AO_EXPECTS(static_cast<bool>(handler), "Track-list projection subscription handler must not be empty");
 
     if (_implPtr->sourceInvalidated)
     {
@@ -1550,8 +1550,8 @@ namespace ao::rt
 
     auto handlerPtr =
       std::make_shared<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>>(std::move(handler));
-    auto subscription = _implPtr->changedSignal.connect(
-      [handlerPtr](TrackListProjectionDeltaBatch const& batch) noexcept { (*handlerPtr)(batch); });
+    auto subscription = _implPtr->changedSignal.connect([handlerPtr](TrackListProjectionDeltaBatch const& batch)
+                                                        { (*handlerPtr)(batch); });
 
     (*handlerPtr)(TrackListProjectionDeltaBatch{.deltas = {ProjectionReset{}}});
 

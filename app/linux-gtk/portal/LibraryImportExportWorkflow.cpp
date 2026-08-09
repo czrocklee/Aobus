@@ -21,7 +21,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -40,23 +39,6 @@ namespace ao::gtk::portal
     constexpr auto kImportExceptionContext = std::string_view{"library import workflow"};
     constexpr auto kExportExceptionContext = std::string_view{"library export workflow"};
     constexpr auto kAudioIdentityExceptionContext = std::string_view{"audio identity workflow"};
-
-    template<typename Callback, typename... Arguments>
-    void presentSafely(std::string_view operation, Callback& callback, Arguments&&... arguments) noexcept
-    {
-      try
-      {
-        callback(std::forward<Arguments>(arguments)...);
-      }
-      catch (std::exception const& error)
-      {
-        APP_LOG_ERROR("{} presentation failed: {}", operation, error.what());
-      }
-      catch (...)
-      {
-        APP_LOG_ERROR("{} presentation failed with a non-standard exception", operation);
-      }
-    }
 
     void logStructuredError(std::string_view action, Error const& error)
     {
@@ -127,28 +109,24 @@ namespace ao::gtk::portal
   {
     APP_LOG_INFO("Starting library scan...");
 
-    spawnUiWorkflow(
-      _runtime.async(),
-      _tasks,
-      *this,
-      kScanExceptionContext,
-      [mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
-      { return self->scanWorkflow(mode, stopToken); },
-      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Scan failed: Internal error"); });
+    spawnUiWorkflow(_runtime.async(),
+                    _tasks,
+                    *this,
+                    kScanExceptionContext,
+                    [mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
+                    { return self->scanWorkflow(mode, stopToken); });
   }
 
   void LibraryImportExportWorkflow::importFrom(std::filesystem::path path)
   {
     auto callbacks = _callbacks;
-    spawnUiWorkflow(
-      _runtime.async(),
-      _tasks,
-      *this,
-      kImportExceptionContext,
-      [callbacks = std::move(callbacks), importPath = std::move(path)](
-        LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-      { return self->prepareImportWorkflow(std::move(callbacks), std::move(importPath), stopToken); },
-      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Import failed: Internal error"); });
+    spawnUiWorkflow(_runtime.async(),
+                    _tasks,
+                    *this,
+                    kImportExceptionContext,
+                    [callbacks = std::move(callbacks), importPath = std::move(path)](
+                      LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
+                    { return self->prepareImportWorkflow(std::move(callbacks), std::move(importPath), stopToken); });
   }
 
   void LibraryImportExportWorkflow::exportTo(std::filesystem::path path, rt::ExportMode mode)
@@ -159,8 +137,7 @@ namespace ao::gtk::portal
       *this,
       kExportExceptionContext,
       [exportPath = std::move(path), mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-      { return self->exportWorkflow(std::move(exportPath), mode, stopToken); },
-      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Export failed: Internal error"); });
+      { return self->exportWorkflow(std::move(exportPath), mode, stopToken); });
   }
 
   async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode, std::stop_token const stopToken)
@@ -187,7 +164,7 @@ namespace ao::gtk::portal
       });
     auto* const taskService = &_runtime.library().taskService();
     auto result = co_await uimodel::runLibraryScanWorkflow(taskService, mode, stopToken);
-    presentSafely("Scan", presentResult, std::move(result));
+    presentResult(std::move(result));
   }
 
   async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow(std::stop_token const stopToken)
@@ -220,11 +197,11 @@ namespace ao::gtk::portal
 
     if (!result)
     {
-      presentSafely("Audio identity", presentResult, std::optional{result.error()}, 0, 0);
+      presentResult(std::optional{result.error()}, 0, 0);
       co_return;
     }
 
-    presentSafely("Audio identity", presentResult, std::nullopt, result->completedCount, result->failureCount);
+    presentResult(std::nullopt, result->completedCount, result->failureCount);
   }
 
   async::Task<void> LibraryImportExportWorkflow::exportWorkflow(std::filesystem::path exportPath,
@@ -245,7 +222,7 @@ namespace ao::gtk::portal
       });
     auto* const taskService = &_runtime.library().taskService();
     auto result = co_await taskService->exportLibraryAsync(std::move(exportPath), mode, stopToken);
-    presentSafely("Export", presentResult, std::move(result));
+    presentResult(std::move(result));
   }
 
   async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflow(ImportExportCallbacks callbacks,
@@ -295,19 +272,17 @@ namespace ao::gtk::portal
     auto* const taskService = &_runtime.library().taskService();
     auto result =
       co_await taskService->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
-    presentSafely("Import preview", presentResult, std::move(result));
+    presentResult(std::move(result));
   }
 
   void LibraryImportExportWorkflow::applyPreparedImport(rt::LibraryImportPlan plan)
   {
-    spawnUiWorkflow(
-      _runtime.async(),
-      _tasks,
-      *this,
-      kImportExceptionContext,
-      [plan = std::move(plan)](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-      { return self->applyImportWorkflow(std::move(plan), stopToken); },
-      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Import failed: Internal error"); });
+    spawnUiWorkflow(_runtime.async(),
+                    _tasks,
+                    *this,
+                    kImportExceptionContext,
+                    [plan = std::move(plan)](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
+                    { return self->applyImportWorkflow(std::move(plan), stopToken); });
   }
 
   async::Task<void> LibraryImportExportWorkflow::applyImportWorkflow(rt::LibraryImportPlan plan,
@@ -327,7 +302,7 @@ namespace ao::gtk::portal
       });
     auto* const taskService = &_runtime.library().taskService();
     auto result = co_await taskService->applyLibraryImportPlanAsync(std::move(plan), stopToken);
-    presentSafely("Import", presentResult, std::move(result));
+    presentResult(std::move(result));
   }
 
   void LibraryImportExportWorkflow::presentScanResult(uimodel::LibraryScanWorkflowResult result)
@@ -395,15 +370,12 @@ namespace ao::gtk::portal
                                   "Library ready; indexing audio identity in background",
                                   rt::NotificationLifetime::transient());
 
-    spawnUiWorkflow(
-      _runtime.async(),
-      _tasks,
-      *this,
-      kAudioIdentityExceptionContext,
-      [](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
-      { return self->backfillAudioIdentityWorkflow(stopToken); },
-      [](LibraryImportExportWorkflow* self)
-      { self->presentInternalFailure("Audio identity indexing failed: Internal error"); });
+    spawnUiWorkflow(_runtime.async(),
+                    _tasks,
+                    *this,
+                    kAudioIdentityExceptionContext,
+                    [](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
+                    { return self->backfillAudioIdentityWorkflow(stopToken); });
   }
 
   void LibraryImportExportWorkflow::presentFailure(std::string_view action,

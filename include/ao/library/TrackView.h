@@ -151,7 +151,7 @@ namespace ao::library
    * valid; isHotValid()/isColdValid() may always be used to inspect which
    * loaded side passed its gate. Calling a decoded accessor for an absent or
    * structurally invalid side violates that accessor's precondition and fails
-   * fast through gsl_Expects. Optional blocks absent from an otherwise valid
+   * fast through AO_EXPECTS. Optional blocks absent from an otherwise valid
    * cold side still produce empty proxies and their documented default values.
    * Semantic corruption within the established bounds (for example unsorted
    * custom metadata keys) is not detected here; deep structural verification

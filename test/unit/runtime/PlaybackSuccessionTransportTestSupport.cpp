@@ -182,11 +182,11 @@ namespace ao::rt::test::playback_succession
                                                    config.failBlockedPreparation,
                                                    config.blockEveryLookahead,
                                                    std::move(config.finalOpenFailureFileName))}
-    , asyncRuntime{transport.executor, 1, {}, &sleeper}
-    , changes{libraryChangesExecutor, 0}
+    , asyncRuntime{transport.executor, 1, &sleeper}
+    , changes{libraryChangesExecutor, 0, "test-library"}
     , writerFixture{transport.libraryFixture.library(), changes}
     , sources{transport.libraryFixture.library(), changes}
-    , views{transport.executor, transport.libraryFixture.library(), sources}
+    , views{transport.executor, transport.libraryFixture.library(), sources, changes}
     , workspace{transport.executor, views, changes}
   {
     transport.onDevicesChangedCb(transport.status.devices);

@@ -3,18 +3,26 @@
 
 #include <ao/rt/Log.h>
 
+#include <ao/Contract.h>
+
 #include <catch2/catch_test_macros.hpp>
 
-#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <source_location>
-#include <stdexcept>
 #include <string>
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    bool testFatalSink(FatalDiagnostic const& /*diagnostic*/)
+    {
+      return true;
+    }
+  } // namespace
+
   TEST_CASE("Log - initialization and shutdown", "[runtime][unit][log]")
   {
     auto const tempDir = std::filesystem::temp_directory_path() / "ao_log_test";
@@ -34,19 +42,16 @@ namespace ao::rt::test
 
       CHECK(appLoggerPtr != nullptr);
       CHECK(audioLoggerPtr != nullptr);
+      CHECK_FALSE(registerFatalSink(&testFatalSink));
 
       // Write a test log
       APP_LOG_DEBUG("Test app debug log");
       AUDIO_LOG_INFO("Test audio info log");
 
-      {
-        auto exceptionHandler = Log::asyncExceptionHandler();
-        REQUIRE(exceptionHandler);
-        exceptionHandler(std::make_exception_ptr(std::runtime_error{"async boom"}), "test coroutine");
-      }
-
       Log::shutdown();
-      CHECK_FALSE(Log::asyncExceptionHandler());
+      auto const registeredAfterShutdown = registerFatalSink(&testFatalSink);
+      REQUIRE(registeredAfterShutdown);
+      CHECK(unregisterFatalSink(&testFatalSink));
 
       // Verify log file was created
       auto const logFile = tempDir / "app.log";
@@ -62,7 +67,6 @@ namespace ao::rt::test
 
       // Audio log writes to the same file sink, let's verify
       CHECK(content.contains("Test audio info log"));
-      CHECK(content.contains("Unhandled exception in test coroutine: async boom"));
       CHECK(content.contains("Shutting down logging"));
     }
 
@@ -80,6 +84,7 @@ namespace ao::rt::test
 
       CHECK(std::filesystem::exists(defaultDir));
       CHECK(std::filesystem::exists(defaultDir / "app.log"));
+      CHECK_FALSE(registerFatalSink(&testFatalSink));
 
       // Use toSpdlog directly to cover it
       auto const loc = std::source_location::current();
@@ -87,7 +92,9 @@ namespace ao::rt::test
       CHECK(spdLoc.filename != nullptr);
 
       Log::shutdown();
-      CHECK_FALSE(Log::asyncExceptionHandler());
+      auto const registeredAfterShutdown = registerFatalSink(&testFatalSink);
+      REQUIRE(registeredAfterShutdown);
+      CHECK(unregisterFatalSink(&testFatalSink));
     }
 
     std::filesystem::remove_all(tempDir);

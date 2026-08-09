@@ -3,6 +3,7 @@
 
 #include <ao/winui/WinUiErrorBoundary.h>
 
+#include <ao/Contract.h>
 #include <ao/rt/Log.h>
 
 #include <spdlog/common.h>
@@ -49,6 +50,7 @@ namespace ao::winui
     }
     catch (...)
     {
+      AO_AUDITED_CATCH(DiagnosticFallback);
       writeDiagnosticFallback();
     }
   }
@@ -71,6 +73,7 @@ namespace ao::winui
     }
     catch (...)
     {
+      AO_AUDITED_CATCH(DiagnosticFallback);
       writeDiagnosticFallback();
     }
   }

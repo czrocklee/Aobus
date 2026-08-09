@@ -4,10 +4,10 @@
 #include <ao/lmdb/Transaction.h>
 
 #include "detail/ResultError.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <lmdb.h>
 
 #include <cstdint>
@@ -42,7 +42,7 @@ namespace ao::lmdb
       return std::unexpected{txnPtrRes.error()};
     }
 
-    return ReadTransaction{std::move(*txnPtrRes)};
+    return ReadTransaction{std::move(*txnPtrRes), ReadFailureMode::Fatal};
   }
 
   Result<WriteTransaction> WriteTransaction::begin(Environment& env)
@@ -59,7 +59,7 @@ namespace ao::lmdb
 
   Result<WriteTransaction> WriteTransaction::begin(WriteTransaction& parent)
   {
-    gsl_Expects(parent.isActive() && "Cannot begin a child transaction from a finished parent");
+    AO_EXPECTS(parent.isActive(), "Cannot begin a child transaction from a finished parent");
 
     auto txnPtrRes = create(::mdb_txn_env(parent.handle()), parent.handle(), 0);
 
@@ -73,7 +73,7 @@ namespace ao::lmdb
 
   Result<> WriteTransaction::commit()
   {
-    gsl_Expects(isActive() && "LMDB write transaction is already finished");
+    AO_EXPECTS(isActive(), "LMDB write transaction is already finished");
 
     int const rc = ::mdb_txn_commit(releaseHandle());
     return resultFromCode("mdb_txn_commit", rc);

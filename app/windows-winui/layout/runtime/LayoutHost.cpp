@@ -76,8 +76,7 @@ namespace ao::winui::layout
       }
       catch (winrt::hresult_error const& error)
       {
-        APP_LOG_CRITICAL(
-          "LayoutHost: failed to restore the previous shell root: {}", winrt::to_string(error.message()));
+        AO_FATAL("LayoutHost failed to restore the previous shell root: {}", winrt::to_string(error.message()));
       }
 
       return std::unexpected{publishedRes.error()};
@@ -116,7 +115,7 @@ namespace ao::winui::layout
       }
       catch (...)
       {
-        APP_LOG_WARN("LayoutHost: failed to detach the shell root: unknown exception");
+        AO_FATAL_EXCEPTION(std::current_exception(), "WinUI shell root detachment");
       }
     }
 

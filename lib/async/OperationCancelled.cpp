@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/async/OperationCancelled.h>
+
+#include <ao/Contract.h>
 // Preload the GCC TSan fence guard before Asio; this header is used for its preprocessing effect.
 // NOLINTNEXTLINE(misc-include-cleaner)
 #include <ao/async/detail/BoostAsioTsanPrelude.h>
@@ -38,16 +40,19 @@ namespace ao::async
     }
     catch (std::exception const& exception)
     {
+      AO_AUDITED_CATCH(ExceptionClassifier);
       return isOperationCancelled(exception);
     }
     catch (...)
     {
+      AO_AUDITED_CATCH(ExceptionClassifier);
       return false;
     }
   }
 
   [[noreturn]] void throwOperationCancelled()
   {
+    AO_EXCEPTION_CARRIER(CancellationTransport);
     throw OperationCancelled{};
   }
 

@@ -7,7 +7,6 @@
 #include "image/ImageRenderPolicy.h"
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
@@ -21,7 +20,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <memory>
 #include <span>
 #include <stop_token>
@@ -98,7 +96,7 @@ namespace ao::gtk
       {
         loaderPtr->close();
       }
-      catch (...)
+      catch (Glib::Error const&)
       {
         if (!rejected)
         {
@@ -172,7 +170,8 @@ namespace ao::gtk
     return _runtime.spawnCancellable(
       [runtime = &_runtime, sourcePixbufPtr = std::move(sourcePixbufPtr), renderedSize, onReady = std::move(onReady)](
         std::stop_token const stopToken) mutable
-      { return render(runtime, std::move(sourcePixbufPtr), renderedSize, std::move(onReady), stopToken); });
+      { return render(runtime, std::move(sourcePixbufPtr), renderedSize, std::move(onReady), stopToken); },
+      "GTK high-quality image render workflow");
   }
 
   void ResourceImageLoader::prefetchThumbnail(ResourceId const resourceId, std::int32_t const physicalPixelSize)
@@ -258,7 +257,8 @@ namespace ao::gtk
       _scopePtr.get(),
       [loader = this, runtime = &_runtime, key, token = std::move(token), bytes = std::move(bytes)](
         std::stop_token const stopToken) mutable
-      { return decode(loader, runtime, key, std::move(token), std::move(bytes), stopToken); });
+      { return decode(loader, runtime, key, std::move(token), std::move(bytes), stopToken); },
+      "GTK resource image decode workflow");
   }
 
   async::Task<void> ResourceImageLoader::decode(ResourceImageLoader* const loader,
@@ -270,26 +270,18 @@ namespace ao::gtk
   {
     auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
 
-    try
-    {
-      co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorker(stopToken);
 
-      if (!bytes.empty())
-      {
-        try
-        {
-          decodedPtr = decodePixbuf(bytes.view(), key);
-        }
-        catch (Glib::Error const&)
-        {
-          decodedPtr.reset();
-        }
-      }
-    }
-    catch (...)
+    if (!bytes.empty())
     {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "GTK resource image decode workflow");
+      try
+      {
+        decodedPtr = decodePixbuf(bytes.view(), key);
+      }
+      catch (Glib::Error const&)
+      {
+        decodedPtr.reset();
+      }
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
@@ -310,19 +302,18 @@ namespace ao::gtk
   {
     auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
 
+    co_await runtime->resumeOnWorker(stopToken);
+
     try
     {
-      co_await runtime->resumeOnWorker(stopToken);
-
       // Pixbuf pixel storage is immutable for the duration of this request.
       // GTK widgets and textures remain confined to the callback executor.
       renderedPixbufPtr =
         sourcePixbufPtr->scale_simple(renderedSize.width, renderedSize.height, Gdk::InterpType::HYPER);
     }
-    catch (...)
+    catch (Glib::Error const&)
     {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "GTK high-quality image render workflow");
+      renderedPixbufPtr.reset();
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);

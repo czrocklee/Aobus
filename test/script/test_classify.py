@@ -72,6 +72,18 @@ class TidyChecksTest(unittest.TestCase):
             tidyconfig.CONFIG_BASE,
         )
 
+    def test_boolean_simplification_ignores_macro_expansions(self):
+        self.assertIn(
+            "{key: 'readability-simplify-boolean-expr.IgnoreMacros', value: true}",
+            tidyconfig.CONFIG_BASE,
+        )
+
+    def test_contract_macros_are_narrowly_allowlisted(self):
+        self.assertIn(
+            "^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+$|^AO_(EXPECTS|ENSURES|INVARIANT|FATAL|RT_INVARIANT)$",
+            tidyconfig.CONFIG_BASE,
+        )
+
     def test_winrt_framework_shapes_are_narrowly_allowlisted(self):
         self.assertIn("|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext)", tidyconfig.CONFIG_BASE)
         self.assertIn(

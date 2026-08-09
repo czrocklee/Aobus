@@ -19,10 +19,11 @@ namespace ao::winui
   /**
    * @brief Operations supplied by the platform owner of a destructive restart.
    *
-   * Releasing the active graph and launching the successor may fail, so this
-   * boundary contains and classifies them. Failure reporting and process-exit
-   * adapters are terminal operations and must establish their own no-throw
-   * guarantees at the platform calls they own.
+   * Launch failure is reported through `Result`. An exception escaping any
+   * operation is not another recoverable launch channel; the enclosing restart
+   * boundary diagnoses it before aborting. If active-graph release escapes, the
+   * owner still attempts the successor first so the dying parent does not cost
+   * the user the replacement process.
    */
   struct DestructiveLibraryRestartOperations final
   {
@@ -36,18 +37,18 @@ namespace ao::winui
      */
     std::move_only_function<void()> releaseActiveGraph;
     std::move_only_function<Result<>()> launchSuccessor;
-    std::move_only_function<void(Error const&) noexcept> reportLaunchFailure;
-    std::move_only_function<void() noexcept> exitProcess;
+    std::move_only_function<void(Error const&)> reportLaunchFailure;
+    std::move_only_function<void()> exitProcess;
   };
 
   /**
    * @brief Releases the current process graph, attempts the successor launch, and exits.
    *
-   * The launch is attempted even when the release fails. The parent is exiting
-   * either way, so a successor that never starts is the only outcome the user
-   * cannot recover from; a half-released dying parent is not. A release failure
-   * is therefore contained and not reported - whatever the user needs to know
-   * arrives as the launch failure, if the launch also fails.
+   * The launch is attempted even when release reports an unexpected exception.
+   * The parent is exiting either way, so a successor that never starts is the
+   * only outcome the user cannot recover from. After that attempt, an escaping
+   * release exception enters AO fatal handling rather than being laundered into
+   * a recoverable launch result.
    *
    * This function never reconstructs or rolls back the released graph.
    */

@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/async/Sleeper.h>
 #include <ao/async/Task.h>
 #include <ao/async/TaskFuture.h>
@@ -19,8 +18,6 @@
 #include <memory>
 #include <mutex>
 #include <stop_token>
-#include <string>
-#include <string_view>
 #include <thread>
 #include <tuple>
 #include <type_traits>
@@ -29,69 +26,6 @@
 
 namespace ao::rt::test
 {
-  struct RecordedAsyncException final
-  {
-    std::exception_ptr exceptionPtr;
-    std::string context;
-  };
-
-  class AsyncExceptionRecorder final
-  {
-  public:
-    AsyncExceptionRecorder();
-    ~AsyncExceptionRecorder();
-
-    AsyncExceptionRecorder(AsyncExceptionRecorder const&) = delete;
-    AsyncExceptionRecorder& operator=(AsyncExceptionRecorder const&) = delete;
-    AsyncExceptionRecorder(AsyncExceptionRecorder&&) = delete;
-    AsyncExceptionRecorder& operator=(AsyncExceptionRecorder&&) = delete;
-
-    async::AsyncExceptionHandler handler();
-    bool waitForCount(std::size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
-    std::vector<RecordedAsyncException> snapshot() const;
-
-  private:
-    struct Impl;
-    std::unique_ptr<Impl> _implPtr;
-  };
-
-  template<typename ExceptionType>
-  bool isExceptionType(std::exception_ptr const& exceptionPtr)
-  {
-    if (!exceptionPtr)
-    {
-      return false;
-    }
-
-    try
-    {
-      std::rethrow_exception(exceptionPtr);
-    }
-    catch (ExceptionType const&)
-    {
-      return true;
-    }
-    catch (...)
-    {
-      return false;
-    }
-  }
-
-  template<typename ExceptionType>
-  void checkRecordedException(RecordedAsyncException const& exception, std::string_view const expectedContext)
-  {
-    CHECK(exception.context == expectedContext);
-    CHECK(isExceptionType<ExceptionType>(exception.exceptionPtr));
-  }
-
-  template<typename ExceptionType>
-  void requireSingleRecordedException(AsyncExceptionRecorder const& recorder, std::string_view const expectedContext)
-  {
-    auto const exceptions = recorder.snapshot();
-    REQUIRE(exceptions.size() == 1);
-    checkRecordedException<ExceptionType>(exceptions.front(), expectedContext);
-  }
-
   template<typename T>
   std::exception_ptr captureTaskFutureException(async::TaskFuture<T>& future)
   {

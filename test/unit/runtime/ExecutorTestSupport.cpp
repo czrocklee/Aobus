@@ -3,7 +3,6 @@
 
 #include "test/unit/runtime/ExecutorTestSupport.h"
 
-#include <ao/Exception.h>
 #include <ao/async/LoopExecutor.h>
 
 #include <catch2/catch_message.hpp>
@@ -16,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 
@@ -60,7 +60,7 @@ namespace ao::rt::test
   {
     if (!isCurrent())
     {
-      throwException<Exception>("ManualExecutor can only be drained on its owner thread");
+      throw std::runtime_error{"ManualExecutor can only be drained on its owner thread"};
     }
 
     auto task = std::move_only_function<void()>{};
@@ -135,7 +135,7 @@ namespace ao::rt::test
 
     if (!isCurrent())
     {
-      throwException<Exception>("InlineExecutor can only execute work on its owner thread");
+      throw std::runtime_error{"InlineExecutor can only execute work on its owner thread"};
     }
 
     task();

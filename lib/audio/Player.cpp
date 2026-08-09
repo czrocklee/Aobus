@@ -5,6 +5,7 @@
 
 #include "detail/TrackPreparation.h"
 #include <ao/AudioCodecText.h>
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
@@ -18,8 +19,6 @@
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -105,14 +104,14 @@ namespace ao::audio
               return;
             }
 
-            gsl_Expects(selfPtr->owner != nullptr);
+            AO_INVARIANT(selfPtr->owner != nullptr);
             task(*selfPtr->owner);
           });
       }
 
       bool shutdown() noexcept
       {
-        gsl_Expects(executor.isCurrent());
+        AO_EXPECTS(executor.isCurrent());
 
         if (shuttingDown.exchange(true, std::memory_order_acq_rel))
         {
@@ -163,13 +162,13 @@ namespace ao::audio
     ~Impl()
     {
       shutdown();
-      gsl_Expects(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
+      AO_INVARIANT(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
     }
 
     void shutdown() noexcept
     {
-      gsl_Expects(executor.isCurrent());
-      gsl_Expects(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
+      AO_EXPECTS(executor.isCurrent());
+      AO_EXPECTS(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
 
       if (!gatePtr->shutdown())
       {
@@ -273,7 +272,7 @@ namespace ao::audio
       }
 
       auto* owner = callbackGatePtr->owner;
-      gsl_Expects(owner != nullptr);
+      AO_INVARIANT(owner != nullptr);
 
       if (taskSlot != nullptr)
       {
@@ -297,7 +296,7 @@ namespace ao::audio
       }
 
       owner = callbackGatePtr->owner;
-      gsl_Expects(owner != nullptr);
+      AO_INVARIANT(owner != nullptr);
       using Outcome = std::invoke_result_t<Adopter&, detail::TrackPreparation&&, Engine&>;
       auto outcomeRes = Outcome{preparationRejectedError()};
 
@@ -340,7 +339,7 @@ namespace ao::audio
         }
 
         auto* const owner = callbackGatePtr->owner;
-        gsl_Expects(owner != nullptr);
+        AO_INVARIANT(owner != nullptr);
         preparedRes = preparation.selectPrewarmFormat(*owner->enginePtr);
 
         if (preparedRes)
@@ -360,7 +359,7 @@ namespace ao::audio
                         std::move(adopter));
     }
 
-    void ensureOnExecutor() const noexcept { gsl_Expects(executor.isCurrent()); }
+    void ensureOnExecutor() const noexcept { AO_EXPECTS(executor.isCurrent()); }
 
     template<typename Slot>
     Slot copyOutwardCallback(Slot Impl::* slot) const
@@ -908,9 +907,9 @@ namespace ao::audio
 
   Player::~Player()
   {
-    gsl_Expects(_implPtr != nullptr);
+    AO_INVARIANT(_implPtr != nullptr);
     _implPtr->ensureOnExecutor();
-    gsl_Expects(_implPtr->outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
+    AO_EXPECTS(_implPtr->outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
     shutdown();
   }
 

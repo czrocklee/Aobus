@@ -1,6 +1,7 @@
 add_library(aobus-cli-lib STATIC
     CliRuntime.cpp
     CliRuntime.h
+    CommandError.cpp
     CommandError.h
     DryRunFlag.h
     DumpOutput.cpp

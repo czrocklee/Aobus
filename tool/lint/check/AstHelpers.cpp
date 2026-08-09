@@ -9,6 +9,7 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/ParentMapContext.h>
+#include <clang/AST/Stmt.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
@@ -16,6 +17,7 @@
 #include <llvm/ADT/StringRef.h>
 
 #include <string>
+#include <string_view>
 
 namespace clang::tidy::aobus
 {
@@ -28,6 +30,100 @@ namespace clang::tidy::aobus
   {
     return range.getBegin().isInvalid() || range.getEnd().isInvalid() || range.getBegin().isMacroID() ||
            range.getEnd().isMacroID();
+  }
+
+  bool isPolicySource(SourceManager const& sourceManager, SourceLocation const location)
+  {
+    if (location.isInvalid())
+    {
+      return false;
+    }
+
+    auto const spellingLocation = sourceManager.getSpellingLoc(location);
+
+    if (sourceManager.isInSystemHeader(spellingLocation))
+    {
+      return false;
+    }
+
+    auto const filename = sourceManager.getFilename(spellingLocation);
+    auto const isTestSource = filename.contains("/test/") || filename.contains("\\test\\");
+    auto const isLintFixture =
+      filename.contains("/test/integration/lint/fixture/") || filename.contains(R"(\test\integration\lint\fixture\)");
+    return !isTestSource || isLintFixture;
+  }
+
+  bool enclosingFunctionBeginsWithPolicyMarker(Stmt const& statement,
+                                               ASTContext& context,
+                                               SourceManager const& sourceManager,
+                                               std::string_view const markerHelperName,
+                                               std::string_view const macroName)
+  {
+    auto current = DynTypedNode::create(statement);
+    FunctionDecl const* function = nullptr;
+
+    while (function == nullptr)
+    {
+      auto const parents = context.getParents(current);
+
+      if (parents.empty())
+      {
+        return false;
+      }
+
+      auto const& parent = *parents.begin();
+      function = parent.get<FunctionDecl>();
+      current = parent;
+    }
+
+    auto const* body = function->getBody();
+    return body != nullptr && blockBeginsWithPolicyMarker(*body, context, sourceManager, markerHelperName, macroName);
+  }
+
+  bool blockBeginsWithPolicyMarker(Stmt const& block,
+                                   ASTContext const& context,
+                                   SourceManager const& sourceManager,
+                                   std::string_view const markerHelperName,
+                                   std::string_view const macroName)
+  {
+    auto const* body = dyn_cast<CompoundStmt>(&block);
+
+    if (body == nullptr || body->body_empty())
+    {
+      return false;
+    }
+
+    auto const* firstExpression = dyn_cast<Expr>(*body->body_begin());
+
+    if (firstExpression == nullptr)
+    {
+      return false;
+    }
+
+    firstExpression = firstExpression->IgnoreParenImpCasts();
+
+    if (auto const* cleanup = dyn_cast<ExprWithCleanups>(firstExpression); cleanup != nullptr)
+    {
+      firstExpression = cleanup->getSubExpr()->IgnoreParenImpCasts();
+    }
+
+    auto const* markerCall = dyn_cast<CallExpr>(firstExpression);
+    auto const* markerFunction = markerCall != nullptr ? markerCall->getDirectCallee() : nullptr;
+
+    if (markerFunction == nullptr || markerFunction->getQualifiedNameAsString() != markerHelperName)
+    {
+      return false;
+    }
+
+    auto const markerLocation = markerCall->getBeginLoc();
+
+    if (!markerLocation.isMacroID())
+    {
+      return false;
+    }
+
+    auto const immediateMacro = Lexer::getImmediateMacroName(markerLocation, sourceManager, context.getLangOpts());
+    return immediateMacro == llvm::StringRef{macroName.data(), macroName.size()};
   }
 
   Expr const* stripImplicitNodes(Expr const* expr)

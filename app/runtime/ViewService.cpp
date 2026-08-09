@@ -3,6 +3,7 @@
 
 #include <ao/rt/ViewService.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -25,11 +26,10 @@
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <format>
 #include <functional>
@@ -168,6 +168,16 @@ namespace ao::rt
         entry.projectionPtr->setPresentation(normalized);
       }
     }
+
+    bool sameRecoverableError(std::optional<Error> const& first, std::optional<Error> const& second)
+    {
+      if (first.has_value() != second.has_value())
+      {
+        return false;
+      }
+
+      return !first || (first->code == second->code && first->message == second->message);
+    }
   } // namespace
 
   struct ViewService::Impl final
@@ -179,45 +189,83 @@ namespace ao::rt
     library::MusicLibrary const& library;
     TrackSourceCache& sources;
 
-    Impl(async::Executor& exec, library::MusicLibrary const& lib, TrackSourceCache& sourceCache)
+    Impl(async::Executor& exec,
+         library::MusicLibrary const& lib,
+         TrackSourceCache& sourceCache,
+         LibraryChanges const& changes)
       : executor{exec}, library{lib}, sources{sourceCache}
     {
+      libraryChangesSubscription = changes.onChanged([this](LibraryChangeSet const&) { refreshFilterErrors(); });
+    }
+
+    void refreshFilterErrors()
+    {
+      auto changedErrors = std::vector<ViewService::FilterErrorChanged>{};
+
+      for (auto& [viewId, entry] : views)
+      {
+        auto optFilterError = sources.sourceError(entry.activeSourceLease);
+
+        if (sameRecoverableError(entry.state.optFilterError, optFilterError))
+        {
+          continue;
+        }
+
+        entry.state.optFilterError = optFilterError;
+        changedErrors.push_back(
+          ViewService::FilterErrorChanged{.viewId = viewId, .optFilterError = std::move(optFilterError)});
+      }
+
+      for (auto const& changed : changedErrors)
+      {
+        filterErrorChangedSignal.emit(changed);
+      }
     }
 
     async::Signal<TrackListProjectionChanged const&> projectionChangedSignal;
     async::Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
     async::Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
     async::Signal<ViewService::ViewDestroyed const&> viewDestroyedSignal;
+    async::Signal<ViewService::FilterErrorChanged const&> filterErrorChangedSignal;
+    async::Subscription libraryChangesSubscription;
   };
 
-  ViewService::ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources)
-    : _implPtr{std::make_unique<Impl>(executor, library, sources)}
+  ViewService::ViewService(async::Executor& executor,
+                           library::MusicLibrary const& library,
+                           TrackSourceCache& sources,
+                           LibraryChanges const& changes)
+    : _implPtr{std::make_unique<Impl>(executor, library, sources, changes)}
   {
   }
 
   ViewService::~ViewService() = default;
 
   async::Subscription ViewService::onProjectionChanged(
-    std::move_only_function<void(TrackListProjectionChanged const&) noexcept> handler)
+    std::move_only_function<void(TrackListProjectionChanged const&)> handler)
   {
     return _implPtr->projectionChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onPresentationChanged(
-    std::move_only_function<void(PresentationChanged const&) noexcept> handler)
+    std::move_only_function<void(PresentationChanged const&)> handler)
   {
     return _implPtr->presentationChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription ViewService::onSelectionChanged(
-    std::move_only_function<void(SelectionChanged const&) noexcept> handler)
+  async::Subscription ViewService::onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler)
   {
     return _implPtr->selectionChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription ViewService::onViewDestroyed(std::move_only_function<void(ViewDestroyed const&) noexcept> handler)
+  async::Subscription ViewService::onViewDestroyed(std::move_only_function<void(ViewDestroyed const&)> handler)
   {
     return _implPtr->viewDestroyedSignal.connect(std::move(handler));
+  }
+
+  async::Subscription ViewService::onFilterErrorChanged(
+    std::move_only_function<void(FilterErrorChanged const&)> handler)
+  {
+    return _implPtr->filterErrorChangedSignal.connect(std::move(handler));
   }
 
   Result<ViewId> ViewService::createView(TrackListViewConfig const& initial)
@@ -268,7 +316,7 @@ namespace ao::rt
   void ViewService::destroyView(ViewId viewId)
   {
     auto const it = _implPtr->views.find(viewId);
-    gsl_Assert(it != _implPtr->views.end());
+    AO_INVARIANT(it != _implPtr->views.end());
     _implPtr->views.erase(it);
     _implPtr->viewDestroyedSignal.emit(ViewDestroyed{.viewId = viewId});
   }
@@ -305,8 +353,18 @@ namespace ao::rt
 
     installResources(entry, std::move(*resourcesRes));
     entry.state.filterExpression = std::move(filterExpression);
-    _implPtr->projectionChangedSignal.post(
-      _implPtr->executor, TrackListProjectionChanged{.viewId = viewId, .projectionPtr = entry.projectionPtr});
+
+    try
+    {
+      _implPtr->projectionChangedSignal.post(
+        _implPtr->executor, TrackListProjectionChanged{.viewId = viewId, .projectionPtr = entry.projectionPtr});
+    }
+    catch (...)
+    {
+      AO_FATAL_EXCEPTION(
+        std::current_exception(), std::format("view projection observation admission for view {}", viewId));
+    }
+
     return {};
   }
 
@@ -327,8 +385,18 @@ namespace ao::rt
     }
 
     applyPresentation(it->second, spec);
-    _implPtr->presentationChangedSignal.post(
-      _implPtr->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = spec});
+
+    try
+    {
+      _implPtr->presentationChangedSignal.post(
+        _implPtr->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = spec});
+    }
+    catch (...)
+    {
+      AO_FATAL_EXCEPTION(
+        std::current_exception(), std::format("view presentation observation admission for view {}", viewId));
+    }
+
     return {};
   }
 

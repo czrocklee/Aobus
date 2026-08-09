@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
@@ -13,8 +14,6 @@
 #include <ao/utility/Xxh3.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <charconv>
@@ -35,8 +34,8 @@ namespace ao::uimodel
   {
     Result<> writeEntry(ryml::NodeRef node, LayoutComponentStateEntry const& entry)
     {
-      gsl_Expects((!entry.type.empty() && !entry.baselineHash.empty()) &&
-                  "Layout component state type and baseline hash must not be empty");
+      AO_EXPECTS((!entry.type.empty() && !entry.baselineHash.empty()),
+                 "Layout component state type and baseline hash must not be empty");
 
       if (entry.stateVersion != kStateEntryVersion)
       {
@@ -293,7 +292,7 @@ namespace ao::uimodel
         Error::Code::NotSupported, std::format("Unsupported layout component state version {}", document.version));
     }
 
-    gsl_Expects(!document.preset.empty() && "Layout component state preset id must not be empty");
+    AO_EXPECTS(!document.preset.empty(), "Layout component state preset id must not be empty");
 
     auto writer = yaml::MapWriter{node};
     writer.scalar("version", document.version)

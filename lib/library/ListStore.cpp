@@ -3,47 +3,24 @@
 
 #include <ao/library/ListStore.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
-#include <cstddef>
+#include <algorithm>
 #include <expected>
-#include <format>
 #include <optional>
-#include <span>
-#include <string_view>
 #include <utility>
 
 namespace ao::library
 {
-  namespace
-  {
-    [[noreturn]] void throwCorruptList(ListId const id)
-    {
-      throwException<Exception>("List {} record is structurally corrupt after library validation", id);
-    }
-
-    Result<ListView> validateListPayload(std::span<std::byte const> const data, std::string_view const operation)
-    {
-      auto view = ListView{data};
-
-      if (!view.isValid())
-      {
-        return makeError(
-          Error::Code::CorruptData, std::format("Cannot {} a structurally corrupt List record", operation));
-      }
-
-      return view;
-    }
-  } // namespace
-
   ListStore::ListStore(lmdb::Database db, detail::LibraryIdentity const& identity)
     : _database{std::move(db)}, _identity{&identity}
   {
@@ -57,6 +34,11 @@ namespace ao::library
   ListStore::Reader ListStore::reader(WriteTransaction const& transaction) const
   {
     return Reader{_database.reader(transaction.native(*_identity))};
+  }
+
+  ListStore::Reader ListStore::reader(LibraryWrite const& write) const
+  {
+    return Reader{_database.reader(write.native(*_identity))};
   }
 
   ListStore::Writer ListStore::writer(WriteTransaction& transaction) const
@@ -91,10 +73,7 @@ namespace ao::library
 
     auto view = ListView{*optBytes};
 
-    if (!view.isValid())
-    {
-      throwCorruptList(id);
-    }
+    AO_INVARIANT(view.isValid(), "List {} record is structurally corrupt after library validation", id);
 
     return view;
   }
@@ -122,10 +101,7 @@ namespace ao::library
     auto const listId = ListId{id};
     auto view = ListView{buffer};
 
-    if (!view.isValid())
-    {
-      throwCorruptList(listId);
-    }
+    AO_INVARIANT(view.isValid(), "List {} record is structurally corrupt after library validation", listId);
 
     return {listId, view};
   }
@@ -136,31 +112,38 @@ namespace ao::library
   {
   }
 
-  Result<ListId> ListStore::Writer::create(std::span<std::byte const> data)
+  Result<ListId> ListStore::Writer::create(ListBuilder::Prepared const& prepared)
   {
-    if (auto validationRes = validateListPayload(data, "create"); !validationRes)
-    {
-      return std::unexpected{validationRes.error()};
-    }
-
-    auto idRes = _writer.append(data);
+    auto idRes = _writer.append(prepared.size());
 
     if (!idRes)
     {
       return std::unexpected{idRes.error()};
     }
 
-    return ListId{*idRes};
+    auto const& [rawListId, bytes] = *idRes;
+    AO_ENSURES(rawListId != kInvalidListId.raw(), "List key allocation produced the reserved id zero");
+    prepared.writeTo(bytes);
+    AO_ENSURES(
+      std::ranges::equal(bytes, prepared.bytes()), "Prepared List encoder did not reproduce its validated snapshot");
+    return ListId{rawListId};
   }
 
-  Result<> ListStore::Writer::update(ListId id, std::span<std::byte const> data)
+  Result<> ListStore::Writer::update(ListId id, ListBuilder::Prepared const& prepared)
   {
-    if (auto viewRes = validateListPayload(data, "update"); !viewRes)
+    AO_EXPECTS(id != kInvalidListId, "Cannot update the reserved List id zero");
+
+    auto bytesRes = _writer.update(id.raw(), prepared.size());
+
+    if (!bytesRes)
     {
-      return std::unexpected{viewRes.error()};
+      return std::unexpected{bytesRes.error()};
     }
 
-    return _writer.update(id.raw(), data);
+    prepared.writeTo(*bytesRes);
+    AO_ENSURES(std::ranges::equal(*bytesRes, prepared.bytes()),
+               "Prepared List encoder did not reproduce its validated snapshot");
+    return {};
   }
 
   bool ListStore::Writer::remove(ListId id)
@@ -184,10 +167,7 @@ namespace ao::library
 
     auto view = ListView{*optBytes};
 
-    if (!view.isValid())
-    {
-      throwCorruptList(id);
-    }
+    AO_INVARIANT(view.isValid(), "List {} record is structurally corrupt after library validation", id);
 
     return view;
   }

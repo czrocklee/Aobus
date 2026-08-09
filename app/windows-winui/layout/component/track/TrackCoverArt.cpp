@@ -90,8 +90,8 @@ namespace ao::winui::layout
         _coverArt.bind(asyncRuntime);
         // The projection hands the current snapshot to a new subscriber, so
         // this both installs the follower and draws what is selected now.
-        _subscription = _projectionPtr->subscribe([this](rt::TrackDetailSnapshot const& snapshot) noexcept
-                                                  { applySnapshot(snapshot); });
+        _subscription =
+          _projectionPtr->subscribe([this](rt::TrackDetailSnapshot const& snapshot) { applySnapshot(snapshot); });
       }
 
       /// Answer the width the frame gave with a height that matches it.

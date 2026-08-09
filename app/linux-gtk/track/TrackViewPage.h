@@ -110,6 +110,7 @@ namespace ao::gtk
     }
 
     void applyPresentation(rt::TrackPresentationSpec const& presentation);
+    void refreshOrderCapabilities();
 
   protected:
     void on_map() override;

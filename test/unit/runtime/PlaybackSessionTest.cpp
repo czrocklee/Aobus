@@ -7,6 +7,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
@@ -26,8 +27,11 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -41,6 +45,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_message.hpp>
@@ -536,6 +541,57 @@ namespace ao::rt::test
       Status _status = makeReadyAudioStatus();
     };
   } // namespace
+
+  TEST_CASE("PlaybackCursorSession - invalid stored source filter rejects launch and restore",
+            "[runtime][unit][playback-session][source]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Not playable through invalid source");
+    auto listId = kInvalidListId;
+
+    {
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto builder = library::ListBuilder::makeEmpty().name("Invalid source").filter("(");
+      listId = ao::test::requireValue(
+        transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto sources = TrackSourceCache{libraryFixture.library(), changes};
+    sources.reloadAllTracks();
+
+    SECTION("fresh launch")
+    {
+      auto const result = PlaybackCursorSession::create(PlaybackLaunchSpec{.sourceListId = listId},
+                                                        trackId,
+                                                        sources,
+                                                        libraryFixture.library(),
+                                                        RepeatMode::Off,
+                                                        ShuffleMode::Off,
+                                                        {});
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
+    }
+
+    SECTION("restored cursor")
+    {
+      auto const result = PlaybackCursorSession::createForRestore(PlaybackLaunchSpec{.sourceListId = listId},
+                                                                  trackId,
+                                                                  0,
+                                                                  sources,
+                                                                  libraryFixture.library(),
+                                                                  RepeatMode::Off,
+                                                                  ShuffleMode::Off,
+                                                                  {});
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
+    }
+  }
 
   TEST_CASE("PlaybackSession - schema v3 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
   {

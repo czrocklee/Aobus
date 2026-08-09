@@ -165,9 +165,9 @@ namespace ao::gtk
     loadState(*_storePtr, "session", state, AppSessionStateYamlSchema{}, "app session");
   }
 
-  void AppConfigStore::saveAppSession(rt::AppSessionState const& state)
+  Result<> AppConfigStore::saveAppSession(rt::AppSessionState const& state)
   {
-    saveState(*_storePtr, "session", state, AppSessionStateYamlSchema{}, "app session");
+    return _storePtr->save("session", state, AppSessionStateYamlSchema{});
   }
 
   rt::ConfigStore& AppConfigStore::playbackSessionStore() noexcept

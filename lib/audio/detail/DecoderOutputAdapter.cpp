@@ -4,13 +4,12 @@
 #include "DecoderOutputAdapter.h"
 
 #include "DecoderOutput.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/PcmConversion.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <expected>
@@ -55,8 +54,8 @@ namespace ao::audio::detail
 
   Result<std::span<std::byte const>> DecoderOutputAdapter::convert(std::span<std::byte const> nativeBytes)
   {
-    gsl_Assert(
-      (_nativeFormat.encoding != SampleEncoding::Unknown && _outputFormat.encoding != SampleEncoding::Unknown) &&
+    AO_INVARIANT(
+      (_nativeFormat.encoding != SampleEncoding::Unknown && _outputFormat.encoding != SampleEncoding::Unknown),
       "Decoder PCM output adapter is not configured");
 
     if (_nativeFormat.encoding == _outputFormat.encoding)

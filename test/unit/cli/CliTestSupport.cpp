@@ -30,9 +30,8 @@ namespace ao::cli::test
   ryml::Tree parseYaml(std::string_view text)
   {
     auto state = yaml::ErrorCallbackState{};
-    auto tree = ryml::Tree{yaml::callbacks(state)};
-    yaml::parseInArena(tree, text, state);
-    tree.callbacks(yaml::callbacks());
+    auto tree = ryml::Tree{yaml::callbacks()};
+    REQUIRE(yaml::parseInArena(tree, text, state));
     return tree;
   }
 
@@ -86,14 +85,14 @@ namespace ao::cli::test
   TrackId CliFixture::addTrack(library::test::TrackSpec const& spec) const
   {
     auto musicLibrary = library::test::makeTestMusicLibrary(root(), rt::LibraryPaths{root()}.databasePath());
-    return library::test::addTrack(musicLibrary, spec);
+    return library::test::addTrackWithUniqueFixtureUri(musicLibrary, spec);
   }
 
   ResourceId CliFixture::addResource(std::span<std::byte const> bytes) const
   {
     auto musicLibrary = library::test::makeTestMusicLibrary(root(), rt::LibraryPaths{root()}.databasePath());
     auto transaction = library::test::writeTransaction(musicLibrary);
-    auto idRes = musicLibrary.resources().writer(transaction).create(bytes);
+    auto idRes = library::test::physicalWriter(musicLibrary.resources(), transaction).create(bytes);
     REQUIRE(idRes);
     REQUIRE(transaction.commit());
     return *idRes;

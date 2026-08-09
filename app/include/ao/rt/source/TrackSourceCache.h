@@ -16,8 +16,8 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ao::library
@@ -65,7 +65,7 @@ namespace ao::rt
 
   private:
     Result<TrackSourceLease> acquire(ListId listId, std::vector<ListId> ancestry);
-    void handleLibraryChange(LibraryChangeSet const& event) noexcept;
+    void handleLibraryChange(LibraryChangeSet const& event);
     void handleLibraryReset();
     void handleIncrementalLibraryChange(LibraryChangeSet const& event);
     std::vector<ListId> applyListOrderChanges(LibraryChangeSet const& event);

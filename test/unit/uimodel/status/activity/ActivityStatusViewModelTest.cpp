@@ -32,7 +32,7 @@ namespace ao::uimodel::test
   {
     auto executor = rt::test::InlineExecutor{};
     auto sleeper = rt::test::ControlledSleeper{};
-    auto asyncRuntime = async::Runtime{executor, 1, {}, &sleeper};
+    auto asyncRuntime = async::Runtime{executor, 1, &sleeper};
     auto notifications = rt::NotificationService{asyncRuntime};
     auto now = std::chrono::steady_clock::time_point{};
     auto latest = ActivityStatusViewState{};

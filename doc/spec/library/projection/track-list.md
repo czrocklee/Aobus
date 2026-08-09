@@ -64,7 +64,8 @@ The rebase releases all old view holders before discarding the arena and rebuild
 
 ## Failure and lifetime
 
-Storage failures are not translated into source invalidation; crossing a `noexcept` source callback boundary is fatal.
+Storage failures are not translated into source invalidation; an exception escaping source consumption is fatal at
+the owning source-signal boundary.
 Internal delta and mirror violations use fail-fast contracts rather than a recovery reset.
 
 Projection delivery is synchronous on the callback side.

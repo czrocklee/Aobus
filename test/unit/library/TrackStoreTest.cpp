@@ -3,12 +3,12 @@
 
 #include <ao/library/TrackStore.h>
 
+#include "lib/library/TrackWrite.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackWrite.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -104,9 +104,9 @@ namespace ao::library::test
       auto wtxn = writeTransaction(fixture.library);
       auto const replacement = TrackSpec{.title = "After", .artist = "After artist", .album = "After album"};
       auto builder = makeBuilder(replacement);
-      auto preparedRes = builder.prepareHot(wtxn);
+      auto preparedRes = physicalPrepareHotTrack(builder, wtxn);
       REQUIRE(preparedRes);
-      auto writer = fixture.store.writer(wtxn);
+      auto writer = physicalWriter(fixture.store, wtxn);
       REQUIRE(updatePreparedHotTrackRecord(writer, id, *preparedRes));
       REQUIRE(wtxn.commit());
     }
@@ -127,7 +127,7 @@ namespace ao::library::test
       fixture.library, TrackSpec{.title = "Removed", .artist = "Removed artist", .duration = std::chrono::minutes{2}});
 
     auto wtxn = writeTransaction(fixture.library);
-    REQUIRE(fixture.store.writer(wtxn).remove(id));
+    REQUIRE(physicalWriter(fixture.store, wtxn).remove(id));
     REQUIRE(wtxn.commit());
 
     auto rtxn = fixture.library.readTransaction();

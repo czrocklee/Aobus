@@ -13,7 +13,6 @@
 #include <format>
 #include <functional>
 #include <map>
-#include <new>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -408,29 +407,22 @@ namespace ao::uimodel
         Error::Code::NotSupported, std::format("Unsupported layout document version {}", document.version));
     }
 
-    try
+    auto authoredMeter = TreeBudgetMeter{limits.authored, "authored"};
+
+    if (auto result = measureAuthoredDocument(document, authoredMeter); !result)
     {
-      auto authoredMeter = TreeBudgetMeter{limits.authored, "authored"};
-
-      if (auto result = measureAuthoredDocument(document, authoredMeter); !result)
-      {
-        return std::unexpected{result.error()};
-      }
-
-      auto effectiveMeter = TreeBudgetMeter{limits.effective, "effective"};
-      auto visited = std::vector<std::string_view>{};
-      auto effectiveRootRes = expandNode(document.root, document.templates, visited, effectiveMeter, 1);
-
-      if (!effectiveRootRes)
-      {
-        return std::unexpected{effectiveRootRes.error()};
-      }
-
-      return PreparedLayout{std::move(*effectiveRootRes)};
+      return std::unexpected{result.error()};
     }
-    catch (std::bad_alloc const&)
+
+    auto effectiveMeter = TreeBudgetMeter{limits.effective, "effective"};
+    auto visited = std::vector<std::string_view>{};
+    auto effectiveRootRes = expandNode(document.root, document.templates, visited, effectiveMeter, 1);
+
+    if (!effectiveRootRes)
     {
-      return makeError(Error::Code::ResourceExhausted, "Insufficient memory to prepare layout document");
+      return std::unexpected{effectiveRootRes.error()};
     }
+
+    return PreparedLayout{std::move(*effectiveRootRes)};
   }
 } // namespace ao::uimodel

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <format>
@@ -79,8 +80,8 @@ namespace ao::uimodel
     , _onRender{std::move(onRender)}
     , _lastOutput{playback.snapshot().transport.output}
   {
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
-                                                 { handleSnapshot(snapshot); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   void OutputDeviceViewModel::selectOutputDevice(audio::BackendId const& backendId,

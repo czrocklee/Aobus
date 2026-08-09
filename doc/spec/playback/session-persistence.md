@@ -72,6 +72,7 @@ Deterministic recovery establishes current before restored shuffle and repeat po
 When the source list is missing, restore substitutes All Tracks, retains sort terms, and clears quick filter.
 Fallback succeeds only when the saved current track still exists and retains offset.
 A missing source plus missing current discards the candidate.
+When the source exists but its own or an ancestor's stored filter is invalid, restore returns the contextual `FormatRejected` error and installs no cursor candidate.
 
 Offset is clamped against resolved duration.
 An offset at or beyond end becomes zero.
@@ -131,6 +132,7 @@ Explicit and lifecycle checkpoints remain no-ops while discarded until a later d
 
 Malformed structural deserialize, unsupported versions, schema semantic validation, source/filter/projection construction, transport preparation, and store failures return typed results.
 Structural and transport-preparation failures are fail-closed with respect to live/restorable state.
+An invalid retained source filter is one such source-construction failure; the frontend may log it and leave default playback active, but the runtime does not reinterpret it as a successful empty session.
 Volume/mute property failure follows the sequential best-effort contract above; the stored payload remains unchanged, while the public snapshot reflects any property write that succeeded.
 Discard remains fail-closed.
 

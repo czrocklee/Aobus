@@ -4,7 +4,7 @@
 #include <ao/audio/PcmRingBuffer.h>
 
 #ifndef NDEBUG
-#include <gsl-lite/gsl-lite.hpp>
+#include <ao/Contract.h>
 
 #include <atomic>
 #include <cstdint>
@@ -109,8 +109,8 @@ namespace ao::audio
 
     while (true)
     {
-      gsl_Expects((observed & kDebugClearActive) == 0);
-      gsl_Expects((observed & kDebugAccessCountMask) != kDebugAccessCountMask);
+      AO_EXPECTS((observed & kDebugClearActive) == 0);
+      AO_EXPECTS((observed & kDebugAccessCountMask) != kDebugAccessCountMask);
 
       if (_debugAccessState.compare_exchange_weak(
             observed, observed + 1, std::memory_order_acquire, std::memory_order_relaxed))
@@ -123,7 +123,7 @@ namespace ao::audio
   void PcmRingBuffer::endDebugAccess() const noexcept
   {
     auto const previous = _debugAccessState.fetch_sub(1, std::memory_order_release);
-    gsl_Expects(previous != 0 && (previous & kDebugClearActive) == 0);
+    AO_EXPECTS(previous != 0 && (previous & kDebugClearActive) == 0);
   }
 
   void PcmRingBuffer::beginDebugClear() noexcept
@@ -131,7 +131,7 @@ namespace ao::audio
     std::uint32_t expected = 0;
     auto const acquired = _debugAccessState.compare_exchange_strong(
       expected, kDebugClearActive, std::memory_order_acquire, std::memory_order_relaxed);
-    gsl_Expects(acquired);
+    AO_EXPECTS(acquired);
   }
 
   void PcmRingBuffer::endDebugClear() noexcept
@@ -139,7 +139,7 @@ namespace ao::audio
     std::uint32_t expected = kDebugClearActive;
     auto const released = _debugAccessState.compare_exchange_strong(
       expected, std::uint32_t{0}, std::memory_order_release, std::memory_order_relaxed);
-    gsl_Expects(released);
+    AO_EXPECTS(released);
   }
 #endif
 } // namespace ao::audio

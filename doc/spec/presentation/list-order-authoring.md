@@ -39,6 +39,7 @@ It does not submit row indexes to storage or call a core store directly.
 - Capability depends on presentation structure, not presentation id: `groupBy` must be `None` and `sortBy` must be empty.
 - Visible fields and whether raw rank is currently empty do not affect capability.
 - Source state must be live and error-free, and library authoring must be `Available`.
+- An invalid filter on the saved List or any saved ancestor is a source error and disables every order-authoring capability until repaired.
 - A quick filter disables gap and relative moves but leaves absolute moves, Reset Order, and Forget Hidden Positions available.
 - Movement operands and anchors are stable TrackIds; GTK row positions never cross the runtime authoring boundary.
 - A dragged selected row moves the complete selection in effective source order.
@@ -70,6 +71,7 @@ Evaluation order makes the most actionable blocking state visible:
 
 Maintenance produces **Library is busy. Manual ordering will be available when maintenance finishes.**
 GTK displays that state in the track-page status surface rather than silently omitting the interaction.
+Live source-error changes refresh exported action state and the page's drag capability surface.
 
 `ListOrderAuthoringSession` owns one `BoundListOrder`, the matching projection, capability snapshot, and subscriptions.
 It becomes invalid when any of these occurs:

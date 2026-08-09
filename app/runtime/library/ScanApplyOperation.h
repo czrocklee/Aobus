@@ -8,10 +8,8 @@
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
-#include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/WriteTransaction.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 
@@ -24,13 +22,14 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::library
 {
   class MusicLibrary;
   class DictionaryStore;
+  class LibraryWrite;
+  class TrackWriter;
   class WritableMusicLibrary;
   struct AudioIdentity;
 }
@@ -66,7 +65,7 @@ namespace ao::rt
     // mutation. apply performs no filesystem reads or audio hashing.
     Result<ScanApplyResult> prepare(std::stop_token stopToken = {});
     Result<ScanApplyResult> revalidatePreparedFiles(std::stop_token stopToken = {});
-    Result<ScanApplyResult> apply(library::WriteTransaction& transaction, std::stop_token stopToken = {});
+    Result<ScanApplyResult> apply(library::LibraryWrite& write, std::stop_token stopToken = {});
     bool cancelled() const noexcept;
     bool readyForMutation() const noexcept;
     bool transactionShouldCommit() const noexcept;
@@ -84,14 +83,12 @@ namespace ao::rt
     };
 
     Result<> validatePlan() const;
-    Result<> validatePersistedTrackEvidence(library::TrackStore::Writer const& trackWriter) const;
+    Result<> validatePersistedTrackEvidence(library::TrackWriter const& trackWriter) const;
     Result<std::filesystem::path> resolveItemPath(ScanItem const& item) const;
 
     Result<> applyScanItem(std::size_t itemIndex,
                            PreparedScanItem const* preparedItem,
-                           library::WriteTransaction& transaction,
-                           library::TrackStore::Writer& trackWriter,
-                           library::FileManifestStore::Writer& manifestWriter,
+                           library::TrackWriter& trackWriter,
                            library::DictionaryStore const& dictionary);
 
     bool skipNonActionableItem(ScanItem const& item);
@@ -100,30 +97,22 @@ namespace ao::rt
 
     void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);
 
-    void applyMissingItem(ScanItem const& item,
-                          library::WriteTransaction& transaction,
-                          library::FileManifestStore::Writer& manifestWriter);
+    void applyMissingItem(ScanItem const& item, library::TrackWriter& trackWriter);
 
     Result<> applyChangedItem(ScanItem const& item,
-                              library::WriteTransaction& transaction,
-                              library::TrackStore::Writer& trackWriter,
-                              library::FileManifestStore::Writer& manifestWriter,
+                              library::TrackWriter& trackWriter,
                               library::DictionaryStore const& dictionary,
                               library::TrackBuilder& builder,
                               library::AudioIdentity const& identity);
 
     bool applyMovedItem(ScanItem const& item,
-                        library::WriteTransaction& transaction,
-                        library::TrackStore::Writer& trackWriter,
-                        library::FileManifestStore::Writer& manifestWriter,
+                        library::TrackWriter& trackWriter,
                         library::DictionaryStore const& dictionary,
                         library::TrackBuilder& builder,
                         library::AudioIdentity const& identity);
 
     Result<> applyNewItem(ScanItem const& item,
-                          library::WriteTransaction& transaction,
-                          library::TrackStore::Writer& trackWriter,
-                          library::FileManifestStore::Writer& manifestWriter,
+                          library::TrackWriter& trackWriter,
                           library::TrackBuilder& builder,
                           std::optional<library::AudioIdentity> const& optIdentity);
 
@@ -141,34 +130,20 @@ namespace ao::rt
                                                                   bool publishProgress,
                                                                   std::stop_token stopToken);
 
-    std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>
-    prepareTrack(library::TrackBuilder const& builder, library::WriteTransaction& transaction, std::string const& uri);
+    bool validateTrack(library::TrackBuilder const& builder,
+                       library::TrackWriter const& trackWriter,
+                       std::string const& uri);
 
     static library::FileManifestBuilder makeAvailableManifest(ScanItem const& item,
-                                                              TrackId trackId,
                                                               std::optional<library::AudioIdentity> const& optIdentity);
 
     // Reports a rejection as an item failure and returns false. Use it only
     // where a false return is item-neutral, or where the caller has already
     // armed _abortTransaction for the complete item, as the Moved path does.
-    bool writeManifest(library::FileManifestStore::Writer& writer,
+    bool writeManifest(library::TrackWriter& writer,
+                       TrackId trackId,
                        std::string const& uri,
                        library::FileManifestBuilder& builder);
-
-    // Post-effect manifest write for a path whose caller keeps applying items.
-    // The item's Track record is already staged, so a rejection must propagate
-    // to the root operation boundary instead of being reported and skipped.
-    static Result<> writeManifestForStagedTrack(library::FileManifestStore::Writer& writer,
-                                                std::string const& uri,
-                                                library::FileManifestBuilder& builder);
-
-    // The Moved path pre-arms whole-transaction abort before it stages data, so
-    // its item-local reporting helpers cannot permit a later commit.
-    bool updateTrack(library::TrackStore::Writer& trackWriter,
-                     TrackId trackId,
-                     std::string const& uri,
-                     library::TrackBuilder::PreparedHot const& hot,
-                     library::TrackBuilder::PreparedCold const& cold);
 
     library::MusicLibrary& _ml;
     ScanPlan _plan;

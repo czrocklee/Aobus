@@ -7,6 +7,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
 #include <ao/AudioScalars.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
@@ -15,8 +16,6 @@
 #include <ao/query/Field.h>
 #include <ao/query/detail/FieldResolver.h>
 #include <ao/utility/VariantVisitor.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -155,7 +154,7 @@ namespace ao::query
     std::visit(utility::makeVisitor(
                  [this](std::unique_ptr<BinaryExpression> const& binaryPtr)
                  {
-                   gsl_Expects(binaryPtr != nullptr);
+                   AO_INVARIANT(binaryPtr != nullptr);
                    compileBinary(*binaryPtr);
                  },
                  [](std::unique_ptr<UnaryExpression> const&)
@@ -291,7 +290,7 @@ namespace ao::query
     explicit Impl(FormatPlan const& sourcePlan, library::DictionaryReadContext* readContext)
       : plan{&sourcePlan}, dictionary{readContext}
     {
-      gsl_Expects(!sourcePlan.requiresDictionary || readContext != nullptr);
+      AO_EXPECTS(!sourcePlan.requiresDictionary || readContext != nullptr);
       dictionaryIds.resize(sourcePlan.dictionarySymbols.size(), kInvalidDictionaryId);
 
       if (readContext == nullptr)
@@ -330,7 +329,7 @@ namespace ao::query
 
   std::string FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track) const
   {
-    gsl_Expects(!plan.requiresDictionary);
+    AO_EXPECTS(!plan.requiresDictionary);
     auto const binding = FormatBinding{plan};
     return evaluate(binding, track);
   }
@@ -341,7 +340,7 @@ namespace ao::query
   {
     auto const& state = *binding._implPtr;
     auto const& plan = *state.plan;
-    gsl_Expects(hasRequiredTrackData(plan.accessProfile, track));
+    AO_EXPECTS(hasRequiredTrackData(plan.accessProfile, track));
     output.clear();
 
     for (auto const& instr : plan.instructions)
@@ -364,7 +363,7 @@ namespace ao::query
 
   void FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track, std::string& output) const
   {
-    gsl_Expects(!plan.requiresDictionary);
+    AO_EXPECTS(!plan.requiresDictionary);
     auto const binding = FormatBinding{plan};
     evaluate(binding, track, output);
   }

@@ -19,6 +19,7 @@
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
@@ -95,13 +96,17 @@ namespace ao::rt::test
     void writeManifestIdentity(library::MusicLibrary& ml, std::string_view uri)
     {
       auto transaction = library::test::writeTransaction(ml);
-      auto writer = ml.manifest().writer(transaction);
-      auto optCurrent = writer.get(uri);
-      REQUIRE(optCurrent);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+          auto optCurrent = writer.manifest(uri);
+          REQUIRE(optCurrent);
 
-      auto builder = library::FileManifestBuilder::fromView(*optCurrent);
-      builder.audioPayloadLength(1).audioSignature(utility::xxh3Hash128("test-identity"));
-      REQUIRE(writer.put(uri, builder.serialize()));
+          auto builder = library::FileManifestBuilder::fromView(*optCurrent);
+          builder.audioPayloadLength(1).audioSignature(utility::xxh3Hash128("test-identity"));
+          return writer.updateManifest(optCurrent->trackId(), builder);
+        }));
       REQUIRE(transaction.commit());
     }
 
@@ -135,7 +140,8 @@ namespace ao::rt::test
         }
 
         auto transaction = writableRes->writeTransaction();
-        auto result = applyAudioIdentityBatch(library, transaction, candidates);
+        auto result = transaction.apply([candidates](library::LibraryWrite& write)
+                                        { return applyAudioIdentityBatch(write, candidates); });
 
         if (!result || result->completedCount == 0)
         {
@@ -360,13 +366,7 @@ namespace ao::rt::test
     auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
-    {
-      auto transaction = library::test::writeTransaction(ml);
-      auto builder = library::FileManifestBuilder::makeEmpty();
-      builder.trackId(TrackId{1});
-      REQUIRE(ml.manifest().writer(transaction).put("alias/song.flac", builder.serialize()));
-      REQUIRE(transaction.commit());
-    }
+    std::ignore = library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("alias/song.flac"));
 
     auto failures = std::vector<AudioIdentityIndexFailure>{};
     auto result = runIndexPending(

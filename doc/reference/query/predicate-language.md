@@ -14,8 +14,8 @@ Predicate evaluation behavior belongs to the [predicate evaluation specification
 
 Expressions are persisted as saved List filter text without a separate language version number.
 The in-memory AST and execution bytecode are not persisted surfaces.
-For saved Lists, this language surface participates in the library database compatibility contract governed by `ao::library::kLibraryVersion`.
-Other retained or automated expressions use the compatibility policy of their containing surface.
+Core library storage preserves saved-List filter bytes opaquely and does not use this grammar for database admission or `ao::library::kLibraryVersion` compatibility.
+Saved Lists and other retained or automated expressions use the interpretation and compatibility policy of their application owner.
 
 ## Code boundary
 
@@ -178,9 +178,9 @@ Saved Lists persist expression text and recompile it when materialized.
 Removing or renaming a variable, alias, operator, literal form, or unit can invalidate stored lists.
 Changing binding or truth semantics can change their membership without changing the list-record byte layout.
 
-The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../spec/query/predicate-evaluation.md), are part of the saved-List contract gated by `kLibraryVersion`.
-A change that expands the storable predicate surface beyond what an existing same-version reader accepts, or that can alter whether stored text parses or compiles, what it binds to, or which tracks it matches, must increment the library version.
-The old version is then rejected or explicitly migrated; the current database implementation accepts only an exact version match and has no in-place migration path.
+The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../spec/query/predicate-evaluation.md), define current application interpretation rather than storage validity.
+Changing them does not by itself increment the library database version.
+If retained saved-List text no longer parses or compiles, source materialization reports an expression error and exposes empty membership; the database remains structurally valid.
 
 Library YAML, playback-session state, workspace state, and CLI automation independently own the compatibility of predicate text they contain or accept.
 An expression carries no nested dialect id or version; the containing surface owns compatibility.

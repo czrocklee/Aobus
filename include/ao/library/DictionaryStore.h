@@ -55,7 +55,7 @@ namespace ao::library
      * @param id The dictionary ID
      * @return A borrowed view that remains valid until this store is destroyed.
      *         Published non-empty entries are immutable.
-     * @throws std::runtime_error if id is not found
+     * Passing zero or an out-of-range ID violates the caller contract.
      */
     std::string_view get(DictionaryId id) const;
 
@@ -72,7 +72,7 @@ namespace ao::library
      * Look up an ID by its string.
      * @param str The string to look up
      * @return The ID
-     * @throws std::runtime_error if string is not found
+     * The text must already be present; absence violates the Store invariant.
      */
     DictionaryId lookupId(std::string_view str) const;
 

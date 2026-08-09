@@ -42,8 +42,14 @@ namespace ao::lmdb
 
     using TxnPtr = std::unique_ptr<MDB_txn, MdbTxnDeleter>;
 
-    ReadTransaction(TxnPtr txnPtr)
-      : _txnPtr{std::move(txnPtr)}
+    enum class ReadFailureMode : std::uint8_t
+    {
+      Fatal,
+      Transaction
+    };
+
+    ReadTransaction(TxnPtr txnPtr, ReadFailureMode failureMode)
+      : _txnPtr{std::move(txnPtr)}, _failureMode{failureMode}
     {
     }
 
@@ -54,6 +60,7 @@ namespace ao::lmdb
 
   private:
     TxnPtr _txnPtr;
+    ReadFailureMode _failureMode = ReadFailureMode::Fatal;
     friend class Database;
   };
 
@@ -81,7 +88,7 @@ namespace ao::lmdb
 
   private:
     explicit WriteTransaction(TxnPtr txnPtr)
-      : ReadTransaction{std::move(txnPtr)}
+      : ReadTransaction{std::move(txnPtr), ReadFailureMode::Transaction}
     {
     }
 

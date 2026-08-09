@@ -44,7 +44,7 @@ namespace ao::rt
 
     TrackSourceState state() const noexcept { return _state; }
 
-    async::Subscription subscribe(std::move_only_function<void(TrackSourceDelta const&) noexcept> handler);
+    async::Subscription subscribe(std::move_only_function<void(TrackSourceDelta const&)> handler);
     void invalidate() noexcept;
 
   protected:

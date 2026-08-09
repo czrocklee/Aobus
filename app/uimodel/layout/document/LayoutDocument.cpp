@@ -3,14 +3,13 @@
 
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <cstdint>
@@ -134,7 +133,7 @@ namespace ao::uimodel
 
   Result<> writeLayoutNode(ryml::NodeRef node, LayoutNode const& value)
   {
-    gsl_Expects(!value.type.empty() && "Layout node type must not be empty");
+    AO_EXPECTS(!value.type.empty(), "Layout node type must not be empty");
 
     auto writer = yaml::MapWriter{node};
 

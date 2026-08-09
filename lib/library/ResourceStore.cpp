@@ -3,8 +3,10 @@
 
 #include <ao/library/ResourceStore.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/Xxh3.h>
@@ -31,9 +33,29 @@ namespace ao::library
     return Reader{_database.reader(transaction.native(*_identity))};
   }
 
+  ResourceStore::Reader ResourceStore::reader(LibraryWrite const& write) const
+  {
+    return Reader{_database.reader(write.native(*_identity))};
+  }
+
   Writer ResourceStore::writer(WriteTransaction& transaction) const
   {
     return Writer{_database.writer(transaction.native(*_identity))};
+  }
+
+  std::optional<std::span<std::byte const>> ResourceStore::Reader::get(ResourceId const id) const
+  {
+    auto optResult = _reader.get(id.raw());
+    AO_INVARIANT(!optResult || !optResult->empty(), "Resource {} is empty after library validation", id.raw());
+    return optResult;
+  }
+
+  void ResourceStore::Reader::Iterator::refresh() const
+  {
+    auto const rawId = static_cast<std::uint32_t>(_iterator->first);
+    AO_INVARIANT(rawId != 0, "Resource iterator encountered the reserved id zero after library validation");
+    AO_INVARIANT(!_iterator->second.empty(), "Resource {} is empty after library validation", rawId);
+    _value = {ResourceId{rawId}, _iterator->second};
   }
 
   ResourceStore::Reader::Iterator::reference ResourceStore::Reader::Iterator::operator*() const
@@ -52,6 +74,13 @@ namespace ao::library
   {
     ++_iterator;
     return *this;
+  }
+
+  std::optional<std::span<std::byte const>> ResourceStore::Writer::get(ResourceId const id) const
+  {
+    auto optResult = _writer.get(id.raw());
+    AO_INVARIANT(!optResult || !optResult->empty(), "Resource {} is empty after library validation", id.raw());
+    return optResult;
   }
 
   Result<ResourceId> Writer::create(std::span<std::byte const> data)

@@ -136,21 +136,19 @@ namespace ao::rt
     // handler must not synchronously destroy this transport; Debug contracts
     // require teardown to be deferred to a later executor turn.
 
-    async::Subscription onPreparing(std::move_only_function<void() noexcept> handler);
-    async::Subscription onStarted(std::move_only_function<void() noexcept> handler);
-    async::Subscription onPaused(std::move_only_function<void() noexcept> handler);
-    async::Subscription onIdle(std::move_only_function<void() noexcept> handler);
-    async::Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&) noexcept> handler);
-    async::Subscription onOutputDeviceChanged(
-      std::move_only_function<void(OutputDeviceSelection const&) noexcept> handler);
-    async::Subscription onStopped(std::move_only_function<void() noexcept> handler);
-    async::Subscription onOutputDevicesChanged(std::move_only_function<void() noexcept> handler);
-    async::Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&) noexcept> handler);
-    async::Subscription onVolumeChanged(std::move_only_function<void(float) noexcept> handler);
-    async::Subscription onMutedChanged(std::move_only_function<void(bool) noexcept> handler);
-    async::Subscription onRevealTrackRequested(
-      std::move_only_function<void(RevealTrackRequested const&) noexcept> handler);
-    async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&) noexcept> handler);
+    async::Subscription onPreparing(std::move_only_function<void()> handler);
+    async::Subscription onStarted(std::move_only_function<void()> handler);
+    async::Subscription onPaused(std::move_only_function<void()> handler);
+    async::Subscription onIdle(std::move_only_function<void()> handler);
+    async::Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
+    async::Subscription onOutputDeviceChanged(std::move_only_function<void(OutputDeviceSelection const&)> handler);
+    async::Subscription onStopped(std::move_only_function<void()> handler);
+    async::Subscription onOutputDevicesChanged(std::move_only_function<void()> handler);
+    async::Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
+    async::Subscription onVolumeChanged(std::move_only_function<void(float)> handler);
+    async::Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
+    async::Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
+    async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
 
     // Starts a track by id. Succession passes announce=false because it
     // publishes its own now-playing story for automatic transitions.
@@ -167,6 +165,10 @@ namespace ao::rt
     Result<PreparedCancellationBarrier> play(PlaybackRequest const& request,
                                              ListId sourceListId,
                                              std::chrono::milliseconds initialOffset = {});
+    // Runtime-private synchronous preparation seam used by focused transport
+    // tests. PlaybackSuccession owns production preparation through the private
+    // asynchronous path below. The caller must clear the active token before
+    // preparing another candidate.
     Result<PreparedNextToken> prepareNext(PlaybackRequest const& request, ListId sourceListId);
     std::optional<PreparedNextToken> clearPreparedNext();
 

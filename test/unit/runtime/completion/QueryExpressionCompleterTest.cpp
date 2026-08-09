@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/completion/QueryExpressionCompleter.h>
+
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/rt/completion/QueryExpressionCompleter.h>
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,17 +28,18 @@ namespace ao::rt::test
                             std::span<std::string const> tags,
                             std::span<std::pair<std::string, std::string> const> custom)
     {
-      library::test::addTrack(libraryFixture.library(),
-                              library::test::TrackSpec{.title = "Completion Track",
-                                                       .artist = "Artist",
-                                                       .album = "Album",
-                                                       .conductor = "Conductor",
-                                                       .ensemble = "Ensemble",
-                                                       .soloist = "Soloist",
-                                                       .uri = "query-completion.flac",
-                                                       .tags = {tags.begin(), tags.end()},
-                                                       .customMetadata = {custom.begin(), custom.end()},
-                                                       .duration = std::chrono::seconds{120}});
+      library::test::addTrackWithUniqueFixtureUri(
+        libraryFixture.library(),
+        library::test::TrackSpec{.title = "Completion Track",
+                                 .artist = "Artist",
+                                 .album = "Album",
+                                 .conductor = "Conductor",
+                                 .ensemble = "Ensemble",
+                                 .soloist = "Soloist",
+                                 .uri = "query-completion.flac",
+                                 .tags = {tags.begin(), tags.end()},
+                                 .customMetadata = {custom.begin(), custom.end()},
+                                 .duration = std::chrono::seconds{120}});
     }
 
     QueryExpressionCompleter makeCompleter(MusicLibraryFixture& libraryFixture,
@@ -46,7 +48,8 @@ namespace ao::rt::test
     {
       static thread_local auto executor = InlineExecutor{};
       auto const transaction = libraryFixture.library().readTransaction();
-      changesPtr = std::make_unique<LibraryChanges>(executor, libraryFixture.library().libraryRevision(transaction));
+      changesPtr = std::make_unique<LibraryChanges>(
+        executor, libraryFixture.library().libraryRevision(transaction), "test-library");
       servicePtr = std::make_unique<CompletionService>(libraryFixture.library(), *changesPtr);
       return QueryExpressionCompleter{*servicePtr};
     }

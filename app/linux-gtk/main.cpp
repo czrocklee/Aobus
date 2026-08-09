@@ -4,7 +4,6 @@
 #include <glibmm/main.h>
 
 #include "app/AppConfigStore.h"
-#include "app/AppDialog.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/KeymapApplicator.h"
 #include "app/LibraryWindowLifecycle.h"
@@ -16,7 +15,8 @@
 #include "portal/LibraryImportExportWorkflow.h"
 #include "preference/PreferencesWindow.h"
 #include <ao/AppVersion.h>
-#include <ao/Exception.h>
+#include <ao/Contract.h>
+#include <ao/Error.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -34,7 +34,6 @@
 #include <glibmm/variant.h>
 #include <gtkmm/aboutdialog.h>
 #include <gtkmm/application.h>
-#include <gtkmm/dialog.h>
 #include <gtkmm/window.h>
 
 #include <array>
@@ -42,6 +41,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -187,14 +187,21 @@ namespace
       requestedPath,
       scanAfterOpen,
       LibraryWindowReplacementCallbacks{
-        .prepareCandidate =
-          [&]
+        .prepareCandidate = [&] -> Result<>
         {
-          candidateWindowPtr =
+          auto candidateRes =
             prepareLibraryWindow({.musicRoot = requestedPath, .databasePath = libraryPaths.databasePath()},
                                  appConfigStorePtr,
                                  shellLayoutStorePtr,
                                  componentStateStorePtr);
+
+          if (!candidateRes)
+          {
+            return std::unexpected{candidateRes.error()};
+          }
+
+          candidateWindowPtr = std::move(*candidateRes);
+          return {};
         },
         .configureCandidate =
           [&]
@@ -210,7 +217,7 @@ namespace
         },
         .retireActive = [&] { return mainWindowPtr->retireForLibrarySwitch(); },
         .activateCandidate = [&]
-        { activateLibraryWindow(*appPtr, candidateWindowPtr, MainWindow::PlaybackRestoreMode::StartIdle); },
+        { return activateLibraryWindow(*appPtr, candidateWindowPtr, MainWindow::PlaybackRestoreMode::StartIdle); },
         .replaceActiveSlot = [&] { retiredWindowPtr = std::exchange(mainWindowPtr, candidateWindowPtr); },
         .releaseRetired =
           [&]
@@ -224,7 +231,7 @@ namespace
           auto appSession = rt::AppSessionState{};
           appConfigStorePtr->loadAppSession(appSession);
           appSession.lastLibraryPath = requestedPath.string();
-          appConfigStorePtr->saveAppSession(appSession);
+          return appConfigStorePtr->saveAppSession(appSession);
         },
         .scanActive = [&]
         { mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap); },
@@ -295,18 +302,7 @@ namespace
       return;
     }
 
-    try
-    {
-      mainWindowPtr->saveSession();
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Failed to save runtime during shutdown: {}", e.what());
-    }
-    catch (...)
-    {
-      APP_LOG_ERROR("Failed to save runtime during shutdown: unknown exception");
-    }
+    mainWindowPtr->saveSession();
 
     app.remove_window(*mainWindowPtr);
     mainWindowPtr.reset();
@@ -547,11 +543,21 @@ namespace
     auto paths = resolveLibraryPaths(*appConfigStorePtr);
 
     auto const scanAfterOpen = paths.scanAfterOpen;
-    mainWindowPtr =
+    auto windowRes =
       prepareLibraryWindow({.musicRoot = std::move(paths.musicRoot), .databasePath = std::move(paths.databasePath)},
                            appConfigStorePtr,
                            shellLayoutStorePtr,
                            componentStateStorePtr);
+
+    if (!windowRes)
+    {
+      APP_LOG_CRITICAL("Failed to prepare the initial library window: {}", windowRes.error().message);
+      std::println(stderr, "Aobus could not open the library: {}", windowRes.error().message);
+      appPtr->quit();
+      return;
+    }
+
+    mainWindowPtr = std::move(*windowRes);
     configureOpenLibraryCallback(mainWindowPtr,
                                  appPtr,
                                  mainWindowPtr,
@@ -561,7 +567,16 @@ namespace
                                  shellLayoutStorePtr,
                                  componentStateStorePtr);
 
-    activateLibraryWindow(*appPtr, mainWindowPtr, MainWindow::PlaybackRestoreMode::Restore);
+    if (auto const activatedRes =
+          activateLibraryWindow(*appPtr, mainWindowPtr, MainWindow::PlaybackRestoreMode::Restore);
+        !activatedRes)
+    {
+      APP_LOG_CRITICAL("Failed to activate the initial library window: {}", activatedRes.error().message);
+      std::println(stderr, "Aobus could not activate the library: {}", activatedRes.error().message);
+      mainWindowPtr.reset();
+      appPtr->quit();
+      return;
+    }
 
     if (scanAfterOpen)
     {
@@ -603,39 +618,9 @@ namespace
     return gtkArguments;
   }
 
-  void handleSignalException(Glib::RefPtr<Gtk::Application> const& appPtr)
+  void handleSignalException()
   {
-    auto detail = std::string{};
-
-    try
-    {
-      throw;
-    }
-    catch (ao::Exception const& e)
-    {
-      APP_LOG_ERROR("Unhandled exception escaped a signal handler: {} (at {}:{})", e.what(), e.file(), e.line());
-      detail = e.what();
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Unhandled exception escaped a signal handler: {}", e.what());
-      detail = e.what();
-    }
-    catch (...)
-    {
-      APP_LOG_ERROR("Unhandled non-standard exception escaped a signal handler");
-      detail = "Unknown error";
-    }
-
-    if (auto* const window = appPtr->get_active_window(); window != nullptr)
-    {
-      AppDialog::presentMessage(
-        *window,
-        "The operation could not be completed.",
-        detail,
-        {AppDialogAction{.label = "OK", .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
-        Gtk::ResponseType::OK);
-    }
+    AO_FATAL_EXCEPTION(std::current_exception(), "GTK signal handler");
   }
 
   std::int32_t runApp(std::span<char*> args, ProcessSignalHandlers& processSignalHandlers)
@@ -658,13 +643,9 @@ namespace
     processSignalHandlers.install(appPtr);
 
     // Top-level boundary for exceptions that escape a GTK signal/action handler.
-    // Such exceptions must not unwind through glib's C frames (UB), so glibmm
-    // catches them at the slot boundary and routes here. By this point the
-    // throwing operation's RAII has already run (e.g. an uncommitted LMDB write
-    // transaction aborts on destruction), so the data store stays consistent;
-    // we log, surface a generic notice, and let the app keep running rather than
-    // terminate on a transient failure.
-    Glib::add_exception_handler([appPtr] { handleSignalException(appPtr); });
+    // Such exceptions must not unwind through glib's C frames. glibmm catches
+    // them at the slot boundary; the project fatal root adds owned context.
+    Glib::add_exception_handler([] { handleSignalException(); });
 
     auto mainWindowPtr = Glib::RefPtr<MainWindow>{};
     auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};
@@ -679,6 +660,8 @@ namespace
     auto windowRegistration =
       utility::ScopedRegistration{[&appPtr, &mainWindowPtr, &preferencesWindowPtr]
                                   {
+                                    auto exceptionPtr = std::exception_ptr{};
+
                                     try
                                     {
                                       if (preferencesWindowPtr)
@@ -690,16 +673,27 @@ namespace
 
                                         preferencesWindowPtr.reset();
                                       }
-
-                                      releaseMainWindow(*appPtr, mainWindowPtr);
-                                    }
-                                    catch (std::exception const& e)
-                                    {
-                                      APP_LOG_ERROR("Failed to release GTK windows during shutdown: {}", e.what());
                                     }
                                     catch (...)
                                     {
-                                      APP_LOG_ERROR("Failed to release GTK windows during shutdown: unknown exception");
+                                      exceptionPtr = std::current_exception();
+                                    }
+
+                                    try
+                                    {
+                                      releaseMainWindow(*appPtr, mainWindowPtr);
+                                    }
+                                    catch (...)
+                                    {
+                                      if (!exceptionPtr)
+                                      {
+                                        exceptionPtr = std::current_exception();
+                                      }
+                                    }
+
+                                    if (exceptionPtr)
+                                    {
+                                      AO_FATAL_EXCEPTION(std::move(exceptionPtr), "GTK window shutdown");
                                     }
                                   }};
     auto openLibraryIdleRegistration = utility::ScopedRegistration{};
@@ -737,30 +731,15 @@ namespace
 int main(int argc, char* argv[])
 {
   auto processSignalHandlers = ProcessSignalHandlers{};
-  std::int32_t exitCode = 0;
 
   try
   {
-    exitCode = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers);
-  }
-  catch (ao::Exception const& e)
-  {
-    APP_LOG_CRITICAL("Internal error: {} (at {}:{})", e.what(), e.file(), e.line());
-    std::println(stderr, "Internal error: {}\n(at {}:{})\nPlease report this bug.", e.what(), e.file(), e.line());
-    exitCode = 1;
-  }
-  catch (std::exception const& ex)
-  {
-    APP_LOG_CRITICAL("Unhandled exception: {}", ex.what());
-    std::println(stderr, "Unhandled exception: {}", ex.what());
-    exitCode = 1;
+    auto const exitCode = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers);
+    rt::Log::shutdown();
+    return exitCode;
   }
   catch (...)
   {
-    std::println(stderr, "Unknown unhandled exception");
-    exitCode = 1;
+    AO_FATAL_EXCEPTION(std::current_exception(), "GTK process root");
   }
-
-  rt::Log::shutdown();
-  return exitCode;
 }

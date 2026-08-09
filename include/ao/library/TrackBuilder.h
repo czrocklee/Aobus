@@ -24,9 +24,15 @@
 
 namespace ao::library
 {
+  namespace detail
+  {
+    class PhysicalStoreAccess;
+  }
+
   class DictionaryStore;
   class ResourceStore;
   class TrackView;
+  class TrackWriter;
   class WriteTransaction;
 
   /**
@@ -35,15 +41,15 @@ namespace ao::library
    * Stores strings as string_view pointing to external data (from std::string or mmap).
    * Sub-builders hold the actual data as member variables.
    *
-   * Records reach storage only as prepared values (see TrackWrite.h), which
-   * serialize directly into storage-owned bytes.
+   * Records reach storage through the logical TrackWriter, which prepares
+   * immutable values and serializes them directly into storage-owned bytes.
    *
    * Usage:
    *   // Pattern A: from existing view, modify hot only
    *   auto builder = TrackBuilder::fromHotView(view, dictionary);
    *   builder.tags().add("rock").remove("jazz");
-   *   auto hot = builder.prepareHot(transaction);
-   *   updatePreparedHotTrackRecord(writer, trackId, *hot);
+   *   auto writer = write.tracks();
+   *   writer.updateHot(trackId, builder);
    *
    *   // Pattern B: create new track
    *   auto builder = TrackBuilder::makeEmpty();
@@ -51,8 +57,8 @@ namespace ao::library
    *   builder.property().fileSize(fs).bitDepth(BitDepth{16});
    *   builder.tags().add("rock");
    *   builder.customMetadata().add("key", "value");
-   *   auto prepared = builder.prepare(transaction, resources);
-   *   createPreparedTrackRecord(writer, prepared->first, prepared->second);
+   *   auto writer = write.tracks();
+   *   writer.create(builder, FileManifestBuilder::makeEmpty());
    */
   class TrackBuilder final
   {
@@ -241,14 +247,6 @@ namespace ao::library
     CustomMetadataBuilder& customMetadata();
     CustomMetadataBuilder const& customMetadata() const;
 
-    // Full serialization - resolves all strings to DictionaryIds
-    Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>> serialize(WriteTransaction& transaction,
-                                                                                ResourceStore const& resources) const;
-
-    // Partial serialization for hot-only or cold-only updates
-    Result<std::vector<std::byte>> serializeHot(WriteTransaction& transaction) const;
-    Result<std::vector<std::byte>> serializeCold(WriteTransaction& transaction, ResourceStore const& resources) const;
-
     //=============================================================================
     // Prepared structures for zero-copy serialization
     //=============================================================================
@@ -262,10 +260,9 @@ namespace ao::library
      * so mutating or destroying builder inputs after prepare() cannot skew
      * the validated size, header fields, or payload bytes.
      *
-     * Resolved dictionary IDs belong to the MusicLibrary that owns the
-     * transaction passed to prepareHot()/prepare(). Write the result only
-     * through that library's TrackStore, and commit the originating transaction
-     * before relying on newly interned IDs in later transactions.
+     * Resolved dictionary IDs belong to the MusicLibrary and transaction used
+     * internally by TrackWriter. The prepared value never crosses that logical
+     * writer boundary.
      */
     class PreparedHot
     {
@@ -304,14 +301,15 @@ namespace ao::library
      * every byte writeTo emits - including the URI - with all header fields
      * overflow-checked and frozen at prepare time.
      *
-     * Resolved dictionary and resource IDs belong to the MusicLibrary that owns
-     * the transaction and ResourceStore passed to prepareCold()/prepare(). The
-     * result is not portable to another library.
+     * Resolved dictionary and resource IDs belong to the MusicLibrary and
+     * transaction used internally by TrackWriter. The prepared value is not
+     * portable to another library.
      */
     class PreparedCold
     {
     public:
       std::size_t size() const noexcept { return _size; }
+      std::string_view uri() const noexcept { return _uri; }
       void writeTo(std::span<std::byte> out) const noexcept;
 
     private:
@@ -361,14 +359,6 @@ namespace ao::library
       friend class TrackBuilder;
     };
 
-    // Prepare methods - resolve dictionary IDs and compute sizes
-    Result<std::pair<PreparedHot, PreparedCold>> prepare(WriteTransaction& transaction,
-                                                         ResourceStore const& resources) const;
-
-    Result<PreparedHot> prepareHot(WriteTransaction& transaction) const;
-
-    Result<PreparedCold> prepareCold(WriteTransaction& transaction, ResourceStore const& resources) const;
-
   private:
     enum class BaselineKind : std::uint8_t
     {
@@ -378,8 +368,23 @@ namespace ao::library
 
     // Private helper methods for serialization
     static std::uint32_t computeBloomFilter(std::span<DictionaryId const> tagIds);
+    static DictionaryId internDictionaryId(std::string_view value, WriteTransaction& transaction);
+    static DictionaryId resolveDictionaryId(std::string_view value, WriteTransaction& transaction);
+    static Result<ResourceId> createResource(std::span<std::byte const> data,
+                                             WriteTransaction& transaction,
+                                             ResourceStore const& resources);
     Result<> validateHotSerializable() const;
     Result<> validateColdSerializable() const;
+
+    Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>> serialize(WriteTransaction& transaction,
+                                                                                ResourceStore const& resources) const;
+    Result<std::vector<std::byte>> serializeHot(WriteTransaction& transaction) const;
+    Result<std::vector<std::byte>> serializeCold(WriteTransaction& transaction, ResourceStore const& resources) const;
+
+    Result<std::pair<PreparedHot, PreparedCold>> prepare(WriteTransaction& transaction,
+                                                         ResourceStore const& resources) const;
+    Result<PreparedHot> prepareHot(WriteTransaction& transaction) const;
+    Result<PreparedCold> prepareCold(WriteTransaction& transaction, ResourceStore const& resources) const;
 
     // Sub-builders stored as members
     MetadataBuilder _metadataBuilder{};
@@ -387,6 +392,9 @@ namespace ao::library
     TagsBuilder _tagsBuilder{};
     CoverArtBuilder _coverArtBuilder{};
     CustomMetadataBuilder _customMetadataBuilder{};
+
+    friend class TrackWriter;
+    friend class detail::PhysicalStoreAccess;
     BaselineKind _baselineKind = BaselineKind::Complete;
   };
 } // namespace ao::library

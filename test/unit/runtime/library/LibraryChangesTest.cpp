@@ -9,7 +9,6 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/TrackMutation.h>
@@ -26,6 +25,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -86,7 +86,7 @@ namespace ao::rt::test
 
         if (!completed.waitUntil(true))
         {
-          throwException<Exception>("Timed out waiting for controlled foreign dispatch completion");
+          throw std::runtime_error{"Timed out waiting for controlled foreign dispatch completion"};
         }
 
         _foreignDispatchReturned.set(true);
@@ -162,7 +162,7 @@ namespace ao::rt::test
     auto executor = ManualExecutor{};
 
     {
-      auto changes = LibraryChanges{executor, 0};
+      auto changes = LibraryChanges{executor, 0, "test-library"};
       auto mutationService = LibraryMutationService{
         executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
       auto mutationRes = mutationService.beginInteractiveMutation();
@@ -180,7 +180,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = AffinityProbeExecutor{};
-    auto changes = LibraryChanges{executor, 0};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
     auto mutationServicePtr = std::make_unique<LibraryMutationService>(
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes);
     auto maintenanceRes = mutationServicePtr->beginMaintenance(LibraryMaintenanceKind::ScanApply);
@@ -206,7 +206,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = AffinityProbeExecutor{};
-    auto changes = LibraryChanges{executor, 0};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
     auto mutationService = LibraryMutationService{
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
     auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
@@ -248,7 +248,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = CompletionBeforeForeignDispatchReturnsExecutor{};
-    auto changes = LibraryChanges{executor, 0};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
     auto mutationService = LibraryMutationService{
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
     bool notified = false;
@@ -282,7 +282,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
-    auto changes = LibraryChanges{executor, 0};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
     auto mutationService = LibraryMutationService{
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
     auto firstMutation = ao::test::requireValue(mutationService.beginInteractiveMutation());

@@ -6,8 +6,8 @@
 #include "app/LibraryWindowSession.h"
 #include "platform/ProcessLauncher.h"
 #include "platform/StringResources.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/rt/Log.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>
@@ -19,7 +19,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <exception>
 #include <expected>
 #include <filesystem>
@@ -50,42 +49,17 @@ namespace winrt::Aobus::implementation
      */
     [[noreturn]] void reportTerminate() noexcept
     {
-      if (auto const exceptionPtr = std::current_exception(); exceptionPtr)
-      {
-        try
-        {
-          std::rethrow_exception(exceptionPtr);
-        }
-        catch (std::exception const& error)
-        {
-          showStartupFailure(error.what());
-          ao::winui::logWinUiCritical("WinUI terminating on an escaped exception", error.what());
-        }
-        catch (...)
-        {
-          showStartupFailure("An unknown exception escaped a no-throw boundary.");
-          ao::winui::logWinUiCritical("WinUI terminating", "escaped unknown exception");
-        }
-      }
-      else
-      {
-        showStartupFailure("Aobus terminated without an active exception.");
-        ao::winui::logWinUiCritical("WinUI terminating", "no active exception");
-      }
-
-      // Quit without unwinding: whatever invariant broke, running more
-      // destructors over it is how a diagnosable fault becomes a corrupt one.
-      std::_Exit(EXIT_FAILURE);
+      AO_FATAL_EXCEPTION(std::current_exception(), "WinUI terminate handler");
     }
 
-    std::filesystem::path stateRoot()
+    ao::Result<std::filesystem::path> stateRoot()
     {
       auto buffer = std::array<wchar_t, kEnvironmentBufferLength>{};
       auto const length = ::GetEnvironmentVariableW(L"LOCALAPPDATA", buffer.data(), static_cast<DWORD>(buffer.size()));
 
       if (length == 0 || length >= buffer.size())
       {
-        ao::throwException<ao::Exception>("LOCALAPPDATA is unavailable");
+        return ao::makeError(ao::Error::Code::NotFound, "LOCALAPPDATA is unavailable");
       }
 
       return std::filesystem::path{std::wstring_view{buffer.data(), length}} / "Aobus";
@@ -102,6 +76,7 @@ namespace winrt::Aobus::implementation
       }
       catch (...)
       {
+        AO_AUDITED_CATCH(DiagnosticFallback);
         ::MessageBoxW(nullptr, L"Aobus could not start.", L"Aobus", kErrorDialogFlags);
       }
     }
@@ -149,6 +124,7 @@ namespace winrt::Aobus::implementation
     }
     catch (...)
     {
+      AO_AUDITED_CATCH(SafeCleanup);
       ::OutputDebugStringA("Aobus could not shut down WinUI logging cleanly.\n");
     }
   }
@@ -163,6 +139,7 @@ namespace winrt::Aobus::implementation
     }
     catch (...)
     {
+      AO_AUDITED_CATCH(PlatformFallback);
       ::PostQuitMessage(1);
     }
   }
@@ -218,16 +195,11 @@ namespace winrt::Aobus::implementation
           ao::Error::Code::ResourceBusy, "The WinUI dispatcher rejected the library restart request");
       }
     }
-    catch (std::exception const& error)
+    catch (winrt::hresult_error const& error)
     {
       _processPhase = ProcessPhase::Running;
-      return ao::makeError(
-        ao::Error::Code::InitFailed, std::format("Failed to queue the library restart: {}", error.what()));
-    }
-    catch (...)
-    {
-      _processPhase = ProcessPhase::Running;
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to queue the library restart: unknown exception");
+      return ao::makeError(ao::Error::Code::InitFailed,
+                           std::format("Failed to queue the library restart: {}", winrt::to_string(error.message())));
     }
 
     return {};
@@ -286,13 +258,22 @@ namespace winrt::Aobus::implementation
     try
     {
       _dispatcher = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-      auto const appStateRoot = stateRoot();
+      auto appStateRootRes = stateRoot();
+
+      if (!appStateRootRes)
+      {
+        failLaunch(appStateRootRes.error().message);
+        return;
+      }
+
+      auto const appStateRoot = std::move(*appStateRootRes);
       ao::rt::Log::initialize(ao::rt::LogLevel::Info, appStateRoot / "logs", ao::rt::LogConsoleMode::Disabled);
       auto startupOptionsRes = ao::winui::readStartupOptions();
 
       if (!startupOptionsRes)
       {
-        ao::throwException<ao::Exception>(startupOptionsRes.error().message);
+        failLaunch(startupOptionsRes.error().message);
+        return;
       }
 
       _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(appStateRoot, _dispatcher);
@@ -318,7 +299,8 @@ namespace winrt::Aobus::implementation
 
       if (!startedRes)
       {
-        ao::throwException<ao::Exception>(startedRes.error().message);
+        failLaunch(startedRes.error().message);
+        return;
       }
 
       if (_processPhase != ProcessPhase::Exiting)
@@ -337,16 +319,22 @@ namespace winrt::Aobus::implementation
       }
       catch (...)
       {
+        AO_AUDITED_CATCH(DiagnosticFallback);
         failLaunch("Windows reported a startup error.");
       }
     }
-    catch (std::exception const& error)
-    {
-      failLaunch(error.what());
-    }
     catch (...)
     {
-      failLaunch(ao::winui::resourceString("StartupFailureUnknown"));
+      auto exceptionPtr = std::current_exception();
+      _processPhase = ProcessPhase::Exiting;
+
+      if (_windowSessionPtr)
+      {
+        _windowSessionPtr->retire();
+        _windowSessionPtr.reset();
+      }
+
+      AO_FATAL_EXCEPTION(std::move(exceptionPtr), "WinUI launch root");
     }
   }
 } // namespace winrt::Aobus::implementation

@@ -90,7 +90,7 @@ namespace ao::gtk
     if (sessionRes)
     {
       _editSessionPtr = std::move(*sessionRes);
-      _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated([this] noexcept { updateSaveEnabled(); });
+      _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated([this] { updateSaveEnabled(); });
     }
     else
     {

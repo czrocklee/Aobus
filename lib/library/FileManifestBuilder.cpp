@@ -1,15 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
+
+#include "FileManifestValidation.h"
+#include <ao/Contract.h>
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <expected>
+#include <span>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::library
@@ -21,6 +30,8 @@ namespace ao::library
 
   FileManifestBuilder FileManifestBuilder::fromView(FileManifestView const& view)
   {
+    AO_EXPECTS(view.isValid(), "Cannot prepare a file manifest from an invalid view");
+
     auto builder = FileManifestBuilder{};
     builder.trackId(view.trackId())
       .fileSize(view.fileSize())
@@ -67,10 +78,45 @@ namespace ao::library
     return *this;
   }
 
+  FileManifestBuilder::Prepared::Prepared(LibraryUri uri, FileManifestHeader header)
+    : _uri{std::move(uri)}, _header{header}
+  {
+  }
+
+  void FileManifestBuilder::Prepared::writeTo(std::span<std::byte> out) const noexcept
+  {
+    AO_EXPECTS(out.size() == sizeof(_header), "Prepared file manifest output size does not match its snapshot");
+    std::memcpy(out.data(), bytes().data(), bytes().size());
+  }
+
+  Result<FileManifestBuilder::Prepared> FileManifestBuilder::prepare(std::string_view uri) const
+  {
+    auto uriRes = LibraryUri::parse(uri);
+
+    if (!uriRes)
+    {
+      return std::unexpected{uriRes.error()};
+    }
+
+    return prepare(std::move(*uriRes));
+  }
+
+  Result<FileManifestBuilder::Prepared> FileManifestBuilder::prepare(LibraryUri uri) const
+  {
+    auto const key = detail::PaddedFileManifestKey{uri.value()};
+    auto const payload = std::as_bytes(std::span{&_header, std::size_t{1}});
+
+    if (auto validationRes = validateFileManifestEntry(key.bytes(), payload); !validationRes)
+    {
+      return std::unexpected{validationRes.error()};
+    }
+
+    return Prepared{std::move(uri), _header};
+  }
+
   std::vector<std::byte> FileManifestBuilder::serialize() const
   {
-    auto buffer = std::vector<std::byte>(sizeof(FileManifestHeader));
-    std::memcpy(buffer.data(), &_header, sizeof(FileManifestHeader));
-    return buffer;
+    auto const bytes = std::as_bytes(std::span{&_header, std::size_t{1}});
+    return {bytes.begin(), bytes.end()};
   }
 } // namespace ao::library

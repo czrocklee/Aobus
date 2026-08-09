@@ -8,7 +8,7 @@
 
 namespace ao::lmdb
 {
-  void throwOnError(char const* origin, std::int32_t code);
+  void failRead(char const* origin, std::int32_t code, bool transactionOwned);
   [[noreturn]] void throwOnMutationError(char const* origin,
                                          std::int32_t code,
                                          std::source_location location = std::source_location::current());

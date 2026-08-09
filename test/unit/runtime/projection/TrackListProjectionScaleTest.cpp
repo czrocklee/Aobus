@@ -7,9 +7,11 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -25,6 +27,7 @@
 #include <cstdint>
 #include <format>
 #include <memory>
+#include <ranges>
 #include <variant>
 #include <vector>
 
@@ -48,22 +51,27 @@ namespace ao::rt::test
     auto addTracks = [&lib](std::int32_t count, auto&& makeSpec)
     {
       auto transaction = library::test::writeTransaction(lib);
-      auto writer = lib.tracks().writer(transaction);
       auto result = std::vector<TrackId>{};
       result.reserve(static_cast<std::size_t>(count));
 
-      for (std::int32_t index = 0; index < count; ++index)
-      {
-        auto builder = library::TrackBuilder::makeEmpty();
-        auto const spec = makeSpec(index);
-        library::test::applyTrackSpec(builder, spec);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
 
-        auto preparedRes = builder.prepare(transaction, lib.resources());
-        REQUIRE(preparedRes);
-        auto createRes = library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
-        REQUIRE(createRes);
-        result.push_back(*createRes);
-      }
+          for (std::int32_t const index : std::views::iota(std::int32_t{0}, count))
+          {
+            auto builder = library::TrackBuilder::makeEmpty();
+            auto const spec = makeSpec(index);
+            library::test::applyTrackSpec(builder, spec);
+
+            auto createRes = writer.create(builder, library::FileManifestBuilder::makeEmpty());
+            REQUIRE(createRes);
+            result.push_back(*createRes);
+          }
+
+          return {};
+        }));
 
       REQUIRE(transaction.commit());
       return result;
@@ -74,7 +82,8 @@ namespace ao::rt::test
                          {
                            return library::test::TrackSpec{.title = std::format("Track {:05d}", index),
                                                            .artist = std::format("Artist {:03d}", index % 100),
-                                                           .album = std::format("Album {:03d}", index % 500)};
+                                                           .album = std::format("Album {:03d}", index % 500),
+                                                           .uri = std::format("track-{:05d}.flac", index)};
                          });
 
     auto sourcePtr = std::make_shared<MutableTrackSource>();
@@ -94,7 +103,10 @@ namespace ao::rt::test
     {
       auto newIds = addTracks(100,
                               [](std::int32_t index)
-                              { return library::test::TrackSpec{.title = std::format("New Track {:05d}", index)}; });
+                              {
+                                return library::test::TrackSpec{.title = std::format("New Track {:05d}", index),
+                                                                .uri = std::format("new-track-{:05d}.flac", index)};
+                              });
 
       sourcePtr->batchInsert(newIds);
 

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "SignalExitWatcher.h"
+#include <ao/Contract.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -12,6 +13,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <thread>
@@ -177,10 +179,9 @@ namespace ao::tui
             _onExit();
           }
         }
-        // Signal-triggered shutdown is best effort; callback failures must not
-        // terminate the watcher thread.
-        catch (...) // NOLINT(bugprone-empty-catch)
+        catch (...)
         {
+          AO_FATAL_EXCEPTION(std::current_exception(), "POSIX signal-exit callback");
         }
       }
 

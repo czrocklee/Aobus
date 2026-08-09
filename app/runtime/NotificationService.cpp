@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/NotificationService.h>
+
+#include <ao/Contract.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Signal.h>
@@ -8,11 +11,8 @@
 #include <ao/async/Task.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
-#include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/utility/StrongTypeFormatter.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -38,21 +38,6 @@ namespace ao::rt
 {
   namespace
   {
-    [[noreturn]] void failExecutorAffinity(std::source_location const& location)
-    {
-      APP_LOG_CRITICAL("NotificationService thread-affinity violation: '{}' invoked off the executor thread ({}:{})",
-                       location.function_name(),
-                       location.file_name(),
-                       location.line());
-
-      if (auto const& loggerPtr = Log::appLogger(); loggerPtr)
-      {
-        loggerPtr->flush();
-      }
-
-      std::abort();
-    }
-
     bool textFits(std::string_view const text, NotificationFeedLimits const& limits) noexcept
     {
       return text.size() <= limits.maxTextBytes;
@@ -125,7 +110,7 @@ namespace ao::rt
       Impl* owner;
     };
 
-    struct ExpiryRegistration final
+    struct [[nodiscard]] ExpiryRegistration final
     {
       async::TaskHandle task{};
     };
@@ -155,10 +140,7 @@ namespace ao::rt
 
     void ensureOnExecutor(std::source_location location = std::source_location::current()) const
     {
-      if (!executor.isCurrent()) [[unlikely]]
-      {
-        failExecutorAffinity(location);
-      }
+      AO_EXPECTS_AT(location, executor.isCurrent(), "NotificationService invoked off the executor thread");
     }
 
     std::shared_ptr<NotificationFeedState> mutableFeedCopy() const
@@ -229,7 +211,7 @@ namespace ao::rt
                                      std::weak_ptr<ExpiryRegistration> expiryRegistrationWeakPtr,
                                      std::chrono::milliseconds const duration)
     {
-      gsl_Expects(duration > std::chrono::milliseconds::zero());
+      AO_INVARIANT(duration > std::chrono::milliseconds::zero());
       return runtime.spawnCancellable(
         [runtime = &runtime,
          expiryControlWeakPtr = std::weak_ptr{expiryControlPtr},
@@ -325,7 +307,7 @@ namespace ao::rt
                                  NotificationFeedMutationKind const mutationKind)
     {
       auto candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
-      gsl_Expects(candidateEntryIter != candidatePtr->entries.end());
+      AO_INVARIANT(candidateEntryIter != candidatePtr->entries.end());
 
       if (!entryFits(*candidateEntryIter, limits))
       {
@@ -334,7 +316,7 @@ namespace ao::rt
       }
 
       auto const registrationIter = expiryRegistrations.find(id);
-      gsl_Expects(registrationIter != expiryRegistrations.end());
+      AO_INVARIANT(registrationIter != expiryRegistrations.end());
 
       auto optEvictedIds = evictHistoryToFit(*candidatePtr, id);
 
@@ -345,7 +327,7 @@ namespace ao::rt
       }
 
       candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
-      gsl_Expects(candidateEntryIter != candidatePtr->entries.end());
+      AO_INVARIANT(candidateEntryIter != candidatePtr->entries.end());
       auto candidateRegistrationPtr = prepareExpiry(*candidateEntryIter);
 
       // Install the candidate identity before synchronous publication so a
@@ -392,7 +374,7 @@ namespace ao::rt
       auto& candidateEntry = candidatePtr->entries.back();
       auto expiryRegistrationPtr = prepareExpiry(candidateEntry);
       auto const inserted = expiryRegistrations.try_emplace(id, expiryRegistrationPtr).second;
-      gsl_Expects(inserted);
+      AO_INVARIANT(inserted);
 
       commit(std::move(candidatePtr), NotificationFeedMutationKind::Posted, id, committedNextId);
       eraseExpiryRegistrations(*optEvictedIds);
@@ -420,7 +402,7 @@ namespace ao::rt
   NotificationService::~NotificationService() = default;
 
   async::Subscription NotificationService::onFeedUpdated(
-    std::move_only_function<void(NotificationFeedUpdate const&) noexcept> handler)
+    std::move_only_function<void(NotificationFeedUpdate const&)> handler)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->feedUpdatedSignal.connect(std::move(handler));

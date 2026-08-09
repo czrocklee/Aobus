@@ -3,10 +3,9 @@
 
 #include <ao/rt/library/ScanPlan.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -81,7 +80,7 @@ namespace ao::rt
 
   Result<ScanPlan> ScanPlan::makeRelinkPlan(std::string_view oldUri, std::string_view newUri) &&
   {
-    gsl_Assert(_executable && "Scan plan has already been consumed");
+    AO_INVARIANT(_executable, "Scan plan has already been consumed");
 
     auto const* const missingItem = findItem(_items, ScanClassification::Missing, oldUri);
 

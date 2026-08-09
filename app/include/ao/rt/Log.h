@@ -3,11 +3,12 @@
 
 #pragma once
 
-#include <ao/async/AsyncExceptionHandler.h>
+#include <ao/Contract.h>
 
 #include <spdlog/common.h>
 #include <spdlog/logger.h>
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -42,14 +43,15 @@ namespace ao::rt
                            LogConsoleMode consoleMode = LogConsoleMode::Enabled);
     static void shutdown();
 
-    static async::AsyncExceptionHandler asyncExceptionHandler();
-
     static std::shared_ptr<spdlog::logger> const& appLogger() noexcept { return _appLoggerPtr; }
     static std::shared_ptr<spdlog::logger> const& audioLogger() noexcept { return _audioLoggerPtr; }
 
   private:
+    static bool submitFatal(FatalDiagnostic const& diagnostic) noexcept;
+
     static std::shared_ptr<spdlog::logger> _appLoggerPtr;
     static std::shared_ptr<spdlog::logger> _audioLoggerPtr;
+    static std::atomic<std::shared_ptr<spdlog::logger>> _fatalLoggerPtr;
     static bool _initialized;
     static std::mutex _lifecycleMutex;
   };

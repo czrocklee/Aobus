@@ -4,7 +4,6 @@
 #include <ao/rt/CoreRuntime.h>
 
 #include <ao/Error.h>
-#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/MusicLibrary.h>
@@ -13,6 +12,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/utility/Path.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -50,14 +50,15 @@ namespace ao::rt
          std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
          std::unique_ptr<library::MusicLibrary> libraryPtr,
-         async::Sleeper* sleeper,
-         async::AsyncExceptionHandler asyncExceptionHandler)
+         async::Sleeper* sleeper)
       : executorPtr{std::move(execPtr)}
-      , asyncRuntime{*executorPtr, std::move(asyncExceptionHandler), sleeper}
+      , asyncRuntime{*executorPtr, sleeper}
       , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , musicLibraryPtr{std::move(libraryPtr)}
-      , libraryChanges{*executorPtr, currentLibraryRevision(*musicLibraryPtr)}
+      , libraryChanges{*executorPtr,
+                       currentLibraryRevision(*musicLibraryPtr),
+                       utility::pathToUtf8(musicLibraryPtr->databasePath())}
       , completionService{*musicLibraryPtr, libraryChanges}
       , trackSourceCache{*musicLibraryPtr, libraryChanges}
       , notificationService{asyncRuntime}
@@ -97,16 +98,11 @@ namespace ao::rt
                                                            std::filesystem::path musicRoot,
                                                            std::filesystem::path databasePath,
                                                            std::size_t const musicLibraryMapSize,
-                                                           async::Sleeper* const sleeper,
-                                                           async::AsyncExceptionHandler asyncExceptionHandler)
+                                                           async::Sleeper* const sleeper)
   {
     auto runtimePtr = std::unique_ptr<CoreRuntime>{new CoreRuntime{}};
-    auto result = runtimePtr->initialize(std::move(executorPtr),
-                                         std::move(musicRoot),
-                                         std::move(databasePath),
-                                         musicLibraryMapSize,
-                                         sleeper,
-                                         std::move(asyncExceptionHandler));
+    auto result = runtimePtr->initialize(
+      std::move(executorPtr), std::move(musicRoot), std::move(databasePath), musicLibraryMapSize, sleeper);
 
     if (!result)
     {
@@ -120,8 +116,7 @@ namespace ao::rt
                                    std::filesystem::path musicRoot,
                                    std::filesystem::path databasePath,
                                    std::size_t const musicLibraryMapSize,
-                                   async::Sleeper* const sleeper,
-                                   async::AsyncExceptionHandler asyncExceptionHandler)
+                                   async::Sleeper* const sleeper)
   {
     if (executorPtr == nullptr)
     {
@@ -137,12 +132,8 @@ namespace ao::rt
     }
 
     auto storagePtr = std::make_unique<library::MusicLibrary>(std::move(*storageRes));
-    auto implPtr = std::make_unique<Impl>(std::move(executorPtr),
-                                          std::move(musicRoot),
-                                          std::move(databasePath),
-                                          std::move(storagePtr),
-                                          sleeper,
-                                          std::move(asyncExceptionHandler));
+    auto implPtr = std::make_unique<Impl>(
+      std::move(executorPtr), std::move(musicRoot), std::move(databasePath), std::move(storagePtr), sleeper);
     auto libraryRes = Library::create(implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges);
 
     if (!libraryRes)

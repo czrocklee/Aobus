@@ -38,8 +38,6 @@ namespace ao::async
     // Admission is complete before wake. Event-loop wake failures are fatal
     // because an accepted task cannot be rolled back safely.
     virtual void wake() noexcept = 0;
-    virtual void executeTask(std::move_only_function<void()>& task) = 0;
-
     std::thread::id _ownerThread;
     std::mutex _mutex;
     std::vector<std::move_only_function<void()>> _pendingTasks;

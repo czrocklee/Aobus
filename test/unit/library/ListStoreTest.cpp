@@ -3,6 +3,7 @@
 
 #include <ao/library/ListStore.h>
 
+#include "lib/library/ListRecordValidation.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -12,7 +13,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -22,9 +22,19 @@ namespace ao::library::test
 {
   namespace
   {
-    std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, std::span<std::byte const> data)
+    template<typename Writer>
+    concept HasRawListCreate = requires(Writer& writer) { writer.create(std::span<std::byte const>{}); };
+
+    template<typename Writer>
+    concept HasRawListUpdate = requires(Writer& writer) { writer.update(ListId{1}, std::span<std::byte const>{}); };
+
+    static_assert(!HasRawListCreate<ListStore::Writer>);
+    static_assert(!HasRawListUpdate<ListStore::Writer>);
+    static_assert(noexcept(std::declval<ListBuilder::Prepared const&>().writeTo(std::span<std::byte>{})));
+
+    std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, ListBuilder::Prepared const& prepared)
     {
-      auto result = writer.create(data);
+      auto result = writer.create(prepared);
       REQUIRE(result);
       auto optView = writer.get(*result);
       REQUIRE(optView);
@@ -38,10 +48,10 @@ namespace ao::library::test
     auto& library = fixture.library;
     auto const& store = library.lists();
 
-    auto const data = ao::test::requireValue(ListBuilder::makeEmpty().name("Stored").serialize());
+    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().name("Stored").prepare());
 
     auto wtxn2 = writeTransaction(library);
-    auto const [id, view] = requireCreate(store.writer(wtxn2), data);
+    auto const [id, view] = requireCreate(physicalWriter(store, wtxn2), prepared);
     REQUIRE(wtxn2.commit());
 
     // Read the list
@@ -66,10 +76,10 @@ namespace ao::library::test
       builder.orderTrackIds().add(TrackId{rawId});
     }
 
-    auto const data = ao::test::requireValue(builder.serialize());
+    auto const prepared = ao::test::requireValue(builder.prepare());
 
     auto wtxn2 = writeTransaction(library);
-    auto const [id, view] = requireCreate(store.writer(wtxn2), data);
+    auto const [id, view] = requireCreate(physicalWriter(store, wtxn2), prepared);
     REQUIRE(wtxn2.commit());
 
     // Read by ID
@@ -87,15 +97,15 @@ namespace ao::library::test
     auto& library = fixture.library;
     auto const& store = library.lists();
 
-    auto const data = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
+    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().prepare());
 
     auto wtxn2 = writeTransaction(library);
-    auto const [id, view] = requireCreate(store.writer(wtxn2), data);
+    auto const [id, view] = requireCreate(physicalWriter(store, wtxn2), prepared);
     REQUIRE(wtxn2.commit());
 
     // Delete it
     auto wtxn3 = writeTransaction(library);
-    REQUIRE(store.writer(wtxn3).remove(id));
+    REQUIRE(physicalWriter(store, wtxn3).remove(id));
     REQUIRE(wtxn3.commit());
 
     // Verify it's gone
@@ -105,30 +115,31 @@ namespace ao::library::test
     CHECK(it == reader.end());
   }
 
-  TEST_CASE("ListStore - rejects structurally invalid records before mutation", "[library][regression][list]")
+  TEST_CASE("ListStore - invalid candidates cannot reach the prepared writer", "[library][regression][list]")
   {
     auto fixture = LibraryStoreFixture{};
-    auto const validPayload = ao::test::requireValue(ListBuilder::makeEmpty().name("Original").serialize());
-    auto const corruptPayload = std::array<std::byte, 4>{};
+    auto invalidBuilder = ListBuilder::makeEmpty();
+    invalidBuilder.orderTrackIds().add(kInvalidTrackId);
+    auto const invalidRes = invalidBuilder.prepare();
+    REQUIRE_FALSE(invalidRes);
+    CHECK(invalidRes.error().code == Error::Code::CorruptData);
+
+    auto const original = ao::test::requireValue(ListBuilder::makeEmpty().name("Original").prepare());
+    auto const updated = ao::test::requireValue(ListBuilder::makeEmpty().name("Updated").prepare());
     auto transaction = writeTransaction(fixture.library);
-    auto writer = fixture.library.lists().writer(transaction);
+    auto writer = physicalWriter(fixture.library.lists(), transaction);
 
-    auto const createRes = writer.create(corruptPayload);
-    REQUIRE_FALSE(createRes);
-    CHECK(createRes.error().code == Error::Code::CorruptData);
-
-    auto createdRes = writer.create(validPayload);
+    auto createdRes = writer.create(original);
     REQUIRE(createdRes);
-    auto const updateRes = writer.update(*createdRes, corruptPayload);
-    REQUIRE_FALSE(updateRes);
-    CHECK(updateRes.error().code == Error::Code::CorruptData);
+    REQUIRE(writer.update(*createdRes, updated));
     REQUIRE(transaction.commit());
 
     auto readTransaction = fixture.library.readTransaction();
     auto reader = fixture.library.lists().reader(readTransaction);
     auto const optStored = reader.get(*createdRes);
     REQUIRE(optStored);
-    CHECK(optStored->name() == "Original");
+    CHECK(optStored->name() == "Updated");
+    CHECK(validateSerializedList(optStored->rawData()));
     auto iterator = reader.begin();
     REQUIRE(iterator != reader.end());
     CHECK((*iterator).first == *createdRes);

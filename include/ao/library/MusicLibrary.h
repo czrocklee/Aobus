@@ -15,7 +15,7 @@
 namespace ao::library
 {
   struct MetadataHeader;
-  class MetadataStore;
+  class LibraryWrite;
   class TrackStore;
   class ListStore;
   class ResourceStore;
@@ -50,7 +50,12 @@ namespace ao::library
 
     ReadTransaction readTransaction() const;
     std::uint64_t libraryRevision(ReadTransaction const& transaction) const;
+    std::uint64_t libraryRevision(LibraryWrite const& write) const;
     std::uint64_t libraryRevision(WriteTransaction const& transaction) const;
+    MetadataHeader metadataHeader() const;
+    MetadataHeader metadataHeader(ReadTransaction const& transaction) const;
+    MetadataHeader metadataHeader(LibraryWrite const& write) const;
+    MetadataHeader metadataHeader(WriteTransaction const& transaction) const;
 
     TrackStore const& tracks() const;
 
@@ -61,9 +66,6 @@ namespace ao::library
     DictionaryStore const& dictionary() const;
 
     FileManifestStore const& manifest() const;
-
-    MetadataStore const& metadata() const;
-    MetadataHeader metadataHeader() const;
 
     std::filesystem::path const& rootPath() const;
     std::filesystem::path const& databasePath() const;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/library/TrackWrite.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -10,7 +11,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -58,10 +58,10 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, replacement);
     builder.property().uri("replacement.flac");
-    auto preparedRes = builder.prepare(transaction, fixture.library.resources());
+    auto preparedRes = physicalPrepareTrack(builder, transaction, fixture.library.resources());
     REQUIRE(preparedRes);
 
-    auto writer = fixture.library.tracks().writer(transaction);
+    auto writer = physicalWriter(fixture.library.tracks(), transaction);
     auto const missingId = TrackId{existingId.raw() + 1};
     enum class UpdateMode : std::uint8_t
     {
@@ -120,10 +120,10 @@ namespace ao::library::test
     auto const reserved = makeTrackSpec("Reserved");
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, reserved);
-    auto preparedRes = builder.prepareHot(transaction);
+    auto preparedRes = physicalPrepareHotTrack(builder, transaction);
     REQUIRE(preparedRes);
 
-    auto writer = fixture.library.tracks().writer(transaction);
+    auto writer = physicalWriter(fixture.library.tracks(), transaction);
 
     // Track zero is a corrupt target, not a recoverable miss, so it must not
     // read back as NotFound just because no row occupies key zero.

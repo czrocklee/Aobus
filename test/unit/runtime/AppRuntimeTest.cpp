@@ -16,7 +16,6 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Backend.h>
@@ -117,12 +116,6 @@ namespace ao::rt::test
       Status _status;
     };
 
-    async::Task<void> failingAppRuntimeTask(async::Runtime* runtime)
-    {
-      co_await runtime->resumeOnWorker();
-      throwException<Exception>("AppRuntime composition failure");
-    }
-
     async::Task<void> attemptWriterDuringQueuedPublication(CoreRuntime* runtime,
                                                            AsyncTestState<bool> started,
                                                            AsyncTestState<bool> rejectedByClosing)
@@ -183,7 +176,7 @@ namespace ao::rt::test
     auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
     {
       auto library = library::test::makeTestMusicLibrary(tempDir.path(), databasePath);
-      [[maybe_unused]] auto const trackId = library::test::addTrack(
+      [[maybe_unused]] auto const trackId = library::test::addTrackWithUniqueFixtureUri(
         library, library::test::TrackSpec{.title = "Already persisted", .uri = "persisted.flac"});
     }
 
@@ -260,29 +253,6 @@ namespace ao::rt::test
 
     // Cover polymorphic destruction of CoreRuntime
     auto const corePtr = std::unique_ptr<CoreRuntime>{std::move(appPtr)};
-  }
-
-  TEST_CASE("AppRuntime - injected async exception handler reaches the composed Runtime",
-            "[runtime][unit][app-runtime]")
-  {
-    auto tempDir = ao::test::TempDir{};
-    auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto appPtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
-      .executorPtr = std::make_unique<InlineExecutor>(),
-      .musicRoot = tempDir.path(),
-      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
-      .workspaceConfigStorePtr =
-        std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
-      .asyncExceptionHandler = exceptionRecorder.handler(),
-    }));
-
-    appPtr->async().spawnLogged(failingAppRuntimeTask(&appPtr->async()));
-
-    REQUIRE(exceptionRecorder.waitForCount(1));
-    appPtr.reset();
-
-    requireSingleRecordedException<Exception>(exceptionRecorder, "root coroutine");
   }
 
   TEST_CASE("CoreRuntime - shutdown wakes a writer behind queued publication",

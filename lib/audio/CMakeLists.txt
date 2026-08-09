@@ -13,6 +13,8 @@ add_library(ao_audio STATIC
     WavDecoderSession.cpp
     detail/AacConfigParser.cpp
     detail/DecoderOutputAdapter.cpp
+    detail/DecoderError.cpp
+    detail/EngineEventQueueInvariants.cpp
     detail/MappedFileCursor.cpp
     detail/Mp4PacketSource.cpp
     detail/RenderPath.cpp

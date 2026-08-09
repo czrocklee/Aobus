@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/async/LoopExecutor.h>
 #include <ao/async/Signal.h>
+
+#include <ao/async/LoopExecutor.h>
 #include <ao/async/Subscription.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -139,25 +140,24 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::int32_t>{2});
   }
 
-  TEST_CASE("Signal - handlers are noexcept by contract", "[core][unit][signal]")
+  TEST_CASE("Signal - owns the non-throwing terminal emission boundary", "[core][unit][signal]")
   {
     // Observation reports something that already happened, so a handler failure
-    // carries no decision the publisher could act on. The contract is enforced
-    // in the type system rather than at runtime: a handler that throws
-    // terminates at the throw point, which no test can observe, so the
-    // assertions here are the contract.
-    STATIC_REQUIRE(std::is_nothrow_invocable_v<Signal<>::Handler>);
-    STATIC_REQUIRE(std::is_nothrow_invocable_v<Signal<std::int32_t>::Handler, std::int32_t>);
+    // carries no decision the publisher could act on. Handlers may use ordinary
+    // throwing callables; emit owns the fatal containment boundary.
+    STATIC_REQUIRE_FALSE(std::is_nothrow_invocable_v<Signal<>::Handler>);
+    STATIC_REQUIRE_FALSE(std::is_nothrow_invocable_v<Signal<std::int32_t>::Handler, std::int32_t>);
 
     STATIC_REQUIRE(std::is_constructible_v<Signal<>::Handler, decltype([] noexcept {})>);
-    STATIC_REQUIRE_FALSE(std::is_constructible_v<Signal<>::Handler, decltype([] {})>);
-    STATIC_REQUIRE_FALSE(std::is_constructible_v<Signal<std::int32_t>::Handler, decltype([](std::int32_t) {})>);
+    STATIC_REQUIRE(std::is_constructible_v<Signal<>::Handler, decltype([] {})>);
+    STATIC_REQUIRE(std::is_constructible_v<Signal<std::int32_t>::Handler, decltype([](std::int32_t) {})>);
 
-    // Delivery inherits the guarantee, synchronously and deferred alike.
+    // Synchronous delivery is the terminal boundary. Deferred delivery may
+    // still fail while constructing or admitting the owned task.
     auto signal = Signal<std::int32_t>{};
     auto executor = LoopExecutor{};
     STATIC_REQUIRE(noexcept(signal.emit(0)));
-    STATIC_REQUIRE(noexcept(signal.post(executor, 0)));
+    STATIC_REQUIRE_FALSE(noexcept(signal.post(executor, 0)));
   }
 
   TEST_CASE("Signal - a disconnecting handler does not starve later observers", "[core][unit][signal]")

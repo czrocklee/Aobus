@@ -80,7 +80,7 @@ namespace ao::gtk
     _observedWorkspaceRevision = initialWorkspace.revision;
 
     _workspaceSub = _runtime.workspace().onChanged(
-      [this](rt::WorkspaceChanged const& changed) noexcept
+      [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.snapshot.revision <= _observedWorkspaceRevision)
         {

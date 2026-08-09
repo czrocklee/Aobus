@@ -4,13 +4,12 @@
 #include <ao/library/DictionaryStore.h>
 
 #include "detail/LibraryError.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <cstddef>
@@ -76,9 +75,9 @@ namespace ao::library
     auto index = id.raw();
 
     // 0 is null/invalid
-    gsl_Expects(index != 0 && "Invalid dictionary ID");
+    AO_EXPECTS(index != 0, "Invalid dictionary ID");
 
-    gsl_Expects(index - 1 < _idToStringStorage.size() && "Invalid dictionary ID");
+    AO_EXPECTS(index - 1 < _idToStringStorage.size(), "Invalid dictionary ID");
 
     return _idToStringStorage[index - 1];
   }
@@ -105,8 +104,7 @@ namespace ao::library
       return *it;
     }
 
-    gsl_Assert(false && "String not found in dictionary");
-    std::unreachable();
+    AO_FATAL("String not found in dictionary");
   }
 
   std::optional<DictionaryId> DictionaryStore::findId(std::string_view str) const
@@ -141,7 +139,7 @@ namespace ao::library
 
   std::uint64_t DictionaryStore::bindSymbols(std::span<std::string const> symbols, std::span<DictionaryId> ids) const
   {
-    gsl_Expects(symbols.size() == ids.size());
+    AO_EXPECTS(symbols.size() == ids.size());
     auto const lock = std::shared_lock{_mutex};
 
     for (std::size_t index = 0; index < symbols.size(); ++index)
@@ -185,7 +183,7 @@ namespace ao::library
 
     Result<DictionaryId> intern(std::string_view value)
     {
-      gsl_Expects(transaction->isActive() && "Dictionary writer transaction is no longer active");
+      AO_EXPECTS(transaction->isActive(), "Dictionary writer transaction is no longer active");
 
       if (auto const optId = dictionary->findId(value); optId)
       {
@@ -209,7 +207,7 @@ namespace ao::library
 
       auto const id = DictionaryId{nextId};
       auto const [overlayIt, inserted] = overlay.emplace(std::string{value}, id);
-      gsl_Expects(inserted);
+      AO_INVARIANT(inserted);
 
       try
       {
@@ -243,8 +241,8 @@ namespace ao::library
 
       auto const expectedFirstId = static_cast<std::uint32_t>(dictionary->_idToStringStorage.size()) + 1;
 
-      gsl_Assert(delta.front().id.raw() == expectedFirstId &&
-                 "Dictionary publication order changed during a library write");
+      AO_INVARIANT(
+        delta.front().id.raw() == expectedFirstId, "Dictionary publication order changed during a library write");
 
       try
       {
@@ -260,7 +258,7 @@ namespace ao::library
         {
           auto const [it, inserted] = dictionary->_stringToId.insert(entry.id);
 
-          gsl_Assert(inserted && "Dictionary publication would rebind an existing string");
+          AO_INVARIANT(inserted, "Dictionary publication would rebind an existing string");
 
           insertedCount++;
         }

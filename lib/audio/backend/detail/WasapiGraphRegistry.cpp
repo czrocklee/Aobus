@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/backend/detail/WasapiGraphRegistry.h>
+
+#include <ao/Contract.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
-#include <ao/audio/backend/detail/WasapiGraphRegistry.h>
 #include <ao/audio/flow/Graph.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -107,10 +108,10 @@ namespace ao::audio::backend::detail
 
   WasapiGraphRegistry::~WasapiGraphRegistry()
   {
-    gsl_Expects(_implPtr != nullptr);
+    AO_INVARIANT(_implPtr != nullptr);
     auto const callbackLock = std::scoped_lock{_implPtr->callbackMutex};
-    gsl_Expects(_implPtr->callbackDepth == 0);
-    gsl_Expects(_implPtr->activeSubscriptionCount == 0);
+    AO_EXPECTS(_implPtr->callbackDepth == 0);
+    AO_EXPECTS(_implPtr->activeSubscriptionCount == 0);
     auto const lock = std::scoped_lock{_implPtr->mutex};
     _implPtr->shutdown = true;
     _implPtr->states.clear();
@@ -178,7 +179,7 @@ namespace ao::audio::backend::detail
         impl->subscribers.erase(it);
       }
 
-      throw;
+      AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI graph observer");
     }
 
     {
@@ -202,7 +203,7 @@ namespace ao::audio::backend::detail
                             impl->subscribers.erase(it);
                           }
 
-                          gsl_Expects(impl->activeSubscriptionCount != 0);
+                          AO_INVARIANT(impl->activeSubscriptionCount != 0);
                           --impl->activeSubscriptionCount;
                         }};
   }
@@ -251,8 +252,15 @@ namespace ao::audio::backend::detail
         }
       }
 
-      auto publication = Impl::CallbackPublicationScope{*impl};
-      subscriber.callback(graph);
+      try
+      {
+        auto publication = Impl::CallbackPublicationScope{*impl};
+        subscriber.callback(graph);
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI graph observer");
+      }
     }
   }
 
@@ -300,8 +308,15 @@ namespace ao::audio::backend::detail
         }
       }
 
-      auto publication = Impl::CallbackPublicationScope{*impl};
-      subscriber.callback(emptyGraph);
+      try
+      {
+        auto publication = Impl::CallbackPublicationScope{*impl};
+        subscriber.callback(emptyGraph);
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI graph observer");
+      }
     }
   }
 
@@ -345,8 +360,9 @@ namespace ao::audio::backend::detail
         auto publication = Impl::CallbackPublicationScope{*impl};
         subscriber.callback(emptyGraph);
       }
-      catch (...) // NOLINT(bugprone-empty-catch) -- shutdown is noexcept and listeners cannot retain the registry
+      catch (...)
       {
+        AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI graph shutdown observer");
       }
     }
   }

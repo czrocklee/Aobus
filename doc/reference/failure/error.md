@@ -100,7 +100,7 @@ ao::Result<> result{};
 ## Implementation authority
 
 - [`Error.h`](../../../include/ao/Error.h) is the exhaustive type and enumerator authority.
-- [`Exception.h`](../../../include/ao/Exception.h) defines the separate invariant-fault type and is intentionally outside this recoverable value surface.
+- The [exception carrier reference](exception-carriers.md) owns the narrow implementation-only transports that may carry an `Error` to one declared translation boundary.
 
 ## Test authority
 
@@ -111,3 +111,5 @@ ao::Result<> result{};
 
 - [Outcome channel specification](../../spec/failure/outcome-channel.md)
 - [Failure and reporting architecture](../../architecture/failure-and-reporting.md)
+- [Fatal facility reference](fatal.md)
+- [Exception carrier reference](exception-carriers.md)

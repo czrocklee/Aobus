@@ -3,6 +3,7 @@
 
 #include <ao/library/ListBuilder.h>
 
+#include "lib/library/ListRecordValidation.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -26,9 +27,9 @@ namespace ao::library::test
 {
   namespace
   {
-    std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, std::span<std::byte const> data)
+    std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, ListBuilder::Prepared const& prepared)
     {
-      auto result = writer.create(data);
+      auto result = writer.create(prepared);
       REQUIRE(result);
       auto optView = writer.get(*result);
       REQUIRE(optView);
@@ -132,6 +133,9 @@ namespace ao::library::test
     auto const duplicateView = ListView{duplicatePayload};
     REQUIRE(duplicateView.isValid());
     REQUIRE(duplicateView.orderTrackIds().size() == 5);
+    auto const validationRes = validateSerializedList(duplicatePayload);
+    REQUIRE_FALSE(validationRes);
+    CHECK(validationRes.error().code == Error::Code::CorruptData);
 
     auto const rebuiltPayload = ao::test::requireValue(ListBuilder::fromView(duplicateView).serialize());
     auto const rebuiltView = ListView{rebuiltPayload};
@@ -181,10 +185,10 @@ namespace ao::library::test
     auto builder = ListBuilder::makeEmpty().name("RoundTrip Test").description("Testing round-trip");
     builder.orderTrackIds().add(TrackId{42});
     builder.orderTrackIds().add(TrackId{99});
-    auto const payload = ao::test::requireValue(builder.serialize());
+    auto const prepared = ao::test::requireValue(builder.prepare());
 
     auto wtxn2 = writeTransaction(library);
-    auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
+    auto const [id, createdView] = requireCreate(physicalWriter(store, wtxn2), prepared);
     REQUIRE(wtxn2.commit());
 
     auto rtxn = library.readTransaction();
@@ -204,14 +208,14 @@ namespace ao::library::test
     auto& library = fixture.library;
     auto const& store = library.lists();
 
-    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty()
-                                                  .name("Smart RoundTrip")
-                                                  .description("Testing smart list round-trip")
-                                                  .filter("@year > 2020")
-                                                  .serialize());
+    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty()
+                                                   .name("Smart RoundTrip")
+                                                   .description("Testing smart list round-trip")
+                                                   .filter("@year > 2020")
+                                                   .prepare());
 
     auto wtxn2 = writeTransaction(library);
-    auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
+    auto const [id, createdView] = requireCreate(physicalWriter(store, wtxn2), prepared);
     REQUIRE(wtxn2.commit());
 
     auto rtxn = library.readTransaction();
@@ -239,6 +243,49 @@ namespace ao::library::test
     auto const longTextRes = ListBuilder::makeEmpty().name(std::string(65'536, 'n')).serialize();
     REQUIRE_FALSE(longTextRes);
     CHECK(longTextRes.error().code == Error::Code::ValueTooLarge);
+  }
+
+  TEST_CASE("ListBuilder - preparation preserves an opaque invalid filter", "[library][unit][list]")
+  {
+    constexpr auto kInvalidFilter = "((( this is not query grammar";
+    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().filter(kInvalidFilter).prepare());
+    auto const view = ListView{prepared.bytes()};
+
+    REQUIRE(view.isValid());
+    CHECK(view.filter() == kInvalidFilter);
+    CHECK(validateSerializedList(prepared.bytes()));
+  }
+
+  TEST_CASE("ListBuilder - builder and prepared values own text snapshots", "[library][unit][list]")
+  {
+    auto name = std::string{"Snapshot"};
+    auto filter = std::string{"not valid query syntax (("};
+    auto builder = ListBuilder::makeEmpty().name(name).filter(filter);
+
+    name = "Source mutated";
+    filter = "$title = source-changed";
+    auto const prepared = ao::test::requireValue(builder.prepare());
+
+    name = "Builder mutated";
+    filter = "$title = builder-changed";
+    builder.name(name).filter(filter);
+    auto const view = ListView{prepared.bytes()};
+
+    REQUIRE(view.isValid());
+    CHECK(view.name() == "Snapshot");
+    CHECK(view.filter() == "not valid query syntax ((");
+    CHECK(validateSerializedList(prepared.bytes()));
+  }
+
+  TEST_CASE("ListBuilder - preparation rejects the reserved saved-order Track id", "[library][unit][list]")
+  {
+    auto builder = ListBuilder::makeEmpty();
+    builder.orderTrackIds().add(kInvalidTrackId);
+
+    auto const preparedRes = builder.prepare();
+
+    REQUIRE_FALSE(preparedRes);
+    CHECK(preparedRes.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("ListBuilder - order supports more than 16-bit byte offsets", "[library][unit][list]")

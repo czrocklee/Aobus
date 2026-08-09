@@ -3,16 +3,17 @@
 
 #include <ao/yaml/RymlAdapter.h>
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 
 #include <c4/substr.hpp>
 #include <ryml.hpp>
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <ios>
 #include <optional>
@@ -23,6 +24,128 @@
 
 namespace ao::yaml
 {
+  namespace
+  {
+    class YamlParseFailure final : public std::exception
+    {
+    public:
+      explicit YamlParseFailure(std::string message)
+        : _message{std::move(message)}
+      {
+      }
+
+      char const* what() const noexcept override { return _message.c_str(); }
+
+    private:
+      std::string _message;
+    };
+
+    std::string callbackFilename(void* const userData)
+    {
+      auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
+      return state != nullptr ? state->filename() : std::string{"<buffer>"};
+    }
+
+    [[noreturn]] void throwBasicParseFailure(c4::basic_substring<char const> const msg,
+                                             c4::yml::ErrorDataBasic const& dat,
+                                             void* const userData)
+    {
+      AO_EXCEPTION_CARRIER(ForeignCallbackAdapter);
+      throw YamlParseFailure{std::format("YAML error at {}:{}:{}: {}",
+                                         callbackFilename(userData),
+                                         dat.location.line,
+                                         dat.location.col,
+                                         std::string_view{msg.data(), msg.size()})};
+    }
+
+    [[noreturn]] void throwDetailedParseFailure(c4::basic_substring<char const> const msg,
+                                                c4::yml::ErrorDataParse const& dat,
+                                                void* const userData)
+    {
+      AO_EXCEPTION_CARRIER(ForeignCallbackAdapter);
+      throw YamlParseFailure{std::format("YAML parse error at {}:{}:{}: {}",
+                                         callbackFilename(userData),
+                                         dat.ymlloc.line,
+                                         dat.ymlloc.col,
+                                         std::string_view{msg.data(), msg.size()})};
+    }
+
+    [[noreturn]] void throwVisitFailure(c4::basic_substring<char const> const msg,
+                                        c4::yml::ErrorDataVisit const& dat,
+                                        void* const userData)
+    {
+      AO_EXCEPTION_CARRIER(ForeignCallbackAdapter);
+      throw YamlParseFailure{std::format("YAML visit error at {}:{}:{}: {}",
+                                         callbackFilename(userData),
+                                         dat.cpploc.line,
+                                         dat.cpploc.col,
+                                         std::string_view{msg.data(), msg.size()})};
+    }
+
+    [[noreturn]] void abortBasicFailure(c4::basic_substring<char const> const msg,
+                                        c4::yml::ErrorDataBasic const& dat,
+                                        void* /*userData*/)
+    {
+      AO_FATAL("RapidYAML tree error at {}:{}: {}",
+               dat.location.line,
+               dat.location.col,
+               std::string_view{msg.data(), msg.size()});
+    }
+
+    [[noreturn]] void abortParseFailure(c4::basic_substring<char const> const msg,
+                                        c4::yml::ErrorDataParse const& dat,
+                                        void* /*userData*/)
+    {
+      AO_FATAL("RapidYAML parse escaped its Result boundary at {}:{}: {}",
+               dat.ymlloc.line,
+               dat.ymlloc.col,
+               std::string_view{msg.data(), msg.size()});
+    }
+
+    [[noreturn]] void abortVisitFailure(c4::basic_substring<char const> const msg,
+                                        c4::yml::ErrorDataVisit const& dat,
+                                        void* /*userData*/)
+    {
+      AO_FATAL("RapidYAML visit error at {}:{}: {}",
+               dat.cpploc.line,
+               dat.cpploc.col,
+               std::string_view{msg.data(), msg.size()});
+    }
+
+    ryml::Callbacks parseCallbacks(ErrorCallbackState& state)
+    {
+      auto result = ryml::Callbacks{};
+      result.set_error_basic(throwBasicParseFailure);
+      result.set_error_parse(throwDetailedParseFailure);
+      result.set_error_visit(throwVisitFailure);
+      result.set_user_data(&state);
+      return result;
+    }
+
+    template<typename Parse>
+    Result<> parseWithResult(ryml::Tree& tree, ErrorCallbackState& state, Parse parse)
+    {
+      tree.callbacks(parseCallbacks(state));
+
+      try
+      {
+        parse();
+        tree.callbacks(callbacks());
+        return {};
+      }
+      catch (YamlParseFailure const& failure)
+      {
+        tree.callbacks(callbacks());
+        return makeError(Error::Code::FormatRejected, failure.what());
+      }
+      catch (...)
+      {
+        tree.callbacks(callbacks());
+        throw;
+      }
+    }
+  } // namespace
+
   ErrorCallbackState::ErrorCallbackState(std::string filename)
     : _filename{std::move(filename)}
   {
@@ -33,56 +156,12 @@ namespace ao::yaml
     return _filename;
   }
 
-  void throwOnErrorWithContext(c4::basic_substring<char const> msg, c4::yml::ErrorDataBasic const& dat, void* userData)
-  {
-    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
-    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
-    throwException<Exception>("YAML error at {}:{}:{}: {}",
-                              filename,
-                              dat.location.line,
-                              dat.location.col,
-                              std::string_view{msg.data(), msg.size()});
-  }
-
-  void throwOnParseErrorWithContext(c4::basic_substring<char const> msg,
-                                    c4::yml::ErrorDataParse const& dat,
-                                    void* userData)
-  {
-    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
-    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
-    throwException<Exception>("YAML parse error at {}:{}:{}: {}",
-                              filename,
-                              dat.ymlloc.line,
-                              dat.ymlloc.col,
-                              std::string_view{msg.data(), msg.size()});
-  }
-
-  void throwOnVisitErrorWithContext(c4::basic_substring<char const> msg,
-                                    c4::yml::ErrorDataVisit const& dat,
-                                    void* userData)
-  {
-    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
-    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
-    throwException<Exception>("YAML visit error at {}:{}:{}: {}",
-                              filename,
-                              dat.cpploc.line,
-                              dat.cpploc.col,
-                              std::string_view{msg.data(), msg.size()});
-  }
-
   ryml::Callbacks callbacks()
   {
     auto result = ryml::Callbacks{};
-    result.set_error_basic(throwOnErrorWithContext);
-    result.set_error_parse(throwOnParseErrorWithContext);
-    result.set_error_visit(throwOnVisitErrorWithContext);
-    return result;
-  }
-
-  ryml::Callbacks callbacks(ErrorCallbackState& state)
-  {
-    auto result = callbacks();
-    result.set_user_data(&state);
+    result.set_error_basic(abortBasicFailure);
+    result.set_error_parse(abortParseFailure);
+    result.set_error_visit(abortVisitFailure);
     return result;
   }
 
@@ -96,16 +175,25 @@ namespace ao::yaml
     return {buffer.data(), buffer.size()};
   }
 
-  void parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state)
+  Result<> parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state)
   {
-    tree.callbacks(callbacks(state));
-    ryml::parse_in_place(toCsubstr(state.filename()), toSubstr(buffer), &tree);
+    return parseWithResult(tree,
+                           state,
+                           [&tree, &buffer, &state]
+                           { ryml::parse_in_place(toCsubstr(state.filename()), toSubstr(buffer), &tree); });
   }
 
-  void parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state)
+  Result<> parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state)
   {
-    tree.callbacks(callbacks(state));
-    ryml::parse_in_arena(toCsubstr(state.filename()), toCsubstr(source), &tree);
+    return parseWithResult(tree,
+                           state,
+                           [&tree, source, &state]
+                           { ryml::parse_in_arena(toCsubstr(state.filename()), toCsubstr(source), &tree); });
+  }
+
+  Result<> resolve(ryml::Tree& tree, ErrorCallbackState& state)
+  {
+    return parseWithResult(tree, state, [&tree] { tree.resolve(); });
   }
 
   ryml::csubstr copyToArena(ryml::Tree& tree, std::string_view value)
@@ -199,18 +287,6 @@ namespace ao::yaml
     }
 
     return buffer;
-  }
-
-  std::vector<char> readFile(std::filesystem::path const& path)
-  {
-    auto result = readFileResult(path);
-
-    if (!result)
-    {
-      throwException<Exception>(std::string_view{result.error().message}, result.error().location);
-    }
-
-    return std::move(*result);
   }
 
   std::string_view scalarView(ryml::ConstNodeRef const& node)

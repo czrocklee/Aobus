@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/async/AsyncExceptionHandler.h>
+#include <ao/async/Runtime.h>
+
+#include <ao/Contract.h>
 #include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
-#include <ao/async/Runtime.h>
 #include <ao/async/Sleeper.h>
 #include <ao/async/Task.h>
 
@@ -19,18 +20,16 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/system_error.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <cstdio>
 #include <exception>
 #include <functional>
 #include <memory>
-#include <print>
 #include <stop_token>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <type_traits>
@@ -38,16 +37,6 @@
 
 namespace ao::async
 {
-  struct Runtime::DiagnosticState final
-  {
-    explicit DiagnosticState(AsyncExceptionHandler handlerValue)
-      : handler{std::move(handlerValue)}
-    {
-    }
-
-    AsyncExceptionHandler handler;
-  };
-
   struct Runtime::CallbackState final
   {
     explicit CallbackState(std::size_t const workerCount)
@@ -81,31 +70,6 @@ namespace ao::async
       std::shared_ptr<State> statePtr;
       Handler handler;
     };
-
-    void writeUnhandledExceptionToStderr(std::exception_ptr const& exceptionPtr,
-                                         std::string_view const context) noexcept
-    {
-      try
-      {
-        try
-        {
-          std::rethrow_exception(exceptionPtr);
-        }
-        catch (std::exception const& exception)
-        {
-          std::println(stderr, "Unhandled exception in {}: {}", context, exception.what());
-        }
-        catch (...)
-        {
-          std::println(stderr, "Unhandled unknown exception in {}", context);
-        }
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): The noexcept stderr fallback has no remaining diagnostic sink.
-      catch (...)
-      {
-        // The final fallback must not escape through an Asio completion callback.
-      }
-    }
 
     [[noreturn]] void translateBoostCancellation(boost::system::system_error const& error)
     {
@@ -156,43 +120,23 @@ namespace ao::async
     }
   } // namespace
 
-  void Runtime::handleUnhandledException(DiagnosticState const& state,
-                                         std::exception_ptr exceptionPtr,
-                                         std::string_view const context) noexcept
+  void Runtime::finishFireAndForget(std::exception_ptr exceptionPtr, std::string_view const context) noexcept
   {
     if (!exceptionPtr || isOperationCancelled(exceptionPtr))
     {
       return;
     }
 
-    if (state.handler)
-    {
-      try
-      {
-        state.handler(exceptionPtr, context);
-        return;
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): A failed handler falls through to the stderr fallback below.
-      catch (...)
-      {
-        // A diagnostic handler must not escape through an Asio completion callback.
-      }
-    }
-
-    writeUnhandledExceptionToStderr(exceptionPtr, context);
+    AO_FATAL_EXCEPTION(std::move(exceptionPtr), context);
   }
 
-  Runtime::Runtime(Executor& callbackExecutor, AsyncExceptionHandler exceptionHandler, Sleeper* sleeper)
-    : Runtime{callbackExecutor, std::max(1U, std::thread::hardware_concurrency()), std::move(exceptionHandler), sleeper}
+  Runtime::Runtime(Executor& callbackExecutor, Sleeper* sleeper)
+    : Runtime{callbackExecutor, std::max(1U, std::thread::hardware_concurrency()), sleeper}
   {
   }
 
-  Runtime::Runtime(Executor& callbackExecutor,
-                   std::size_t workerCount,
-                   AsyncExceptionHandler exceptionHandler,
-                   Sleeper* sleeper)
+  Runtime::Runtime(Executor& callbackExecutor, std::size_t workerCount, Sleeper* sleeper)
     : _callbackExecutor{callbackExecutor}
-    , _diagnosticStatePtr{std::make_shared<DiagnosticState>(std::move(exceptionHandler))}
     , _callbackStatePtr{std::make_shared<CallbackState>(workerCount)}
     , _sleeper{sleeper}
   {
@@ -207,11 +151,6 @@ namespace ao::async
   Executor& Runtime::callbackExecutor() noexcept
   {
     return _callbackExecutor;
-  }
-
-  void Runtime::reportUnhandledException(std::exception_ptr exceptionPtr, std::string_view const context) const noexcept
-  {
-    handleUnhandledException(*_diagnosticStatePtr, std::move(exceptionPtr), context);
   }
 
   void Runtime::requestStop() noexcept
@@ -273,7 +212,7 @@ namespace ao::async
 
   Task<void> Runtime::sleepFor(std::chrono::milliseconds const delay, std::stop_token const stopToken)
   {
-    gsl_Expects(delay > std::chrono::milliseconds::zero());
+    AO_EXPECTS(delay > std::chrono::milliseconds::zero());
     throwIfStopRequested(stopToken);
 
     if (_sleeper != nullptr)
@@ -290,14 +229,12 @@ namespace ao::async
     throwIfStopRequested(stopToken);
   }
 
-  void Runtime::spawnLogged(Task<void> task)
+  void Runtime::spawnLogged(Task<void> task, std::string_view const fatalContext)
   {
-    auto diagnosticStatePtr = _diagnosticStatePtr;
-    boost::asio::co_spawn(
-      workerPool(),
-      std::move(task),
-      [diagnosticStatePtr = std::move(diagnosticStatePtr)](std::exception_ptr exceptionPtr)
-      { handleUnhandledException(*diagnosticStatePtr, std::move(exceptionPtr), "root coroutine"); });
+    boost::asio::co_spawn(workerPool(),
+                          std::move(task),
+                          [fatalContext = std::string{fatalContext}](std::exception_ptr exceptionPtr)
+                          { finishFireAndForget(std::move(exceptionPtr), fatalContext); });
   }
 
   std::move_only_function<void()> Runtime::startCancellable(CancellableTask task,
@@ -310,12 +247,10 @@ namespace ao::async
     return [stopSourcePtr] { std::ignore = stopSourcePtr->request_stop(); };
   }
 
-  TaskHandle Runtime::spawnCancellable(CancellableTask task)
+  TaskHandle Runtime::spawnCancellable(CancellableTask task, std::string_view const fatalContext)
   {
-    auto diagnosticStatePtr = _diagnosticStatePtr;
-    return TaskHandle{startCancellable(
-      std::move(task),
-      [diagnosticStatePtr = std::move(diagnosticStatePtr)](std::exception_ptr exceptionPtr)
-      { handleUnhandledException(*diagnosticStatePtr, std::move(exceptionPtr), "cancellable coroutine"); })};
+    return TaskHandle{startCancellable(std::move(task),
+                                       [fatalContext = std::string{fatalContext}](std::exception_ptr exceptionPtr)
+                                       { finishFireAndForget(std::move(exceptionPtr), fatalContext); })};
   }
 } // namespace ao::async

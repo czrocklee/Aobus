@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
@@ -9,7 +11,6 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <array>
 #include <cstddef>
@@ -95,8 +96,8 @@ namespace ao::uimodel
     , _playSelection{std::move(playSelection)}
     , _lastSnapshot{playback.snapshot()}
   {
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
-                                                 { handleSnapshot(snapshot); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   bool PlaybackCommandSurface::execute(PlaybackCommand command)
@@ -198,13 +199,13 @@ namespace ao::uimodel
     return false;
   }
 
-  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(std::move_only_function<void()> handler)
   {
     return _availabilityChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackCommandSurface::onAvailabilityChanged(PlaybackCommand const command,
-                                                                    std::move_only_function<void() noexcept> handler)
+                                                                    std::move_only_function<void()> handler)
   {
     return _commandAvailabilityChangedSignals[commandIndex(command)].connect(std::move(handler));
   }

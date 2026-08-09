@@ -3,8 +3,6 @@
 
 #include "TestFixtureSupport.h"
 
-#include <ao/Exception.h>
-
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -14,6 +12,8 @@
 #include <iterator>
 #include <random>
 #include <span>
+#include <stdexcept>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -36,7 +36,7 @@ namespace ao::test
       }
     }
 
-    throwException<Exception>("failed to create temporary test directory");
+    throw std::runtime_error{"failed to create temporary test directory"};
   }
 
   TempDir::~TempDir() noexcept

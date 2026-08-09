@@ -5,6 +5,7 @@
 
 #include "detail/DecoderError.h"
 #include "detail/StreamingBufferPolicy.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
@@ -12,12 +13,11 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/utility/ThreadName.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -84,7 +84,7 @@ namespace ao::audio
 
   Result<> StreamingSource::prepare()
   {
-    gsl_Expects((!_prepared && !_activated) && "Streaming source preparation may only run once");
+    AO_EXPECTS((!_prepared && !_activated), "Streaming source preparation may only run once");
 
     auto const seekToken = _seekStopSource.get_token();
 
@@ -122,7 +122,7 @@ namespace ao::audio
 
   Result<> StreamingSource::activate(std::function<void(Error const&)> onError)
   {
-    gsl_Expects((_prepared && !_activated) && "Streaming source activation requires one prepared source");
+    AO_EXPECTS((_prepared && !_activated), "Streaming source activation requires one prepared source");
 
     _onError = std::move(onError);
     _activated = true;
@@ -154,7 +154,7 @@ namespace ao::audio
   // streaming source intentionally fails fast if that escapes its noexcept contract.
   Result<> StreamingSource::seek(std::chrono::milliseconds offset) noexcept
   {
-    gsl_Expects((_prepared && _activated) && "Streaming source seek requires an activated source");
+    AO_EXPECTS((_prepared && _activated), "Streaming source seek requires an activated source");
 
     stopDecodeThread();
 
@@ -223,7 +223,15 @@ namespace ao::audio
     _decodeThread = std::jthread{[this](std::stop_token const& token)
                                  {
                                    setCurrentThreadName("StreamingSource-Decode");
-                                   decodeLoop(token);
+
+                                   try
+                                   {
+                                     decodeLoop(token);
+                                   }
+                                   catch (...)
+                                   {
+                                     AO_FATAL_EXCEPTION(std::current_exception(), "streaming-source decode thread");
+                                   }
                                  }};
   }
 

@@ -50,7 +50,9 @@ namespace ao::audio
      * advance the current active playback item after the backend commits the
      * full bytesWritten; it can be smaller than bytesWritten/frame when a
      * render crosses a gapless splice boundary. A short render is an underrun
-     * unless RenderPcmResult::drained is true.
+     * unless RenderPcmResult::drained is true. Once drained is returned, that
+     * backend run admits no later renderPcm() call and emits at most one ordered
+     * handleDrainComplete() before a new start.
      */
     virtual RenderPcmResult renderPcm(std::span<std::byte> output) noexcept = 0;
 
@@ -60,7 +62,7 @@ namespace ao::audio
     /// Called by the backend to report playback progress.
     virtual void handlePositionAdvanced(std::uint32_t frames) noexcept = 0;
 
-    /// Called by the backend when a drain operation has completed.
+    /// Called at most once after the final drained render of one backend run.
     virtual void handleDrainComplete() noexcept = 0;
 
     /// Called by the backend when the stream's runtime node ID or route anchor is stable.

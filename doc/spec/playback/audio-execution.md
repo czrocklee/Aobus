@@ -41,6 +41,10 @@ This contract belongs primarily to the **Core libraries** layer in the [system a
 - Backend, decoder, and realtime callbacks never run Engine lifecycle logic or application callbacks inline.
 - The steady-state realtime render path is lock-free and allocation-free.
 - A natural splice is wait-free and transfers no owning pointer on the render thread.
+- The render-to-event ring has exactly two entries; its only legal full state is
+  one unconsumed splice followed by that successor's drain completion.
+- One serialized producer domain owns all splice and drain-complete pushes for
+  an active render target, while `controlMutex` serializes every consumer pop.
 - Timeline-node destruction and decode-thread joins happen off the render thread exactly once.
 - Preroll and background decode use the same capacity-bounded byte-target policy.
 - The source requests another decoded block only while below its buffer target and with predictive block headroom; one decoded block cannot exceed the whole PCM ring.
@@ -114,6 +118,43 @@ They read the active source through timeline cursor atomics and use atomics for 
 At end of stream, the render path may consume one armed lookahead pointer with an atomic exchange, publish that node as active, and push one non-owning splice signal into the bounded SPSC ring.
 A counting semaphore wakes the consumer without a lost wakeup or render-thread mutex.
 
+The ring capacity is exactly two. Its bound follows from the timeline owner and
+backend drain protocols rather than from expected event-worker speed:
+
+1. The timeline owns at most one lookahead node. It is empty, armed, or consumed
+   by realtime and awaiting control-side promotion.
+2. Lookahead replacement runs under `controlMutex` as one operation: disarm the
+   old cursor, wait for any splice handoff, settle every currently visible
+   signal, revalidate the captured transition, then arm the replacement.
+3. `RenderTimeline::armLookahead()` checks its published cursor and owning slot
+   together under the timeline mutex, so a consumed-but-unpromoted owner cannot
+   be overwritten even if a future caller bypasses the intended control flow.
+4. Consuming the sole armed slot can leave at most one unconsumed `Spliced`
+   signal. The successor may then drain and add one ordered `Drained` signal.
+5. A backend admits no further render cycle after a drained render result until
+   control restarts it, and emits at most one corresponding drain completion.
+
+The legal full sequence is therefore `[Spliced, Drained]`. A third push is a
+producer, re-arm, or backend drain-admission defect and aborts through
+`AO_RT_INVARIANT`; it is never dropped as a recoverable queue condition.
+
+`kMaxSplicesPerRender == 8` is only a bound on sequential work inside one render
+call. Every successful splice consumes the sole armed slot. A later splice in
+that same call requires control-side promotion and a new arm, so the sequential
+limit is not the simultaneous ring-capacity bound.
+
+The producer side may move between a backend's serialized callback contexts,
+but producer entries may not overlap. Engine enforces that exclusion at the
+queue boundary. PipeWire does not rely on its main-loop drained callback being
+implicitly serialized with the realtime process callback: after a drained
+render it closes Aobus render admission, and its main-loop callback posts the
+accepted drain completion onto that stream's data loop. Both final
+`RenderTarget` calls therefore run on the same data loop. Stop uses a
+data-loop barrier, clears pending drain admission, drains the main loop, then
+uses a second data-loop barrier so a previously accepted handoff cannot outlive
+the target. Every pop and settlement path holds `controlMutex`, so the consumer
+side likewise remains singular.
+
 The event worker or next control command promotes the lookahead node, retires the old node, refreshes current format and route/current-input snapshots, then schedules callbacks.
 A successful transition emits `onTrackAdvanced`; a drain fallback emits `onTrackEnded` after generation/epoch checks.
 If a committed source is already drained with no buffered PCM, or resume or seek
@@ -126,8 +167,11 @@ drained committed source.
 One render call may contain retired-track tail and successor head.
 Backends report progress with `RenderPcmResult::positionFrameOffset` and `positionFrames`, not `bytesWritten / frameSize`, so committed tail bytes are not counted as successor position.
 
-The ring is single-producer across render splice and drain-complete publication.
-A backend may report drain completion from another thread only when its own synchronization orders it after the final render callback.
+A `Drained` completion may become visible after replacement has settled the
+ring but before it arms the new lookahead. Ring emptiness is therefore neither
+a stable nor a necessary arm precondition: that pending completion has no
+unpromoted lookahead owner, and the stopped backend cannot produce another
+render signal before control restarts and settles it.
 
 ### Streaming decode and buffering
 
@@ -306,6 +350,13 @@ Playback stops and succession does not skip the track, but the report is transie
 
 `stop()` is called from the non-render Engine control domain, closes admission of new render cycles, and waits for every admitted cycle to finish before returning.
 A render cycle includes `renderPcm` and its directly associated position, underrun, and drain notifications; a backend may deliver such a notification synchronously inside `stop()`, but not after it returns until rendering is restarted.
+After `renderPcm` reports `drained`, the backend closes render admission for that
+run and publishes at most one `handleDrainComplete()` after the final render
+notification. ALSA and WASAPI perform both actions on their single render loop.
+PipeWire closes its project-owned admission in the process callback and posts
+the native main-loop drained event back to the stream data loop, so the two
+Engine-facing producer calls cannot overlap; only an explicit start reopens
+admission.
 The target remains open, permitting stop/flush/start seek flows, while non-render route, property, and error callbacks remain protected by generation checks and the `close()` lifetime boundary.
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
@@ -318,6 +369,9 @@ A backend accepting properties before stream open caches and reapplies them when
 The first `Engine::shutdown()` caller changes lifecycle under the control lock, retires the render session, stops and joins the event worker, and closes backend/timeline state.
 Commands admitted after lifecycle transition do not enter backend/timeline logic and result-bearing commands return `InvalidState`.
 Concurrent shutdown callers wait for the single teardown; repeated completed shutdown is a no-op.
+Engine event-queue destruction requires a non-joinable worker, a published
+stopped state, an empty non-realtime event deque, and an empty realtime ring.
+Those are always-active invariants in every build configuration.
 
 Player public methods and destruction run on its executor, which outlives Player.
 Destruction closes the shared gate and cancels start/lookahead task handles before providers and Engine stop, so already queued tasks return without touching Player state.
@@ -380,6 +434,8 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 ## Test map
 
 - [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown.
+- [`EngineRtSignalRingTest.cpp`](../../../test/unit/audio/EngineRtSignalRingTest.cpp) protects the exact two-entry capacity, serialized producer handoff, sequential-splice occupancy, pending-drain arm behavior, and legal full-ring delivery.
+- [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal/) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.

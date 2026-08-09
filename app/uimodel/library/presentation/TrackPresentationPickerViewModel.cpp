@@ -44,7 +44,7 @@ namespace ao::uimodel
   {
     _observedViewId = _workspace.snapshot().activeViewId;
     _focusSub = _workspace.onChanged(
-      [this](rt::WorkspaceChanged const& changed) noexcept
+      [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.snapshot.activeViewId == _observedViewId)
         {
@@ -56,7 +56,7 @@ namespace ao::uimodel
       });
 
     _presentationSub = _views.onPresentationChanged(
-      [this](rt::ViewService::PresentationChanged const& ev) noexcept
+      [this](rt::ViewService::PresentationChanged const& ev)
       {
         if (ev.viewId != _workspace.snapshot().activeViewId)
         {
@@ -66,7 +66,7 @@ namespace ao::uimodel
         refresh();
       });
 
-    _catalogSub = _catalog.signalChanged().connect([this] noexcept { refresh(); });
+    _catalogSub = _catalog.signalChanged().connect([this] { refresh(); });
   }
 
   TrackPresentationPickerState TrackPresentationPickerViewModel::state() const

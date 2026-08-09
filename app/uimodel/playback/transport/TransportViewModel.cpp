@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
+
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <functional>
 #include <utility>
@@ -119,7 +120,7 @@ namespace ao::uimodel
                                          std::function<void(TransportViewState const&)> onRender)
     : _playback{playback}, _commands{commands}, _command{command}, _showLabel{showLabel}, _onRender{std::move(onRender)}
   {
-    _availabilitySub = _commands.onAvailabilityChanged(_command, [this] noexcept { refresh(); });
+    _availabilitySub = _commands.onAvailabilityChanged(_command, [this] { refresh(); });
     refresh();
   }
 

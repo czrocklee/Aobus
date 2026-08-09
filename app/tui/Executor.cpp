@@ -3,13 +3,11 @@
 
 #include "Executor.h"
 
-#include <ao/Exception.h>
-#include <ao/rt/Log.h>
+#include <ao/Contract.h>
 
 #include <ftxui/component/screen_interactive.hpp>
 
 #include <exception>
-#include <functional>
 
 namespace ao::tui
 {
@@ -20,31 +18,18 @@ namespace ao::tui
 
   void Executor::wake() noexcept
   {
-    _screen.Post([this] { drainQueuedTasks(); });
+    try
+    {
+      _screen.Post([this] { drainQueuedTasks(); });
+    }
+    catch (...)
+    {
+      AO_FATAL_EXCEPTION(std::current_exception(), "TUI executor wake");
+    }
   }
 
   void Executor::drainPendingTasks()
   {
     drainQueuedTasks();
-  }
-
-  void Executor::executeTask(std::move_only_function<void()>& task)
-  {
-    try
-    {
-      task();
-    }
-    catch (ao::Exception const& e)
-    {
-      APP_LOG_CRITICAL("Executor: task threw an internal exception: {} (at {}:{})", e.what(), e.file(), e.line());
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Executor: task threw an exception: {}", e.what());
-    }
-    catch (...)
-    {
-      APP_LOG_ERROR("Executor: task threw an unknown exception");
-    }
   }
 } // namespace ao::tui

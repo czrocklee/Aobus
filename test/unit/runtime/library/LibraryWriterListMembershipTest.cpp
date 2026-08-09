@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -51,7 +52,8 @@ namespace ao::rt::test
           builder.orderTrackIds().add(trackId);
         }
 
-        auto result = storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
+        auto result =
+          transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
         REQUIRE(result);
         REQUIRE(transaction.commit());
         return *result;
@@ -130,7 +132,8 @@ namespace ao::rt::test
         }
 
         auto const transaction = storage.library().readTransaction();
-        changesPtr = std::make_unique<LibraryChanges>(executor, storage.library().libraryRevision(transaction));
+        changesPtr =
+          std::make_unique<LibraryChanges>(executor, storage.library().libraryRevision(transaction), "test-library");
         writerFixturePtr = std::make_unique<LibraryWriterFixture>(storage.library(), *changesPtr);
         changeSubscription =
           changesPtr->onChanged([this](LibraryChangeSet const& event) noexcept { events.push_back(event); });
@@ -212,6 +215,27 @@ namespace ao::rt::test
     REQUIRE(acceptedRes);
     CHECK(acceptedRes->status == TrackAuthoringStatus::Applied);
     CHECK(fixture.hasTag(eligible, "playlist"));
+  }
+
+  TEST_CASE("LibraryWriter List membership - invalid stored parent filter rejects before mutation",
+            "[runtime][unit][library][list-membership]")
+  {
+    auto fixture = ListMembershipFixture{};
+    auto const trackId = fixture.addTrack("Unchanged");
+    auto const parentId = fixture.seedList("Invalid parent", "(");
+    auto const childId = fixture.seedList("Playlist", "#playlist", parentId);
+    auto targets = fixture.bind(std::array{trackId});
+    fixture.clearEvents();
+    auto const beforeRevision = fixture.revision();
+
+    auto const result = fixture.writer().addTracksToList(childId, targets);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(result.error().message.contains("parent List " + std::to_string(parentId.raw())));
+    CHECK_FALSE(fixture.hasTag(trackId, "playlist"));
+    CHECK(fixture.revision() == beforeRevision);
+    CHECK(fixture.events.empty());
   }
 
   TEST_CASE("LibraryWriter List membership - explicit Remove forgets rank and tag in one revision",

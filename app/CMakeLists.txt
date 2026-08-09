@@ -1,3 +1,12 @@
+# Prepared-next contract diagnostics are compiled once and shared with the
+# minimal fatal probe so source-location coverage does not duplicate a source
+# file across targets with incompatible compile commands.
+add_library(ao_prepared_next_contract STATIC
+    runtime/playback/PreparedNextContract.cpp
+)
+target_include_directories(ao_prepared_next_contract PRIVATE "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_prepared_next_contract PRIVATE ao_utility)
+
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
@@ -67,7 +76,7 @@ add_library(ao_app_runtime STATIC
 target_include_directories(ao_app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml spdlog::spdlog)
-target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
+target_link_libraries(ao_app_runtime PRIVATE ao_prepared_next_contract Boost::headers)
 
 if(WIN32)
   add_library(ao_windows_platform STATIC

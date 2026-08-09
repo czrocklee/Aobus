@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/track/TrackFilterViewModel.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -13,7 +19,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/TrackSourceCache.h>
-#include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,9 +33,9 @@ namespace ao::uimodel::test
     {
       MusicLibraryFixture libraryFixture;
       InlineExecutor executor;
-      LibraryChanges changes{executor, 0};
+      LibraryChanges changes{executor, 0, "test-library"};
       TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
-      ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
+      ViewService viewService{executor, libraryFixture.library(), trackSourceCache, changes};
       WorkspaceService workspaceService{executor, viewService, changes};
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel{viewService,
@@ -156,6 +161,49 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().hasError == true);
     CHECK(fixture.renderLog.last().tooltip.contains("Filter error"));
     CHECK(fixture.renderLog.last().canCreateSmartList == false);
+  }
+
+  TEST_CASE("TrackFilterViewModel - repaired stored source error refreshes the active view",
+            "[uimodel][unit][track-filter]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto listId = kInvalidListId;
+
+    {
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto builder = library::ListBuilder::makeEmpty().name("Invalid source").filter("(");
+      listId = ao::test::requireValue(
+        transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto executor = InlineExecutor{};
+    auto const revision = [&libraryFixture]
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      return libraryFixture.library().libraryRevision(transaction);
+    }();
+    auto changes = LibraryChanges{executor, revision, "test-library"};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto sources = TrackSourceCache{libraryFixture.library(), changes};
+    auto views = ViewService{executor, libraryFixture.library(), sources, changes};
+    auto workspace = WorkspaceService{executor, views, changes};
+    auto renderLog = ao::test::RenderLog<TrackFilterViewState>{};
+    auto viewModel = TrackFilterViewModel{views, workspace, [&renderLog](auto const& view) { renderLog.render(view); }};
+
+    REQUIRE(
+      workspace.navigate(NavigationRequest{.target = FilteredListTarget{.listId = listId, .filterExpression = {}}}));
+    REQUIRE(renderLog.last().hasError);
+    CHECK(renderLog.last().tooltip.contains("Filter error"));
+
+    REQUIRE(writerFixture.writer().updateList(LibraryWriter::ListDraft{
+      .listId = listId,
+      .name = "Repaired source",
+      .expression = "true",
+    }));
+
+    CHECK_FALSE(renderLog.last().hasError);
+    CHECK(renderLog.last().tooltip.empty());
   }
 
   TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation", "[uimodel][unit][track-filter]")

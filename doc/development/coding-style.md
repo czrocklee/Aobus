@@ -188,19 +188,27 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
       synchronous owner destruction unless the API explicitly documents a
       stronger reentrant lifetime model.
 - 5\. Error Handling
-  - 5.1. Three-Layer Policy
+  - 5.1. Outcome Policy
     - 5.1.1. **`ao::Result<T>`** (alias for `std::expected<T, ao::Error>`) — Recoverable fallible operations
       - Use when the operation can legitimately fail and the caller is expected to handle it
       - Examples: `ao::Result<> open(path)`, `ao::Result<PcmBlock> readNextBlock()`
       - The error value travels with the return — no separate `lastError()` query needed
-    - 5.1.2. **Exceptions** — Invariant violations, programmer errors, third-party callback mechanisms, and rare fatal startup defects
-      - Use `std::logic_error` or `ao::throwException<ao::Exception>()` according to the local pattern
-      - Do not use exceptions as the ordinary public contract for recoverable core/runtime/frontend failures
-      - Catch third-party exceptions at adapter boundaries when the failure should become `ao::Result<T>`
-    - 5.1.3. **`std::optional<T>`** — Legitimate absence
+    - 5.1.2. **AO fatal contracts** — Non-recoverable programming and infrastructure faults
+      - Use `AO_EXPECTS` when a caller violates a documented argument, capability, or call-order obligation knowable before the call
+      - Use `AO_ENSURES` when a function cannot satisfy its documented normal-return guarantee
+      - Use `AO_INVARIANT` for a private lifecycle, state-machine, construction, or previously validated fact
+      - Use `AO_RT_INVARIANT` for the same kind of internal fact on a realtime path, and `AO_FATAL` when mandatory infrastructure cannot preserve its contract after recovery has ceased to be truthful
+      - Conditions and diagnostic arguments must not perform a mutation or query required for program correctness; compute required effects first, then check their result
+      - Production code must not use raw `gsl_Expects`, `gsl_Ensures`, `gsl_Assert`, or the C `assert` macro; compile-time `static_assert` remains valid
+    - 5.1.3. **Exceptions** — Explicitly whitelisted transport or foreign mechanisms only
+      - Do not use exceptions as the ordinary public contract for recoverable core/runtime/frontend failures or for project contract faults
+      - Catch third-party exceptions at the narrow adapter boundary and translate them to the enclosing operation's declared channel
+      - A project-private exception carrier names its exact catch owner and never escapes the public subsystem boundary
+      - `std::bad_alloc` is not translated to `ResourceExhausted` at any current codebase site
+    - 5.1.4. **`std::optional<T>`** — Legitimate absence
       - Use when "not found" is a normal outcome, not an error
       - Examples: database lookups, optional UI state, finding a sink by name
-    - 5.1.4. See `doc/spec/failure/outcome-channel.md` for shared channel rules and `doc/reference/failure/error.md` for the exact error surface
+    - 5.1.5. See `doc/spec/failure/outcome-channel.md` for shared channel rules, `doc/reference/failure/fatal.md` for the AO fatal surface, `doc/reference/failure/error.md` for recoverable errors, and `doc/reference/failure/exception-carriers.md` for the exhaustive exception whitelist
   - 5.2. Error Type
     - 5.2.1. Use `ao::Result<T>` (alias for `std::expected<T, ao::Error>`) as the return type; use `ao::Result<>` when `T` is `void`
       - `ao::Error` has a `Code` enum for programmatic dispatch and a `message` string for human context
@@ -213,6 +221,7 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
     - 5.3.2. Do not return an empty `std::string` to indicate success
     - 5.3.3. Do not use `std::optional` to signal an error — use `std::expected` and let `std::nullopt` mean "absent, not broken"
     - 5.3.4. Do not catch exceptions in low-level implementation code only to stringify them; catch at meaningful adapter boundaries and preserve error code/context when converting to `ao::Result<T>`
+    - 5.3.5. Do not put required side effects inside an AO condition or diagnostic argument
 - 6\. Platform-Specific Code
   - 6.1. File-Level Separation
     - 6.1.1. Put platform implementations in separate files selected by CMake (`if(WIN32)`/`elseif(LINUX)`), using a platform suffix or a platform file family: `SignalExitWatcherPosix.cpp` / `SignalExitWatcherWindows.cpp`, `backend/WasapiProvider.cpp` / `backend/PipeWireProvider.cpp`.

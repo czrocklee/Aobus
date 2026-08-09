@@ -14,14 +14,14 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
+#include <ao/library/ListWriter.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
@@ -39,7 +39,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -660,7 +659,7 @@ namespace ao::rt
       , mode{modeValue}
       , buildChangeSet{buildChangeSetValue}
       , yamlErrorState{sourcePath.string()}
-      , tree{yaml::callbacks(yamlErrorState)}
+      , tree{yaml::callbacks()}
     {
     }
 
@@ -687,19 +686,19 @@ namespace ao::rt
 
     Result<ImportReport> applyPreparedImport(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
                                              ImportRunMode runMode,
-                                             library::WriteTransaction& transaction) const;
+                                             library::LibraryWrite& transaction) const;
     Result<> applyPreparedRecords(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
-                                  library::WriteTransaction& transaction,
+                                  library::LibraryWrite& transaction,
                                   ImportReport& report) const;
     Result<> restoreLibraryIdentity(ValidatedImport const& validated,
                                     ImportMode mode,
-                                    library::WriteTransaction& transaction) const;
+                                    library::LibraryWrite& transaction) const;
     LibraryChangeSet buildPreparedChangeSet(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
-                                            library::WriteTransaction const& transaction) const;
+                                            library::LibraryWrite const& transaction) const;
     Result<std::vector<PreparedTrack>> prepareTracks(ValidatedImport const& validated, ImportMode mode) const;
 
     void populateDeletionStats(ValidatedImport const& val, ImportReport& rep) const;
-    Result<> clearDatabase(ValidatedImport const& val, library::WriteTransaction& writeTransaction) const;
+    Result<> clearDatabase(ValidatedImport const& val, library::LibraryWrite& writeTransaction) const;
 
     Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
     Result<> validateHeader(ryml::ConstNodeRef const& root, ValidatedImport& validated) const;
@@ -708,14 +707,12 @@ namespace ao::rt
     Result<> validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
     Result<> importTracks(std::vector<PreparedTrack> const& tracks,
-                          library::WriteTransaction& transaction,
+                          library::LibraryWrite& transaction,
                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                           ImportMode strategy,
                           ImportReport& report) const;
     Result<> importTrackRecord(PreparedTrack const& preparedTrack,
-                               library::WriteTransaction& transaction,
-                               library::TrackStore::Writer& trackWriter,
-                               library::FileManifestStore::Writer& manifestWriter,
+                               library::TrackWriter& trackWriter,
                                library::FileManifestStore::Reader const& manifestReader,
                                ImportMode strategy,
                                std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
@@ -728,7 +725,7 @@ namespace ao::rt
                                library::TrackStore::Reader const& trackReader) const;
 
     Result<> importLists(std::vector<ValidatedList> const& lists,
-                         library::WriteTransaction& transaction,
+                         library::LibraryWrite& transaction,
                          std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
                          ImportMode strategy,
                          ImportReport& report) const;
@@ -739,11 +736,6 @@ namespace ao::rt
                                std::string_view uriStr,
                                library::FileManifestStore::Reader const& manifestReader,
                                library::FileManifestBuilder& manifestBuilder) const;
-    Result<TrackId> writePreparedTrackRecord(library::TrackStore::Writer& trackWriter,
-                                             std::optional<TrackId> const& optExistingTrackId,
-                                             library::TrackBuilder::PreparedHot const& preparedHot,
-                                             library::TrackBuilder::PreparedCold const& preparedCold) const;
-
     Result<> buildListOrder(library::ListBuilder& builder,
                             ValidatedList const& importedList,
                             std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
@@ -751,7 +743,7 @@ namespace ao::rt
                             ImportReport& report) const;
     Result<> updateListParent(ValidatedList const& importedList,
                               std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
-                              library::ListStore::Writer& listWriter,
+                              library::ListWriter& listWriter,
                               ImportReport& report) const;
 
     Result<> overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
@@ -806,7 +798,7 @@ namespace ao::rt
     }
 
     auto transaction = writableRes->writeTransaction();
-    auto reportRes = transaction.apply([&operation, &preparedRes](library::WriteTransaction& activeTransaction)
+    auto reportRes = transaction.apply([&operation, &preparedRes](library::LibraryWrite& activeTransaction)
                                        { return operation.apply(*preparedRes, activeTransaction); });
 
     if (!reportRes)
@@ -841,7 +833,7 @@ namespace ao::rt
     }
 
     auto transaction = writableRes->writeTransaction();
-    return transaction.apply([&operation, &preparedRes](library::WriteTransaction& activeTransaction)
+    return transaction.apply([&operation, &preparedRes](library::LibraryWrite& activeTransaction)
                              { return operation.preview(*preparedRes, activeTransaction); });
   }
 
@@ -860,15 +852,17 @@ namespace ao::rt
     preparedPtr->buffer = std::move(*bufferRes);
     preparedPtr->sourceBytes = preparedPtr->buffer;
 
-    try
-    {
-      yaml::parseInPlace(preparedPtr->tree, preparedPtr->buffer, preparedPtr->yamlErrorState);
-      preparedPtr->tree.resolve();
-    }
-    catch (std::exception const& exception)
+    if (auto const parsedRes = yaml::parseInPlace(preparedPtr->tree, preparedPtr->buffer, preparedPtr->yamlErrorState);
+        !parsedRes)
     {
       return makeError(
-        Error::Code::FormatRejected, std::format("Failed to parse '{}': {}", path.string(), exception.what()));
+        Error::Code::FormatRejected, std::format("Failed to parse '{}': {}", path.string(), parsedRes.error().message));
+    }
+
+    if (auto const resolvedRes = yaml::resolve(preparedPtr->tree, preparedPtr->yamlErrorState); !resolvedRes)
+    {
+      return makeError(Error::Code::FormatRejected,
+                       std::format("Failed to resolve '{}': {}", path.string(), resolvedRes.error().message));
     }
 
     auto validationRes = _importer._implPtr->validate(preparedPtr->tree.rootref());
@@ -938,27 +932,25 @@ namespace ao::rt
     return {};
   }
 
-  Result<ImportReport> LibraryYamlImportOperation::apply(PreparedImport const& prepared,
-                                                         library::WriteTransaction& transaction)
+  Result<ImportReport> LibraryYamlImportOperation::apply(PreparedImport const& prepared, library::LibraryWrite& write)
   {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Commit, transaction);
+    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Commit, write);
   }
 
   LibraryChangeSet LibraryYamlImportOperation::buildChangeSet(PreparedImport const& prepared,
-                                                              library::WriteTransaction const& transaction) const
+                                                              library::LibraryWrite const& write) const
   {
-    return _importer._implPtr->buildPreparedChangeSet(*prepared._implPtr, transaction);
+    return _importer._implPtr->buildPreparedChangeSet(*prepared._implPtr, write);
   }
 
-  Result<ImportReport> LibraryYamlImportOperation::preview(PreparedImport const& prepared,
-                                                           library::WriteTransaction& transaction)
+  Result<ImportReport> LibraryYamlImportOperation::preview(PreparedImport const& prepared, library::LibraryWrite& write)
   {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Preview, transaction);
+    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Preview, write);
   }
 
   Result<> LibraryYamlImporter::Impl::applyPreparedRecords(
     LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
-    library::WriteTransaction& transaction,
+    library::LibraryWrite& transaction,
     ImportReport& report) const
   {
     auto const& validated = prepared.validated;
@@ -992,27 +984,19 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::restoreLibraryIdentity(ValidatedImport const& validated,
                                                              ImportMode mode,
-                                                             library::WriteTransaction& transaction) const
+                                                             library::LibraryWrite& transaction) const
   {
     if (mode != ImportMode::Restore || validated.payloadMode == ExportMode::ListOnly || !validated.optLibraryId)
     {
       return {};
     }
 
-    auto headerRes = ml.metadata().load(transaction);
-
-    if (!headerRes)
-    {
-      return std::unexpected{headerRes.error()};
-    }
-
-    headerRes->libraryId = parseUuid(*validated.optLibraryId);
-    return ml.metadata().update(transaction, *headerRes);
+    return transaction.restoreLibraryIdentity(parseUuid(*validated.optLibraryId));
   }
 
   LibraryChangeSet LibraryYamlImporter::Impl::buildPreparedChangeSet(
     LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
-    library::WriteTransaction const& transaction) const
+    library::LibraryWrite const& transaction) const
   {
     auto changeSet = LibraryChangeSet{.libraryReset = prepared.mode == ImportMode::Restore};
 
@@ -1064,7 +1048,7 @@ namespace ao::rt
   Result<ImportReport> LibraryYamlImporter::Impl::applyPreparedImport(
     LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
     ImportRunMode runMode,
-    library::WriteTransaction& transaction) const
+    library::LibraryWrite& transaction) const
   {
     auto report = prepared.initialReport;
     auto applyRes = applyPreparedRecords(prepared, transaction, report);
@@ -1103,22 +1087,17 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlImporter::Impl::clearDatabase(ValidatedImport const& val,
-                                                    library::WriteTransaction& writeTransaction) const
+                                                    library::LibraryWrite& writeTransaction) const
   {
     if (val.payloadMode != ExportMode::ListOnly)
     {
-      if (auto result = ml.tracks().writer(writeTransaction).clear(); !result)
-      {
-        return result;
-      }
-
-      if (auto result = ml.manifest().writer(writeTransaction).clear(); !result)
+      if (auto result = writeTransaction.tracks().clear(); !result)
       {
         return result;
       }
     }
 
-    return ml.lists().writer(writeTransaction).clear();
+    return writeTransaction.lists().clear();
   }
 
   Result<ValidatedImport> LibraryYamlImporter::Impl::validate(ryml::ConstNodeRef const& root) const
@@ -1494,25 +1473,18 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlImporter::Impl::importTracks(std::vector<PreparedTrack> const& tracks,
-                                                   library::WriteTransaction& transaction,
+                                                   library::LibraryWrite& transaction,
                                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                                                    ImportMode strategy,
                                                    ImportReport& report) const
   {
-    auto trackWriter = ml.tracks().writer(transaction);
-    auto manifestWriter = ml.manifest().writer(transaction);
+    auto trackWriter = transaction.tracks();
     auto manifestReader = ml.manifest().reader(transaction);
 
     for (auto const& preparedTrack : tracks)
     {
-      if (auto result = importTrackRecord(preparedTrack,
-                                          transaction,
-                                          trackWriter,
-                                          manifestWriter,
-                                          manifestReader,
-                                          strategy,
-                                          yamlTrackIdToInternalId,
-                                          report);
+      if (auto result =
+            importTrackRecord(preparedTrack, trackWriter, manifestReader, strategy, yamlTrackIdToInternalId, report);
           !result)
       {
         return std::unexpected{result.error()};
@@ -1524,15 +1496,12 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::importTrackRecord(
     PreparedTrack const& preparedTrack,
-    library::WriteTransaction& transaction,
-    library::TrackStore::Writer& trackWriter,
-    library::FileManifestStore::Writer& manifestWriter,
+    library::TrackWriter& trackWriter,
     library::FileManifestStore::Reader const& manifestReader,
     ImportMode strategy,
     std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
     ImportReport& report) const
   {
-    auto const& resources = ml.resources();
     auto const& uri = preparedTrack.uri;
     auto optExistingTrackId = preparedTrack.optExistingTrackId;
 
@@ -1553,23 +1522,29 @@ namespace ao::rt
     }
 
     auto builder = preparedTrack.builder.makeBuilder();
-    auto preparedRes = builder.prepare(transaction, resources);
+    auto manifestBuilder = preparedTrack.manifest;
+    auto targetTrackId = kInvalidTrackId;
 
-    if (!preparedRes)
+    if (optExistingTrackId)
     {
-      return std::unexpected{preparedRes.error()};
+      targetTrackId = *optExistingTrackId;
+
+      if (auto replaceRes = trackWriter.replace(targetTrackId, builder, manifestBuilder); !replaceRes)
+      {
+        return std::unexpected{replaceRes.error()};
+      }
     }
-
-    auto& [preparedHot, preparedCold] = *preparedRes;
-
-    auto targetTrackIdRes = writePreparedTrackRecord(trackWriter, optExistingTrackId, preparedHot, preparedCold);
-
-    if (!targetTrackIdRes)
+    else
     {
-      return std::unexpected{targetTrackIdRes.error()};
-    }
+      auto createRes = trackWriter.create(builder, manifestBuilder);
 
-    auto const targetTrackId = *targetTrackIdRes;
+      if (!createRes)
+      {
+        return std::unexpected{createRes.error()};
+      }
+
+      targetTrackId = *createRes;
+    }
 
     if (optExistingTrackId)
     {
@@ -1578,14 +1553,6 @@ namespace ao::rt
     else
     {
       ++report.tracksCreated;
-    }
-
-    auto manifestBuilder = preparedTrack.manifest;
-    manifestBuilder.trackId(targetTrackId);
-
-    if (auto putRes = manifestWriter.put(uri, manifestBuilder.serialize()); !putRes)
-    {
-      return std::unexpected{putRes.error()};
     }
 
     if (preparedTrack.yamlId != 0)
@@ -1740,35 +1707,6 @@ namespace ao::rt
     }
 
     return {};
-  }
-
-  Result<TrackId> LibraryYamlImporter::Impl::writePreparedTrackRecord(
-    library::TrackStore::Writer& trackWriter,
-    std::optional<TrackId> const& optExistingTrackId,
-    library::TrackBuilder::PreparedHot const& preparedHot,
-    library::TrackBuilder::PreparedCold const& preparedCold) const
-  {
-    if (optExistingTrackId)
-    {
-      auto const targetTrackId = *optExistingTrackId;
-      auto writeRes = library::updatePreparedTrackRecord(trackWriter, targetTrackId, preparedHot, preparedCold);
-
-      if (!writeRes)
-      {
-        return std::unexpected{writeRes.error()};
-      }
-
-      return targetTrackId;
-    }
-
-    auto createRes = library::createPreparedTrackRecord(trackWriter, preparedHot, preparedCold);
-
-    if (!createRes)
-    {
-      return std::unexpected{createRes.error()};
-    }
-
-    return *createRes;
   }
 
   Result<> LibraryYamlImporter::Impl::loadTrackBaseline(std::string_view uriStr,
@@ -2114,12 +2052,12 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::importLists(
     std::vector<ValidatedList> const& lists,
-    library::WriteTransaction& transaction,
+    library::LibraryWrite& transaction,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
     ImportMode /*strategy*/,
     ImportReport& report) const
   {
-    auto listWriter = ml.lists().writer(transaction);
+    auto listWriter = transaction.lists();
     auto manifestReader = ml.manifest().reader(transaction);
 
     auto yamlListIdToNewListId = std::unordered_map<std::uint32_t, ListId>{};
@@ -2137,20 +2075,18 @@ namespace ao::rt
         return result;
       }
 
-      auto payloadRes = builder.serialize();
-
-      if (!payloadRes)
-      {
-        return makeError(
-          Error::Code::FormatRejected,
-          std::format(
-            "List YAML id {} exceeds the binary storage limits: {}", importedList.yamlId, payloadRes.error().message));
-      }
-
-      auto createRes = listWriter.create(*payloadRes);
+      auto createRes = listWriter.create(builder);
 
       if (!createRes)
       {
+        if (createRes.error().code == Error::Code::ValueTooLarge || createRes.error().code == Error::Code::InvalidInput)
+        {
+          return makeError(Error::Code::FormatRejected,
+                           std::format("List YAML id {} cannot be represented in the library: {}",
+                                       importedList.yamlId,
+                                       createRes.error().message));
+        }
+
         return std::unexpected{createRes.error()};
       }
 
@@ -2210,7 +2146,7 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::updateListParent(
     ValidatedList const& importedList,
     std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
-    library::ListStore::Writer& listWriter,
+    library::ListWriter& listWriter,
     ImportReport& report) const
   {
     if (importedList.yamlParentId == 0)
@@ -2235,14 +2171,8 @@ namespace ao::rt
     }
 
     auto builder = library::ListBuilder::fromView(*optListView).parentId(parentIt->second);
-    auto payloadRes = builder.serialize();
 
-    if (!payloadRes)
-    {
-      return std::unexpected{payloadRes.error()};
-    }
-
-    if (auto result = listWriter.update(childId, *payloadRes); !result)
+    if (auto result = listWriter.update(childId, builder); !result)
     {
       return std::unexpected{result.error()};
     }

@@ -6,7 +6,6 @@
 #include "image/CoverArtPlaceholderRenderer.h"
 #include "theme/ThemeCoordinator.h"
 #include <ao/CoreIds.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/Log.h>
@@ -19,7 +18,6 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <cstdint>
-#include <exception>
 #include <memory>
 #include <stop_token>
 #include <utility>
@@ -118,7 +116,8 @@ namespace ao::winui
         _streamTask = _runtime->spawnCancellable(
           [weakStatePtr, runtime = _runtime, generation, bytes = std::move(bytes)](
             std::stop_token const stopToken) mutable
-          { return prepareAndDisplay(weakStatePtr, runtime, generation, std::move(bytes), stopToken); });
+          { return prepareAndDisplay(weakStatePtr, runtime, generation, std::move(bytes), stopToken); },
+          "Windows cover-art stream preparation");
       });
   }
 
@@ -130,19 +129,11 @@ namespace ao::winui
   {
     auto prepared = PreparedMemoryRandomAccessStream{};
 
-    try
-    {
-      co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorker(stopToken);
 
-      if (!bytes.empty())
-      {
-        prepared = prepareMemoryRandomAccessStream(bytes.view());
-      }
-    }
-    catch (...)
+    if (!bytes.empty())
     {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "Windows cover-art stream preparation");
+      prepared = prepareMemoryRandomAccessStream(bytes.view());
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);

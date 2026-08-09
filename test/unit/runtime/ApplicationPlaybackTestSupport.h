@@ -15,6 +15,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -51,11 +52,11 @@ namespace ao::rt::test
     ControlledSleeper sleeper;
     ExecutorT executor;
     InlineExecutor libraryChangesExecutor;
-    async::Runtime asyncRuntime{executor, 1, {}, &sleeper};
-    LibraryChanges changes{libraryChangesExecutor, 0};
+    async::Runtime asyncRuntime{executor, 1, &sleeper};
+    LibraryChanges changes{libraryChangesExecutor, 0, "test-library"};
     LibraryWriterFixture writerFixture{libraryFixture.library(), changes};
     TrackSourceCache sources{libraryFixture.library(), changes};
-    ViewService views{executor, libraryFixture.library(), sources};
+    ViewService views{executor, libraryFixture.library(), sources, changes};
     WorkspaceService workspace{executor, views, changes};
     NotificationService notifications{asyncRuntime};
     PlaybackTransport playbackTransport{makePlaybackTransport(asyncRuntime, libraryFixture.library(), notifications)};

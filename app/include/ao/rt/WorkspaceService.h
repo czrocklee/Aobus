@@ -90,7 +90,7 @@ namespace ao::rt
 
     std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target);
 
-    async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&) noexcept> handler);
+    async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler);
 
     std::span<CustomTrackPresentationPreset const> customPresets() const;
     Result<> addCustomPreset(CustomTrackPresentationPreset const& preset);

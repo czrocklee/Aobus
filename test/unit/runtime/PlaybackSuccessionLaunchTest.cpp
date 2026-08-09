@@ -17,6 +17,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -304,16 +305,23 @@ namespace ao::rt::test
     REQUIRE(optInitialSuccessor);
 
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.drainUntil(
+    auto const settled = fixture.transport.executor.drainUntil(
       [&]
       {
         auto const& state = succession.state();
-        return gatePtr->createdPtr->load(std::memory_order_relaxed) == 2 &&
-               gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
-                 gatePtr->createdPtr->load(std::memory_order_relaxed) &&
+        auto const created = gatePtr->createdPtr->load(std::memory_order_relaxed);
+        // A queued observation of the committed start may replace the first
+        // blocked lookahead. Decoder construction count is therefore
+        // scheduling-dependent; the contract is reroll plus full reclamation.
+        return created >= 2 && gatePtr->destroyedPtr->load(std::memory_order_relaxed) == created &&
                state.optResolvedSuccessor && state.optResolvedSuccessor != optInitialSuccessor;
       },
-      std::chrono::seconds{15}));
+      std::chrono::seconds{15});
+    INFO("created=" << gatePtr->createdPtr->load(std::memory_order_relaxed)
+                    << " destroyed=" << gatePtr->destroyedPtr->load(std::memory_order_relaxed)
+                    << " initial=" << optInitialSuccessor->raw()
+                    << " resolved=" << succession.state().optResolvedSuccessor.value_or(kInvalidTrackId).raw());
+    REQUIRE(settled);
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(succession.state().shuffle == ShuffleMode::On);

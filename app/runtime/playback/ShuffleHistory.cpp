@@ -3,9 +3,8 @@
 
 #include "runtime/playback/ShuffleHistory.h"
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <optional>
@@ -53,7 +52,7 @@ namespace ao::rt
   ShuffleHistory::ShuffleHistory(CandidateChooser candidateChooser)
     : _candidateChooser{std::move(candidateChooser)}
   {
-    gsl_Expects(static_cast<bool>(_candidateChooser) && "Shuffle history requires a candidate chooser");
+    AO_EXPECTS(static_cast<bool>(_candidateChooser), "Shuffle history requires a candidate chooser");
 
     _history.reserve(kHistoryCapacity);
   }
@@ -81,7 +80,7 @@ namespace ao::rt
 
     auto const selected = _candidateChooser(candidates);
 
-    gsl_Assert(containsTrack(candidates, selected) && "Shuffle candidate chooser returned an ineligible track");
+    AO_INVARIANT(containsTrack(candidates, selected), "Shuffle candidate chooser returned an ineligible track");
 
     _optForwardCandidate = selected;
     return selected;
@@ -107,12 +106,12 @@ namespace ao::rt
                                         TrackId const arrivingTrackId,
                                         TransitionOrigin const origin)
   {
-    gsl_Expects(!(leavingTrackId == kInvalidTrackId || arrivingTrackId == kInvalidTrackId) &&
-                "Shuffle history requires valid transition track identities");
+    AO_EXPECTS(!(leavingTrackId == kInvalidTrackId || arrivingTrackId == kInvalidTrackId),
+               "Shuffle history requires valid transition track identities");
 
     if (origin == TransitionOrigin::Restart)
     {
-      gsl_Assert(leavingTrackId == arrivingTrackId && "Playback restart cannot change the current track identity");
+      AO_INVARIANT(leavingTrackId == arrivingTrackId, "Playback restart cannot change the current track identity");
 
       return;
     }

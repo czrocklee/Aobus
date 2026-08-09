@@ -13,7 +13,6 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
@@ -49,6 +48,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -142,7 +142,7 @@ namespace ao::rt::test
     ResourceId writeResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
       auto transaction = library::test::writeTransaction(library);
-      auto result = library.resources().writer(transaction).create(bytes);
+      auto result = library::test::physicalWriter(library.resources(), transaction).create(bytes);
       REQUIRE(result);
       REQUIRE(transaction.commit());
       return *result;
@@ -776,18 +776,11 @@ namespace ao::rt::test
     std::filesystem::remove(firstFile);
     std::filesystem::remove(secondFile);
 
-    auto const result =
-      runQueuedTask(runtime,
-                    executor,
-                    service.applyScanPlanAsync(std::move(plan),
-                                               {},
-                                               {},
-                                               {},
-                                               [&failureCallbackCount](ScanFailure const&)
-                                               {
-                                                 ++failureCallbackCount;
-                                                 throwException<Exception>("injected scan failure callback failure");
-                                               }));
+    auto const result = runQueuedTask(
+      runtime,
+      executor,
+      service.applyScanPlanAsync(
+        std::move(plan), {}, {}, {}, [&failureCallbackCount](ScanFailure const&) { ++failureCallbackCount; }));
 
     REQUIRE(result);
     CHECK(result->insertedIds.empty());
@@ -865,7 +858,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("LibraryTaskService - throwing scan progress callback is contained",
+  TEST_CASE("LibraryTaskService - throwing scan progress callback propagates after maintenance cleanup",
             "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -888,19 +881,19 @@ namespace ao::rt::test
                                              [&callbackCount](ScanApplyProgress const&)
                                              {
                                                ++callbackCount;
-                                               throwException<Exception>("injected library task callback failure");
+                                               throw std::runtime_error{"injected library task callback failure"};
                                              }),
                   completedPtr);
 
     REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
-    REQUIRE(future.get());
+    CHECK_THROWS_AS(future.get(), std::runtime_error);
     CHECK(callbackCount > 0);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     runtime.requestStop();
     runtime.join();
   }
 
-  TEST_CASE("LibraryTaskService - throwing backfill progress callback is contained",
+  TEST_CASE("LibraryTaskService - throwing backfill progress callback propagates after maintenance cleanup",
             "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -931,12 +924,12 @@ namespace ao::rt::test
                                          [&callbackCount](AudioIdentityIndexProgress const&)
                                          {
                                            ++callbackCount;
-                                           throwException<Exception>("injected library task callback failure");
+                                           throw std::runtime_error{"injected library task callback failure"};
                                          }),
       completedPtr);
 
     REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
-    REQUIRE(future.get());
+    CHECK_THROWS_AS(future.get(), std::runtime_error);
     CHECK(callbackCount > 0);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     runtime.requestStop();

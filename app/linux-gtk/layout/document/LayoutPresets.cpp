@@ -3,6 +3,7 @@
 
 #include "layout/document/LayoutPresets.h"
 
+#include <ao/Contract.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
@@ -11,7 +12,6 @@
 #include <giomm/resource.h>
 #include <glib.h>
 #include <glibmm/error.h>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <map>
 #include <string>
@@ -31,12 +31,14 @@ namespace ao::gtk::layout
         auto const* const data = static_cast<char const*>(bytesPtr->get_data(size));
 
         auto yamlErrorState = yaml::ErrorCallbackState{std::string{path}};
-        auto tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
-        yaml::parseInArena(tree, std::string_view{data, size}, yamlErrorState);
+        auto tree = ryml::Tree{yaml::callbacks()};
+        auto const parsedRes = yaml::parseInArena(tree, std::string_view{data, size}, yamlErrorState);
+
+        AO_INVARIANT(parsedRes, "Failed to parse built-in layout: {}", parsedRes.error().message);
 
         auto docRes = uimodel::LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutDocument{});
 
-        gsl_Assert(docRes && "Failed to deserialize built-in layout");
+        AO_INVARIANT(docRes, "Failed to deserialize built-in layout");
 
         return std::move(*docRes);
       }

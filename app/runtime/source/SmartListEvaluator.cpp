@@ -3,6 +3,7 @@
 
 #include <ao/rt/source/SmartListEvaluator.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -18,7 +19,6 @@
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -140,7 +140,7 @@ namespace ao::rt
 
     if (inserted && !bucket.invalidated)
     {
-      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDelta const& batch) noexcept
+      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDelta const& batch)
                                              { handleSourceBatch(*source, batch); });
     }
 
@@ -281,7 +281,7 @@ namespace ao::rt
           if (auto const& work = works[index]; work.active)
           {
             auto const& binding = bindings[index];
-            gsl_Expects(binding);
+            AO_INVARIANT(binding);
 
             if (query::hasRequiredTrackData(work.list->_current.planPtr->accessProfile, *optView))
             {
@@ -328,7 +328,7 @@ namespace ao::rt
       }
 
       auto const script = delta::diff(work.oldMembers, work.members, updatedTrackIds, preferredMovedIds);
-      gsl_Assert((
+      AO_INVARIANT((
         [&work, &script]
         {
           auto const applied = delta::apply(work.oldMembers, script);
@@ -372,7 +372,7 @@ namespace ao::rt
     auto upstreamTracks = bucket.upstreamTracks;
     upstreamTracks.applyScript(script);
     ++_operationCounts.upstreamIndexRebuilds;
-    gsl_Assert(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
+    AO_INVARIANT(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
 
     auto evaluatableLists = std::vector<SmartListSource*>{};
     auto works = buildDerivedWorks(bucket, evaluatableLists);

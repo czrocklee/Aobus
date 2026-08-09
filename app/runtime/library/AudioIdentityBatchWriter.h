@@ -10,14 +10,12 @@
 
 namespace ao::library
 {
-  class MusicLibrary;
-  class WriteTransaction;
+  class LibraryWrite;
 }
 
 namespace ao::rt
 {
   Result<AudioIdentityBatchCommitResult> applyAudioIdentityBatch(
-    library::MusicLibrary& library,
-    library::WriteTransaction& transaction,
+    library::LibraryWrite& write,
     std::span<AudioIdentityWriteCandidate const> candidates);
 } // namespace ao::rt

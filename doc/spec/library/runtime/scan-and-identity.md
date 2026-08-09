@@ -45,8 +45,8 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
 - Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
 - Identity backfill never commits a hash for a row or file whose live size or modification time changed after snapshot.
-- Persisted manifest corruption present at open rejects the library with `CorruptData`; a post-open manifest iterator integrity breach raises the infrastructure exception and delivers no partial plan or later row.
-- Before scan apply mutates any item, every plan item that names an existing Track must still have valid hot and cold records; missing evidence is `CorruptData` and is never reinterpreted as a new Track.
+- Persisted manifest corruption present at open rejects the library with `CorruptData`; a post-open manifest integrity breach aborts through the fatal facility and delivers no partial plan or later row.
+- Before scan apply mutates any item, every plan item that names an existing Track must still resolve to its validated hot/cold pair. After the exact library-revision check, missing evidence violates the live-library invariant and aborts; it is never reinterpreted as a new Track.
 
 ## Plan classification
 
@@ -64,8 +64,7 @@ The planner recursively walks the configured music root, skips unsupported and n
 A missing root or root-level walk failure is a plan-building error.
 Per-entry problems may appear as error items without erasing other classifications.
 These item errors describe external filesystem, path-resolution, or media inspection failures.
-A malformed manifest found by a point read fails the complete `buildPlan()` result at that row.
-A malformed row found by manifest iteration after the library passed its open gate raises the infrastructure exception, because continuing would make corrupt storage look like an ordinary missing file and the iterator has no partial-result contract.
+A malformed manifest cannot enter a live planner through supported storage: open rejects persisted corruption, while a later point-read or iterator breach aborts through the fatal facility because continuing would make invalid storage look like an ordinary missing file.
 An entry that is present but cannot be resolved or inspected safely is `Error`, not also `Missing`; its existing manifest row remains unchanged when the plan is applied.
 The planner reads the persisted library id, committed revision, and manifest from the same LMDB snapshot and stores that binding in the returned plan.
 
@@ -91,15 +90,17 @@ After maintenance closes interactive admission, application validates the plan b
 The write transaction validates the same library id again and requires its newly allocated revision to immediately follow the plan revision before it touches track or manifest rows.
 A single pre-mutation pass also validates the hot/cold evidence for every nonzero planned Track id.
 A foreign binding returns `InvalidInput`; a superseded or replayed binding returns `Conflict`; both paths abort without a durable revision or content change.
-Missing or invalid Track evidence returns `CorruptData` and aborts the staged revision plus every planned item; the `Changed` branch cannot fall through to `New`.
+Once that binding matches, supported writes cannot have removed or malformed one of the
+plan's Tracks without advancing the revision. Missing evidence therefore fails an
+`AO_INVARIANT` and terminates the process; the `Changed` branch cannot fall through to `New`.
 
 The transaction currently covers the complete prepared plan and has no item or byte bound.
 This preserves whole-plan all-or-nothing behavior; writer hold time and rollback cost scale with the prepared plan.
 
-- `New` parses metadata and technical properties, creates a track, and writes an available manifest row.
-- `Changed` preserves curated metadata, refreshes technical properties, and refreshes file and identity facts.
-- `Moved` rebuilds the existing track with the new URI and refreshed technical properties, removes the old manifest key, and writes the new key with the same track id.
-- `Missing` preserves the previous identity and marks the manifest row missing.
+- `New` parses metadata and technical properties, then asks the logical Track writer to create the track and available manifest row together.
+- `Changed` preserves curated metadata, then replaces Track data and file/identity facts through one logical operation.
+- `Moved` first requires the stored Track URI to equal the plan's old URI, then rebuilds the existing track with the new URI and refreshed technical properties and uses the logical relink operation to replace the manifest key while preserving the Track id; a mismatch reports the item failure and aborts the complete scan transaction.
+- `Missing` preserves the previous identity and uses the manifest-only logical update to mark the row missing.
 - `Unchanged` performs no write.
 - Item-level parse/open failures are counted and reported without claiming that item succeeded.
 
@@ -132,7 +133,7 @@ Aobus never writes a guessed identity.
 3. Acquire one bounded coordinator mutation per serial write-back batch, re-read every row, and commit identities for rows still available, pending, and stat-equal.
 
 Per-file failures are reported and counted without aborting the run; recoverable database failures fail the operation.
-Manifest iteration validates each persisted row and raises the general infrastructure exception on a post-open integrity breach rather than skipping it, treating it as pending work, or translating the private iterator mechanism in runtime.
+Manifest iteration trusts the open gate and aborts through `AO_INVARIANT` on a later row-integrity breach rather than skipping it, treating it as pending work, or translating a private mechanism in runtime.
 Progress callbacks are serialized but may run on worker-pool threads.
 
 Cancellation stops hashing at chunk boundaries, commits valid rows already completed in the current batch, leaves unfinished rows pending, and propagates `OperationCancelled` after callback-owner maintenance cleanup.
@@ -149,8 +150,10 @@ Pairing the 128-bit signature with payload length is the complete equality key.
 ## Failure and cancellation
 
 Filesystem, mapping, tag parsing, media corruption, database, and resource-limit failures use `Result` or the per-item failure channel according to whether useful plan/application work can continue.
-Safely detected malformed persisted manifest or Track evidence at a declared `Result` boundary is operation-level `CorruptData`, not an external-item failure that permits continuation.
-Post-open manifest iterator corruption is an invariant fault and propagates through the general exception channel.
+Malformed persisted manifest or Track evidence discovered during admission returns
+open-level `CorruptData`, not an external-item failure that permits continuation.
+After admission, a Store or cross-Store integrity breach is an `AO_INVARIANT` fault; a
+non-miss native cursor fault is `AO_FATAL`.
 Any post-effect storage failure reaches the scan's root `WriteTransaction::apply()` boundary; that owner aborts the complete scan transaction before returning the carried `Error`.
 Cancellation is cooperative during payload hashing and before commit.
 The shared UIModel workflow distinguishes an up-to-date plan, an errors-only
@@ -164,6 +167,7 @@ through `LibraryChanges`; workflow completion performs no independent refresh.
 - [`LibraryScan.h`](../../../../app/include/ao/rt/library/LibraryScan.h) and [`ScanPlan.h`](../../../../app/include/ao/rt/library/ScanPlan.h) define the shared scan surface.
 - [`LibraryScan.cpp`](../../../../app/runtime/library/LibraryScan.cpp) owns planning and move matching.
 - [`ScanApplyOperation.cpp`](../../../../app/runtime/library/ScanApplyOperation.cpp) owns the shared state machine, the self-contained offline `run()` composition, and transaction-scoped apply.
+- [`TrackWriter.h`](../../../../include/ao/library/TrackWriter.h) owns the logical create, replace, relink, and manifest-only operations used during apply.
 - [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns maintenance lifetime and prepare/apply worker composition.
 - [`LibraryScanWorkflow.cpp`](../../../../app/uimodel/library/task/LibraryScanWorkflow.cpp) owns frontend-shared plan disposition, issue collection, identity policy, and build/apply orchestration.
 - [`AudioIdentity.h`](../../../../include/ao/library/AudioIdentity.h) owns identity calculation.

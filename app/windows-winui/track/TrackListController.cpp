@@ -209,7 +209,7 @@ namespace ao::winui
     _runtime = &runtime;
     _columnLayouts = &columnLayouts;
     _viewProjectionSub = _runtime->views().onProjectionChanged(
-      [this](rt::TrackListProjectionChanged const& changed) noexcept
+      [this](rt::TrackListProjectionChanged const& changed)
       {
         if (changed.viewId == _viewId)
         {
@@ -321,7 +321,7 @@ namespace ao::winui
     }
 
     _bindingLifetimePtr = std::make_shared<int>(0);
-    _projectionSub = _projectionPtr->subscribe([this](rt::TrackListProjectionDeltaBatch const& batch) noexcept
+    _projectionSub = _projectionPtr->subscribe([this](rt::TrackListProjectionDeltaBatch const& batch)
                                                { handleProjectionBatch(batch); });
   }
 

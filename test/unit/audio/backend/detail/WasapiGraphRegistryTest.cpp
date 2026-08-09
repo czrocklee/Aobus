@@ -12,7 +12,6 @@
 #include <atomic>
 #include <cstdint>
 #include <semaphore>
-#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -158,23 +157,6 @@ namespace ao::audio::backend::detail::test
                                   });
 
     CHECK(callCount == 2);
-  }
-
-  TEST_CASE("WasapiGraphRegistry - throwing initial callback is rolled back", "[audio][regression][wasapi][graph]")
-  {
-    auto registry = WasapiGraphRegistry{};
-    std::int32_t callCount = 0;
-
-    REQUIRE_THROWS_AS(registry.subscribe("endpoint-a",
-                                         [&](flow::Graph const&)
-                                         {
-                                           ++callCount;
-                                           throw std::runtime_error{"callback failed"};
-                                         }),
-                      std::runtime_error);
-
-    registry.publish({.routeAnchor = "endpoint-a", .volume = 0.5F});
-    CHECK(callCount == 1);
   }
 
   TEST_CASE("WasapiGraphRegistry - clear removes state and emits an empty graph", "[audio][unit][wasapi][graph]")

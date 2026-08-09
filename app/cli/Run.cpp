@@ -13,7 +13,7 @@
 #include "TagCommand.h"
 #include "TrackCommand.h"
 #include <ao/AppVersion.h>
-#include <ao/Exception.h>
+#include <ao/Contract.h>
 
 #include <CLI/CLI.hpp>
 
@@ -104,20 +104,9 @@ namespace ao::cli
       std::println(err, "{}", e.what());
       return 1;
     }
-    catch (Exception const& e)
-    {
-      std::println(err, "Internal error: {}\n(at {}:{})\nPlease report this bug.", e.what(), e.file(), e.line());
-      return 1;
-    }
-    catch (std::exception const& e)
-    {
-      std::println(err, "Error: {}", e.what());
-      return 1;
-    }
     catch (...)
     {
-      std::println(err, "Unknown error occurred");
-      return 1;
+      AO_FATAL_EXCEPTION(std::current_exception(), "CLI process root");
     }
   }
 

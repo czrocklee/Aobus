@@ -17,10 +17,10 @@
 
 namespace ao::library
 {
+  class LibraryWrite;
   class MusicLibrary;
   class TrackBuilder;
   class TrackView;
-  class WriteTransaction;
 }
 
 namespace ao::library::test
@@ -61,8 +61,10 @@ namespace ao::library::test
   TrackSpec makeEmptyTrackSpec(std::string_view uri);
   void applyTrackSpec(TrackBuilder& builder, TrackSpec const& spec);
   TrackSpec trackSpecFromView(MusicLibrary const& library, TrackView const& view);
-  TrackId addTrack(MusicLibrary& library, WriteTransaction& transaction, TrackSpec const& spec);
+  TrackId addTrack(MusicLibrary& library, LibraryWrite& write, TrackSpec const& spec);
   TrackId addTrack(MusicLibrary& library, TrackSpec const& spec);
+  TrackId addTrackWithUniqueFixtureUri(MusicLibrary& library, LibraryWrite& write, TrackSpec const& spec);
+  TrackId addTrackWithUniqueFixtureUri(MusicLibrary& library, TrackSpec const& spec);
   void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate);
   void updateTrackSpec(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackSpec&)> updater);
 } // namespace ao::library::test

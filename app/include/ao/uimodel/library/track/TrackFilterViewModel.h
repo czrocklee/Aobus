@@ -58,6 +58,7 @@ namespace ao::uimodel
     std::string _resolvedExpression;
     std::optional<Error> _optFilterError;
 
+    async::Subscription _filterErrorSub;
     async::Subscription _focusSub;
   };
 } // namespace ao::uimodel

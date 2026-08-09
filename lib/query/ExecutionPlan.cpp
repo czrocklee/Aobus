@@ -6,6 +6,7 @@
 #include "detail/QueryError.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
@@ -595,7 +596,7 @@ namespace ao::query
   {
     // Only the current top register may be freed; this enforces the stack discipline the
     // evaluator relies on (a binary op's left operand sits immediately below its right).
-    gsl_Expects(top + 1 == _nextReg);
+    AO_INVARIANT(top + 1 == _nextReg);
     --_nextReg;
   }
 
@@ -605,12 +606,12 @@ namespace ao::query
       utility::makeVisitor(
         [this](std::unique_ptr<BinaryExpression> const& binaryPtr) -> std::uint32_t
         {
-          gsl_Expects(binaryPtr != nullptr);
+          AO_INVARIANT(binaryPtr != nullptr);
           return compileBinary(*binaryPtr);
         },
         [this](std::unique_ptr<UnaryExpression> const& unaryPtr) -> std::uint32_t
         {
-          gsl_Expects(unaryPtr != nullptr);
+          AO_INVARIANT(unaryPtr != nullptr);
           return compileUnary(*unaryPtr);
         },
         [this](VariableExpression const& var) -> std::uint32_t { return compileVariable(var); },
@@ -661,7 +662,7 @@ namespace ao::query
 
       // And/Or consume the top two results (left immediately below right) and write the
       // result back into the left register.
-      gsl_Expects(rightReg == leftReg + 1);
+      AO_INVARIANT(rightReg == leftReg + 1);
       _plan.instructions.push_back(Instruction{
         .op = opcode,
         .field = 0,
@@ -733,7 +734,7 @@ namespace ao::query
     // Carry the left field and relevant dictionary symbol directly on the comparison so the
     // evaluator resolves the operand's type without scanning back for the LoadField. The
     // comparison consumes the top two results and writes the result into the left register.
-    gsl_Expects(rightReg == leftReg + 1);
+    AO_INVARIANT(rightReg == leftReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = opcode,
       .field = static_cast<std::uint8_t>(leftField),
@@ -1074,7 +1075,7 @@ namespace ao::query
         dictionarySymbol = valueDictionarySymbol;
       }
 
-      gsl_Expects(rightReg == leftReg + 1);
+      AO_INVARIANT(rightReg == leftReg + 1);
       _plan.instructions.push_back(Instruction{
         .op = OpCode::Eq,
         .field = static_cast<std::uint8_t>(leftField),
@@ -1093,7 +1094,7 @@ namespace ao::query
       }
 
       // OR the new comparison (the top register) into the accumulator just below it.
-      gsl_Expects(leftReg == *optAccumReg + 1);
+      AO_INVARIANT(leftReg == *optAccumReg + 1);
       _plan.instructions.push_back(Instruction{
         .op = OpCode::Or,
         .field = 0,
@@ -1105,7 +1106,7 @@ namespace ao::query
       popReg(leftReg); // Or result is now in *optAccumReg
     }
 
-    gsl_Expects(optAccumReg); // non-empty list guarantees at least one comparison
+    AO_INVARIANT(optAccumReg); // non-empty list guarantees at least one comparison
     return *optAccumReg;
   }
 
@@ -1137,7 +1138,7 @@ namespace ao::query
 
     auto const lowerReg = compileConstant(range.lower).reg;
 
-    gsl_Expects(lowerReg == lhsLowerReg + 1);
+    AO_INVARIANT(lowerReg == lhsLowerReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Ge,
       .field = static_cast<std::uint8_t>(leftField),
@@ -1154,7 +1155,7 @@ namespace ao::query
 
     auto const upperReg = compileConstant(range.upper).reg;
 
-    gsl_Expects(upperReg == lhsUpperReg + 1);
+    AO_INVARIANT(upperReg == lhsUpperReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Le,
       .field = static_cast<std::uint8_t>(leftField),
@@ -1168,7 +1169,7 @@ namespace ao::query
     auto const leReg = lhsUpperReg;
 
     // AND the two bounds together; the result lands in the Ge register.
-    gsl_Expects(leReg == geReg + 1);
+    AO_INVARIANT(leReg == geReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::And,
       .field = 0,

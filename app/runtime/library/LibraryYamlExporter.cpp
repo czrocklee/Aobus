@@ -6,6 +6,7 @@
 #include "MediaTrack.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/CoverArt.h>
@@ -15,7 +16,6 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -369,11 +369,7 @@ namespace ao::rt
       }
 
       auto const optDbData = resReader.get(resId);
-
-      if (!optDbData || optDbData->empty())
-      {
-        return makeError(Error::Code::CorruptData, std::format("Cover resource {} is missing or empty", resId.raw()));
-      }
+      AO_INVARIANT(optDbData, "Track cover references missing Resource {} after library validation", resId.raw());
 
       auto const b64 = utility::base64Encode(*optDbData);
       auto const anchorName = "cover_" + std::to_string(resId.raw());
@@ -489,19 +485,10 @@ namespace ao::rt
           continue;
         }
 
-        if (!optTrackView->isColdValid())
-        {
-          return makeError(
-            Error::Code::CorruptData, std::format("Track {} contains an invalid cold record", trackId.raw()));
-        }
-
         auto uriRes = library::LibraryUri::parse(optTrackView->property().uri());
-
-        if (!uriRes || uriRes->value() != optTrackView->property().uri())
-        {
-          return makeError(
-            Error::Code::CorruptData, std::format("Track {} contains an invalid library URI", trackId.raw()));
-        }
+        AO_INVARIANT(uriRes && uriRes->value() == optTrackView->property().uri(),
+                     "Track {} contains a non-canonical URI after library validation",
+                     trackId.raw());
 
         auto refNode = orderNode.append_child();
         refNode |= ryml::MAP;
@@ -554,15 +541,10 @@ namespace ao::rt
     root |= ryml::MAP;
 
     auto const transaction = ml.readTransaction();
-    auto const headerRes = ml.metadata().load(transaction);
-
-    if (!headerRes)
-    {
-      return std::unexpected{headerRes.error()};
-    }
+    auto const header = ml.metadataHeader(transaction);
 
     root.append_child() << ryml::key("version") << 3;
-    appendString(root, "libraryId", utility::formatUuid(headerRes->libraryId));
+    appendString(root, "libraryId", utility::formatUuid(header.libraryId));
     appendString(root, "export_mode", exportModeName(mode));
 
     auto library = root.append_child();
@@ -637,11 +619,6 @@ namespace ao::rt
                                                   library::DictionaryStore const& dictionary,
                                                   library::FileManifestStore::Reader const& manifestReader) const
   {
-    if (!view.isHotValid() || !view.isColdValid())
-    {
-      return makeError(Error::Code::CorruptData, std::format("Track {} contains an invalid record", id.raw()));
-    }
-
     auto trackNode = node.append_child();
     trackNode |= ryml::MAP;
 
@@ -649,11 +626,9 @@ namespace ao::rt
 
     auto const property = view.property();
     auto uriRes = library::LibraryUri::parse(property.uri());
-
-    if (!uriRes || uriRes->value() != property.uri())
-    {
-      return makeError(Error::Code::CorruptData, std::format("Track {} contains an invalid library URI", id.raw()));
-    }
+    AO_INVARIANT(uriRes && uriRes->value() == property.uri(),
+                 "Track {} contains a non-canonical URI after library validation",
+                 id.raw());
 
     appendString(trackNode, "uri", uriRes->value());
 

@@ -4,7 +4,6 @@
 #include <ao/yaml/RymlAdapter.h>
 
 #include "test/unit/TestFixtureSupport.h"
-#include <ao/Exception.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ryml.hpp>
@@ -23,9 +22,8 @@ namespace ao::test
     ryml::Tree parseYaml(std::string_view text)
     {
       auto state = yaml::ErrorCallbackState{};
-      auto tree = ryml::Tree{yaml::callbacks(state)};
-      yaml::parseInArena(tree, text, state);
-      tree.callbacks(yaml::callbacks());
+      auto tree = ryml::Tree{yaml::callbacks()};
+      REQUIRE(yaml::parseInArena(tree, text, state));
       return tree;
     }
   } // namespace
@@ -136,16 +134,11 @@ namespace ao::test
   TEST_CASE("RymlAdapter - error callback state owns diagnostic filename", "[core][unit][yaml]")
   {
     auto state = yaml::ErrorCallbackState{"fixture.yaml"};
-    auto tree = ryml::Tree{yaml::callbacks(state)};
+    auto tree = ryml::Tree{yaml::callbacks()};
+    auto const parsedRes = yaml::parseInArena(tree, "root: [unterminated", state);
 
-    try
-    {
-      yaml::parseInArena(tree, "root: [unterminated", state);
-      FAIL("invalid YAML should throw through the ryml callback");
-    }
-    catch (Exception const& e)
-    {
-      CHECK(std::string_view{e.what()}.contains("fixture.yaml"));
-    }
+    REQUIRE_FALSE(parsedRes);
+    CHECK(parsedRes.error().code == Error::Code::FormatRejected);
+    CHECK(parsedRes.error().message.contains("fixture.yaml"));
   }
 } // namespace ao::test

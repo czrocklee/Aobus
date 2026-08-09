@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/Exception.h>
 #include <ao/async/LoopExecutor.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -165,48 +164,5 @@ namespace ao::async::test
     CHECK(order == std::vector<int>{1, 2});
     REQUIRE(executor.runReadyTurn());
     CHECK(order == std::vector<int>{1, 2, 3});
-  }
-
-  TEST_CASE("LoopExecutor - failed turn leaves newly deferred work ready", "[runtime][unit][async]")
-  {
-    auto executor = LoopExecutor{};
-    auto order = std::vector<int>{};
-
-    executor.defer(
-      [&]
-      {
-        executor.defer([&] { order.push_back(2); });
-        throwException<Exception>("task failed");
-      });
-
-    CHECK_THROWS_AS(executor.runOneTurn(), Exception);
-    REQUIRE(executor.runReadyTurn());
-    CHECK(order == std::vector<int>{2});
-    CHECK_FALSE(executor.runReadyTurn());
-  }
-
-  TEST_CASE("LoopExecutor - failed turn preserves queued work behind the throwing task", "[runtime][unit][async]")
-  {
-    auto executor = LoopExecutor{};
-    auto order = std::vector<int>{};
-
-    executor.defer(
-      [&]
-      {
-        order.push_back(1);
-        throwException<Exception>("task failed");
-      });
-    executor.defer([&] { order.push_back(2); });
-
-    CHECK_THROWS_AS(executor.runOneTurn(), Exception);
-    CHECK(order == std::vector<int>{1});
-
-    executor.defer([&] { order.push_back(3); });
-
-    REQUIRE(executor.runReadyTurn());
-    CHECK(order == std::vector<int>{1, 2});
-    REQUIRE(executor.runReadyTurn());
-    CHECK(order == std::vector<int>{1, 2, 3});
-    CHECK_FALSE(executor.runReadyTurn());
   }
 } // namespace ao::async::test

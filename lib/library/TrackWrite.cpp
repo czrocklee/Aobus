@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/library/TrackWrite.h>
+#include "TrackWrite.h"
 
 #include "TrackRecordValidation.h"
-#include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Database.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstdint>
 #include <expected>
@@ -44,7 +42,9 @@ namespace ao::library::detail
         preparedHot.writeTo(hotBytes);
 
         auto const validationRes = validateSerializedHotTrack(hotBytes);
-        gsl_Assert(validationRes && "Prepared hot Track record is not canonical");
+        AO_ENSURES(validationRes,
+                   "Prepared hot Track encoder produced a non-canonical record: {}",
+                   validationRes.error().message);
       }
 
       auto coldRes = writer._coldWriter.create(rawTrackId, preparedCold.size());
@@ -52,13 +52,9 @@ namespace ao::library::detail
       if (!coldRes)
       {
         auto error = std::move(coldRes.error());
-
-        if (error.code == Error::Code::Conflict)
-        {
-          throwLibraryError(Error::Code::CorruptData,
-                            std::format("Cold Track record {} already exists without its hot side", rawTrackId));
-        }
-
+        AO_INVARIANT(error.code != Error::Code::Conflict,
+                     "Cold Track record {} already exists without its hot side after library validation",
+                     rawTrackId);
         lmdb::detail::throwTransactionFailure(std::move(error));
       }
 
@@ -66,7 +62,9 @@ namespace ao::library::detail
       preparedCold.writeTo(coldBytes);
 
       auto const validationRes = validateSerializedColdTrack(coldBytes);
-      gsl_Assert(validationRes && "Prepared cold Track record is not canonical");
+      AO_ENSURES(validationRes,
+                 "Prepared cold Track encoder produced a non-canonical record: {}",
+                 validationRes.error().message);
 
       return TrackId{rawTrackId};
     }
@@ -141,7 +139,8 @@ namespace ao::library::detail
       preparedHot.writeTo(hotBytes);
 
       auto const validationRes = validateSerializedHotTrack(hotBytes);
-      gsl_Assert(validationRes && "Prepared hot Track record is not canonical");
+      AO_ENSURES(
+        validationRes, "Prepared hot Track encoder produced a non-canonical record: {}", validationRes.error().message);
     }
 
     static void replaceCold(TrackStore::Writer& writer,
@@ -159,7 +158,9 @@ namespace ao::library::detail
       preparedCold.writeTo(coldBytes);
 
       auto const validationRes = validateSerializedColdTrack(coldBytes);
-      gsl_Assert(validationRes && "Prepared cold Track record is not canonical");
+      AO_ENSURES(validationRes,
+                 "Prepared cold Track encoder produced a non-canonical record: {}",
+                 validationRes.error().message);
     }
   };
 } // namespace ao::library::detail

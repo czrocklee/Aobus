@@ -4,6 +4,7 @@
 #include <ao/audio/backend/WasapiSharedBackend.h>
 
 #include "detail/DecoderOutput.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
@@ -40,6 +41,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <format>
 #include <limits>
 #include <memory>
@@ -529,8 +531,9 @@ namespace ao::audio::backend
     {
       close();
     }
-    catch (...) // NOLINT(bugprone-empty-catch) -- cleanup callbacks cannot escape a destructor
+    catch (...)
     {
+      AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI backend destruction");
     }
   }
 
@@ -716,7 +719,17 @@ namespace ao::audio::backend
 
     if (!_implPtr->thread.joinable())
     {
-      _implPtr->thread = std::jthread{[this](std::stop_token const& st) { _implPtr->renderLoop(st); }};
+      _implPtr->thread = std::jthread{[this](std::stop_token const& st)
+                                      {
+                                        try
+                                        {
+                                          _implPtr->renderLoop(st);
+                                        }
+                                        catch (...)
+                                        {
+                                          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI render thread");
+                                        }
+                                      }};
     }
 
     // The stream itself is started from the render thread once the first

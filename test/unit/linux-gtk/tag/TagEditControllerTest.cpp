@@ -119,12 +119,12 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto firstTrackId = kInvalidTrackId;
     auto secondTrackId = kInvalidTrackId;
-    auto fixture =
-      GtkRuntimeFixture{[&](library::MusicLibrary& library)
-                        {
-                          firstTrackId = library::test::addTrack(library, {.title = "Controller Target 1"});
-                          secondTrackId = library::test::addTrack(library, {.title = "Controller Target 2"});
-                        }};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      {
+        firstTrackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Controller Target 1"});
+        secondTrackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Controller Target 2"});
+      }};
     auto window = Gtk::Window{};
 
     auto themeCoordinator = ThemeCoordinator{};
@@ -162,8 +162,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& library)
-                                     { trackId = library::test::addTrack(library, {.title = "Popover Target"}); }};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Popover Target"}); }};
     auto window = Gtk::Window{};
     auto anchor = Gtk::Box{};
     window.set_child(anchor);
@@ -196,8 +197,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& library)
-                                     { trackId = library::test::addTrack(library, {.title = "Context Target"}); }};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library()};
     auto imageCache = ImageCache{200};
@@ -232,8 +234,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& library)
-                                     { trackId = library::test::addTrack(library, {.title = "Context Target"}); }};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library()};
     auto imageCache = ImageCache{200};
@@ -267,8 +270,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& library)
-                                     { trackId = library::test::addTrack(library, {.title = "Context Target"}); }};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
     auto const writableId = ao::test::requireValue(runtime.library().writer().createList(
       rt::LibraryWriter::ListDraft{.name = "Road Trip", .expression = "#roadtrip"}));
@@ -329,8 +333,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& library)
-                                     { trackId = library::test::addTrack(library, {.title = "Context Target"}); }};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
     auto const listId =
       ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Ordered"}));

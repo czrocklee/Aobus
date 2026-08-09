@@ -43,6 +43,9 @@ namespace ao::lmdb
 
     static Result<Database> open(WriteTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
     static Result<Database> open(ReadTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
+    static Result<Database> openExisting(WriteTransaction& txn, std::string const& name);
+    static Result<Database> openExisting(WriteTransaction& txn, std::string const& name, KeyKind kind);
+    static Database main(WriteTransaction& txn);
 
     Reader reader(ReadTransaction const& txn) const;
     Writer writer(WriteTransaction& txn) const;
@@ -51,6 +54,7 @@ namespace ao::lmdb
 
   private:
     Database(DbiHandle dbi, KeyKind kind);
+    static bool transactionOwned(ReadTransaction const& transaction) noexcept;
 
     DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
     KeyKind _kind = KeyKind::Integer;
@@ -68,10 +72,8 @@ namespace ao::lmdb
     struct KeyView final : std::span<std::byte const>
     {
       using std::span<std::byte const>::span;
-      // Coerce an integer key to uint32. Throws on a size mismatch rather than
-      // silently yielding 0, so a corrupt/non-integer key surfaces as an error
-      // instead of a bogus id (release builds strip gsl contracts, so this guard
-      // must be a plain throw).
+      // Coerce an admitted integer key to uint32. A size mismatch violates the
+      // database/key-kind invariant and terminates instead of yielding a bogus id.
       operator std::uint32_t() const;
     };
 
@@ -83,16 +85,17 @@ namespace ao::lmdb
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
-    // Point lookups. A missing key is the only recoverable outcome and is
-    // reported as std::nullopt; non-NotFound storage faults throw (see the
-    // Iterator note below for why corruption is fatal at this layer).
+    // Point lookups. A missing key is normal. Other native faults are fatal for
+    // an exposed read snapshot and use the private transaction carrier when the
+    // reader belongs to a write/open transaction.
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
     std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
 
-    // Number of rows visible to this transaction. Throws on fault.
+    // Number of rows visible to this transaction. Fault ownership follows the
+    // same read-snapshot versus transaction phase split.
     std::size_t entryCount() const;
 
-    // Largest integer key, or 0 when the database is empty. Throws on fault.
+    // Largest integer key, or 0 when the database is empty.
     std::uint32_t maxKey() const;
 
     ~Reader() = default;
@@ -114,7 +117,7 @@ namespace ao::lmdb
     };
 
     using CursorPtr = std::unique_ptr<MDB_cursor, MdbCursorDeleter>;
-    static CursorPtr create(MDB_txn* txn, DbiHandle dbi);
+    static CursorPtr create(MDB_txn* txn, ReadTransaction const& owner, DbiHandle dbi);
     void ensureActive() const;
 
     DbiHandle _dbi;
@@ -130,15 +133,10 @@ namespace ao::lmdb
    * Database::Reader::Iterator - Input iterator over database entries.
    *
    * Cursor EOF (MDB_NOTFOUND) is normal and compares equal to EndSentinel.
-   * Any other cursor failure throws. These are either programmer errors
-   * (EINVAL) or unrecoverable storage faults (MDB_PANIC, MDB_CORRUPTED): the
-   * same on-disk corruption that yields MDB_CORRUPTED here equally surfaces as
-   * SIGBUS through the mmap, which no Result can intercept, so a recoverable
-   * channel at this layer would be a false promise. We therefore treat every
-   * non-EOF cursor failure as fatal, consistent with the error model's
-   * invariant/fatal rule. The same reasoning is why point lookups and metadata
-   * queries (get/entryCount/maxKey) report only the recoverable miss and throw
-   * on everything else.
+   * Other cursor failures use the owner selected by the transaction: exposed
+   * read snapshots terminate, while write/open transactions unwind through the
+   * private transaction carrier so their root owner can abort and return a
+   * typed failure.
    */
   class Database::Reader::Iterator final
   {
@@ -216,8 +214,8 @@ namespace ao::lmdb
     Result<std::span<std::byte>> update(std::uint32_t id, std::size_t size);
     Result<std::span<std::byte>> update(std::span<std::byte const> key, std::size_t size);
 
-    // Delete a key. Returns true if a row was removed, false if the key was
-    // absent (idempotent callers can ignore the result). Throws on fault.
+    // Delete a key. Returns true if a row was removed, false if it was absent.
+    // Other native failures terminate the owning write transaction.
     bool del(std::uint32_t id);
     bool del(std::span<std::byte const> key);
 
@@ -231,9 +229,8 @@ namespace ao::lmdb
   private:
     Writer(DbiHandle dbi, WriteTransaction& txn, KeyKind kind);
 
-    // Throw if the owning transaction has already been committed. After commit
-    // LMDB has closed every cursor, so reusing this writer would dereference a
-    // dangling cursor. Always-on (not gsl-gated) since release strips contracts.
+    // After commit LMDB has closed every cursor; reuse is a caller precondition
+    // violation and terminates before dereferencing the dangling handle.
     void ensureActive() const;
     void releaseFinishedCursor() noexcept;
 

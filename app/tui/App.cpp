@@ -29,9 +29,8 @@
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -66,6 +65,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -227,7 +227,20 @@ namespace ao::tui
       PeriodicRefresh(ftxui::ScreenInteractive& screen,
                       std::chrono::milliseconds interval,
                       std::function<bool()> shouldTick)
-        : _screen{screen}, _interval{interval}, _shouldTick{std::move(shouldTick)}, _thread{[this] { run(); }}
+        : _screen{screen}
+        , _interval{interval}
+        , _shouldTick{std::move(shouldTick)}
+        , _thread{[this]
+                  {
+                    try
+                    {
+                      run();
+                    }
+                    catch (...)
+                    {
+                      AO_FATAL_EXCEPTION(std::current_exception(), "TUI periodic-refresh thread");
+                    }
+                  }}
       {
       }
 
@@ -589,7 +602,6 @@ namespace ao::tui
     rt::Log::initialize(
       options.logLevel, rt::LibraryPaths{options.libraryRoot}.logsPath(), rt::LogConsoleMode::Disabled);
     auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
-    auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
     screen.TrackMouse(true);
     auto executorPtr = std::make_unique<Executor>(screen);
@@ -599,12 +611,12 @@ namespace ao::tui
       .musicRoot = options.libraryRoot,
       .databasePath = options.databasePath,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
-      .asyncExceptionHandler = std::move(asyncExceptionHandler),
     });
 
     if (!runtimeRes)
     {
-      throwException<Exception>("Failed to open library: {}", runtimeRes.error().message);
+      std::println(stderr, "Failed to open library: {}", runtimeRes.error().message);
+      return 1;
     }
 
     auto runtimePtr = std::move(*runtimeRes);
@@ -662,7 +674,7 @@ namespace ao::tui
     runtime.notifications().post(rt::NotificationSeverity::Info, "Ready", rt::NotificationLifetime::transient());
 
     auto playbackSub =
-      playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) noexcept { requestRefresh(); });
+      playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) { requestRefresh(); });
     auto outputDevices = OutputDeviceController{playback, requestRefresh};
     auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace()};
     auto events = EventController{screen,

@@ -101,7 +101,7 @@ namespace ao::library::test
     auto temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = writeTransaction(library);
-    auto coldDataRes = builder.serializeCold(transaction, library.resources());
+    auto coldDataRes = physicalSerializeColdTrack(builder, transaction, library.resources());
     REQUIRE(coldDataRes);
     auto const& coldData = *coldDataRes;
     REQUIRE(transaction.commit());
@@ -127,7 +127,7 @@ namespace ao::library::test
     auto temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = writeTransaction(library);
-    auto coldDataRes = builder.serializeCold(transaction, library.resources());
+    auto coldDataRes = physicalSerializeColdTrack(builder, transaction, library.resources());
     REQUIRE(coldDataRes);
     auto const& coldData = *coldDataRes;
 

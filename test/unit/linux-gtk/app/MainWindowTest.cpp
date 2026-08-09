@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <utility>
 
 namespace ao::gtk::test
 {
@@ -138,7 +139,7 @@ namespace ao::gtk::test
 
     auto switchedSession = rt::AppSessionState{};
     switchedSession.lastLibraryPath = "/tmp/new-library";
-    configStorePtr->saveAppSession(switchedSession);
+    REQUIRE(configStorePtr->saveAppSession(switchedSession));
     window.saveSession();
 
     auto persistedSession = rt::AppSessionState{};
@@ -269,8 +270,10 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
     bool finalized = false;
 
-    auto windowPtr =
+    auto windowRes =
       prepareLibraryWindow({.musicRoot = musicRoot, .databasePath = databasePath}, configStorePtr, nullptr, nullptr);
+    REQUIRE(windowRes);
+    auto windowPtr = std::move(*windowRes);
     ::g_object_weak_ref(
       G_OBJECT(windowPtr->gobj()), [](gpointer data, GObject*) { *static_cast<bool*>(data) = true; }, &finalized);
 
@@ -278,7 +281,7 @@ namespace ao::gtk::test
     CHECK_FALSE(windowPtr->get_application());
     CHECK_FALSE(windowPtr->isMprisStarted());
 
-    activateLibraryWindow(*appPtr, windowPtr, MainWindow::PlaybackRestoreMode::StartIdle);
+    REQUIRE(activateLibraryWindow(*appPtr, windowPtr, MainWindow::PlaybackRestoreMode::StartIdle));
 
     CHECK(windowPtr->sessionPhase() == MainWindow::SessionPhase::Active);
     CHECK(windowPtr->get_application() == appPtr);

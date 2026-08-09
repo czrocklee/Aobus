@@ -199,7 +199,7 @@ namespace ao::gtk::test
     session.lastOutputBackendId = "test_backend";
     session.lastOutputDeviceId = "test_device";
     session.lastOutputProfileId = audio::kProfileShared.raw();
-    configStorePtr->saveAppSession(session);
+    REQUIRE(configStorePtr->saveAppSession(session));
 
     auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
@@ -216,13 +216,13 @@ namespace ao::gtk::test
   {
     auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture =
-      GtkRuntimeFixture{[&](library::MusicLibrary& library)
-                        {
-                          auto const fixtureUri = audio::test::installAudioFixture(
-                            library.rootPath(), "basic_metadata.flac", "restored-track.flac");
-                          trackId = library::test::addTrack(library, {.title = "Restored Track", .uri = fixtureUri});
-                        }};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      {
+        auto const fixtureUri =
+          audio::test::installAudioFixture(library.rootPath(), "basic_metadata.flac", "restored-track.flac");
+        trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Restored Track", .uri = fixtureUri});
+      }};
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime);
     auto& playback = runtime.playback();

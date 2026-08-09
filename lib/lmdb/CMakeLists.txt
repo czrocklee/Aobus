@@ -9,3 +9,43 @@ add_library(ao_lmdb STATIC
 )
 target_include_directories(ao_lmdb PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_lmdb PUBLIC ao_utility PkgLMDB)
+
+set(AO_LMDB_FORBIDDEN_READ_FAULT_INJECTION_REGEX
+    "#[ \t]*include[ \t]*[<\"][^\">]*ReadFaultInjection\\.h[>\"]|(^|[^A-Za-z0-9_])ReadFaultInjection([^A-Za-z0-9_]|$)"
+)
+foreach(AO_FORBIDDEN_READ_FAULT_INJECTION_SPELLING IN ITEMS
+    "#include \"lib/lmdb/detail/ReadFaultInjection.h\""
+    "auto injection = ReadFaultInjection{MDB_PANIC}")
+  if(NOT "${AO_FORBIDDEN_READ_FAULT_INJECTION_SPELLING}" MATCHES
+         "${AO_LMDB_FORBIDDEN_READ_FAULT_INJECTION_REGEX}")
+    message(FATAL_ERROR
+      "LMDB read-fault injection guardrail does not reject '${AO_FORBIDDEN_READ_FAULT_INJECTION_SPELLING}'")
+  endif()
+endforeach()
+if("ReadFaultInjectionPolicy" MATCHES "${AO_LMDB_FORBIDDEN_READ_FAULT_INJECTION_REGEX}")
+  message(FATAL_ERROR "LMDB read-fault injection guardrail rejects a longer identifier")
+endif()
+ao_write_guardrail_regex(
+  AO_LMDB_FORBIDDEN_READ_FAULT_INJECTION_REGEX_FILE
+  "lmdb-read-fault-injection"
+  "${AO_LMDB_FORBIDDEN_READ_FAULT_INJECTION_REGEX}"
+)
+set(AO_LMDB_READ_FAULT_INJECTION_OWNER_REGEX
+    "/lib/lmdb/detail/(ReadFaultInjection\\.h|ThrowError\\.cpp)$"
+)
+ao_write_guardrail_regex(
+  AO_LMDB_READ_FAULT_INJECTION_OWNER_REGEX_FILE
+  "lmdb-read-fault-injection-owners"
+  "${AO_LMDB_READ_FAULT_INJECTION_OWNER_REGEX}"
+)
+add_custom_target(ao_lmdb_read_fault_injection_boundary_check ALL
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
+          "-DFORBIDDEN_REGEX_FILE=${AO_LMDB_FORBIDDEN_READ_FAULT_INJECTION_REGEX_FILE}"
+          "-DEXCLUDE_REGEX_FILE=${AO_LMDB_READ_FAULT_INJECTION_OWNER_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking LMDB read-fault injection stays test-only"
+  VERBATIM
+)
+add_dependencies(ao_lmdb ao_lmdb_read_fault_injection_boundary_check)

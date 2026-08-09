@@ -8,8 +8,8 @@
 #include "pch.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -35,28 +35,18 @@ namespace winrt::Aobus::implementation
     {
       // These tags are supplied by the shipped template or by showColumnsMenu;
       // absence is broken frontend wiring, not recoverable user input. The
-      // exception intentionally leaves the XAML event handler and reaches the
-      // application's terminal boundary; continuing could mutate the wrong field.
+      // fatal contract prevents continuing with the wrong field identity.
       auto const element = sender.try_as<Microsoft::UI::Xaml::FrameworkElement>();
 
-      if (!element)
-      {
-        ao::throwException<ao::Exception>("MainWindow column field-id binding requires a FrameworkElement sender");
-      }
+      AO_INVARIANT(element, "MainWindow column field-id binding requires a FrameworkElement sender");
 
       auto const tag = element.Tag().try_as<Windows::Foundation::IPropertyValue>();
 
-      if (!tag || tag.Type() != Windows::Foundation::PropertyType::String)
-      {
-        ao::throwException<ao::Exception>("MainWindow column field-id binding requires a string Tag");
-      }
+      AO_INVARIANT(tag && tag.Type() == Windows::Foundation::PropertyType::String,
+                   "MainWindow column field-id binding requires a string Tag");
 
       auto fieldId = to_string(tag.GetString());
-
-      if (fieldId.empty())
-      {
-        ao::throwException<ao::Exception>("MainWindow column field-id binding requires a non-empty Tag");
-      }
+      AO_INVARIANT(!fieldId.empty(), "MainWindow column field-id binding requires a non-empty Tag");
 
       return fieldId;
     }

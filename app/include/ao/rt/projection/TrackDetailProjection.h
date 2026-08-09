@@ -5,6 +5,7 @@
 
 #include "../ViewIds.h"
 #include "TrackDetailSnapshot.h"
+#include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 
 #include <functional>
@@ -53,11 +54,11 @@ namespace ao::rt
     TrackDetailProjection& operator=(TrackDetailProjection&&) = delete;
 
     TrackDetailSnapshot snapshot() const;
-    async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&) noexcept> handler);
+    async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler);
 
   private:
     TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
-    void refreshSnapshot(std::span<TrackId const> ids) noexcept;
+    void refreshSnapshot(std::span<TrackId const> ids);
     void publishSnapshot();
 
     struct Impl;

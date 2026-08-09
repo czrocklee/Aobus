@@ -20,6 +20,7 @@
 #include "platform/MprisBridge.h"
 #include "portal/ImportExportCoordinator.h"
 #include "track/TrackOrderActions.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
@@ -30,7 +31,6 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <gdkmm/enums.h>
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/eventcontroller.h>
@@ -159,13 +159,9 @@ namespace ao::gtk
     {
       saveSession();
     }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Failed to save runtime in destructor: {}", e.what());
-    }
     catch (...)
     {
-      APP_LOG_ERROR("Failed to save runtime in destructor: unknown exception");
+      AO_FATAL_EXCEPTION(std::current_exception(), "GTK MainWindow session save during destruction");
     }
   }
 
@@ -186,7 +182,7 @@ namespace ao::gtk
       return {};
     }
 
-    gsl_Expects(_sessionPhase == SessionPhase::Active && "Only an active GTK session can be retired");
+    AO_EXPECTS(_sessionPhase == SessionPhase::Active, "Only an active GTK session can be retired");
 
     saveSession();
 
@@ -242,7 +238,7 @@ namespace ao::gtk
 
   Result<> MainWindow::prepareSession()
   {
-    gsl_Expects(_sessionPhase == SessionPhase::Constructed && "Only a constructed GTK session can be prepared");
+    AO_EXPECTS(_sessionPhase == SessionPhase::Constructed, "Only a constructed GTK session can be prepared");
 
     _mainWindowCoordinatorPtr->prepareSession();
 
@@ -255,7 +251,7 @@ namespace ao::gtk
 
   Result<> MainWindow::activateSession(PlaybackRestoreMode const restoreMode)
   {
-    gsl_Expects(_sessionPhase == SessionPhase::Prepared && "Only a prepared GTK session can be activated");
+    AO_EXPECTS(_sessionPhase == SessionPhase::Prepared, "Only a prepared GTK session can be activated");
 
     _sessionPhase = SessionPhase::Active;
 
@@ -269,13 +265,9 @@ namespace ao::gtk
       _mprisBridgePtr->start();
       _mprisStarted = true;
     }
-    catch (std::exception const& e)
+    catch (Glib::Error const& e)
     {
       APP_LOG_WARN("Failed to activate MPRIS for GTK session: {}", e.what());
-    }
-    catch (...)
-    {
-      APP_LOG_WARN("Failed to activate MPRIS for GTK session: unknown exception");
     }
 
     return {};

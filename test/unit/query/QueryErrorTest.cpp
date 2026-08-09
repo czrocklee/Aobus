@@ -65,12 +65,11 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("QueryException - exposes its Error through what() and location()", "[query][unit][error]")
+  TEST_CASE("QueryException - exposes its Error through what()", "[query][unit][error]")
   {
     auto const ex = detail::QueryException{Error::Code::FormatRejected, "bad query expression"};
 
     CHECK(ex.error().code == Error::Code::FormatRejected);
     CHECK(std::string_view{ex.what()} == "bad query expression");
-    CHECK(ex.location().line() == ex.error().location.line());
   }
 } // namespace ao::query::test

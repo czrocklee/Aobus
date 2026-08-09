@@ -3,13 +3,12 @@
 
 #include <ao/rt/source/TrackSource.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSourceDelta.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -24,9 +23,9 @@ namespace ao::rt
 {
   TrackSource::~TrackSource() = default;
 
-  async::Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDelta const&) noexcept> handler)
+  async::Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDelta const&)> handler)
   {
-    gsl_Expects(static_cast<bool>(handler) && "Track source subscription handler must not be empty");
+    AO_EXPECTS(static_cast<bool>(handler), "Track source subscription handler must not be empty");
 
     if (_state == TrackSourceState::Invalidated)
     {
@@ -198,7 +197,8 @@ namespace ao::rt
       return false;
     }
 
-    gsl_Assert(validateTrackSourceDelta(message, previousSize) && !std::holds_alternative<SourceInvalidated>(message));
+    AO_INVARIANT(validateTrackSourceDelta(message, previousSize) &&
+                 !std::holds_alternative<SourceInvalidated>(message));
 
     _changedSignal.emit(message);
     return true;

@@ -601,9 +601,11 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{
-      [&](library::MusicLibrary& library)
-      { trackId = library::test::addTrack(library, {.title = "Tagged Track", .tags = {"road-trip"}}); }};
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& library)
+                                     {
+                                       trackId = library::test::addTrackWithUniqueFixtureUri(
+                                         library, {.title = "Tagged Track", .tags = {"road-trip"}});
+                                     }};
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{fixture.runtime().library()};
     auto themeCoordinator = ThemeCoordinator{};

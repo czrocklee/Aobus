@@ -13,11 +13,13 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/utility/Path.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -35,6 +37,15 @@
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    InlineExecutor& stateOnlyLibraryExecutor()
+    {
+      static thread_local auto executor = InlineExecutor{};
+      return executor;
+    }
+  } // namespace
+
   MetadataPatch metadataPatch(library::test::TrackSpec const& spec)
   {
     auto patch = MetadataPatch{
@@ -185,7 +196,7 @@ namespace ao::rt::test
 
   TrackId MusicLibraryFixture::addTrack(library::test::TrackSpec const& spec)
   {
-    return library::test::addTrack(_implPtr->library, spec);
+    return library::test::addTrackWithUniqueFixtureUri(_implPtr->library, spec);
   }
 
   void MusicLibraryFixture::updateTrack(TrackId const id,
@@ -201,25 +212,25 @@ namespace ao::rt::test
 
   LibraryChanges makeStateOnlyLibraryChanges(std::uint64_t const lastPublishedRevision)
   {
-    static thread_local auto executor = InlineExecutor{};
-    return LibraryChanges{executor, lastPublishedRevision};
+    return LibraryChanges{stateOnlyLibraryExecutor(), lastPublishedRevision, "state-only-test-library"};
   }
 
   LibraryChanges makeStateOnlyLibraryChanges(library::MusicLibrary const& storage)
   {
     auto const transaction = storage.readTransaction();
-    return makeStateOnlyLibraryChanges(storage.libraryRevision(transaction));
+    return LibraryChanges{
+      stateOnlyLibraryExecutor(), storage.libraryRevision(transaction), utility::pathToUtf8(storage.databasePath())};
   }
 
   LibraryChanges makeLibraryChanges(async::Executor& executor, std::uint64_t const lastPublishedRevision)
   {
-    return LibraryChanges{executor, lastPublishedRevision};
+    return LibraryChanges{executor, lastPublishedRevision, "test-library"};
   }
 
   LibraryChanges makeLibraryChanges(async::Executor& executor, library::MusicLibrary const& storage)
   {
     auto const transaction = storage.readTransaction();
-    return makeLibraryChanges(executor, storage.libraryRevision(transaction));
+    return LibraryChanges{executor, storage.libraryRevision(transaction), utility::pathToUtf8(storage.databasePath())};
   }
 
   TrackId addTrackAndPublish(library::MusicLibrary& storage,
@@ -230,8 +241,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(storage), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto trackIdRes = mutation.apply([&storage, &spec](library::WriteTransaction& transaction) -> Result<TrackId>
-                                     { return library::test::addTrack(storage, transaction, spec); });
+    auto trackIdRes = mutation.apply([&storage, &spec](library::LibraryWrite& write) -> Result<TrackId>
+                                     { return library::test::addTrackWithUniqueFixtureUri(storage, write, spec); });
     REQUIRE(trackIdRes);
     auto const trackId = *trackIdRes;
     REQUIRE(mutation.commit(LibraryChangeSet{

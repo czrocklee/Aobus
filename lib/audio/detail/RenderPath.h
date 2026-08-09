@@ -62,9 +62,9 @@ namespace ao::audio::detail
     }
 
     // The event/control consumer promotes the lookahead node to current when
-    // `active`, or discards it otherwise. On the unreachable ring-overflow path
-    // the node intentionally remains owned by the timeline rather than running
-    // a decode-thread join on the RT thread.
+    // `active`, or discards it otherwise. Signal publication is mandatory: a
+    // violated ring-capacity plan aborts on this thread and never continues with
+    // an unreported timeline owner.
     enqueueSpliced(generation, session);
     spliceHandoffInProgress.store(false, std::memory_order_release);
     return active;
@@ -86,6 +86,9 @@ namespace ao::audio::detail
 
     auto progress = RenderProgress{};
     std::size_t spliceCount = 0;
+    // This bounds sequential work in one render call, not simultaneous RT-ring
+    // occupancy. Each splice consumes the sole armed lookahead; another splice
+    // requires control-side promotion and re-arm first.
     constexpr std::size_t kMaxSplicesPerRender = 8;
 
     while (progress.bytesWritten < output.size())

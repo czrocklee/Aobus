@@ -102,7 +102,7 @@ namespace ao::gtk::layout
         }
 
         // Subscribe to projection
-        _sub = _projectionPtr->subscribe([this](auto const& snap) noexcept { handleSnapshot(snap); });
+        _sub = _projectionPtr->subscribe([this](auto const& snap) { handleSnapshot(snap); });
       }
 
       TrackDetailScopeComponent(TrackDetailScopeComponent const&) = delete;

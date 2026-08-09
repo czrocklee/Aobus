@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <filesystem>
@@ -45,7 +46,7 @@ namespace ao::gtk
     void loadAppPrefs(rt::AppPrefsState& state) const;
     void saveAppPrefs(rt::AppPrefsState const& state);
     void loadAppSession(rt::AppSessionState& state) const;
-    void saveAppSession(rt::AppSessionState const& state);
+    Result<> saveAppSession(rt::AppSessionState const& state);
 
     /** Store used by the active library's application-level playback session. */
     rt::ConfigStore& playbackSessionStore() noexcept;

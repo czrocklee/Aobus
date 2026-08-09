@@ -3,6 +3,8 @@
 
 #include <ao/library/FileManifestStore.h>
 
+#include "lib/library/FileManifestValidation.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/library/FileManifestBuilder.h>
@@ -19,12 +21,19 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::library::test
 {
   namespace
   {
+    template<typename Writer>
+    concept HasRawManifestPut =
+      requires(Writer& writer) { writer.put(std::string_view{}, std::span<std::byte const>{}); };
+
+    static_assert(!HasRawManifestPut<FileManifestStore::Writer>);
+    static_assert(noexcept(std::declval<FileManifestBuilder::Prepared const&>().writeTo(std::span<std::byte>{})));
   } // namespace
 
   TEST_CASE("FileManifestStore - writes and reads back manifests", "[library][unit][manifest]")
@@ -43,8 +52,9 @@ namespace ao::library::test
       .audioSignature(signature)
       .status(FileStatus::Available);
     auto const payload = builder.serialize();
+    auto const prepared = ao::test::requireValue(builder.prepare("song.flac"));
 
-    REQUIRE(store.writer(wtxn).put("song.flac", payload));
+    REQUIRE(physicalWriter(store, wtxn).put(prepared));
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
@@ -71,15 +81,14 @@ namespace ao::library::test
 
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
-    auto const payload = builder.serialize();
-
     {
-      auto writer = store.writer(wtxn);
+      auto writer = physicalWriter(store, wtxn);
 
       for (auto const uriLength : kUriLengths)
       {
         auto const uri = std::string(uriLength, 'a');
-        REQUIRE(writer.put(uri, payload));
+        auto const prepared = ao::test::requireValue(builder.prepare(uri));
+        REQUIRE(writer.put(prepared));
 
         auto const optView = writer.get(uri);
         REQUIRE(optView);
@@ -103,7 +112,7 @@ namespace ao::library::test
 
     {
       auto removeTxn = writeTransaction(library);
-      auto writer = store.writer(removeTxn);
+      auto writer = physicalWriter(store, removeTxn);
 
       for (auto const uriLength : kUriLengths)
       {
@@ -156,9 +165,10 @@ namespace ao::library::test
 
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
+    auto const prepared = ao::test::requireValue(builder.prepare("song.flac"));
 
-    auto writer = store.writer(wtxn);
-    REQUIRE(writer.put("song.flac", builder.serialize()));
+    auto writer = physicalWriter(store, wtxn);
+    REQUIRE(writer.put(prepared));
     CHECK(writer.remove("song.flac"));
     CHECK_FALSE(writer.remove("song.flac"));
     REQUIRE(wtxn.commit());
@@ -168,8 +178,7 @@ namespace ao::library::test
     CHECK_FALSE(optView);
   }
 
-  TEST_CASE("FileManifestStore - exact payload validation is item-relative atomic",
-            "[library][unit][manifest][integrity]")
+  TEST_CASE("FileManifestStore - failed preparation cannot mutate the Store", "[library][unit][manifest][integrity]")
   {
     auto const serialize = [](FileManifestHeader const& header)
     {
@@ -178,39 +187,48 @@ namespace ao::library::test
       return bytes;
     };
     auto validHeader = FileManifestHeader{.trackId = TrackId{1}};
-    auto invalidStatus = validHeader;
-    invalidStatus.status = static_cast<FileStatus>(0xff);
     auto nonzeroPadding = validHeader;
     nonzeroPadding.padding[1] = std::byte{1};
-    auto lengthWithoutSignature = validHeader;
-    lengthWithoutSignature.audioPayloadLength(1);
-    auto signatureWithoutLength = validHeader;
-    signatureWithoutLength.audioSignatureBytes[0] = std::byte{1};
 
-    struct InvalidCase final
+    struct InvalidPayloadCase final
     {
       std::string name;
       std::vector<std::byte> payload;
     };
 
-    auto const cases = std::array{
-      InvalidCase{.name = "short", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) - 1)},
-      InvalidCase{.name = "long", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) + 1)},
-      InvalidCase{.name = "zero-track", .payload = FileManifestBuilder::makeEmpty().serialize()},
-      InvalidCase{.name = "status", .payload = serialize(invalidStatus)},
-      InvalidCase{.name = "padding", .payload = serialize(nonzeroPadding)},
-      InvalidCase{.name = "length", .payload = serialize(lengthWithoutSignature)},
-      InvalidCase{.name = "signature", .payload = serialize(signatureWithoutLength)},
+    auto const invalidPayloads = std::array{
+      InvalidPayloadCase{.name = "short", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) - 1)},
+      InvalidPayloadCase{.name = "long", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) + 1)},
+      InvalidPayloadCase{.name = "padding", .payload = serialize(nonzeroPadding)},
+    };
+
+    for (auto const& invalid : invalidPayloads)
+    {
+      CAPTURE(invalid.name);
+      auto const validationRes = validateFileManifestPayload(invalid.payload);
+      REQUIRE_FALSE(validationRes);
+      CHECK(validationRes.error().code == Error::Code::CorruptData);
+    }
+
+    auto const invalidCandidates = std::array{
+      std::pair{"zero-track", FileManifestBuilder::makeEmpty()},
+      std::pair{"status", FileManifestBuilder::makeEmpty().trackId(TrackId{1}).status(static_cast<FileStatus>(0xff))},
+      std::pair{"length", FileManifestBuilder::makeEmpty().trackId(TrackId{1}).audioPayloadLength(1)},
+      std::pair{"signature",
+                FileManifestBuilder::makeEmpty().trackId(TrackId{1}).audioSignature(utility::xxh3Hash128("signature"))},
     };
 
     auto fixture = LibraryStoreFixture{};
     auto transaction = writeTransaction(fixture.library);
-    auto writer = fixture.library.manifest().writer(transaction);
+    auto writer = physicalWriter(fixture.library.manifest(), transaction);
 
-    for (auto const& invalid : cases)
+    for (auto const& [name, builder] : invalidCandidates)
     {
-      auto const uri = invalid.name + ".flac";
-      CAPTURE(invalid.name);
+      auto const uri = std::string{name} + ".flac";
+      CAPTURE(name);
+      auto const preparedRes = builder.prepare(uri);
+      REQUIRE_FALSE(preparedRes);
+      CHECK(preparedRes.error().code == Error::Code::CorruptData);
       auto const optStagedRead = writer.get(uri);
       CHECK_FALSE(optStagedRead);
     }
@@ -219,9 +237,10 @@ namespace ao::library::test
     auto readTransaction = fixture.library.readTransaction();
     auto reader = fixture.library.manifest().reader(readTransaction);
 
-    for (auto const& invalid : cases)
+    for (auto const& [name, builder] : invalidCandidates)
     {
-      auto const optResult = reader.get(invalid.name + ".flac");
+      std::ignore = builder;
+      auto const optResult = reader.get(std::string{name} + ".flac");
       CHECK_FALSE(optResult);
     }
   }

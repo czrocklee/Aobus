@@ -5,13 +5,13 @@
 
 #include "MusicLibraryTestSupport.h"
 #include "WritableLibraryTestSupport.h"
+#include "lib/library/TrackWrite.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
@@ -110,10 +110,10 @@ namespace ao::library::test
 
   TrackId requireCreate(MusicLibrary& library, WriteTransaction& transaction, TrackBuilder const& builder)
   {
-    auto preparedRes = builder.prepare(transaction, library.resources());
+    auto preparedRes = physicalPrepareTrack(builder, transaction, library.resources());
     REQUIRE(preparedRes);
 
-    auto writer = library.tracks().writer(transaction);
+    auto writer = physicalWriter(library.tracks(), transaction);
     auto createdRes = createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
     REQUIRE(createdRes);
     return *createdRes;

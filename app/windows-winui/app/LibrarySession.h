@@ -49,9 +49,9 @@ namespace ao::winui
   class [[nodiscard]] LibrarySession final
   {
   public:
-    LibrarySession(std::filesystem::path stateRoot,
-                   winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                   StartupOptions startupOptions);
+    static Result<std::unique_ptr<LibrarySession>> create(std::filesystem::path stateRoot,
+                                                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+                                                          StartupOptions startupOptions);
     ~LibrarySession();
 
     LibrarySession(LibrarySession const&) = delete;
@@ -85,9 +85,12 @@ namespace ao::winui
     Result<> playTrack(rt::ViewId viewId, TrackId trackId);
 
   private:
+    LibrarySession(std::filesystem::path stateRoot, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher);
+
     struct CallbackLifetime final
     {};
 
+    Result<> initialize(StartupOptions startupOptions);
     /// Quiesce all callback and runtime-facing owners before releasing the runtime.
     void shutdown() noexcept;
 
@@ -95,11 +98,11 @@ namespace ao::winui
     void bindRuntimeServices();
     void startActiveScan();
     void finishActiveScan(
-      std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result) noexcept;
-    void reportStatus(std::string status) noexcept;
-    void reportFailure(Error const& error) noexcept;
-    void reportBusy() noexcept;
-    void reportReady(std::filesystem::path const& root) noexcept;
+      std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result);
+    void reportStatus(std::string status);
+    void reportFailure(Error const& error);
+    void reportBusy();
+    void reportReady(std::filesystem::path const& root);
     void requestPlaySelection();
 
     std::filesystem::path _stateRoot;

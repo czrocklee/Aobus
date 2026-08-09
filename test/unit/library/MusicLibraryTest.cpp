@@ -3,35 +3,49 @@
 
 #include <ao/library/MusicLibrary.h>
 
+#include "lib/library/FileManifestValidation.h"
+#include "lib/library/OpenValidationMetrics.h"
+#include "lib/lmdb/detail/ReadFaultInjection.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
+#include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <expected>
 #include <filesystem>
+#include <format>
+#include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -102,9 +116,92 @@ namespace ao::library::test
       REQUIRE(transaction.commit());
     }
 
+    void updateRawIntegerRow(std::filesystem::path const& path,
+                             std::string const& databaseName,
+                             std::uint32_t const id,
+                             std::span<std::byte const> const payload)
+    {
+      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto transaction = beginWriteTransaction(environment);
+      auto database = openDatabase(transaction, databaseName);
+      REQUIRE(database.writer(transaction).update(id, payload));
+      REQUIRE(transaction.commit());
+    }
+
+    void createRawManifestRow(std::filesystem::path const& path, std::string_view const uri, TrackId const trackId)
+    {
+      auto const key = detail::PaddedFileManifestKey{uri};
+      auto const payload = FileManifestBuilder::makeEmpty().trackId(trackId).serialize();
+      createRawBlobRow(path, "file_manifest", key.bytes(), payload);
+    }
+
+    void dropNamedDatabase(std::filesystem::path const& path,
+                           std::string const& databaseName,
+                           std::optional<Database::KeyKind> const optReplacementKind = std::nullopt)
+    {
+      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto* rawTransaction = static_cast<MDB_txn*>(nullptr);
+      REQUIRE(::mdb_txn_begin(environment.handle(), nullptr, 0, &rawTransaction) == MDB_SUCCESS);
+      auto transactionPtr = std::unique_ptr<MDB_txn, decltype(&::mdb_txn_abort)>{rawTransaction, &::mdb_txn_abort};
+      MDB_dbi dbi = 0;
+      REQUIRE(::mdb_dbi_open(transactionPtr.get(), databaseName.c_str(), 0, &dbi) == MDB_SUCCESS);
+      REQUIRE(::mdb_drop(transactionPtr.get(), dbi, 1) == MDB_SUCCESS);
+
+      if (optReplacementKind)
+      {
+        std::uint32_t flags = MDB_CREATE;
+
+        if (*optReplacementKind == Database::KeyKind::Integer)
+        {
+          flags |= MDB_INTEGERKEY;
+        }
+
+        REQUIRE(::mdb_dbi_open(transactionPtr.get(), databaseName.c_str(), flags, &dbi) == MDB_SUCCESS);
+      }
+
+      auto* commitTransaction = transactionPtr.release();
+      REQUIRE(::mdb_txn_commit(commitTransaction) == MDB_SUCCESS);
+    }
+
+    void addOrdinaryMainCatalogRow(std::filesystem::path const& path, std::string_view const key)
+    {
+      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto transaction = beginWriteTransaction(environment);
+      auto mainDatabase = Database::main(transaction);
+      REQUIRE(mainDatabase.writer(transaction).create(utility::bytes::view(key), createStringData("ordinary")));
+      REQUIRE(transaction.commit());
+    }
+
+    std::vector<std::byte> makeColdDataWithCover(std::string_view const uri, ResourceId const resourceId)
+    {
+      auto header = TrackColdHeader{};
+      header.blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)] = sizeof(TrackColdHeader);
+      header.uriOffset = sizeof(TrackColdHeader) + sizeof(CoverArtEntry);
+      header.uriLength = static_cast<std::uint16_t>(uri.size());
+      auto const logicalSize = static_cast<std::size_t>(header.uriOffset) + uri.size();
+      auto payload = std::vector<std::byte>(alignToWord(logicalSize), std::byte{0});
+      auto const cover = CoverArtEntry{.id = resourceId};
+      std::memcpy(payload.data(), &header, sizeof(header));
+      std::memcpy(payload.data() + sizeof(header), &cover, sizeof(cover));
+      std::memcpy(payload.data() + header.uriOffset, uri.data(), uri.size());
+      return payload;
+    }
+
+    void createRawTrackPair(std::filesystem::path const& path,
+                            TrackId const trackId,
+                            std::string_view const uri,
+                            std::optional<ResourceId> const optCover = std::nullopt)
+    {
+      createRawIntegerRow(path, "tracks_hot", trackId.raw(), makeHotData());
+      auto cold = optCover ? makeColdDataWithCover(uri, *optCover) : makeColdData({}, uri);
+      createRawIntegerRow(path, "tracks_cold", trackId.raw(), cold);
+    }
+
     void requireCorruptLibrary(std::filesystem::path const& path)
     {
       auto const result = openTestMusicLibrary(path, path);
+      auto const message = result ? std::string{} : result.error().message;
+      INFO(message);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -125,10 +222,56 @@ namespace ao::library::test
     }();
 
     auto reopenedRes = openTestMusicLibrary(temp.path(), temp.path());
+    auto const reopenMessage = reopenedRes ? std::string{} : reopenedRes.error().message;
+    INFO(reopenMessage);
     REQUIRE(reopenedRes);
     auto const& reopened = *reopenedRes;
     CHECK(reopened.metadataHeader().libraryId == firstHeader.libraryId);
     CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
+  }
+
+  TEST_CASE("MusicLibrary - admits only the exact current main catalog", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("missing named database")
+    {
+      dropNamedDatabase(temp.path(), "resources");
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("unknown named database")
+    {
+      {
+        auto environment = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
+        auto transaction = beginWriteTransaction(environment);
+        std::ignore = openDatabase(transaction, "future_extension");
+        REQUIRE(transaction.commit());
+      }
+
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("ordinary main-database row")
+    {
+      addOrdinaryMainCatalogRow(temp.path(), "ordinary");
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("wrong named-database key flags")
+    {
+      dropNamedDatabase(temp.path(), "resources", Database::KeyKind::Blob);
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
+  TEST_CASE("MusicLibrary - does not mistake an ordinary meta row for the metadata database",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    addOrdinaryMainCatalogRow(temp.path(), "meta");
+    requireCorruptLibrary(temp.path());
   }
 
   TEST_CASE("MusicLibrary - rejects persisted data without metadata", "[library][unit][music-library][integrity]")
@@ -139,7 +282,7 @@ namespace ao::library::test
     requireCorruptLibrary(temp.path());
   }
 
-  TEST_CASE("MusicLibrary - reports unsupported library versions as CorruptData", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - reports unsupported library versions as NotSupported", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     constexpr std::uint32_t kLegacyV1LibraryVersion = 1;
@@ -152,7 +295,7 @@ namespace ao::library::test
 
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      CHECK(result.error().code == Error::Code::NotSupported);
     }
 
     SECTION("old version")
@@ -162,7 +305,7 @@ namespace ao::library::test
 
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      CHECK(result.error().code == Error::Code::NotSupported);
     }
 
     SECTION("previous cold layout version")
@@ -172,7 +315,7 @@ namespace ao::library::test
 
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      CHECK(result.error().code == Error::Code::NotSupported);
     }
 
     SECTION("version 4 before unified List ordering")
@@ -182,8 +325,166 @@ namespace ao::library::test
 
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      CHECK(result.error().code == Error::Code::NotSupported);
     }
+  }
+
+  TEST_CASE("MusicLibrary - future schema is rejected before current exact-shape checks",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto header = [&]
+    {
+      auto library = makeTestMusicLibrary(temp.path(), temp.path());
+      return library.metadataHeader();
+    }();
+    header.libraryVersion = kLibraryVersion + 1U;
+    auto enlargedHeader = std::vector<std::byte>(sizeof(header) + 24U, std::byte{0x5a});
+    std::memcpy(enlargedHeader.data(), &header, sizeof(header));
+    updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, enlargedHeader);
+
+    {
+      auto environment = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto transaction = beginWriteTransaction(environment);
+      std::ignore = openDatabase(transaction, "future_extension", Database::KeyKind::Blob);
+      REQUIRE(transaction.commit());
+    }
+
+    auto const result = openTestMusicLibrary(temp.path(), temp.path());
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
+  }
+
+  TEST_CASE("MusicLibrary - validates the staged metadata header admission rules",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto header = [&]
+    {
+      auto library = makeTestMusicLibrary(temp.path(), temp.path());
+      return library.metadataHeader();
+    }();
+
+    SECTION("shorter than stable prefix")
+    {
+      auto const bytes = std::array<std::byte, 7>{};
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, bytes);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("wrong magic")
+    {
+      header.magic ^= 1U;
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, utility::bytes::view(header));
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("wrong current-version exact size")
+    {
+      auto bytes = std::vector<std::byte>(sizeof(header) + 1U, std::byte{0});
+      std::memcpy(bytes.data(), &header, sizeof(header));
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, bytes);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("nonzero current-version flags")
+    {
+      header.flags = 1;
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, utility::bytes::view(header));
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
+  TEST_CASE("MusicLibrary - admits only the current metadata record set and revision range",
+            "[library][unit][music-library][revision]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("unknown metadata record")
+    {
+      createRawIntegerRow(temp.path(), "meta", 99, createStringData("unknown"));
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("revision with wrong size")
+    {
+      auto const bytes = std::array<std::byte, sizeof(std::uint64_t) - 1U>{};
+      createRawIntegerRow(temp.path(), "meta", kLibraryRevisionRecordId, bytes);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("persisted revision zero")
+    {
+      constexpr std::uint64_t kZeroRevision = 0;
+      createRawIntegerRow(temp.path(), "meta", kLibraryRevisionRecordId, utility::bytes::view(kZeroRevision));
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("reserved maximum revision")
+    {
+      constexpr auto kReservedRevision = std::numeric_limits<std::uint64_t>::max();
+      createRawIntegerRow(temp.path(), "meta", kLibraryRevisionRecordId, utility::bytes::view(kReservedRevision));
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
+  TEST_CASE("MusicLibrary - maximum valid committed revision opens", "[library][unit][music-library][revision]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+    constexpr auto kMaximumValidRevision = std::numeric_limits<std::uint64_t>::max() - 1U;
+    createRawIntegerRow(temp.path(), "meta", kLibraryRevisionRecordId, utility::bytes::view(kMaximumValidRevision));
+
+    auto library = makeTestMusicLibrary(temp.path(), temp.path());
+    auto read = library.readTransaction();
+    CHECK(library.libraryRevision(read) == kMaximumValidRevision);
+  }
+
+  TEST_CASE("MusicLibrary - Track and manifest admission work grows linearly", "[library][unit][music-library][cost]")
+  {
+    auto const measure = [](std::size_t const trackCount)
+    {
+      auto const temp = ao::test::TempDir{};
+
+      {
+        auto library = makeTestMusicLibrary(temp.path(), temp.path());
+        auto transaction = writeTransaction(library);
+        auto createRes = transaction.apply(
+          [trackCount](LibraryWrite& write) -> Result<>
+          {
+            auto writer = write.tracks();
+
+            for (std::size_t index = 0; index < trackCount; ++index)
+            {
+              auto const uri = std::format("linear-{}.flac", index);
+              auto track = TrackBuilder::makeEmpty();
+              track.property().uri(uri);
+
+              if (auto result = writer.create(track, FileManifestBuilder::makeEmpty()); !result)
+              {
+                return std::unexpected{result.error()};
+              }
+            }
+
+            return {};
+          });
+        REQUIRE(createRes);
+        REQUIRE(transaction.commit());
+      }
+
+      [[maybe_unused]] auto reopened = makeTestMusicLibrary(temp.path(), temp.path());
+      return detail::openValidationMetrics();
+    };
+
+    constexpr std::size_t kN = 24;
+    auto const atN = measure(kN);
+    auto const atTwoN = measure(kN * 2U);
+
+    CHECK(atN.trackCursorRows == kN);
+    CHECK(atN.manifestPointReads == kN);
+    CHECK(atTwoN.trackCursorRows == 2U * atN.trackCursorRows);
+    CHECK(atTwoN.manifestPointReads == 2U * atN.manifestPointReads);
   }
 
   TEST_CASE("MusicLibrary - open reports a storage fault as a Result", "[library][regression][music-library]")
@@ -199,6 +500,20 @@ namespace ao::library::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::IoError);
+  }
+
+  TEST_CASE("MusicLibrary - injected validation read fault remains a recoverable open result",
+            "[library][regression][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto injection = lmdb::detail::ReadFaultInjection{MDB_PANIC};
+
+    auto const result = openTestMusicLibrary(temp.path(), temp.path());
+
+    REQUIRE_FALSE(result);
+    CHECK(injection.wasConsumed());
+    CHECK(result.error().code == Error::Code::IoError);
+    CHECK(result.error().message.contains("mdb_stat"));
   }
 
   TEST_CASE("MusicLibrary - rejects invalid persisted dictionary state", "[library][unit][music-library][integrity]")
@@ -255,6 +570,67 @@ namespace ao::library::test
     }
   }
 
+  TEST_CASE("MusicLibrary - requires a strict Track and manifest bijection",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("Track is missing its manifest")
+    {
+      createRawTrackPair(temp.path(), TrackId{1}, "a.flac");
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("manifest names a missing Track")
+    {
+      createRawManifestRow(temp.path(), "a.flac", TrackId{1});
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("manifest URI does not match its Track")
+    {
+      createRawTrackPair(temp.path(), TrackId{1}, "a.flac");
+      createRawManifestRow(temp.path(), "b.flac", TrackId{1});
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("manifest is bound to the wrong Track id")
+    {
+      createRawTrackPair(temp.path(), TrackId{1}, "a.flac");
+      createRawManifestRow(temp.path(), "a.flac", TrackId{2});
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("two Tracks participate in the same URI")
+    {
+      createRawTrackPair(temp.path(), TrackId{1}, "shared.flac");
+      createRawTrackPair(temp.path(), TrackId{2}, "shared.flac");
+      createRawManifestRow(temp.path(), "shared.flac", TrackId{1});
+      createRawManifestRow(temp.path(), "extra.flac", TrackId{2});
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("two manifests participate in the same Track id")
+    {
+      createRawTrackPair(temp.path(), TrackId{1}, "a.flac");
+      createRawTrackPair(temp.path(), TrackId{2}, "b.flac");
+      createRawManifestRow(temp.path(), "a.flac", TrackId{1});
+      createRawManifestRow(temp.path(), "b.flac", TrackId{1});
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
+  TEST_CASE("MusicLibrary - rejects missing referenced Resources", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+    createRawTrackPair(temp.path(), TrackId{1}, "covered.flac", ResourceId{1});
+    createRawManifestRow(temp.path(), "covered.flac", TrackId{1});
+
+    requireCorruptLibrary(temp.path());
+  }
+
   TEST_CASE("MusicLibrary - rejects invalid persisted List state", "[library][unit][music-library][integrity]")
   {
     auto const temp = ao::test::TempDir{};
@@ -280,6 +656,120 @@ namespace ao::library::test
       auto const invalidPayload = std::array{std::byte{0x42}};
       createRawIntegerRow(temp.path(), "lists", 1, invalidPayload);
       requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("saved-order Track ids must be nonzero")
+    {
+      auto builder = ListBuilder::makeEmpty();
+      builder.orderTrackIds().add(TrackId{1});
+      auto payload = ao::test::requireValue(builder.serialize());
+      constexpr std::uint32_t kZeroTrackId = 0;
+      std::memcpy(payload.data() + kListHeaderSize, &kZeroTrackId, sizeof(kZeroTrackId));
+      createRawIntegerRow(temp.path(), "lists", 1, payload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("saved-order Track ids must be unique")
+    {
+      auto builder = ListBuilder::makeEmpty();
+      builder.orderTrackIds().add(TrackId{1}).add(TrackId{2});
+      auto payload = ao::test::requireValue(builder.serialize());
+      constexpr std::uint32_t kDuplicateTrackId = 1;
+      std::memcpy(payload.data() + kListHeaderSize + sizeof(TrackId), &kDuplicateTrackId, sizeof(kDuplicateTrackId));
+      createRawIntegerRow(temp.path(), "lists", 1, payload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("parent must exist")
+    {
+      auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().parentId(ListId{2}).serialize());
+      createRawIntegerRow(temp.path(), "lists", 1, payload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("parent graph must be acyclic")
+    {
+      auto const first = ao::test::requireValue(ListBuilder::makeEmpty().parentId(ListId{2}).serialize());
+      auto const second = ao::test::requireValue(ListBuilder::makeEmpty().parentId(ListId{1}).serialize());
+      createRawIntegerRow(temp.path(), "lists", 1, first);
+      createRawIntegerRow(temp.path(), "lists", 2, second);
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
+  TEST_CASE("MusicLibrary - accepts opaque invalid List filter text", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+    constexpr auto kInvalidFilter = "((( not application grammar";
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().filter(kInvalidFilter).serialize());
+    createRawIntegerRow(temp.path(), "lists", 1, payload);
+
+    auto libraryRes = openTestMusicLibrary(temp.path(), temp.path());
+
+    REQUIRE(libraryRes);
+    auto transaction = libraryRes->readTransaction();
+    auto const optList = libraryRes->lists().reader(transaction).get(ListId{1});
+    REQUIRE(optList);
+    CHECK(optList->filter() == kInvalidFilter);
+  }
+
+  TEST_CASE("MusicLibrary - retains stale saved-order Track ids", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+    auto builder = ListBuilder::makeEmpty();
+    builder.orderTrackIds().add(TrackId{999});
+    auto const payload = ao::test::requireValue(builder.serialize());
+    createRawIntegerRow(temp.path(), "lists", 1, payload);
+
+    auto library = makeTestMusicLibrary(temp.path(), temp.path());
+    auto read = library.readTransaction();
+    auto const optList = library.lists().reader(read).get(ListId{1});
+    REQUIRE(optList);
+    REQUIRE(optList->orderTrackIds().size() == 1);
+    CHECK(optList->orderTrackIds()[0] == TrackId{999});
+  }
+
+  TEST_CASE("MusicLibrary - validates Resource rows while accepting opaque orphan data",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("Resource key has the wrong width")
+    {
+      auto const shortKey = std::array{std::byte{1}, std::byte{0}};
+      auto const payload = std::array{std::byte{0x42}};
+      createRawIntegerKeyRow(temp.path(), "resources", shortKey, payload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("Resource id zero is reserved")
+    {
+      auto const payload = std::array{std::byte{0x42}};
+      createRawIntegerRow(temp.path(), "resources", 0, payload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("Resource value must be nonempty")
+    {
+      createRawIntegerRow(temp.path(), "resources", 1, std::span<std::byte const>{});
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("orphan Dictionary and opaque Resource rows are accepted")
+    {
+      auto const opaqueBytes = std::array{std::byte{0xff}, std::byte{0x00}, std::byte{0x81}};
+      createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("unused"));
+      createRawIntegerRow(temp.path(), "resources", 1, opaqueBytes);
+
+      auto library = makeTestMusicLibrary(temp.path(), temp.path());
+      CHECK(library.dictionary().getOrDefault(DictionaryId{1}) == "unused");
+      auto read = library.readTransaction();
+      auto const optResource = library.resources().reader(read).get(ResourceId{1});
+      REQUIRE(optResource);
+      CHECK(std::ranges::equal(*optResource, opaqueBytes));
     }
   }
 
@@ -323,7 +813,7 @@ namespace ao::library::test
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().resources()), ResourceStore const&>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().dictionary()), DictionaryStore const&>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().manifest()), FileManifestStore const&>);
-    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().metadata()), MetadataStore const&>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().metadataHeader()), MetadataHeader>);
   }
 
   TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit][music-library]")
@@ -446,8 +936,8 @@ namespace ao::library::test
         auto transaction = writerRes->writeTransaction();
         auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
         auto failureRes =
-          transaction.apply([&smallLibrary, &oversizedValue](WriteTransaction& activeTransaction)
-                            { return smallLibrary.resources().writer(activeTransaction).create(oversizedValue); });
+          transaction.apply([&smallLibrary, &oversizedValue](LibraryWrite& write)
+                            { return physicalWriter(smallLibrary.resources(), write).create(oversizedValue); });
         REQUIRE_FALSE(failureRes);
         CHECK(failureRes.error().code == Error::Code::IoError);
       }

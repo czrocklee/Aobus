@@ -5,43 +5,19 @@
 
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/enums.h>
 
-#include <cstddef>
 #include <cstdint>
-#include <exception>
-#include <format>
 #include <limits>
-#include <new>
-#include <string>
-#include <string_view>
 #include <utility>
 
 namespace ao::gtk::layout
 {
-  namespace
-  {
-    std::string boundedExceptionMessage(std::string_view message)
-    {
-      constexpr std::size_t kMaximumBytes = 160;
-
-      if (message.size() <= kMaximumBytes)
-      {
-        return std::string{message};
-      }
-
-      constexpr auto kSuffix = std::string_view{"..."};
-      auto result = std::string{message.substr(0, kMaximumBytes - kSuffix.size())};
-      result += kSuffix;
-      return result;
-    }
-  } // namespace
-
   LayoutHost::LayoutHost(ComponentRegistry const& registry)
     : _runtime{registry}
   {
@@ -60,30 +36,14 @@ namespace ao::gtk::layout
     auto buildContext = ctx;
     buildContext.buildState.overrideGeneration(nextGeneration);
 
-    try
-    {
-      auto rootComponentPtr = _runtime.build(buildContext, layout);
+    auto rootComponentPtr = _runtime.build(buildContext, layout);
 
-      gsl_Assert(rootComponentPtr && "Layout component factory returned no root component");
+    AO_INVARIANT(rootComponentPtr, "Layout component factory returned no root component");
 
-      auto& activeWidget = rootComponentPtr->widget();
-      activeWidget.set_hexpand(true);
-      activeWidget.set_vexpand(true);
-      return PreparedTree{std::move(rootComponentPtr), nextGeneration};
-    }
-    catch (std::bad_alloc const&)
-    {
-      return makeError(Error::Code::ResourceExhausted, "Insufficient memory to build GTK layout tree");
-    }
-    catch (std::exception const& error)
-    {
-      return makeError(Error::Code::InitFailed,
-                       std::format("Failed to build GTK layout tree: {}", boundedExceptionMessage(error.what())));
-    }
-    catch (...)
-    {
-      return makeError(Error::Code::InitFailed, "Failed to build GTK layout tree with an unknown exception");
-    }
+    auto& activeWidget = rootComponentPtr->widget();
+    activeWidget.set_hexpand(true);
+    activeWidget.set_vexpand(true);
+    return PreparedTree{std::move(rootComponentPtr), nextGeneration};
   }
 
   void LayoutHost::commit(uimodel::LayoutRuntimeState& runtimeState, PreparedTree prepared)

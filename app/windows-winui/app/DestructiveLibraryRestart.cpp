@@ -3,6 +3,7 @@
 
 #include <ao/winui/app/DestructiveLibraryRestart.h>
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
 
 #include <exception>
@@ -22,68 +23,38 @@ namespace ao::winui
                    .message = std::format("Destructive restart operation '{}' is missing", name)};
     }
 
-    Error exceptionError(std::string_view const what, std::exception const& error)
-    {
-      return Error{
-        .code = Error::Code::InitFailed, .message = std::format("{} threw an exception: {}", what, error.what())};
-    }
-
-    Error unknownExceptionError(std::string_view const what)
-    {
-      return Error{.code = Error::Code::InitFailed, .message = std::format("{} threw an unknown exception", what)};
-    }
-
-    Result<> guarded(std::move_only_function<Result<>()>& operation, std::string_view const what)
-    {
-      try
-      {
-        return operation();
-      }
-      catch (std::exception const& error)
-      {
-        return std::unexpected{exceptionError(what, error)};
-      }
-      catch (...)
-      {
-        return std::unexpected{unknownExceptionError(what)};
-      }
-    }
-
-    Result<> guarded(std::move_only_function<void()>& operation, std::string_view const what)
-    {
-      try
-      {
-        operation();
-        return {};
-      }
-      catch (std::exception const& error)
-      {
-        return std::unexpected{exceptionError(what, error)};
-      }
-      catch (...)
-      {
-        return std::unexpected{unknownExceptionError(what)};
-      }
-    }
-
-    void report(std::move_only_function<void(Error const&) noexcept>& reportFailure, Error const& error) noexcept
+    void report(std::move_only_function<void(Error const&)>& reportFailure, Error const& error) noexcept
     {
       if (!reportFailure)
       {
         return;
       }
 
-      reportFailure(error);
+      try
+      {
+        reportFailure(error);
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), "destructive restart failure reporting");
+      }
     }
 
-    void exitProcess(std::move_only_function<void() noexcept>& exitOperation) noexcept
+    void exitProcess(std::move_only_function<void()>& exitOperation) noexcept
     {
       if (!exitOperation)
       {
         return;
       }
 
-      exitOperation();
+      try
+      {
+        exitOperation();
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), "destructive restart process exit");
+      }
     }
   } // namespace
 
@@ -98,14 +69,36 @@ namespace ao::winui
       return DestructiveLibraryRestartOutcome::LaunchFailed;
     }
 
-    // Deliberately discarded: a failed release must not cost the successor.
-    std::ignore = guarded(operations.releaseActiveGraph, "Active graph release");
+    auto releaseExceptionPtr = std::exception_ptr{};
+    try
+    {
+      operations.releaseActiveGraph();
+    }
+    catch (...)
+    {
+      // A dying parent must still attempt its successor before diagnosing an
+      // unexpected teardown escape.
+      releaseExceptionPtr = std::current_exception();
+    }
 
-    auto const launchedRes = guarded(operations.launchSuccessor, "Successor process launch");
+    auto launchedRes = Result<>{};
+    try
+    {
+      launchedRes = operations.launchSuccessor();
+    }
+    catch (...)
+    {
+      AO_FATAL_EXCEPTION(std::current_exception(), "destructive restart successor launch");
+    }
 
     if (!launchedRes)
     {
       report(operations.reportLaunchFailure, launchedRes.error());
+    }
+
+    if (releaseExceptionPtr)
+    {
+      AO_FATAL_EXCEPTION(std::move(releaseExceptionPtr), "destructive restart active-graph release");
     }
 
     exitProcess(operations.exitProcess);

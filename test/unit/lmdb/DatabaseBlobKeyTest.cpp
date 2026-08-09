@@ -3,15 +3,12 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
-
-#include <cstdint>
 
 namespace ao::lmdb::test
 {
@@ -81,25 +78,5 @@ namespace ao::lmdb::test
       REQUIRE_FALSE(writer2.get(key1).has_value());
       REQUIRE(wtxn2.commit());
     }
-  }
-
-  TEST_CASE("Database::Reader::KeyView - coercion throws on non-uint32 key", "[lmdb][unit][database-reader][blob]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "blobdb", Database::KeyKind::Blob);
-    auto writer = db.writer(wtxn);
-    REQUIRE(writer.create(createStringData("xy"), createStringData("value"))); // 2-byte key
-    REQUIRE(wtxn.commit());
-
-    auto const rtxn = beginReadTransaction(env);
-    auto const reader = db.reader(rtxn);
-    auto const it = reader.begin();
-    REQUIRE(it != reader.end());
-
-    // A 2-byte key cannot be coerced to uint32; it must throw rather than yield 0.
-    REQUIRE_THROWS_AS(static_cast<std::uint32_t>(it->first), Exception);
   }
 } // namespace ao::lmdb::test

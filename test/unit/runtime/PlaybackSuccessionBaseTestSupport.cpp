@@ -80,11 +80,11 @@ namespace ao::rt::test::playback_succession
   }
 
   PlaybackSuccessionFixture::PlaybackSuccessionFixture()
-    : asyncRuntime{executor, 1, {}, &sleeper}
-    , changes{libraryChangesExecutor, 0}
+    : asyncRuntime{executor, 1, &sleeper}
+    , changes{libraryChangesExecutor, 0, "test-library"}
     , writerFixture{libraryFixture.library(), changes}
     , sources{libraryFixture.library(), changes}
-    , views{executor, libraryFixture.library(), sources}
+    , views{executor, libraryFixture.library(), sources, changes}
     , workspace{executor, views, changes}
     , playbackTransport{makePlaybackTransport(asyncRuntime, libraryFixture.library(), notifications)}
   {

@@ -35,6 +35,8 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - **Interactive admission** accepts a command only while authoring is `Available` and no earlier commit is awaiting publication completion.
 - **Dictionary overlay** is the write-transaction-local text/id delta used while serializing records; it is not visible through committed dictionary reads.
 - **Root operation boundary** is `WriteTransaction::apply()` and, for live writes, `LibraryMutationService::Mutation::apply()`; it owns rollback before a failed body can return or throw outward.
+- **Write operation context** is the callback-scoped `LibraryWrite` passed by that boundary; it exposes logical mutation ports but cannot commit or abort the transaction.
+- **Logical mutation ports** are `LibraryWrite::tracks()` and `LibraryWrite::lists()`; runtime code composes user-facing behavior through them and never pairs physical Store writes itself.
 - **Raw order** is a saved List's persisted rank sequence, including ids currently hidden by its parent or local expression.
 
 ## Invariants
@@ -45,6 +47,7 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - One writer command owns at most one write transaction and is independently atomic.
 - A sequence of writer calls is a sequence of commits; the API exposes no caller-controlled multi-command transaction.
 - Every transaction-dependent command body runs through the root operation boundary and returns `Result<T>`.
+- Logical mutation ports and library-identity restore are unavailable on the transaction owner and are valid only while its `apply()` callback is active.
 - Any error returned by that body aborts and terminalizes the complete root before the error is exposed; an unexpected exception does the same before being rethrown.
 - Private `lmdb::detail::TransactionFailure` and `library::detail::LibraryException` carriers may unwind lower mutation helpers only as far as `WriteTransaction`, which catches them exactly, aborts, and returns the carried error.
 - Library code does not expose nested transactions or item savepoints, so no batch owner continues after a failed root body.
@@ -57,7 +60,8 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - A preview, abort, serialization failure, or commit failure leaves committed dictionary lookup, size, and generation unchanged.
 - User-authored validation failure, storage failure, serialization failure, and commit failure leave library content unchanged.
 - Runtime return values own their data and never retain transaction-bound `TrackView`, `ListView`, or manifest views.
-- Native commit or abort makes store writers terminal without destroying their C++ transaction owner; retained writers fail on use and remain safe to destroy before the outer wrapper leaves scope.
+- Native commit or abort makes transaction-borrowing logical writers terminal without destroying their C++ transaction owner; retained writers fail on use and remain safe to destroy while that owner remains alive.
+- `LibraryWrite` itself is callback-scoped, and every logical writer must be destroyed before its borrowed `WriteTransaction` owner; using either through a dangling reference is outside the API contract.
 
 ## Read model
 
@@ -70,8 +74,10 @@ Selection-tag intersection treats a stale selected track id as contributing no t
 The all-tags query returns distinct tag text and usage counts ordered by descending frequency and then ascending name.
 
 Runtime construction receives only a `MusicLibrary` whose persisted dictionary, paired Track records, dictionary references, List rows, and manifest rows passed the open-time integrity gate.
-Safely detected corruption at a later point-read is never collapsed to a miss and returns `CorruptData` where that method has a typed boundary.
-A List or manifest iterator row that violates the established gate instead raises the general infrastructure exception; runtime does not catch a private carrier to return partial output.
+Persisted corruption safely detected during `MusicLibrary::open()` returns `CorruptData`.
+After admission, a Store or cross-Store fact that supported logical writers preserve is never
+collapsed to a miss or returned as an application error; it aborts through the fatal facility.
+A List or manifest row that violates the established gate instead aborts through `AO_INVARIANT`; runtime does not catch a private carrier to return partial output.
 
 ## Track commands
 
@@ -120,7 +126,7 @@ There is no Manual, Smart, Folder, or Playlist kind.
 An empty expression is the identity predicate and a non-empty expression computes membership from the parent source.
 The draft never carries order ids.
 
-Creation and update validate the name, parent relationship, expression, size bounds, and parent cycles before commit.
+Creation and update validate the name, expression, and size bounds before mutation; the logical List writer independently validates parent existence and cycles against the live write snapshot before commit.
 A non-empty List expression must parse and compile under the [predicate contracts](../../query/predicate-evaluation.md) before the transaction commits.
 A stale update target returns `NotFound`.
 
@@ -158,6 +164,7 @@ Compound, negated, invalid, or non-tag expressions have computed membership and 
 Add validates the complete bound track selection and, for a nested List, requires every target to belong to the target List's parent source.
 It adds the ordinary visible tag atomically, does not materialize raw order, and leaves a new member in the unranked tail.
 Already-present tags are idempotent no-ops.
+If evaluating that parent membership encounters an invalid stored expression anywhere in the parent chain, Add returns contextual `FormatRejected` naming the originating parent List before changing tags, revision, or publication state.
 
 Explicit Remove removes the ordinary tag and removes each selected id from the target List raw order in the same transaction.
 The reply identifies every forgotten position, and the changeset carries both track mutation and raw-order evidence.
@@ -167,7 +174,7 @@ Removing the same tag through the generic tag editor does not alter raw order; a
 ### List deletion
 
 Ordinary deletion rejects a List with direct dependents and reports their identities; it never reparents or silently cascades.
-`previewDeleteListAndDescendants` returns the complete subtree before the separate cascade command removes every row atomically.
+`previewDeleteListAndDescendants` returns the complete subtree before the separate cascade command asks the logical List writer to rediscover that live subtree and remove every row children-first and atomically.
 
 Deletion of a directly editable single-tag List preserves ordinary track tags by default.
 The preview reports the tag, tagged-track count, and other remaining List expressions that reference it.
@@ -180,7 +187,7 @@ A missing list returns `NotFound`.
 
 Synchronous commands are not cooperatively cancellable.
 All recoverable input and persistence failures use `Result`; malformed internal edit coordinates and impossible invariants remain programmer errors.
-Native transaction begin and revision initialization occur before a `Mutation` is exposed and have no recoverable authoring branch; failure releases writer admission and propagates through the library's general storage-exception boundary.
+Native transaction begin and candidate-revision construction from that writer snapshot's durable metadata occur before a `Mutation` is exposed and have no recoverable authoring branch; failure releases writer admission and aborts through the fatal facility.
 
 Pure validation may return before a transaction is acquired.
 Once a root exists, a command-body `Result` error is exposed only by `apply()`, which explicitly aborts and releases writer ownership even when the C++ transaction or mutation wrapper remains alive.
@@ -198,7 +205,7 @@ Coordinated Closing privately seals later mutation admission before callback wor
 
 ## Persistence and versioning
 
-Every effective command commits its records and one bumped library revision in the same LMDB transaction.
+Every effective command commits its records and one candidate library revision in the same LMDB transaction; the revision is written immediately before native commit and is not consumed on abort or failed commit.
 The next interactive command is admitted only after callback-executor publication of that revision completes.
 Exact records and identifier allocation belong to the [library database reference](../../../reference/library/storage/database.md).
 
@@ -213,12 +220,16 @@ Exact records and identifier allocation belong to the [library database referenc
 - [`MusicLibrary.h`](../../../../include/ao/library/MusicLibrary.h) defines the lower physical facade.
 - [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) defines read-snapshot ownership and the store-read capability.
 - [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) defines coherent native-write and dictionary-overlay ownership plus the non-nested root execution boundary.
+- [`LibraryWrite.h`](../../../../include/ao/library/LibraryWrite.h) defines the callback-scoped logical mutation capability.
+- [`TrackWriter.h`](../../../../include/ao/library/TrackWriter.h) and [`ListWriter.h`](../../../../include/ao/library/ListWriter.h) define the logical transaction-scoped mutation ports used by runtime commands.
 
 ## Test map
 
 - [`LibraryReaderTest.cpp`](../../../../test/unit/runtime/library/LibraryReaderTest.cpp) proves coherent runtime values.
 - [`WriteTransactionTest.cpp`](../../../../test/unit/library/WriteTransactionTest.cpp) proves root error containment, rollback, terminal state, and writer-gate reuse.
+- [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) and [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) prove the logical port capability boundary and relationship-preserving mutations below the runtime facade.
 - `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
+- [`LibraryWriterListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListMembershipTest.cpp) additionally proves that an invalid stored parent expression returns contextual `FormatRejected` before mutation or publication.
 - [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, failed-mutation admission release, no-op binding retention, and publication reentrancy closure.
 
 ## Related documents

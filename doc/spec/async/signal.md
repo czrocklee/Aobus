@@ -3,7 +3,7 @@ id: async.signal
 type: spec
 status: current
 domain: async
-summary: Defines owner-affine signal connection, synchronous delivery, reentrancy, the noexcept handler contract, and deferred lifetime behavior.
+summary: Defines owner-affine signal connection, synchronous delivery, reentrancy, fatal observer containment, and deferred lifetime behavior.
 ---
 # Signal delivery
 
@@ -64,24 +64,27 @@ A post requested by a handler cannot run inside that handler and remains subject
 
 ## Failure and cancellation
 
-`Signal` handlers are `noexcept`, enforced by the handler type rather than by convention.
+`Signal` handlers are ordinary callables; the owning emission boundary provides the non-throwing external guarantee.
 A signal notifies observers of something the owner has already committed, so a failure an observer reports carries no decision the owner could act on: the state change cannot be undone.
-A handler that cannot degrade locally therefore terminates the process at the throw point, with the faulting stack intact, instead of being logged and stepped over while that observer's state has silently diverged.
+A handler that lets an exception escape therefore enters the AO exception-aware fatal backend at the emission call site instead of relying on raw language termination or stepping over a diverged observer.
 Handlers that call fallible operations contain the failure themselves, where enough context remains to choose a meaningful fallback.
-Contract-fulfilling handlers are visited in connection order; after a handler violates the `noexcept` contract, the process terminates immediately and no later-handler guarantee applies.
+Contract-fulfilling handlers are visited in connection order; after a handler escapes, the process aborts immediately and no later-handler guarantee applies.
 
-`emit` and `post` inherit that guarantee and are `noexcept`.
-Allocation failure while queueing a deferred emission or copying its arguments also terminates.
+`emit` and the deferred callback installed by `post` catch at their owning
+boundary and invoke `AO_FATAL_EXCEPTION()` with signal context.
+Allocation failure while constructing or admitting a posted emission follows the enclosing executor call's exception contract; once accepted, an escaping callback or payload fault is fatal at the deferred emission boundary.
 
 Signals are therefore for notification only.
-A mandatory single-consumer replication phase is a different topology, not an exception protocol; [library change publication](../library/runtime/change-publication.md) uses a named `noexcept` replica callable outside this broadcast primitive.
+A mandatory single-consumer replication phase is a different topology, not an exception protocol; [library change
+publication](../library/runtime/change-publication.md) uses a named ordinary replica callable inside its own
+non-throwing delivery boundary.
 
 The primitive has no cancellation state.
 Destroying a signal before a posted callback runs turns that callback into a successful no-op.
 
 ## Implementation map
 
-- [`Signal.h`](../../../include/ao/async/Signal.h) implements shared weak state, slot tombstoning, nested-emission depth, deferred payload ownership, and the noexcept handler type.
+- [`Signal.h`](../../../include/ao/async/Signal.h) implements the ordinary handler type, shared weak state, slot tombstoning, nested-emission depth, deferred payload ownership, and the `noexcept` owning emission boundary.
 - [`Subscription.h`](../../../include/ao/async/Subscription.h) defines the shared async lifetime name over `utility::ScopedRegistration`.
 - [`ScopedRegistration.h`](../../../include/ao/utility/ScopedRegistration.h) implements reset, destruction, and move-assignment release behavior.
 - [`lib/async/CMakeLists.txt`](../../../lib/async/CMakeLists.txt) records the public `ao_async -> ao_utility` dependency.
@@ -89,7 +92,8 @@ Destroying a signal before a posted callback runs turns that callback into a suc
 
 ## Test map
 
-- [`SignalTest.cpp`](../../../test/unit/async/SignalTest.cpp) covers connection order, move-only handlers, connect/disconnect during emission, nested emission, self-disconnection lifetime, `disconnectAll`, subscription moves, the noexcept handler contract, owner destruction, decayed posts, later turns, and destroyed-owner posts.
+- [`SignalTest.cpp`](../../../test/unit/async/SignalTest.cpp) covers connection order, move-only handlers, connect/disconnect during emission, nested emission, self-disconnection lifetime, `disconnectAll`, subscription moves, owner destruction, decayed posts, later turns, and destroyed-owner posts.
+- Fatal subprocess coverage protects escaping observer diagnostics and abort behavior.
 - [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) proves that the reporting owner adds immutable reentrant-update queuing above the generic primitive.
 
 ## Related documents

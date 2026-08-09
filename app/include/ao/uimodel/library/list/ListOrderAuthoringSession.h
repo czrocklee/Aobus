@@ -40,7 +40,7 @@ namespace ao::uimodel
     bool isCurrent() const noexcept;
     ListOrderCapabilityState const& capabilities() const noexcept;
     std::span<TrackId const> effectiveTrackIds() const noexcept;
-    async::Subscription onInvalidated(std::move_only_function<void() noexcept> handler) const;
+    async::Subscription onInvalidated(std::move_only_function<void()> handler) const;
 
     Result<rt::LibraryWriter::MoveOrderAuthoringResult> moveBefore(std::span<TrackId const> selectedTrackIds,
                                                                    std::optional<TrackId> optBeforeTrackId);

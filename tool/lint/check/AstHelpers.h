@@ -6,6 +6,7 @@
 #include <clang/Basic/SourceLocation.h>
 
 #include <string>
+#include <string_view>
 
 namespace clang
 {
@@ -15,6 +16,7 @@ namespace clang
   class Expr;
   class LangOptions;
   class SourceManager;
+  class Stmt;
   class VarDecl;
 } // namespace clang
 
@@ -25,6 +27,24 @@ namespace clang::tidy::aobus
   // True when any end of the range sits inside a macro expansion; a FixIt
   // anchored there would edit the macro definition, not the use site.
   bool isInMacro(SourceRange range);
+
+  // True for production project sources and lint fixtures. Ordinary tests and
+  // system headers are outside production policy checks.
+  bool isPolicySource(SourceManager const& sourceManager, SourceLocation location);
+
+  bool blockBeginsWithPolicyMarker(Stmt const& block,
+                                   ASTContext const& context,
+                                   SourceManager const& sourceManager,
+                                   std::string_view markerHelperName,
+                                   std::string_view macroName);
+
+  // True when the function enclosing statement begins with the exact policy
+  // marker macro expansion backed by markerHelperName.
+  bool enclosingFunctionBeginsWithPolicyMarker(Stmt const& statement,
+                                               ASTContext& context,
+                                               SourceManager const& sourceManager,
+                                               std::string_view markerHelperName,
+                                               std::string_view macroName);
 
   // Unwraps the implicit wrapper chains the AST inserts around expressions
   // (ImplicitCastExpr / single-argument CXXConstructExpr /

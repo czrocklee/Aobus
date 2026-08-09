@@ -8,6 +8,7 @@
 #include "runtime/playback/PlaybackCursorSession.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
@@ -22,8 +23,6 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -110,9 +109,9 @@ namespace ao::rt
 
     _started = true;
     _lastSnapshot = _playback.snapshot();
-    _successionStateSubscription = _succession.onRestorableStateChanged([this] noexcept { requestDebouncedSave(); });
+    _successionStateSubscription = _succession.onRestorableStateChanged([this] { requestDebouncedSave(); });
     _snapshotSubscription =
-      _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) noexcept { handleSnapshot(snapshot); });
+      _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   Result<> PlaybackSessionPersistence::checkpoint()
@@ -277,9 +276,9 @@ namespace ao::rt
     auto const publicSubjectMatches =
       snapshot.transport.nowPlaying.trackId == currentTrackId && snapshot.succession.currentTrackId == currentTrackId;
 
-    gsl_Assert(transportSession.trackId != kInvalidTrackId && transportSession.trackId == currentTrackId &&
-               (!hasActiveSession() || publicSubjectMatches) &&
-               "Playback cursor and transport current tracks disagree during save");
+    AO_INVARIANT(transportSession.trackId != kInvalidTrackId && transportSession.trackId == currentTrackId &&
+                   (!hasActiveSession() || publicSubjectMatches),
+                 "Playback cursor and transport current tracks disagree during save");
 
     auto const session = snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, elapsed, snapshot);
 

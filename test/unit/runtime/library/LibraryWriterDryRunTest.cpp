@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -143,7 +143,7 @@ namespace ao::rt::test
       }
 
       auto const createRes =
-        libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
+        transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
       REQUIRE(createRes);
       REQUIRE(transaction.commit());
       return *createRes;

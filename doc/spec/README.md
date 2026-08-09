@@ -17,7 +17,7 @@ Use the [specification template](../template/spec.md).
 
 ## Async
 
-- [Signal delivery](async/signal.md) defines owner-affine connection, synchronous and deferred delivery, reentrant mutation, the noexcept handler contract, and destruction behavior.
+- [Signal delivery](async/signal.md) defines owner-affine connection, synchronous and deferred delivery, reentrant mutation, owning fatal containment, and destruction behavior.
 
 ## Failure and reporting
 

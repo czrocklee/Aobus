@@ -1,7 +1,7 @@
 ---
 id: decision.0006.validate-open-fail-fast-live-iterator
 type: decision
-status: accepted
+status: superseded
 domain: library
 summary: Validates every structured iterable store before exposure and treats a later iterator integrity breach as an infrastructure fault.
 ---
@@ -66,4 +66,4 @@ Rejected because throwing the project's general invariant exception preserves RA
 
 ## Supersession
 
-Not superseded.
+Superseded by [Decision 0008](0008-close-library-admission-and-trust-live-storage.md), which retains complete validation before exposure, closes the current schema and cross-Store proof, and replaces the post-open general exception with the unified fatal facility.

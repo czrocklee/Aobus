@@ -7,6 +7,7 @@
 #include "LibraryMutationService.h"
 #include "LibraryYamlImportOperation.h"
 #include "ScanApplyOperation.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -15,8 +16,8 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/Log.h>
@@ -32,8 +33,6 @@
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/ThreadName.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -87,7 +86,7 @@ namespace ao::rt
 
   ImportReport const& LibraryImportPlan::report() const noexcept
   {
-    gsl_Expects(_implPtr != nullptr);
+    AO_EXPECTS(_implPtr != nullptr);
     return _implPtr->report;
   }
 
@@ -175,7 +174,7 @@ namespace ao::rt
       }
 
       auto mutation = std::move(*mutationRes);
-      auto applyRes = mutation.apply([&operation, stopToken](library::WriteTransaction& transaction)
+      auto applyRes = mutation.apply([&operation, stopToken](library::LibraryWrite& transaction)
                                      { return operation.apply(transaction, stopToken); });
 
       if (!applyRes)
@@ -232,18 +231,7 @@ namespace ao::rt
 
         if (callback)
         {
-          try
-          {
-            callback(progress);
-          }
-          catch (std::exception const& error)
-          {
-            APP_LOG_ERROR("Library scan progress callback failed: {}", error.what());
-          }
-          catch (...)
-          {
-            APP_LOG_ERROR("Library scan progress callback failed with a non-standard exception");
-          }
+          callback(progress);
         }
       };
     }
@@ -258,28 +246,16 @@ namespace ao::rt
 
         if (callback)
         {
-          try
-          {
-            callback(failure);
-          }
-          catch (std::exception const& error)
-          {
-            APP_LOG_ERROR("Library scan failure callback failed: {}", error.what());
-          }
-          catch (...)
-          {
-            APP_LOG_ERROR("Library scan failure callback failed with a non-standard exception");
-          }
+          callback(failure);
         }
       };
     }
 
     AudioIdentityIndexer::CommitBatchCallback makeAudioIdentityCommitBatch(
       LibraryMutationService& mutationService,
-      LibraryMutationService::MaintenanceGuard const& maintenance,
-      library::MusicLibrary& library)
+      LibraryMutationService::MaintenanceGuard const& maintenance)
     {
-      return [mutationServiceRaw = &mutationService, maintenanceRaw = &maintenance, libraryRaw = &library](
+      return [mutationServiceRaw = &mutationService, maintenanceRaw = &maintenance](
                std::span<AudioIdentityWriteCandidate const> candidates) -> Result<AudioIdentityBatchCommitResult>
       {
         auto mutationRes = mutationServiceRaw->beginMaintenanceMutation(*maintenanceRaw);
@@ -290,8 +266,8 @@ namespace ao::rt
         }
 
         auto mutation = std::move(*mutationRes);
-        auto result = mutation.apply([libraryRaw, candidates](library::WriteTransaction& transaction)
-                                     { return applyAudioIdentityBatch(*libraryRaw, transaction, candidates); });
+        auto result = mutation.apply([candidates](library::LibraryWrite& transaction)
+                                     { return applyAudioIdentityBatch(transaction, candidates); });
 
         if (!result || result->completedCount == 0)
         {
@@ -322,18 +298,7 @@ namespace ao::rt
 
         if (callback)
         {
-          try
-          {
-            callback(progress);
-          }
-          catch (std::exception const& error)
-          {
-            APP_LOG_ERROR("Audio identity progress callback failed: {}", error.what());
-          }
-          catch (...)
-          {
-            APP_LOG_ERROR("Audio identity progress callback failed with a non-standard exception");
-          }
+          callback(progress);
         }
       };
     }
@@ -346,18 +311,7 @@ namespace ao::rt
 
         if (callback)
         {
-          try
-          {
-            callback(failure);
-          }
-          catch (std::exception const& error)
-          {
-            APP_LOG_ERROR("Audio identity failure callback failed: {}", error.what());
-          }
-          catch (...)
-          {
-            APP_LOG_ERROR("Audio identity failure callback failed with a non-standard exception");
-          }
+          callback(failure);
         }
       };
     }
@@ -381,32 +335,21 @@ namespace ao::rt
       auto* const executorRaw = &asyncRuntime.callbackExecutor();
       auto const weakSignalsPtr = std::weak_ptr<Signals>{signalsPtr};
 
-      return [executorRaw, weakSignalsPtr](LibraryTaskProgressKind kind, double fraction, std::string subject) noexcept
+      return [executorRaw, weakSignalsPtr](LibraryTaskProgressKind kind, double fraction, std::string subject)
       {
-        try
-        {
-          executorRaw->dispatch(
-            [weakSignalsPtr, kind, fraction, subject = std::move(subject)]
+        executorRaw->dispatch(
+          [weakSignalsPtr, kind, fraction, subject = std::move(subject)]
+          {
+            if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
             {
-              if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
-              {
-                auto const event = LibraryTaskProgressUpdated{
-                  .kind = kind,
-                  .fraction = fraction,
-                  .subject = std::move(subject),
-                };
-                signalsPtr->progress.emit(event);
-              }
-            });
-        }
-        catch (std::exception const& error)
-        {
-          APP_LOG_ERROR("Library task progress dispatch failed: {}", error.what());
-        }
-        catch (...)
-        {
-          APP_LOG_ERROR("Library task progress dispatch failed with a non-standard exception");
-        }
+              auto const event = LibraryTaskProgressUpdated{
+                .kind = kind,
+                .fraction = fraction,
+                .subject = std::move(subject),
+              };
+              signalsPtr->progress.emit(event);
+            }
+          });
       };
     }
 
@@ -427,13 +370,13 @@ namespace ao::rt
 
   LibraryTaskService::~LibraryTaskService() = default;
 
-  async::Subscription LibraryTaskService::onProgressFinished(std::move_only_function<void() noexcept> handler) const
+  async::Subscription LibraryTaskService::onProgressFinished(std::move_only_function<void()> handler) const
   {
     return _implPtr->signalsPtr->progressFinished.connect(std::move(handler));
   }
 
   async::Subscription LibraryTaskService::onProgress(
-    std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const
+    std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const
   {
     return _implPtr->signalsPtr->progress.connect(std::move(handler));
   }
@@ -513,14 +456,7 @@ namespace ao::rt
 
           {
             auto readTransaction = _implPtr->library.readTransaction();
-            auto const headerRes = _implPtr->library.metadata().load(readTransaction);
-
-            if (!headerRes)
-            {
-              return std::unexpected{headerRes.error()};
-            }
-
-            targetLibraryId = headerRes->libraryId;
+            targetLibraryId = _implPtr->library.metadataHeader(readTransaction).libraryId;
             targetRevision = _implPtr->library.libraryRevision(readTransaction);
           }
 
@@ -532,7 +468,7 @@ namespace ao::rt
           }
 
           auto mutation = std::move(*mutationRes);
-          auto reportRes = mutation.apply([&importOperation, &preparedRes](library::WriteTransaction& transaction)
+          auto reportRes = mutation.apply([&importOperation, &preparedRes](library::LibraryWrite& transaction)
                                           { return importOperation.preview(*preparedRes, transaction); });
 
           if (!reportRes)
@@ -589,7 +525,7 @@ namespace ao::rt
       async::throwOperationCancelled();
     }
 
-    gsl_Assert(optRes);
+    AO_INVARIANT(optRes);
     co_return std::move(*optRes);
   }
 
@@ -598,7 +534,7 @@ namespace ao::rt
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
-    gsl_Expects(plan._implPtr && "Import plan has already been consumed");
+    AO_EXPECTS(plan._implPtr, "Import plan has already been consumed");
 
     auto maintenanceRes = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
 
@@ -629,14 +565,9 @@ namespace ao::rt
 
           {
             auto readTransaction = _implPtr->library.readTransaction();
-            auto const headerRes = _implPtr->library.metadata().load(readTransaction);
+            auto const header = _implPtr->library.metadataHeader(readTransaction);
 
-            if (!headerRes)
-            {
-              return std::unexpected{headerRes.error()};
-            }
-
-            if (headerRes->libraryId != binding.targetLibraryId ||
+            if (header.libraryId != binding.targetLibraryId ||
                 _implPtr->library.libraryRevision(readTransaction) != binding.targetRevision)
             {
               return makeError(Error::Code::Conflict, "Target library changed after the import preview");
@@ -659,7 +590,7 @@ namespace ao::rt
           }
 
           auto mutation = std::move(*mutationRes);
-          auto importRes = mutation.apply([&importOperation, &binding](library::WriteTransaction& transaction)
+          auto importRes = mutation.apply([&importOperation, &binding](library::LibraryWrite& transaction)
                                           { return importOperation.apply(binding.prepared, transaction); });
 
           if (!importRes)
@@ -667,9 +598,9 @@ namespace ao::rt
             return std::unexpected{importRes.error()};
           }
 
-          auto changeSetRes = mutation.apply(
-            [&importOperation, &binding](library::WriteTransaction& transaction) -> Result<LibraryChangeSet>
-            { return importOperation.buildChangeSet(binding.prepared, transaction); });
+          auto changeSetRes =
+            mutation.apply([&importOperation, &binding](library::LibraryWrite& transaction) -> Result<LibraryChangeSet>
+                           { return importOperation.buildChangeSet(binding.prepared, transaction); });
 
           if (!changeSetRes)
           {
@@ -726,7 +657,7 @@ namespace ao::rt
       std::rethrow_exception(exceptionPtr);
     }
 
-    gsl_Assert(optRes);
+    AO_INVARIANT(optRes);
     co_return std::move(*optRes);
   }
 
@@ -805,7 +736,7 @@ namespace ao::rt
       async::throwOperationCancelled();
     }
 
-    gsl_Assert(optPlanRes);
+    AO_INVARIANT(optPlanRes);
     co_return std::move(*optPlanRes);
   }
 
@@ -924,7 +855,7 @@ namespace ao::rt
     {
       co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
       setCurrentThreadName("AudioBackfill");
-      auto commitBatch = makeAudioIdentityCommitBatch(_implPtr->mutationService, maintenance, _implPtr->library);
+      auto commitBatch = makeAudioIdentityCommitBatch(_implPtr->mutationService, maintenance);
       auto progress = makeAudioIdentityProgressReporter(_implPtr->makeProgressPublisher(), std::move(progressCallback));
       auto failure = makeAudioIdentityFailureReporter(std::move(failureCallback));
 

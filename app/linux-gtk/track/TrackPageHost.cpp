@@ -58,11 +58,11 @@ namespace ao::gtk
 
     auto& playback = _runtime.playback();
     setPlayingTrack(playback.snapshot().transport.nowPlaying.trackId);
-    _snapshotSub = playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
+    _snapshotSub = playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
                                                 { setPlayingTrack(snapshot.transport.nowPlaying.trackId); });
 
     _focusSub = _runtime.workspace().onChanged(
-      [this](rt::WorkspaceChanged const& changed) noexcept
+      [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.cause != rt::WorkspaceChangeCause::Presentation &&
             changed.cause != rt::WorkspaceChangeCause::Presets)
@@ -72,7 +72,7 @@ namespace ao::gtk
       });
 
     _projectionChangedSub = _runtime.views().onProjectionChanged(
-      [this](rt::TrackListProjectionChanged const& ev) noexcept
+      [this](rt::TrackListProjectionChanged const& ev)
       {
         auto* entry = find(ev.viewId);
 
@@ -91,7 +91,7 @@ namespace ao::gtk
       });
 
     _presentationChangedSub = _runtime.views().onPresentationChanged(
-      [this](rt::ViewService::PresentationChanged const& ev) noexcept
+      [this](rt::ViewService::PresentationChanged const& ev)
       {
         auto* entry = find(ev.viewId);
 
@@ -105,6 +105,15 @@ namespace ao::gtk
         if (_playingTrackId != kInvalidTrackId)
         {
           entry->pagePtr->setPlayingTrackId(_playingTrackId);
+        }
+      });
+
+    _filterErrorChangedSub = _runtime.views().onFilterErrorChanged(
+      [this](rt::ViewService::FilterErrorChanged const& changed)
+      {
+        if (auto* const entry = find(changed.viewId); entry != nullptr && entry->pagePtr != nullptr)
+        {
+          entry->pagePtr->refreshOrderCapabilities();
         }
       });
   }
@@ -144,7 +153,7 @@ namespace ao::gtk
     entry->pagePtr->selectionController().selectTrack(trackId);
   }
 
-  void TrackPageHost::handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev) noexcept
+  void TrackPageHost::handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev)
   {
     auto viewId = rt::ViewId{ev.preferredViewId};
 

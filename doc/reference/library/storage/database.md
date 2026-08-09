@@ -25,8 +25,9 @@ This surface belongs to the **core libraries** layer in the [system architecture
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and defaults to a 1 GiB map unless `MusicLibrary::Options::mapSize` overrides it.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It validates the metadata/version gate and the dictionary, Track, List, and manifest invariants described below before exposing any store.
-An absent metadata header initializes a library only when every named database is empty; data without that header is `CorruptData`, not a partially initialized new library.
+It enumerates the main LMDB catalog before any named database is created and initializes the exact version-5 schema only when that catalog is empty.
+A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
+After the version gate accepts version 5, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
 
 The database is host-local rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
@@ -37,17 +38,40 @@ Integer keys use LMDB native word order and record structs are host-endian; [lib
 
 ## Transaction access
 
-`MusicLibrary::readTransaction()` returns a move-only `ReadTransaction` that directly owns one native LMDB read snapshot.
-Failure to begin the native transaction raises the library's general storage exception; this API has no recoverable typed-error channel.
+`MusicLibrary::readTransaction()` returns a move-only `ReadTransaction` that directly owns one native LMDB read snapshot plus the header and revision values read from that snapshot.
+Failure to begin the native transaction is fatal because a live library has no recoverable storage-snapshot alternative.
 `WritableMusicLibrary::acquire(MusicLibrary&)` returns the explicit move-only capability whose `writeTransaction()` factory returns a `WriteTransaction`; `MusicLibrary` exposes no public write-transaction factory.
-The factory performs native begin and the transaction's one staged revision bump before exposing the wrapper.
-Either failure releases the process writer gate and discards the transaction's lease-anchor reference, then raises the library's general storage exception instead of creating a recoverable authoring result.
+After native begin has acquired LMDB's single-writer snapshot, the factory reads that snapshot's durable header and revision and computes the transaction's one in-memory candidate revision before exposing the wrapper.
+Either failure releases the process writer gate and discards the transaction's lease-anchor reference, then fails fatally instead of creating a recoverable authoring result.
 The originating writable capability continues to hold its process session lease.
-The write wrapper owns one native transaction, its transaction-local dictionary writer, the process writer gate, and a shared anchor to the writable capability's lease.
+The write wrapper owns one native transaction, the transaction-local dictionary writer hidden behind Track preparation, the process writer gate, a shared anchor to the writable capability's lease, and one lazily opened physical writer per touched Store.
+Repeated logical operations and successive successful `apply()` callbacks reuse those writers and their native cursors until commit or abort.
+It exposes logical Track, List, and identity mutation authority only through the callback-scoped `LibraryWrite` supplied by `WriteTransaction::apply()`.
 
-The specialized stores are const service handles.
-Their readers accept either library transaction type, while their writers require a mutable `WriteTransaction`.
+The specialized stores are const read service handles.
+Their readers accept a read transaction, a write transaction for pre-operation inspection, or the active `LibraryWrite` context for a coherent in-operation snapshot.
+Production mutation does not obtain a physical Store writer: `LibraryWrite::tracks()` and `LibraryWrite::lists()` return callback-scoped logical writers, and `LibraryWrite::restoreLibraryIdentity()` is the only metadata mutation exposed inside the root operation.
+Physical Track, manifest, List, Resource, Dictionary, and metadata writer factories remain inaccessible to production callers; representation, corruption, and isolated Store-backed tests use one source-private access seam.
+`MusicLibrary` exposes logical metadata-header values rather than a physical Metadata Store handle.
 Native LMDB transaction handles remain private implementation details of `MusicLibrary` and the stores; the wrappers add semantic capability boundaries but no additional storage transaction or heap allocation on the read path.
+
+The logical Track writer has these operation groups:
+
+- validate a `TrackBuilder` for representability and existing Resource references without writing dictionary or Resource rows;
+- create one hot/cold Track pair together with its manifest row;
+- update complete, hot-only, or cold-only Track data while retaining its existing URI;
+- replace Track data and its existing manifest facts together;
+- update only file status or audio identity while retaining the existing URI-to-Track binding;
+- relink by changing the cold URI, removing the old manifest key, and creating the new binding as one operation;
+- delete one Track together with its manifest row; and
+- clear Tracks and the manifest together.
+
+The logical List writer accepts `ListBuilder`, prepares its physical row internally, and creates or updates it only after validating the live parent chain.
+Update first proves that its target exists, so the physical LMDB upsert primitive cannot create a caller-selected List id.
+An ordinary delete returns `NotFound` for an absent id and `Conflict` while a child exists.
+Explicit subtree deletion discovers the complete live subtree, deletes children before parents, and returns the deleted ids in root-first discovery order.
+Clear removes the complete List graph coherently.
+Filter bytes remain opaque throughout these storage operations.
 
 Writable-capability acquisition non-blockingly locks `<database-path>/.aobus-writer.lock` for the capability lifetime.
 An active write transaction retains the lock after its originating capability is destroyed and releases it on commit, failure, abort-by-destruction, or transaction destruction.
@@ -93,7 +117,10 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 | `libraryId` | 16 UUID bytes. |
 
 The revision record is an unsigned 64-bit integer.
-It is bumped inside each committing library mutation transaction.
+Absence means the initial committed revision `0`; a present record must be exactly eight bytes and contain neither `0` nor `UINT64_MAX`.
+The maximum valid committed value is `UINT64_MAX - 1`, a physically unreachable exhaustion sentinel for this desktop application's mutation rate.
+A write transaction computes the next value in memory from the durable revision visible to its already-acquired LMDB writer snapshot, exposes it as its candidate revision, and persists it in that same native transaction immediately before commit.
+Abort, pre-commit rejection, and failed commit leave the previous durable revision unchanged.
 
 ## Track records
 
@@ -114,22 +141,30 @@ An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
 The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI bytes.
 
-Every Track write uses immutable `TrackBuilder::PreparedHot` and `PreparedCold` values through the helpers in `TrackWrite.h`.
-`TrackStore::Writer` accepts no caller-supplied record bytes and exposes no callback-filled or mutable LMDB span, so there is one record-writing path rather than a prepared path beside a raw one.
+Production callers pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
+The writer performs preparation itself and keeps the resulting immutable `TrackBuilder::PreparedHot` and `PreparedCold` values inside `ao_library`.
+This binds resolved dictionary ids and byte-backed Resource creation to the same library and transaction that performs the physical write; caller-supplied existing Resource ids must already exist in that write snapshot.
+The physical `TrackStore::Writer` accepts no caller-supplied record bytes and exposes no callback-filled or mutable LMDB span, and it is unavailable to production callers, so there is one record-writing path rather than a prepared path beside a raw one.
 That also removes the defensive copy a caller span would need, because a reservation is already four-byte-aligned storage the canonical validators can view as typed records.
 Writes reject the reserved zero `TrackId` as a `CorruptData` fault.
-Complete `prepare()` and `serialize()` first run both pure hot and cold validators; single-side entry points run the validator for that side.
+Complete internal preparation first runs both pure hot and cold validators; single-side logical updates run the validator for that side.
+Private serialization helpers used by representation tests follow the same preflight rules.
 Those gates check every representable size and the canonical Track URI before dictionary interning, resource creation, or Track mutation begins, so a recoverable rejection adds no item-relative dictionary, resource, or Track delta.
+They validate builder input and representability rather than encoded bytes: a prepared Track side is a typed zero-copy snapshot and does not retain a second serialized record.
 That private zero-copy path reserves the hot value, fills every byte, validates it, and lets the reservation leave scope before reserving the cold value.
 Updates follow the same per-side sequence.
 Prepared writes fill a transaction-owned reservation and validate the complete bytes before the reservation leaves scope.
-A canonical post-fill validation failure is an internal `InvalidState` fault; the root operation owner explicitly aborts the transaction before rethrowing it.
+A canonical post-fill validation failure violates the encoder's `AO_ENSURES` postcondition and aborts immediately.
 
 Create requires both canonical payloads and allocates the identity by appending to `tracks_hot`, then creates the same key in `tracks_cold`.
-A cold-key conflict after hot allocation is `CorruptData` and rolls back the hot row.
+After open proves matching key sets, a cold-key conflict after hot allocation violates the
+Track-pair invariant and aborts; supported writers cannot create that state. Other native
+failure after the hot reservation uses the private transaction carrier so the root aborts the
+whole write before returning its typed storage error.
 After open establishes the exact-pair invariant, update helpers do not rescan the opposite database as a recovery check.
+A `Both` point lookup still probes both sides so it can distinguish a normal miss, where neither row exists, from a post-open invariant breach, where exactly one row exists.
 A single-side update checks its target row and returns `NotFound` without terminating the transaction when that row is absent.
-`updatePreparedTrackRecord()` checks the hot target once before its first mutation, then relies on the established pair invariant for the cold replacement.
+The private complete-update encoder checks the hot target once before its first mutation, then relies on the established pair invariant for the cold replacement.
 It changes both sides as one logical operation.
 If any multi-side mutation reaches its first successful storage update and a later storage step fails, the mutation raises `lmdb::detail::TransactionFailure`; the root operation owner explicitly aborts before translating the failure to its enclosing `Result` boundary.
 
@@ -140,7 +175,10 @@ An LMDB fault from a mutation path is carried by `lmdb::detail::TransactionFailu
 `WriteTransaction::commit()` provides the same containment for a mutation fault during dictionary preparation.
 No public runtime writer exposes a transaction that may be continued after either failure.
 
-`TrackStore::Writer::remove()` deletes both physical keys without decoding their values and returns whether the Track pair existed; both absent returns false.
+The logical Track delete first proves the complete Track and matching manifest binding, then deletes the manifest and both physical Track keys.
+An absent Track returns successful `false`; a present Track with missing or mismatched
+cross-Store evidence violates the admission-and-writer invariant and aborts rather than
+presenting the live database as recoverably corrupt.
 The write surface is not a damaged-database repair path because a one-sided physical Track cannot pass open.
 
 ## List records
@@ -198,6 +236,14 @@ The serializer emits exactly that size and fills the final zero through three pa
 The reader rejects multiplication/addition overflow, truncated fields, a non-canonical total size, nonzero padding, and hidden trailing bytes.
 Text fields retain an independent 65,535-byte product limit; the 32-bit physical lengths do not authorize multi-gigabyte user text.
 
+`ListBuilder` owns copies of its name, description, and filter inputs, so a logical mutation may stage the semantic value without retaining a caller or LMDB view.
+`ListBuilder::prepare()` snapshots one immutable prepared value after checking the product limits, exact canonical layout, nonzero unique saved-order ids, and every derived extent.
+The filter field is opaque at this boundary: any byte string within the size limit is locally valid, and no query parse or compile occurs.
+`ListStore::Writer` accepts only the prepared value, fills one LMDB reservation, and uses `AO_ENSURES` to prove that the output exactly equals the validated immutable snapshot.
+It does not allocate and rebuild a second saved-order uniqueness set after copying those bytes.
+Creation allocates the nonzero List key; update requires a nonzero key.
+Parent existence and parent-cycle checks are cross-row logical-writer rules and are not part of this local prepared-record gate.
+
 ## Resource and dictionary records
 
 Resource values are raw blob bytes with no header.
@@ -223,25 +269,44 @@ Zero payload length together with an all-zero signature means pending audio iden
 Manifest point reads, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
 Values must be exactly 48 bytes, carry a nonzero Track id, a declared status, three zero reserved bytes, and either both parts of an audio identity or neither.
-`FileManifestStore::Writer::put()` validates the key and value before its first LMDB mutation.
-Only a point-read `NotFound` may be interpreted as absence, and a malformed point-read value is `CorruptData`.
-Iterator dereference after a successful open assumes the validated store invariant; a malformed row raises the general `ao::Exception` infrastructure channel rather than skipping the row, returning partial output, or exposing a private library carrier.
+`FileManifestBuilder::prepare()` parses the URI, applies the complete canonical key/value validator without allocating a serialized payload, and snapshots the header before mutation.
+`FileManifestStore::Writer::put()` accepts only the prepared value, fills one LMDB reservation, and applies the complete key/value validator as an `AO_ENSURES` encoder postcondition.
+Only a point-read `NotFound` may be interpreted as absence.
+Point reads and iterator dereference after a successful open assume the validated Store invariant; a malformed row fails through `AO_INVARIANT` rather than being skipped, returned as partial output, or exposed through a private library error carrier.
 
 ## Validation rules
 
-Builders are the only record producers and own overflow and structural validation before bytes reach a store.
-`ListStore::Writer::create()` and `update()` repeat the complete structural gate before issuing an LMDB mutation; creation returns only the durable-candidate `ListId`, never a transaction-bound `ListView`.
-An invalid payload returns `CorruptData`, and update leaves the prior value unchanged.
+Production callers cannot submit serialized Track, List, or manifest byte spans to their structured Store writers.
+The logical Track port accepts `TrackBuilder` and `FileManifestBuilder`, the logical List port accepts `ListBuilder`, and both own their private preparation.
+Manifest-only Track updates likewise accept the owning `TrackId` plus `FileManifestBuilder`; the port derives and preserves the live URI-to-Track binding itself.
+Track preflight, List preparation, and manifest preparation return recoverable validation errors before their first related mutation, while passing an invalid prepared value is impossible through the public construction surface.
+Once Track preparation starts interning dictionary text or creating byte-backed Resources, any later failure reaches the root operation boundary and aborts the complete transaction.
+Track and manifest encoders validate the bytes they fill with the same canonical local validators used by open and treat a mismatch as an `AO_ENSURES` failure.
+Because a prepared List already owns its validated encoded bytes, its encoder instead uses `AO_ENSURES` to compare the filled reservation with that exact snapshot; repeating the allocating uniqueness validator cannot add evidence.
 
-Open completes the metadata/version gate, validates dictionary key width, dense ids, and unique text while building its in-memory index, merge-checks the hot/cold Track key sets and validates canonical records plus every dictionary reference, validates every List key and record, and validates every manifest key and value.
-These gates all complete before exposure; their internal evaluation order is not an error-precedence contract.
+Open first reads only the stable eight-byte metadata prefix needed for magic and version.
+A valid non-current version returns `NotSupported` before version-5 catalog closure, exact header size, flags, or extra-database checks; migration remains a separate facility.
+For version 5, the header is exactly 40 bytes with zero flags, the catalog is exactly the seven named databases above, every integer-key database has `MDB_INTEGERKEY`, `file_manifest` has no key flags, and `meta` contains only header record `1` plus optional revision record `2`.
+
+The current-schema gate then validates Resource keys as nonzero four-byte ids and Resource values as nonempty opaque bytes; orphan Resources and orphan dictionary rows are accepted.
+It validates dictionary key width, dense ids, and unique text while building the in-memory index.
+It merge-checks the hot/cold Track key sets, validates canonical records plus every dictionary and Resource reference, and proves a strict Track-to-manifest bijection.
+The bijection first compares row counts, then performs one canonical manifest point read for each Track URI and requires the manifest's Track id to equal that Track id.
+Equal counts, unique Track ids, and the exact point matches prove that no extra manifest row exists without allocating a Track- or manifest-sized set; duplicate Track URIs and duplicate manifest bindings cannot pass.
+It validates every List key and local record, requires each non-root parent to exist, and rejects parent cycles using memory proportional to the List count.
+Saved-order Track ids must be nonzero and unique, but they may be stale or currently absent because saved rank is intentionally retained outside current membership.
+Stored filter bytes remain opaque and are not parsed or compiled by database admission.
+These gates all complete in one coherent initialization transaction before exposure; their internal evaluation order after the version gate is not an error-precedence contract.
 The first observed failure returns `CorruptData` for the complete open.
 No `MusicLibrary`, runtime source, partial All Tracks membership, or salvage-row view is exposed.
+The admission algorithm is linear in the number and total byte size of persisted rows.
+Track-to-manifest closure adds one manifest point lookup per Track and constant Track-sized auxiliary storage; List topology adds linear auxiliary storage in the number of Lists.
+Tests lock the operation-count slope from `N` to `2N`, and a manual 100,000-Track evidence run records wall time and peak resident memory without imposing a machine-dependent CI time threshold.
 
 Directly constructed read views perform one constant-time structural gate that proves the fixed header and all derived slices remain inside the record.
 `TrackView` gates its hot and cold sides independently because callers may deliberately load only one side.
 `isHotValid()` and `isColdValid()` are always legal and report whether the corresponding loaded side passed its gate.
-A decoded hot or cold accessor requires that side to be valid; calling it for an absent or structurally invalid side is a programmer error that fails fast through `gsl_Expects`.
+A decoded hot or cold accessor requires that side to be valid; calling it for an absent or structurally invalid side is a programmer error that fails fast through `AO_EXPECTS`.
 Raw diagnostic access remains available for the exact bytes supplied to the view.
 An absent optional block inside a valid cold side is not an invalid tier: classical, cover-art, and custom-metadata proxies remain legal and empty, with their documented optional-block defaults.
 The canonical write validator additionally checks exact size and zero padding, tag ids and bloom agreement, and cold block ordering.
@@ -252,12 +317,13 @@ Those linear checks do not add a per-row scan to normal decoded access.
 A directly constructed invalid `ListView` retains its raw-view safety behavior: `isValid()` is false and decoded fields are empty or invalid.
 That `ListView` behavior is not the `ListStore` absence contract.
 For `ListStore::Reader::get()` and `ListStore::Writer::get()`, `nullopt` means only that the key is absent.
-A structurally invalid stored value after successful open throws the general `ao::Exception`; dereferencing a List iterator does the same.
+A structurally invalid stored value after successful open fails through `AO_INVARIANT`; dereferencing a List iterator does the same.
 Callers therefore cannot mistake storage corruption for a missing List or silently omit a corrupt row from a full scan.
-An exception escaping a root write body is rethrown only after the transaction owner has explicitly aborted every uncommitted mutation.
+The check aborts rather than unwinding into an application catch boundary because the open-time proof or a supported writer invariant has been violated.
 
-`TrackStore::Reader::get()` and `visitTracks()` use a different partial-view contract: an absent row is skipped/returned as `nullopt`, while a loaded but structurally invalid hot or cold side is returned in a `TrackView` with its validity query false.
-Visitors and other consumers must check the required side before decoded access; a contract failure after earlier visitor calls is not rolled back or reclassified as absence.
+`TrackStore::Reader::get()` and `visitTracks()` treat absence as the only normal miss.
+A loaded but structurally invalid hot or cold side after successful open fails through `AO_INVARIANT`; it is not returned as a poisoned live Store row.
+Directly constructed `TrackView` remains available for bounded binary diagnostics and preserves its independent validity queries.
 
 Every store view borrows its bytes from the active LMDB transaction.
 It must not outlive that transaction.
@@ -269,38 +335,50 @@ It cannot turn an underlying mapped-file fault into a recoverable record-validat
 
 ## Compatibility and versioning
 
-Opening a database whose metadata magic or stored library version is invalid returns `CorruptData`.
+Opening a database with invalid metadata magic returns `CorruptData`; a valid non-current stored version returns `NotSupported` after only the stable prefix is read.
 There is no migration path today; the current reset-and-rescan recovery instruction loses database-only user-authored state and must be treated as an explicit destructive fallback rather than a reconstruction guarantee.
-Safely detected malformed dictionary, Track, List, or manifest state likewise rejects open as a unit.
+Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, or manifest state likewise rejects open as a unit.
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
-Version `5` also gates the interpretation of saved List `filter` text and `orderTrackIds` rank semantics.
-The exact accepted surface belongs to the [predicate language reference](../../query/predicate-language.md), and membership meaning belongs to the [predicate evaluation specification](../../../spec/query/predicate-evaluation.md).
+Version `5` gates the `orderTrackIds` representation and List record layout, while stored `filter` bytes remain opaque to database admission.
+The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../spec/query/predicate-evaluation.md).
+A grammar or predicate-semantic change does not by itself increment `kLibraryVersion`; stored text that no longer parses or compiles is an application expression error rather than corrupt storage.
 
-Any incompatible key, record, enum encoding, slot meaning, signature-algorithm, stored List predicate, or saved-order interpretation change must increment `kLibraryVersion`.
-A predicate change is incompatible when it expands the storable surface beyond what an existing same-version reader accepts, or when it can alter whether existing filter text parses or compiles, what it binds to, or which tracks it matches, even if `ListHeader` and its stored bytes do not change.
-An explicitly tested future migration may replace reset-and-rescan recovery for an old version only when it reads the old predicate contract, converts or validates every affected filter atomically, and updates the metadata version after the converted data is valid; the target still has an incremented `kLibraryVersion`, and no such migration exists today.
+Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
+An explicitly tested future migration may replace reset-and-rescan recovery for an old physical version only when it converts or validates every affected record atomically and updates the metadata version after the converted data is valid; no such migration exists today.
 There is no version-4 reader or in-place migration.
-Opening a version-4 environment fails the exact version gate; preserving its user-authored data requires an explicit portable export performed by a compatible build before opening the library with version 5.
+Opening a version-4 environment returns `NotSupported`; preserving its user-authored data requires an explicit portable export performed by a compatible build before opening the library with version 5.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created host-local index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority
 
 - [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, version, and metadata sizes.
 - [`TrackLayout.h`](../../../../include/ao/library/TrackLayout.h), [`ListLayout.h`](../../../../include/ao/library/ListLayout.h), and [`FileManifestLayout.h`](../../../../include/ao/library/FileManifestLayout.h) own binary structs and static size checks.
-- [`TrackRecordValidation.cpp`](../../../../lib/library/TrackRecordValidation.cpp), [`FileManifestValidation.cpp`](../../../../lib/library/FileManifestValidation.cpp), and [`LibraryUriValidation.h`](../../../../lib/library/LibraryUriValidation.h) own canonical persisted-record validation.
+- [`TrackRecordValidation.cpp`](../../../../lib/library/TrackRecordValidation.cpp), [`ListRecordValidation.cpp`](../../../../lib/library/ListRecordValidation.cpp), [`FileManifestValidation.cpp`](../../../../lib/library/FileManifestValidation.cpp), and [`LibraryUriValidation.h`](../../../../lib/library/LibraryUriValidation.h) own the canonical persisted-record validation implementations.
 - [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) owns environment, named-database creation, and the complete open gate; [`DictionaryStore.cpp`](../../../../lib/library/DictionaryStore.cpp) establishes the dictionary representation while loading it.
-- [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) and [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) own the public transaction capabilities.
-- Store and builder implementations under [`lib/library/`](../../../../lib/library/) own key allocation and write validation.
+- [`OpenValidationMetrics.cpp`](../../../../lib/library/OpenValidationMetrics.cpp)
+  is the source-private operation-count probe used only to lock the open gate's
+  linear Track/manifest growth law; the library build guard limits recording
+  and reset to the open owner and prevents other production consumers.
+- [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) and [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) own the public transaction capabilities; [`LibraryWrite.h`](../../../../include/ao/library/LibraryWrite.h) owns the callback-scoped mutation capability.
+- [`TrackWriter.h`](../../../../include/ao/library/TrackWriter.h), [`TrackWriter.cpp`](../../../../lib/library/TrackWriter.cpp), [`ListWriter.h`](../../../../include/ao/library/ListWriter.h), and [`ListWriter.cpp`](../../../../lib/library/ListWriter.cpp) own logical cross-Store and cross-row mutation invariants.
+- Store and builder implementations under [`lib/library/`](../../../../lib/library/) own key allocation, private preparation, and physical write validation.
+- [`lib/library/CMakeLists.txt`](../../../../lib/library/CMakeLists.txt) enforces that production code cannot include, define, or invoke the source-private physical access seam or call internal Track encoder helpers.
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers environment, metadata, revision, version, and dictionary/Track/List/manifest open integrity behavior.
+- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision admission, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, and deterministic `N`/`2N` operation counts.
+- [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, identity publication, failed-commit rollback, and candidate revision sequencing across separately opened library instances.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
-- [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, and padding gate.
-- [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks pre-mutation validation and post-open fail-fast point-read, writer-read, and iteration behavior.
-- [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) locks manifest validation, point-read outcomes, and post-open iterator fail-fast behavior.
+- [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
+- [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks the prepared-only writer surface, pre-mutation validation, and post-open fail-fast point-read, writer-read, and iteration behavior.
+- [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock prepared snapshots, the prepared-only writer surface, manifest validation, point-read outcomes, and post-open iterator fail-fast behavior.
+- [`LibraryFatalProbeTest.cpp`](../../../../test/unit/library/LibraryFatalProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, and LMDB lifetime misuse to owned subprocess fatal diagnostics.
+- [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) locks a runtime YAML consumer's post-open Resource-reference invariant to the same fatal diagnostics.
+- [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, cursor-row, and manifest-point-read evidence.
+- [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior.
+- [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) locks live parent validation, leaf-delete conflict, children-first subtree deletion, and coherent clear behavior.
 - [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, load modes, and ordinary store behavior.
 - [`TrackStoreIntegrityTest.cpp`](../../../../test/unit/library/TrackStoreIntegrityTest.cpp) locks reserved-id rejection and the canonical sweep over persisted records.
 - Other layout and serialization tests under [`test/unit/library/`](../../../../test/unit/library/) lock the remaining record sizes, alignment, validation, and store behavior.

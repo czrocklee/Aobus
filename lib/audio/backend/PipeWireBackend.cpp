@@ -4,6 +4,7 @@
 #include <ao/audio/backend/PipeWireBackend.h>
 
 #include "detail/DecoderOutput.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -18,8 +19,6 @@
 #include <ao/audio/backend/detail/PipeWireFormatParsing.h>
 #include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/Raii.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 extern "C"
 {
@@ -40,11 +39,14 @@ extern "C"
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
+#include <exception>
 #include <expected>
 #include <format>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -58,12 +60,44 @@ namespace ao::audio::backend
     constexpr std::size_t kPodBufferSize = 1024;
     constexpr std::int64_t kOpenTimeoutNanoseconds = 5'000'000'000;
 
+    template<typename Callback>
+    void invokePipeWireCallback(std::string_view const context,
+                                Callback&& callback,
+                                std::source_location const location = std::source_location::current()) noexcept
+    {
+      try
+      {
+        std::forward<Callback>(callback)();
+      }
+      catch (...)
+      {
+        fatalFromException(std::current_exception(), context, location);
+      }
+    }
+
+    template<std::size_t Size, typename Callback>
+    // Literal extent is the realtime static-context contract.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+    void invokePipeWireRealtimeCallback(char const (&context)[Size],
+                                        Callback&& callback,
+                                        std::source_location const location = std::source_location::current()) noexcept
+    {
+      try
+      {
+        std::forward<Callback>(callback)();
+      }
+      catch (...)
+      {
+        AO_RT_FATAL_EXCEPTION_AT(location, context);
+      }
+    }
+
     std::int32_t completeLoopBarrier(::spa_loop* /*loop*/,
                                      bool /*async*/,
                                      std::uint32_t /*seq*/,
                                      void const* /*data*/,
                                      std::size_t /*size*/,
-                                     void* /*userData*/)
+                                     void* /*userData*/) noexcept
     {
       return 0;
     }
@@ -76,7 +110,11 @@ namespace ao::audio::backend
       }
 
       auto const result = ::pw_loop_invoke(loop, completeLoopBarrier, SPA_ID_INVALID, nullptr, 0, true, nullptr);
-      gsl_Expects(result >= 0);
+
+      if (result < 0)
+      {
+        AO_FATAL("PipeWire loop barrier failed with code {}", result);
+      }
     }
   } // namespace
 
@@ -123,6 +161,12 @@ namespace ao::audio::backend
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
     void handleStreamStateChanged(::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
+    static std::int32_t dispatchDrainComplete(::spa_loop* loop,
+                                              bool async,
+                                              std::uint32_t sequence,
+                                              void const* data,
+                                              std::size_t size,
+                                              void* userData) noexcept;
 
     static ::pw_stream_events const streamEvents;
 
@@ -201,12 +245,28 @@ namespace ao::audio::backend
   {
     auto ev = ::pw_stream_events{};
     ev.version = PW_VERSION_STREAM_EVENTS;
-    ev.state_changed = [](void* data, ::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage)
-    { static_cast<Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage); };
-    ev.param_changed = [](void* data, std::uint32_t id, ::spa_pod const* param)
-    { static_cast<Impl*>(data)->handleStreamParamChanged(id, param); };
-    ev.process = [](void* data) { static_cast<Impl*>(data)->handleStreamProcess(); };
-    ev.drained = [](void* data) { static_cast<Impl*>(data)->handleStreamDrained(); };
+    ev.state_changed =
+      [](void* data, ::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage) noexcept
+    {
+      invokePipeWireCallback("PipeWire stream-state callback",
+                             [=]
+                             { static_cast<Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage); });
+    };
+    ev.param_changed = [](void* data, std::uint32_t id, ::spa_pod const* param) noexcept
+    {
+      invokePipeWireCallback(
+        "PipeWire stream-parameter callback", [=] { static_cast<Impl*>(data)->handleStreamParamChanged(id, param); });
+    };
+    ev.process = [](void* data) noexcept
+    {
+      invokePipeWireRealtimeCallback("Unhandled exception escaped PipeWire process callback",
+                                     [=] { static_cast<Impl*>(data)->handleStreamProcess(); });
+    };
+    ev.drained = [](void* data) noexcept
+    {
+      invokePipeWireCallback(
+        "PipeWire stream-drained callback", [=] { static_cast<Impl*>(data)->handleStreamDrained(); });
+    };
     return ev;
   }();
 
@@ -288,6 +348,13 @@ namespace ao::audio::backend
       if (::pw_stream_flush(streamPtr.get(), true) < 0)
       {
         drainPending.store(false, std::memory_order_release);
+      }
+      else
+      {
+        // The native drained event is delivered on the main loop. Close
+        // project render admission before this data-loop callback returns;
+        // handleStreamDrained() marshals the final target call back here.
+        renderAdmissionOpen.store(false, std::memory_order_release);
       }
     }
   }
@@ -420,10 +487,37 @@ namespace ao::audio::backend
 
   void PipeWireBackend::Impl::handleStreamDrained()
   {
-    if (drainPending.exchange(false, std::memory_order_acq_rel))
+    if (!drainPending.exchange(false, std::memory_order_acq_rel))
     {
-      renderTarget->handleDrainComplete();
+      return;
     }
+
+    auto* const dataLoop = ::pw_stream_get_data_loop(streamPtr.get());
+
+    if (dataLoop == nullptr)
+    {
+      AO_FATAL("PipeWire drained event has no stream data loop");
+    }
+
+    auto const result = ::pw_loop_invoke(dataLoop, dispatchDrainComplete, SPA_ID_INVALID, nullptr, 0, false, this);
+
+    if (result < 0)
+    {
+      AO_FATAL("PipeWire drain-complete handoff failed with code {}", result);
+    }
+  }
+
+  std::int32_t PipeWireBackend::Impl::dispatchDrainComplete(::spa_loop* /*loop*/,
+                                                            bool /*async*/,
+                                                            std::uint32_t /*sequence*/,
+                                                            void const* /*data*/,
+                                                            std::size_t /*size*/,
+                                                            void* userData) noexcept
+  {
+    auto& impl = *static_cast<Impl*>(userData);
+    AO_RT_INVARIANT(impl.renderTarget != nullptr, "PipeWire drain target must remain alive");
+    impl.renderTarget->handleDrainComplete();
+    return 0;
   }
 
   void PipeWireBackend::Impl::stopRenderCycles()
@@ -458,6 +552,10 @@ namespace ao::audio::backend
     // thread-loop lock.
     drainPending.store(false, std::memory_order_release);
     waitForLoopBarrier(mainLoop);
+
+    // A drained main-loop callback accepted just before suppression may have
+    // posted its final target call after the first data-loop barrier.
+    waitForLoopBarrier(dataLoop);
   }
 
   void PipeWireBackend::Impl::applyCachedControls() const

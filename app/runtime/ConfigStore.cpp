@@ -3,19 +3,17 @@
 
 #include <ao/rt/ConfigStore.h>
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <ryml.hpp>
 
 #include <array>
-#include <cassert>
 #include <cstddef>
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -113,16 +111,13 @@ namespace ao::rt
     }
 
     auto inputBuffer = std::move(*bufferRes);
-    auto root = ryml::Tree{yaml::callbacks(_yamlErrorState)};
+    auto root = ryml::Tree{yaml::callbacks()};
 
-    try
-    {
-      yaml::parseInPlace(root, inputBuffer, _yamlErrorState);
-    }
-    catch (std::exception const& e)
+    if (auto const parsedRes = yaml::parseInPlace(root, inputBuffer, _yamlErrorState); !parsedRes)
     {
       return makeError(
-        Error::Code::FormatRejected, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
+        Error::Code::FormatRejected,
+        std::format("Failed to parse config file '{}': {}", _filePath.string(), parsedRes.error().message));
     }
 
     if (!root.is_map(0))
@@ -149,14 +144,14 @@ namespace ao::rt
 
   Result<ryml::Tree> ConfigStore::prepareWriteCandidate()
   {
-    gsl_Expects(_mode != OpenMode::ReadOnly && "write called on ReadOnly ConfigStore");
+    AO_EXPECTS(_mode != OpenMode::ReadOnly, "write called on ReadOnly ConfigStore");
 
     if (auto const loadedRes = ensureLoaded(); !loadedRes)
     {
       return std::unexpected{loadedRes.error()};
     }
 
-    assert(_root.is_map(0) && "Successful ConfigStore initialization must establish a top-level mapping");
+    AO_INVARIANT(_root.is_map(0), "Successful ConfigStore initialization must establish a top-level mapping");
 
     // The complete-tree snapshot isolates serialization failures until atomic replacement succeeds.
     return _root;

@@ -162,10 +162,12 @@ namespace ao::gtk::layout::test
   TEST_CASE("SemanticLayoutComponents - render configured GTK widgets", "[gtk][unit][layout-component][semantic]")
   {
     auto undoTrackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{
-      "io.github.aobus.layout_test",
-      [&undoTrackId](library::MusicLibrary& musicLibrary)
-      { undoTrackId = library::test::addTrack(musicLibrary, {.title = "Undo notification target"}); }};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test",
+                                        [&undoTrackId](library::MusicLibrary& musicLibrary)
+                                        {
+                                          undoTrackId = library::test::addTrackWithUniqueFixtureUri(
+                                            musicLibrary, {.title = "Undo notification target"});
+                                        }};
     auto& ctx = fixture.context();
 
     int const cacheSize = 10;
@@ -443,9 +445,10 @@ namespace ao::gtk::layout::test
             "[gtk][regression][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.tag_editor_stale_fallback_test",
-                                        [&trackId](library::MusicLibrary& musicLibrary)
-                                        { trackId = library::test::addTrack(musicLibrary, {.title = "Tag Target"}); }};
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.tag_editor_stale_fallback_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Tag Target"}); }};
     auto& runtime = fixture.runtime();
     auto& scope = fixture.attachTrackDetailScope();
     auto snapshot = rt::TrackDetailSnapshot{};
@@ -483,9 +486,10 @@ namespace ao::gtk::layout::test
   TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_test",
-                                        [&trackId](library::MusicLibrary& musicLibrary)
-                                        { trackId = library::test::addTrack(musicLibrary, {.title = "Undo Target"}); }};
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_undo_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Undo Target"}); }};
     auto const& musicLibrary = fixture.runtime().musicLibrary();
     auto undoController = TrackDetailUndoController{};
     auto sessionPtr =
@@ -508,10 +512,10 @@ namespace ao::gtk::layout::test
   TEST_CASE("TrackDetailUndoController - clears pending undo after timeout", "[gtk][unit][layout-component][semantic]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture =
-      LayoutRuntimeFixture{"io.github.aobus.detail_undo_timeout_test",
-                           [&trackId](library::MusicLibrary& musicLibrary)
-                           { trackId = library::test::addTrack(musicLibrary, {.title = "Undo timeout target"}); }};
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_undo_timeout_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Undo timeout target"}); }};
     auto timeoutCallback = sigc::slot<bool()>{};
     auto controller = TrackDetailUndoController{[&](std::chrono::milliseconds interval, sigc::slot<bool()> callback)
                                                 {
@@ -535,10 +539,12 @@ namespace ao::gtk::layout::test
             "[gtk][unit][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{
-      "io.github.aobus.detail_stale_undo_test",
-      [&trackId](library::MusicLibrary& musicLibrary)
-      { trackId = library::test::addTrack(musicLibrary, {.customMetadata = {{"Mood", "Bright"}}}); }};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_undo_test",
+                                        [&trackId](library::MusicLibrary& musicLibrary)
+                                        {
+                                          trackId = library::test::addTrackWithUniqueFixtureUri(
+                                            musicLibrary, {.customMetadata = {{"Mood", "Bright"}}});
+                                        }};
     auto& runtime = fixture.runtime();
     auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
     auto deletePatch = rt::MetadataPatch{};
@@ -565,10 +571,10 @@ namespace ao::gtk::layout::test
             "[gtk][regression][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture =
-      LayoutRuntimeFixture{"io.github.aobus.detail_rejected_undo_test",
-                           [&trackId](library::MusicLibrary& musicLibrary)
-                           { trackId = library::test::addTrack(musicLibrary, {.title = "Rejected undo target"}); }};
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_rejected_undo_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Rejected undo target"}); }};
     auto sessionPtr =
       ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
     auto controller = TrackDetailUndoController{};
@@ -591,9 +597,10 @@ namespace ao::gtk::layout::test
             "[gtk][unit][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_editor_test",
-                                        [&trackId](library::MusicLibrary& musicLibrary)
-                                        { trackId = library::test::addTrack(musicLibrary, {.title = "Before"}); }};
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_stale_editor_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Before"}); }};
     auto& runtime = fixture.runtime();
     auto const navigation =
       ao::test::requireValue(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
@@ -625,10 +632,12 @@ namespace ao::gtk::layout::test
             "[gtk][regression][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{
-      "io.github.aobus.detail_stale_custom_metadata_test",
-      [&trackId](library::MusicLibrary& musicLibrary)
-      { trackId = library::test::addTrack(musicLibrary, {.customMetadata = {{"Mood", "Bright"}}}); }};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_custom_metadata_test",
+                                        [&trackId](library::MusicLibrary& musicLibrary)
+                                        {
+                                          trackId = library::test::addTrackWithUniqueFixtureUri(
+                                            musicLibrary, {.customMetadata = {{"Mood", "Bright"}}});
+                                        }};
     auto& runtime = fixture.runtime();
     auto const navigation =
       ao::test::requireValue(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
@@ -670,10 +679,10 @@ namespace ao::gtk::layout::test
             "[gtk][regression][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
-    auto fixture =
-      LayoutRuntimeFixture{"io.github.aobus.detail_builtin_metadata_failure_test",
-                           [&trackId](library::MusicLibrary& musicLibrary)
-                           { trackId = library::test::addTrack(musicLibrary, {.title = "Before", .year = 2020}); }};
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_builtin_metadata_failure_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Before", .year = 2020}); }};
     auto& runtime = fixture.runtime();
     auto const navigation =
       ao::test::requireValue(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
@@ -728,9 +737,10 @@ namespace ao::gtk::layout::test
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_scope_test",
                                         [&](library::MusicLibrary& musicLibrary)
                                         {
-                                          firstTrackId = library::test::addTrack(
+                                          firstTrackId = library::test::addTrackWithUniqueFixtureUri(
                                             musicLibrary, {.title = "First", .customMetadata = {{"Mood", "Bright"}}});
-                                          secondTrackId = library::test::addTrack(musicLibrary, {.title = "Second"});
+                                          secondTrackId = library::test::addTrackWithUniqueFixtureUri(
+                                            musicLibrary, {.title = "Second"});
                                         }};
     auto& runtime = fixture.runtime();
 
@@ -770,7 +780,7 @@ namespace ao::gtk::layout::test
       LayoutRuntimeFixture{"io.github.aobus.detail_undo_button_test",
                            [&trackId](library::MusicLibrary& musicLibrary)
                            {
-                             trackId = library::test::addTrack(
+                             trackId = library::test::addTrackWithUniqueFixtureUri(
                                musicLibrary, {.title = "Undo Button Target", .customMetadata = {{"Mood", "Bright"}}});
                            }};
     auto& runtime = fixture.runtime();
@@ -818,7 +828,7 @@ namespace ao::gtk::layout::test
       LayoutRuntimeFixture{"io.github.aobus.detail_add_custom_test",
                            [&trackId](library::MusicLibrary& musicLibrary)
                            {
-                             trackId = library::test::addTrack(
+                             trackId = library::test::addTrackWithUniqueFixtureUri(
                                musicLibrary, {.title = "Add Target", .customMetadata = {{"Mood", "Bright"}}});
                            }};
     auto& runtime = fixture.runtime();

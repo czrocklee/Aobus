@@ -3,7 +3,7 @@
 
 #include "App.h"
 #include <ao/AppVersion.h>
-#include <ao/Exception.h>
+#include <ao/Contract.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 
@@ -95,16 +95,8 @@ int main(int argc, char* argv[])
   {
     return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}));
   }
-  catch (ao::Exception const& e)
+  catch (...)
   {
-    std::println(stderr, "Internal error: {}\n(at {}:{})", e.what(), e.file(), e.line());
-    ao::rt::Log::shutdown();
-    return 1;
-  }
-  catch (std::exception const& e)
-  {
-    std::println(stderr, "Error: {}", e.what());
-    ao::rt::Log::shutdown();
-    return 1;
+    AO_FATAL_EXCEPTION(std::current_exception(), "TUI process root");
   }
 }

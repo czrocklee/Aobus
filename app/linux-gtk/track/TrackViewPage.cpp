@@ -458,6 +458,11 @@ namespace ao::gtk
     rebuildColumnView(presentation.visibleFields);
   }
 
+  void TrackViewPage::refreshOrderCapabilities()
+  {
+    installOrderDragController();
+  }
+
   void TrackViewPage::setPlayingTrackId(TrackId trackId)
   {
     _playingTrackId = trackId;

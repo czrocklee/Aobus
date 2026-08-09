@@ -7,7 +7,6 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/lmdb/Environment.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -56,6 +55,52 @@ namespace ao::lmdb::test
     CHECK(dbRes.error().code == Error::Code::NotFound);
   }
 
+  TEST_CASE("Database - openExisting never creates a missing named database", "[lmdb][unit][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+
+    auto missingRes = Database::openExisting(transaction, "missing");
+
+    REQUIRE_FALSE(missingRes);
+    CHECK(missingRes.error().code == Error::Code::NotFound);
+    CHECK(Database::main(transaction).reader(transaction).entryCount() == 0);
+    REQUIRE(transaction.commit());
+  }
+
+  TEST_CASE("Database - openExisting validates exact native key flags", "[lmdb][unit][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    REQUIRE(Database::open(transaction, "integer", Database::KeyKind::Integer));
+    REQUIRE(Database::open(transaction, "blob", Database::KeyKind::Blob));
+
+    CHECK(Database::openExisting(transaction, "integer", Database::KeyKind::Integer));
+    CHECK(Database::openExisting(transaction, "blob", Database::KeyKind::Blob));
+    auto wrongIntegerRes = Database::openExisting(transaction, "integer", Database::KeyKind::Blob);
+    auto wrongBlobRes = Database::openExisting(transaction, "blob", Database::KeyKind::Integer);
+    REQUIRE_FALSE(wrongIntegerRes);
+    REQUIRE_FALSE(wrongBlobRes);
+    CHECK(wrongIntegerRes.error().code == Error::Code::CorruptData);
+    CHECK(wrongBlobRes.error().code == Error::Code::CorruptData);
+  }
+
+  TEST_CASE("Database - openExisting rejects an ordinary main-database row", "[lmdb][unit][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    auto main = Database::main(transaction);
+    REQUIRE(main.writer(transaction).create(createStringData("ordinary"), createStringData("value")));
+
+    auto ordinaryRes = Database::openExisting(transaction, "ordinary");
+
+    REQUIRE_FALSE(ordinaryRes);
+    CHECK(ordinaryRes.error().code == Error::Code::CorruptData);
+  }
+
   TEST_CASE("Database - failed write open unwinds and rolls back database creation", "[lmdb][regression][database]")
   {
     auto const temp = ao::test::TempDir{};
@@ -81,22 +126,5 @@ namespace ao::lmdb::test
     auto firstRes = Database::open(readTransaction, "first");
     REQUIRE_FALSE(firstRes);
     CHECK(firstRes.error().code == Error::Code::NotFound);
-  }
-
-  TEST_CASE("Database - reader rejects a moved-from transaction", "[lmdb][unit][database]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto setup = beginWriteTransaction(env);
-    auto db = openDatabase(setup, "test");
-    REQUIRE(setup.commit());
-
-    auto source = beginReadTransaction(env);
-    auto destination = ReadTransaction{std::move(source)};
-
-    // ReadTransaction specifies an inactive moved-from state.
-    // NOLINTNEXTLINE(bugprone-use-after-move)
-    CHECK_THROWS_AS(db.reader(source), Exception);
-    CHECK(db.reader(destination).begin() == db.reader(destination).end());
   }
 } // namespace ao::lmdb::test

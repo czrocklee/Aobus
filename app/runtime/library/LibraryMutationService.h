@@ -3,15 +3,15 @@
 
 #pragma once
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <condition_variable>
 #include <cstdint>
@@ -21,6 +21,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -40,6 +41,16 @@ namespace ao::rt
 {
   class LibraryChanges;
   struct LibraryChangeSet;
+
+  namespace detail
+  {
+    // Completion acknowledgement has no recoverable branch after commit.
+    void requireMatchingPublicationCompletion(bool publicationInProgress,
+                                              std::uint64_t revision,
+                                              std::uint64_t committedRevision,
+                                              std::string_view libraryIdentity,
+                                              std::string_view replicaName);
+  } // namespace detail
 
   class LibraryMutationService final
   {
@@ -61,13 +72,12 @@ namespace ao::rt
 
       // An error result or exception terminalizes this mutation and releases
       // writer admission. Later apply() or commit() calls return InvalidState.
-      template<
-        typename Function,
-        typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Function, library::WriteTransaction&>>>
+      template<typename Function,
+               typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Function, library::LibraryWrite&>>>
         requires library::detail::IsResult<OperationResult>::value
       OperationResult apply(Function&& function)
       {
-        gsl_Assert(_owner != nullptr && !_terminal && "Library mutation is already terminal");
+        AO_INVARIANT(_owner != nullptr && !_terminal, "Library mutation is already terminal");
 
         try
         {
@@ -150,12 +160,12 @@ namespace ao::rt
 
     LibraryAuthoringAvailability availability() const;
     // Availability is a notification: it reports a state the coordinator has
-    // already reached, so handlers are noexcept. Publication faults come from
-    // revision admission or executor task admission, not from observers.
+    // already reached. The owning Signal boundary diagnoses and aborts an
+    // escaping observer exception.
     // Handlers must defer owner destruction or runtime shutdown to a later
     // callback-executor turn instead of tearing down the active emitter.
     async::Subscription onAvailabilityChanged(
-      std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const;
+      std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
@@ -168,6 +178,13 @@ namespace ao::rt
     Result<Mutation> beginMaintenanceMutation(MaintenanceGuard const& guard);
 
   private:
+    struct PublicationDiagnosticContext final
+    {
+      std::string libraryIdentity;
+      std::string replicaName;
+      std::uint64_t revision = 0;
+    };
+
     // Submission return and publication completion rendezvous in either order;
     // writer admission reopens only after both have completed.
     class PublicationBarrier final
@@ -210,7 +227,8 @@ namespace ao::rt
     void dispatchMaintenanceFinish(std::uint64_t generation) noexcept;
     void handleFinalizationAdmissionFailure(std::exception_ptr exceptionPtr) noexcept;
     void finishMaintenance(std::uint64_t generation) noexcept;
-    void finishPublication(std::uint64_t revision) noexcept;
+    void finishPublication(std::uint64_t revision, std::string libraryIdentity, std::string replicaName);
+    std::shared_ptr<PublicationDiagnosticContext const> activePublicationDiagnosticContext() const noexcept;
     bool beginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept;
     void completeAvailabilityNotification() noexcept;
     void emitAvailability(LibraryAuthoringAvailability const& expected) noexcept;
@@ -235,6 +253,7 @@ namespace ao::rt
     std::uint64_t _maintenanceGeneration = 0;
     LibraryMaintenanceKind _maintenanceKind = LibraryMaintenanceKind::None;
     PublicationBarrier _publicationBarrier;
+    std::shared_ptr<PublicationDiagnosticContext const> _activePublicationDiagnosticContextPtr;
     bool _availabilityNotificationInProgress = false;
     bool _closing = false;
     mutable async::Signal<LibraryAuthoringAvailability const&> _availabilityChanged;

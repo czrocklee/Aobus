@@ -3,7 +3,6 @@
 
 #include "test/unit/runtime/AsyncTestSupport.h"
 
-#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/async/Task.h>
 
 #include <boost/asio/co_spawn.hpp>
@@ -19,14 +18,11 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <ranges>
 #include <stop_token>
-#include <string>
-#include <string_view>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -34,42 +30,6 @@
 
 namespace ao::rt::test
 {
-  struct AsyncExceptionRecorder::Impl final
-  {
-    mutable std::mutex mutex;
-    mutable std::condition_variable cv;
-    std::vector<RecordedAsyncException> exceptions;
-  };
-
-  AsyncExceptionRecorder::AsyncExceptionRecorder()
-    : _implPtr{std::make_unique<Impl>()}
-  {
-  }
-
-  AsyncExceptionRecorder::~AsyncExceptionRecorder() = default;
-
-  async::AsyncExceptionHandler AsyncExceptionRecorder::handler()
-  {
-    return [this](std::exception_ptr exceptionPtr, std::string_view const context)
-    {
-      auto const lock = std::scoped_lock{_implPtr->mutex};
-      _implPtr->exceptions.push_back({.exceptionPtr = std::move(exceptionPtr), .context = std::string{context}});
-      _implPtr->cv.notify_all();
-    };
-  }
-
-  bool AsyncExceptionRecorder::waitForCount(std::size_t const count, std::chrono::milliseconds const timeout) const
-  {
-    auto lock = std::unique_lock{_implPtr->mutex};
-    return _implPtr->cv.wait_for(lock, timeout, [this, count] { return _implPtr->exceptions.size() >= count; });
-  }
-
-  std::vector<RecordedAsyncException> AsyncExceptionRecorder::snapshot() const
-  {
-    auto const lock = std::scoped_lock{_implPtr->mutex};
-    return _implPtr->exceptions;
-  }
-
   struct ControlledSleeper::Impl final
   {
     using StopCallback = std::stop_callback<std::function<void()>>;

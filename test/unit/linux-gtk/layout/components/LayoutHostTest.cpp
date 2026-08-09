@@ -16,7 +16,6 @@
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/components/ContainerTestHelpers.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
-#include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -32,6 +31,7 @@
 #include <gtkmm/window.h>
 
 #include <memory>
+#include <stdexcept>
 #include <utility>
 
 namespace ao::gtk::layout::test
@@ -44,7 +44,7 @@ namespace ao::gtk::layout::test
   {
     std::unique_ptr<LayoutComponent> makeFailingComponent(LayoutBuildContext& /*context*/, LayoutNode const& /*node*/)
     {
-      throwException<Exception>("Test exception");
+      throw std::runtime_error{"Test exception"};
     }
   } // namespace
 
@@ -140,7 +140,7 @@ namespace ao::gtk::layout::test
       CHECK(runtimeState.componentState.components.empty());
     }
 
-    SECTION("failed preparation preserves the active tree and generation")
+    SECTION("unexpected component exception preserves the active tree and generation")
     {
       install(makeDefaultLayout());
 
@@ -150,9 +150,7 @@ namespace ao::gtk::layout::test
       auto rejected = LayoutDocument{};
       rejected.root.type = "test.null";
       auto prepared = ao::test::requireValue(prepareLayout(rejected));
-      auto const result = host.prepare(ctx, prepared);
-
-      CHECK_FALSE(result);
+      CHECK_THROWS_AS(host.prepare(ctx, prepared), std::runtime_error);
       CHECK(host.get_first_child() == activeChild);
       CHECK(runtimeState.componentStateGeneration == activeGeneration);
     }

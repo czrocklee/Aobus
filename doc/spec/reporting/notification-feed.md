@@ -36,7 +36,7 @@ observer callbacks are confined to the runtime callback executor.
 - `Transient` entries expire authoritatively after a positive duration. `History` entries are retained but may be evicted for capacity. `Pinned` entries are retained and never evicted automatically.
 - Every live entry has an expiry registration. Expiry removes a transient entry only when its id and registration identity are still current.
 - Observer-initiated mutations are queued until the current update completes delivery to its contract-fulfilling observers, so nested publication cannot change an earlier snapshot.
-- Feed observers are `noexcept` (see [signal delivery](../async/signal.md)). Publication is already committed when they run, so a failure cannot roll it back; an observer that cannot degrade locally terminates at the throw point, with no later-observer guarantee.
+- Feed observers are ordinary callables behind the owning `Signal::emit` boundary (see [signal delivery](../async/signal.md)). Publication is already committed when they run, so a failure cannot roll it back; an escaping exception enters AO fatal handling at the emission boundary, with no later-observer guarantee.
 - The service does not infer domain failures, aggregate unrelated reports, or resolve presentation text.
 
 ## State
@@ -80,7 +80,8 @@ Structured playback reports remain structured; their subject and detail count to
 
 Candidate state, update storage, expiry scheduling, and the next-id watermark are prepared before the authoritative feed changes.
 After commit, observer delivery is synchronous and has no recoverable failure channel.
-Contract-fulfilling `noexcept` observers complete normally; an escaping exception terminates immediately.
+Observers are ordinary callables behind the owning `Signal::emit` boundary; a contract-fulfilling observer completes
+normally, while an escaping exception enters AO fatal handling immediately.
 A mutation requested by an observer appends a later immutable update to the publication queue and is drained only after the current emission returns.
 Validation and capacity rejection occur before commit and preserve the previous feed.
 Allocation failure is an exceptional process-resource failure; the service does not attempt allocator rollback or promise continued usability afterward.
@@ -104,7 +105,7 @@ The feed contains no frontend actions, icons, progress widgets, presentation mod
 
 ## Test map
 
-- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) protects identity, bounds, history eviction, keyed replacement, the noexcept observer contract, and reentrant FIFO delivery.
+- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) protects identity, bounds, history eviction, keyed replacement, observer delivery, and reentrant FIFO delivery.
 - [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects executor-returned expiry, registration-identity checks, cancellation, and teardown safety.
 
 ## Related documents

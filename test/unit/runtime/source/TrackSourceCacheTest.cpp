@@ -10,6 +10,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -63,7 +64,7 @@ namespace ao::rt::test
         auto builder = ListBuilder::makeEmpty();
         builder.name("Saved List");
         listId = ao::test::requireValue(
-          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
+          transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
         REQUIRE(transaction.commit());
       }
 
@@ -86,7 +87,7 @@ namespace ao::rt::test
         builder.name("SmartList");
         builder.filter("title == \"foo\"");
         listId = ao::test::requireValue(
-          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
+          transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
         REQUIRE(transaction.commit());
       }
 
@@ -146,7 +147,7 @@ namespace ao::rt::test
         auto builder = ListBuilder::makeEmpty();
         builder.name("ToErase");
         listId = ao::test::requireValue(
-          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
+          transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
         REQUIRE(transaction.commit());
       }
 
@@ -178,7 +179,7 @@ namespace ao::rt::test
       builder.name("Matching title");
       builder.filter("$title = \"After\"");
       smartListId = ao::test::requireValue(
-        libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
+        transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
       REQUIRE(transaction.commit());
     }
 
@@ -214,6 +215,53 @@ namespace ao::rt::test
     auto const& insert = std::get<delta::InsertRange>(sourceEditScript(smartBatches[0]).edits[0]);
     CHECK(insert.start == 0);
     CHECK(insert.trackIds == std::vector{trackId});
+  }
+
+  TEST_CASE("TrackSourceCache - invalid stored filter is empty and propagates through child sources",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    libraryFixture.addTrack("Present only in All Tracks");
+    auto parentId = kInvalidListId;
+    auto childId = kInvalidListId;
+
+    {
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto parentBuilder = ListBuilder::makeEmpty().name("Invalid parent").filter("(");
+      parentId = ao::test::requireValue(
+        transaction.apply([&parentBuilder](LibraryWrite& write) { return write.lists().create(parentBuilder); }));
+      auto childBuilder = ListBuilder::makeEmpty().name("Child").parentId(parentId);
+      childId = ao::test::requireValue(
+        transaction.apply([&childBuilder](LibraryWrite& write) { return write.lists().create(childBuilder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    cache.reloadAllTracks();
+    auto parentLease = ao::test::requireValue(cache.acquire(parentId));
+    auto childLease = ao::test::requireValue(cache.acquire(childId));
+    auto filteredChildLease =
+      ao::test::requireValue(cache.acquire(SourceSpec{.baseListId = childId, .filterExpression = "$title ~ child"}));
+
+    CHECK(parentLease->size() == 0);
+    CHECK(childLease->size() == 0);
+    CHECK(filteredChildLease->size() == 0);
+
+    auto const optParentError = cache.sourceError(parentLease);
+    REQUIRE(optParentError);
+    CHECK(optParentError->code == Error::Code::FormatRejected);
+    CHECK(optParentError->message.contains("List " + std::to_string(parentId.raw()) + " stored filter"));
+
+    auto const optChildError = cache.sourceError(childLease);
+    REQUIRE(optChildError);
+    CHECK(optChildError->code == Error::Code::FormatRejected);
+    CHECK(optChildError->message == optParentError->message);
+
+    auto const optFilteredChildError = cache.sourceError(filteredChildLease);
+    REQUIRE(optFilteredChildError);
+    CHECK(optFilteredChildError->code == Error::Code::FormatRejected);
+    CHECK(optFilteredChildError->message == optParentError->message);
   }
 
   TEST_CASE("TrackSourceCache - shutdown does not semantically invalidate a leased All Tracks source",

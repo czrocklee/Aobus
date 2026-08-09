@@ -27,7 +27,7 @@ namespace ao::rt::test
     struct RestartDeadlineFixture final
     {
       RestartDeadlineFixture()
-        : asyncRuntime{executor, 1, {}, &scheduler}
+        : asyncRuntime{executor, 1, &scheduler}
         , deadline{asyncRuntime,
                    [this]
                    {
@@ -122,7 +122,7 @@ namespace ao::rt::test
   {
     auto executor = ManualExecutor{};
     auto scheduler = ControlledSleeper{};
-    auto asyncRuntime = async::Runtime{executor, 1, {}, &scheduler};
+    auto asyncRuntime = async::Runtime{executor, 1, &scheduler};
     std::size_t liveElapsedReadCount = 0;
     auto availabilityEvents = std::vector<bool>{};
     auto deadlinePtr = std::make_unique<PlaybackRestartDeadline>(
@@ -150,7 +150,7 @@ namespace ao::rt::test
   {
     auto executor = ManualExecutor{};
     auto scheduler = ControlledSleeper{};
-    auto asyncRuntime = async::Runtime{executor, 1, {}, &scheduler};
+    auto asyncRuntime = async::Runtime{executor, 1, &scheduler};
     auto availabilityEvents = std::vector<bool>{};
     auto deadlinePtr = std::unique_ptr<PlaybackRestartDeadline>{};
     deadlinePtr = std::make_unique<PlaybackRestartDeadline>(asyncRuntime,

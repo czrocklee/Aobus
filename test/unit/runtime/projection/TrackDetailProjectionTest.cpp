@@ -62,10 +62,10 @@ namespace ao::rt::test
       TrackDetailProjectionFixture()
         : libraryFixture{}
         , runtime{executor}
-        , changes{executor, 0}
+        , changes{executor, 0, "test-library"}
         , writerFixture{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
-        , views{executor, libraryFixture.library(), sources}
+        , views{executor, libraryFixture.library(), sources, changes}
         , workspace{executor, views, changes}
       {
       }

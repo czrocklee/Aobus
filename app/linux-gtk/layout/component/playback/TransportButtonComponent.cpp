@@ -7,12 +7,12 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/TransportButton.h"
+#include <ao/Contract.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/widget.h>
 
 #include <memory>
@@ -25,8 +25,8 @@ namespace ao::gtk::layout
   {
     uimodel::PlaybackCommandSurface& commandSurface(LayoutBuildContext& ctx)
     {
-      gsl_Expects(ctx.dependencies.playbackCommandSurface != nullptr &&
-                  "TransportButtonComponent: playback command surface is not bound");
+      AO_EXPECTS(ctx.dependencies.playbackCommandSurface != nullptr,
+                 "TransportButtonComponent: playback command surface is not bound");
 
       return *ctx.dependencies.playbackCommandSurface;
     }

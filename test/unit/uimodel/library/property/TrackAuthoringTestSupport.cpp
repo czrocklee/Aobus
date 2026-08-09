@@ -34,15 +34,15 @@ namespace ao::uimodel::test
 
       for (std::size_t index = 0; index < trackCount; ++index)
       {
-        trackIds.push_back(
-          library::test::addTrack(musicLibrary,
-                                  library::test::TrackSpec{.title = index == 0 ? "Old Title" : "Other Title",
-                                                           .uri = "track-" + std::to_string(index) + ".flac"}));
+        trackIds.push_back(library::test::addTrackWithUniqueFixtureUri(
+          musicLibrary,
+          library::test::TrackSpec{
+            .title = index == 0 ? "Old Title" : "Other Title", .uri = "track-" + std::to_string(index) + ".flac"}));
       }
 
       auto readTransaction = musicLibrary.readTransaction();
       auto const revision = musicLibrary.libraryRevision(readTransaction);
-      changesPtr = std::make_unique<rt::LibraryChanges>(executor, revision);
+      changesPtr = std::make_unique<rt::LibraryChanges>(executor, revision, "test-library");
       libraryPtr = ao::test::requireValue(rt::Library::create(asyncRuntime, musicLibrary, *changesPtr));
     }
 

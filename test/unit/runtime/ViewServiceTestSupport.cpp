@@ -22,10 +22,10 @@
 namespace ao::rt::test
 {
   ViewServiceFixture::ViewServiceFixture()
-    : changes{executor, 0}
+    : changes{executor, 0, "test-library"}
     , writerFixture{libraryFixture.library(), changes}
     , cachePtr{std::make_unique<TrackSourceCache>(libraryFixture.library(), changes)}
-    , service{executor, libraryFixture.library(), *cachePtr}
+    , service{executor, libraryFixture.library(), *cachePtr, changes}
     , workspace{executor, service, changes}
   {
   }

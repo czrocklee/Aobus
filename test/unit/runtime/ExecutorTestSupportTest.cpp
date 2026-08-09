@@ -3,11 +3,10 @@
 
 #include "test/unit/runtime/ExecutorTestSupport.h"
 
-#include <ao/Exception.h>
-
 #include <catch2/catch_test_macros.hpp>
 
 #include <exception>
+#include <stdexcept>
 #include <string_view>
 #include <thread>
 #include <tuple>
@@ -25,7 +24,7 @@ namespace ao::rt::test
       {
         std::rethrow_exception(failure);
       }
-      catch (Exception const& exception)
+      catch (std::runtime_error const& exception)
       {
         CHECK(std::string_view{exception.what()} == expectedMessage);
       }

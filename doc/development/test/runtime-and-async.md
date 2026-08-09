@@ -16,7 +16,8 @@ Prefer:
 - `InlineExecutor` only for fully synchronous, owner-thread state tests.
   It captures its construction thread, reports `isCurrent()` truthfully, and rejects non-empty work submitted from another thread.
   Its `defer()` runs inline and reentrantly, so it does not model the later-turn ordering required of production executors.
-  Direct foreign-thread submissions throw, but the same violation through a `noexcept` boundary such as `Signal::post()` terminates the process.
+  Direct foreign-thread submissions throw. `Signal::post()` preserves that pre-admission exception for its enclosing
+  owner; accepted deferred delivery and synchronous `Signal::emit()` own exception-aware fatal containment.
 - Production `LoopExecutor` when owner affinity and real turn semantics are the behavior under test.
 - `ManualExecutor` when a test needs one-task control. Producers may submit from any thread, but only its construction
   thread may call `runOne()` or `runUntilIdle()`.
@@ -100,7 +101,8 @@ For notification-like services, cover:
 - authoritative expiry and stale timer generations.
 - feed/state projection.
 - immutable update delivery and non-emission for unchanged keyed requests.
-- the `noexcept` observer contract and reentrant FIFO delivery when those are part of the service contract.
+- the ordinary observer-callable contract, owning fatal boundary, and reentrant FIFO delivery when those are part of
+  the service contract.
 
 ## Callback tests
 
@@ -109,7 +111,7 @@ Callback assertions should be specific enough to reject wrong events:
 ```cpp
 auto received = std::vector<NotificationFeedUpdate>{};
 auto sub = service.onFeedUpdated(
-  [&](auto const& update) noexcept { received.push_back(update); });
+  [&](auto const& update) { received.push_back(update); });
 
 service.post(NotificationSeverity::Warning,
              "Device unavailable",
@@ -123,7 +125,8 @@ CHECK(received[0].feedPtr->entries.back().message == NotificationMessage{"Device
 ```
 
 Avoid only checking a boolean unless the contract has no payload.
-Do not invoke `REQUIRE`, `CHECK`, or `FAIL` inside a `noexcept` callback: Catch2 may throw while abort-after is active.
+Do not invoke `REQUIRE`, `CHECK`, or `FAIL` inside a callback delivered through a fatal-owning boundary: Catch2 may
+throw and intentionally enter that boundary's fatal path.
 Record the callback payload or outcome and assert after delivery returns.
 
 ## Subscriptions and lifetime
@@ -133,7 +136,7 @@ Keep subscriptions in named variables when their lifetime keeps callbacks connec
 ```cpp
 auto latestFeed = std::shared_ptr<NotificationFeedState const>{};
 auto sub = service.onFeedUpdated(
-  [&](auto const& update) noexcept { latestFeed = update.feedPtr; });
+  [&](auto const& update) { latestFeed = update.feedPtr; });
 ```
 
 For cancellation/lifetime tests, assert both sides:

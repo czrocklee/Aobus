@@ -305,8 +305,8 @@ namespace ao::uimodel
                                          std::function<void(AobusSoulViewState const&)> onRender)
     : _playback{playback}, _onRender{std::move(onRender)}
   {
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
-                                                 { handleSnapshot(snapshot); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     refresh();
   }
 

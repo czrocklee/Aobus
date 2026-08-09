@@ -23,8 +23,10 @@ Use the [decision template](../template/decision.md).
 - [Decision 0003: terminate on live library publication fault](0003-terminate-on-library-publication-fault.md)
 - [Decision 0004: adopt layout documents for WinUI shell composition](0004-adopt-layout-documents-for-winui-shell-composition.md)
 - [Decision 0005: use process restart for WinUI library switching](0005-use-process-restart-for-winui-library-switching.md)
-- [Decision 0006: validate before exposure and fail fast on live iterator faults](0006-validate-open-fail-fast-live-iterator.md)
+- [Decision 0007: unify fatal diagnostics and abort](0007-unify-fatal-diagnostics-and-abort.md)
+- [Decision 0008: close library admission and trust live storage](0008-close-library-admission-and-trust-live-storage.md)
 
 ## Superseded decisions
 
 - [Decision 0002: fail closed at the library integrity boundary](0002-fail-closed-library-integrity.md), superseded by [Decision 0006](0006-validate-open-fail-fast-live-iterator.md).
+- [Decision 0006: validate before exposure and fail fast on live iterator faults](0006-validate-open-fail-fast-live-iterator.md), superseded by [Decision 0008](0008-close-library-admission-and-trust-live-storage.md).

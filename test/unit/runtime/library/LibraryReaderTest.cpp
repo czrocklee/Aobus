@@ -13,18 +13,19 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
@@ -83,7 +84,7 @@ namespace ao::rt::test
         library::test::makeTestMusicLibrary(tempDir.path(), LibraryPaths{tempDir.path()}.databasePath());
       auto transaction = library::test::writeTransaction(musicLibrary);
 
-      auto resourceWriter = musicLibrary.resources().writer(transaction);
+      auto resourceWriter = library::test::physicalWriter(musicLibrary.resources(), transaction);
       auto resourceIdRes = resourceWriter.create(kCoverBytes);
       REQUIRE(resourceIdRes);
       auto const resourceId = *resourceIdRes;
@@ -120,38 +121,33 @@ namespace ao::rt::test
       trackBuilder.tags().add("Favorite").add("Live");
       trackBuilder.coverArt().add(PictureType::FrontCover, resourceId);
 
-      auto preparedRes = trackBuilder.prepare(transaction, musicLibrary.resources());
-      REQUIRE(preparedRes);
-      auto trackWriter = musicLibrary.tracks().writer(transaction);
-      auto const trackId = ao::test::requireValue(
-        library::createPreparedTrackRecord(trackWriter, preparedRes->first, preparedRes->second));
-
+      auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
+      manifestBuilder.fileSize(123456789).mtime(987654321).status(library::FileStatus::Missing);
       auto otherTrackBuilder = library::TrackBuilder::makeEmpty();
       otherTrackBuilder.metadata().title("Another Song");
       otherTrackBuilder.property().uri("other.flac");
       otherTrackBuilder.tags().add("Favorite").add("Jazz");
-      auto otherPreparedRes = otherTrackBuilder.prepare(transaction, musicLibrary.resources());
-      REQUIRE(otherPreparedRes);
-      auto const otherTrackId = ao::test::requireValue(
-        library::createPreparedTrackRecord(trackWriter, otherPreparedRes->first, otherPreparedRes->second));
-
-      auto manifestPayload = library::FileManifestBuilder::makeEmpty()
-                               .trackId(trackId)
-                               .fileSize(123456789)
-                               .mtime(987654321)
-                               .status(library::FileStatus::Missing)
-                               .serialize();
-      CHECK(musicLibrary.manifest().writer(transaction).put(kTrackUri, manifestPayload));
-
       auto orderedListBuilder = library::ListBuilder::makeEmpty();
-      orderedListBuilder.name("Ordered List").description("Pinned songs").orderTrackIds().add(trackId);
-      auto const orderedListId = ao::test::requireValue(
-        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(orderedListBuilder.serialize())));
-
       auto filteredListBuilder = library::ListBuilder::makeEmpty();
-      filteredListBuilder.name("Filtered List").parentId(orderedListId).filter("@artist = \"An Artist\"");
-      auto const filteredListId = ao::test::requireValue(
-        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(filteredListBuilder.serialize())));
+      auto trackId = kInvalidTrackId;
+      auto otherTrackId = kInvalidTrackId;
+      auto orderedListId = kInvalidListId;
+      auto filteredListId = kInvalidListId;
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto trackWriter = write.tracks();
+          trackId = ao::test::requireValue(trackWriter.create(trackBuilder, manifestBuilder));
+          otherTrackId =
+            ao::test::requireValue(trackWriter.create(otherTrackBuilder, library::FileManifestBuilder::makeEmpty()));
+
+          orderedListBuilder.name("Ordered List").description("Pinned songs").orderTrackIds().add(trackId);
+          auto listWriter = write.lists();
+          orderedListId = ao::test::requireValue(listWriter.create(orderedListBuilder));
+          filteredListBuilder.name("Filtered List").parentId(orderedListId).filter("@artist = \"An Artist\"");
+          filteredListId = ao::test::requireValue(listWriter.create(filteredListBuilder));
+          return {};
+        }));
 
       REQUIRE(transaction.commit());
       auto const artistId = musicLibrary.dictionary().lookupId("An Artist");
@@ -246,7 +242,8 @@ namespace ao::rt::test
     std::filesystem::create_directories(outsideRoot);
     auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
     auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
-    auto const trackId = library::test::addTrack(ml, library::test::makeEmptyTrackSpec("alias/song.flac"));
+    auto const trackId =
+      library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("alias/song.flac"));
 
     auto executor = InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor};

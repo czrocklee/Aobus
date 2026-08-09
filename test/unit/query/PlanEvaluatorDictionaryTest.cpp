@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
@@ -131,8 +132,8 @@ namespace ao::query::test
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
-    auto bachId = ao::test::requireValue(transaction.dictionary().intern("Johann Sebastian Bach"));
-    auto mozartId = ao::test::requireValue(transaction.dictionary().intern("Wolfgang Amadeus Mozart"));
+    auto bachId = ao::test::requireValue(physicalDictionary(transaction).intern("Johann Sebastian Bach"));
+    auto mozartId = ao::test::requireValue(physicalDictionary(transaction).intern("Wolfgang Amadeus Mozart"));
     REQUIRE(transaction.commit());
     auto const& dictionary = dictionaryFixture.dictionary();
 
@@ -181,8 +182,8 @@ namespace ao::query::test
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
-    auto const bachId = ao::test::requireValue(transaction.dictionary().intern("Bach"));
-    auto const otherId = ao::test::requireValue(transaction.dictionary().intern("Other"));
+    auto const bachId = ao::test::requireValue(physicalDictionary(transaction).intern("Bach"));
+    auto const otherId = ao::test::requireValue(physicalDictionary(transaction).intern("Other"));
     REQUIRE(transaction.commit());
 
     auto spec = TrackSpec{};
@@ -346,10 +347,10 @@ namespace ao::query::test
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
-    auto zappaId = ao::test::requireValue(transaction.dictionary().intern("Zappa"));
-    auto adeleId = ao::test::requireValue(transaction.dictionary().intern("Adele"));
-    auto mozartId = ao::test::requireValue(transaction.dictionary().intern("Mozart"));
-    auto kinksId = ao::test::requireValue(transaction.dictionary().intern("Kinks"));
+    auto zappaId = ao::test::requireValue(physicalDictionary(transaction).intern("Zappa"));
+    auto adeleId = ao::test::requireValue(physicalDictionary(transaction).intern("Adele"));
+    auto mozartId = ao::test::requireValue(physicalDictionary(transaction).intern("Mozart"));
+    auto kinksId = ao::test::requireValue(physicalDictionary(transaction).intern("Kinks"));
     REQUIRE(transaction.commit());
     auto const& dictionary = dictionaryFixture.dictionary();
 
@@ -469,8 +470,8 @@ namespace ao::query::test
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
-    auto const firstId = ao::test::requireValue(transaction.dictionary().intern("first"));
-    auto const secondId = ao::test::requireValue(transaction.dictionary().intern("second"));
+    auto const firstId = ao::test::requireValue(physicalDictionary(transaction).intern("first"));
+    auto const secondId = ao::test::requireValue(physicalDictionary(transaction).intern("second"));
     REQUIRE(transaction.commit());
 
     auto data = makeHotOnlyTrack(firstId, secondId, secondId);

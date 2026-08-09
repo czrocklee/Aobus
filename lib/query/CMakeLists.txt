@@ -16,6 +16,7 @@ add_library(ao_query STATIC
     Expression.cpp
     Parser.cpp
     Predicate.cpp
+    detail/QueryError.cpp
     Serializer.cpp
     "${QUERY_UNIT_DISPATCH_HEADER}"
 )

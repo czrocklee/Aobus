@@ -339,18 +339,11 @@ namespace ao::winui::layout
       _optRejectedPreset.reset();
       return {};
     }
-    catch (std::exception const& error)
-    {
-      _host.discard(std::move(generation));
-      _runtimeState.activePresetId = previousPresetId;
-      return makeError(
-        Error::Code::InitFailed, std::format("Windows shell construction threw an exception: {}", error.what()));
-    }
     catch (...)
     {
       _host.discard(std::move(generation));
       _runtimeState.activePresetId = previousPresetId;
-      return makeError(Error::Code::InitFailed, "Windows shell construction threw an unknown exception");
+      throw;
     }
   }
 

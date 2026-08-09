@@ -286,13 +286,13 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - changed observations are deferred to contract-fulfilling observers",
             "[runtime][unit][workspace][observation]")
   {
-    // The handler type enforces the noexcept contract. These two
-    // contract-fulfilling observers therefore receive the same committed
-    // snapshot in connection order.
-    STATIC_REQUIRE(
+    // The owning Signal emission boundary accepts ordinary handlers so it can
+    // diagnose an escaping exception before aborting. Contract-fulfilling
+    // observers receive the same committed snapshot in connection order.
+    STATIC_REQUIRE_FALSE(
       std::is_nothrow_invocable_v<async::Signal<WorkspaceChanged const&>::Handler, WorkspaceChanged const&>);
-    STATIC_REQUIRE_FALSE(std::is_constructible_v<async::Signal<WorkspaceChanged const&>::Handler,
-                                                 decltype([](WorkspaceChanged const&) {})>);
+    STATIC_REQUIRE(std::is_constructible_v<async::Signal<WorkspaceChanged const&>::Handler,
+                                           decltype([](WorkspaceChanged const&) {})>);
 
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();

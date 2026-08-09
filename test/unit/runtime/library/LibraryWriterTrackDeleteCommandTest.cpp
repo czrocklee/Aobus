@@ -6,8 +6,10 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
@@ -34,18 +36,27 @@ namespace ao::rt::test
     auto listIds = std::vector<ListId>{};
     {
       auto transaction = library::test::writeTransaction(libraryFixture.library());
-      auto manifest = library::FileManifestBuilder::makeEmpty().trackId(trackId).fileSize(10).mtime(20).serialize();
-      CHECK(libraryFixture.library().manifest().writer(transaction).put("test.flac", manifest));
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto manifest = library::FileManifestBuilder::makeEmpty().fileSize(10).mtime(20);
 
-      for (auto const* const name : std::array{"Ordered A", "Ordered B"})
-      {
-        auto listBuilder = library::ListBuilder::makeEmpty();
-        listBuilder.name(name).orderTrackIds().add(trackId);
-        listIds.push_back(ao::test::requireValue(libraryFixture.library()
-                                                   .lists()
-                                                   .writer(transaction)
-                                                   .create(ao::test::requireValue(listBuilder.serialize()))));
-      }
+          if (auto updateRes = write.tracks().updateManifest(trackId, manifest); !updateRes)
+          {
+            return updateRes;
+          }
+
+          auto listWriter = write.lists();
+
+          for (auto const* const name : std::array{"Ordered A", "Ordered B"})
+          {
+            auto listBuilder = library::ListBuilder::makeEmpty();
+            listBuilder.name(name).orderTrackIds().add(trackId);
+            listIds.push_back(ao::test::requireValue(listWriter.create(listBuilder)));
+          }
+
+          return {};
+        }));
 
       REQUIRE(transaction.commit());
     }

@@ -1,91 +1,394 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <cstdint>
+#include <cstddef>
+#include <exception>
+#include <new>
 #include <stdexcept>
-#include <string_view>
 
-namespace ao
+void mayThrow();
+
+namespace ao::detail
 {
-  template<typename ExceptionType, typename... Args>
-  void throwException(std::string_view fmt, Args&&... args)
+  enum class AuditedCatchReason
   {
-    // NEGATIVE
-    throw ExceptionType{"dummy"};
-  }
-}
+    DiagnosticFallback,
+    FatalSinkFallback,
+  };
 
-void testRawThrow()
+  enum class ExceptionCarrierReason
+  {
+    CancellationTransport,
+    PrivateErrorTransport,
+  };
+
+  constexpr void acknowledgeAuditedCatch(AuditedCatchReason /*reason*/) noexcept
+  {
+  }
+  constexpr void acknowledgeExceptionCarrier(ExceptionCarrierReason /*reason*/) noexcept
+  {
+  }
+} // namespace ao::detail
+
+#define AO_AUDITED_CATCH(reason) ::ao::detail::acknowledgeAuditedCatch(::ao::detail::AuditedCatchReason::reason)
+
+#define AO_EXCEPTION_CARRIER(reason)                                                                                   \
+  ::ao::detail::acknowledgeExceptionCarrier(::ao::detail::ExceptionCarrierReason::reason)
+
+void rawThrowIsRejected()
 {
   // POSITIVE
   throw std::runtime_error{"this should fail"};
 }
 
-// NEGATIVE
-void testGoodThrow()
+namespace ao::async
 {
-  ao::throwException<std::runtime_error>("this is good");
+  [[noreturn]] void throwOperationCancelled()
+  {
+    AO_EXCEPTION_CARRIER(CancellationTransport);
+    // NEGATIVE
+    throw std::runtime_error{"approved cancellation carrier"};
+  }
 }
 
-// A subsystem throw<Domain>Error helper inside the ao namespace may raise a raw
-// throw directly: its name begins with "throw" followed by an upper-case letter,
-// so it is a sanctioned throwing helper just like ao::throwException.
 namespace ao::audio::detail
 {
-  [[noreturn]] void throwDecoderError(std::string_view message)
-  {
-    // NEGATIVE
-    throw std::runtime_error{std::string{message}};
-  }
-}
-
-// The exemption is limited to the ao namespace tree: a throw<Domain>Error-shaped
-// helper outside ao is still held to the rule.
-namespace other
-{
-  [[noreturn]] void throwOutsideAo(std::string_view message)
+  [[noreturn]] void throwDecoderError()
   {
     // POSITIVE
-    throw std::runtime_error{std::string{message}};
+    throw std::runtime_error{"a formerly approved function name is not a whitelist"};
   }
 }
 
-// A function in ao whose name merely starts with the letters "throw" but lacks the
-// upper-case word boundary of a helper ("throwaway") is still held to the rule.
+namespace ao::lmdb
+{
+  [[noreturn]] void throwOnMutationError()
+  {
+    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
+    // NEGATIVE
+    throw std::runtime_error{"approved transaction carrier"};
+  }
+}
+
+namespace ao::yaml
+{
+  [[noreturn]] void throwBasicParseFailure()
+  {
+    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
+    // NEGATIVE
+    throw std::runtime_error{"approved parser callback carrier"};
+  }
+}
+
+namespace ao::gtk::platform
+{
+  [[noreturn]] void throwGioError()
+  {
+    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
+    // NEGATIVE
+    throw std::runtime_error{"approved platform ABI carrier"};
+  }
+}
+
 namespace ao
 {
-  void throwaway()
+  [[noreturn]] void throwUnexpectedError()
   {
-    // POSITIVE
-    throw std::runtime_error{"this should fail"};
+    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
+    // NEGATIVE
+    throw std::runtime_error{"a locally marked helper does not depend on its name"};
   }
 }
 
-#include <exception>
-#include <system_error>
-
-namespace boost::system
+[[noreturn]] void directExceptionCarrierHelperIsRejected()
 {
-  class system_error : public std::exception
+  ao::detail::acknowledgeExceptionCarrier(ao::detail::ExceptionCarrierReason::PrivateErrorTransport);
+  // POSITIVE
+  throw std::runtime_error{"the marker helper itself is not an exemption"};
+}
+
+[[noreturn]] void nestedExceptionCarrierMarkerIsRejected()
+{
+  if (true)
+  {
+    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
+  }
+
+  // POSITIVE
+  throw std::runtime_error{"the marker must be the carrier helper's first statement"};
+}
+
+void broadCatchThatContinuesIsRejected()
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (std::exception const&)
+  {
+  }
+}
+
+void badAllocCatchThatContinuesIsRejected()
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (std::bad_alloc const&)
+  {
+  }
+}
+
+namespace ao::rt
+{
+  class Log final
   {
   public:
-    explicit system_error(std::int32_t code)
-      : _code{code}
+    static bool submitFatal();
+    static bool submitOrdinary();
+  };
+
+  bool Log::submitFatal()
+  {
+    try
     {
+      mayThrow();
+    }
+    // NEGATIVE
+    catch (...)
+    {
+      AO_AUDITED_CATCH(FatalSinkFallback);
+      return false;
     }
 
-  private:
-    std::int32_t _code;
-  };
-}
+    return true;
+  }
 
-namespace
-{
-  // NEGATIVE
-  void testAllowedRawThrows()
+  bool Log::submitOrdinary()
   {
-    throw std::system_error{std::error_code{}};
-    constexpr std::int32_t dummyCode = 42;
-    throw boost::system::system_error{dummyCode};
+    try
+    {
+      mayThrow();
+    }
+    // POSITIVE
+    catch (...)
+    {
+      return false;
+    }
+
+    return true;
+  }
+} // namespace ao::rt
+
+void locallyAuditedCatchIsAccepted()
+{
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (...)
+  {
+    AO_AUDITED_CATCH(DiagnosticFallback);
   }
 }
+
+void directAuditedCatchHelperIsRejected()
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    ao::detail::acknowledgeAuditedCatch(ao::detail::AuditedCatchReason::DiagnosticFallback);
+  }
+}
+
+void nestedAuditedCatchMarkerIsRejected()
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    if (true)
+    {
+      AO_AUDITED_CATCH(DiagnosticFallback);
+    }
+  }
+}
+
+void exactAdapterCatchIsAccepted()
+{
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (std::runtime_error const&)
+  {
+  }
+}
+
+void cleanupAndRethrowIsAccepted()
+{
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (...)
+  {
+    throw;
+  }
+}
+
+namespace ao
+{
+  [[noreturn]] void fatalFromException();
+
+  namespace detail
+  {
+    template<std::size_t Size>
+    [[noreturn]] void abortRealtime(char const (&context)[Size]);
+  }
+} // namespace ao
+
+void owningFatalCatchIsAccepted()
+{
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (...)
+  {
+    ao::fatalFromException();
+  }
+}
+
+template<std::size_t Size>
+void dependentFatalCatchIsAccepted(char const (&context)[Size])
+{
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (...)
+  {
+    ao::detail::abortRealtime(context);
+  }
+}
+
+void stdExceptionCleanupAndRethrowIsAccepted()
+{
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (std::exception const&)
+  {
+    throw;
+  }
+}
+
+void nestedCatchDoesNotTransferOuterOwnership()
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    try
+    {
+      mayThrow();
+    }
+    catch (...)
+    {
+      throw;
+    }
+  }
+}
+
+void lambdaDoesNotTransferOuterOwnership()
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    auto terminateLater = [] { ao::fatalFromException(); };
+    static_cast<void>(terminateLater);
+  }
+}
+
+void conditionalRethrowDoesNotTransferEveryPath(bool const shouldRethrow)
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    if (shouldRethrow)
+    {
+      throw;
+    }
+  }
+}
+
+void allConditionalPathsTransferOrTerminate(bool const shouldRethrow)
+{
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (...)
+  {
+    if (shouldRethrow)
+    {
+      throw;
+    }
+    else
+    {
+      ao::fatalFromException();
+    }
+  }
+}
+
+void earlyReturnDoesNotReachLaterFatalOnEveryPath(bool const shouldReturn)
+{
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    if (shouldReturn)
+    {
+      return;
+    }
+
+    ao::fatalFromException();
+  }
+}
+
+void declarationDefaultArgumentDoesNotCrashChecker(
+  // POSITIVE
+  int value = (throw std::runtime_error{"default argument carrier is not approved"}, 0));

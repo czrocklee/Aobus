@@ -197,10 +197,10 @@ namespace ao::gtk::layout
         }
 
         auto& playback = _runtime.playback();
-        _snapshotSub = playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
-                                                    { syncSnapshot(snapshot); });
+        _snapshotSub =
+          playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { syncSnapshot(snapshot); });
         _tracksMutatedSub = _runtime.library().changes().onChanged(
-          [this](rt::LibraryChangeSet const& changeSet) noexcept
+          [this](rt::LibraryChangeSet const& changeSet)
           {
             if (changeSet.libraryReset || std::ranges::contains(changeSet.tracksInserted, _currentTrackId) ||
                 std::ranges::contains(changeSet.tracksDeleted, _currentTrackId) ||

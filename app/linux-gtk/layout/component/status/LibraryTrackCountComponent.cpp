@@ -6,6 +6,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/LibraryTrackCountLabel.h"
+#include <ao/Contract.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -13,7 +14,6 @@
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/widget.h>
 
 #include <memory>
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
     {
       auto result = runtime.sources().acquire(rt::kAllTracksListId);
 
-      gsl_Assert(result && "Failed to acquire All Tracks list");
+      AO_INVARIANT(result, "Failed to acquire All Tracks list");
 
       return std::move(*result);
     }

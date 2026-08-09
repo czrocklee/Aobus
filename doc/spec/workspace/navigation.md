@@ -159,7 +159,7 @@ Commands are bounded and synchronous and expose no cancellation point.
 `onChanged()` delivers `WorkspaceChanged{snapshot, cause}` on a later callback-executor turn.
 The event owns its snapshot, so a command called by an observer cannot mutate the event currently being delivered; its own observation is queued separately.
 
-Observers are `noexcept` (see [signal delivery](../async/signal.md)): the snapshot they receive is already committed, so an observer cannot change an already-returned command result, and one that cannot degrade locally terminates rather than leaving a diverged replica rendering.
+Observers are ordinary callables behind the owning signal boundary (see [signal delivery](../async/signal.md)): the snapshot they receive is already committed, so an observer cannot change an already-returned command result, and an escaping exception enters AO fatal handling rather than leaving a diverged replica rendering.
 Queued delivery holds only a weak signal owner, so destruction makes undelivered events harmless.
 
 A newly constructed consumer reads `snapshot()` before subscribing or records that revision and ignores any queued event that is not newer.
@@ -182,7 +182,7 @@ The [workspace session specification](session.md) owns capture and restore, and 
 ## Test map
 
 - [`NavigationHistoryTest.cpp`](../../../test/unit/runtime/NavigationHistoryTest.cpp) proves cursor and capacity mechanics.
-- [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, the noexcept observer contract, deletion batching, and album reveal.
+- [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion batching, and album reveal.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) proves atomic history replay.
 - [`WorkspacePresentationTest.cpp`](../../../test/unit/runtime/WorkspacePresentationTest.cpp) proves presentation and preset commands.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves atomic multi-view restore and failure cleanup.

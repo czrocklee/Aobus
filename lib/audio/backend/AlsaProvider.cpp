@@ -4,13 +4,15 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnull-dereference"
 
+#include <ao/audio/backend/AlsaProvider.h>
+
+#include <ao/Contract.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
-#include <ao/audio/backend/AlsaProvider.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/utility/Raii.h>
 #include <ao/utility/ThreadName.h>
@@ -30,6 +32,7 @@ extern "C"
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <stop_token>
@@ -69,7 +72,15 @@ namespace ao::audio::backend
       monitorThread = std::jthread{[this](std::stop_token const& st)
                                    {
                                      setCurrentThreadName("AlsaDeviceMonitor");
-                                     monitorLoop(st);
+
+                                     try
+                                     {
+                                       monitorLoop(st);
+                                     }
+                                     catch (...)
+                                     {
+                                       AO_FATAL_EXCEPTION(std::current_exception(), "ALSA device-monitor thread");
+                                     }
                                    }};
     }
 
@@ -126,7 +137,14 @@ namespace ao::audio::backend
             {
               if (sub.callback)
               {
-                sub.callback(snapshot);
+                try
+                {
+                  sub.callback(snapshot);
+                }
+                catch (...)
+                {
+                  AO_FATAL_EXCEPTION(std::current_exception(), "ALSA device observer");
+                }
               }
             }
           }
@@ -182,7 +200,14 @@ namespace ao::audio::backend
 
     if (callback)
     {
-      callback(devices);
+      try
+      {
+        callback(devices);
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), "ALSA device observer");
+      }
     }
 
     return Subscription{[this, id]

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
@@ -203,14 +204,14 @@ namespace ao::library::test
     rejected.property().uri("rejected.flac");
     rejected.customMetadata().add("oversized-key", oversizedValue);
 
-    auto rejectedRes = rejected.serialize(context.transaction(), context.resources());
+    auto rejectedRes = physicalSerializeTrack(rejected, context.transaction(), context.resources());
     REQUIRE_FALSE(rejectedRes);
     CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
 
     auto accepted = TrackBuilder::makeEmpty();
     accepted.metadata().artist("accepted-artist");
     accepted.property().uri("accepted.flac");
-    auto acceptedRes = accepted.serialize(context.transaction(), context.resources());
+    auto acceptedRes = physicalSerializeTrack(accepted, context.transaction(), context.resources());
     REQUIRE(acceptedRes);
     REQUIRE(context.transaction().commit());
 

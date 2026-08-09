@@ -5,6 +5,7 @@
 
 #include "runtime/playback/ProjectionAnchor.h"
 #include "runtime/playback/ShuffleHistory.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/MusicLibrary.h>
@@ -15,8 +16,6 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -69,11 +68,11 @@ namespace ao::rt
         }
 
         projectionSourceLease = std::move(*filteredRes);
+      }
 
-        if (auto const optError = sources.sourceError(projectionSourceLease); optError)
-        {
-          return std::unexpected{*optError};
-        }
+      if (auto const optError = sources.sourceError(projectionSourceLease); optError)
+      {
+        return std::unexpected{*optError};
       }
 
       if (projectionSourceLease->state() == TrackSourceState::Invalidated)
@@ -164,12 +163,12 @@ namespace ao::rt
 
   void PlaybackCursorSession::startObserving(ProjectionBatchHandler handler)
   {
-    gsl_Expects(!_projectionSubscription && "Playback cursor session is already observing its projection");
-    gsl_Expects(handler && "Playback cursor session requires a projection batch handler");
+    AO_EXPECTS(!_projectionSubscription, "Playback cursor session is already observing its projection");
+    AO_EXPECTS(handler, "Playback cursor session requires a projection batch handler");
 
     _projectionBatchHandler = std::move(handler);
-    _projectionSubscription = _projectionPtr->subscribe([this](TrackListProjectionDeltaBatch const& batch) noexcept
-                                                        { handleProjectionBatch(batch); });
+    _projectionSubscription =
+      _projectionPtr->subscribe([this](TrackListProjectionDeltaBatch const& batch) { handleProjectionBatch(batch); });
   }
 
   std::size_t PlaybackCursorSession::projectionSize() const
@@ -247,10 +246,12 @@ namespace ao::rt
 
     if (_cursor.sourceState() == PlaybackCursor::SourceState::Invalidated)
     {
-      gsl_Assert((!optPreparedNextToken || _preparedNextRegistry.resolveWinner(*optPreparedNextToken)) &&
-                 "Prepared transition token is unknown to this playback session");
-
-      if (!optPreparedNextToken)
+      if (optPreparedNextToken)
+      {
+        auto const optWinner = _preparedNextRegistry.resolveWinner(*optPreparedNextToken);
+        AO_INVARIANT(optWinner, "Prepared transition token is unknown to this playback session");
+      }
+      else
       {
         _preparedNextRegistry.clear();
       }
@@ -264,7 +265,7 @@ namespace ao::rt
     {
       optAnchor = _preparedNextRegistry.resolveWinner(*optPreparedNextToken);
 
-      gsl_Assert(optAnchor && "Prepared transition token is unknown to this playback session");
+      AO_INVARIANT(optAnchor, "Prepared transition token is unknown to this playback session");
     }
     else
     {

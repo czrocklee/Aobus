@@ -39,6 +39,7 @@ UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; r
 - GTK and TUI use the same UIModel completer and therefore expose the same value set, ranking, replacement, and expression boundary.
 - Runtime evaluates resolved text through the same source and predicate path used by saved Lists.
 - An invalid expression is observable in the view state and empty filtered membership without corrupting the base source.
+- An error inherited from the saved-List base source is observable through the same view-state error field and keeps the projection empty.
 - Creating a saved List uses the resolved expression, not the user's unresolved quick-search text.
 
 ## Input resolution
@@ -126,7 +127,9 @@ Its detailed membership and expression-error behavior is owned by [track sources
 Quick-mode resolution itself does not parse or reject the produced text.
 Parsing and compilation happen in the runtime source path.
 
-An invalid expression remains an accepted view-filter state with an attached `FormatRejected` error and empty filtered membership.
+An invalid transient expression or inherited stored source expression remains an accepted view state with an attached contextual `FormatRejected` error and empty membership.
+The view service refreshes inherited source errors after each applied library revision and emits a focused error-state change when the code or message changes.
+The active filter view model updates its tooltip and action eligibility from that event, so repairing a stored ancestor does not leave stale error UI.
 Resource-acquisition failures that prevent construction return a failed `Result` and preserve the preceding installed view resources.
 
 Resolution, source compilation, and view replacement are synchronous on their owning path and have no cancellation point.
@@ -163,7 +166,8 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 - [`TrackFilterResolverTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and expansion.
 - [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the live field set, ranking, limits, replacement, escaping, and Quick/expression boundary.
 - [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, synchronous failure handling, and single-render policy.
-- View-service and source tests under [`test/unit/runtime/`](../../../test/unit/runtime/) protect runtime replacement and membership.
+- [`ViewServiceListFilterTest.cpp`](../../../test/unit/runtime/ViewServiceListFilterTest.cpp) protects runtime replacement, transient expression errors, and contextual stored-parent errors with empty projections.
+- Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source/) protect source membership and dependency propagation.
 - GTK quick-filter and TUI library-controller tests protect frontend adaptation.
 
 ## Related documents

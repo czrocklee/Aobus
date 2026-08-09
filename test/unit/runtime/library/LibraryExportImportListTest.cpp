@@ -6,13 +6,11 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/FileManifestBuilder.h>
-#include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
@@ -22,14 +20,13 @@
 #include <c4/yml/tree.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -41,17 +38,18 @@ namespace ao::rt::test
   {
     ryml::Tree loadTree(std::filesystem::path const& path, std::vector<char>& buffer)
     {
-      buffer = yaml::readFile(path);
+      auto bufferRes = yaml::readFileResult(path);
+      REQUIRE(bufferRes);
+      buffer = std::move(*bufferRes);
       auto state = yaml::ErrorCallbackState{path.string()};
-      auto tree = ryml::Tree{yaml::callbacks(state)};
-      yaml::parseInPlace(tree, buffer, state);
-      tree.callbacks(yaml::callbacks());
+      auto tree = ryml::Tree{yaml::callbacks()};
+      REQUIRE(yaml::parseInPlace(tree, buffer, state));
       return tree;
     }
 
-    ListId createList(ListStore::Writer writer, std::span<std::byte const> payload)
+    ListId createList(WriteTransaction& transaction, ListBuilder const& list)
     {
-      auto result = writer.create(payload);
+      auto result = transaction.apply([&list](LibraryWrite& write) { return write.lists().create(list); });
       REQUIRE(result);
       return *result;
     }
@@ -98,7 +96,7 @@ namespace ao::rt::test
     auto const sourceLibraryId = [&]
     {
       auto transaction = ml1.readTransaction();
-      return ao::test::requireValue(ml1.metadata().load(transaction)).libraryId;
+      return ml1.metadataHeader(transaction).libraryId;
     }();
 
     auto trackId = kInvalidTrackId;
@@ -106,17 +104,12 @@ namespace ao::rt::test
 
     // 1. Setup initial library
     {
-      trackId = library::test::addTrack(ml1, library::test::makeEmptyTrackSpec(uri));
+      trackId = library::test::addTrackWithUniqueFixtureUri(ml1, library::test::makeEmptyTrackSpec(uri));
       auto transaction = library::test::writeTransaction(ml1);
-
-      auto manifestWriter = ml1.manifest().writer(transaction);
-      auto builder = FileManifestBuilder::makeEmpty();
-      builder.trackId(trackId);
-      REQUIRE(manifestWriter.put(uri, builder.serialize()));
 
       auto listBuilder = ListBuilder::makeEmpty().name("My URI List");
       listBuilder.orderTrackIds().add(trackId);
-      createList(ml1.lists().writer(transaction), ao::test::requireValue(listBuilder.serialize()));
+      createList(transaction, listBuilder);
 
       REQUIRE(transaction.commit());
     }
@@ -141,26 +134,18 @@ namespace ao::rt::test
     auto const targetLibraryId = [&]
     {
       auto transaction = ml2.readTransaction();
-      return ao::test::requireValue(ml2.metadata().load(transaction)).libraryId;
+      return ml2.metadataHeader(transaction).libraryId;
     }();
     REQUIRE(targetLibraryId != sourceLibraryId);
 
     // Create a valid junk track first to ensure IDs don't match.
-    auto const junkTrackId =
-      library::test::addTrack(ml2, library::test::makeEmptyTrackSpec("library-export-import-junk.flac"));
+    auto const junkTrackId = library::test::addTrackWithUniqueFixtureUri(
+      ml2, library::test::makeEmptyTrackSpec("library-export-import-junk.flac"));
     REQUIRE(junkTrackId != kInvalidTrackId);
 
     auto targetTrackId = kInvalidTrackId;
     {
-      targetTrackId = library::test::addTrack(ml2, library::test::makeEmptyTrackSpec(uri));
-      auto transaction = library::test::writeTransaction(ml2);
-
-      auto manifestWriter = ml2.manifest().writer(transaction);
-      auto builder = FileManifestBuilder::makeEmpty();
-      builder.trackId(targetTrackId);
-      REQUIRE(manifestWriter.put(uri, builder.serialize()));
-
-      REQUIRE(transaction.commit());
+      targetTrackId = library::test::addTrackWithUniqueFixtureUri(ml2, library::test::makeEmptyTrackSpec(uri));
     }
 
     auto importer = LibraryYamlImporter{ml2};
@@ -185,7 +170,7 @@ namespace ao::rt::test
 
       // Verify tracks were NOT cleared
       CHECK(ml2.tracks().reader(transaction).begin() != ml2.tracks().reader(transaction).end());
-      CHECK(ao::test::requireValue(ml2.metadata().load(transaction)).libraryId == targetLibraryId);
+      CHECK(ml2.metadataHeader(transaction).libraryId == targetLibraryId);
     }
   }
 
@@ -197,7 +182,7 @@ namespace ao::rt::test
 
     auto trackId = kInvalidTrackId;
     {
-      trackId = library::test::addTrack(ml, library::test::makeEmptyTrackSpec("song.flac"));
+      trackId = library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("song.flac"));
     }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";

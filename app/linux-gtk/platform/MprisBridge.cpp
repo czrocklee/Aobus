@@ -6,6 +6,7 @@
 #include "MprisArtUrlSession.h"
 #include "MprisPlaybackEndpoint.h"
 #include "common/UStringConvert.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
@@ -29,7 +30,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <exception>
 #include <initializer_list>
 #include <limits>
 #include <map>
@@ -119,6 +119,7 @@ namespace ao::gtk::platform
 
     [[noreturn]] void throwGioError(Gio::Error::Code const code, char const* const message)
     {
+      AO_EXCEPTION_CARRIER(ForeignCallbackAdapter);
       throw Gio::Error{code, message};
     }
 
@@ -254,11 +255,11 @@ namespace ao::gtk::platform
     void subscribePlayback()
     {
       subscriptions.push_back(commands.onAvailabilityChanged(
-        [this] noexcept { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
+        [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
       lastSnapshot = playbackSource.snapshot();
       refreshArt(lastSnapshot.transport);
       subscriptions.push_back(playbackSource.onSnapshot(
-        [this](rt::PlaybackSnapshot const& snapshot) noexcept
+        [this](rt::PlaybackSnapshot const& snapshot)
         {
           if (snapshot.transport.transport != lastSnapshot.transport.transport)
           {
@@ -328,23 +329,7 @@ namespace ao::gtk::platform
       return artUrlSession.urlFor(state.nowPlaying.coverArtId);
     }
 
-    void refreshArt(rt::PlaybackTransportSnapshot const& state)
-    {
-      auto const resourceId = state.nowPlaying.coverArtId;
-
-      try
-      {
-        artUrlSession.refresh(resourceId);
-      }
-      catch (std::exception const& e)
-      {
-        APP_LOG_WARN("MPRIS art URL request failed for resource {}: {}", resourceId.raw(), e.what());
-      }
-      catch (...)
-      {
-        APP_LOG_WARN("MPRIS art URL request failed for resource {}: unknown exception", resourceId.raw());
-      }
-    }
+    void refreshArt(rt::PlaybackTransportSnapshot const& state) { artUrlSession.refresh(state.nowPlaying.coverArtId); }
 
     void emitPlayerPropertiesChanged(std::initializer_list<std::string_view> propertyNames) const
     {

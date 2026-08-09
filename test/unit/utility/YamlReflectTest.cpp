@@ -60,8 +60,8 @@ namespace ao::yaml::test
     ryml::Tree parseYaml(std::string_view text)
     {
       auto state = ErrorCallbackState{"<reflect-test>"};
-      auto tree = ryml::Tree{callbacks(state)};
-      parseInArena(tree, text, state);
+      auto tree = ryml::Tree{callbacks()};
+      REQUIRE(parseInArena(tree, text, state));
       return tree;
     }
   } // namespace

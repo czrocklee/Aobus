@@ -3,14 +3,13 @@
 
 #include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 
-#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/rt/ListNode.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -46,7 +45,8 @@ namespace ao::uimodel::test
     auto transaction = library::test::writeTransaction(storage.library());
     auto builder = library::ListBuilder::makeEmpty().name("Road Trip").filter(R"(#"road-trip")");
     builder.orderTrackIds().add(trackId);
-    auto createRes = storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
+    auto createRes =
+      transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
     REQUIRE(createRes);
     auto const listId = *createRes;
     REQUIRE(transaction.commit());

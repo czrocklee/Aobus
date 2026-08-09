@@ -3,6 +3,7 @@
 
 #include "runtime/source/CachedListSource.h"
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackEditScript.h>
@@ -10,25 +11,46 @@
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
-
-#include <gsl-lite/gsl-lite.hpp>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <cstddef>
+#include <format>
 #include <memory>
 #include <optional>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <variant>
 
 namespace ao::rt
 {
+  std::optional<Error> trackSourceError(TrackSource const& source)
+  {
+    if (auto const* smartSource = dynamic_cast<SmartListSource const*>(&source); smartSource != nullptr)
+    {
+      if (auto const optError = smartSource->error(); optError)
+      {
+        return optError;
+      }
+
+      return trackSourceError(smartSource->source());
+    }
+
+    if (auto const* cachedSource = dynamic_cast<CachedListSource const*>(&source); cachedSource != nullptr)
+    {
+      return cachedSource->sourceError();
+    }
+
+    return std::nullopt;
+  }
+
   CachedListSource::CachedListSource(CachedListSourceDefinition definition,
                                      std::unique_ptr<ListOrderSource> implementationPtr)
     : _definition{std::move(definition)}
     , _implementationPtr{std::move(implementationPtr)}
     , _lastPublishedSize{_implementationPtr ? _implementationPtr->size() : 0}
   {
-    gsl_Expects(_implementationPtr != nullptr && "Cached list source requires an implementation");
+    AO_EXPECTS(_implementationPtr != nullptr, "Cached list source requires an implementation");
 
     subscribeToImplementation();
   }
@@ -42,8 +64,8 @@ namespace ao::rt
   void CachedListSource::rebind(CachedListSourceDefinition definition,
                                 std::unique_ptr<ListOrderSource> implementationPtr)
   {
-    gsl_Expects(implementationPtr != nullptr && "Cached list source rebind requires an implementation");
-    gsl_Expects(state() != TrackSourceState::Invalidated && "Cannot rebind an invalidated cached list source");
+    AO_EXPECTS(implementationPtr != nullptr, "Cached list source rebind requires an implementation");
+    AO_EXPECTS(state() != TrackSourceState::Invalidated, "Cannot rebind an invalidated cached list source");
 
     auto const previousSize = _lastPublishedSize;
     _implementationSubscription.reset();
@@ -56,10 +78,20 @@ namespace ao::rt
     std::ignore = publishDelta(SourceReset{}, previousSize);
   }
 
-  std::optional<Error> CachedListSource::filterError() const
+  std::optional<Error> CachedListSource::sourceError() const
   {
     auto const* const filterSource = dynamic_cast<SmartListSource const*>(&_implementationPtr->filteredParent());
-    return filterSource == nullptr ? std::nullopt : filterSource->error();
+
+    AO_INVARIANT(filterSource != nullptr, "Cached List implementation must contain its filter source");
+
+    if (auto const optError = filterSource->error(); optError)
+    {
+      auto error = *optError;
+      error.message = std::format("List {} stored filter: {}", _definition.listId, error.message);
+      return error;
+    }
+
+    return trackSourceError(filterSource->source());
   }
 
   bool CachedListSource::trySynchronizeOrderDefinition(CachedListSourceDefinition const& definition)
@@ -124,8 +156,8 @@ namespace ao::rt
 
   void CachedListSource::subscribeToImplementation()
   {
-    _implementationSubscription = _implementationPtr->subscribe([this](TrackSourceDelta const& batch) noexcept
-                                                                { handleImplementationBatch(batch); });
+    _implementationSubscription =
+      _implementationPtr->subscribe([this](TrackSourceDelta const& batch) { handleImplementationBatch(batch); });
   }
 
   void CachedListSource::handleImplementationBatch(TrackSourceDelta const& batch)

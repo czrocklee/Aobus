@@ -101,8 +101,8 @@ namespace ao::uimodel
     _lastOutput = transport.output;
     _lastQuality = transport.quality;
     _lastReady = transport.ready;
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
-                                                 { handleSnapshot(snapshot); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     refresh();
   }
 

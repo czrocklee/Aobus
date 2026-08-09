@@ -45,7 +45,24 @@ Split support by the behavior or layer that consumes it instead of creating an i
 ## Testability seams
 
 Tests should observe public behavior, not bypass production privacy. Do not add
-test-only private-access backdoors to production types.
+an ungoverned test-only private-access backdoor to a production type.
+
+The following closed inventory contains the exceptional low-level seams. Each
+has one narrow owner, deterministic semantics, an owning specification, and a
+build guard that rejects production consumers outside its implementation
+owner:
+
+| Seam | Permitted evidence | Boundary |
+|---|---|---|
+| `library::detail::PhysicalStoreAccess` | Exact malformed library bytes and isolated Store representation state that no logical mutation can create. | Source-private header; production roots cannot include, define, or invoke it. |
+| `WriteTransaction::Options::optInjectedCommitFailure` | Rollback and publication behavior for a native commit result that cannot be induced portably. | Data-only input; production roots cannot reference it, and it invokes no callback while locks are held. |
+| `library::detail::OpenValidationMetrics` | Exact operation counts for the open gate's linear Track/manifest growth law. | Source-private observation; only `MusicLibrary` may record/reset it and production roots cannot consume it. |
+| `lmdb::detail::ReadFaultInjection` | Admission, live-read, and writer-read ownership for a native LMDB fault without damaging a mapped environment. | Source-private, single-use, same-thread scope; destruction requires that the next read consumed it, and production roots cannot reference it. |
+
+These seams do not authorize application behavior, arbitrary collaborator
+control, or a general test API. Adding another seam requires updating this
+closed inventory, its owning behavior document, and a positive/negative
+mechanical boundary test in the same change.
 
 When a behavior is hard to observe, use this order:
 
@@ -57,6 +74,9 @@ When a behavior is hard to observe, use this order:
    interface to drive the behavior through production code.
 4. Add focused shared test support around public APIs when the setup is common.
 5. Stop and review the design if none of these options fits.
+
+Fixture helpers must not silently rewrite domain identity to make setup succeed.
+For example, the strict library `addTrack()` helper preserves the supplied URI and exposes duplicate-URI conflicts, while the explicitly named `addTrackWithUniqueFixtureUri()` helper opts into deterministic private URI allocation and media-file mirroring for high-level playback fixtures.
 
 ## Catch2 style reminders
 

@@ -53,7 +53,7 @@ namespace ao::tui
     _sections = std::move(snapshot.sections);
     syncSelectedPresentation(activePresentationId());
     _customPresetsSub = _runtime.workspace().onChanged(
-      [this](rt::WorkspaceChanged const& changed) noexcept
+      [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.cause == rt::WorkspaceChangeCause::Presets || changed.cause == rt::WorkspaceChangeCause::Restore)
         {
@@ -61,7 +61,7 @@ namespace ao::tui
         }
       });
     _libraryChangesSub = _runtime.library().changes().onChanged(
-      [this](rt::LibraryChangeSet const& changeSet) noexcept
+      [this](rt::LibraryChangeSet const& changeSet)
       {
         if (changeSet.libraryReset || !changeSet.listsUpserted.empty() || !changeSet.listsDeleted.empty())
         {

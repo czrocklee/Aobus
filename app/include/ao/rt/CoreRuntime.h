@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/async/AsyncExceptionHandler.h>
 
 #include <cstddef>
 #include <filesystem>
@@ -40,8 +39,7 @@ namespace ao::rt
                                                        std::filesystem::path musicRoot,
                                                        std::filesystem::path databasePath,
                                                        std::size_t musicLibraryMapSize = 0,
-                                                       async::Sleeper* sleeper = nullptr,
-                                                       async::AsyncExceptionHandler asyncExceptionHandler = {});
+                                                       async::Sleeper* sleeper = nullptr);
     virtual ~CoreRuntime();
 
     // Composition-root teardown must not run from a synchronous runtime
@@ -73,8 +71,7 @@ namespace ao::rt
                         std::filesystem::path musicRoot,
                         std::filesystem::path databasePath,
                         std::size_t musicLibraryMapSize,
-                        async::Sleeper* sleeper,
-                        async::AsyncExceptionHandler asyncExceptionHandler);
+                        async::Sleeper* sleeper);
 
   private:
     struct Impl;

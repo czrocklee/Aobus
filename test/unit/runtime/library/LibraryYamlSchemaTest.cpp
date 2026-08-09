@@ -354,7 +354,7 @@ library:
       .label = "overlong List name",
       .yaml = std::string{"version: 3\nexport_mode: listOnly\nlibrary:\n  lists:\n    - id: 1\n      name: "} +
               overlongListName + "\n",
-      .error = "exceeds the binary storage limits",
+      .error = "exceeds the 65535-byte product limit",
     });
 
     checkRejectedPayload(RejectedPayload{

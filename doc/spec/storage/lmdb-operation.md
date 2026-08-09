@@ -42,9 +42,10 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - Explicitly aborting or destroying an uncommitted write transaction aborts all of its staged changes.
 - An unexpected failure from a mutating LMDB primitive aborts the complete write transaction before control returns; swallowing the reported error cannot make earlier staged writes committable.
 - Calling `commit()` consumes the native write transaction whether commit succeeds or fails; the transaction and every writer created from it are terminal afterward.
-- A writer operation after its transaction's commit attempt throws before touching the cursor.
+- A writer operation after its transaction's commit attempt violates `AO_EXPECTS` before touching the cursor.
 - A read point miss, write-transaction point miss, delete miss, empty-database maximum, and iterator end are normal values rather than recoverable errors.
-- A non-end cursor fault and a non-miss point-read fault throw; they are never collapsed into absence.
+- A non-end cursor fault and a non-miss point-read fault are never collapsed into absence.
+- Such a fault on an ordinary read snapshot is fatal; the same fault inside a write transaction uses the private transaction-failure carrier so the owner aborts the complete root.
 - An exclusive create never overwrites an existing record.
 - An update is an upsert: it replaces an existing value or creates the key when absent.
 - Integer overloads, append, and maximum-key operations are used with `KeyKind::Integer`; byte-span key operations are used with `KeyKind::Blob`.
@@ -80,6 +81,7 @@ Dereference and increment require the positioned state.
 
 An integer-key writer captures the database's largest key when the writer is constructed and advances that cached value after each successful append.
 `Writer::maxKey()` exposes this cached allocation value and is distinct from `Reader::maxKey()`.
+Successful `clear()` resets that cached allocation value to zero, so the same writer's next append allocates key `1`.
 
 Explicit `create`, `update`, or `delete` calls do not recompute or advance the cache.
 Callers that mix explicit integer-key creation with append in one writer must not assume append observes the newly explicit maximum; constructing a new writer after commit obtains the current database maximum.
@@ -91,13 +93,16 @@ Callers that mix explicit integer-key creation with append in one writer must no
 `Environment::open` applies nonzero map-size, maximum-database, and maximum-reader options before opening the requested path, then uses the supplied flags and mode for the native environment open.
 Failure at environment creation, option application, or path opening returns a recoverable `Result` error and releases any partially created native handle.
 
-Opening a database through a write transaction creates the named database when missing and otherwise opens the existing database.
+Opening a database through the create-capable write overload creates the named database when missing and otherwise opens the existing database.
+The existing-only write overload never creates and reports a missing or incompatible catalog entry as a typed schema-admission result.
+The main-database handle permits catalog enumeration before any named database creation.
 An unexpected write-open failure throws `lmdb::detail::TransactionFailure`; the transaction owner must unwind, which aborts that complete transaction, including named databases created earlier in it.
 Opening through a read transaction never creates; a missing database returns `NotFound`.
+Current-schema admission inspects each opened database's native flags instead of assuming that the requested key interpretation changed an existing database.
 
 An integer-key database uses native `std::uint32_t` keys and integer ordering.
 A blob-key database accepts arbitrary byte-span keys and iterates in LMDB byte order.
-Converting an iterator `KeyView` to `std::uint32_t` requires exactly four key bytes and throws on a size mismatch.
+Converting an iterator `KeyView` to `std::uint32_t` requires exactly four key bytes and fails through `AO_INVARIANT` on a size mismatch.
 
 ### Transaction begin, nesting, and commit
 
@@ -111,15 +116,16 @@ The parent remains responsible for the final commit or abort.
 A successful outer commit publishes all staged changes atomically.
 Destruction without commit aborts the complete transaction.
 Explicit `abort()` consumes the native handle immediately and is idempotent.
-Beginning a child, opening a database, or creating a reader/writer from an inactive transaction fails before calling LMDB.
+Beginning a child, opening a database, or creating a reader/writer from an inactive transaction violates `AO_EXPECTS` before calling LMDB.
 
 ### Reads and iteration
 
 | Operation | Existing data | Missing or empty | Other LMDB fault |
 |---|---|---|---|
-| `Reader::get` / `Writer::get` | Transaction-scoped byte span. | `std::nullopt`. | Throw `ao::Exception`. |
-| `Reader::maxKey` | Largest integer key. | `0`. | Throw `ao::Exception`. |
-| Iterator construction/increment | Current key/value view. | End sentinel. | Throw `ao::Exception`. |
+| `Reader::get` | Transaction-scoped byte span. | `std::nullopt`. | Fatal on an ordinary read transaction; private transaction failure on a write transaction. |
+| `Writer::get` | Transaction-scoped byte span. | `std::nullopt`. | Private transaction failure. |
+| `Reader::maxKey` | Largest integer key. | `0`. | Same channel as `Reader::get`. |
+| Iterator construction/increment | Current key/value view. | End sentinel. | Same channel as the owning transaction. |
 
 Reader iteration follows database key order and yields borrowed key/value spans.
 Integer `maxKey` reads the last database key at the time of the transaction snapshot; it is distinct from the writer's cached append cursor.
@@ -134,8 +140,8 @@ Integer `maxKey` reads the last database key at the time of the transaction snap
 | `update(key, size)` | Upsert and reserve the requested value size. | None. | An LMDB mutation fault throws `detail::TransactionFailure`. |
 | `append(data)` | Allocate cached maximum plus one and exclusively create it. | None. | Exhaustion is `ResourceExhausted`; create failure is propagated. |
 | `append(size)` | Allocate and reserve cached maximum plus one. | None. | Same as data append. |
-| `del(key)` | Remove an existing record. | Missing key returns `false`; deletion returns `true`. | Other faults throw rather than returning `Result`. |
-| `clear()` | Remove all records while retaining the named database. | Empty clear succeeds. | An LMDB mutation fault throws `detail::TransactionFailure`. |
+| `del(key)` | Remove an existing record. | Missing key returns `false`; deletion returns `true`. | Other faults use `detail::TransactionFailure`. |
+| `clear()` | Remove all records while retaining the named database; an integer writer also resets its cached append maximum to zero. | Empty clear succeeds. | An LMDB mutation fault throws `detail::TransactionFailure`. |
 
 Reservation spans are writable transaction-scoped storage.
 The caller must overwrite every reserved byte before the next LMDB update operation in that transaction or before the transaction finishes.
@@ -154,7 +160,7 @@ An LMDB failure from a mutating call after the operation has entered the mutatio
 This is private transaction-control flow, not a second public error vocabulary: the nearest library transaction owner catches it exactly, explicitly aborts all staged changes, and only then converts the carried error to the enclosing operation's `Result`.
 The marker does not cross into runtime, CLI, or frontend code, and the failed root cannot be continued or committed while its wrapper remains alive.
 A caller must not catch it inside the owner scope, continue using the writer, or attempt a later commit.
-This defines item neutrality relative to the transaction state when that item began: unrelated mutations already staged by the owner, including the library revision bump created with a library write transaction, are not part of the item delta.
+This defines item neutrality relative to the transaction state when that item began: unrelated mutations already staged by the owner are not part of the item delta, while the library's in-memory candidate revision is persisted only at the later commit boundary.
 
 Append starts at key `1` for an empty integer database because key `0` is reserved by current Aobus consumers as a null identity.
 When the cached maximum is `std::numeric_limits<std::uint32_t>::max()`, both append variants return `ResourceExhausted` without attempting a write.
@@ -176,11 +182,23 @@ Integer append exhaustion originates `ResourceExhausted` directly rather than ma
 
 This result mapping applies to operations that return `Result`, including environment opening, transaction begin and commit, and the documented no-mutation outcomes of create, append, and delete.
 The database writer's mutation-fault path uses the same code mapping inside `detail::TransactionFailure` instead of returning a `Result`, because the transaction cannot safely continue.
-Point reads, cursor construction/advance, key coercion, and delete deliberately use value-or-throw contracts: only their documented miss/end state is normal, and every other failure throws `ao::Exception` (or `detail::TransactionFailure` for a delete mutation fault).
+Point reads and cursor construction or advance deliberately use value-or-fail contracts: only their documented miss/end state is normal.
+An ordinary read transaction sends every other native failure to `AO_FATAL`; a write transaction throws `detail::TransactionFailure`, including failures from reads needed to decide a mutation.
+The write owner catches that carrier exactly, aborts, and only then exposes its mapped `Error`.
+Key-shape violations discovered after a database's declared key kind has been established are invariants rather than recoverable native errors.
 
 The adapter cannot provide recoverable containment for every storage failure.
 LMDB uses a memory-mapped database; external truncation or corruption may surface as `SIGBUS`, which no `Result` boundary can intercept, and the same corruption may also appear as a thrown cursor fault.
 Accordingly, a point lookup or cursor must never convert an arbitrary nonzero LMDB result into an empty value.
+
+The music-library admission pass runs inside one uncommitted write transaction.
+Consequently, native read faults during admission use the write transaction's private carrier and are translated by `MusicLibrary::open()` into its recoverable typed result, while the same fault after a successful open is fatal.
+This is an ownership distinction, not a second Store read API.
+
+Tests prove all three phases through the source-private `detail::ReadFaultInjection` scope rather than corrupting a mapped environment.
+The scope arms one non-success code for the next LMDB read adapter call on the same thread and records its consumption.
+Leaving the owning thread violates a lifecycle invariant; leaving the scope with an unconsumed injection enters `AO_FATAL` after clearing the test slot because that branch is already known to be unconditionally terminal.
+A build guard prevents production roots from including or naming the seam; the normal read path performs only the thread-local empty check and no write when no injection is armed.
 
 All operations are synchronous and expose no cooperative cancellation point.
 Application cancellation and task scheduling occur above this core adapter and cannot reinterpret a completed commit.
@@ -206,7 +224,11 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`Transaction.h`](../../../include/ao/lmdb/Transaction.h) and [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own read/write begin, nesting, abort, commit, and terminal state.
 - [`Database.h`](../../../include/ao/lmdb/Database.h) and [`Database.cpp`](../../../lib/lmdb/Database.cpp) own named-database access, readers, iterators, writers, and key allocation.
 - [`ResultError.h`](../../../lib/lmdb/detail/ResultError.h) owns recoverable native-code mapping and source-location capture.
-- [`ThrowError.h`](../../../lib/lmdb/detail/ThrowError.h) owns value-or-throw native fault conversion and mutation-failure exception construction; the private [`TransactionFailure.h`](../../../lib/lmdb/detail/TransactionFailure.h) carries the narrow transaction-control error to an owner boundary.
+- [`ThrowError.h`](../../../lib/lmdb/detail/ThrowError.h) dispatches native read faults to the owning transaction channel and constructs mutation-failure control flow; the private [`TransactionFailure.h`](../../../lib/lmdb/detail/TransactionFailure.h) carries the narrow transaction-control error to an owner boundary.
+- [`ReadFaultInjection.h`](../../../lib/lmdb/detail/ReadFaultInjection.h) and
+  [`ThrowError.cpp`](../../../lib/lmdb/detail/ThrowError.cpp) own the
+  source-private, single-use native-read test seam; [`lib/lmdb/CMakeLists.txt`](../../../lib/lmdb/CMakeLists.txt)
+  guards its production boundary.
 - [`lib/lmdb/CMakeLists.txt`](../../../lib/lmdb/CMakeLists.txt) defines the independent `ao_lmdb` target and external dependency.
 
 ## Test map
@@ -215,8 +237,13 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`TransactionTest.cpp`](../../../test/unit/lmdb/TransactionTest.cpp) protects read/write lifetime, commit, abort, moves, and nested transaction behavior.
 - [`DatabaseTest.cpp`](../../../test/unit/lmdb/DatabaseTest.cpp) protects named-database creation, failed-open rollback, and read-only `NotFound`.
 - [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseBlobKeyTest.cpp`](../../../test/unit/lmdb/DatabaseBlobKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, iteration, key kinds, key coercion, and maximum-key behavior.
-- [`DatabaseWriterTest.cpp`](../../../test/unit/lmdb/DatabaseWriterTest.cpp) protects create, reservation, append, exhaustion, update, delete, write reads, conflicts, mutation-failure exception unwinding and rollback, moves, and use-after-commit faults.
+- [`DatabaseWriterTest.cpp`](../../../test/unit/lmdb/DatabaseWriterTest.cpp) protects create, reservation, append, clear-and-reappend allocation, exhaustion, update, delete, write reads, conflicts, mutation-failure exception unwinding and rollback, moves, and use-after-commit faults.
 - [`ResultErrorTest.cpp`](../../../test/unit/lmdb/ResultErrorTest.cpp) protects native-code mapping and caller source-location capture.
+- [`MusicLibraryTest.cpp`](../../../test/unit/library/MusicLibraryTest.cpp),
+  [`WriteTransactionTest.cpp`](../../../test/unit/library/WriteTransactionTest.cpp),
+  and the library fatal subprocess scenarios under
+  [`test/fatal/`](../../../test/fatal) use the governed read-fault seam to
+  protect admission, writer-root, and post-open ownership respectively.
 
 ## Related documents
 

@@ -140,7 +140,6 @@ class TidyCommandTest(unittest.TestCase):
             command = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))[0]["command"]
             for argument in tidy.WINDOWS_EXCLUDED_COMPILE_ARGUMENTS:
                 self.assertNotIn(f" {argument} ", command)
-            self.assertIn(" /GL- ", command)
 
     def test_python_only_scope_runs_pythoncheck_without_preparing_clang_tidy(self):
         args = Namespace(

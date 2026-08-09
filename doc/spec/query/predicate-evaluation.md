@@ -142,9 +142,9 @@ Execution plans and internal field opcodes are not persisted.
 Saved List records store local expression text, while runtime view filters retain expression text in view/session state according to their owning contracts.
 
 A predicate change must consider retained expressions even when no record byte changes.
-For saved Lists, accepted grammar, field binding, and the truth behavior in this specification are part of the library database contract gated by `ao::library::kLibraryVersion`.
-A change that expands the storable predicate surface beyond what an existing same-version reader accepts, or that can alter whether stored text parses or compiles, what it binds to, or which tracks it matches, must increment that version.
-The old version is then rejected or explicitly migrated; the current database accepts only an exact version match and provides no in-place migration.
+Saved-List text is interpreted by the current application query implementation rather than admitted by the physical library database version.
+A grammar, binding, or truth-semantics change may therefore turn retained text into an expression error or change its resulting membership without making the database structurally corrupt, and does not by itself increment `ao::library::kLibraryVersion`.
+The [library database reference](../../reference/library/storage/database.md) owns versioning for the List record layout and other physical storage representations.
 
 Runtime view filters use the compatibility policy of the workspace, playback-session, or CLI surface that retains or accepts them.
 Expressions carry no independent dialect id or version; the containing surface owns compatibility.

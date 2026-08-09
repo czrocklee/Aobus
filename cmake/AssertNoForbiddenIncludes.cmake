@@ -49,7 +49,17 @@ set(_finding_count 0)
 
 foreach(root IN LISTS ROOTS)
   if(IS_DIRECTORY "${root}")
-    file(GLOB_RECURSE sources "${root}/*.h" "${root}/*.hpp" "${root}/*.cpp")
+    file(GLOB_RECURSE sources
+      "${root}/*.h"
+      "${root}/*.hh"
+      "${root}/*.hpp"
+      "${root}/*.hxx"
+      "${root}/*.c"
+      "${root}/*.cc"
+      "${root}/*.cpp"
+      "${root}/*.cxx"
+      "${root}/*.inl"
+      "${root}/*.ipp")
   elseif(EXISTS "${root}")
     set(sources "${root}")
   else()

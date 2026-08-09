@@ -12,6 +12,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -54,11 +55,11 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - builds tag and custom-key vocabularies", "[runtime][unit][completion][vocabulary]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrack(
+    library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .tags = {"Rock", "Favorite"}, .customMetadata = {{"Mood", "Bright"}, {"ReplayGain", "-6"}}});
-    library::test::addTrack(
+    library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(),
       library::test::TrackSpec{.title = "Two", .tags = {"Rock", "Live"}, .customMetadata = {{"Mood", "Dark"}}});
 
@@ -80,42 +81,42 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][value]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "One",
-                                                     .artist = "Bach",
-                                                     .album = "Goldberg",
-                                                     .albumArtist = "Glenn Gould",
-                                                     .genre = "Classical",
-                                                     .composer = "Bach",
-                                                     .conductor = "Carlos Kleiber",
-                                                     .ensemble = "Vienna Philharmonic",
-                                                     .work = "Variations",
-                                                     .movement = "Aria",
-                                                     .soloist = "Glenn Gould"});
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "Two",
-                                                     .artist = "Bach",
-                                                     .album = "Cello Suites",
-                                                     .albumArtist = "Yo-Yo Ma",
-                                                     .genre = "Classical",
-                                                     .composer = "Bach",
-                                                     .conductor = "Carlos Kleiber",
-                                                     .ensemble = "Staatskapelle Dresden",
-                                                     .work = "Suites",
-                                                     .movement = "Prelude",
-                                                     .soloist = "Yo-Yo Ma"});
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "Three",
-                                                     .artist = "Glass",
-                                                     .album = "Glassworks",
-                                                     .albumArtist = "Philip Glass",
-                                                     .genre = "Minimal",
-                                                     .composer = "Glass",
-                                                     .conductor = "Michael Riesman",
-                                                     .ensemble = "Philip Glass Ensemble",
-                                                     .work = "Glassworks",
-                                                     .movement = "Opening",
-                                                     .soloist = "Philip Glass"});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "One",
+                                                                         .artist = "Bach",
+                                                                         .album = "Goldberg",
+                                                                         .albumArtist = "Glenn Gould",
+                                                                         .genre = "Classical",
+                                                                         .composer = "Bach",
+                                                                         .conductor = "Carlos Kleiber",
+                                                                         .ensemble = "Vienna Philharmonic",
+                                                                         .work = "Variations",
+                                                                         .movement = "Aria",
+                                                                         .soloist = "Glenn Gould"});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "Two",
+                                                                         .artist = "Bach",
+                                                                         .album = "Cello Suites",
+                                                                         .albumArtist = "Yo-Yo Ma",
+                                                                         .genre = "Classical",
+                                                                         .composer = "Bach",
+                                                                         .conductor = "Carlos Kleiber",
+                                                                         .ensemble = "Staatskapelle Dresden",
+                                                                         .work = "Suites",
+                                                                         .movement = "Prelude",
+                                                                         .soloist = "Yo-Yo Ma"});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "Three",
+                                                                         .artist = "Glass",
+                                                                         .album = "Glassworks",
+                                                                         .albumArtist = "Philip Glass",
+                                                                         .genre = "Minimal",
+                                                                         .composer = "Glass",
+                                                                         .conductor = "Michael Riesman",
+                                                                         .ensemble = "Philip Glass Ensemble",
+                                                                         .work = "Glassworks",
+                                                                         .movement = "Opening",
+                                                                         .soloist = "Philip Glass"});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
@@ -168,20 +169,20 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][aggregate]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "Shared",
-                                                     .artist = "Shared",
-                                                     .album = "Excluded Album",
-                                                     .conductor = "Excluded Conductor",
-                                                     .work = "Selected Work",
-                                                     .tags = {"Shared", "Tag Only"}});
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "Other",
-                                                     .artist = "Shared",
-                                                     .album = "Another Excluded Album",
-                                                     .conductor = "Another Excluded Conductor",
-                                                     .work = "Selected Work",
-                                                     .tags = {"Tag Only"}});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "Shared",
+                                                                         .artist = "Shared",
+                                                                         .album = "Excluded Album",
+                                                                         .conductor = "Excluded Conductor",
+                                                                         .work = "Selected Work",
+                                                                         .tags = {"Shared", "Tag Only"}});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "Other",
+                                                                         .artist = "Shared",
+                                                                         .album = "Another Excluded Album",
+                                                                         .conductor = "Another Excluded Conductor",
+                                                                         .work = "Selected Work",
+                                                                         .tags = {"Tag Only"}});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
@@ -207,19 +208,19 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "First Title",
-                                                     .artist = "First Artist",
-                                                     .work = "First Work",
-                                                     .tags = {"First Tag"},
-                                                     .customMetadata = {{"First Key", "Value"}}});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "First Title",
+                                                                         .artist = "First Artist",
+                                                                         .work = "First Work",
+                                                                         .tags = {"First Tag"},
+                                                                         .customMetadata = {{"First Key", "Value"}}});
     auto const baselineRevision = [&]
     {
       auto const transaction = libraryFixture.library().readTransaction();
       return libraryFixture.library().libraryRevision(transaction);
     }();
     auto changesExecutor = ManualExecutor{};
-    auto changes = LibraryChanges{changesExecutor, baselineRevision};
+    auto changes = LibraryChanges{changesExecutor, baselineRevision, "test-library"};
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kAggregateFields = std::to_array({TrackField::Title, TrackField::Artist, TrackField::Work});
 
@@ -230,17 +231,17 @@ namespace ao::rt::test
       mutationExecutor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
     auto secondIdRes = mutation.apply(
-      [&libraryFixture](library::WriteTransaction& transaction) -> Result<TrackId>
+      [&libraryFixture](library::LibraryWrite& write) -> Result<TrackId>
       {
-        return library::test::addTrack(libraryFixture.library(),
-                                       transaction,
-                                       library::test::TrackSpec{
-                                         .title = "Second Title",
-                                         .artist = "Second Artist",
-                                         .work = "Second Work",
-                                         .tags = {"Second Tag"},
-                                         .customMetadata = {{"Second Key", "Value"}},
-                                       });
+        return library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                           write,
+                                                           library::test::TrackSpec{
+                                                             .title = "Second Title",
+                                                             .artist = "Second Artist",
+                                                             .work = "Second Work",
+                                                             .tags = {"Second Tag"},
+                                                             .customMetadata = {{"Second Key", "Value"}},
+                                                           });
       });
     REQUIRE(secondIdRes);
     auto const secondId = *secondIdRes;
@@ -297,7 +298,7 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const originalId = library::test::addTrack(
+    auto const originalId = library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(), library::test::TrackSpec{.title = "Original", .artist = "Original Artist"});
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
@@ -358,8 +359,8 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId =
-      library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
+    auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
@@ -382,7 +383,7 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId = library::test::addTrack(
+    auto const trackId = library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .conductor = "Carlos Kleiber", .work = "Variations"});
@@ -432,20 +433,21 @@ namespace ao::rt::test
             "[runtime][regression][completion-vocabulary]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId = library::test::addTrack(libraryFixture.library(),
-                                                 library::test::TrackSpec{.title = "Only Track",
-                                                                          .artist = "Only Artist",
-                                                                          .album = "Only Album",
-                                                                          .albumArtist = "Only Album Artist",
-                                                                          .genre = "Only Genre",
-                                                                          .composer = "Only Composer",
-                                                                          .conductor = "Only Conductor",
-                                                                          .ensemble = "Only Ensemble",
-                                                                          .work = "Only Work",
-                                                                          .movement = "Only Movement",
-                                                                          .soloist = "Only Soloist",
-                                                                          .tags = {"Only Tag"},
-                                                                          .customMetadata = {{"Only Key", "Value"}}});
+    auto const trackId =
+      library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                  library::test::TrackSpec{.title = "Only Track",
+                                                                           .artist = "Only Artist",
+                                                                           .album = "Only Album",
+                                                                           .albumArtist = "Only Album Artist",
+                                                                           .genre = "Only Genre",
+                                                                           .composer = "Only Composer",
+                                                                           .conductor = "Only Conductor",
+                                                                           .ensemble = "Only Ensemble",
+                                                                           .work = "Only Work",
+                                                                           .movement = "Only Movement",
+                                                                           .soloist = "Only Soloist",
+                                                                           .tags = {"Only Tag"},
+                                                                           .customMetadata = {{"Only Key", "Value"}}});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
@@ -525,7 +527,7 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId = library::test::addTrack(
+    auto const trackId = library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .genre = "Classical", .work = "Variations"});

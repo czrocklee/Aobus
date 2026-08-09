@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Exception.h>
+#include <ao/audio/backend/WasapiProvider.h>
+
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Subscription.h>
-#include <ao/audio/backend/WasapiProvider.h>
 #include <ao/audio/backend/detail/WasapiProviderMonitorHooks.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -176,39 +176,6 @@ namespace ao::audio::backend::test
     CHECK_FALSE(providerPtr);
     CHECK_FALSE(sub);
     CHECK(monitorExited.try_acquire_for(std::chrono::seconds{5}));
-  }
-
-  TEST_CASE("WasapiProvider - throwing refresh callback is removed without terminating monitor",
-            "[audio][regression][wasapi][provider]")
-  {
-    auto refreshCompleted = std::binary_semaphore{0};
-    auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
-    hooksPtr->enumerateDevices = []
-    { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
-    hooksPtr->onRefreshComplete = [&] { refreshCompleted.release(); };
-    auto provider = WasapiProvider{hooksPtr};
-    auto callbackCount = std::atomic{std::size_t{0}};
-    auto sub = provider.subscribeDevices(
-      [&](std::vector<Device> const&)
-      {
-        if (callbackCount.fetch_add(1, std::memory_order_relaxed) != 0)
-        {
-          throwException<Exception>("expected monitor callback failure");
-        }
-      });
-    REQUIRE(sub);
-    REQUIRE(hooksPtr->requestRefresh);
-
-    hooksPtr->requestRefresh();
-    REQUIRE(refreshCompleted.try_acquire_for(std::chrono::seconds{5}));
-    CHECK(callbackCount.load(std::memory_order_relaxed) == 2);
-
-    hooksPtr->requestRefresh();
-    REQUIRE(refreshCompleted.try_acquire_for(std::chrono::seconds{5}));
-    CHECK(callbackCount.load(std::memory_order_relaxed) == 2);
-
-    sub.reset();
-    provider.shutdown();
   }
 
   TEST_CASE("WasapiProvider - cancellation removes a device callback already copied by monitor",

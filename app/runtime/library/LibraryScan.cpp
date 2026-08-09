@@ -4,12 +4,10 @@
 #include <ao/rt/library/LibraryScan.h>
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -19,7 +17,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <functional>
@@ -71,15 +68,7 @@ namespace ao::rt
       auto entryEc = std::error_code{};
       bool isFile = false;
 
-      try
-      {
-        isFile = std::filesystem::is_regular_file(path, entryEc);
-      }
-      catch (std::exception const& /*e*/)
-      {
-        isFile = false;
-        entryEc = std::make_error_code(std::errc::permission_denied);
-      }
+      isFile = std::filesystem::is_regular_file(path, entryEc);
 
       if (entryEc)
       {
@@ -110,47 +99,35 @@ namespace ao::rt
 
       auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
 
-      try
-      {
-        item.fileSize = std::filesystem::file_size(path, entryEc);
-        item.mtime = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                  std::filesystem::last_write_time(path, entryEc).time_since_epoch())
-                                                  .count());
+      item.fileSize = std::filesystem::file_size(path, entryEc);
+      item.mtime = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                std::filesystem::last_write_time(path, entryEc).time_since_epoch())
+                                                .count());
 
-        if (entryEc)
+      if (entryEc)
+      {
+        item.classification = ScanClassification::Error;
+        item.errorMessage = entryEc.message();
+      }
+      else if (auto optManifest = manifestReader.get(uri); !optManifest)
+      {
+        item.classification = ScanClassification::New;
+      }
+      else
+      {
+        auto const& view = *optManifest;
+        item.trackId = view.trackId();
+        item.audioPayloadLength = view.audioPayloadLength();
+        item.audioSignature = view.audioSignature();
+
+        if (view.fileSize() == item.fileSize && view.mtime() == item.mtime)
         {
-          item.classification = ScanClassification::Error;
-          item.errorMessage = entryEc.message();
-        }
-        else if (auto optManifest = manifestReader.get(uri); !optManifest)
-        {
-          item.classification = ScanClassification::New;
+          item.classification = ScanClassification::Unchanged;
         }
         else
         {
-          auto const& view = *optManifest;
-          item.trackId = view.trackId();
-          item.audioPayloadLength = view.audioPayloadLength();
-          item.audioSignature = view.audioSignature();
-
-          if (view.fileSize() == item.fileSize && view.mtime() == item.mtime)
-          {
-            item.classification = ScanClassification::Unchanged;
-          }
-          else
-          {
-            item.classification = ScanClassification::Changed;
-          }
+          item.classification = ScanClassification::Changed;
         }
-      }
-      catch (Exception const&)
-      {
-        throw;
-      }
-      catch (std::exception const& e)
-      {
-        item.classification = ScanClassification::Error;
-        item.errorMessage = e.what();
       }
 
       items.push_back(std::move(item));
@@ -350,13 +327,7 @@ namespace ao::rt
     }
 
     auto transaction = _library.readTransaction();
-    auto const headerRes = _library.metadata().load(transaction);
-
-    if (!headerRes)
-    {
-      return std::unexpected{headerRes.error()};
-    }
-
+    auto const header = _library.metadataHeader(transaction);
     auto const libraryRevision = _library.libraryRevision(transaction);
     auto const manifestReader = _library.manifest().reader(transaction);
     auto items = std::vector<ScanItem>{};
@@ -484,6 +455,6 @@ namespace ao::rt
     addMissingEntries(items, manifestReader, seenUris, blockedUriPrefixes);
     classifyMovedEntries(items);
 
-    return ScanPlan{headerRes->libraryId, libraryRevision, std::move(items)};
+    return ScanPlan{header.libraryId, libraryRevision, std::move(items)};
   }
 } // namespace ao::rt

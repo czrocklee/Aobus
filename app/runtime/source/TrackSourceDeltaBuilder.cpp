@@ -3,10 +3,9 @@
 
 #include "runtime/source/TrackSourceDeltaBuilder.h"
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -47,13 +46,13 @@ namespace ao::rt
     for (std::size_t index = 0; index < removals.size(); ++index)
     {
       auto const& removal = removals[index];
-      gsl_Assert(removal.index < _initialSize);
-      gsl_Assert(index == 0 || removal.index != removals[index - 1].index);
+      AO_INVARIANT(removal.index < _initialSize);
+      AO_INVARIANT(index == 0 || removal.index != removals[index - 1].index);
     }
 
     for (std::size_t index = 1; index < insertions.size(); ++index)
     {
-      gsl_Assert(insertions[index].index > insertions[index - 1].index);
+      AO_INVARIANT(insertions[index].index > insertions[index - 1].index);
     }
 
     auto coalescer = delta::Coalescer{};
@@ -69,7 +68,7 @@ namespace ao::rt
     }
 
     auto script = coalescer.take();
-    gsl_Assert(delta::validate(script, _initialSize));
+    AO_INVARIANT(delta::validate(script, _initialSize));
     return script;
   }
 } // namespace ao::rt

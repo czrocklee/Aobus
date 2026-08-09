@@ -90,7 +90,7 @@ namespace ao::library::test
     auto temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = writeTransaction(library);
-    auto result = builder.serializeCold(transaction, library.resources());
+    auto result = physicalSerializeColdTrack(builder, transaction, library.resources());
     REQUIRE(result);
 
     auto data = std::move(*result);

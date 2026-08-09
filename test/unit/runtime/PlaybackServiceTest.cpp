@@ -15,19 +15,10 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/BackendIds.h>
-#include <ao/audio/BackendProvider.h>
-#include <ao/audio/Device.h>
-#include <ao/audio/NullBackend.h>
-#include <ao/audio/Property.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
@@ -38,7 +29,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
-#include <atomic>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -46,7 +36,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -65,108 +54,6 @@ namespace ao::rt::test
 
     template<typename T>
     concept HasLegacySuccessionAccessor = requires(T& target) { target.playbackSequence(); };
-
-    class PreAdmissionRejectingDeferExecutor final : public async::Executor
-    {
-    public:
-      bool isCurrent() const noexcept override { return _delegate.isCurrent(); }
-      void dispatch(std::move_only_function<void()> task) override { _delegate.dispatch(std::move(task)); }
-
-      void defer(std::move_only_function<void()> task) override
-      {
-        if (_rejectNextDefer.exchange(false))
-        {
-          throwException<Exception>("scripted defer rejection");
-        }
-
-        _delegate.defer(std::move(task));
-      }
-
-      void rejectNextDefer() noexcept { _rejectNextDefer.store(true); }
-      void drain() { _delegate.drain(); }
-
-    private:
-      QueuedExecutor _delegate;
-      std::atomic_bool _rejectNextDefer{false};
-    };
-
-    class ThrowingVolumeArm final
-    {
-    public:
-      void arm() noexcept { _armed = true; }
-      bool consume() noexcept { return std::exchange(_armed, false); }
-
-    private:
-      bool _armed = false;
-    };
-
-    class ThrowingVolumeBackend final : public audio::NullBackend
-    {
-    public:
-      explicit ThrowingVolumeBackend(ThrowingVolumeArm& arm)
-        : _arm{&arm}
-      {
-      }
-
-      audio::BackendId backendId() const override { return audio::BackendId{"throwing_backend"}; }
-      audio::ProfileId profileId() const override { return audio::ProfileId{audio::kProfileShared}; }
-
-      Result<> setProperty(audio::PropertyId const id, audio::PropertyValue const& value) override
-      {
-        if (id == audio::PropertyId::Volume && _arm->consume())
-        {
-          throwException<Exception>("scripted volume exception");
-        }
-
-        return NullBackend::setProperty(id, value);
-      }
-
-    private:
-      ThrowingVolumeArm* _arm;
-    };
-
-    class ThrowingVolumeProvider final : public audio::BackendProvider
-    {
-    public:
-      explicit ThrowingVolumeProvider(ThrowingVolumeArm& arm)
-        : _arm{&arm}
-      {
-        _status.descriptor.id = audio::BackendId{"throwing_backend"};
-        _status.descriptor.supportedProfiles.push_back({.id = audio::kProfileShared});
-        _status.devices.push_back(audio::Device{
-          .id = audio::DeviceId{"throwing_device"},
-          .displayName = "Throwing Device",
-          .description = "Controlled exception output",
-          .isDefault = false,
-          .backendId = audio::BackendId{"throwing_backend"},
-        });
-      }
-
-      void shutdown() noexcept override {}
-
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
-      {
-        callback(_status.devices);
-        return {};
-      }
-
-      Status status() const override { return _status; }
-
-      std::unique_ptr<audio::Backend> createBackend(audio::Device const& /*device*/,
-                                                    audio::ProfileId const& /*profile*/) override
-      {
-        return std::make_unique<ThrowingVolumeBackend>(*_arm);
-      }
-
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
-      {
-        return {};
-      }
-
-    private:
-      ThrowingVolumeArm* _arm;
-      Status _status;
-    };
 
     template<typename ExecutorT = QueuedExecutor>
     struct PlaybackServiceFixture final
@@ -372,7 +259,7 @@ namespace ao::rt::test
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     auto changes = makeStateOnlyLibraryChanges();
     auto sources = TrackSourceCache{fixture.libraryFixture.library(), changes};
-    auto views = ViewService{fixture.executor, fixture.libraryFixture.library(), sources};
+    auto views = ViewService{fixture.executor, fixture.libraryFixture.library(), sources, changes};
     auto succession = PlaybackSuccession{fixture.executor,
                                          views,
                                          sources,
@@ -443,29 +330,6 @@ namespace ao::rt::test
     CHECK(snapshots.empty());
     CHECK(fixture.playback.snapshot() == before);
 
-    fixture.executor.drain();
-
-    REQUIRE(snapshots.size() == 1);
-    CHECK(snapshots.front().succession.shuffle == ShuffleMode::On);
-    CHECK(snapshots.front().succession.repeat == RepeatMode::All);
-  }
-
-  TEST_CASE("PlaybackService - rejected lower-state publication retries on the next observation",
-            "[runtime][regression][playback][concurrency]")
-  {
-    auto fixture = ApplicationPlaybackFixtureT<PreAdmissionRejectingDeferExecutor>{};
-    auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback.events().onSnapshot(
-      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
-    auto const before = fixture.playback.snapshot();
-
-    fixture.executor.rejectNextDefer();
-    fixture.succession.setShuffleMode(ShuffleMode::On);
-
-    CHECK(snapshots.empty());
-    CHECK(fixture.playback.snapshot() == before);
-
-    fixture.succession.setRepeatMode(RepeatMode::All);
     fixture.executor.drain();
 
     REQUIRE(snapshots.size() == 1);
@@ -617,94 +481,6 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
-  }
-
-  TEST_CASE("PlaybackService - rejected drain scheduling preserves queued command order",
-            "[runtime][regression][playback][concurrency]")
-  {
-    auto fixture = ApplicationPlaybackFixtureT<PreAdmissionRejectingDeferExecutor>{};
-    bool queuedRepeat = false;
-    auto observedRepeats = std::array<RepeatMode, 3>{};
-    std::size_t observedRepeatCount = 0;
-    auto const subscription = fixture.playback.events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot) noexcept
-      {
-        if (observedRepeatCount < observedRepeats.size())
-        {
-          observedRepeats[observedRepeatCount] = snapshot.succession.repeat;
-        }
-
-        ++observedRepeatCount;
-
-        if (!queuedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
-        {
-          queuedRepeat = true;
-          fixture.executor.rejectNextDefer();
-          fixture.commands().setRepeatMode(RepeatMode::All);
-        }
-      });
-
-    // Model a spontaneous lower-layer settlement. Its publication admits the
-    // observer command, then the controlled executor rejects that command's
-    // first drain request.
-    fixture.succession.setShuffleMode(ShuffleMode::On);
-    CHECK_NOTHROW(fixture.executor.drain());
-    REQUIRE(queuedRepeat);
-    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
-    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::Off);
-
-    fixture.commands().setRepeatMode(RepeatMode::One);
-    fixture.executor.drain();
-
-    auto const expectedRepeats = std::array{RepeatMode::Off, RepeatMode::All, RepeatMode::One};
-    REQUIRE(observedRepeatCount == 3);
-    CHECK(observedRepeats == expectedRepeats);
-    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
-  }
-
-  TEST_CASE("PlaybackService - an unexpected command exception terminally closes admission",
-            "[runtime][regression][playback][concurrency]")
-  {
-    // The arm must outlive the backend that borrows it.
-    auto arm = ThrowingVolumeArm{};
-    auto fixture = PlaybackServiceFixture<QueuedExecutor>{};
-    fixture.buildThreeTrackManualView();
-    fixture.application.executor.drain();
-    fixture.application.playbackBootstrap.addProvider(std::make_unique<ThrowingVolumeProvider>(arm));
-    fixture.application.executor.drain();
-    fixture.commands().setOutputDevice(audio::BackendId{"throwing_backend"},
-                                       audio::DeviceId{"throwing_device"},
-                                       audio::ProfileId{audio::kProfileShared});
-    fixture.application.executor.drain();
-    bool queuedCommands = false;
-    auto const subscription = fixture.playback().events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot) noexcept
-      {
-        if (!queuedCommands && snapshot.succession.shuffle == ShuffleMode::On)
-        {
-          queuedCommands = true;
-          fixture.commands().setVolume(0.25F);
-          fixture.commands().setRepeatMode(RepeatMode::All);
-        }
-      });
-    arm.arm();
-
-    fixture.commands().setShuffleMode(ShuffleMode::On);
-    REQUIRE(queuedCommands);
-    auto const lastCommitted = fixture.playback().snapshot();
-    REQUIRE_THROWS_AS(fixture.application.executor.drain(), Exception);
-
-    CHECK(fixture.playback().snapshot() == lastCommitted);
-    CHECK(fixture.playback().snapshot().succession.repeat == RepeatMode::Off);
-
-    auto const rejectedStartRes = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
-    REQUIRE_FALSE(rejectedStartRes);
-    CHECK(rejectedStartRes.error().code == Error::Code::InvalidState);
-
-    fixture.commands().setRepeatMode(RepeatMode::One);
-    fixture.application.executor.drain();
-
-    CHECK(fixture.playback().snapshot() == lastCommitted);
   }
 
   TEST_CASE("PlaybackService - a newer stop supersedes an observer-queued start",

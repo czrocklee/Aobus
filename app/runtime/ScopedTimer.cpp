@@ -3,6 +3,7 @@
 
 #include <ao/rt/ScopedTimer.h>
 
+#include <ao/Contract.h>
 #include <ao/rt/Log.h>
 
 #include <chrono>
@@ -18,8 +19,9 @@ namespace ao::rt
     {
       APP_LOG_DEBUG("[perf] {} took {} ms", _label, elapsed.count());
     }
-    catch (...) // NOLINT(bugprone-empty-catch): destructor logging is best effort.
+    catch (...)
     {
+      AO_AUDITED_CATCH(DiagnosticFallback);
       // Best-effort logging from a destructor; must not propagate.
     }
   }

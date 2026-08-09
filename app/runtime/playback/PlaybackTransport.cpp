@@ -4,6 +4,8 @@
 #include "runtime/playback/PlaybackTransport.h"
 
 #include "runtime/PlaybackSessionState.h"
+#include "runtime/playback/PreparedNextContract.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -31,13 +33,10 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <algorithm>
 #include <chrono>
 #include <concepts>
 #include <cstdint>
-#include <cstdlib>
 #include <deque>
 #include <expected>
 #include <filesystem>
@@ -61,7 +60,7 @@ namespace ao::rt
   {
     std::unique_ptr<audio::Player> requireOwnedPlayer(std::unique_ptr<audio::Player> playerPtr)
     {
-      gsl_Expects(playerPtr != nullptr);
+      AO_EXPECTS(playerPtr != nullptr);
       return playerPtr;
     }
 
@@ -313,21 +312,6 @@ namespace ao::rt
       {
         logOutputDeviceCleared(previous);
       }
-    }
-
-    [[noreturn]] void failExecutorAffinity(std::source_location const& loc)
-    {
-      APP_LOG_CRITICAL("PlaybackTransport thread-affinity violation: '{}' invoked off the executor thread ({}:{})",
-                       loc.function_name(),
-                       loc.file_name(),
-                       loc.line());
-
-      if (auto const& loggerPtr = Log::appLogger(); loggerPtr)
-      {
-        loggerPtr->flush();
-      }
-
-      std::abort();
     }
   } // namespace
 
@@ -680,10 +664,7 @@ namespace ao::rt
     // guard and are valid only when affinity is outside the test's scope.
     void ensureOnExecutor(std::source_location loc = std::source_location::current()) const
     {
-      if (!executor.isCurrent()) [[unlikely]]
-      {
-        failExecutorAffinity(loc);
-      }
+      AO_EXPECTS_AT(loc, executor.isCurrent(), "PlaybackTransport invoked off the executor thread");
     }
 
     void ensureReady() const
@@ -1052,7 +1033,7 @@ namespace ao::rt
       // error on screen long after it stopped being true.
       auto const persists = !failure.recoverable && !isTransientOutputFailure(failure);
 
-      gsl_Expects(optLastPlaybackFailureReport);
+      AO_INVARIANT(optLastPlaybackFailureReport);
       notifications.createOrUpdate(
         optLastPlaybackFailureReport->reportKey,
         NotificationRequest{
@@ -1331,8 +1312,9 @@ namespace ao::rt
                        state.output.selectedDevice.profileId);
         }
       }
-      catch (...) // NOLINT(bugprone-empty-catch) -- noexcept destruction makes release logging best-effort
+      catch (...)
       {
+        AO_AUDITED_CATCH(DiagnosticFallback);
       }
 
       playerPtr.reset();
@@ -1356,9 +1338,9 @@ namespace ao::rt
 
   PlaybackTransport::~PlaybackTransport()
   {
-    gsl_Expects(_implPtr != nullptr);
+    AO_INVARIANT(_implPtr != nullptr);
+    AO_EXPECTS(!_implPtr->drainingOutboundEvents);
     shutdown();
-    gsl_Expects(!_implPtr->drainingOutboundEvents);
   }
 
   void PlaybackTransport::shutdown() noexcept
@@ -1366,83 +1348,82 @@ namespace ao::rt
     checkedImpl()->shutdown();
   }
 
-  async::Subscription PlaybackTransport::onPreparing(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackTransport::onPreparing(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->preparingSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onStarted(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackTransport::onStarted(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->startedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onPaused(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackTransport::onPaused(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->pausedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onIdle(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackTransport::onIdle(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->idleSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onNowPlayingChanged(
-    std::move_only_function<void(NowPlayingChanged const&) noexcept> handler)
+    std::move_only_function<void(NowPlayingChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->nowPlayingChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onOutputDeviceChanged(
-    std::move_only_function<void(OutputDeviceSelection const&) noexcept> handler)
+    std::move_only_function<void(OutputDeviceSelection const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->outputDeviceChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onStopped(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackTransport::onStopped(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->stoppedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onOutputDevicesChanged(std::move_only_function<void() noexcept> handler)
+  async::Subscription PlaybackTransport::onOutputDevicesChanged(std::move_only_function<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->outputDevicesChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onQualityChanged(
-    std::move_only_function<void(QualityChanged const&) noexcept> handler)
+  async::Subscription PlaybackTransport::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->qualityChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onVolumeChanged(std::move_only_function<void(float) noexcept> handler)
+  async::Subscription PlaybackTransport::onVolumeChanged(std::move_only_function<void(float)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->volumeChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onMutedChanged(std::move_only_function<void(bool) noexcept> handler)
+  async::Subscription PlaybackTransport::onMutedChanged(std::move_only_function<void(bool)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->mutedChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onRevealTrackRequested(
-    std::move_only_function<void(RevealTrackRequested const&) noexcept> handler)
+    std::move_only_function<void(RevealTrackRequested const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->revealTrackRequestedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onSeekUpdate(std::move_only_function<void(SeekUpdate const&) noexcept> handler)
+  async::Subscription PlaybackTransport::onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->seekUpdateSignal.connect(std::move(handler));
@@ -1452,8 +1433,8 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
-    gsl_Expects(handler && "Playback failure recovery handler must not be empty");
-    gsl_Expects(!impl->playbackFailureRecoveryHandlerPtr && "Playback failure recovery handler is already bound");
+    AO_EXPECTS(handler, "Playback failure recovery handler must not be empty");
+    AO_EXPECTS(!impl->playbackFailureRecoveryHandlerPtr, "Playback failure recovery handler is already bound");
 
     impl->playbackFailureRecoveryHandlerPtr = std::make_shared<PlaybackFailureRecoveryHandler>(std::move(handler));
   }
@@ -1537,7 +1518,7 @@ namespace ao::rt
     auto* const impl = checkedImpl();
     impl->ensureReady();
 
-    gsl_Expects(!impl->optActivePreparedToken && "Implicit token replacement is prohibited");
+    detail::expectPreparedNextSlotAvailable(impl->optActivePreparedToken.has_value());
 
     auto requestRes = playbackRequestForTrack(impl->library, trackId);
 
@@ -1664,7 +1645,7 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
-    gsl_Expects(preparedStart._implPtr && "Start transition requires a valid prepared token");
+    AO_EXPECTS(preparedStart._implPtr, "Start transition requires a valid prepared token");
 
     if (impl->isClosing())
     {
@@ -1756,7 +1737,7 @@ namespace ao::rt
 
     impl->ensureReady();
 
-    gsl_Expects(!impl->optActivePreparedToken && "Implicit token replacement is prohibited");
+    detail::expectPreparedNextSlotAvailable(impl->optActivePreparedToken.has_value());
 
     auto item = impl->makePlaybackItem(request.input);
     auto const result = impl->playerPtr->prepareNext(item);

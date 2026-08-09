@@ -4,7 +4,7 @@
 #pragma once
 
 #include "Output.h"
-#include <ao/Exception.h>
+#include <ao/Contract.h>
 #include <ao/async/Task.h>
 
 #include <cstddef>
@@ -70,10 +70,7 @@ namespace ao::cli
       runTask(storeTaskResult(std::move(task), optResultPtr));
       auto optResult = std::move(*optResultPtr);
 
-      if (!optResult)
-      {
-        throwException<Exception>("CLI task completed without publishing its result");
-      }
+      AO_INVARIANT(optResult, "CLI task completed without publishing its result");
 
       return std::move(*optResult);
     }

@@ -4,12 +4,11 @@
 #include "runtime/playback/PlaybackCursor.h"
 
 #include "runtime/playback/ProjectionAnchor.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/projection/TrackListProjection.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <optional>
@@ -57,7 +56,7 @@ namespace ao::rt
     , _repeatMode{repeatMode}
     , _shuffleMode{shuffleMode}
   {
-    gsl_Expects(_launchSpec.sourceListId != kInvalidListId && "Playback cursor requires a valid launch source");
+    AO_EXPECTS(_launchSpec.sourceListId != kInvalidListId, "Playback cursor requires a valid launch source");
 
     validateLiveAnchor(_anchor, policy);
     _semanticTuple = computeSemanticTuple(policy);
@@ -66,8 +65,8 @@ namespace ao::rt
   PlaybackCursor::Changes PlaybackCursor::applyProjectionBatch(TrackListProjectionDeltaBatch const& batch,
                                                                PlaybackCursorPolicy& policy)
   {
-    gsl_Expects(_sourceState != SourceState::Invalidated &&
-                "Invalidated playback cursor cannot consume projection batches");
+    AO_EXPECTS(
+      _sourceState != SourceState::Invalidated, "Invalidated playback cursor cannot consume projection batches");
 
     auto const previousAnchorIndex = _anchor.anchorIndex();
     auto const projectionSize = policy.projectionSize();
@@ -136,7 +135,7 @@ namespace ao::rt
 
   PlaybackCursor::Changes PlaybackCursor::adoptLiveCurrent(ProjectionAnchor currentAnchor, PlaybackCursorPolicy& policy)
   {
-    gsl_Expects(_sourceState != SourceState::Invalidated && "Invalidated playback cursor cannot adopt a live anchor");
+    AO_EXPECTS(_sourceState != SourceState::Invalidated, "Invalidated playback cursor cannot adopt a live anchor");
 
     validateLiveAnchor(currentAnchor, policy);
     auto const restorableStateChanged =
@@ -154,9 +153,9 @@ namespace ao::rt
 
   PlaybackCursor::Changes PlaybackCursor::adoptInvalidatedCurrent(TrackId const currentTrackId)
   {
-    gsl_Expects(_sourceState == SourceState::Invalidated &&
-                "Live playback cursor requires a projection anchor for a current transition");
-    gsl_Expects(currentTrackId != kInvalidTrackId && "Playback cursor requires a valid current track");
+    AO_EXPECTS(_sourceState == SourceState::Invalidated,
+               "Live playback cursor requires a projection anchor for a current transition");
+    AO_EXPECTS(currentTrackId != kInvalidTrackId, "Playback cursor requires a valid current track");
 
     if (_currentTrackId == currentTrackId)
     {
@@ -217,7 +216,7 @@ namespace ao::rt
     {
       if (auto const optPrevious = policy.popShufflePrevious(_currentTrackId); optPrevious)
       {
-        gsl_Assert(*optPrevious != kInvalidTrackId && "Shuffle previous returned an invalid track");
+        AO_INVARIANT(*optPrevious != kInvalidTrackId, "Shuffle previous returned an invalid track");
 
         return startTrack(*optPrevious);
       }
@@ -238,19 +237,19 @@ namespace ao::rt
     auto const projectionSize = policy.projectionSize();
     auto const optIndex = policy.indexOf(anchor.trackId());
 
-    gsl_Expects(anchor.anchorIndex() <= projectionSize && "Playback cursor anchor exceeds the projection size");
+    AO_EXPECTS(anchor.anchorIndex() <= projectionSize, "Playback cursor anchor exceeds the projection size");
 
     if (optIndex)
     {
-      gsl_Expects(*optIndex < projectionSize && anchor.state() == ProjectionAnchor::State::Bound &&
-                  anchor.anchorIndex() == *optIndex &&
-                  "Playback cursor Bound anchor does not match projection identity");
+      AO_EXPECTS(*optIndex < projectionSize && anchor.state() == ProjectionAnchor::State::Bound &&
+                   anchor.anchorIndex() == *optIndex,
+                 "Playback cursor Bound anchor does not match projection identity");
 
       return;
     }
 
-    gsl_Expects(anchor.state() == ProjectionAnchor::State::Gap &&
-                "Playback cursor Gap anchor is required for a missing projected current");
+    AO_EXPECTS(anchor.state() == ProjectionAnchor::State::Gap,
+               "Playback cursor Gap anchor is required for a missing projected current");
   }
 
   PlaybackCursor::SemanticTuple PlaybackCursor::computeSemanticTuple(PlaybackCursorPolicy& policy)
@@ -294,7 +293,7 @@ namespace ao::rt
       auto const optCandidate = policy.shuffleForwardCandidate(
         _currentTrackId, _anchor.state() == ProjectionAnchor::State::Bound, _repeatMode == RepeatMode::All);
 
-      gsl_Assert(!(optCandidate && *optCandidate == kInvalidTrackId) && "Shuffle forward returned an invalid track");
+      AO_INVARIANT(!(optCandidate && *optCandidate == kInvalidTrackId), "Shuffle forward returned an invalid track");
 
       return optCandidate;
     }
@@ -342,7 +341,7 @@ namespace ao::rt
   {
     auto const trackId = policy.trackIdAt(index);
 
-    gsl_Assert(trackId != kInvalidTrackId && "Playback cursor resolved an invalid projected track");
+    AO_INVARIANT(trackId != kInvalidTrackId, "Playback cursor resolved an invalid projected track");
 
     return trackId;
   }

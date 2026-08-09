@@ -4,6 +4,7 @@
 #include <ao/rt/WorkspaceService.h>
 
 #include "WorkspaceSessionYamlSchema.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -26,6 +27,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <exception>
 #include <expected>
 #include <format>
 #include <functional>
@@ -50,21 +52,6 @@ namespace ao::rt
       std::string filterExpression{};
       bool reusePlainView = false;
     };
-
-    [[noreturn]] void failExecutorAffinity(std::source_location const& location)
-    {
-      APP_LOG_CRITICAL("WorkspaceService thread-affinity violation: '{}' invoked off the executor thread ({}:{})",
-                       location.function_name(),
-                       location.file_name(),
-                       location.line());
-
-      if (auto const& loggerPtr = Log::appLogger(); loggerPtr)
-      {
-        loggerPtr->flush();
-      }
-
-      std::abort();
-    }
 
     Result<ResolvedNavigationTarget> resolveNavigationTarget(NavigationTarget const& target)
     {
@@ -108,7 +95,7 @@ namespace ao::rt
       : executor{callbackExecutor}, views{viewService}, changes{changes}
     {
       listsMutatedSub =
-        changes.onChanged([this](LibraryChangeSet const& changeSet) noexcept { handleLibraryChange(changeSet); });
+        changes.onChanged([this](LibraryChangeSet const& changeSet) { handleLibraryChange(changeSet); });
     }
 
     ~Impl() { changedSignal.disconnectAll(); }
@@ -120,10 +107,7 @@ namespace ao::rt
 
     void ensureOnExecutor(std::source_location location = std::source_location::current()) const
     {
-      if (!executor.isCurrent()) [[unlikely]]
-      {
-        failExecutorAffinity(location);
-      }
+      AO_EXPECTS_AT(location, executor.isCurrent(), "WorkspaceService invoked off the executor thread");
     }
 
     PendingCommit prepareCommit(WorkspaceSnapshot nextSnapshot,
@@ -142,9 +126,16 @@ namespace ao::rt
 
     void publish(WorkspaceChanged changed) noexcept
     {
-      // Signal::post owns the weak-state dance and the noexcept delivery
-      // contract, so a faulty observer can no longer escape into the executor.
-      changedSignal.post(executor, std::move(changed));
+      try
+      {
+        // Signal::post owns the weak-state dance and the non-throwing delivery
+        // boundary after admission.
+        changedSignal.post(executor, std::move(changed));
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), "workspace observation admission");
+      }
     }
 
     void installCommit(PendingCommit pending) noexcept
@@ -681,8 +672,7 @@ namespace ao::rt
     return _implPtr->views.detailProjection(target, *this, _implPtr->changes);
   }
 
-  async::Subscription WorkspaceService::onChanged(
-    std::move_only_function<void(WorkspaceChanged const&) noexcept> handler)
+  async::Subscription WorkspaceService::onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->changedSignal.connect(std::move(handler));

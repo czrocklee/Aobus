@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/rt/TrackEditScript.h>
@@ -47,7 +48,8 @@ namespace ao::rt::test
           builder.orderTrackIds().add(trackId);
         }
 
-        auto result = storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
+        auto result =
+          transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
         REQUIRE(result);
         REQUIRE(transaction.commit());
         return *result;
@@ -96,7 +98,8 @@ namespace ao::rt::test
         }
 
         auto const transaction = storage.library().readTransaction();
-        changesPtr = std::make_unique<LibraryChanges>(executor, storage.library().libraryRevision(transaction));
+        changesPtr =
+          std::make_unique<LibraryChanges>(executor, storage.library().libraryRevision(transaction), "test-library");
         writerFixturePtr = std::make_unique<LibraryWriterFixture>(storage.library(), *changesPtr);
         changeSubscription =
           changesPtr->onChanged([this](LibraryChangeSet const& event) noexcept { events.push_back(event); });

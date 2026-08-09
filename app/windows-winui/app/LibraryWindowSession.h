@@ -29,7 +29,7 @@ namespace ao::winui
   {
   public:
     using RestartRequest = std::move_only_function<Result<>(std::filesystem::path)>;
-    using ClosedCallback = std::move_only_function<void() noexcept>;
+    using ClosedCallback = std::move_only_function<void()>;
 
     LibraryWindowSession(std::filesystem::path stateRoot,
                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher);

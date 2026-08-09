@@ -4,7 +4,6 @@
 #pragma once
 
 #include "PlaybackLaunchSpec.h"
-#include "TrackMutation.h"
 #include "TrackPresentation.h"
 #include "ViewIds.h"
 #include "ViewState.h"
@@ -18,6 +17,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -65,7 +65,16 @@ namespace ao::rt
       ViewId viewId{};
     };
 
-    ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources);
+    struct FilterErrorChanged final
+    {
+      ViewId viewId{};
+      std::optional<Error> optFilterError{};
+    };
+
+    ViewService(async::Executor& executor,
+                library::MusicLibrary const& library,
+                TrackSourceCache& sources,
+                LibraryChanges const& changes);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;
@@ -78,12 +87,11 @@ namespace ao::rt
     Result<> setSelection(ViewId viewId, std::vector<TrackId> selection);
     Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
-    async::Subscription onProjectionChanged(
-      std::move_only_function<void(TrackListProjectionChanged const&) noexcept> handler);
-    async::Subscription onPresentationChanged(
-      std::move_only_function<void(PresentationChanged const&) noexcept> handler);
-    async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&) noexcept> handler);
-    async::Subscription onViewDestroyed(std::move_only_function<void(ViewDestroyed const&) noexcept> handler);
+    async::Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
+    async::Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
+    async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
+    async::Subscription onViewDestroyed(std::move_only_function<void(ViewDestroyed const&)> handler);
+    async::Subscription onFilterErrorChanged(std::move_only_function<void(FilterErrorChanged const&)> handler);
 
     // View lookups come in two forms. The precondition form assumes the caller
     // already holds a live view id, so an unknown id is a programming error and
@@ -91,8 +99,8 @@ namespace ao::rt
     // same NotFound error as every other fallible method here.
     //
     // Observers must use the find form: a queued notification can outlive the
-    // view it names, and observer handlers are noexcept, so a throwing lookup
-    // there terminates the process rather than propagating.
+    // view it names. A missing view is expected stale-notification state rather
+    // than an exception for the owning Signal boundary to diagnose as fatal.
     TrackListViewState trackListState(ViewId viewId) const;
     Result<TrackListViewState> findTrackListState(ViewId viewId) const;
 

@@ -7,11 +7,9 @@
 #include "BackendTestSupport.h"
 #include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
-#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/audio/BackendIds.h>
@@ -1380,44 +1378,6 @@ namespace ao::audio::test
     runtime.requestStop();
     runtime.join();
     executor.drain();
-  }
-
-  TEST_CASE("Player - unexpected preparation exceptions reach the async diagnostic boundary",
-            "[audio][regression][error][concurrency]")
-  {
-    auto probePtr = std::make_shared<BarrierBackendProbe>();
-    auto executor = QueuedExecutor{};
-    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
-    auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
-    auto const factory = [](std::filesystem::path const&,
-                            std::optional<SampleEncoding>) -> std::unique_ptr<DecoderSession>
-    { throwException<Exception>("unexpected preparation failure"); };
-    auto player = Player{runtime, factory};
-    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
-    executor.drain();
-    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    bool acceptanceCalled = false;
-    bool completionCalled = false;
-
-    REQUIRE(player.stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 104}, .input = PlaybackInput{.filePath = "invariant.flac"}},
-      {},
-      [&]
-      {
-        acceptanceCalled = true;
-        return true;
-      },
-      [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
-    REQUIRE(exceptionRecorder.waitForCount(1));
-
-    runtime.requestStop();
-    runtime.join();
-    executor.drain();
-
-    CHECK_FALSE(acceptanceCalled);
-    CHECK_FALSE(completionCalled);
-    rt::test::requireSingleRecordedException<Exception>(exceptionRecorder, "cancellable coroutine");
   }
 
   TEST_CASE("Player - start acceptance veto completes exactly once with conflict",

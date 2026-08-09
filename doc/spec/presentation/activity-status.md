@@ -96,8 +96,8 @@ Runtime-transient info also has no local timeout because its authoritative servi
 The view model owns its subscriptions and the optional local deadline.
 The notification service and optional `LibraryTaskService` owner outlive it through application composition.
 Projection exposes no recoverable error channel.
-Feed callbacks are `noexcept`.
-They handle expected fallible work locally; an exception that escapes instead terminates at the callback contract boundary.
+Feed handlers are ordinary callables behind the notification signal's owning fatal boundary.
+They handle expected fallible work locally; an exception that escapes instead is diagnosed and aborted by that owner.
 
 ## Implementation map
 

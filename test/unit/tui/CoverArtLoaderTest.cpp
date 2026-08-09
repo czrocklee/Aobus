@@ -71,7 +71,7 @@ namespace ao::tui::test
       ResourceId addResource(std::span<std::byte const> bytes)
       {
         auto transaction = library::test::writeTransaction(_storage.library());
-        auto result = _storage.library().resources().writer(transaction).create(bytes);
+        auto result = library::test::physicalWriter(_storage.library().resources(), transaction).create(bytes);
         REQUIRE(result);
         REQUIRE(transaction.commit());
         return *result;

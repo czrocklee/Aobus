@@ -90,11 +90,11 @@ namespace ao::tui::test
             "[tui][unit][completion][filter]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    library::test::addTrack(libraryFixture.library(),
-                            library::test::TrackSpec{.title = "Expression Track",
-                                                     .artist = "Aimer",
-                                                     .uri = "tui-expression-completion.flac",
-                                                     .duration = std::chrono::seconds{120}});
+    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                library::test::TrackSpec{.title = "Expression Track",
+                                                                         .artist = "Aimer",
+                                                                         .uri = "tui-expression-completion.flac",
+                                                                         .duration = std::chrono::seconds{120}});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = uimodel::TrackFilterCompleter{service};

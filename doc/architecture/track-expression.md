@@ -129,8 +129,9 @@ The stored predicate value is expression text, not an AST or execution bytecode.
 The same List record independently stores raw rank TrackIds; those IDs do not participate in predicate truth.
 Opening or refreshing the List recompiles its expression against the current implementation, then applies rank to the resulting membership.
 The text has no separate language identity or version.
-For a persisted List, the accepted grammar, field catalog, binding behavior, and evaluation meaning are part of the library database contract gated by `ao::library::kLibraryVersion`, even when the list-record byte layout is unchanged.
-Other retained expression surfaces use the compatibility version or policy owned by their containing format rather than introducing a per-expression dialect.
+Core library storage treats those bytes as opaque and does not make query parsing part of database integrity or `ao::library::kLibraryVersion` admission.
+Application authoring may validate a new expression before commit, while source materialization represents stored text that no longer parses or compiles as an expression error with empty membership.
+Other retained expression surfaces likewise use the interpretation and compatibility policy of their application owner rather than introducing a per-expression dialect in storage.
 
 ### Transient track filter
 
@@ -177,8 +178,8 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 
 ## Structural constraints
 
-- Expression text is persistence-facing; changing the storable predicate surface or altering whether retained text parses, what it binds to, or which tracks it matches is incompatible for every containing persistence or automation contract that retains that text.
-- Saved-List predicate compatibility is gated by the library database version; the library YAML, playback-session, workspace, and CLI surfaces retain their own independent compatibility owners.
+- Expression text is persistence-facing opaque data; changing whether retained text parses, what it binds to, or which tracks it matches can change application behavior without making its containing database structurally invalid.
+- Saved-List predicate interpretation follows the current application query implementation rather than the library database version; library YAML, playback-session, workspace, and CLI surfaces retain their own independent compatibility owners.
 - `ExecutionPlan` and `FormatPlan` are runtime-only and are never persisted as compatibility surfaces.
 - Plans own every expression symbol needed for later dictionary binding and can outlive the library against which they were first evaluated.
 - A dictionary-using plan is bound explicitly for one bounded batch; a later batch creates a new binding and can observe a newer committed dictionary generation.

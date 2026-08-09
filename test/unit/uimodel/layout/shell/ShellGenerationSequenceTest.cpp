@@ -4,13 +4,13 @@
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -29,7 +29,7 @@ namespace ao::uimodel::test
 
     Result<> throws()
     {
-      throwException<Exception>("native attachment threw");
+      throw std::runtime_error{"native attachment threw"};
     }
   } // namespace
 
@@ -99,10 +99,7 @@ namespace ao::uimodel::test
     REQUIRE(sequence.publish(firstPtr->id(), succeeds).has_value());
 
     auto const candidatePtr = sequence.stage();
-    auto const publishedRes = sequence.publish(candidatePtr->id(), throws);
-
-    REQUIRE_FALSE(publishedRes.has_value());
-    CHECK(publishedRes.error().code == Error::Code::InitFailed);
+    CHECK_THROWS_AS(sequence.publish(candidatePtr->id(), throws), std::runtime_error);
     CHECK(sequence.activeId() == firstPtr->id());
     CHECK(firstPtr->isActive());
     CHECK_FALSE(candidatePtr->isActive());

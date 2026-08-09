@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 
@@ -94,7 +95,7 @@ namespace ao::library::test
     builder.tags().add("tag10").add("tag20");
 
     auto context = TrackSerializationFixture{};
-    auto hotDataRes = builder.serializeHot(context.transaction());
+    auto hotDataRes = physicalSerializeHotTrack(builder, context.transaction());
     REQUIRE(hotDataRes);
     auto const& hotData = *hotDataRes;
 

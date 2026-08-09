@@ -5,7 +5,6 @@
 
 #include "Task.h"
 #include "TaskFuture.h"
-#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <boost/asio/co_spawn.hpp>
@@ -36,13 +35,8 @@ namespace ao::async
   public:
     // A non-null sleeper replaces the default steady-timer sleepFor with an
     // injected delay strategy; the Sleeper must outlive this Runtime.
-    explicit Runtime(Executor& callbackExecutor,
-                     AsyncExceptionHandler exceptionHandler = {},
-                     Sleeper* sleeper = nullptr);
-    Runtime(Executor& callbackExecutor,
-            std::size_t workerCount,
-            AsyncExceptionHandler exceptionHandler = {},
-            Sleeper* sleeper = nullptr);
+    explicit Runtime(Executor& callbackExecutor, Sleeper* sleeper = nullptr);
+    Runtime(Executor& callbackExecutor, std::size_t workerCount, Sleeper* sleeper = nullptr);
     ~Runtime();
 
     Runtime(Runtime const&) = delete;
@@ -51,11 +45,6 @@ namespace ao::async
     Runtime& operator=(Runtime&&) = delete;
 
     Executor& callbackExecutor() noexcept;
-
-    // Consumes an exception at an application-owned async boundary. Expected
-    // cancellation is silent; all other exceptions go to the injected handler
-    // or the default stderr fallback.
-    void reportUnhandledException(std::exception_ptr exceptionPtr, std::string_view context) const noexcept;
 
     // Terminally closes callback-executor resumption admission and stops the
     // worker pool. The Runtime cannot be restarted afterward.
@@ -68,8 +57,8 @@ namespace ao::async
     Task<void> resumeOnWorker(std::stop_token stopToken = {});
     Task<void> sleepFor(std::chrono::milliseconds delay, std::stop_token stopToken = {});
 
-    void spawnLogged(Task<void> task);
-    TaskHandle spawnCancellable(CancellableTask task);
+    void spawnLogged(Task<void> task, std::string_view fatalContext = "root coroutine");
+    TaskHandle spawnCancellable(CancellableTask task, std::string_view fatalContext = "cancellable coroutine");
 
     template<typename T>
     TaskFuture<T> spawn(Task<T> task)
@@ -88,21 +77,18 @@ namespace ao::async
       }
     }
 
-    void spawnWithLifetime(LifetimeScope* scope, CancellableTask task);
+    void spawnWithLifetime(LifetimeScope* scope,
+                           CancellableTask task,
+                           std::string_view fatalContext = "lifetime-bound coroutine");
 
   private:
     struct CallbackState;
-    struct DiagnosticState;
-
-    static void handleUnhandledException(DiagnosticState const& state,
-                                         std::exception_ptr exceptionPtr,
-                                         std::string_view context) noexcept;
+    static void finishFireAndForget(std::exception_ptr exceptionPtr, std::string_view context) noexcept;
 
     std::move_only_function<void()> startCancellable(CancellableTask task,
                                                      std::function<void(std::exception_ptr)> completion);
 
     Executor& _callbackExecutor;
-    std::shared_ptr<DiagnosticState> _diagnosticStatePtr;
     std::shared_ptr<CallbackState> _callbackStatePtr;
     Sleeper* _sleeper;
   };

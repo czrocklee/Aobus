@@ -54,7 +54,7 @@ namespace ao::uimodel
 
     bool isCurrent() const noexcept;
     std::span<TrackId const> targetIds() const noexcept;
-    async::Subscription onInvalidated(std::move_only_function<void() noexcept> handler) const;
+    async::Subscription onInvalidated(std::move_only_function<void()> handler) const;
 
     Result<TrackMetadataSubmitResult> submitMetadata(rt::MetadataPatch const& patch);
     Result<TrackTagSubmitResult> submitTags(std::span<std::string const> tagsToAdd,

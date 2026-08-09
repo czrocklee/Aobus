@@ -75,6 +75,73 @@ The portal never builds the full product graph merely to populate dependency rec
 The audited Visual Studio WinUI companion tree remains the existing exception: an explicit Windows tidy tree uses its `-winui` sibling.
 Visual Studio-only WinUI headers use a small audited companion map because that generator does not provide the Ninja dependency graph.
 
+## Fatal-contract source guardrails
+
+Normal builds scan production C++ under `app/`, `include/`, `lib/`, and `tool/`
+and fail when a source uses the C `assert` macro or raw gsl-lite contract
+spelling (`gsl_Expects`, `gsl_Ensures`, or `gsl_Assert`).
+Production runtime contracts use the AO macros so category, source location,
+diagnostic context, and abort behavior remain project-owned and consistent.
+Compile-time `static_assert` and third-party or test-source assertions are not
+part of this guardrail.
+
+The check is intentionally lexical and admits no per-file production
+allowlist. If foreign code must retain a raw spelling, keep that code outside
+the production source roots or isolate it behind the owning adapter rather
+than suppressing the repository rule.
+
+The same normal-build guardrail rejects the removed general exception surface
+(`ao/Exception.h`, `ExceptionFormat`, and `throwException`) and raw fatal
+call spellings (`std::terminate`, `std::abort`, `std::quick_exit`, `std::_Exit`,
+their explicitly global forms, and `_Exit`).
+It also rejects `AO_EXPECTS(false, ...)`, `AO_ENSURES(false, ...)`,
+`AO_INVARIANT(false, ...)`, and production `std::unreachable()` so an
+unconditional terminal branch has the explicit `AO_FATAL` category.
+Tests remain outside that production scan because category death probes and
+exhaustive-switch fixtures deliberately exercise those spellings.
+Only the Core fatal implementation may invoke the final abort primitive.
+Normal CLI parser exits remain `std::exit` and are not fatal-contract calls.
+
+The `aobus-readability-forbid-raw-fatal` AST check is the semantic authority
+for that rule. It resolves the standard/global `abort`, `terminate`,
+`quick_exit`, and `_Exit` declarations, including imported unqualified calls
+and address-taking, while ignoring unrelated project members with the same
+leaf name. It also rejects direct production references to the `ao::detail::abortFatal` and `ao::detail::abortRealtime` implementation entry points; public Contract macro expansions are the only exception. The one process-termination backend helper must begin with the exact
+`AO_RAW_FATAL_BACKEND()` macro expansion. A direct call to the marker helper,
+a nested marker, or a later marker does not qualify. Ordinary tests are outside
+production policy; the check's integration fixture remains covered. Do not
+suppress this check with `NOLINT`.
+
+The lexical build guard remains as an early failure for common call spellings;
+it is intentionally not the source of symbol resolution or the backend
+exception policy.
+
+The `aobus-readability-forbid-raw-throw` AST check enforces the
+[exception-carrier reference](../reference/failure/exception-carriers.md)
+without copying its whitelist here.
+In production source, a non-rethrowing `throw` expression is valid only when
+its enclosing helper begins with `AO_EXCEPTION_CARRIER(reason)` and that helper
+is inventoried by the reference.
+The checker recognizes the exact first-statement macro pattern rather than
+function or file names; a direct call to its implementation helper, a nested
+marker, or a later marker does not qualify.
+A `catch (...)`, `catch (std::exception const&)`, or
+`catch (std::bad_alloc const&)` must rethrow, enter AO fatal handling, or
+explicitly capture `std::current_exception()` for a later owning boundary.
+Termination or transfer inside a nested catch, lambda, or only one branch of a conditional does not discharge the outer catch; every continuation path must transfer or terminate unless the current exception is explicitly captured.
+An adapter that can name a narrower foreign exception catches that exact type.
+Ordinary test sources may inject arbitrary exceptions; the check's own
+integration fixture remains covered so the production rule cannot regress.
+
+An exceptional boundary that is allowed to continue begins its catch body with
+`AO_AUDITED_CATCH(reason)`. The reason identifies exception classification,
+best-effort diagnostics during already-safe cleanup, fatal-sink rejection,
+platform fallback, or preservation of an active primary exception. The checker
+recognizes only that exact first-statement macro pattern; it has no function-name
+or file allowlist, and a nested or later marker does not qualify. Every production
+use is inventoried in the exception-carrier reference. Do not suppress this check
+with `NOLINT`.
+
 The portal copies the selected native compiler flags into a temporary compilation database and checks the header itself as the main file.
 On Windows, it removes the translation unit's `/TP` after replacing the input because the header invocation supplies `-x c++-header` explicitly.
 A platform-incompatible header without a safe paired implementation, real Ninja consumer, or audited WinUI companion is deferred in a batch scan.

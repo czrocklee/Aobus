@@ -3,6 +3,7 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/CoreIds.h>
@@ -138,15 +139,15 @@ namespace ao::query::test
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
-    auto const targetId = ao::test::requireValue(transaction.dictionary().intern("target"));
+    auto const targetId = ao::test::requireValue(physicalDictionary(transaction).intern("target"));
 
     for (std::int32_t index = 0; index < 31; ++index)
     {
       auto const filler = std::format("filler-{}", index);
-      REQUIRE(transaction.dictionary().intern(filler));
+      REQUIRE(physicalDictionary(transaction).intern(filler));
     }
 
-    auto const collisionId = ao::test::requireValue(transaction.dictionary().intern("collision"));
+    auto const collisionId = ao::test::requireValue(physicalDictionary(transaction).intern("collision"));
     REQUIRE(transaction.commit());
     REQUIRE(targetId != collisionId);
     REQUIRE((targetId.raw() & 31U) == (collisionId.raw() & 31U));
@@ -206,7 +207,7 @@ namespace ao::query::test
     auto const oldBinding = PlanBinding{plan, oldContext};
 
     auto transaction = dictionaryFixture.writeTransaction();
-    auto const futureId = ao::test::requireValue(transaction.dictionary().intern("future"));
+    auto const futureId = ao::test::requireValue(physicalDictionary(transaction).intern("future"));
     REQUIRE(transaction.commit());
 
     auto const tagIds = std::array{futureId};

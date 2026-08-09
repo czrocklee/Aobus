@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
+
 #include <ao/audio/Transport.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 
 #include <algorithm>
 #include <chrono>
@@ -37,9 +38,9 @@ namespace ao::uimodel
       return;
     }
 
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
-                                                 { onSnapshotChanged(snapshot); });
-    _seekPreviewSub = _playback.events().onSeekPreview([this](std::chrono::milliseconds const elapsed) noexcept
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { onSnapshotChanged(snapshot); });
+    _seekPreviewSub = _playback.events().onSeekPreview([this](std::chrono::milliseconds const elapsed)
                                                        { refresh(false, true, elapsed); });
 
     refresh(true);

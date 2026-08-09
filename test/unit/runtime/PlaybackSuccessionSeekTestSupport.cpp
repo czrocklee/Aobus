@@ -39,10 +39,10 @@ namespace ao::rt::test::playback_succession
 {
   PlaybackSuccessionSeekFixture::PlaybackSuccessionSeekFixture(audio::test::StagedFailureGate* const failureGate)
     : asyncRuntime{executor}
-    , changes{libraryChangesExecutor, 0}
+    , changes{libraryChangesExecutor, 0, "test-library"}
     , writerFixture{libraryFixture.library(), changes}
     , sources{libraryFixture.library(), changes}
-    , views{executor, libraryFixture.library(), sources}
+    , views{executor, libraryFixture.library(), sources, changes}
     , workspace{executor, views, changes}
   {
     // A 48 kHz clock represents every whole millisecond exactly, including

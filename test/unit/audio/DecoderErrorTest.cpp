@@ -69,12 +69,11 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("DecoderException - exposes its Error through what() and location()", "[audio][unit][decoder][error]")
+  TEST_CASE("DecoderException - exposes its Error through what()", "[audio][unit][decoder][error]")
   {
     auto const ex = detail::DecoderException{Error::Code::SeekFailed, "seek boom"};
 
     CHECK(ex.error().code == Error::Code::SeekFailed);
     CHECK(std::string_view{ex.what()} == "seek boom");
-    CHECK(ex.location().line() == ex.error().location.line());
   }
 } // namespace ao::audio::test

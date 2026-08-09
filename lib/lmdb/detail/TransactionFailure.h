@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 
+#include <exception>
 #include <string>
 #include <utility>
 
@@ -17,14 +17,15 @@ namespace ao::lmdb::detail
    * operation; the nearest library transaction owner explicitly aborts before
    * translating it to Result or propagating an infrastructure exception.
    */
-  class TransactionFailure final : public Exception
+  class TransactionFailure final : public std::exception
   {
   public:
     explicit TransactionFailure(Error error)
-      : Exception{error.message, error.location}, _error{std::move(error)}
+      : _error{std::move(error)}
     {
     }
 
+    char const* what() const noexcept override { return _error.message.c_str(); }
     Error const& error() const noexcept { return _error; }
 
   private:

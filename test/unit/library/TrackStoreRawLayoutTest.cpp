@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/library/TrackWrite.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -9,7 +10,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -94,9 +94,9 @@ namespace ao::library::test
       auto transaction = writeTransaction(fixture.library);
       auto const replacement = TrackSpec{.title = "After", .artist = "Second Artist"};
       auto builder = makeBuilder(replacement);
-      auto preparedRes = builder.prepareHot(transaction);
+      auto preparedRes = physicalPrepareHotTrack(builder, transaction);
       REQUIRE(preparedRes);
-      auto writer = fixture.store.writer(transaction);
+      auto writer = physicalWriter(fixture.store, transaction);
       REQUIRE(updatePreparedHotTrackRecord(writer, id, *preparedRes));
       REQUIRE(transaction.commit());
     }
@@ -120,9 +120,9 @@ namespace ao::library::test
       auto transaction = writeTransaction(fixture.library);
       auto const replacement = TrackSpec{.title = "Kept", .trackNumber = 2, .duration = std::chrono::seconds{200}};
       auto builder = makeBuilder(replacement);
-      auto preparedRes = builder.prepareCold(transaction, fixture.library.resources());
+      auto preparedRes = physicalPrepareColdTrack(builder, transaction, fixture.library.resources());
       REQUIRE(preparedRes);
-      auto writer = fixture.store.writer(transaction);
+      auto writer = physicalWriter(fixture.store, transaction);
       REQUIRE(updatePreparedColdTrackRecord(writer, id, *preparedRes));
       REQUIRE(transaction.commit());
     }
@@ -145,9 +145,9 @@ namespace ao::library::test
       auto const replacement =
         TrackSpec{.title = "Replaced", .artist = "New Artist", .duration = std::chrono::minutes{7}};
       auto builder = makeBuilder(replacement);
-      auto preparedRes = builder.prepare(transaction, fixture.library.resources());
+      auto preparedRes = physicalPrepareTrack(builder, transaction, fixture.library.resources());
       REQUIRE(preparedRes);
-      auto writer = fixture.store.writer(transaction);
+      auto writer = physicalWriter(fixture.store, transaction);
       REQUIRE(updatePreparedTrackRecord(writer, targetId, preparedRes->first, preparedRes->second));
       REQUIRE(transaction.commit());
     }
@@ -166,7 +166,7 @@ namespace ao::library::test
     auto const id = addCommittedTrack(fixture.library, TrackSpec{});
 
     auto wtxn = writeTransaction(fixture.library);
-    REQUIRE(fixture.store.writer(wtxn).remove(id));
+    REQUIRE(physicalWriter(fixture.store, wtxn).remove(id));
     REQUIRE(wtxn.commit());
 
     auto rtxn = fixture.library.readTransaction();
@@ -181,7 +181,7 @@ namespace ao::library::test
     auto const id = addCommittedTrack(fixture.library, TrackSpec{.duration = std::chrono::minutes{4}});
 
     auto wtxn = writeTransaction(fixture.library);
-    auto writer = fixture.store.writer(wtxn);
+    auto writer = physicalWriter(fixture.store, wtxn);
     auto optHot = writer.get(id, TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optHot);
     CHECK(optHot->isHotValid());

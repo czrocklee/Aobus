@@ -10,11 +10,8 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces that raw C++ 'throw' expressions are forbidden in general code,
-  /// requiring that they be raised through a throwing helper instead: the core
-  /// ao::throwException or a subsystem throw<Domain>Error helper. A throwing
-  /// helper is a function in the ao namespace tree whose name begins with "throw"
-  /// followed by an upper-case letter.
+  /// Enforces the exact exception-carrier throw regions and rejects broad catch
+  /// handlers that neither transfer nor terminate the caught failure.
   class ForbidRawThrowCheck : public ClangTidyCheck
   {
   public:

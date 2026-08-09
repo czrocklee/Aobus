@@ -7,8 +7,6 @@
 
 #include <glibmm/dispatcher.h>
 
-#include <functional>
-
 namespace ao::gtk
 {
   class GtkMainContextExecutor final : public async::QueuedExecutorBase
@@ -25,7 +23,6 @@ namespace ao::gtk
 
   private:
     void wake() noexcept override;
-    void executeTask(std::move_only_function<void()>& task) override;
 
     Glib::Dispatcher _dispatcher;
   };

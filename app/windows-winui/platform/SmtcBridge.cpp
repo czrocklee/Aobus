@@ -4,7 +4,6 @@
 #include "platform/SmtcBridge.h"
 
 #include <ao/CoreIds.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
@@ -24,7 +23,6 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
 
-#include <exception>
 #include <memory>
 #include <stop_token>
 #include <utility>
@@ -131,7 +129,7 @@ namespace ao::winui
     _statePtr->controls.IsStopEnabled(true);
     _statePtr->controls.IsNextEnabled(true);
     _statePtr->controls.IsPreviousEnabled(true);
-    _snapshotSub = runtime.playback().events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
+    _snapshotSub = runtime.playback().events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
                                                           { handleSnapshot(snapshot); });
     handleSnapshot(runtime.playback().snapshot());
   }
@@ -220,7 +218,8 @@ namespace ao::winui
           auto* const runtime = &_runtime->async();
           _artworkTask = runtime->spawnCancellable(
             [statePtr, runtime, resourceId, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
-            { return prepareAndWriteArtwork(statePtr, runtime, resourceId, std::move(bytes), stopToken); });
+            { return prepareAndWriteArtwork(statePtr, runtime, resourceId, std::move(bytes), stopToken); },
+            "Windows SMTC cover-art stream preparation");
         }
       });
   }
@@ -233,16 +232,8 @@ namespace ao::winui
   {
     auto prepared = PreparedMemoryRandomAccessStream{};
 
-    try
-    {
-      co_await runtime->resumeOnWorker(stopToken);
-      prepared = prepareMemoryRandomAccessStream(bytes.view());
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "Windows SMTC cover-art stream preparation");
-    }
+    co_await runtime->resumeOnWorker(stopToken);
+    prepared = prepareMemoryRandomAccessStream(bytes.view());
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
 

@@ -8,6 +8,8 @@
 #include <ao/library/ListView.h>
 
 #include <cstddef>
+#include <span>
+#include <string>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
@@ -50,15 +52,39 @@ namespace ao::library
     ListBuilder& filter(std::string_view filter);
     ListBuilder& parentId(ListId parentId);
 
-    // Serialization validates every field and every derived extent.
+    /** Immutable, canonically validated bytes for one List Store write. */
+    class Prepared final
+    {
+    public:
+      std::size_t size() const noexcept { return _bytes.size(); }
+      std::span<std::byte const> bytes() const noexcept { return _bytes; }
+      void writeTo(std::span<std::byte> out) const noexcept;
+
+    private:
+      explicit Prepared(std::vector<std::byte> bytes);
+
+      std::vector<std::byte> _bytes;
+
+      friend class ListBuilder;
+    };
+
+    // Preparation validates every field, every derived extent, and the final
+    // canonical record.
+    Result<Prepared> prepare() const;
+
+    // Standalone serialization follows the same canonical preparation path.
+    // Corruption diagnostics mutate the returned bytes explicitly; production
+    // Store writers accept Prepared only.
     Result<std::vector<std::byte>> serialize() const;
 
   private:
     explicit ListBuilder() = default;
 
-    std::string_view _name;
-    std::string_view _description;
-    std::string_view _filter;
+    Result<std::vector<std::byte>> serializeCandidate() const;
+
+    std::string _name;
+    std::string _description;
+    std::string _filter;
     ListId _parentId = kInvalidListId;
 
     OrderTrackIdsBuilder _orderTrackIdsBuilder;

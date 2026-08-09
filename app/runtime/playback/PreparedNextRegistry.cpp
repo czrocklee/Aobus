@@ -4,10 +4,9 @@
 #include "runtime/playback/PreparedNextRegistry.h"
 
 #include "runtime/playback/ProjectionAnchor.h"
+#include <ao/Contract.h>
 #include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/projection/TrackListProjection.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -19,8 +18,8 @@ namespace ao::rt
 {
   void PreparedNextRegistry::activate(PreparedNextToken const token, ProjectionAnchor anchor)
   {
-    gsl_Expects(token.value != 0 && "Prepared-next commitment requires a valid token");
-    gsl_Expects(!contains(token) && "Prepared-next token is already registered");
+    AO_EXPECTS(token.value != 0, "Prepared-next commitment requires a valid token");
+    AO_EXPECTS(!contains(token), "Prepared-next token is already registered");
 
     retireActive();
     _optActive.emplace(Commitment{.token = token, .anchor = std::move(anchor)});
@@ -64,7 +63,7 @@ namespace ao::rt
       return;
     }
 
-    gsl_Expects(resolveIndex && "Prepared-next registry requires a projection index resolver");
+    AO_EXPECTS(resolveIndex, "Prepared-next registry requires a projection index resolver");
 
     auto const apply = [&](Commitment& commitment)
     { commitment.anchor.applyBatch(batch, projectionSize, resolveIndex(commitment.anchor.trackId())); };

@@ -5,7 +5,6 @@
 
 #include "platform/StringResources.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/utility/Path.h>
 #include <ao/winui/Theme.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -43,26 +42,19 @@ namespace ao::winui
       return std::unexpected{bufferRes.error()};
     }
 
-    try
-    {
-      auto errorState = yaml::ErrorCallbackState{utility::pathToUtf8(_themePath)};
-      auto tree = ryml::Tree{yaml::callbacks(errorState)};
-      yaml::parseInPlace(tree, *bufferRes, errorState);
+    auto errorState = yaml::ErrorCallbackState{utility::pathToUtf8(_themePath)};
+    auto tree = ryml::Tree{yaml::callbacks()};
 
-      if (auto const reloadedRes = _session.reload(tree.rootref()); !reloadedRes)
-      {
-        return std::unexpected{reloadedRes.error()};
-      }
+    if (auto const parsedRes = yaml::parseInPlace(tree, *bufferRes, errorState); !parsedRes)
+    {
+      return makeError(Error::Code::FormatRejected, formatResource("ThemeLoadFailedFormat", parsedRes.error().message));
+    }
 
-      return _session.theme();
-    }
-    catch (ao::Exception const& error)
+    if (auto const reloadedRes = _session.reload(tree.rootref()); !reloadedRes)
     {
-      return makeError(Error::Code::FormatRejected, error.what());
+      return std::unexpected{reloadedRes.error()};
     }
-    catch (std::exception const& error)
-    {
-      return makeError(Error::Code::FormatRejected, formatResource("ThemeLoadFailedFormat", error.what()));
-    }
+
+    return _session.theme();
   }
 } // namespace ao::winui

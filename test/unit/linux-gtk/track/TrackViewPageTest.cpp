@@ -17,10 +17,12 @@
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -48,6 +50,7 @@
 #include <cstdint>
 #include <format>
 #include <memory>
+#include <ranges>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -58,42 +61,47 @@ namespace ao::gtk::test
   {
     TrackId addAlbumTrack(library::MusicLibrary& library, std::string const& album)
     {
-      return library::test::addTrack(library,
-                                     library::test::TrackSpec{.title = "Track",
-                                                              .artist = "Artist",
-                                                              .album = album,
-                                                              .albumArtist = "Album Artist",
-                                                              .uri = "track.flac",
-                                                              .year = 2023,
-                                                              .trackNumber = 1,
-                                                              .duration = std::chrono::minutes{3}});
+      return library::test::addTrackWithUniqueFixtureUri(library,
+                                                         library::test::TrackSpec{.title = "Track",
+                                                                                  .artist = "Artist",
+                                                                                  .album = album,
+                                                                                  .albumArtist = "Album Artist",
+                                                                                  .uri = "track.flac",
+                                                                                  .year = 2023,
+                                                                                  .trackNumber = 1,
+                                                                                  .duration = std::chrono::minutes{3}});
     }
 
     std::vector<TrackId> seedLargeProjection(library::MusicLibrary& library, std::size_t count)
     {
       auto transaction = library::test::writeTransaction(library);
-      auto writer = library.tracks().writer(transaction);
       auto trackIds = std::vector<TrackId>{};
       trackIds.reserve(count);
 
-      for (std::size_t index = 0; index < count; ++index)
-      {
-        auto builder = library::TrackBuilder::makeEmpty();
-        auto const spec = library::test::TrackSpec{
-          .title = std::format("Track {:05}", index),
-          .artist = std::format("Artist {:03}", index % 100),
-          .album = std::format("Album {:04}", index % 1000),
-          .albumArtist = std::format("Album Artist {:03}", index % 100),
-          .uri = std::format("music/track_{}.flac", index),
-          .duration = std::chrono::minutes{3},
-        };
-        library::test::applyTrackSpec(builder, spec);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
 
-        auto preparedRes = builder.prepare(transaction, library.resources());
-        REQUIRE(preparedRes);
-        trackIds.push_back(
-          ao::test::requireValue(library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second)));
-      }
+          for (std::size_t const index : std::views::iota(std::size_t{0}, count))
+          {
+            auto builder = library::TrackBuilder::makeEmpty();
+            auto const spec = library::test::TrackSpec{
+              .title = std::format("Track {:05}", index),
+              .artist = std::format("Artist {:03}", index % 100),
+              .album = std::format("Album {:04}", index % 1000),
+              .albumArtist = std::format("Album Artist {:03}", index % 100),
+              .uri = std::format("music/track_{}.flac", index),
+              .duration = std::chrono::minutes{3},
+            };
+            library::test::applyTrackSpec(builder, spec);
+
+            trackIds.push_back(
+              ao::test::requireValue(writer.create(builder, library::FileManifestBuilder::makeEmpty())));
+          }
+
+          return {};
+        }));
 
       REQUIRE(transaction.commit());
       return trackIds;
@@ -306,6 +314,16 @@ namespace ao::gtk::test
     REQUIRE(runtime.views().setFilter(viewId, "true"));
     page.applyPresentation(manual->spec);
     CHECK_FALSE(page.hasOrderDragHandle());
+
+    REQUIRE(runtime.views().setFilter(viewId, ""));
+    page.refreshOrderCapabilities();
+    CHECK(page.hasOrderDragHandle());
+
+    REQUIRE(runtime.views().setFilter(viewId, "("));
+    page.refreshOrderCapabilities();
+    CHECK_FALSE(page.hasOrderDragHandle());
+    CHECK(page.orderCapabilities().disabledReason ==
+          "Fix the List or quick-filter expression before changing its order.");
   }
 
   TEST_CASE("TrackViewPage - stale inline metadata keeps the row value and shows status",
@@ -313,8 +331,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
-                                     { trackId = library::test::addTrack(musicLibrary, {.title = "Before"}); }};
+    auto fixture =
+      GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                        { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Before"}); }};
     auto& runtime = fixture.runtime();
     auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
     sourcePtr->addInitial(trackId);

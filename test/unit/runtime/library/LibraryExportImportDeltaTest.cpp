@@ -13,7 +13,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
-#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
@@ -46,11 +45,12 @@ namespace ao::rt::test
   {
     ryml::Tree loadTree(std::filesystem::path const& path, std::vector<char>& buffer)
     {
-      buffer = yaml::readFile(path);
+      auto bufferRes = yaml::readFileResult(path);
+      REQUIRE(bufferRes);
+      buffer = std::move(*bufferRes);
       auto state = yaml::ErrorCallbackState{path.string()};
-      auto tree = ryml::Tree{yaml::callbacks(state)};
-      yaml::parseInPlace(tree, buffer, state);
-      tree.callbacks(yaml::callbacks());
+      auto tree = ryml::Tree{yaml::callbacks()};
+      REQUIRE(yaml::parseInPlace(tree, buffer, state));
       return tree;
     }
 
@@ -84,25 +84,26 @@ namespace ao::rt::test
     auto coverResourceId = kInvalidResourceId;
     {
       auto transaction = library::test::writeTransaction(ml);
-      auto result = ml.resources().writer(transaction).create(std::vector{std::byte{1}, std::byte{2}, std::byte{3}});
+      auto result = library::test::physicalWriter(ml.resources(), transaction)
+                      .create(std::vector{std::byte{1}, std::byte{2}, std::byte{3}});
       REQUIRE(result);
       coverResourceId = *result;
       REQUIRE(transaction.commit());
     }
-    library::test::addTrack(ml,
-                            library::test::TrackSpec{.title = "Should Export Fully",
-                                                     .artist = "",
-                                                     .album = "",
-                                                     .uri = "no-file.flac",
-                                                     .year = 0,
-                                                     .discNumber = 0,
-                                                     .trackNumber = 0,
-                                                     .duration = std::chrono::milliseconds{0},
-                                                     .bitrate = Bitrate{},
-                                                     .sampleRate = SampleRate{},
-                                                     .channels = Channels{},
-                                                     .bitDepth = BitDepth{}});
-    library::test::addTrack(
+    library::test::addTrackWithUniqueFixtureUri(ml,
+                                                library::test::TrackSpec{.title = "Should Export Fully",
+                                                                         .artist = "",
+                                                                         .album = "",
+                                                                         .uri = "no-file.flac",
+                                                                         .year = 0,
+                                                                         .discNumber = 0,
+                                                                         .trackNumber = 0,
+                                                                         .duration = std::chrono::milliseconds{0},
+                                                                         .bitrate = Bitrate{},
+                                                                         .sampleRate = SampleRate{},
+                                                                         .channels = Channels{},
+                                                                         .bitDepth = BitDepth{}});
+    library::test::addTrackWithUniqueFixtureUri(
       ml,
       library::test::TrackSpec{.title = "Will fallback to full export because media file read fails",
                                .artist = "",
@@ -116,33 +117,33 @@ namespace ao::rt::test
                                .sampleRate = SampleRate{},
                                .channels = Channels{},
                                .bitDepth = BitDepth{}});
-    library::test::addTrack(ml,
-                            library::test::TrackSpec{.title = "Different Title",
-                                                     .artist = "",
-                                                     .album = "",
-                                                     .uri = "cover.flac",
-                                                     .coverArtId = coverResourceId,
-                                                     .year = 0,
-                                                     .discNumber = 0,
-                                                     .trackNumber = 0,
-                                                     .duration = std::chrono::milliseconds{0},
-                                                     .bitrate = Bitrate{},
-                                                     .sampleRate = SampleRate{},
-                                                     .channels = Channels{},
-                                                     .bitDepth = BitDepth{}});
-    library::test::addTrack(ml,
-                            library::test::TrackSpec{.title = "",
-                                                     .artist = "",
-                                                     .album = "",
-                                                     .uri = "cover-removed.flac",
-                                                     .year = 0,
-                                                     .discNumber = 0,
-                                                     .trackNumber = 0,
-                                                     .duration = std::chrono::milliseconds{0},
-                                                     .bitrate = Bitrate{},
-                                                     .sampleRate = SampleRate{},
-                                                     .channels = Channels{},
-                                                     .bitDepth = BitDepth{}});
+    library::test::addTrackWithUniqueFixtureUri(ml,
+                                                library::test::TrackSpec{.title = "Different Title",
+                                                                         .artist = "",
+                                                                         .album = "",
+                                                                         .uri = "cover.flac",
+                                                                         .coverArtId = coverResourceId,
+                                                                         .year = 0,
+                                                                         .discNumber = 0,
+                                                                         .trackNumber = 0,
+                                                                         .duration = std::chrono::milliseconds{0},
+                                                                         .bitrate = Bitrate{},
+                                                                         .sampleRate = SampleRate{},
+                                                                         .channels = Channels{},
+                                                                         .bitDepth = BitDepth{}});
+    library::test::addTrackWithUniqueFixtureUri(ml,
+                                                library::test::TrackSpec{.title = "",
+                                                                         .artist = "",
+                                                                         .album = "",
+                                                                         .uri = "cover-removed.flac",
+                                                                         .year = 0,
+                                                                         .discNumber = 0,
+                                                                         .trackNumber = 0,
+                                                                         .duration = std::chrono::milliseconds{0},
+                                                                         .bitrate = Bitrate{},
+                                                                         .sampleRate = SampleRate{},
+                                                                         .channels = Channels{},
+                                                                         .bitDepth = BitDepth{}});
 
     std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "with_cover.flac",
                                std::filesystem::path{temp.path()} / "cover.flac");
@@ -183,19 +184,19 @@ namespace ao::rt::test
     std::ofstream{blockedFile} << "content";
 
     {
-      library::test::addTrack(ml,
-                              library::test::TrackSpec{.title = "Cannot inspect baseline",
-                                                       .artist = "",
-                                                       .album = "",
-                                                       .uri = "blocked/song.flac",
-                                                       .year = 0,
-                                                       .discNumber = 0,
-                                                       .trackNumber = 0,
-                                                       .duration = std::chrono::milliseconds{0},
-                                                       .bitrate = Bitrate{},
-                                                       .sampleRate = SampleRate{},
-                                                       .channels = Channels{},
-                                                       .bitDepth = BitDepth{}});
+      library::test::addTrackWithUniqueFixtureUri(ml,
+                                                  library::test::TrackSpec{.title = "Cannot inspect baseline",
+                                                                           .artist = "",
+                                                                           .album = "",
+                                                                           .uri = "blocked/song.flac",
+                                                                           .year = 0,
+                                                                           .discNumber = 0,
+                                                                           .trackNumber = 0,
+                                                                           .duration = std::chrono::milliseconds{0},
+                                                                           .bitrate = Bitrate{},
+                                                                           .sampleRate = SampleRate{},
+                                                                           .channels = Channels{},
+                                                                           .bitDepth = BitDepth{}});
     }
 
     auto const denied = ao::test::ScopedDirectoryAccessGuard{blockedDir, ao::test::DeniedDirectoryAccess::Read};
@@ -253,15 +254,8 @@ namespace ao::rt::test
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto const existingId = library::test::addTrack(
+    auto const existingId = library::test::addTrackWithUniqueFixtureUri(
       ml, library::test::TrackSpec{.title = "Before", .artist = "", .album = "", .uri = "existing.flac"});
-    {
-      auto transaction = library::test::writeTransaction(ml);
-      auto builder = FileManifestBuilder::makeEmpty();
-      builder.trackId(existingId);
-      REQUIRE(ml.manifest().writer(transaction).put("existing.flac", builder.serialize()));
-      REQUIRE(transaction.commit());
-    }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
     {

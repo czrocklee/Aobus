@@ -48,12 +48,11 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryException - exposes its Error through what() and location()", "[library][unit][error]")
+  TEST_CASE("LibraryException - exposes its Error through what()", "[library][unit][error]")
   {
     auto const ex = detail::LibraryException{Error::Code::ResourceExhausted, "store full"};
 
     CHECK(ex.error().code == Error::Code::ResourceExhausted);
     CHECK(std::string_view{ex.what()} == "store full");
-    CHECK(ex.location().line() == ex.error().location.line());
   }
 } // namespace ao::library::test

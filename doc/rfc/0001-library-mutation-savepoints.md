@@ -14,7 +14,7 @@ The current [library architecture](../architecture/library.md), [outcome channel
 `WriteTransaction::apply()` accepts a `Result<T>`-returning body, aborts the complete root on an error or private native transaction marker, and aborts before rethrowing an unrelated exception.
 `LibraryMutationService::Mutation::apply()` additionally releases live writer admission, and offline scan/import owners use the same core boundary.
 No runtime writer, task, scan, or importer catches `lmdb::detail::TransactionFailure`.
-Root construction is deliberately outside that recoverable operation channel: native begin and the one revision initialization occur before the wrapper is exposed, and failure unwinds writer ownership before propagating as the library's general storage exception.
+Root construction is deliberately outside that recoverable operation channel: native begin and candidate-revision construction occur before the wrapper is exposed, and failure unwinds writer ownership before aborting through the fatal facility.
 
 That baseline makes whole-root commands safe and gives their callers one recoverable channel:
 
@@ -83,8 +83,8 @@ The target contract separates observable outcomes from private unwinding mechani
 | Recoverable command, parse, media, validation, storage, or commit failure | `Result<T>` | Public |
 | Recoverable failure inside a savepoint | `Result<T>` returned to the savepoint owner | Internal operation API |
 | Native mutation fault that still uses an exception internally | Exact private catch by the active transaction owner, followed by rollback and `Result` translation | LMDB/library implementation only |
-| Root construction or revision-initialization failure | General storage exception after writer-ownership unwind | Library infrastructure boundary |
-| Broken invariant or unexpected fault | `ao::Exception`, another exact exception, or contract failure | Propagates to the established invariant boundary |
+| Root construction or revision-initialization failure | AO fatal handling after writer-ownership unwind | Library infrastructure boundary |
+| Broken invariant or unexpected fault | AO contract or unchanged foreign exception transport | Reaches the established owning fatal boundary |
 | Failure after durable root commit in mandatory revision or publication infrastructure | Terminal infrastructure handling | Runtime implementation only |
 
 A function declared to return `Result<T>` must not let an exception carrying an ordinary recoverable `Error` cross its declared subsystem boundary.
@@ -97,7 +97,7 @@ Its current uses are reclassified by origin:
 - A recoverable mutation rejection returns `Result` through a root or child execution boundary that has already rolled back the affected transaction.
 - A canonical postcondition that is impossible after successful preflight and prepared-value construction is an invariant fault.
 - Safely detected persisted corruption before library exposure retains the open-level `CorruptData` policy.
-  After that gate establishes an iterable store invariant, a later row-integrity breach is a general infrastructure exception rather than a recoverable private carrier; runtime and CLI code name neither private type.
+  After that gate establishes a Store invariant, a later row-integrity breach aborts through `AO_INVARIANT` rather than becoming a recoverable private carrier; runtime and CLI code name neither private type.
 
 `lmdb::detail::TransactionFailure` currently remains inside the independent LMDB and library adapters because a native mutation can fail through an interface that cannot safely return into its active transaction.
 The implemented root execution owner catches it, aborts the root, and returns the carried `Error`; no runtime writer, task, scan, or importer catches that type.
@@ -333,8 +333,8 @@ The callback API limits the normal lifetime of child writers to the callback bod
 Debug contracts and unit tests additionally reject deliberately retained wrappers.
 The implementation may recreate a cursor lazily instead of renewing it, but it cannot silently reuse a cached append maximum or cursor position from an earlier leaf epoch.
 
-The root metadata revision bump occurs exactly once when the root transaction begins.
-Child begin does not acquire the writer gate again, acquire another process lease, or bump the revision.
+The root candidate revision is computed exactly once when the root transaction begins and is persisted only immediately before the outer native commit.
+Child begin does not acquire the writer gate again, acquire another process lease, or create another candidate revision.
 The root's lease anchor remains alive until every child and the root are terminal.
 
 ### Result-oriented mutation bodies

@@ -283,8 +283,8 @@ namespace ao::winui
     try
     {
       _projectionPtr = std::move(binding.projectionPtr);
-      _subscription = _projectionPtr->subscribe([this](rt::TrackDetailSnapshot const& snapshot) noexcept
-                                                { handleSnapshot(snapshot); });
+      _subscription =
+        _projectionPtr->subscribe([this](rt::TrackDetailSnapshot const& snapshot) { handleSnapshot(snapshot); });
     }
     catch (...)
     {

@@ -75,7 +75,7 @@ namespace ao::gtk::test
     auto fixture =
       GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
                         {
-                          trackId = library::test::addTrack(
+                          trackId = library::test::addTrackWithUniqueFixtureUri(
                             musicLibrary,
                             library::test::TrackSpec{
                               .title = "Test Title", .artist = "Test Artist", .duration = std::chrono::minutes{2}});

@@ -32,9 +32,9 @@ namespace ao::tui::test
     struct ControllerPlayback final
     {
       explicit ControllerPlayback(rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>& fixture)
-        : changes{fixture.executor, 0}
+        : changes{fixture.executor, 0, "test-library"}
         , sources{fixture.libraryFixture.library(), changes}
-        , views{fixture.executor, fixture.libraryFixture.library(), sources}
+        , views{fixture.executor, fixture.libraryFixture.library(), sources, changes}
         , succession{fixture.executor,
                      views,
                      sources,

@@ -208,6 +208,12 @@ Replacement and cancellation follow proof rather than timing assumptions:
 - an exact active or retired winner supplies its maintained anchor and closes the whole competing-token window;
 - an unknown non-null token is stale and must not be reclassified as an explicit start.
 
+PlaybackSuccession is the production owner of preparation and clears or
+invalidates its active commitment before arming a replacement. The synchronous
+`PlaybackTransport` preparation seam remains private to runtime-focused tests
+and the callback-executor domain; invoking it while an active token remains is
+a caller precondition violation, not a recoverable transport state conflict.
+
 An explicit start has no prepared token.
 While Live, it anchors by current projection identity or by the clamped preceding gap.
 While Invalidated, it may update only the current subject and leaves the frozen anchor non-authoritative.
@@ -228,7 +234,9 @@ An actual mode change invalidates or replaces the sticky/prepared forward candid
 ## Failure and cancellation
 
 Launch failures are atomic before acceptance as described above.
-Expected missing view, source, projected start, invalid filter, missing library record, and audio preparation errors return recoverable failures.
+Expected missing view, source, projected start, invalid transient filter, inherited stored source-expression error, missing library record, and audio preparation errors return recoverable failures.
+A stored source-expression error retains its contextual `FormatRejected` diagnostic rather than being collapsed into an empty-source `NotFound` result.
+The same rule applies to fresh launch and persisted-session restoration; restore does not install an empty projection as a successful cursor.
 
 Navigation and recoverable current-track open/decode failure walk candidates in the requested direction against the latest live projection.
 Each candidate is resolved immediately before its attempt.
@@ -285,7 +293,9 @@ Observers are observational and do not choose succession policy.
 - [`ProjectionAnchorTest.cpp`](../../../test/unit/runtime/playback/ProjectionAnchorTest.cpp) proves insertion/removal boundaries, move reconciliation, reset, empty gaps, and range invariants.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.
+- [`PlaybackTransportTokenTest.cpp`](../../../test/unit/runtime/PlaybackTransportTokenTest.cpp) protects the runtime-private synchronous token seam, while the `duplicate-prepared-next` scenario in `ao_fatal_probe` under [`test/fatal/`](../../../test/fatal/) proves uncleared replacement aborts as a caller precondition.
 - [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, replacement and owner-destruction cancellation after callback queueing, synchronous reentrancy, pause/resume/seek control, session replacement, and shutdown.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) proves persisted session behavior and that a contextual invalid stored source expression rejects cursor construction before playback.
 - [`PlaybackSuccessionLaunchTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp) proves launch atomicity and detached view context; [`PlaybackSuccessionProjectionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionProjectionTest.cpp) proves live membership and repeat behavior; [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp) proves prepared transitions; [`PlaybackSuccessionFailureTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp) proves failure walking and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects public reentrancy ordering and projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 

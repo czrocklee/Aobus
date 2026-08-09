@@ -4,6 +4,7 @@
 #include "TrackSession.h"
 
 #include "DecoderError.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/DecoderSession.h>
@@ -13,8 +14,6 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/StreamingSource.h>
 #include <ao/utility/StrongTypeFormatter.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <chrono>
 #include <expected>
@@ -139,7 +138,7 @@ namespace ao::audio::detail
 
   Result<TrackSession::OpenedTrack> TrackSession::activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError)
   {
-    gsl_Assert(preparedTrack.sourcePtr && "Prepared track has no streaming source");
+    AO_INVARIANT(preparedTrack.sourcePtr, "Prepared track has no streaming source");
 
     if (auto activatedRes = preparedTrack.sourcePtr->activate(std::move(onSourceError)); !activatedRes)
     {

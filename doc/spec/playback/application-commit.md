@@ -172,9 +172,9 @@ nothing. Restore never advances `PlaybackFinalSeekRevision`.
 
 ## Observation
 
-Snapshot observers are `noexcept` (see [signal delivery](../async/signal.md)),
+Snapshot observers are ordinary callables behind the owning signal boundary (see [signal delivery](../async/signal.md)),
 so contract-fulfilling observers run synchronously in connection order.
-An escaping exception terminates at the callback boundary and provides no later-observer guarantee.
+An escaping exception enters AO fatal handling at that boundary and provides no later-observer guarantee.
 Observer-issued commands join the queue.
 
 Seek previews carry only their elapsed position and do not alter the snapshot.

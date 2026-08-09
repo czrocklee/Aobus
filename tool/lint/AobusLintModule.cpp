@@ -7,6 +7,7 @@
 #include "check/ChronoNamingConventionCheck.h"
 #include "check/ConcreteFinalCheck.h"
 #include "check/ControlBlockSpacingCheck.h"
+#include "check/ForbidRawFatalCheck.h"
 #include "check/ForbidRawThrowCheck.h"
 #include "check/ForbidTrailingReturnCheck.h"
 #include "check/HeaderFunctionDefinitionCheck.h"
@@ -60,6 +61,7 @@ namespace clang::tidy::readability
         checkFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
         checkFactories.registerCheck<modernize::NodiscardUsageCheck>("aobus-modernize-nodiscard-usage");
         checkFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
+        checkFactories.registerCheck<ForbidRawFatalCheck>("aobus-readability-forbid-raw-fatal");
         checkFactories.registerCheck<ForbidRawThrowCheck>("aobus-readability-forbid-raw-throw");
         checkFactories.registerCheck<HeaderFunctionDefinitionCheck>("aobus-readability-header-function-definition");
         checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");

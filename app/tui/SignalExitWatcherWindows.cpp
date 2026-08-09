@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "SignalExitWatcher.h"
+#include <ao/Contract.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -12,6 +13,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -42,11 +44,9 @@ namespace ao::tui
             (*callbackPtr)();
           }
         }
-        // NOLINTNEXTLINE(bugprone-empty-catch): Console-control callbacks cannot propagate exceptions.
         catch (...)
         {
-          // Console shutdown callbacks are best effort and may not unwind
-          // through the Windows console-control dispatcher.
+          AO_FATAL_EXCEPTION(std::current_exception(), "Windows console-exit callback");
         }
       }
 

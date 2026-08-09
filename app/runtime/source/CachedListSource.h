@@ -21,8 +21,11 @@ namespace ao::rt
   class TrackSourceCache;
   class ListOrderSource;
 
+  std::optional<Error> trackSourceError(TrackSource const& source);
+
   struct CachedListSourceDefinition final
   {
+    ListId listId = kInvalidListId;
     ListId parentId = kInvalidListId;
     std::string expression{};
     std::vector<TrackId> orderTrackIds{};
@@ -42,7 +45,7 @@ namespace ao::rt
     CachedListSource& operator=(CachedListSource&&) = delete;
 
     CachedListSourceDefinition const& definition() const noexcept { return _definition; }
-    std::optional<Error> filterError() const;
+    std::optional<Error> sourceError() const;
 
     void rebind(CachedListSourceDefinition definition, std::unique_ptr<ListOrderSource> implementationPtr);
     bool trySynchronizeOrderDefinition(CachedListSourceDefinition const& definition);

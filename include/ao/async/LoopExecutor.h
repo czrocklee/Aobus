@@ -5,15 +5,14 @@
 
 #include "QueuedExecutorBase.h"
 
-#include <functional>
 #include <semaphore>
 
 namespace ao::async
 {
   // Runs queued callback turns on the thread that constructs and drives it.
   // Foreign producers only enqueue and signal; they never execute callbacks.
-  // Callback exceptions propagate to the driver; unexecuted callbacks remain
-  // ready for a later turn.
+  // The QueuedExecutorBase owner completes queue bookkeeping and enters the AO
+  // fatal backend if a callback exception escapes.
   class LoopExecutor final : public QueuedExecutorBase
   {
   public:
@@ -33,7 +32,6 @@ namespace ao::async
 
   private:
     void wake() noexcept override;
-    void executeTask(std::move_only_function<void()>& task) override;
 
     std::binary_semaphore _wakeSignal{0};
   };

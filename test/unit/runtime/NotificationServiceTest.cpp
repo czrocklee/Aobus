@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/NotificationService.h>
+
 #include "test/unit/runtime/ExecutorTestSupport.h"
-#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Signal.h>
 #include <ao/rt/NotificationIds.h>
-#include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,7 +16,6 @@
 #include <memory>
 #include <string>
 #include <type_traits>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -26,9 +25,8 @@ namespace ao::rt::test
   {
     struct NotificationServiceFixture final
     {
-      explicit NotificationServiceFixture(async::AsyncExceptionHandler exceptionHandler = {},
-                                          NotificationFeedLimits limits = {})
-        : runtime{executor, 1, std::move(exceptionHandler)}, service{runtime, limits}
+      explicit NotificationServiceFixture(NotificationFeedLimits limits = {})
+        : runtime{executor, 1}, service{runtime, limits}
       {
       }
 
@@ -88,7 +86,7 @@ namespace ao::rt::test
   {
     auto limits = NotificationFeedLimits{};
     limits.maxTextBytes = 32;
-    auto fixture = NotificationServiceFixture{{}, limits};
+    auto fixture = NotificationServiceFixture{limits};
     auto& service = fixture.service;
     std::int32_t updateCount = 0;
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++updateCount; });
@@ -116,7 +114,7 @@ namespace ao::rt::test
   {
     auto limits = NotificationFeedLimits{};
     limits.maxTextBytes = 32;
-    auto fixture = NotificationServiceFixture{{}, limits};
+    auto fixture = NotificationServiceFixture{limits};
     auto& service = fixture.service;
     std::int32_t updateCount = 0;
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++updateCount; });
@@ -165,7 +163,7 @@ namespace ao::rt::test
   {
     auto limits = NotificationFeedLimits{};
     limits.maxEntries = 3;
-    auto fixture = NotificationServiceFixture{{}, limits};
+    auto fixture = NotificationServiceFixture{limits};
     auto& service = fixture.service;
     auto updates = std::vector<NotificationFeedUpdate>{};
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); });
@@ -239,13 +237,12 @@ namespace ao::rt::test
             "[runtime][regression][notification][concurrency]")
   {
     // The feed cannot act on an observer failure: publication is already
-    // committed. Observers are therefore noexcept; a handler that cannot
-    // degrade locally terminates at the throw point, with no later-observer
-    // guarantee.
-    STATIC_REQUIRE(std::is_nothrow_invocable_v<async::Signal<NotificationFeedUpdate const&>::Handler,
-                                               NotificationFeedUpdate const&>);
-    STATIC_REQUIRE_FALSE(std::is_constructible_v<async::Signal<NotificationFeedUpdate const&>::Handler,
-                                                 decltype([](NotificationFeedUpdate const&) {})>);
+    // committed. The owning Signal emission boundary accepts ordinary handlers
+    // so it can diagnose an escaping exception before aborting.
+    STATIC_REQUIRE_FALSE(std::is_nothrow_invocable_v<async::Signal<NotificationFeedUpdate const&>::Handler,
+                                                     NotificationFeedUpdate const&>);
+    STATIC_REQUIRE(std::is_constructible_v<async::Signal<NotificationFeedUpdate const&>::Handler,
+                                           decltype([](NotificationFeedUpdate const&) {})>);
 
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;

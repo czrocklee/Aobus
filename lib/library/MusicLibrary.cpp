@@ -5,24 +5,30 @@
 
 #include "FileManifestValidation.h"
 #include "LibraryIdentity.h"
+#include "ListRecordValidation.h"
+#include "MetadataState.h"
+#include "MetadataStore.h"
+#include "OpenValidationMetrics.h"
 #include "TrackRecordValidation.h"
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileManifestView.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 
 #include <algorithm>
 #include <array>
@@ -33,12 +39,18 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <functional>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <random>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace ao::library
 {
@@ -89,45 +101,278 @@ namespace ao::library
                             .libraryId = *libraryIdRes};
     }
 
-    Result<> validateMetadataHeader(MetadataHeader const& header)
+    constexpr auto kCurrentDatabaseNames = std::to_array<std::string_view>(
+      {"meta", "tracks_hot", "tracks_cold", "lists", "resources", "dictionary", "file_manifest"});
+
+    struct MetadataPrefix final
     {
-      if (header.magic != kMetadataMagic)
-      {
-        return makeError(
-          Error::Code::CorruptData,
-          std::format("Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", header.magic, kMetadataMagic));
-      }
+      std::uint32_t magic = 0;
+      std::uint32_t libraryVersion = 0;
+    };
 
-      if (header.libraryVersion != kLibraryVersion)
-      {
-        return makeError(
-          Error::Code::CorruptData,
-          std::format("Unsupported library version {} (current {})", header.libraryVersion, kLibraryVersion));
-      }
+    static_assert(sizeof(MetadataPrefix) == 8);
 
-      return {};
-    }
+    struct SchemaDatabases final
+    {
+      lmdb::Database metadata;
+      lmdb::Database tracksHot;
+      lmdb::Database tracksCold;
+      lmdb::Database lists;
+      lmdb::Database resources;
+      lmdb::Database dictionary;
+      lmdb::Database manifest;
+    };
 
-    Result<MetadataHeader> loadMetadataHeader(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    Result<std::span<std::byte const>> loadMetadataHeaderBytes(lmdb::Database const& database,
+                                                               lmdb::ReadTransaction const& transaction)
     {
       auto const optBytes = database.reader(transaction).get(kMetadataHeaderRecordId);
 
       if (!optBytes)
       {
-        return makeError(Error::Code::NotFound, "Library metadata header was not found");
+        return makeError(Error::Code::CorruptData, "Library metadata header was not found");
       }
 
-      if (optBytes->size() != sizeof(MetadataHeader))
+      return *optBytes;
+    }
+
+    Result<MetadataPrefix> validateMetadataPrefix(std::span<std::byte const> const bytes)
+    {
+      if (bytes.size() < sizeof(MetadataPrefix))
       {
         return makeError(
           Error::Code::CorruptData,
-          std::format(
-            "Invalid library metadata header size {} (expected {})", optBytes->size(), sizeof(MetadataHeader)));
+          std::format("Library metadata header is shorter than the stable {}-byte prefix", sizeof(MetadataPrefix)));
+      }
+
+      auto prefix = MetadataPrefix{};
+      std::memcpy(&prefix, bytes.data(), sizeof(prefix));
+
+      if (prefix.magic != kMetadataMagic)
+      {
+        return makeError(
+          Error::Code::CorruptData,
+          std::format("Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", prefix.magic, kMetadataMagic));
+      }
+
+      return prefix;
+    }
+
+    Result<MetadataHeader> validateCurrentMetadataHeader(std::span<std::byte const> const bytes)
+    {
+      if (bytes.size() != sizeof(MetadataHeader))
+      {
+        return makeError(
+          Error::Code::CorruptData,
+          std::format("Invalid library metadata header size {} (expected {})", bytes.size(), sizeof(MetadataHeader)));
       }
 
       auto header = MetadataHeader{};
-      std::memcpy(&header, optBytes->data(), sizeof(header));
+      std::memcpy(&header, bytes.data(), sizeof(header));
+
+      if (header.flags != 0)
+      {
+        return makeError(Error::Code::CorruptData,
+                         std::format("Library metadata header has unsupported flags 0x{:08x}", header.flags));
+      }
+
       return header;
+    }
+
+    bool catalogKeyEquals(lmdb::Database::Reader::KeyView const key, std::string_view const expected) noexcept
+    {
+      return key.size() == expected.size() && std::ranges::equal(key, std::as_bytes(std::span{expected}));
+    }
+
+    bool catalogIsEmpty(lmdb::Database const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    {
+      return mainDatabase.reader(transaction).entryCount() == 0;
+    }
+
+    Result<> requireMetadataCatalogEntry(lmdb::Database const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    {
+      for (auto const& [key, value] : mainDatabase.reader(transaction))
+      {
+        std::ignore = value;
+
+        if (catalogKeyEquals(key, "meta"))
+        {
+          return {};
+        }
+      }
+
+      return makeError(Error::Code::CorruptData, "Nonempty library environment has no meta database");
+    }
+
+    Result<> validateCurrentCatalog(lmdb::Database const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    {
+      auto seen = std::array<bool, kCurrentDatabaseNames.size()>{};
+      std::size_t count = 0;
+
+      for (auto const& [key, value] : mainDatabase.reader(transaction))
+      {
+        std::ignore = value;
+        ++count;
+        bool matched = false;
+
+        for (std::size_t index = 0; index < kCurrentDatabaseNames.size(); ++index)
+        {
+          if (catalogKeyEquals(key, kCurrentDatabaseNames[index]))
+          {
+            seen[index] = true;
+            matched = true;
+            break;
+          }
+        }
+
+        if (!matched)
+        {
+          return makeError(Error::Code::CorruptData, "Library main catalog contains an unknown entry");
+        }
+      }
+
+      if (count != kCurrentDatabaseNames.size() || !std::ranges::all_of(seen, std::identity{}))
+      {
+        return makeError(Error::Code::CorruptData, "Library main catalog does not contain the exact current schema");
+      }
+
+      return {};
+    }
+
+    Result<SchemaDatabases> openSchema(lmdb::WriteTransaction& transaction, bool const create)
+    {
+      auto open = [&transaction, create](
+                    std::string const& name, lmdb::Database::KeyKind const kind) -> Result<lmdb::Database>
+      {
+        return create ? lmdb::Database::open(transaction, name, kind)
+                      : lmdb::Database::openExisting(transaction, name, kind);
+      };
+
+      auto metadataRes = open("meta", lmdb::Database::KeyKind::Integer);
+      auto tracksHotRes = open("tracks_hot", lmdb::Database::KeyKind::Integer);
+      auto tracksColdRes = open("tracks_cold", lmdb::Database::KeyKind::Integer);
+      auto listsRes = open("lists", lmdb::Database::KeyKind::Integer);
+      auto resourcesRes = open("resources", lmdb::Database::KeyKind::Integer);
+      auto dictionaryRes = open("dictionary", lmdb::Database::KeyKind::Integer);
+      auto manifestRes = open("file_manifest", lmdb::Database::KeyKind::Blob);
+
+      for (auto const* result :
+           {&metadataRes, &tracksHotRes, &tracksColdRes, &listsRes, &resourcesRes, &dictionaryRes, &manifestRes})
+      {
+        if (!*result)
+        {
+          return std::unexpected{result->error()};
+        }
+      }
+
+      return SchemaDatabases{.metadata = std::move(*metadataRes),
+                             .tracksHot = std::move(*tracksHotRes),
+                             .tracksCold = std::move(*tracksColdRes),
+                             .lists = std::move(*listsRes),
+                             .resources = std::move(*resourcesRes),
+                             .dictionary = std::move(*dictionaryRes),
+                             .manifest = std::move(*manifestRes)};
+    }
+
+    struct AdmittedSchema final
+    {
+      MetadataHeader header;
+      std::uint64_t revision = 0;
+      SchemaDatabases databases;
+    };
+
+    Result<std::uint64_t> validateMetadataDatabase(lmdb::Database const& database,
+                                                   lmdb::ReadTransaction const& transaction);
+
+    Result<AdmittedSchema> createFreshSchema(lmdb::WriteTransaction& transaction)
+    {
+      auto schemaRes = openSchema(transaction, true);
+
+      if (!schemaRes)
+      {
+        return std::unexpected{schemaRes.error()};
+      }
+
+      auto headerRes = makeMetadataHeader();
+
+      if (!headerRes)
+      {
+        return std::unexpected{headerRes.error()};
+      }
+
+      auto createRes =
+        schemaRes->metadata.writer(transaction).create(kMetadataHeaderRecordId, utility::bytes::view(*headerRes));
+
+      if (!createRes)
+      {
+        return std::unexpected{createRes.error()};
+      }
+
+      return AdmittedSchema{.header = *headerRes, .revision = 0, .databases = std::move(*schemaRes)};
+    }
+
+    Result<AdmittedSchema> admitCurrentSchema(lmdb::Database const& mainDatabase, lmdb::WriteTransaction& transaction)
+    {
+      if (auto metadataEntryRes = requireMetadataCatalogEntry(mainDatabase, transaction); !metadataEntryRes)
+      {
+        return std::unexpected{metadataEntryRes.error()};
+      }
+
+      auto rawMetadataRes = lmdb::Database::openExisting(transaction, "meta");
+
+      if (!rawMetadataRes)
+      {
+        return std::unexpected{rawMetadataRes.error()};
+      }
+
+      auto headerBytesRes = loadMetadataHeaderBytes(*rawMetadataRes, transaction);
+
+      if (!headerBytesRes)
+      {
+        return std::unexpected{headerBytesRes.error()};
+      }
+
+      auto prefixRes = validateMetadataPrefix(*headerBytesRes);
+
+      if (!prefixRes)
+      {
+        return std::unexpected{prefixRes.error()};
+      }
+
+      if (prefixRes->libraryVersion != kLibraryVersion)
+      {
+        return makeError(
+          Error::Code::NotSupported,
+          std::format("Unsupported library version {} (current {})", prefixRes->libraryVersion, kLibraryVersion));
+      }
+
+      if (auto catalogRes = validateCurrentCatalog(mainDatabase, transaction); !catalogRes)
+      {
+        return std::unexpected{catalogRes.error()};
+      }
+
+      auto headerRes = validateCurrentMetadataHeader(*headerBytesRes);
+
+      if (!headerRes)
+      {
+        return std::unexpected{headerRes.error()};
+      }
+
+      auto schemaRes = openSchema(transaction, false);
+
+      if (!schemaRes)
+      {
+        return std::unexpected{schemaRes.error()};
+      }
+
+      auto revisionRes = validateMetadataDatabase(schemaRes->metadata, transaction);
+
+      if (!revisionRes)
+      {
+        return std::unexpected{revisionRes.error()};
+      }
+
+      return AdmittedSchema{.header = *headerRes, .revision = *revisionRes, .databases = std::move(*schemaRes)};
     }
 
     Result<std::uint32_t> decodePersistedId(lmdb::Database::Reader::KeyView const key, std::string_view const database)
@@ -143,13 +388,120 @@ namespace ao::library
       return value;
     }
 
+    Result<std::uint64_t> validateMetadataDatabase(lmdb::Database const& database,
+                                                   lmdb::ReadTransaction const& transaction)
+    {
+      auto const reader = database.reader(transaction);
+      bool foundHeader = false;
+      std::uint64_t revision = 0;
+
+      for (auto const& [key, payload] : reader)
+      {
+        auto idRes = decodePersistedId(key, "Metadata database");
+
+        if (!idRes)
+        {
+          return std::unexpected{idRes.error()};
+        }
+
+        if (*idRes == kMetadataHeaderRecordId)
+        {
+          if (auto headerRes = validateCurrentMetadataHeader(payload); !headerRes)
+          {
+            return std::unexpected{headerRes.error()};
+          }
+
+          foundHeader = true;
+          continue;
+        }
+
+        if (*idRes != kLibraryRevisionRecordId)
+        {
+          return makeError(
+            Error::Code::CorruptData, std::format("Metadata database contains unknown record {}", *idRes));
+        }
+
+        if (payload.size() != sizeof(revision))
+        {
+          return makeError(
+            Error::Code::CorruptData,
+            std::format("Library revision record has size {} (expected {})", payload.size(), sizeof(revision)));
+        }
+
+        std::memcpy(&revision, payload.data(), sizeof(revision));
+
+        if (revision == 0 || revision == std::numeric_limits<std::uint64_t>::max())
+        {
+          return makeError(
+            Error::Code::CorruptData, std::format("Library revision record contains reserved value {}", revision));
+        }
+      }
+
+      if (!foundHeader)
+      {
+        return makeError(Error::Code::CorruptData, "Metadata database has no header record");
+      }
+
+      return revision;
+    }
+
+    Result<> validateResourceDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    {
+      for (auto const& [key, payload] : database.reader(transaction))
+      {
+        auto idRes = decodePersistedId(key, "Resource database");
+
+        if (!idRes)
+        {
+          return std::unexpected{idRes.error()};
+        }
+
+        if (*idRes == 0)
+        {
+          return makeError(Error::Code::CorruptData, "Resource database contains the reserved id zero");
+        }
+
+        if (payload.empty())
+        {
+          return makeError(Error::Code::CorruptData, std::format("Resource {} contains an empty value", *idRes));
+        }
+      }
+
+      return {};
+    }
+
+    Result<> validateManifestDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    {
+      auto const reader = database.reader(transaction);
+
+      for (auto const& [key, payload] : reader)
+      {
+        if (auto validationRes = validateFileManifestEntry(key, payload); !validationRes)
+        {
+          return std::unexpected{validationRes.error()};
+        }
+      }
+
+      return {};
+    }
+
     Result<> validateTrackDatabases(lmdb::Database const& hotDatabase,
                                     lmdb::Database const& coldDatabase,
+                                    lmdb::Database const& resourceDatabase,
+                                    lmdb::Database const& manifestDatabase,
                                     lmdb::ReadTransaction const& transaction,
                                     std::size_t const dictionarySize)
     {
       auto const hotReader = hotDatabase.reader(transaction);
       auto const coldReader = coldDatabase.reader(transaction);
+      auto const resourceReader = resourceDatabase.reader(transaction);
+      auto const manifestReader = manifestDatabase.reader(transaction);
+
+      if (hotReader.entryCount() != manifestReader.entryCount())
+      {
+        return makeError(Error::Code::CorruptData, "Track and file manifest databases contain different row counts");
+      }
+
       auto hot = hotReader.begin();
       auto cold = coldReader.begin();
       auto const hotEnd = hotReader.end();
@@ -157,6 +509,7 @@ namespace ao::library
 
       while (hot != hotEnd && cold != coldEnd)
       {
+        detail::recordOpenValidationTrackRow();
         auto const& [hotKey, hotPayload] = *hot;
         auto const& [coldKey, coldPayload] = *cold;
         auto hotIdRes = decodePersistedId(hotKey, "Hot Track database");
@@ -188,6 +541,36 @@ namespace ao::library
             std::format("Track {} failed persisted validation: {}", *hotIdRes, validationRes.error().message));
         }
 
+        auto const view = TrackView{hotPayload, coldPayload};
+
+        for (auto const cover : view.coverArt())
+        {
+          if (!resourceReader.get(cover.resourceId.raw()))
+          {
+            return makeError(Error::Code::CorruptData,
+                             std::format("Track {} references missing Resource {}", *hotIdRes, cover.resourceId.raw()));
+          }
+        }
+
+        auto const uri = view.property().uri();
+        auto const manifestKey = detail::PaddedFileManifestKey{uri};
+        detail::recordOpenValidationManifestPointRead();
+        auto const optManifestPayload = manifestReader.get(manifestKey.bytes());
+
+        if (!optManifestPayload)
+        {
+          return makeError(
+            Error::Code::CorruptData, std::format("Track {} has no file manifest row for '{}'", *hotIdRes, uri));
+        }
+
+        auto const manifestView = FileManifestView{*optManifestPayload};
+
+        if (!manifestView.isValid() || manifestView.trackId().raw() != *hotIdRes)
+        {
+          return makeError(Error::Code::CorruptData,
+                           std::format("Track {} has a mismatched file manifest binding for '{}'", *hotIdRes, uri));
+        }
+
         ++hot;
         ++cold;
       }
@@ -203,6 +586,19 @@ namespace ao::library
     Result<> validateListDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
     {
       auto const reader = database.reader(transaction);
+      enum class Color : std::uint8_t
+      {
+        White,
+        Gray,
+        Black
+      };
+      struct Node final
+      {
+        std::uint32_t parentId = 0;
+        Color color = Color::White;
+      };
+      auto nodes = std::unordered_map<std::uint32_t, Node>{};
+      nodes.reserve(reader.entryCount());
 
       for (auto const& [key, payload] : reader)
       {
@@ -218,24 +614,63 @@ namespace ao::library
           return makeError(Error::Code::CorruptData, "List database contains the reserved id zero");
         }
 
-        if (!ListView{payload}.isValid())
+        if (auto validationRes = validateSerializedList(payload); !validationRes)
         {
-          return makeError(Error::Code::CorruptData, std::format("List {} record is structurally corrupt", *idRes));
+          return makeError(
+            Error::Code::CorruptData,
+            std::format("List {} failed persisted validation: {}", *idRes, validationRes.error().message));
+        }
+
+        auto const [it, inserted] = nodes.emplace(*idRes, Node{.parentId = ListView{payload}.parentId().raw()});
+        std::ignore = it;
+        AO_INVARIANT(inserted, "LMDB yielded a duplicate List key");
+      }
+
+      for (auto const& [id, node] : nodes)
+      {
+        if (node.parentId != 0 && !nodes.contains(node.parentId))
+        {
+          return makeError(
+            Error::Code::CorruptData, std::format("List {} references missing parent {}", id, node.parentId));
         }
       }
 
-      return {};
-    }
+      auto path = std::vector<std::uint32_t>{};
+      path.reserve(nodes.size());
 
-    Result<> validateManifestDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
-    {
-      auto const reader = database.reader(transaction);
-
-      for (auto const& [key, payload] : reader)
+      for (auto const& [startId, startNode] : nodes)
       {
-        if (auto validationRes = validateFileManifestEntry(key, payload); !validationRes)
+        if (startNode.color != Color::White)
         {
-          return std::unexpected{validationRes.error()};
+          continue;
+        }
+
+        path.clear();
+        auto currentId = startId;
+
+        while (currentId != 0)
+        {
+          auto& current = nodes.at(currentId);
+
+          if (current.color == Color::Black)
+          {
+            break;
+          }
+
+          if (current.color == Color::Gray)
+          {
+            return makeError(
+              Error::Code::CorruptData, std::format("List parent graph contains a cycle through {}", currentId));
+          }
+
+          current.color = Color::Gray;
+          path.push_back(currentId);
+          currentId = current.parentId;
+        }
+
+        for (auto const id : path)
+        {
+          nodes.at(id).color = Color::Black;
         }
       }
 
@@ -249,6 +684,7 @@ namespace ao::library
     std::filesystem::path const databasePath;
     lmdb::Environment env;
     lmdb::WriteTransaction initializationTransaction;
+    detail::MetadataState metadataState;
     detail::LibraryIdentity identity;
     MetadataStore metadataStore;
     TrackStore tracks;
@@ -261,6 +697,8 @@ namespace ao::library
          std::filesystem::path databasePath,
          lmdb::Environment env,
          lmdb::WriteTransaction initializationTransaction,
+         MetadataHeader metadataHeader,
+         std::uint64_t committedRevision,
          lmdb::Database metadataDb,
          lmdb::Database tracksHotDb,
          lmdb::Database tracksColdDb,
@@ -272,6 +710,7 @@ namespace ao::library
       , databasePath{std::move(databasePath)}
       , env{std::move(env)}
       , initializationTransaction{std::move(initializationTransaction)}
+      , metadataState{metadataHeader, committedRevision}
       , metadataStore{std::move(metadataDb), identity}
       , tracks{std::move(tracksHotDb), std::move(tracksColdDb), identity}
       , lists{std::move(listsDb), identity}
@@ -285,6 +724,8 @@ namespace ao::library
                                                 std::filesystem::path databasePath,
                                                 std::size_t mapSize)
     {
+      detail::resetOpenValidationMetrics();
+
       if (mapSize == 0)
       {
         mapSize = kLmdbMapSize;
@@ -307,104 +748,62 @@ namespace ao::library
         return std::unexpected{initializationTransactionRes.error()};
       }
 
-      auto metadataDbRes = lmdb::Database::open(*initializationTransactionRes, "meta");
-      auto tracksHotDbRes = lmdb::Database::open(*initializationTransactionRes, "tracks_hot");
-      auto tracksColdDbRes = lmdb::Database::open(*initializationTransactionRes, "tracks_cold");
-      auto listsDbRes = lmdb::Database::open(*initializationTransactionRes, "lists");
-      auto resourcesDbRes = lmdb::Database::open(*initializationTransactionRes, "resources");
-      auto dictionaryDbRes = lmdb::Database::open(*initializationTransactionRes, "dictionary");
-      auto manifestDbRes =
-        lmdb::Database::open(*initializationTransactionRes, "file_manifest", lmdb::Database::KeyKind::Blob);
+      auto const mainDatabase = lmdb::Database::main(*initializationTransactionRes);
+      auto const catalogEmpty = catalogIsEmpty(mainDatabase, *initializationTransactionRes);
+      auto admittedSchemaRes = catalogEmpty ? createFreshSchema(*initializationTransactionRes)
+                                            : admitCurrentSchema(mainDatabase, *initializationTransactionRes);
 
-      if (!metadataDbRes)
+      if (!admittedSchemaRes)
       {
-        return std::unexpected{metadataDbRes.error()};
+        return std::unexpected{admittedSchemaRes.error()};
       }
 
-      if (!tracksHotDbRes)
-      {
-        return std::unexpected{tracksHotDbRes.error()};
-      }
+      auto admittedSchema = std::move(*admittedSchemaRes);
+      auto& schema = admittedSchema.databases;
 
-      if (!tracksColdDbRes)
-      {
-        return std::unexpected{tracksColdDbRes.error()};
-      }
+      auto implPtr = std::make_unique<Impl>(std::move(musicRoot),
+                                            std::move(databasePath),
+                                            std::move(*envRes),
+                                            std::move(*initializationTransactionRes),
+                                            admittedSchema.header,
+                                            admittedSchema.revision,
+                                            schema.metadata,
+                                            schema.tracksHot,
+                                            schema.tracksCold,
+                                            schema.lists,
+                                            schema.resources,
+                                            schema.dictionary,
+                                            schema.manifest);
 
-      if (!listsDbRes)
-      {
-        return std::unexpected{listsDbRes.error()};
-      }
-
-      if (!resourcesDbRes)
-      {
-        return std::unexpected{resourcesDbRes.error()};
-      }
-
-      if (!dictionaryDbRes)
-      {
-        return std::unexpected{dictionaryDbRes.error()};
-      }
-
-      if (!manifestDbRes)
-      {
-        return std::unexpected{manifestDbRes.error()};
-      }
-
-      auto const persistedHeaderRes = loadMetadataHeader(*metadataDbRes, *initializationTransactionRes);
-
-      if (persistedHeaderRes)
-      {
-        if (auto validationRes = validateMetadataHeader(*persistedHeaderRes); !validationRes)
-        {
-          return std::unexpected{validationRes.error()};
-        }
-      }
-      else if (persistedHeaderRes.error().code != Error::Code::NotFound)
-      {
-        return std::unexpected{persistedHeaderRes.error()};
-      }
-      else if (metadataDbRes->reader(*initializationTransactionRes).entryCount() != 0 ||
-               tracksHotDbRes->reader(*initializationTransactionRes).entryCount() != 0 ||
-               tracksColdDbRes->reader(*initializationTransactionRes).entryCount() != 0 ||
-               listsDbRes->reader(*initializationTransactionRes).entryCount() != 0 ||
-               resourcesDbRes->reader(*initializationTransactionRes).entryCount() != 0 ||
-               dictionaryDbRes->reader(*initializationTransactionRes).entryCount() != 0 ||
-               manifestDbRes->reader(*initializationTransactionRes).entryCount() != 0)
-      {
-        return makeError(Error::Code::CorruptData, "Library data exists without a metadata header");
-      }
-
-      auto const dictionarySize = dictionaryDbRes->reader(*initializationTransactionRes).entryCount();
-
-      if (auto validationRes =
-            validateTrackDatabases(*tracksHotDbRes, *tracksColdDbRes, *initializationTransactionRes, dictionarySize);
+      if (auto validationRes = validateResourceDatabase(schema.resources, implPtr->initializationTransaction);
           !validationRes)
       {
         return std::unexpected{validationRes.error()};
       }
 
-      if (auto validationRes = validateListDatabase(*listsDbRes, *initializationTransactionRes); !validationRes)
+      if (auto validationRes = validateManifestDatabase(schema.manifest, implPtr->initializationTransaction);
+          !validationRes)
       {
         return std::unexpected{validationRes.error()};
       }
 
-      if (auto validationRes = validateManifestDatabase(*manifestDbRes, *initializationTransactionRes); !validationRes)
+      if (auto validationRes = validateTrackDatabases(schema.tracksHot,
+                                                      schema.tracksCold,
+                                                      schema.resources,
+                                                      schema.manifest,
+                                                      implPtr->initializationTransaction,
+                                                      implPtr->dictionary.size());
+          !validationRes)
       {
         return std::unexpected{validationRes.error()};
       }
 
-      return std::make_unique<Impl>(std::move(musicRoot),
-                                    std::move(databasePath),
-                                    std::move(*envRes),
-                                    std::move(*initializationTransactionRes),
-                                    std::move(*metadataDbRes),
-                                    std::move(*tracksHotDbRes),
-                                    std::move(*tracksColdDbRes),
-                                    std::move(*listsDbRes),
-                                    std::move(*resourcesDbRes),
-                                    std::move(*dictionaryDbRes),
-                                    std::move(*manifestDbRes));
+      if (auto validationRes = validateListDatabase(schema.lists, implPtr->initializationTransaction); !validationRes)
+      {
+        return std::unexpected{validationRes.error()};
+      }
+
+      return implPtr;
     }
   };
 
@@ -447,35 +846,6 @@ namespace ao::library
 
       auto implPtr = std::move(*implRes);
 
-      auto headerRes = implPtr->metadataStore.load(implPtr->initializationTransaction);
-
-      if (!headerRes && headerRes.error().code != Error::Code::NotFound)
-      {
-        return std::unexpected{headerRes.error()};
-      }
-
-      if (headerRes)
-      {
-        if (auto result = validateMetadataHeader(*headerRes); !result)
-        {
-          return std::unexpected{result.error()};
-        }
-      }
-      else
-      {
-        auto newHeaderRes = makeMetadataHeader();
-
-        if (!newHeaderRes)
-        {
-          return std::unexpected{newHeaderRes.error()};
-        }
-
-        if (auto result = implPtr->metadataStore.create(implPtr->initializationTransaction, *newHeaderRes); !result)
-        {
-          return result;
-        }
-      }
-
       if (auto result = implPtr->initializationTransaction.commit(); !result)
       {
         return std::unexpected{result.error()};
@@ -507,36 +877,33 @@ namespace ao::library
 
     if (!transactionRes)
     {
-      throwException<Exception>("Failed to begin read transaction: {}", transactionRes.error().message);
+      AO_FATAL("Failed to begin library read transaction: {}", transactionRes.error().message);
     }
 
-    return ReadTransaction{std::move(*transactionRes), _implPtr->identity};
+    auto headerRes = _implPtr->metadataStore.load(*transactionRes);
+    AO_INVARIANT(headerRes, "Library metadata header failed after open validation: {}", headerRes.error().message);
+    auto const revision = _implPtr->metadataStore.revision(*transactionRes);
+    return ReadTransaction{std::move(*transactionRes), _implPtr->identity, *headerRes, revision};
   }
 
   WriteTransaction MusicLibrary::beginWriteTransaction(WriteTransaction::Options options,
                                                        std::shared_ptr<void const> writerSessionAnchorPtr)
   {
-    auto transactionRes = WriteTransaction::begin(
-      _implPtr->env, _implPtr->dictionary, _implPtr->identity, std::move(options), std::move(writerSessionAnchorPtr));
+    auto transactionRes = WriteTransaction::begin(_implPtr->env,
+                                                  _implPtr->tracks,
+                                                  _implPtr->lists,
+                                                  _implPtr->resources,
+                                                  _implPtr->dictionary,
+                                                  _implPtr->manifest,
+                                                  _implPtr->metadataStore,
+                                                  _implPtr->metadataState,
+                                                  _implPtr->identity,
+                                                  std::move(options),
+                                                  std::move(writerSessionAnchorPtr));
 
     if (!transactionRes)
     {
-      throwException<Exception>("Failed to begin write transaction: {}", transactionRes.error().message);
-    }
-
-    try
-    {
-      _implPtr->metadataStore.bumpRevision(transactionRes->native(_implPtr->identity));
-    }
-    catch (lmdb::detail::TransactionFailure const& failure)
-    {
-      transactionRes->abort();
-      throwException<Exception>("Failed to initialize write transaction: {}", failure.error().message);
-    }
-    catch (...)
-    {
-      transactionRes->abort();
-      throw;
+      AO_FATAL("Failed to begin library write transaction: {}", transactionRes.error().message);
     }
 
     return std::move(*transactionRes);
@@ -544,12 +911,19 @@ namespace ao::library
 
   std::uint64_t MusicLibrary::libraryRevision(ReadTransaction const& transaction) const
   {
-    return _implPtr->metadataStore.revision(transaction);
+    AO_EXPECTS(transaction._identity == &_implPtr->identity, "Read transaction belongs to a different MusicLibrary");
+    return transaction._libraryRevision;
   }
 
   std::uint64_t MusicLibrary::libraryRevision(WriteTransaction const& transaction) const
   {
-    return _implPtr->metadataStore.revision(transaction);
+    return transaction.libraryRevision();
+  }
+
+  std::uint64_t MusicLibrary::libraryRevision(LibraryWrite const& write) const
+  {
+    write._transaction->requireOperationActive();
+    return write._transaction->libraryRevision();
   }
 
   TrackStore const& MusicLibrary::tracks() const
@@ -577,22 +951,26 @@ namespace ao::library
     return _implPtr->manifest;
   }
 
-  MetadataStore const& MusicLibrary::metadata() const
-  {
-    return _implPtr->metadataStore;
-  }
-
   MetadataHeader MusicLibrary::metadataHeader() const
   {
-    auto transaction = readTransaction();
-    auto headerRes = _implPtr->metadataStore.load(transaction);
+    return _implPtr->metadataState.snapshot().header;
+  }
 
-    if (!headerRes)
-    {
-      throwException<Exception>("Failed to load library metadata header: {}", headerRes.error().message);
-    }
+  MetadataHeader MusicLibrary::metadataHeader(ReadTransaction const& transaction) const
+  {
+    AO_EXPECTS(transaction._identity == &_implPtr->identity, "Read transaction belongs to a different MusicLibrary");
+    return transaction._metadataHeader;
+  }
 
-    return *headerRes;
+  MetadataHeader MusicLibrary::metadataHeader(WriteTransaction const& transaction) const
+  {
+    return transaction.metadataHeader();
+  }
+
+  MetadataHeader MusicLibrary::metadataHeader(LibraryWrite const& write) const
+  {
+    write._transaction->requireOperationActive();
+    return write._transaction->metadataHeader();
   }
 
   std::filesystem::path const& MusicLibrary::rootPath() const

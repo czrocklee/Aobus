@@ -68,7 +68,7 @@ namespace ao::rt
     // Synchronous callback-executor notification. A handler must defer
     // Library destruction or CoreRuntime shutdown to a later executor turn.
     async::Subscription onAuthoringAvailabilityChanged(
-      std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const;
+      std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;

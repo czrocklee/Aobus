@@ -49,13 +49,15 @@ It is unsynchronized and does not choose an executor, so its owner defines the s
 Its `post()` operation is a weak-lifetime deferred hop through a supplied executor, not permission for other signal operations to cross threads.
 
 Primitive choice follows delivery topology.
-Notification owners broadcast already-committed state through `async::Signal`, whose handlers are `noexcept`.
-Library change publication instead binds one named replica callable because phase ordering requires exactly one mandatory derived-state consumer before notifications; that callable is also `noexcept`.
+Notification owners broadcast already-committed state through `async::Signal`, whose owning emission boundary is `noexcept` and converts an escaping handler exception into AO fatal handling.
+Library change publication instead binds one named ordinary replica callable because phase ordering requires exactly
+one mandatory derived-state consumer before notifications; its owning delivery boundary catches an escape and enters
+AO fatal handling before phase-two notification.
 The [signal delivery specification](../spec/async/signal.md) owns signal ordering, reentrancy, handler failure, and destruction behavior.
 
 The notification service refines synchronous callback delivery with a small publication queue.
 One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later update rather than nesting signal delivery.
-Feed observers are `noexcept`, so delivery cannot unwind an already committed feed command.
+Feed observers are ordinary callables behind that boundary, so delivery cannot unwind an already committed feed command.
 Candidate bounding and eligible history eviction complete before that commit, so rejection leaves the current snapshot and id watermark untouched while accepted eviction remains part of the same observed update.
 For transient notification lifetime, the service schedules a cancellable worker sleep through the same runtime and defers completion to the callback executor.
 Only a callback carrying the current notification id and lifetime generation may commit expiry; updates restart the duration, while cancellation merely avoids obsolete work.
@@ -82,7 +84,7 @@ Interactive resource delivery follows the same boundary without entering library
 Those consumers carry copied values across suspension and revalidate owner lifetime plus current resource identity before publication.
 
 Boost.Asio owns coroutine exception transport and passes an escaping exception to the terminal `co_spawn` completion handler as `std::exception_ptr`.
-For fire-and-forget roots, `Runtime` filters expected cancellation and forwards every other exception to an injected thread-safe diagnostic handler.
+For fire-and-forget roots, `Runtime` filters expected cancellation and sends every other exception to the Core exception-aware fatal entry after completion bookkeeping.
 Future-returning tasks retain explicit caller ownership and are not also reported by that handler.
 `Runtime::spawn` exposes that ownership as `TaskFuture<T>`.
 For non-void tasks, its private standard future carries `std::optional<T>`, separating transport readiness from domain construction so result types do not need an invalid default state.
@@ -121,12 +123,14 @@ These include engine event delivery, backend render/device-monitor work, and per
 They communicate through synchronized queues, snapshots, and callbacks rather than accessing frontend or runtime state directly.
 
 The logging backend may also own its own asynchronous worker, but it is infrastructure rather than an application-control domain.
+After logging initialization, the application registers one Core fatal sink backed by a non-blocking asynchronous logger path; the realtime fatal entry bypasses that sink.
 
 ## Boundaries and dependency direction
 
 - Frontends construct the callback executor and transfer exclusive ownership to `CoreRuntime`.
 - `CoreRuntime` owns `async::Runtime`; runtime services borrow it or its callback executor and cannot outlive it.
-- Interactive composition injects an async exception handler from the application logging boundary; `ao_async` does not depend on application logging types.
+- The Core fatal backend exposes only a function-pointer registration seam; application logging depends on Core, never the reverse.
+- `ao_async` invokes that Core facility directly and has no application logging callback or second terminal-reporting seam.
 - Runtime and UIModel event owners may use `async::Signal`, but application payloads, affinity checks, and transaction ordering remain with those owners.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
 - Runtime library code cannot bypass `LibraryMutationService` with an independent committing transaction; UIModel and frontend code cannot name that authority.
@@ -180,8 +184,8 @@ Cancellation before commit releases maintenance without advancing the library re
 After a transaction may have committed, the coroutine returns to the callback executor without a cancellable hop so publication and maintenance cleanup cannot be skipped.
 
 For CLI, the callback executor is the invocation thread's `LoopExecutor` and the synchronous command boundary pumps it through `CliRuntime::runTask()` until terminal completion.
-If a callback throws while pumping, CLI retains the first exception and continues to the terminal marker before consuming the spawned future; command-owned task inputs therefore cannot unwind while worker work still uses them.
-A task failure remains the primary command exception and the retained callback failure is reported; otherwise the retained callback failure is rethrown on the invocation thread.
+An escaping executor callback completes the executor's mandatory queue bookkeeping and then enters AO fatal handling at the executor boundary.
+The command task itself remains caller-owned: after its terminal marker runs, `runTask()` consumes the future and rethrows that task exception on the invocation thread.
 
 An audio observation uses a separate bridge:
 
@@ -236,12 +240,12 @@ Because pool join is final rather than detached, a decoder open that does not
 return can extend `CoreRuntime` shutdown even though cancellation has already
 made its result inadmissible.
 
-`spawnLogged`, `spawnCancellable`, and lifetime-bound completion capture shared
-diagnostic state that is independent of the `Runtime` object, so terminal
-closures never borrow `this`.
-They use the same injected exception handler after their terminal ownership bookkeeping.
-The handler may run concurrently on worker threads and therefore must synchronize its own mutable state.
-A frontend workflow that catches an unexpected exception before a cancellable callback hop reports it immediately, then performs only generic presentation on the callback executor; later cancellation may suppress presentation but cannot erase the diagnostic.
+`spawnLogged`, `spawnCancellable`, and lifetime-bound completion do not borrow the
+`Runtime` object from terminal closures.
+They consume expected cancellation, finish their owned completion or scope retirement, and
+invoke the exception-aware fatal entry for every other exception.
+Different worker threads may reach that entry concurrently; the Core fatal backend owns
+concurrent diagnostics and single-sink admission.
 
 Runtime shutdown proceeds from producers toward dependencies:
 
@@ -252,11 +256,12 @@ Runtime shutdown proceeds from producers toward dependencies:
 5. Library, source, completion, and notification collaborators are destroyed.
 6. The callback executor is released last within `CoreRuntime` ownership.
 
-The application logger and its captured async-exception adapter outlive step 3 and are shut down only after worker completion handlers have quiesced.
+The application logger and its registered fatal sink outlive step 3 and are shut down only after worker, audio, device, and frontend callback producers have quiesced.
+The application unregisters the fatal sink before destroying the logger backend.
 CLI follows the same producer-first order, then drains already-ready loop turns while `CoreRuntime` callback targets remain alive before releasing that runtime and executor.
 
 Dedicated audio and device owners request stop and join their own threads inside their shutdown or destruction boundary.
-Unexpected coroutine exceptions are reported by the async runtime; expected cancellation is not reported as an unhandled failure.
+Unexpected coroutine exceptions abort through the Core fatal backend after terminal bookkeeping; expected cancellation does not enter that path.
 
 ## Implementation map
 
@@ -267,23 +272,23 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`LoopExecutor`](../../include/ao/async/LoopExecutor.h) adds the binary wake signal and owner-driven blocking/non-blocking turn operations.
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
 - [`TaskFuture`](../../include/ao/async/TaskFuture.h) owns explicit future result and exception transport without default-constructing domain values.
-- [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) is the injected terminal diagnostic seam.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
 - [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) enforces reporting-feed affinity and deterministic reentrant publication on that executor.
-- [`Log.cpp`](../../app/runtime/Log.cpp) adapts terminal exceptions to the retained application logger.
+- [`Contract.h`](../../include/ao/Contract.h) and [`Fatal.cpp`](../../lib/utility/Fatal.cpp) define the application-independent fatal registration and abort boundary used by that adapter.
 - [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) orders playback-session and player shutdown ahead of base-runtime teardown.
 - [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), [`CliRuntime`](../../app/cli/CliRuntime.cpp), and [`DispatcherQueueExecutor`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) adapt the frontend execution models.
 - [`Engine.cpp`](../../lib/audio/Engine.cpp) and [`StreamingSource.cpp`](../../lib/audio/StreamingSource.cpp) contain the principal dedicated audio-thread boundaries.
 
 ## Test map
 
-- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, terminal exception ownership, non-default-constructible result transport, and runtime lifetime.
-- [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping and injected exception delivery.
+- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, caller-owned exception transport, non-default-constructible results, and runtime lifetime.
+- The dedicated `ao_fatal_probe` under [`test/fatal/`](../../test/fatal) and [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protect fatal-sink concurrency, registration, and logger lifetime independently of executor affinity.
+- [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping before cancellation or terminal fatal handling.
 - [`LoopExecutorTest.cpp`](../../test/unit/runtime/LoopExecutorTest.cpp) protects owner affinity, burst wake coalescing, multi-producer admission, non-reentrant turns, and later-turn delivery.
-- [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects connection order, reentrant mutation, nested emission, the noexcept handler contract, deferred turns, and weak owner lifetime independently of application runtime composition.
+- [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects connection order, reentrant mutation, nested emission, the owning fatal boundary, deferred turns, and weak owner lifetime independently of application runtime composition.
 - [`RequestCoalescerTest.cpp`](../../test/unit/async/RequestCoalescerTest.cpp) protects flight sharing, cross-thread interest cancellation, reentrant completion, clear generation fencing, and callback fanout.
-- [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, callback-failure task completion, terminal exception propagation, and producer-first callback draining.
+- [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, caller-owned task exception propagation, and producer-first callback draining.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor and cancellation while optimistic preroll is blocked on a worker.
@@ -296,6 +301,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [System architecture](system-overview.md)
 - [Failure and reporting architecture](failure-and-reporting.md)
 - [Outcome channel specification](../spec/failure/outcome-channel.md)
+- [Fatal facility reference](../reference/failure/fatal.md)
 - [Signal delivery specification](../spec/async/signal.md)
 - [Notification feed specification](../spec/reporting/notification-feed.md)
 - [Library architecture](library.md)

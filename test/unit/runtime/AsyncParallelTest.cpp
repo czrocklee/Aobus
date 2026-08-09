@@ -3,7 +3,6 @@
 
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/async/Parallel.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -12,6 +11,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -29,7 +29,7 @@ namespace ao::rt::test
 
     Task<> throwingTask()
     {
-      throwException<Exception>("whenAll test failure");
+      throw std::runtime_error{"whenAll test failure"};
       co_return;
     }
 
@@ -84,7 +84,7 @@ namespace ao::rt::test
 
     auto future = runtime.spawn(awaitAllTask(&runtime, std::move(tasks)));
 
-    CHECK_THROWS_AS(future.get(), Exception);
+    CHECK_THROWS_AS(future.get(), std::runtime_error);
     CHECK(counter.load() == 1);
   }
 

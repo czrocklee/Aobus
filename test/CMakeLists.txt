@@ -11,12 +11,51 @@ if(LINUX)
   target_link_libraries(ao_test_options INTERFACE PkgPipeWire PkgALSA PkgUDEV)
 endif()
 
+# Fatal subprocess coverage uses a minimal self-reentering executable so sanitizer
+# startup and abort behavior are independent of Catch2 and the application runtime.
+add_library(ao_fatal_probe_support STATIC
+    fatal/AudioFatalProbeProtocol.cpp
+    fatal/FatalProbeProtocol.cpp
+    fatal/LibraryFatalProbeProtocol.cpp
+    fatal/RuntimeFatalProbeProtocol.cpp
+)
+target_include_directories(ao_fatal_probe_support PUBLIC "${CMAKE_SOURCE_DIR}")
+if(LINUX)
+  target_sources(ao_fatal_probe_support PRIVATE fatal/FatalProbeProcessPosix.cpp)
+endif()
+if(WIN32)
+  target_sources(ao_fatal_probe_support PRIVATE fatal/FatalProbeProcessWindows.cpp)
+endif()
+
+add_executable(ao_fatal_probe
+    fatal/FatalProbeMain.cpp
+    fatal/FatalProbeScenario.cpp
+)
+target_include_directories(ao_fatal_probe PRIVATE "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_fatal_probe PRIVATE ao_fatal_probe_support ao_prepared_next_contract ao_utility)
+add_test(NAME ao_fatal_probe COMMAND ao_fatal_probe)
+
+add_executable(ao_audio_fatal_probe
+    fatal/AudioFatalProbeMain.cpp
+    fatal/AudioFatalProbeScenario.cpp
+)
+target_link_libraries(ao_audio_fatal_probe PRIVATE ao_fatal_probe_support ao_test_support_audio)
+add_test(NAME ao_audio_fatal_probe COMMAND ao_audio_fatal_probe)
+
 # Concrete test support is compiled once per layer. Keep these libraries
 # dependency-directed: a narrow test must not inherit runtime or frontend
 # headers merely to use a temporary directory or a Track fixture.
 add_library(ao_test_support_common STATIC
     unit/TestFixtureSupport.cpp
 )
+
+add_executable(ao_library_fatal_probe
+    fatal/LibraryFatalProbeMain.cpp
+    fatal/LibraryFatalProbeScenario.cpp
+)
+target_link_libraries(ao_library_fatal_probe PRIVATE ao_fatal_probe_support ao_test_support_common ao_library)
+add_test(NAME ao_library_fatal_probe COMMAND ao_library_fatal_probe)
+
 target_link_libraries(ao_test_support_common
     PUBLIC
       ao_test_options
@@ -114,6 +153,9 @@ endif()
 
 # ao_core_test: shared and host-native unit + integration tests
 add_executable(ao_core_test
+    CoreTestMain.cpp
+    fatal/RuntimeFatalProbeScenario.cpp
+
     # async tests
     unit/async/RequestCoalescerTest.cpp
     unit/async/SignalTest.cpp
@@ -135,8 +177,9 @@ add_executable(ao_core_test
     unit/utility/YamlSerializationTest.cpp
     unit/utility/TestFixtureSupportTest.cpp
     unit/core/AudioCodecTest.cpp
-    unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
+    unit/core/FatalTest.cpp
+    unit/core/FatalProbeTest.cpp
 
     # query tests
     unit/query/CompletionBaselineTest.cpp
@@ -206,6 +249,7 @@ add_executable(ao_core_test
     unit/library/TrackBuilderSerializationTest.cpp
     unit/library/TrackBuilderOverflowTest.cpp
     unit/library/LibraryErrorTest.cpp
+    unit/library/LibraryFatalProbeTest.cpp
     unit/library/MetadataStoreTest.cpp
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
@@ -214,6 +258,8 @@ add_executable(ao_core_test
     unit/library/ListStoreTest.cpp
     unit/library/ResourceStoreTest.cpp
     unit/library/WriteTransactionTest.cpp
+    unit/library/TrackWriterTest.cpp
+    unit/library/ListWriterTest.cpp
 
     unit/library/TrackStoreTest.cpp
     unit/library/TrackWriteTest.cpp
@@ -263,7 +309,9 @@ add_executable(ao_core_test
     unit/audio/PlayerTest.cpp
     unit/audio/EngineDrainTest.cpp
     unit/audio/EngineErrorTest.cpp
+    unit/audio/EngineFatalProbeTest.cpp
     unit/audio/EngineGaplessTest.cpp
+    unit/audio/EngineRtSignalRingTest.cpp
     unit/audio/EngineTest.cpp
     unit/audio/EngineBackendSwapTest.cpp
     unit/audio/EngineCallbackTest.cpp
@@ -416,6 +464,7 @@ add_executable(ao_core_test
     unit/runtime/library/ScanPlanTest.cpp
     unit/runtime/library/ScanApplyOperationTest.cpp
     unit/runtime/library/LibraryTaskServiceTest.cpp
+    unit/runtime/library/RuntimeFatalProbeTest.cpp
     unit/runtime/library/LibraryWriterTest.cpp
     unit/runtime/library/LibraryAuthoringTest.cpp
     unit/runtime/completion/MetadataValueCompleterTest.cpp
@@ -449,10 +498,11 @@ add_executable(ao_core_test
 )
 
 target_link_libraries(ao_core_test PRIVATE
+    ao_fatal_probe_support
     ao_app_uimodel
     ao_test_support_runtime
     ao_test_options
-    Catch2::Catch2WithMain
+    Catch2::Catch2
     FakeIt::FakeIt-catch
 )
 if(LINUX)
@@ -525,6 +575,7 @@ if(WIN32)
     AOBUS_WINDOWS_RESW="${CMAKE_SOURCE_DIR}/app/windows-winui/Resources/en-US/Resources.resw")
   target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()
+add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_fatal_probe)
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
 if(AOBUS_BUILD_TUI)

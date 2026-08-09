@@ -5,19 +5,22 @@
 
 #include "LibraryMutationService.h"
 #include "MediaTrack.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/library/ListWriter.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
@@ -30,8 +33,6 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/StrongTypeFormatter.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -413,69 +414,17 @@ namespace ao::rt
       return {};
     }
 
-    struct PreparedListPayload final
-    {
-      std::vector<std::byte> payload{};
-    };
-
-    Result<PreparedListPayload> payloadForDraft(LibraryWriter::ListDraft const& draft,
-                                                std::optional<library::ListView> const& optExisting = std::nullopt)
+    library::ListBuilder listForDraft(LibraryWriter::ListDraft const& draft,
+                                      std::optional<library::ListView> const& optExisting = std::nullopt)
     {
       auto builder = optExisting ? library::ListBuilder::fromView(*optExisting) : library::ListBuilder::makeEmpty();
       builder.name(draft.name).description(draft.description).filter(draft.expression).parentId(draft.parentId);
-      auto payloadRes = builder.serialize();
-
-      if (!payloadRes)
-      {
-        return std::unexpected{payloadRes.error()};
-      }
-
-      return PreparedListPayload{.payload = std::move(*payloadRes)};
+      return builder;
     }
 
-    Result<> validateListDraft(library::ListStore::Writer const& listWriter, LibraryWriter::ListDraft const& draft)
+    Result<> validateListDraft(LibraryWriter::ListDraft const& draft)
     {
-      if (auto result = validateListExpression(draft.expression); !result)
-      {
-        return result;
-      }
-
-      if (draft.parentId == kInvalidListId)
-      {
-        return {};
-      }
-
-      if (draft.parentId == draft.listId)
-      {
-        return makeError(Error::Code::InvalidInput, "list parent cannot be the list itself");
-      }
-
-      auto seen = std::unordered_set<std::uint32_t>{};
-      auto cursor = draft.parentId;
-
-      while (cursor != kInvalidListId)
-      {
-        if (!seen.insert(cursor.raw()).second)
-        {
-          return makeError(Error::Code::InvalidInput, "list parent chain contains a cycle");
-        }
-
-        auto const optParent = listWriter.get(cursor);
-
-        if (!optParent)
-        {
-          return makeError(Error::Code::InvalidInput, std::format("list parent not found: {}", cursor));
-        }
-
-        cursor = optParent->parentId();
-
-        if (draft.listId != kInvalidListId && cursor == draft.listId)
-        {
-          return makeError(Error::Code::InvalidInput, "list parent cannot be a descendant of the list");
-        }
-      }
-
-      return {};
+      return validateListExpression(draft.expression);
     }
 
     std::vector<TrackId> orderTrackIdsFrom(library::ListView::OrderTrackIdProxy const& trackIds)
@@ -491,8 +440,7 @@ namespace ao::rt
       return orderTrackIdsFrom(view.orderTrackIds());
     }
 
-    Result<std::vector<std::byte>> listPayloadWithOrder(library::ListView const& view,
-                                                        std::span<TrackId const> orderTrackIds)
+    library::ListBuilder listWithOrder(library::ListView const& view, std::span<TrackId const> orderTrackIds)
     {
       auto builder = library::ListBuilder::fromView(view);
       builder.orderTrackIds().clear();
@@ -502,10 +450,10 @@ namespace ao::rt
         builder.orderTrackIds().add(trackId);
       }
 
-      return builder.serialize();
+      return builder;
     }
 
-    Result<library::ListView> requireList(library::ListStore::Writer const& listWriter, ListId listId)
+    Result<library::ListView> requireList(library::ListWriter const& listWriter, ListId listId)
     {
       auto optView = listWriter.get(listId);
 
@@ -560,12 +508,12 @@ namespace ao::rt
     struct PendingListOrderRemoval final
     {
       ListId listId = kInvalidListId;
-      std::vector<std::byte> payload{};
+      library::ListBuilder list;
       ListOrderChange orderChange{};
     };
 
     Result<ListOrderRemovalResult> removeTrackFromListOrders(library::MusicLibrary& library,
-                                                             library::WriteTransaction& transaction,
+                                                             library::LibraryWrite& transaction,
                                                              TrackId trackId)
     {
       auto updates = std::vector<PendingListOrderRemoval>{};
@@ -584,16 +532,10 @@ namespace ao::rt
           auto const selectedTrackIds = std::unordered_set<TrackId>{trackId};
           auto builder = library::ListBuilder::fromView(view);
           builder.orderTrackIds().remove(trackId);
-          auto payloadRes = builder.serialize();
-
-          if (!payloadRes)
-          {
-            return std::unexpected{payloadRes.error()};
-          }
 
           updates.push_back(PendingListOrderRemoval{
             .listId = listId,
-            .payload = std::move(*payloadRes),
+            .list = std::move(builder),
             .orderChange =
               ListOrderChange{
                 .listId = listId,
@@ -603,14 +545,14 @@ namespace ao::rt
         }
       }
 
-      auto listWriter = library.lists().writer(transaction);
+      auto listWriter = transaction.lists();
       auto result = ListOrderRemovalResult{};
       result.changedListIds.reserve(updates.size());
       result.orderChanges.reserve(updates.size());
 
       for (auto& update : updates)
       {
-        if (auto updateRes = listWriter.update(update.listId, update.payload); !updateRes)
+        if (auto updateRes = listWriter.update(update.listId, update.list); !updateRes)
         {
           return storageError("Failed to remove deleted track from List order", updateRes.error());
         }
@@ -657,11 +599,11 @@ namespace ao::rt
     }
 
     Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::MusicLibrary& library,
-                                                                     library::WriteTransaction& transaction,
+                                                                     library::LibraryWrite& transaction,
                                                                      std::span<TrackId const> trackIds,
                                                                      MetadataPatch const& patch)
     {
-      auto writer = library.tracks().writer(transaction);
+      auto writer = transaction.tracks();
       auto changes = std::vector<TrackChangeRecord>{};
 
       for (auto const trackId : trackIds)
@@ -686,37 +628,15 @@ namespace ao::rt
 
         if (patchRes.changedHot && patchRes.changedCold)
         {
-          auto preparedRes = builder.prepare(transaction, library.resources());
-
-          if (!preparedRes)
-          {
-            return storageError("Failed to serialize cold track data", preparedRes.error());
-          }
-
-          auto const& [preparedHot, preparedCold] = *preparedRes;
-          updateRes = library::updatePreparedTrackRecord(writer, trackId, preparedHot, preparedCold);
+          updateRes = writer.update(trackId, builder);
         }
         else if (patchRes.changedHot)
         {
-          auto preparedRes = builder.prepareHot(transaction);
-
-          if (!preparedRes)
-          {
-            return storageError("Failed to serialize hot track data", preparedRes.error());
-          }
-
-          updateRes = library::updatePreparedHotTrackRecord(writer, trackId, *preparedRes);
+          updateRes = writer.updateHot(trackId, builder);
         }
         else
         {
-          auto preparedRes = builder.prepareCold(transaction, library.resources());
-
-          if (!preparedRes)
-          {
-            return storageError("Failed to serialize cold track data", preparedRes.error());
-          }
-
-          updateRes = library::updatePreparedColdTrackRecord(writer, trackId, *preparedRes);
+          updateRes = writer.updateCold(trackId, builder);
         }
 
         if (!updateRes)
@@ -731,12 +651,12 @@ namespace ao::rt
     }
 
     Result<EditTrackTagsReply> applyTagPatchInTransaction(library::MusicLibrary& library,
-                                                          library::WriteTransaction& transaction,
+                                                          library::LibraryWrite& transaction,
                                                           std::span<TrackId const> trackIds,
                                                           std::span<std::string const> tagsToAdd,
                                                           std::span<std::string const> tagsToRemove)
     {
-      auto writer = library.tracks().writer(transaction);
+      auto writer = transaction.tracks();
       auto changes = std::vector<TrackTagsChange>{};
 
       for (auto const trackId : trackIds)
@@ -779,14 +699,7 @@ namespace ao::rt
           continue;
         }
 
-        auto preparedRes = builder.prepareHot(transaction);
-
-        if (!preparedRes)
-        {
-          return storageError("Failed to serialize hot track data", preparedRes.error());
-        }
-
-        if (auto result = library::updatePreparedHotTrackRecord(writer, trackId, *preparedRes); !result)
+        if (auto result = writer.updateHot(trackId, builder); !result)
         {
           return storageError("Failed to update hot track data", result.error());
         }
@@ -806,7 +719,7 @@ namespace ao::rt
 
     Result<std::optional<DeleteListTagImpactWork>> analyzeDeleteListTagImpact(
       library::MusicLibrary& library,
-      library::WriteTransaction& transaction,
+      library::LibraryWrite& transaction,
       library::ListView const& targetView,
       std::span<ListId const> const deletedListIds)
     {
@@ -834,12 +747,6 @@ namespace ao::rt
 
       for (auto const& [trackId, view] : library.tracks().reader(transaction).hot())
       {
-        if (!view.isHotValid())
-        {
-          return makeError(
-            Error::Code::CorruptData, std::format("track {} contains an invalid hot record", trackId.raw()));
-        }
-
         bool hasTag = false;
 
         for (auto const tagId : view.tags())
@@ -862,7 +769,7 @@ namespace ao::rt
     }
 
     Result<std::vector<DeleteListReply>> collectDeleteListSubtree(library::MusicLibrary& library,
-                                                                  library::WriteTransaction& transaction,
+                                                                  library::LibraryWrite& transaction,
                                                                   ListId const rootListId)
     {
       auto records = std::unordered_map<ListId, DeleteListReply>{};
@@ -953,8 +860,15 @@ namespace ao::rt
       query::ExecutionPlan plan{};
     };
 
+    Error storedParentFilterError(ListId const parentId, Error error)
+    {
+      error.code = Error::Code::FormatRejected;
+      error.message = std::format("invalid stored filter for parent List {}: {}", parentId, error.message);
+      return error;
+    }
+
     Result<std::vector<ParentFilterPlan>> compileParentFilterPlans(library::MusicLibrary& library,
-                                                                   library::WriteTransaction& transaction,
+                                                                   library::LibraryWrite& transaction,
                                                                    library::ListView const& targetView)
     {
       auto plans = std::vector<ParentFilterPlan>{};
@@ -964,21 +878,28 @@ namespace ao::rt
 
       while (parentId != kInvalidListId)
       {
-        gsl_Assert(visited.insert(parentId).second && "List parent cycle detected while validating membership");
+        auto const inserted = visited.insert(parentId).second;
+        AO_INVARIANT(inserted, "List parent cycle detected while validating membership");
 
         auto optParent = reader.get(parentId);
 
-        gsl_Assert(optParent && "List parent is missing while validating membership");
+        AO_INVARIANT(optParent, "List parent is missing while validating membership");
 
         if (!optParent->filter().empty())
         {
           auto expressionRes = query::parse(optParent->filter());
 
-          gsl_Assert(expressionRes && "Stored parent List expression is invalid");
+          if (!expressionRes)
+          {
+            return std::unexpected{storedParentFilterError(parentId, std::move(expressionRes).error())};
+          }
 
           auto planRes = query::compileQuery(*expressionRes);
 
-          gsl_Assert(planRes && "Stored parent List expression cannot be compiled");
+          if (!planRes)
+          {
+            return std::unexpected{storedParentFilterError(parentId, std::move(planRes).error())};
+          }
 
           plans.push_back(ParentFilterPlan{.listId = parentId, .plan = std::move(*planRes)});
         }
@@ -990,7 +911,7 @@ namespace ao::rt
     }
 
     Result<> validateTracksExist(library::MusicLibrary& library,
-                                 library::WriteTransaction& transaction,
+                                 library::LibraryWrite& transaction,
                                  std::span<TrackId const> trackIds)
     {
       auto reader = library.tracks().reader(transaction);
@@ -1007,7 +928,7 @@ namespace ao::rt
     }
 
     Result<> validateParentMembership(library::MusicLibrary& library,
-                                      library::WriteTransaction& transaction,
+                                      library::LibraryWrite& transaction,
                                       library::ListView const& targetView,
                                       ListId const targetListId,
                                       std::span<TrackId const> trackIds)
@@ -1050,12 +971,10 @@ namespace ao::rt
 
         for (std::size_t index = 0; index < plans.size(); ++index)
         {
-          if (!query::hasRequiredTrackData(plans[index].plan.accessProfile, *optTrack))
-          {
-            return makeError(
-              Error::Code::CorruptData,
-              std::format("Track {} contains invalid data required by parent List {}", trackId, plans[index].listId));
-          }
+          AO_INVARIANT(query::hasRequiredTrackData(plans[index].plan.accessProfile, *optTrack),
+                       "Complete Track {} lacks data required by parent List {}",
+                       trackId,
+                       plans[index].listId);
 
           if (!evaluator.matches(bindings[index], *optTrack))
           {
@@ -1071,7 +990,7 @@ namespace ao::rt
     }
 
     Result<AddTracksToListReply> applyAddTracksToListInTransaction(library::MusicLibrary& library,
-                                                                   library::WriteTransaction& transaction,
+                                                                   library::LibraryWrite& transaction,
                                                                    ListId const listId,
                                                                    std::span<TrackId const> trackIds)
     {
@@ -1082,7 +1001,7 @@ namespace ao::rt
       // a later write. Materialize every List field used by the reply before
       // applyTagPatchInTransaction performs any database mutation.
       {
-        auto listWriter = library.lists().writer(transaction);
+        auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, listId);
 
         if (!viewRes)
@@ -1131,7 +1050,7 @@ namespace ao::rt
     };
 
     Result<RemoveTracksFromListWork> applyRemoveTracksFromListInTransaction(library::MusicLibrary& library,
-                                                                            library::WriteTransaction& transaction,
+                                                                            library::LibraryWrite& transaction,
                                                                             ListId const listId,
                                                                             std::span<TrackId const> trackIds)
     {
@@ -1146,10 +1065,10 @@ namespace ao::rt
       auto oldOrder = std::vector<TrackId>{};
       auto nextOrder = std::vector<TrackId>{};
       auto forgotten = std::vector<TrackId>{};
-      auto payload = std::vector<std::byte>{};
+      auto optList = std::optional<library::ListBuilder>{};
 
       {
-        auto listWriter = library.lists().writer(transaction);
+        auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, listId);
 
         if (!viewRes)
@@ -1181,14 +1100,7 @@ namespace ao::rt
 
         if (nextOrder != oldOrder)
         {
-          auto payloadRes = listPayloadWithOrder(*viewRes, nextOrder);
-
-          if (!payloadRes)
-          {
-            return std::unexpected{payloadRes.error()};
-          }
-
-          payload = std::move(*payloadRes);
+          optList.emplace(listWithOrder(*viewRes, nextOrder));
         }
       }
 
@@ -1217,7 +1129,9 @@ namespace ao::rt
         return work;
       }
 
-      if (auto updateRes = library.lists().writer(transaction).update(listId, payload); !updateRes)
+      AO_INVARIANT(optList, "Changed List order did not retain its semantic update");
+
+      if (auto updateRes = transaction.lists().update(listId, *optList); !updateRes)
       {
         return storageError("Failed to forget removed List positions", updateRes.error());
       }
@@ -1229,14 +1143,13 @@ namespace ao::rt
       return work;
     }
 
-    Result<LibraryChangeSet> applyMoveListOrderInTransaction(library::MusicLibrary& library,
-                                                             library::WriteTransaction& transaction,
+    Result<LibraryChangeSet> applyMoveListOrderInTransaction(library::LibraryWrite& transaction,
                                                              BoundListOrder const& order,
                                                              std::span<TrackId const> selectedTrackIds,
                                                              std::span<TrackId const> desiredEffectiveTrackIds,
                                                              std::optional<TrackId> const optBeforeTrackId)
     {
-      auto listWriter = library.lists().writer(transaction);
+      auto listWriter = transaction.lists();
       auto viewRes = requireList(listWriter, order.listId());
 
       if (!viewRes)
@@ -1268,8 +1181,8 @@ namespace ao::rt
       {
         orderInsertion = std::ranges::find(nextOrderTrackIds, *optBeforeTrackId);
 
-        gsl_Assert(orderInsertion != nextOrderTrackIds.end() &&
-                   "Bound List order anchor is absent from materialized order");
+        AO_INVARIANT(
+          orderInsertion != nextOrderTrackIds.end(), "Bound List order anchor is absent from materialized order");
       }
 
       nextOrderTrackIds.insert(orderInsertion, selectedTrackIds.begin(), selectedTrackIds.end());
@@ -1285,17 +1198,12 @@ namespace ao::rt
         }
       }
 
-      gsl_Assert(std::ranges::equal(projectedOrder, desiredEffectiveTrackIds) &&
-                 "Materialized List order does not represent the requested move");
+      AO_INVARIANT(std::ranges::equal(projectedOrder, desiredEffectiveTrackIds),
+                   "Materialized List order does not represent the requested move");
 
-      auto payloadRes = listPayloadWithOrder(view, nextOrderTrackIds);
+      auto list = listWithOrder(view, nextOrderTrackIds);
 
-      if (!payloadRes)
-      {
-        return std::unexpected{payloadRes.error()};
-      }
-
-      if (auto updateRes = listWriter.update(order.listId(), *payloadRes); !updateRes)
+      if (auto updateRes = listWriter.update(order.listId(), list); !updateRes)
       {
         return storageError("Failed to update List order", updateRes.error());
       }
@@ -1314,11 +1222,11 @@ namespace ao::rt
     };
 
     Result<DeleteListWork> applyDeleteListInTransaction(library::MusicLibrary& library,
-                                                        library::WriteTransaction& transaction,
+                                                        library::LibraryWrite& transaction,
                                                         ListId const listId,
                                                         DeleteListOptions const options)
     {
-      auto listWriter = library.lists().writer(transaction);
+      auto listWriter = transaction.lists();
       auto optView = listWriter.get(listId);
 
       if (!optView)
@@ -1365,9 +1273,9 @@ namespace ao::rt
 
       auto optTagImpactWork = std::move(*tagImpactWorkRes);
 
-      if (!listWriter.remove(listId))
+      if (auto removeRes = listWriter.remove(listId); !removeRes)
       {
-        return makeError(Error::Code::NotFound, std::format("list not found: {}", listId));
+        return std::unexpected{removeRes.error()};
       }
 
       auto mutatedTrackIds = std::vector<TrackId>{};
@@ -1601,7 +1509,7 @@ namespace ao::rt
     }
 
     auto mutation = std::move(*mutationRes);
-    auto replyRes = mutation.apply([this, trackIds, &patch](library::WriteTransaction& transaction)
+    auto replyRes = mutation.apply([this, trackIds, &patch](library::LibraryWrite& transaction)
                                    { return applyMetadataPatchInTransaction(library, transaction, trackIds, patch); });
 
     if (!replyRes)
@@ -1625,7 +1533,7 @@ namespace ao::rt
     }
 
     auto replyRes = start.optMutation->apply(
-      [this, &targets, &patch](library::WriteTransaction& transaction)
+      [this, &targets, &patch](library::LibraryWrite& transaction)
       { return applyMetadataPatchInTransaction(library, transaction, targets.trackIds(), patch); });
 
     if (!replyRes)
@@ -1668,7 +1576,7 @@ namespace ao::rt
 
     auto mutation = std::move(*mutationRes);
     auto replyRes =
-      mutation.apply([this, trackIds, tagsToAdd, tagsToRemove](library::WriteTransaction& transaction)
+      mutation.apply([this, trackIds, tagsToAdd, tagsToRemove](library::LibraryWrite& transaction)
                      { return applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove); });
 
     if (!replyRes)
@@ -1693,7 +1601,7 @@ namespace ao::rt
     }
 
     auto replyRes = start.optMutation->apply(
-      [this, &targets, tagsToAdd, tagsToRemove](library::WriteTransaction& transaction)
+      [this, &targets, tagsToAdd, tagsToRemove](library::LibraryWrite& transaction)
       { return applyTagPatchInTransaction(library, transaction, targets.trackIds(), tagsToAdd, tagsToRemove); });
 
     if (!replyRes)
@@ -1734,7 +1642,7 @@ namespace ao::rt
     }
 
     auto mutation = std::move(*mutationRes);
-    return mutation.apply([this, listId, trackIds](library::WriteTransaction& transaction)
+    return mutation.apply([this, listId, trackIds](library::LibraryWrite& transaction)
                           { return applyAddTracksToListInTransaction(library, transaction, listId, trackIds); });
   }
 
@@ -1751,7 +1659,7 @@ namespace ao::rt
     }
 
     auto replyRes = start.optMutation->apply(
-      [this, listId, &targets](library::WriteTransaction& transaction)
+      [this, listId, &targets](library::LibraryWrite& transaction)
       { return applyAddTracksToListInTransaction(library, transaction, listId, targets.trackIds()); });
 
     if (!replyRes)
@@ -1794,7 +1702,7 @@ namespace ao::rt
 
     auto mutation = std::move(*mutationRes);
     auto workRes =
-      mutation.apply([this, listId, trackIds](library::WriteTransaction& transaction)
+      mutation.apply([this, listId, trackIds](library::LibraryWrite& transaction)
                      { return applyRemoveTracksFromListInTransaction(library, transaction, listId, trackIds); });
 
     if (!workRes)
@@ -1818,7 +1726,7 @@ namespace ao::rt
     }
 
     auto workRes = start.optMutation->apply(
-      [this, listId, &targets](library::WriteTransaction& transaction)
+      [this, listId, &targets](library::LibraryWrite& transaction)
       { return applyRemoveTracksFromListInTransaction(library, transaction, listId, targets.trackIds()); });
 
     if (!workRes)
@@ -1868,22 +1776,17 @@ namespace ao::rt
 
     auto mutation = std::move(*mutationRes);
     auto createRes = mutation.apply(
-      [this, &draft](library::WriteTransaction& transaction) -> Result<ListId>
+      [&draft](library::LibraryWrite& transaction) -> Result<ListId>
       {
-        auto listWriter = library.lists().writer(transaction);
-        auto preparedRes = payloadForDraft(draft);
+        auto listWriter = transaction.lists();
+        auto list = listForDraft(draft);
 
-        if (!preparedRes)
-        {
-          return std::unexpected{preparedRes.error()};
-        }
-
-        if (auto result = validateListDraft(listWriter, draft); !result)
+        if (auto result = validateListDraft(draft); !result)
         {
           return std::unexpected{result.error()};
         }
 
-        auto result = listWriter.create(preparedRes->payload);
+        auto result = listWriter.create(list);
 
         if (!result)
         {
@@ -1924,9 +1827,9 @@ namespace ao::rt
 
     auto mutation = std::move(*mutationRes);
     auto replyRes = mutation.apply(
-      [this, &draft](library::WriteTransaction& transaction) -> Result<UpdateListReply>
+      [&draft](library::LibraryWrite& transaction) -> Result<UpdateListReply>
       {
-        auto listWriter = library.lists().writer(transaction);
+        auto listWriter = transaction.lists();
         auto optExisting = listWriter.get(draft.listId);
 
         if (!optExisting)
@@ -1934,28 +1837,23 @@ namespace ao::rt
           return makeError(Error::Code::NotFound, std::format("list not found: {}", draft.listId));
         }
 
-        auto preparedRes = payloadForDraft(draft, optExisting);
+        auto list = listForDraft(draft, optExisting);
 
-        if (!preparedRes)
-        {
-          return std::unexpected{preparedRes.error()};
-        }
-
-        if (auto result = validateListDraft(listWriter, draft); !result)
+        if (auto result = validateListDraft(draft); !result)
         {
           return std::unexpected{result.error()};
         }
 
         auto reply = diffListUpdate(*optExisting, draft);
 
-        if (std::ranges::equal(optExisting->rawData(), preparedRes->payload))
+        if (reply.fieldChanges.empty())
         {
           return reply;
         }
 
         reply.changed = true;
 
-        if (auto result = listWriter.update(draft.listId, preparedRes->payload); !result)
+        if (auto result = listWriter.update(draft.listId, list); !result)
         {
           return storageError("Failed to update list", result.error());
         }
@@ -2061,10 +1959,10 @@ namespace ao::rt
     }
 
     auto changeSetRes = start.optMutation->apply(
-      [this, &order, &desiredEffectiveTrackIds, &result, optBeforeTrackId](library::WriteTransaction& transaction)
+      [&order, &desiredEffectiveTrackIds, &result, optBeforeTrackId](library::LibraryWrite& transaction)
       {
         return applyMoveListOrderInTransaction(
-          library, transaction, order, result.reply.selectedTrackIds, desiredEffectiveTrackIds, optBeforeTrackId);
+          transaction, order, result.reply.selectedTrackIds, desiredEffectiveTrackIds, optBeforeTrackId);
       });
 
     if (!changeSetRes)
@@ -2094,9 +1992,9 @@ namespace ao::rt
     }
 
     auto changedRes = start.optMutation->apply(
-      [this, &order, &result](library::WriteTransaction& transaction) -> Result<bool>
+      [&order, &result](library::LibraryWrite& transaction) -> Result<bool>
       {
-        auto listWriter = library.lists().writer(transaction);
+        auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, order.listId());
 
         if (!viewRes)
@@ -2112,14 +2010,9 @@ namespace ao::rt
           return false;
         }
 
-        auto payloadRes = listPayloadWithOrder(*viewRes, {});
+        auto list = listWithOrder(*viewRes, {});
 
-        if (!payloadRes)
-        {
-          return std::unexpected{payloadRes.error()};
-        }
-
-        if (auto updateRes = listWriter.update(order.listId(), *payloadRes); !updateRes)
+        if (auto updateRes = listWriter.update(order.listId(), list); !updateRes)
         {
           return storageError("Failed to reset List order", updateRes.error());
         }
@@ -2165,9 +2058,9 @@ namespace ao::rt
     }
 
     auto changeSetRes = start.optMutation->apply(
-      [this, &order, &result](library::WriteTransaction& transaction) -> Result<std::optional<LibraryChangeSet>>
+      [&order, &result](library::LibraryWrite& transaction) -> Result<std::optional<LibraryChangeSet>>
       {
-        auto listWriter = library.lists().writer(transaction);
+        auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, order.listId());
 
         if (!viewRes)
@@ -2197,14 +2090,9 @@ namespace ao::rt
           return std::optional<LibraryChangeSet>{};
         }
 
-        auto payloadRes = listPayloadWithOrder(*viewRes, nextOrderTrackIds);
+        auto list = listWithOrder(*viewRes, nextOrderTrackIds);
 
-        if (!payloadRes)
-        {
-          return std::unexpected{payloadRes.error()};
-        }
-
-        if (auto updateRes = listWriter.update(order.listId(), *payloadRes); !updateRes)
+        if (auto updateRes = listWriter.update(order.listId(), list); !updateRes)
         {
           return storageError("Failed to forget hidden List positions", updateRes.error());
         }
@@ -2251,7 +2139,7 @@ namespace ao::rt
     }
 
     auto mutation = std::move(*mutationRes);
-    auto workRes = mutation.apply([this, listId, options](library::WriteTransaction& transaction)
+    auto workRes = mutation.apply([this, listId, options](library::LibraryWrite& transaction)
                                   { return applyDeleteListInTransaction(library, transaction, listId, options); });
 
     if (!workRes)
@@ -2289,7 +2177,7 @@ namespace ao::rt
     auto reply = DeleteListSubtreeReply{};
     auto changeSet = LibraryChangeSet{};
     auto applyRes = mutation.apply(
-      [this, listId, options, &reply, &changeSet](library::WriteTransaction& transaction) -> Result<>
+      [this, listId, options, &reply, &changeSet](library::LibraryWrite& transaction) -> Result<>
       {
         auto deletedListsRes = collectDeleteListSubtree(library, transaction, listId);
 
@@ -2317,16 +2205,16 @@ namespace ao::rt
 
         auto optTagImpactWork = std::move(*tagImpactWorkRes);
 
-        auto listWriter = library.lists().writer(transaction);
+        auto listWriter = transaction.lists();
+        auto removedIdsRes = listWriter.removeSubtree(listId);
 
-        for (auto const& deleted : std::views::reverse(reply.deletedLists))
+        if (!removedIdsRes)
         {
-          if (!listWriter.remove(deleted.listId))
-          {
-            return makeError(
-              Error::Code::NotFound, std::format("list not found while deleting subtree: {}", deleted.listId));
-          }
+          return std::unexpected{removedIdsRes.error()};
         }
+
+        AO_INVARIANT(std::ranges::is_permutation(*removedIdsRes, deletedIds),
+                     "Logical List subtree membership disagreed with the application snapshot");
 
         auto mutatedTrackIds = std::vector<TrackId>{};
 
@@ -2393,19 +2281,14 @@ namespace ao::rt
     auto reply = DeleteTrackReply{};
     auto changeSet = LibraryChangeSet{};
     auto applyRes = mutation.apply(
-      [this, trackId, &reply, &changeSet](library::WriteTransaction& transaction) -> Result<>
+      [this, trackId, &reply, &changeSet](library::LibraryWrite& transaction) -> Result<>
       {
-        auto writer = library.tracks().writer(transaction);
+        auto writer = transaction.tracks();
         auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
         if (!optView)
         {
           return makeError(Error::Code::NotFound, std::format("track not found: {}", trackId));
-        }
-
-        if (!optView->isHotValid() || !optView->isColdValid())
-        {
-          return makeError(Error::Code::CorruptData, std::format("track {} contains an invalid record", trackId.raw()));
         }
 
         auto const uri = std::string{optView->property().uri()};
@@ -2425,12 +2308,14 @@ namespace ao::rt
           .removedFromListIds = changedLists.changedListIds,
         };
 
-        if (!uri.empty())
+        auto removeRes = writer.remove(trackId);
+
+        if (!removeRes)
         {
-          library.manifest().writer(transaction).remove(uri);
+          return std::unexpected{removeRes.error()};
         }
 
-        if (!writer.remove(trackId))
+        if (!*removeRes)
         {
           return makeError(Error::Code::NotFound, std::format("track not found: {}", trackId));
         }
@@ -2488,12 +2373,11 @@ namespace ao::rt
     auto reply = CreateTrackReply{};
     auto changeSet = LibraryChangeSet{};
     auto applyRes = mutation.apply(
-      [this, &target, &mediaTrackRes, &reply, &changeSet](library::WriteTransaction& transaction) -> Result<>
+      [&target, &mediaTrackRes, &reply, &changeSet](library::LibraryWrite& transaction) -> Result<>
       {
-        auto writer = library.tracks().writer(transaction);
-        auto manifestWriter = library.manifest().writer(transaction);
+        auto writer = transaction.tracks();
 
-        if (auto const optExistingManifest = manifestWriter.get(target.uri); optExistingManifest)
+        if (auto const optExistingManifest = writer.manifest(target.uri); optExistingManifest)
         {
           return makeError(Error::Code::Conflict, std::format("track file is already imported: {}", target.uri));
         }
@@ -2502,23 +2386,6 @@ namespace ao::rt
         builder.property().uri(target.uri);
         auto const title = std::string{builder.metadata().title()};
         auto const artist = std::string{builder.metadata().artist()};
-
-        auto preparedRes = builder.prepare(transaction, library.resources());
-
-        if (!preparedRes)
-        {
-          return storageError("Failed to prepare track data", preparedRes.error());
-        }
-
-        auto& [preparedHot, preparedCold] = *preparedRes;
-        auto createRes = library::createPreparedTrackRecord(writer, preparedHot, preparedCold);
-
-        if (!createRes)
-        {
-          return storageError("Failed to create track data", createRes.error());
-        }
-
-        auto const id = *createRes;
 
         auto fileEc = std::error_code{};
         auto const fileSize = std::filesystem::file_size(target.fullPath, fileEc);
@@ -2542,15 +2409,18 @@ namespace ao::rt
         }
 
         auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
-        manifestBuilder.trackId(id)
-          .fileSize(static_cast<std::uint64_t>(fileSize))
+        manifestBuilder.fileSize(static_cast<std::uint64_t>(fileSize))
           .mtime(static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
 
-        if (auto putRes = manifestWriter.put(target.uri, manifestBuilder.serialize()); !putRes)
+        auto createRes = writer.create(builder, manifestBuilder);
+
+        if (!createRes)
         {
-          return storageError("Failed to update file manifest", putRes.error());
+          return storageError("Failed to create track data", createRes.error());
         }
+
+        auto const id = *createRes;
 
         reply = CreateTrackReply{.trackId = id, .uri = target.uri, .title = title, .artist = artist};
         changeSet = LibraryChangeSet{.tracksInserted = {id}};

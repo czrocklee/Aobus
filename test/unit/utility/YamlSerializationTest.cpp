@@ -25,9 +25,8 @@ namespace ao::test
     ryml::Tree parseYaml(std::string_view text)
     {
       auto state = yaml::ErrorCallbackState{};
-      auto tree = ryml::Tree{yaml::callbacks(state)};
-      yaml::parseInArena(tree, text, state);
-      tree.callbacks(yaml::callbacks());
+      auto tree = ryml::Tree{yaml::callbacks()};
+      REQUIRE(yaml::parseInArena(tree, text, state));
       return tree;
     }
   } // namespace

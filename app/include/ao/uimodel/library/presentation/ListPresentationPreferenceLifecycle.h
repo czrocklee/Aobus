@@ -25,7 +25,7 @@ namespace ao::uimodel
   public:
     ListPresentationPreferenceLifecycle(std::map<ListId, std::string>& presentations,
                                         rt::LibraryChanges const& changes,
-                                        std::move_only_function<void(ListId) noexcept> onPreferenceRemoved);
+                                        std::move_only_function<void(ListId)> onPreferenceRemoved);
     ~ListPresentationPreferenceLifecycle() = default;
 
     ListPresentationPreferenceLifecycle(ListPresentationPreferenceLifecycle const&) = delete;
@@ -35,7 +35,7 @@ namespace ao::uimodel
 
   private:
     std::map<ListId, std::string>& _presentations;
-    std::move_only_function<void(ListId) noexcept> _onPreferenceRemoved;
+    std::move_only_function<void(ListId)> _onPreferenceRemoved;
     async::Subscription _changesSubscription;
   };
 } // namespace ao::uimodel

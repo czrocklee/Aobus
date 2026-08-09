@@ -4,15 +4,11 @@
 #include <ao/rt/library/LibraryWriter.h>
 
 #include "test/unit/TestFixtureSupport.h"
-#include "test/unit/library/MusicLibraryTestSupport.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
-#include <ao/lmdb/Environment.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -23,11 +19,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -35,39 +29,6 @@
 
 namespace ao::rt::test
 {
-  namespace
-  {
-    struct RawListRecord final
-    {
-      std::uint32_t listId = 0;
-      std::span<std::byte const> payload{};
-    };
-
-    void appendRawListRecords(std::filesystem::path const& path, std::span<RawListRecord const> const records)
-    {
-      auto environment = lmdb::test::openEnvironment(path, {.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
-      auto transaction = lmdb::test::beginWriteTransaction(environment);
-      auto database = lmdb::test::openDatabase(transaction, "lists");
-      auto writer = database.writer(transaction);
-
-      for (auto const& record : records)
-      {
-        REQUIRE(writer.create(record.listId, record.payload));
-      }
-
-      REQUIRE(transaction.commit());
-    }
-
-    void seedRawListRecords(std::filesystem::path const& path, std::span<RawListRecord const> const records)
-    {
-      {
-        [[maybe_unused]] auto library = library::test::makeTestMusicLibrary(path, path);
-      }
-
-      appendRawListRecords(path, records);
-    }
-  } // namespace
-
   TEST_CASE("LibraryWriter - updateMetadata publishes TracksMutated", "[runtime][unit][library][mutation]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -251,7 +212,7 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::ValueTooLarge);
-    CHECK(result.error().message.contains("Failed to serialize cold track data"));
+    CHECK(result.error().message.contains("Failed to update track data"));
     CHECK(result.error().message.contains("exceeds uint16_t"));
 
     CHECK(mutated.empty());
@@ -527,35 +488,5 @@ namespace ao::rt::test
     CHECK_FALSE(writerFixture.library().reader().listNode(childId).has_value());
     CHECK_FALSE(writerFixture.library().reader().listNode(grandchildId).has_value());
     CHECK(writerFixture.library().reader().listNode(unrelatedId).has_value());
-  }
-
-  TEST_CASE("LibraryWriter - subtree delete rejects cycles without deleting any List",
-            "[runtime][regression][list-delete][delete-subtree]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto const firstPayload =
-      ao::test::requireValue(library::ListBuilder::makeEmpty().parentId(ListId{2}).name("First").serialize());
-    auto const secondPayload =
-      ao::test::requireValue(library::ListBuilder::makeEmpty().parentId(ListId{1}).name("Second").serialize());
-    seedRawListRecords(temp.path(),
-                       std::array{RawListRecord{.listId = 1, .payload = firstPayload},
-                                  RawListRecord{.listId = 2, .payload = secondPayload}});
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto changes = makeStateOnlyLibraryChanges(musicLibrary);
-    auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
-    auto events = std::vector<LibraryChangeSet>{};
-    auto subscription =
-      changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
-
-    auto const result = writerFixture.writer().deleteListAndDescendants(ListId{1});
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
-    CHECK(result.error().message.contains("cycle"));
-    auto transaction = musicLibrary.readTransaction();
-    auto reader = musicLibrary.lists().reader(transaction);
-    CHECK(reader.get(ListId{1}).has_value());
-    CHECK(reader.get(ListId{2}).has_value());
-    CHECK(events.empty());
   }
 } // namespace ao::rt::test

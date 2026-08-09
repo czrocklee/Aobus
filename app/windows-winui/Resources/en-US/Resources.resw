@@ -158,5 +158,4 @@
 
 {0}</value></data>
   <data name="StartupHresultDetailFormat" xml:space="preserve"><value>{0} (HRESULT 0x{1:08X})</value></data>
-  <data name="StartupFailureUnknown" xml:space="preserve"><value>An unknown startup error occurred.</value></data>
 </root>

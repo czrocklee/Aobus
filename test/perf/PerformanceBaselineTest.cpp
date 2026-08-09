@@ -3,16 +3,21 @@
 //
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
+#include "lib/library/OpenValidationMetrics.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackWrite.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
@@ -37,11 +42,13 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <expected>
 #include <format>
 #include <fstream>
 #include <functional>
@@ -51,11 +58,17 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
+
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 namespace ao::rt::test
 {
@@ -344,6 +357,26 @@ namespace ao::rt::test
     void recordBaseline(std::string benchmark, std::vector<BaselineMetric> metrics)
     {
       baselineRecorder().record(BaselineRecord{.benchmark = std::move(benchmark), .metrics = std::move(metrics)});
+    }
+
+    std::int64_t currentResidentSetKiB()
+    {
+#ifdef __linux__
+      auto input = std::ifstream{"/proc/self/statm"};
+      [[maybe_unused]] std::uint64_t totalPages = 0;
+      std::uint64_t residentPages = 0;
+      input >> totalPages >> residentPages;
+
+      if (!input)
+      {
+        return 0;
+      }
+
+      auto const pageSize = ::sysconf(_SC_PAGESIZE);
+      return pageSize > 0 ? static_cast<std::int64_t>(residentPages) * pageSize / 1024 : 0;
+#else
+      return 0;
+#endif
     }
 
     // A comparison-heavy predicate that every synthetic track satisfies, so the
@@ -1340,6 +1373,7 @@ namespace ao::rt::test
 
     struct PipelineOperationTiming final
     {
+      std::chrono::microseconds mutationDuration{};
       std::chrono::microseconds commitDuration{};
       std::chrono::microseconds callbackDuration{};
     };
@@ -1362,6 +1396,7 @@ namespace ao::rt::test
         .artist = std::format("Artist {:03}", index % 200),
         .album = std::format("Album {:04}", index % 1000),
         .genre = std::format("Genre {:02}", index % 20),
+        .uri = std::format("track-{:06}.flac", index),
         .year = static_cast<std::uint16_t>(1990 + (index % 35)),
       };
     }
@@ -1369,30 +1404,40 @@ namespace ao::rt::test
     std::vector<TrackId> createPipelineTracks(library::MusicLibrary& library,
                                               std::size_t firstIndex,
                                               std::size_t count,
-                                              std::chrono::microseconds* commitDuration = nullptr)
+                                              PipelineOperationTiming* timing = nullptr)
     {
       auto transaction = library::test::writeTransaction(library);
-      auto writer = library.tracks().writer(transaction);
       auto ids = std::vector<TrackId>{};
       ids.reserve(count);
 
-      for (std::size_t offset = 0; offset < count; ++offset)
-      {
-        auto builder = library::TrackBuilder::makeEmpty();
-        library::test::applyTrackSpec(builder, pipelineTrackSpec(firstIndex + offset));
-        auto preparedRes = builder.prepare(transaction, library.resources());
-        REQUIRE(preparedRes);
-        auto createdRes = library::createPreparedTrackRecord(writer, preparedRes->first, preparedRes->second);
-        REQUIRE(createdRes);
-        ids.push_back(*createdRes);
-      }
+      auto const mutationStart = std::chrono::steady_clock::now();
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
 
-      auto const start = std::chrono::steady_clock::now();
+          for (std::size_t const offset : std::views::iota(std::size_t{0}, count))
+          {
+            auto const spec = pipelineTrackSpec(firstIndex + offset);
+            auto builder = library::TrackBuilder::makeEmpty();
+            library::test::applyTrackSpec(builder, spec);
+            auto createdRes = writer.create(builder, library::FileManifestBuilder::makeEmpty());
+            REQUIRE(createdRes);
+            ids.push_back(*createdRes);
+          }
+
+          return {};
+        }));
+
+      auto const mutationEnd = std::chrono::steady_clock::now();
+      auto const commitStart = std::chrono::steady_clock::now();
       REQUIRE(transaction.commit());
 
-      if (auto const end = std::chrono::steady_clock::now(); commitDuration != nullptr)
+      if (timing != nullptr)
       {
-        *commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing->mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing->commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
       }
 
       return ids;
@@ -1443,7 +1488,7 @@ namespace ao::rt::test
         }
 
         auto result =
-          _libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
+          transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
         REQUIRE(result);
         _orderedListId = *result;
         REQUIRE(transaction.commit());
@@ -1453,23 +1498,22 @@ namespace ao::rt::test
       {
         auto timing = PipelineRunTiming{};
         timing.denseOrderBindDuration = measureDenseOrderBindDuration();
-        auto newIds = createPipelineTracks(
-          _libraryFixture.library(), kInitialTrackCount, kBulkCount, &timing.insert.commitDuration);
+        auto newIds = createPipelineTracks(_libraryFixture.library(), kInitialTrackCount, kBulkCount, &timing.insert);
         timing.insert.callbackDuration = measureCallbackDuration([&] { _rootPtr->appendBatch(newIds); });
 
-        timing.remove.commitDuration = removeTracksDuration(newIds);
+        timing.remove = removeTracksTiming(newIds);
         timing.remove.callbackDuration =
           measureCallbackDuration([&] { CHECK(_rootPtr->removeTail(kBulkCount) == newIds); });
 
-        timing.singleUpdate.commitDuration = updateTracksDuration(kBulkCount, 1);
+        timing.singleUpdate = updateTracksTiming(kBulkCount, 1);
         timing.singleUpdate.callbackDuration = measureCallbackDuration([&] { _rootPtr->updateRange(kBulkCount, 1); });
         timing.singleProjectionUpdate.callbackDuration =
           measureCallbackDuration([&] { _orderedPtr->updateRange(kBulkCount, 1); });
 
-        timing.update.commitDuration = updateTracksDuration(0, kBulkCount);
+        timing.update = updateTracksTiming(0, kBulkCount);
         timing.update.callbackDuration = measureCallbackDuration([&] { _rootPtr->updateRange(0, kBulkCount); });
 
-        timing.orderMove.commitDuration = persistOrderMoveDuration();
+        timing.orderMove = persistOrderMoveTiming();
         timing.orderMove.callbackDuration =
           measureCallbackDuration([&] { _orderedPtr->moveRangeToEnd(0, kOrderMoveCount); });
 
@@ -1494,49 +1538,75 @@ namespace ao::rt::test
         return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
       }
 
-      std::chrono::microseconds removeTracksDuration(std::span<TrackId const> trackIds)
+      PipelineOperationTiming removeTracksTiming(std::span<TrackId const> trackIds)
       {
+        auto timing = PipelineOperationTiming{};
         auto transaction = library::test::writeTransaction(_libraryFixture.library());
-        auto writer = _libraryFixture.library().tracks().writer(transaction);
+        auto const mutationStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.apply(
+          [trackIds](library::LibraryWrite& write) -> Result<>
+          {
+            auto writer = write.tracks();
 
-        for (auto const trackId : trackIds)
-        {
-          REQUIRE(writer.remove(trackId));
-        }
+            for (auto const trackId : trackIds)
+            {
+              auto removeRes = writer.remove(trackId);
+              REQUIRE(removeRes);
+              REQUIRE(*removeRes);
+            }
 
-        auto const start = std::chrono::steady_clock::now();
+            return {};
+          }));
+
+        auto const mutationEnd = std::chrono::steady_clock::now();
+        auto const commitStart = std::chrono::steady_clock::now();
         REQUIRE(transaction.commit());
-        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
+        return timing;
       }
 
-      std::chrono::microseconds updateTracksDuration(std::size_t const startIndex, std::size_t const count)
+      PipelineOperationTiming updateTracksTiming(std::size_t const startIndex, std::size_t const count)
       {
         REQUIRE(startIndex <= _ids.size());
         REQUIRE(count <= _ids.size() - startIndex);
+        auto timing = PipelineOperationTiming{};
         auto transaction = library::test::writeTransaction(_libraryFixture.library());
-        auto writer = _libraryFixture.library().tracks().writer(transaction);
+        auto const mutationStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.apply(
+          [&](library::LibraryWrite& write) -> Result<>
+          {
+            auto writer = write.tracks();
 
-        for (std::size_t offset = 0; offset < count; ++offset)
-        {
-          auto const index = startIndex + offset;
-          auto builder = library::TrackBuilder::makeEmpty();
-          library::test::applyTrackSpec(builder, pipelineTrackSpec(index, true));
-          auto preparedRes = builder.prepareHot(transaction);
-          REQUIRE(preparedRes);
-          REQUIRE(library::updatePreparedHotTrackRecord(writer, _ids[index], *preparedRes));
-        }
+            for (std::size_t const offset : std::views::iota(std::size_t{0}, count))
+            {
+              auto const index = startIndex + offset;
+              auto const spec = pipelineTrackSpec(index, true);
+              auto builder = library::TrackBuilder::makeEmpty();
+              library::test::applyTrackSpec(builder, spec);
+              REQUIRE(writer.updateHot(_ids[index], builder));
+            }
 
-        auto const start = std::chrono::steady_clock::now();
+            return {};
+          }));
+
+        auto const mutationEnd = std::chrono::steady_clock::now();
+        auto const commitStart = std::chrono::steady_clock::now();
         REQUIRE(transaction.commit());
-        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
+        return timing;
       }
 
-      std::chrono::microseconds persistOrderMoveDuration()
+      PipelineOperationTiming persistOrderMoveTiming()
       {
         auto movedIds = std::vector<TrackId>{_ids.begin(), _ids.begin() + static_cast<std::ptrdiff_t>(kOrderMoveCount)};
         _ids.erase(_ids.begin(), _ids.begin() + static_cast<std::ptrdiff_t>(kOrderMoveCount));
         _ids.append_range(movedIds);
 
+        auto timing = PipelineOperationTiming{};
         auto transaction = library::test::writeTransaction(_libraryFixture.library());
         auto builder = library::ListBuilder::makeEmpty().name("Performance ordered List");
 
@@ -1545,13 +1615,16 @@ namespace ao::rt::test
           builder.orderTrackIds().add(trackId);
         }
 
-        REQUIRE(_libraryFixture.library()
-                  .lists()
-                  .writer(transaction)
-                  .update(_orderedListId, ao::test::requireValue(builder.serialize())));
-        auto const start = std::chrono::steady_clock::now();
+        auto const mutationStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.apply([&](library::LibraryWrite& write)
+                                  { return write.lists().update(_orderedListId, builder); }));
+        auto const mutationEnd = std::chrono::steady_clock::now();
+        auto const commitStart = std::chrono::steady_clock::now();
         REQUIRE(transaction.commit());
-        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
+        return timing;
       }
 
       std::chrono::microseconds measureDenseOrderBindDuration()
@@ -1579,27 +1652,36 @@ namespace ao::rt::test
 
     void reportPipelineOperation(std::string_view name, std::vector<PipelineOperationTiming> const& samples)
     {
+      auto mutations = std::vector<std::int64_t>{};
       auto commits = std::vector<std::int64_t>{};
       auto callbacks = std::vector<std::int64_t>{};
+      mutations.reserve(samples.size());
       commits.reserve(samples.size());
       callbacks.reserve(samples.size());
 
       for (auto const& sample : samples)
       {
+        mutations.push_back(sample.mutationDuration.count());
         commits.push_back(sample.commitDuration.count());
         callbacks.push_back(sample.callbackDuration.count());
       }
 
+      std::ranges::sort(mutations);
       std::ranges::sort(commits);
       std::ranges::sort(callbacks);
       auto const medianIndex = commits.size() / 2U;
       auto const percentile95Index = (((commits.size() * 95U) + 99U) / 100U) - 1U;
+      auto const mutationMedian = mutations[medianIndex];
+      auto const mutationP95 = mutations[percentile95Index];
       auto const commitMedian = commits[medianIndex];
       auto const commitP95 = commits[percentile95Index];
       auto const callbackMedian = callbacks[medianIndex];
       auto const callbackP95 = callbacks[percentile95Index];
-      APP_LOG_INFO("  {}: commit median/p95 {} / {} us; callbacks median/p95 {} / {} us",
+      APP_LOG_INFO("  {}: mutation median/p95 {} / {} us; commit median/p95 {} / {} us; "
+                   "callbacks median/p95 {} / {} us",
                    name,
+                   mutationMedian,
+                   mutationP95,
                    commitMedian,
                    commitP95,
                    callbackMedian,
@@ -1608,6 +1690,8 @@ namespace ao::rt::test
                      {
                        metric("track_count", SourcePipelineBench::kInitialTrackCount, "count"),
                        metric("smart_list_count", SourcePipelineBench::kSmartListCount, "count"),
+                       metric("mutation_median", mutationMedian, "us"),
+                       metric("mutation_p95", mutationP95, "us"),
                        metric("commit_median", commitMedian, "us"),
                        metric("commit_p95", commitP95, "us"),
                        metric("callbacks_median", callbackMedian, "us"),
@@ -2062,6 +2146,87 @@ namespace ao::rt::test
                      });
       CHECK(duration < std::chrono::minutes{5});
     }
+  }
+
+  TEST_CASE("PerformanceBaseline - 100k library open admission", "[perf][unit][baseline][library-open-admission]")
+  {
+    constexpr std::size_t kTrackCount = 100'000;
+    constexpr std::size_t kMapSize = std::size_t{512} * 1024U * 1024U;
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+
+    {
+      auto libraryRes =
+        library::MusicLibrary::open(temp.path(), databasePath, library::MusicLibrary::Options{.mapSize = kMapSize});
+      REQUIRE(libraryRes);
+      auto library = std::move(*libraryRes);
+      auto transaction = library::test::writeTransaction(library);
+      auto createRes = transaction.apply(
+        [](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+
+          for (std::size_t index = 0; index < kTrackCount; ++index)
+          {
+            auto const uri = std::format("open-benchmark/{:06}.flac", index);
+            auto track = library::TrackBuilder::makeEmpty();
+            track.property().uri(uri);
+
+            if (auto result = writer.create(track, library::FileManifestBuilder::makeEmpty()); !result)
+            {
+              return std::unexpected{result.error()};
+            }
+          }
+
+          return {};
+        });
+      REQUIRE(createRes);
+      REQUIRE(transaction.commit());
+    }
+
+    auto const baselineRss = currentResidentSetKiB();
+    auto peakRss = std::atomic<std::int64_t>{baselineRss};
+    auto sampler = std::jthread{
+      [&peakRss](std::stop_token const stopToken)
+      {
+        while (!stopToken.stop_requested())
+        {
+          auto const current = currentResidentSetKiB();
+          auto observed = peakRss.load(std::memory_order_relaxed);
+
+          while (observed < current && !peakRss.compare_exchange_weak(observed, current, std::memory_order_relaxed))
+          {
+          }
+
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+      }};
+
+    auto const start = std::chrono::steady_clock::now();
+    auto reopenedRes =
+      library::MusicLibrary::open(temp.path(), databasePath, library::MusicLibrary::Options{.mapSize = kMapSize});
+    auto const endTime = std::chrono::steady_clock::now();
+    sampler.request_stop();
+    sampler.join();
+
+    REQUIRE(reopenedRes);
+    auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - start);
+    auto const metrics = library::detail::openValidationMetrics();
+    auto const sampledPeakRss = peakRss.load(std::memory_order_relaxed);
+    auto const rssGrowth = std::max<std::int64_t>(0, sampledPeakRss - baselineRss);
+    recordBaseline("library-open-admission",
+                   {
+                     metric("track_count", static_cast<std::int64_t>(kTrackCount), "count"),
+                     metric("duration", duration.count(), "ms"),
+                     metric("baseline_rss", baselineRss, "KiB"),
+                     metric("sampled_peak_rss", sampledPeakRss, "KiB"),
+                     metric("sampled_rss_growth", rssGrowth, "KiB"),
+                     metric("track_cursor_rows", static_cast<std::int64_t>(metrics.trackCursorRows), "count"),
+                     metric("manifest_point_reads", static_cast<std::int64_t>(metrics.manifestPointReads), "count"),
+                   });
+
+    CHECK(metrics.trackCursorRows == kTrackCount);
+    CHECK(metrics.manifestPointReads == kTrackCount);
   }
 
   TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][unit][baseline]")

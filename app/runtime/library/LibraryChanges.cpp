@@ -3,18 +3,20 @@
 
 #include <ao/rt/library/LibraryChanges.h>
 
+#include <ao/Contract.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <cstdint>
+#include <exception>
+#include <format>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::rt
@@ -24,27 +26,33 @@ namespace ao::rt
     struct PendingPublication final
     {
       LibraryChangeSet changeSet{};
-      std::move_only_function<void() noexcept> completion{};
+      std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion{};
     };
 
     struct ReplicaSlot final
     {
       std::string name{};
-      std::move_only_function<void(LibraryChangeSet const&) noexcept> apply{};
+      std::move_only_function<void(LibraryChangeSet const&)> apply{};
     };
 
-    Impl(async::Executor& executor, std::uint64_t const lastPublishedRevision)
-      : callbackExecutor{executor}, expectedRevision{lastPublishedRevision + 1U}
+    static std::string_view replicaNameOf(std::shared_ptr<ReplicaSlot> const& replicaPtr) noexcept
     {
+      return replicaPtr == nullptr ? std::string_view{"<unbound>"} : std::string_view{replicaPtr->name};
     }
 
-    void bindReplica(std::string name, std::move_only_function<void(LibraryChangeSet const&) noexcept> apply)
+    Impl(async::Executor& executor, std::uint64_t const lastPublishedRevision, std::string identity)
+      : callbackExecutor{executor}, libraryIdentity{std::move(identity)}, expectedRevision{lastPublishedRevision + 1U}
+    {
+      AO_EXPECTS(!libraryIdentity.empty(), "Library changes require a diagnostic identity");
+    }
+
+    void bindReplica(std::string name, std::move_only_function<void(LibraryChangeSet const&)> apply)
     {
       auto const lock = std::scoped_lock{mutex};
 
-      gsl_Expects(apply && "Library change replica '{}' requires an apply callback");
-      gsl_Expects(!publicationInProgress && "Cannot bind library change replica '{}' during active publication");
-      gsl_Expects(!replicaSlotPtr && "Library change replica '{}' is already bound");
+      AO_EXPECTS(apply, "Library change replica '{}' requires an apply callback", name);
+      AO_EXPECTS(!publicationInProgress, "Cannot bind library change replica '{}' during active publication", name);
+      AO_EXPECTS(!replicaSlotPtr, "Library change replica '{}' is already bound", name);
 
       replicaSlotPtr = std::make_shared<ReplicaSlot>(std::move(name), std::move(apply));
     }
@@ -55,25 +63,49 @@ namespace ao::rt
       replicaSlotPtr.reset();
     }
 
-    void publish(LibraryChangeSet changeSet, std::move_only_function<void() noexcept> completion)
+    void publish(
+      LibraryChangeSet changeSet,
+      std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
     {
-      gsl_Expects(changeSet.libraryRevision != 0 && "Library changeset must carry a non-zero revision");
-
       auto const revision = changeSet.libraryRevision;
-      {
-        auto const lock = std::scoped_lock{mutex};
-
-        gsl_Expects(revision == expectedRevision && "Out-of-sequence library changeset revision");
-        gsl_Expects(!publicationInProgress && "Library changeset revision {} submitted during active publication");
-        gsl_Expects(!closing && "Library changeset revision {} submitted while closing");
-
-        optPendingPublication.emplace(
-          PendingPublication{.changeSet = std::move(changeSet), .completion = std::move(completion)});
-        publicationInProgress = true;
-      }
 
       try
       {
+        {
+          auto const lock = std::scoped_lock{mutex};
+          auto const replicaName = replicaNameOf(replicaSlotPtr);
+
+          AO_INVARIANT(revision != 0,
+                       "library publication failure: phase=admission library='{}' revision={} replica='{}': "
+                       "changeset revision must be nonzero",
+                       libraryIdentity,
+                       revision,
+                       replicaName);
+          AO_INVARIANT(revision == expectedRevision,
+                       "library publication failure: phase=admission library='{}' revision={} replica='{}': "
+                       "expected revision {}",
+                       libraryIdentity,
+                       revision,
+                       replicaName,
+                       expectedRevision);
+          AO_INVARIANT(!publicationInProgress,
+                       "library publication failure: phase=admission library='{}' revision={} replica='{}': "
+                       "another publication is active",
+                       libraryIdentity,
+                       revision,
+                       replicaName);
+          AO_INVARIANT(!closing,
+                       "library publication failure: phase=admission library='{}' revision={} replica='{}': "
+                       "publication owner is closing",
+                       libraryIdentity,
+                       revision,
+                       replicaName);
+
+          optPendingPublication.emplace(
+            PendingPublication{.changeSet = std::move(changeSet), .completion = std::move(completion)});
+          publicationInProgress = true;
+        }
+
         callbackExecutor.dispatch(
           [weakImplPtr = weak_from_this()] noexcept
           {
@@ -85,20 +117,19 @@ namespace ao::rt
       }
       catch (...)
       {
+        auto pinnedReplicaPtr = std::shared_ptr<ReplicaSlot>{};
         {
           auto const lock = std::scoped_lock{mutex};
-
-          // A synchronous delivery extracts the pending value before running.
-          // If none remains, its failure is already complete and only needs to
-          // propagate. A still-pending value means dispatch rejected the task.
-          if (optPendingPublication)
-          {
-            optPendingPublication.reset();
-            publicationInProgress = false;
-          }
+          pinnedReplicaPtr = replicaSlotPtr;
         }
 
-        throw;
+        auto const replicaName = replicaNameOf(pinnedReplicaPtr);
+        AO_FATAL_EXCEPTION(
+          std::current_exception(),
+          std::format("library publication failure: phase=admission library='{}' revision={} replica='{}'",
+                      libraryIdentity,
+                      revision,
+                      replicaName));
       }
     }
 
@@ -114,17 +145,36 @@ namespace ao::rt
           return;
         }
 
-        gsl_Assert(publicationInProgress);
         optPending.emplace(std::move(*optPendingPublication));
         optPendingPublication.reset();
         // Pinned under the lock, applied outside it, so binding cannot race a
         // delivery already in flight.
         pinnedReplicaPtr = replicaSlotPtr;
+        activeReplicaPtr = pinnedReplicaPtr;
+        auto const replicaName = replicaNameOf(pinnedReplicaPtr);
+        AO_INVARIANT(publicationInProgress,
+                     "library publication failure: phase=delivery library='{}' revision={} replica='{}': "
+                     "pending delivery lost its publication gate",
+                     libraryIdentity,
+                     optPending->changeSet.libraryRevision,
+                     replicaName);
       }
 
       if (pinnedReplicaPtr)
       {
-        pinnedReplicaPtr->apply(optPending->changeSet);
+        try
+        {
+          pinnedReplicaPtr->apply(optPending->changeSet);
+        }
+        catch (...)
+        {
+          AO_FATAL_EXCEPTION(
+            std::current_exception(),
+            std::format("library publication failure: phase=replica-apply library='{}' revision={} replica='{}'",
+                        libraryIdentity,
+                        optPending->changeSet.libraryRevision,
+                        pinnedReplicaPtr->name));
+        }
       }
 
       // Phase two. Reaching an observer states that the replica is current.
@@ -132,14 +182,60 @@ namespace ao::rt
 
       {
         auto const lock = std::scoped_lock{mutex};
+        activeReplicaPtr.reset();
         publicationInProgress = false;
         ++expectedRevision;
       }
 
       if (optPending->completion)
       {
-        optPending->completion();
+        try
+        {
+          optPending->completion(std::string{libraryIdentity}, std::string{replicaNameOf(pinnedReplicaPtr)});
+        }
+        catch (...)
+        {
+          auto const replicaName = replicaNameOf(pinnedReplicaPtr);
+          AO_FATAL_EXCEPTION(
+            std::current_exception(),
+            std::format("library publication failure: phase=completion library='{}' revision={} replica='{}'",
+                        libraryIdentity,
+                        optPending->changeSet.libraryRevision,
+                        replicaName));
+        }
       }
+    }
+
+    async::Subscription connectObserver(std::move_only_function<void(LibraryChangeSet const&)> handler)
+    {
+      return changedSignal.connect(
+        [weakImplPtr = weak_from_this(),
+         handler = std::move(handler)](LibraryChangeSet const& changeSet) mutable noexcept
+        {
+          try
+          {
+            handler(changeSet);
+          }
+          catch (...)
+          {
+            auto const lockedPtr = weakImplPtr.lock();
+            AO_INVARIANT(lockedPtr != nullptr, "Library observer outlived its publication owner");
+            auto const pinnedReplicaPtr = lockedPtr->activeReplica();
+            auto const replicaName = replicaNameOf(pinnedReplicaPtr);
+            AO_FATAL_EXCEPTION(
+              std::current_exception(),
+              std::format("library publication failure: phase=observer-delivery library='{}' revision={} replica='{}'",
+                          lockedPtr->libraryIdentity,
+                          changeSet.libraryRevision,
+                          replicaName));
+          }
+        });
+    }
+
+    std::shared_ptr<ReplicaSlot> activeReplica() const
+    {
+      auto const lock = std::scoped_lock{mutex};
+      return activeReplicaPtr;
     }
 
     void retire() noexcept
@@ -155,25 +251,28 @@ namespace ao::rt
     }
 
     async::Executor& callbackExecutor;
+    std::string const libraryIdentity;
     std::shared_ptr<ReplicaSlot> replicaSlotPtr;
+    std::shared_ptr<ReplicaSlot> activeReplicaPtr;
     async::Signal<LibraryChangeSet const&> changedSignal;
-    std::mutex mutex;
+    mutable std::mutex mutex;
     std::optional<PendingPublication> optPendingPublication;
     std::uint64_t expectedRevision = 1;
     bool publicationInProgress = false;
     bool closing = false;
   };
 
-  LibraryChanges::LibraryChanges(async::Executor& callbackExecutor, std::uint64_t lastPublishedRevision)
-    : _implPtr{std::make_shared<Impl>(callbackExecutor, lastPublishedRevision)}
+  LibraryChanges::LibraryChanges(async::Executor& callbackExecutor,
+                                 std::uint64_t lastPublishedRevision,
+                                 std::string libraryIdentity)
+    : _implPtr{std::make_shared<Impl>(callbackExecutor, lastPublishedRevision, std::move(libraryIdentity))}
   {
   }
 
   LibraryChanges::~LibraryChanges() = default;
 
-  async::Subscription LibraryChanges::bindReplica(
-    std::string replicaName,
-    std::move_only_function<void(LibraryChangeSet const&) noexcept> apply) const
+  async::Subscription LibraryChanges::bindReplica(std::string replicaName,
+                                                  std::move_only_function<void(LibraryChangeSet const&)> apply) const
   {
     _implPtr->bindReplica(std::move(replicaName), std::move(apply));
 
@@ -186,14 +285,14 @@ namespace ao::rt
                                }};
   }
 
-  async::Subscription LibraryChanges::onChanged(
-    std::move_only_function<void(LibraryChangeSet const&) noexcept> handler) const
+  async::Subscription LibraryChanges::onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const
   {
-    return _implPtr->changedSignal.connect(std::move(handler));
+    return _implPtr->connectObserver(std::move(handler));
   }
 
-  void LibraryChanges::publishFromCoordinator(LibraryChangeSet changeSet,
-                                              std::move_only_function<void() noexcept> completion)
+  void LibraryChanges::publishFromCoordinator(
+    LibraryChangeSet changeSet,
+    std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
   {
     _implPtr->publish(std::move(changeSet), std::move(completion));
   }

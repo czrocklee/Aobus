@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/library/TrackWrite.h>
+#include "lib/library/TrackWrite.h"
 
 #include "lib/library/TrackRecordValidation.h"
 #include "lib/lmdb/detail/TransactionFailure.h"
@@ -64,7 +64,7 @@ namespace ao::library::test
                                                                                   WriteTransaction& transaction,
                                                                                   ResourceStore const& resources)
     {
-      auto result = builder.prepare(transaction, resources);
+      auto result = physicalPrepareTrack(builder, transaction, resources);
       REQUIRE(result);
       return *std::move(result);
     }
@@ -79,7 +79,7 @@ namespace ao::library::test
     builder.property().uri("created.flac");
 
     auto const [preparedHot, preparedCold] = prepareTrack(builder, transaction, fixture.library.resources());
-    auto writer = fixture.store.writer(transaction);
+    auto writer = physicalWriter(fixture.store, transaction);
 
     auto createRes = createPreparedTrackRecord(writer, preparedHot, preparedCold);
     REQUIRE(createRes);
@@ -127,7 +127,7 @@ namespace ao::library::test
     updatedBuilder.property().uri("updated.flac");
     auto const [updatedHot, updatedCold] = prepareTrack(updatedBuilder, transaction, fixture.library.resources());
 
-    auto writer = fixture.store.writer(transaction);
+    auto writer = physicalWriter(fixture.store, transaction);
     auto createRes = createPreparedTrackRecord(writer, originalHot, originalCold);
     REQUIRE(createRes);
 
@@ -163,7 +163,7 @@ namespace ao::library::test
       builder.metadata().title(longerTitle).trackNumber(9);
       builder.property().uri(longerUri);
 
-      auto writer = fixture.store.writer(transaction);
+      auto writer = physicalWriter(fixture.store, transaction);
 
       auto createRes = createPreparedTrackRecord(writer, preparedHot, preparedCold);
       REQUIRE(createRes);
@@ -203,7 +203,7 @@ namespace ao::library::test
     originalBuilder.metadata().title("Original");
     originalBuilder.property().uri("original.flac");
     auto const [originalHot, originalCold] = prepareTrack(originalBuilder, originalTransaction, library.resources());
-    auto originalWriter = library.tracks().writer(originalTransaction);
+    auto originalWriter = physicalWriter(library.tracks(), originalTransaction);
     auto const createRes = createPreparedTrackRecord(originalWriter, originalHot, originalCold);
     REQUIRE(createRes);
     auto const trackId = *createRes;
@@ -221,7 +221,7 @@ namespace ao::library::test
       updatedBuilder.property().uri("oversized.flac");
       updatedBuilder.customMetadata().add("oversized", oversizedValue);
       auto const [updatedHot, updatedCold] = prepareTrack(updatedBuilder, updateTransaction, library.resources());
-      auto updateWriter = library.tracks().writer(updateTransaction);
+      auto updateWriter = physicalWriter(library.tracks(), updateTransaction);
 
       try
       {

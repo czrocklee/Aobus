@@ -29,7 +29,7 @@ namespace ao::library::test
     auto const buffer = utility::bytes::view(std::string_view{"hello"});
 
     auto wtxn2 = writeTransaction(library);
-    auto idRes = store.writer(wtxn2).create(buffer);
+    auto idRes = physicalWriter(store, wtxn2).create(buffer);
     REQUIRE(idRes);
     auto const id = *idRes;
     CHECK(id > 0);
@@ -61,14 +61,14 @@ namespace ao::library::test
     auto const buffer = utility::bytes::view(std::string_view{"test"});
 
     auto wtxn2 = writeTransaction(library);
-    auto idRes = store.writer(wtxn2).create(buffer);
+    auto idRes = physicalWriter(store, wtxn2).create(buffer);
     REQUIRE(idRes);
     auto const id = *idRes;
     REQUIRE(wtxn2.commit());
 
     // Delete it
     auto wtxn3 = writeTransaction(library);
-    REQUIRE(store.writer(wtxn3).remove(id));
+    REQUIRE(physicalWriter(store, wtxn3).remove(id));
     REQUIRE(wtxn3.commit());
 
     // Verify it's gone
@@ -88,14 +88,14 @@ namespace ao::library::test
     auto const buffer = utility::bytes::view(std::string_view{"samedata"});
 
     auto wtxn2 = writeTransaction(library);
-    auto id1Res = store.writer(wtxn2).create(buffer);
+    auto id1Res = physicalWriter(store, wtxn2).create(buffer);
     REQUIRE(id1Res);
     auto const id1 = *id1Res;
     REQUIRE(wtxn2.commit());
 
     // Create same content again - should return same ID (deduplication)
     auto wtxn3 = writeTransaction(library);
-    auto id2Res = store.writer(wtxn3).create(buffer);
+    auto id2Res = physicalWriter(store, wtxn3).create(buffer);
     REQUIRE(id2Res);
     auto const id2 = *id2Res;
     CHECK(id2 == id1);
@@ -125,7 +125,7 @@ namespace ao::library::test
     constexpr auto kData = std::array{std::byte{0xee}, std::byte{0xdc}, std::byte{0xc8}, std::byte{0xbf}};
 
     auto wtxn2 = writeTransaction(library);
-    auto writer = store.writer(wtxn2);
+    auto writer = physicalWriter(store, wtxn2);
     auto idRes = writer.create(kData);
     REQUIRE(idRes);
     auto const id = *idRes;

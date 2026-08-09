@@ -193,9 +193,9 @@ namespace ao::gtk
     _implPtr = std::make_unique<Impl>(window, runtime);
 
     _trackPresentationChangedSubscription = _implPtr->trackPresentationPreferences.signalChanged().connect(
-      [this](ao::ListId /*listId*/) noexcept { saveColumnLayoutIfNotRestoring(); });
+      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
     _trackColumnLayoutChangedSubscription = _implPtr->trackColumnLayouts.signalChanged().connect(
-      [this](ao::ListId /*listId*/) noexcept { saveColumnLayoutIfNotRestoring(); });
+      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
   }
 
   MainWindowCoordinator::~MainWindowCoordinator()
@@ -209,7 +209,7 @@ namespace ao::gtk
   void MainWindowCoordinator::prepareSession()
   {
     _tracksMutatedSubscription = _runtime.library().changes().onChanged(
-      [this](rt::LibraryChangeSet const& changeSet) noexcept
+      [this](rt::LibraryChangeSet const& changeSet)
       {
         if (changeSet.libraryReset)
         {
@@ -228,7 +228,7 @@ namespace ao::gtk
       });
 
     _listsMutatedSubscription = _runtime.library().changes().onChanged(
-      [this](rt::LibraryChangeSet const& mutation) noexcept
+      [this](rt::LibraryChangeSet const& mutation)
       {
         if (!mutation.libraryReset && mutation.listsUpserted.empty() && mutation.listsDeleted.empty() &&
             mutation.listOrderChanges.empty())
@@ -289,7 +289,10 @@ namespace ao::gtk
     session.lastOutputDeviceId = pb.output.selectedDevice.deviceId.raw();
     session.lastOutputProfileId = pb.output.selectedDevice.profileId.raw();
 
-    _configStorePtr->saveAppSession(session);
+    if (auto const savedRes = _configStorePtr->saveAppSession(session); !savedRes)
+    {
+      APP_LOG_WARN("MainWindowCoordinator: Failed to save application session - {}", savedRes.error().message);
+    }
 
     if (auto const savedRes = _runtime.savePlaybackSession(); !savedRes)
     {

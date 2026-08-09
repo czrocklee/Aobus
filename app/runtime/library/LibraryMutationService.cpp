@@ -3,6 +3,7 @@
 
 #include "LibraryMutationService.h"
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -11,14 +12,12 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WritableMusicLibrary.h>
-#include <ao/rt/Log.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -31,13 +30,33 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <source_location>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::rt
 {
+  void detail::requireMatchingPublicationCompletion(bool const publicationInProgress,
+                                                    std::uint64_t const revision,
+                                                    std::uint64_t const committedRevision,
+                                                    std::string_view const libraryIdentity,
+                                                    std::string_view const replicaName)
+  {
+    if (!publicationInProgress || revision != committedRevision)
+    {
+      AO_FATAL("library publication failure: phase=completion-ack library='{}' revision={} replica='{}' "
+               "committed-revision={} publication-active={}",
+               libraryIdentity,
+               revision,
+               replicaName,
+               committedRevision,
+               publicationInProgress);
+    }
+  }
+
   struct LibraryMutationService::MaintenanceGuard::LifetimeState final
   {
     explicit LifetimeState(LibraryMutationService* ownerValue) noexcept
@@ -118,38 +137,17 @@ namespace ao::rt
       return library.libraryRevision(transaction);
     }
 
-    [[noreturn]] void terminateLibraryInfrastructure(std::string_view const context,
-                                                     std::exception_ptr const exceptionPtr = {}) noexcept
+    [[noreturn]] void abortLibraryInfrastructure(
+      std::string_view const context,
+      std::exception_ptr const exceptionPtr = {},
+      std::source_location const location = std::source_location::current()) noexcept
     {
-      try
+      if (exceptionPtr)
       {
-        if (exceptionPtr)
-        {
-          try
-          {
-            std::rethrow_exception(exceptionPtr);
-          }
-          catch (std::exception const& error)
-          {
-            APP_LOG_CRITICAL("{}: {}", context, error.what());
-          }
-          catch (...)
-          {
-            APP_LOG_CRITICAL("{}: unknown exception", context);
-          }
-        }
-        else
-        {
-          APP_LOG_CRITICAL("{}", context);
-        }
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): Logging cannot weaken the terminal infrastructure boundary.
-      catch (...)
-      {
-        // Termination is the final live-runtime infrastructure boundary.
+        fatalFromException(exceptionPtr, context, location);
       }
 
-      std::terminate();
+      AO_FATAL_AT(location, context);
     }
   } // namespace
 
@@ -191,7 +189,7 @@ namespace ao::rt
 
   Result<LibraryMutationService::CommitInfo> LibraryMutationService::Mutation::commit(LibraryChangeSet changeSet)
   {
-    gsl_Assert(_owner != nullptr && !_terminal && "Library mutation is already terminal");
+    AO_INVARIANT(_owner != nullptr && !_terminal, "Library mutation is already terminal");
 
     try
     {
@@ -273,9 +271,32 @@ namespace ao::rt
   }
 
   async::Subscription LibraryMutationService::onAvailabilityChanged(
-    std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const
+    std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const
   {
-    return _availabilityChanged.connect(std::move(handler));
+    return _availabilityChanged.connect(
+      [this, handler = std::move(handler)](LibraryAuthoringAvailability const& availability) mutable noexcept
+      {
+        try
+        {
+          handler(availability);
+        }
+        catch (...)
+        {
+          auto const diagnosticContextPtr = activePublicationDiagnosticContext();
+
+          if (diagnosticContextPtr != nullptr)
+          {
+            AO_FATAL_EXCEPTION(
+              std::current_exception(),
+              std::format("library publication failure: phase=completion library='{}' revision={} replica='{}'",
+                          diagnosticContextPtr->libraryIdentity,
+                          diagnosticContextPtr->revision,
+                          diagnosticContextPtr->replicaName));
+          }
+
+          AO_FATAL_EXCEPTION(std::current_exception(), "library availability observer");
+        }
+      });
   }
 
   Result<BoundTrackTargets> LibraryMutationService::bindTrackTargets(std::span<TrackId const> trackIds) const
@@ -507,8 +528,8 @@ namespace ao::rt
 
     for (auto const trackId : targets._trackIds)
     {
-      gsl_Assert(trackId != kInvalidTrackId);
-      gsl_Assert(reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot));
+      AO_INVARIANT(trackId != kInvalidTrackId);
+      AO_INVARIANT(reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot));
     }
 
     auto result = AuthoringStart{.status = TrackAuthoringStatus::NoOp};
@@ -541,8 +562,8 @@ namespace ao::rt
     }
 
     auto transaction = _writableLibrary.writeTransaction();
-    gsl_Assert(order._listId != kInvalidListId);
-    gsl_Assert(_library.lists().writer(transaction).get(order._listId));
+    AO_INVARIANT(order._listId != kInvalidListId);
+    AO_INVARIANT(_library.lists().reader(transaction).get(order._listId));
     auto result = ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::NoOp};
     result.optMutation.emplace(Mutation{*this, std::move(*writerLockRes), std::move(transaction)});
     return result;
@@ -555,7 +576,7 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "Library maintenance requires an operation kind");
     }
 
-    gsl_Expects(_callbackExecutor.isCurrent() && "Library maintenance must begin on the callback executor");
+    AO_EXPECTS(_callbackExecutor.isCurrent(), "Library maintenance must begin on the callback executor");
 
     auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "Library maintenance");
 
@@ -607,8 +628,8 @@ namespace ao::rt
   Result<LibraryMutationService::CommitInfo> LibraryMutationService::commit(Mutation& mutation,
                                                                             LibraryChangeSet changeSet)
   {
-    gsl_Expects(mutation._owner == this && mutation._writerLock.owns_lock() && !mutation._terminal &&
-                "Library mutation does not belong to this service");
+    AO_EXPECTS(mutation._owner == this && mutation._writerLock.owns_lock() && !mutation._terminal,
+               "Library mutation does not belong to this service");
 
     auto finishTransaction = [&mutation]
     {
@@ -636,7 +657,7 @@ namespace ao::rt
     if (revision != expectedRevision)
     {
       releaseMutation();
-      terminateLibraryInfrastructure(
+      abortLibraryInfrastructure(
         std::format("Library revision gap before commit: expected {}, got {}", expectedRevision, revision));
     }
 
@@ -663,7 +684,7 @@ namespace ao::rt
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
       _lastCommittedRevision = revision;
-      gsl_Assert(!_publicationBarrier.blocksWriter());
+      AO_INVARIANT(!_publicationBarrier.blocksWriter());
       _publicationBarrier.beginSubmission(submissionFromOwner);
     }
 
@@ -674,30 +695,25 @@ namespace ao::rt
     finishTransaction();
     changeSet.libraryRevision = revision;
     mutation._writerLock.unlock();
-    gsl_Assert(!mutation._writerLock.owns_lock());
+    AO_INVARIANT(!mutation._writerLock.owns_lock());
 
-    try
-    {
-      _changes.publishFromCoordinator(
-        std::move(changeSet),
-        [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, revision] noexcept
+    _changes.publishFromCoordinator(
+      std::move(changeSet),
+      [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, revision](
+        std::string libraryIdentity, std::string replicaName)
+      {
+        if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
         {
-          if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
-          {
-            lifetimeStatePtr->invokeIfAlive([revision](LibraryMutationService& owner) noexcept
-                                            { owner.finishPublication(revision); });
-          }
-        });
-    }
-    catch (...)
-    {
-      terminateLibraryInfrastructure(
-        "Committed library revision could not enter mandatory publication", std::current_exception());
-    }
+          lifetimeStatePtr->invokeIfAlive(
+            [revision, libraryIdentity = std::move(libraryIdentity), replicaName = std::move(replicaName)](
+              LibraryMutationService& owner) mutable
+            { owner.finishPublication(revision, std::move(libraryIdentity), std::move(replicaName)); });
+        }
+      });
 
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
-      gsl_Assert(_publicationBarrier.submissionInProgress());
+      AO_INVARIANT(_publicationBarrier.submissionInProgress());
       _publicationBarrier.completeSubmission();
     }
 
@@ -723,7 +739,7 @@ namespace ao::rt
         {
           // Destroying an owner-thread publisher or availability emitter from
           // its synchronous observer would resume through a dead object.
-          gsl_Expects(!_callbackExecutor.isCurrent());
+          AO_EXPECTS(!_callbackExecutor.isCurrent());
         }
 
         writerLock.unlock();
@@ -737,7 +753,7 @@ namespace ao::rt
       }
 
       _closing = true;
-      gsl_Assert(!_publicationBarrier.submissionInProgress());
+      AO_INVARIANT(!_publicationBarrier.submissionInProgress());
       _publicationBarrier.retire();
       _maintenanceKind = LibraryMaintenanceKind::None;
       _changes.retireFromCoordinator();
@@ -788,7 +804,7 @@ namespace ao::rt
         }
       }
 
-      terminateLibraryInfrastructure(
+      abortLibraryInfrastructure(
         "Live library maintenance could not return to the callback executor", std::current_exception());
     }
   }
@@ -804,7 +820,7 @@ namespace ao::rt
       }
     }
 
-    terminateLibraryInfrastructure(
+    abortLibraryInfrastructure(
       "Live library maintenance finalization was rejected by the callback executor", std::move(exceptionPtr));
   }
 
@@ -832,7 +848,7 @@ namespace ao::rt
         }
       }
 
-      terminateLibraryInfrastructure("Library maintenance completion violated publication ordering");
+      abortLibraryInfrastructure("Library maintenance completion violated publication ordering");
     }
 
     auto expected = LibraryAuthoringAvailability{};
@@ -854,11 +870,14 @@ namespace ao::rt
     writerLockRes->unlock();
   }
 
-  void LibraryMutationService::finishPublication(std::uint64_t const revision) noexcept
+  void LibraryMutationService::finishPublication(std::uint64_t const revision,
+                                                 std::string libraryIdentity,
+                                                 std::string replicaName)
   {
     auto expected = LibraryAuthoringAvailability{};
+    std::uint64_t committedRevision = 0;
     bool shouldEmit = false;
-    bool invariantViolated = false;
+    bool publicationInProgress = false;
 
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
@@ -868,11 +887,10 @@ namespace ao::rt
         return;
       }
 
-      if (!_publicationBarrier.publicationInProgress() || revision != _lastCommittedRevision)
-      {
-        invariantViolated = true;
-      }
-      else
+      publicationInProgress = _publicationBarrier.publicationInProgress();
+      committedRevision = _lastCommittedRevision;
+
+      if (publicationInProgress && revision == committedRevision)
       {
         _availableRevision = revision;
         shouldEmit = _state == LibraryAuthoringState::Available;
@@ -880,14 +898,30 @@ namespace ao::rt
       }
     }
 
-    if (invariantViolated)
-    {
-      terminateLibraryInfrastructure("Library publication completion did not match the committed revision");
-    }
+    detail::requireMatchingPublicationCompletion(
+      publicationInProgress, revision, committedRevision, libraryIdentity, replicaName);
 
     if (shouldEmit)
     {
+      auto diagnosticContextPtr = std::make_shared<PublicationDiagnosticContext const>(PublicationDiagnosticContext{
+        .libraryIdentity = std::move(libraryIdentity),
+        .replicaName = std::move(replicaName),
+        .revision = revision,
+      });
+
+      {
+        auto const stateLock = std::scoped_lock{_stateMutex};
+        AO_INVARIANT(_activePublicationDiagnosticContextPtr == nullptr);
+        _activePublicationDiagnosticContextPtr = std::move(diagnosticContextPtr);
+      }
+
       emitAvailability(expected);
+
+      {
+        auto const stateLock = std::scoped_lock{_stateMutex};
+        AO_INVARIANT(_activePublicationDiagnosticContextPtr != nullptr);
+        _activePublicationDiagnosticContextPtr.reset();
+      }
     }
 
     {
@@ -904,6 +938,13 @@ namespace ao::rt
     _writerAdmissionChanged.notify_all();
   }
 
+  std::shared_ptr<LibraryMutationService::PublicationDiagnosticContext const>
+  LibraryMutationService::activePublicationDiagnosticContext() const noexcept
+  {
+    auto const stateLock = std::scoped_lock{_stateMutex};
+    return _activePublicationDiagnosticContextPtr;
+  }
+
   bool LibraryMutationService::beginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept
   {
     auto const stateLock = std::scoped_lock{_stateMutex};
@@ -913,7 +954,7 @@ namespace ao::rt
       return false;
     }
 
-    gsl_Assert(!_availabilityNotificationInProgress);
+    AO_INVARIANT(!_availabilityNotificationInProgress);
     _availabilityNotificationInProgress = true;
     return true;
   }
@@ -922,7 +963,7 @@ namespace ao::rt
   {
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
-      gsl_Assert(_availabilityNotificationInProgress);
+      AO_INVARIANT(_availabilityNotificationInProgress);
       _availabilityNotificationInProgress = false;
     }
 
@@ -943,7 +984,7 @@ namespace ao::rt
   void LibraryMutationService::emitAvailability(LibraryAuthoringAvailability const& expected,
                                                 std::unique_lock<std::mutex>& writerLock) noexcept
   {
-    gsl_Expects(writerLock.owns_lock());
+    AO_INVARIANT(writerLock.owns_lock());
 
     if (!beginAvailabilityNotification(expected))
     {

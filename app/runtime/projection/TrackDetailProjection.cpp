@@ -175,7 +175,7 @@ namespace ao::rt
           }
 
           _implPtr->focusSub = _implPtr->workspace.onChanged(
-            [this](WorkspaceChanged const& changed) noexcept
+            [this](WorkspaceChanged const& changed)
             {
               auto const viewId = changed.snapshot.activeViewId;
 
@@ -193,7 +193,7 @@ namespace ao::rt
               }
 
               // The workspace snapshot can name a view that ViewService has
-              // already dropped, and observers cannot throw.
+              // already dropped before this observer runs.
               auto const foundRes = _implPtr->views.findTrackListState(viewId);
               refreshSnapshot(foundRes ? std::span<TrackId const>{foundRes->selection} : std::span<TrackId const>{});
             });
@@ -213,7 +213,7 @@ namespace ao::rt
 
     // Shared subscriber: ViewSelectionChanged, filtered by trackedViewId
     _implPtr->selectionSub = _implPtr->views.onSelectionChanged(
-      [this](ViewService::SelectionChanged const& ev) noexcept
+      [this](ViewService::SelectionChanged const& ev)
       {
         if (ev.viewId != _implPtr->trackedViewId)
         {
@@ -224,7 +224,7 @@ namespace ao::rt
       });
 
     _implPtr->tracksMutatedSub = _implPtr->changes.onChanged(
-      [this](LibraryChangeSet const& changeSet) noexcept
+      [this](LibraryChangeSet const& changeSet)
       {
         if (_implPtr->cachedSnapshot.trackIds.empty())
         {
@@ -260,7 +260,7 @@ namespace ao::rt
   }
 
   async::Subscription TrackDetailProjection::subscribe(
-    std::move_only_function<void(TrackDetailSnapshot const&) noexcept> handler)
+    std::move_only_function<void(TrackDetailSnapshot const&)> handler)
   {
     handler(_implPtr->cachedSnapshot);
     return _implPtr->changedSignal.connect(std::move(handler));
@@ -271,7 +271,7 @@ namespace ao::rt
     _implPtr->changedSignal.emit(_implPtr->cachedSnapshot);
   }
 
-  void TrackDetailProjection::refreshSnapshot(std::span<TrackId const> const ids) noexcept
+  void TrackDetailProjection::refreshSnapshot(std::span<TrackId const> const ids)
   {
     _implPtr->cachedSnapshot = buildSnapshot(ids);
     publishSnapshot();

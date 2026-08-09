@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -10,8 +11,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <expected>
 #include <functional>
@@ -28,7 +27,7 @@ namespace ao::uimodel
       : library{libraryValue}, targets{std::move(targetsValue)}
     {
       availabilitySubscription = library.onAuthoringAvailabilityChanged(
-        [this](rt::LibraryAuthoringAvailability const& availability) noexcept { handleAvailability(availability); });
+        [this](rt::LibraryAuthoringAvailability const& availability) { handleAvailability(availability); });
       handleAvailability(library.authoringAvailability());
     }
 
@@ -82,7 +81,7 @@ namespace ao::uimodel
       switch (completed.status)
       {
         case rt::TrackAuthoringStatus::Applied:
-          gsl_Assert(completed.optNextTargets && "Applied authoring result did not return a next binding");
+          AO_INVARIANT(completed.optNextTargets, "Applied authoring result did not return a next binding");
 
           targets = std::move(*completed.optNextTargets);
 
@@ -114,6 +113,7 @@ namespace ao::uimodel
       }
       catch (...)
       {
+        AO_AUDITED_CATCH(PreservePrimaryException);
         // Preserve the submission exception; invalidate changes state before notification.
         return;
       }
@@ -178,7 +178,7 @@ namespace ao::uimodel
     return _implPtr->targets.trackIds();
   }
 
-  async::Subscription TrackAuthoringSession::onInvalidated(std::move_only_function<void() noexcept> handler) const
+  async::Subscription TrackAuthoringSession::onInvalidated(std::move_only_function<void()> handler) const
   {
     return _implPtr->invalidated.connect(std::move(handler));
   }

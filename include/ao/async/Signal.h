@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include <ao/Contract.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Subscription.h>
 
 #include <algorithm>
 #include <cstddef>
 #include <deque>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -19,24 +21,19 @@ namespace ao::async
   /**
    * Multicast event source with subscription-scoped disconnection.
    *
-   * Handlers are noexcept: an observer is told about something that already
-   * happened, so a failure it reports carries no decision the publisher could
-   * act on -- the state change cannot be undone. A handler that lets an
-   * exception escape therefore terminates the process at the throw point, with
-   * the faulting stack intact, rather than being logged and stepped over while
-   * the observer's state has silently diverged. Handlers that call fallible
-   * operations must contain the failure locally, where enough context remains
-   * to degrade meaningfully.
+   * An observer is told about something that already happened, so a failure it
+   * reports carries no decision the publisher could act on -- the state change
+   * cannot be undone. The owning emission boundary diagnoses and aborts an
+   * escaping exception rather than stepping over a diverged observer.
    *
-   * `emit` and `post` inherit that guarantee. Both are noexcept, so an
-   * allocation failure while queueing a deferred emission or copying its
-   * arguments also terminates.
+   * `emit` provides the non-throwing terminal boundary. `post` may still fail
+   * before executor admission while it constructs or submits the owned payload.
    */
   template<typename... Args>
   class Signal final
   {
   public:
-    using Handler = std::move_only_function<void(Args...) noexcept>;
+    using Handler = std::move_only_function<void(Args...)>;
 
     Signal();
     ~Signal();
@@ -48,7 +45,7 @@ namespace ao::async
 
     Subscription connect(Handler handler);
     void emit(Args... args) noexcept;
-    void post(Executor& executor, std::decay_t<Args>... args) noexcept;
+    void post(Executor& executor, std::decay_t<Args>... args);
     bool hasConnectedHandlers() const;
     void disconnectAll();
 
@@ -75,7 +72,7 @@ namespace ao::async
         return id;
       }
 
-      void emit(Args... args) noexcept
+      void emit(Args... args)
       {
         if (!_active)
         {
@@ -227,19 +224,34 @@ namespace ao::async
   void Signal<Args...>::emit(Args... args) noexcept
   {
     auto const statePtr = _statePtr;
-    statePtr->emit(args...);
+
+    try
+    {
+      statePtr->emit(args...);
+    }
+    catch (...)
+    {
+      AO_FATAL_EXCEPTION(std::current_exception(), "signal observer");
+    }
   }
 
   template<typename... Args>
-  void Signal<Args...>::post(Executor& executor, std::decay_t<Args>... args) noexcept
+  void Signal<Args...>::post(Executor& executor, std::decay_t<Args>... args)
   {
     auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
     executor.defer(
-      [weakStatePtr, ... args = std::move(args)] mutable noexcept
+      [weakStatePtr, ... args = std::move(args)] mutable
       {
         if (auto statePtr = weakStatePtr.lock(); statePtr != nullptr)
         {
-          statePtr->emit(args...);
+          try
+          {
+            statePtr->emit(args...);
+          }
+          catch (...)
+          {
+            AO_FATAL_EXCEPTION(std::current_exception(), "posted signal observer");
+          }
         }
       });
   }

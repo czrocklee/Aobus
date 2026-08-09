@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Error.h>
 #include <ao/utility/MappedFile.h>
+
+#include <ao/Error.h>
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
 #include <cstddef>
-#include <exception>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -46,7 +46,7 @@ namespace ao::utility
       _implPtr->isMapped = true;
       return {};
     }
-    catch (std::exception const& e)
+    catch (boost::interprocess::interprocess_exception const& e)
     {
       return makeError(Error::Code::IoError, std::format("Failed to mmap file: {}", e.what()));
     }

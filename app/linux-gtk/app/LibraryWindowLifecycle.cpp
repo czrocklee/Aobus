@@ -9,28 +9,26 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "platform/AudioBackendBootstrap.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 
 #include <gtkmm/application.h>
 
-#include <exception>
 #include <expected>
 #include <memory>
 #include <utility>
 
 namespace ao::gtk
 {
-  Glib::RefPtr<MainWindow> prepareLibraryWindow(LibraryWindowPaths paths,
-                                                std::shared_ptr<AppConfigStore> appConfigStorePtr,
-                                                std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                                                std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
+  Result<Glib::RefPtr<MainWindow>> prepareLibraryWindow(
+    LibraryWindowPaths paths,
+    std::shared_ptr<AppConfigStore> appConfigStorePtr,
+    std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
   {
-    auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
 
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
@@ -41,12 +39,11 @@ namespace ao::gtk
                                  .musicRoot = std::move(paths.musicRoot),
                                  .databasePath = std::move(paths.databasePath),
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr),
-                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore(),
-                                 .asyncExceptionHandler = std::move(asyncExceptionHandler)});
+                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore()});
 
     if (!runtimeRes)
     {
-      throwException<Exception>("Failed to open library: {}", runtimeRes.error().message);
+      return makeError(runtimeRes.error().code, "Failed to open library: " + runtimeRes.error().message);
     }
 
     auto appRuntimePtr = std::move(*runtimeRes);
@@ -65,25 +62,26 @@ namespace ao::gtk
 
     if (auto const preparedRes = windowPtr->prepareSession(); !preparedRes)
     {
-      throwException<Exception>(preparedRes.error().message);
+      return std::unexpected{preparedRes.error()};
     }
 
     return windowPtr;
   }
 
-  void activateLibraryWindow(Gtk::Application& app,
-                             Glib::RefPtr<MainWindow> const& windowPtr,
-                             MainWindow::PlaybackRestoreMode const restoreMode)
+  Result<> activateLibraryWindow(Gtk::Application& app,
+                                 Glib::RefPtr<MainWindow> const& windowPtr,
+                                 MainWindow::PlaybackRestoreMode const restoreMode)
   {
     app.add_window(*windowPtr);
 
     if (auto const activatedRes = windowPtr->activateSession(restoreMode); !activatedRes)
     {
       app.remove_window(*windowPtr);
-      throwException<Exception>(activatedRes.error().message);
+      return std::unexpected{activatedRes.error()};
     }
 
     windowPtr->present();
+    return {};
   }
 
   Result<LibraryWindowOpenOutcome> openLibraryWindow(std::filesystem::path const& activeRoot,
@@ -102,7 +100,11 @@ namespace ao::gtk
       return LibraryWindowOpenOutcome::Reused;
     }
 
-    callbacks.prepareCandidate();
+    if (auto const preparedRes = callbacks.prepareCandidate(); !preparedRes)
+    {
+      return std::unexpected{preparedRes.error()};
+    }
+
     callbacks.configureCandidate();
 
     if (auto const retiredRes = callbacks.retireActive(); !retiredRes)
@@ -110,21 +112,17 @@ namespace ao::gtk
       return std::unexpected<Error>{retiredRes.error()};
     }
 
-    callbacks.activateCandidate();
+    if (auto const activatedRes = callbacks.activateCandidate(); !activatedRes)
+    {
+      AO_FATAL("Candidate library activation failed after active-library retirement: {}", activatedRes.error().message);
+    }
+
     callbacks.replaceActiveSlot();
     callbacks.releaseRetired();
 
-    try
+    if (auto const persistedRes = callbacks.persistSelectedPath(); !persistedRes)
     {
-      callbacks.persistSelectedPath();
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_WARN("Failed to persist the selected GTK library path: {}", e.what());
-    }
-    catch (...)
-    {
-      APP_LOG_WARN("Failed to persist the selected GTK library path: unknown exception");
+      APP_LOG_WARN("Failed to persist the selected GTK library path: {}", persistedRes.error().message);
     }
 
     if (scanAfterOpen)

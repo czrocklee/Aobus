@@ -3,6 +3,7 @@
 
 #include <ao/audio/backend/WasapiProvider.h>
 
+#include <ao/Contract.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -33,6 +34,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -237,27 +239,18 @@ namespace ao::audio::backend
 
       HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR /*deviceId*/, DWORD /*newState*/) override
       {
-        _onChanged();
-        return S_OK;
+        return notifyChanged();
       }
 
-      HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR /*deviceId*/) override
-      {
-        _onChanged();
-        return S_OK;
-      }
+      HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR /*deviceId*/) override { return notifyChanged(); }
 
-      HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR /*deviceId*/) override
-      {
-        _onChanged();
-        return S_OK;
-      }
+      HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR /*deviceId*/) override { return notifyChanged(); }
 
       HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole /*role*/, LPCWSTR /*deviceId*/) override
       {
         if (flow == eRender)
         {
-          _onChanged();
+          return notifyChanged();
         }
 
         return S_OK;
@@ -268,11 +261,23 @@ namespace ao::audio::backend
         // Friendly-name changes arrive through this callback. Re-enumeration is
         // coalesced by the monitor thread, so treating all endpoint property
         // changes alike keeps display names current without callback-side COM.
-        _onChanged();
-        return S_OK;
+        return notifyChanged();
       }
 
     private:
+      HRESULT notifyChanged() noexcept
+      {
+        try
+        {
+          _onChanged();
+          return S_OK;
+        }
+        catch (...)
+        {
+          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI endpoint-notification callback");
+        }
+      }
+
       std::function<void()> _onChanged;
     };
 
@@ -348,10 +353,9 @@ namespace ao::audio::backend
           {
             monitorHooksPtr->onMonitorStateDestroyed();
           }
-          // NOLINTNEXTLINE(bugprone-empty-catch): Lifecycle observers cannot unwind a destructor.
           catch (...)
           {
-            // Lifecycle observers cannot unwind a destructor path.
+            AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI monitor destruction callback");
           }
         }
       }
@@ -415,8 +419,7 @@ namespace ao::audio::backend
         }
         catch (...)
         {
-          // Test and embedding observers cannot unwind the monitor thread.
-          return;
+          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device-callback readiness observer");
         }
       }
 
@@ -443,9 +446,8 @@ namespace ao::audio::backend
         }
         catch (...)
         {
-          // Initial delivery removes a callback before rethrowing to its
-          // caller. Match that policy here without unwinding the worker.
           removeDeviceSubscription(sub.id);
+          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device observer");
         }
 
         return true;
@@ -469,10 +471,9 @@ namespace ao::audio::backend
         {
           monitorHooksPtr->onRefreshComplete();
         }
-        // NOLINTNEXTLINE(bugprone-empty-catch): Monitor observers cannot unwind the worker thread.
         catch (...)
         {
-          // Lifecycle observers cannot unwind the monitor thread.
+          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI refresh-completion observer");
         }
 
         return true;
@@ -586,20 +587,19 @@ namespace ao::audio::backend
       {
         monitorThread = std::jthread{[statePtr = monitorStatePtr]
                                      {
-                                       setCurrentThreadName("WasapiDeviceMonitor");
-                                       statePtr->monitorLoop();
-
-                                       if (statePtr->monitorHooksPtr && statePtr->monitorHooksPtr->onMonitorExit)
+                                       try
                                        {
-                                         try
+                                         setCurrentThreadName("WasapiDeviceMonitor");
+                                         statePtr->monitorLoop();
+
+                                         if (statePtr->monitorHooksPtr && statePtr->monitorHooksPtr->onMonitorExit)
                                          {
                                            statePtr->monitorHooksPtr->onMonitorExit();
                                          }
-                                         // NOLINTNEXTLINE(bugprone-empty-catch): Exit observers cannot unwind a thread.
-                                         catch (...)
-                                         {
-                                           // Lifecycle observers cannot unwind the monitor thread.
-                                         }
+                                       }
+                                       catch (...)
+                                       {
+                                         AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device-monitor thread");
                                        }
                                      }};
       }
@@ -714,7 +714,7 @@ namespace ao::audio::backend
         statePtr->deviceSubs.erase(it);
       }
 
-      throw;
+      AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device observer");
     }
 
     {

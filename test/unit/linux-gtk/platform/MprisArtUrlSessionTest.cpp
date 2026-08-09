@@ -4,12 +4,12 @@
 #include "platform/MprisArtUrlSession.h"
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -144,11 +144,11 @@ namespace ao::gtk::platform::test
       {
         CHECK(resourceId == kResourceId);
         capturedCompletion = std::move(complete);
-        throwException<Exception>("request failed");
+        throw std::runtime_error{"request failed"};
       },
       [&changeCount] { ++changeCount; }};
 
-    REQUIRE_THROWS_AS(session.refresh(kResourceId), Exception);
+    REQUIRE_THROWS_AS(session.refresh(kResourceId), std::runtime_error);
     REQUIRE(capturedCompletion);
     CHECK(changeCount == 0);
     CHECK(session.urlFor(kResourceId).empty());

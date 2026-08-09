@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
-#include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
+
+#include <ao/Contract.h>
+#include <ao/uimodel/input/KeyChord.h>
 
 #include <algorithm>
 #include <map>
@@ -196,12 +196,10 @@ namespace ao::uimodel
   {
     auto const chord = [](std::string text)
     {
-      if (auto optChord = KeyChord::parse(text); optChord)
-      {
-        return *optChord;
-      }
+      auto optChord = KeyChord::parse(text);
+      AO_INVARIANT(optChord, "Invalid built-in key chord: {}", text);
 
-      throwException<Exception>("Invalid default key chord: {}", text);
+      return *optChord;
     };
 
     return KeymapBindings{

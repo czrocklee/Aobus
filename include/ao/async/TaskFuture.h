@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Exception.h>
+#include <ao/Contract.h>
 
 #include <future>
 #include <optional>
@@ -31,10 +31,7 @@ namespace ao::async
     {
       auto optResult = _future.get();
 
-      if (!optResult)
-      {
-        throwException<Exception>("Task future completed without a result");
-      }
+      AO_INVARIANT(optResult, "Task future completed without a result");
 
       return std::move(*optResult);
     }

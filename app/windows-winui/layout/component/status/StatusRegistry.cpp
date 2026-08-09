@@ -262,7 +262,7 @@ namespace ao::winui::layout
       {
         apply(0);
         _selectionSub = views.onSelectionChanged(
-          [this](rt::ViewService::SelectionChanged const& changed) noexcept
+          [this](rt::ViewService::SelectionChanged const& changed)
           {
             if (changed.viewId == _trackList.viewId())
             {
@@ -320,21 +320,8 @@ namespace ao::winui::layout
   {
     registry.registerComponent(
       "status.activity",
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
-      {
-        // Subscribing to the notification and task services is the one thing a
-        // component here does that reports failure by throwing, and a candidate
-        // must fail as a value so the live generation survives it.
-        try
-        {
-          return std::make_unique<ActivityStatusComponent>(ctx);
-        }
-        catch (std::exception const& error)
-        {
-          return makeError(Error::Code::InitFailed,
-                           std::format("Node '{}' could not observe library activity: {}", node.id, error.what()));
-        }
-      });
+      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
+      { return std::make_unique<ActivityStatusComponent>(ctx); });
 
     registry.registerComponent(
       "status.trackCount",

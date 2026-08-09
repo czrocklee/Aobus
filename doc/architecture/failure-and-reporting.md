@@ -10,7 +10,7 @@ summary: Defines failure classification, propagation, recovery, reporting, and p
 ## Scope
 
 This document owns the cross-cutting path from a failure origin to classification, propagation, recovery, reporting, and final application presentation.
-It distinguishes domain outcomes, recoverable errors, asynchronous failure events, cancellation control flow, invariant faults, notifications, and diagnostic logging so that no one mechanism becomes a universal error bus.
+It distinguishes domain outcomes, recoverable errors, asynchronous failure events, cancellation control flow, fatal contracts, notifications, and diagnostic logging so that no one mechanism becomes a universal error bus.
 
 It does not enumerate `Error::Code`, notification fields, CLI exit values, playback failure kinds, exact retry or fallback behavior, user-visible strings, or logging configuration.
 Those exact surfaces and behavioral rules belong in reference and subsystem specifications.
@@ -44,16 +44,17 @@ it is not the application state or recovery path
 ```
 
 The channels are deliberately distinct.
-A successful absence or no-op is a domain value; a rejected synchronous operation returns a recoverable result; a failure after asynchronous acceptance may require a typed event; cancellation unwinds lifetime-bound work; an invariant fault uses an exception or contract; and a user-facing report is an explicit application decision after classification.
+A successful absence or no-op is a domain value; a rejected synchronous operation returns a recoverable result; a failure after asynchronous acceptance may require a typed event; cancellation unwinds lifetime-bound work; an invariant fault uses an AO contract; and a user-facing report is an explicit application decision after classification.
 
 The principal public code boundaries are:
 
 | Concern | System layer | Public boundary | Implementation |
 |---|---|---|---|
 | Recoverable error value | Core libraries | `include/ao/Error.h` | Header-defined `Error` and `Result<T>` value types |
-| Invariant exception and contracts | Core libraries | `include/ao/Exception.h` and `gsl-lite` contracts | Core and subsystem call sites |
+| Project fatal contracts | Core utility library | `include/ao/Contract.h` | `lib/utility/Fatal.cpp` and project call sites |
+| Fatal diagnostic adapter | Core registration seam with application adapter | `FatalSink` and `ao::rt::Log` | `lib/utility/Fatal.cpp` and `app/runtime/Log.cpp` |
 | Cancellation control flow | Core async library | `include/ao/async/OperationCancelled.h` and `LifetimeScope.h` | `lib/async/` |
-| Unobserved coroutine diagnostics | Core async library with application adapter | `include/ao/async/AsyncExceptionHandler.h` and `Runtime.h` | `lib/async/Runtime.cpp` and `app/runtime/Log.cpp` |
+| Unobserved coroutine faults | Core async completion roots using the fatal seam | `include/ao/async/Runtime.h` and `include/ao/Contract.h` | `lib/async/Runtime.cpp`, `lib/async/LifetimeScope.cpp`, and `lib/utility/Fatal.cpp` |
 | Runtime reporting feed | Application runtime | `app/include/ao/rt/NotificationService.h` and `NotificationState.h` | `app/runtime/NotificationService.cpp` |
 | Platform-neutral activity projection | UIModel | `app/include/ao/uimodel/status/activity/` | `app/uimodel/status/activity/` |
 | Final presentation and leaf catches | Frontends | Frontend-local | `app/linux-gtk/`, `app/tui/`, and `app/cli/` |
@@ -65,9 +66,11 @@ The principal public code boundaries are:
 The subsystem where an outcome originates owns its initial semantic classification.
 External data, devices, storage, user input, formats, and resource limits use recoverable result channels when the caller can report or react.
 Ordinary absence, end-of-stream, no-op, and other normal domain states remain values rather than manufactured errors.
-Broken internal preconditions and impossible in-memory states use invariant exceptions or contracts because downstream application policy cannot recover them safely.
+Broken caller preconditions, callee postconditions, internal invariants, and mandatory infrastructure faults use the AO fatal facility because downstream application policy cannot recover them safely.
+Project-owned runtime contracts use the AO fatal facility rather than raw gsl-lite contracts or catchable invariant exceptions.
 Persisted structure that can be inspected before exposure remains recoverable at the library-open boundary.
-Once that complete gate has established a store invariant, a later invalid row from an iterator is an infrastructure fault: the iterator has no partial-result or safe-continuation protocol, and application code must not manufacture one by catching a private store exception.
+Once that complete gate has established a store invariant, a later invalid row is an invariant fault and a later non-miss native read failure is a fatal infrastructure fault.
+Neither path throws to an application catch boundary because the live library has no partial-result or safe-continuation protocol.
 
 Core subsystems expose typed errors and values without knowing runtime notifications, UIModel state, widgets, terminal cells, or CLI formatting.
 Private subsystem exceptions may simplify local implementation only when the public subsystem boundary translates them back into its declared channel.
@@ -79,7 +82,7 @@ A runtime operation that already has a `Result` channel propagates recoverable l
 A boundary may add operation context or translate a third-party exception, but it does not infer behavior from message text or discard diagnostic origin information.
 
 A private storage exception may cross only the shortest core-library scope needed to restore transactional safety or reach another library-owned `Result` boundary.
-Before a library write wrapper is exposed, construction catches a native begin or revision-initialization failure, releases writer authority, and raises the library's general infrastructure exception because no recoverable caller branch exists.
+Before a library write wrapper is exposed, construction releases writer authority and fails fatally on native begin failure or revision exhaustion because no recoverable caller branch exists.
 For an exposed library write, the root `WriteTransaction` owner catches the native mutation marker, aborts and terminalizes the transaction, and only then returns its carried `Error`; the runtime consumes that `Result` and never names the lower exception type.
 An unrelated exception is not reclassified: the same owner aborts first and then rethrows it to the established invariant boundary.
 
@@ -103,7 +106,7 @@ There is no process-wide recovery manager.
 The service owns an executor-confined in-memory feed, explicit notification lifetimes, post and keyed create-or-update commands, and service-owned transient expiry.
 Each effective mutation publishes one canonical update carrying a complete immutable snapshot on the callback executor.
 Reentrant commands enter a small FIFO until the current update completes delivery to its contract-fulfilling observers.
-Feed observers are `noexcept`; an expected fallible operation is handled locally by the observer, while an escaping exception terminates at that contract boundary.
+Feed observers are ordinary callables behind the owning signal boundary; an expected fallible operation is handled locally by the observer, while an escaping exception enters AO fatal handling at that boundary.
 Matching the id and current expiry-registration identity prevents cancelled or superseded timers from expiring newer state.
 History and pinned entries do not schedule expiry.
 Construction-time entry and text bounds keep retained state finite.
@@ -135,11 +138,10 @@ Validation attached to an editor may remain local typed view state instead of en
 GTK and TUI render runtime/UIModel reporting state and bind user actions to typed commands.
 They own widget, popover, status-bar, terminal-panel, and lifecycle presentation, but equivalent cross-frontend recovery policy remains below them.
 
-Frontend workflow boundaries catch unexpected exceptions that escape their owned callback or coroutine boundary.
-They log diagnostic detail and may present a generic internal-error message; they do not reinterpret the exception as a recoverable domain error.
-Expected cancellation passes through these catches to its lifetime owner and normally produces no error report.
-When presentation requires a stop-aware callback hop, the boundary sends the unexpected exception to the diagnostic handler before that hop and sends only the generic user message afterward.
-Cancellation may suppress stale presentation but cannot replace the already captured diagnostic.
+Frontend adapters translate expected framework, file, image, device, and user-data failures only at the narrow boundary whose documented channel can recover.
+An unexpected exception escaping a callback, executor, coroutine, thread, or platform ABI root is not converted into a generic presentation success.
+The root completes mandatory local bookkeeping and then enters the Core exception-aware fatal backend.
+Expected cancellation remains silent after its lifetime owner has retired the task.
 
 The CLI bypasses UIModel and the notification feed for command-scoped reporting.
 Command code adapts a recoverable `Error` to a CLI-local `CommandError`, while the top-level runner owns stderr formatting and process status.
@@ -150,16 +152,22 @@ Unexpected invariant and standard exceptions are formatted separately from user-
 Logging is an operational side channel for developers and operators.
 Boundary adapters log information that is too diagnostic or platform-specific for user-facing state, including source location and unexpected exception detail.
 
-The core async layer passes the original `std::exception_ptr` and a short context string to an injected handler rather than defining a second normalized fault object.
-Interactive composition adapts that handler to the thread-safe application logger; bare runtime and CLI composition may use the runtime's stderr fallback.
-The [outcome channel specification](../spec/failure/outcome-channel.md) owns handler selection, cancellation exclusion, terminal bookkeeping order, future single ownership, and fallback containment.
+The Core fatal backend first emits a bounded emergency record without depending on application state.
+For ordinary non-realtime fatal entry, it then invokes at most one registered application sink and aborts regardless of sink availability or success.
+The application logging adapter submits fatal context through a non-blocking overflow policy and makes only a bounded flush request; the realtime entry never invokes it.
+
+The core async layer passes an escaping fire-and-forget `std::exception_ptr` and short owner context directly to the exception-aware fatal entry after terminal bookkeeping.
+That entry uses the same emergency diagnostic and registered application fatal sink as AO contracts, then aborts.
+There is no second injectable async exception reporter and no log-and-continue fallback.
+The [outcome channel specification](../spec/failure/outcome-channel.md) owns cancellation exclusion, terminal bookkeeping order, future single ownership, and fatal-root behavior.
 
 Logging does not acknowledge a command, mutate runtime state, alter notification lifetime, or prove that the user saw a failure.
 A notification message is likewise not a substitute for the structured error or log context needed to diagnose its origin.
 
 ## Boundaries and dependency direction
 
-- Core libraries define values, errors, exceptions, contracts, and typed subsystem observations without depending on runtime reporting types.
+- Core libraries define values, errors, fatal contracts, narrowly owned exception carriers, and typed subsystem observations without depending on runtime reporting types.
+- The Core fatal facility exposes a registration seam but cannot depend on the application logger; the application adapter depends downward on that seam.
 - Runtime depends on core failure channels and owns application recovery, typed public events, and the notification feed; it cannot depend on UIModel or frontend presentation.
 - UIModel depends on runtime reporting values and commands but cannot become the recovery authority or catch storage/audio exceptions as presentation policy.
 - GTK and TUI consume runtime/UIModel state and own platform leaf catches; platform exception types do not cross into runtime public APIs.
@@ -214,18 +222,17 @@ owner teardown or explicit cancel
 Cancellation does not become a domain error merely because it uses exception-shaped control flow.
 If cancellation itself fails to quiesce an owner, that separate invariant or shutdown failure follows its own channel.
 
-### Unexpected invariant fault
+### Fatal contract fault
 
 ```text
-contract or invariant violation
-  -> exception / termination boundary
-  -> explicit caller, or async completion / application leaf catch
-  -> critical diagnostic log or stderr
-  -> optional generic internal-error presentation
+AO contract violation
+  -> bounded emergency diagnostic
+  -> optional registered application fatal sink for non-realtime entry
+  -> std::abort()
 ```
 
-Leaf catches contain the fault and protect toolkit or executor boundaries.
-They do not invent domain recovery or silently continue mutation from a partially failed invariant-sensitive operation.
+An owning asynchronous or platform root completes mandatory bookkeeping before converting an escaping non-cancellation exception into this fatal sequence.
+No leaf catch may convert a fatal contract into domain recovery or continue mutation from partially invalid state.
 
 ## Structural constraints
 
@@ -244,11 +251,12 @@ They do not invent domain recovery or silently continue mutation from a partiall
 - UI-local validation and fallback state remain local unless the outcome must survive editor dismissal or be visible across application surfaces.
 - Runtime reporting values are frontend-neutral and contain no widget, terminal, or platform exception object.
 - Shared report and progress copy resolves in UIModel from typed values; runtime does not parse or duplicate resolved catalog text.
-- Expected cancellation is silent at generic exception-reporting leaves and cannot be swallowed before the lifetime boundary has made captured state safe.
+- Expected cancellation is silent at terminal async roots and cannot be swallowed before the lifetime boundary has made captured state safe.
 - A future-returning task has one explicit exception owner and is not also diagnosed as an unobserved coroutine.
-- An injected async exception handler is diagnostic-only, may run concurrently, and cannot mutate executor-affine application state.
-- A catch-all at a composition leaf may contain and log an unexpected fault but cannot convert it into an ordinary success value.
-- A validated-store iterator treats end as a normal value and propagates any later cursor or row-integrity fault through the general invariant channel; runtime and frontend code do not catch private storage carriers to create a partial result.
+- The fatal sink is diagnostic-only, may run on any ordinary caller thread, and cannot suppress or delay the final abort through a recovery protocol.
+- Fatal-sink registration starts only after logger initialization and ends only after every possible fatal producer has quiesced.
+- A catch-all at a composition or ABI root performs required local bookkeeping and then invokes the exception-aware fatal entry; it cannot log and continue.
+- A validated-store iterator treats end as a normal value, aborts on a later cursor or row-integrity fault, and never exposes a private storage carrier from an ordinary read snapshot.
 
 ## Failure, cancellation, and lifetime boundaries
 
@@ -260,17 +268,19 @@ UIModel subscriptions and frontend views release before the runtime notification
 
 Lifetime-bound workflows use stop tokens and `LifetimeScope` so owner teardown cancels outstanding work.
 Cancellation is consumed only after the coroutine has unwound and can no longer access retired owner state.
-Unhandled coroutine faults are diagnosed at async completion boundaries; expected cancellation is excluded from that reporting.
-The application logging adapter remains alive until runtime worker completion handlers have quiesced.
+Unhandled coroutine faults abort at async completion boundaries after owned bookkeeping; expected cancellation is excluded from that path.
+The application logging adapter and registered fatal sink remain alive until runtime worker, audio, device, and frontend callback producers have quiesced.
+The sink is unregistered before the logger backend is destroyed.
 
 Frontend leaf catches remain alive for the callback source they protect.
 During shutdown, final persistence and subsystem quiescence run while their reporting and logging dependencies still exist, but no late worker or audio callback may post into a destroyed runtime feed.
 
 ## Implementation map
 
-- [`Error`](../../include/ao/Error.h) and [`Exception`](../../include/ao/Exception.h) define the shared recoverable value and invariant exception foundations.
+- [`Error`](../../include/ao/Error.h) defines the shared recoverable value foundation, while the [exception carrier reference](../reference/failure/exception-carriers.md) owns the exhaustive narrow-carrier whitelist.
+- [`Contract.h`](../../include/ao/Contract.h) and [`Fatal.cpp`](../../lib/utility/Fatal.cpp) define fatal categories, macros, emergency diagnostics, sink registration, reentrancy handling, and abort.
 - [`OperationCancelled`](../../include/ao/async/OperationCancelled.h), [`LifetimeScope`](../../include/ao/async/LifetimeScope.h), and their implementations under [`lib/async/`](../../lib/async) define cancellation and lifetime completion boundaries.
-- [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) and [`Runtime.cpp`](../../lib/async/Runtime.cpp) define unobserved coroutine diagnostic ownership without replacing Asio exception transport.
+- [`Runtime.cpp`](../../lib/async/Runtime.cpp) and [`LifetimeScope.cpp`](../../lib/async/LifetimeScope.cpp) define unobserved coroutine fatal ownership without replacing Asio exception transport.
 - [`Signal`](../../include/ao/async/Signal.h) supplies generic synchronous observer delivery below reporting, while [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) owns feed-specific queuing.
 - [`NotificationState`](../../app/include/ao/rt/NotificationState.h), [`NotificationService`](../../app/include/ao/rt/NotificationService.h), and [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) define the runtime reporting feed.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) composes the notification owner with library, source, completion, async, and diagnostic collaborators.
@@ -279,14 +289,15 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) owns shared report expansion and typed library-progress copy.
 - GTK [`UiWorkflow`](../../app/linux-gtk/common/UiWorkflow.h), TUI [`Executor.cpp`](../../app/tui/Executor.cpp), and CLI [`CommandError`](../../app/cli/CommandError.h) plus [`Run.cpp`](../../app/cli/Run.cpp) define representative application-leaf containment and presentation boundaries.
 - [`Log.h`](../../app/include/ao/rt/Log.h) exposes the application logging surface used by runtime and frontend boundary adapters.
-- [`Log.cpp`](../../app/runtime/Log.cpp) supplies the application adapter for injected async exceptions.
+- [`Log.cpp`](../../app/runtime/Log.cpp) also owns fatal-sink registration and bounded asynchronous fatal-log submission.
 
 ## Test map
 
-- [`ErrorTest.cpp`](../../test/unit/core/ErrorTest.cpp), [`ExceptionTest.cpp`](../../test/unit/core/ExceptionTest.cpp), and subsystem error tests under [`test/unit/`](../../test/unit) protect shared values, source locations, and translation boundaries.
-- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) and [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) protect cancellation, executor return, single-owner exception completion, injected diagnostics, and owner lifetime.
-- [`UiWorkflowTest.cpp`](../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
-- [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protects the retained application-log adapter.
+- [`ErrorTest.cpp`](../../test/unit/core/ErrorTest.cpp) and subsystem error tests under [`test/unit/`](../../test/unit) protect shared values, source locations, and translation boundaries.
+- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) and [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) protect cancellation, executor return, single-owner future completion, bookkeeping, and owner lifetime.
+- Runtime fatal subprocess scenarios protect unobserved faults during ordinary operation and shutdown.
+- [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protects fatal-sink registration and bounded application-log submission.
+- Fatal unit tests under [`test/unit/core/`](../../test/unit/core) invoke the dedicated self-reentering `ao_fatal_probe` under [`test/fatal/`](../../test/fatal) to protect category, source, fallback, reentrancy, registration, and abort behavior.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects feed mutation, configured bounds, atomic history eviction, keyed correlation, immutable snapshots, executor-owned observation, and reentrant FIFO publication.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects transient scheduling, unchanged suppression, keyed lifetime transitions, callback-executor expiry, registration-identity races, cancellation, and teardown.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp), [`PlaybackTransportTest.cpp`](../../test/unit/runtime/PlaybackTransportTest.cpp), [`PlaybackSuccessionLaunchTest.cpp`](../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp), and [`PlaybackSuccessionFailureTest.cpp`](../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp) protect typed failure correlation, recovery ownership, and notification aggregation.
@@ -307,6 +318,8 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [Outcome channel specification](../spec/failure/outcome-channel.md)
 - [Signal delivery specification](../spec/async/signal.md)
 - [Error value reference](../reference/failure/error.md)
+- [Fatal facility reference](../reference/failure/fatal.md)
+- [Decision 0007](../decision/0007-unify-fatal-diagnostics-and-abort.md)
 - [Notification feed specification](../spec/reporting/notification-feed.md) and [model reference](../reference/reporting/notification.md)
 - [Activity-status specification](../spec/presentation/activity-status.md) and [surface reference](../reference/presentation/activity-status.md)
 - [Decoder session specification](../spec/playback/decoder-session.md) and [decoder error reference](../reference/playback/decoder-error.md) for the remaining core-audio translation boundary

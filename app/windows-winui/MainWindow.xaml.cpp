@@ -144,15 +144,11 @@ namespace winrt::Aobus::implementation
       _sessionPhase = SessionPhase::Active;
       return {};
     }
-    catch (std::exception const& error)
+    catch (winrt::hresult_error const& error)
     {
       return ao::makeError(
-        ao::Error::Code::InitFailed, std::format("Failed to activate WinUI playback adapters: {}", error.what()));
-    }
-    catch (...)
-    {
-      return ao::makeError(
-        ao::Error::Code::InitFailed, "Failed to activate WinUI playback adapters: unknown exception");
+        ao::Error::Code::InitFailed,
+        std::format("Failed to activate WinUI playback adapters: {}", winrt::to_string(error.message())));
     }
   }
 

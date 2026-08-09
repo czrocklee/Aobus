@@ -56,8 +56,8 @@ UIModel and frontends begin above these stages and consume runtime values rather
 ### Physical storage
 
 `ao::library::MusicLibrary` owns the LMDB environment and coordinates specialized track, list, resource, dictionary, and file-manifest stores.
-It creates public read transactions and owns the physical library metadata header and revision source.
-Its sole public construction boundary is `MusicLibrary::open()`, which returns a typed result and validates the current metadata version, dictionary, paired Track records and references, Lists, and manifest before exposing the store graph.
+It creates public read transactions and owns cached logical metadata-header and committed-revision state; the physical metadata Store is private.
+Its sole public construction boundary is `MusicLibrary::open()`, which returns a typed result, enumerates the LMDB catalog before creation, and validates the current schema, metadata, dictionary, Resources, paired Track records and references, List graph, and Track-to-manifest bijection before exposing the store graph.
 Safely detected corruption in those records rejects the complete open; runtime composition cannot receive a partial library or build a partial All Tracks source.
 The environment combines user-authored library truth with scan-derived facts; media rescan cannot reconstruct the complete database.
 Committing writes require a separately acquired `WritableMusicLibrary`; `MusicLibrary` keeps transaction construction private to that capability.
@@ -71,18 +71,21 @@ The wrapper is the library-level snapshot capability: store readers accept it, w
 The wrapper and every store carry the same stable implementation-owned library identity, so a snapshot from one `MusicLibrary` is rejected before it can be mixed with another library's DBI.
 This adds no allocation, locking, or another transaction layer to each operation.
 
-Every writable-capability write uses one move-only `WriteTransaction` that owns the native LMDB transaction, the process writer gate, a shared writer-lease anchor, and a transaction-local dictionary writer.
-Creating that wrapper performs the transaction's one revision bump before exposing it.
-A native begin or revision-initialization failure releases the process writer gate and discards the transaction's lease-anchor reference, then propagates as the library's general storage exception; transaction construction is not a recoverable authoring outcome.
+Every writable-capability write uses one move-only `WriteTransaction` that owns the native LMDB transaction, the process writer gate, a shared writer-lease anchor, and the transaction-local dictionary overlay.
+After native begin acquires LMDB's single-writer snapshot, creating the wrapper reads that snapshot's durable header and revision and computes its one candidate successor without persisting it.
+A native begin failure or revision exhaustion releases the process writer gate and discards the transaction's lease-anchor reference, then fails through the fatal facility; transaction construction is not a recoverable authoring outcome.
 Every logical write body runs through `WriteTransaction::apply()`; an error result, private native mutation marker, or private library error carrier explicitly aborts the complete root before returning the error, while an unexpected exception aborts before it is rethrown.
-`apply()` is a non-nested root boundary and cannot commit from its callback; a successful body leaves the root active for a later explicit commit.
-Interning first consults committed mappings and then the transaction overlay; new id/text rows are written into the same native transaction as the track or other record that references them.
+`apply()` is a non-nested root boundary and passes its callback a narrow `LibraryWrite` operation context rather than the transaction owner.
+Only that context exposes logical Track and List mutation ports plus the narrow library-identity restore operation; it exposes neither commit nor abort and exists only for the callback invocation.
+Logical writers returned by the context borrow the transaction owner, are valid only while that callback is active, and must not outlive the transaction object; retaining the context itself beyond the callback is an ordinary dangling-reference error rather than a wider lifetime guarantee.
+A successful body leaves the root active for a later explicit commit by its transaction owner.
+Track preparation owns dictionary interning and resource creation: interning first consults committed mappings and then the transaction overlay, and new id/text or resource rows are written into the same native transaction as the Track record that references them.
 Dropping or failing the wrapper aborts both authorities.
 Commit or abort consumes the native handle but retains the native transaction object and dictionary writer until the outer wrapper is destroyed.
 Store writers that remain in ordinary scope across `commit()` therefore observe a terminal transaction and can be destroyed safely; any post-terminal operation fails before touching an LMDB cursor.
 
-Before native commit, the wrapper acquires the dictionary's exclusive lock and prepares every potentially throwing in-memory insertion.
-It holds that lock through commit, then either advances the dictionary generation and unlocks or rolls the prepared delta back before unlocking.
+Before native commit, the wrapper prepares every potentially throwing dictionary insertion, acquires the logical metadata publication lock, persists any candidate header and then the candidate revision, and enters native commit.
+It holds the publication locks through commit, then either publishes the dictionary, header, and committed revision together or rolls the prepared in-memory state back before unlocking.
 Readers therefore observe either the complete old mapping or the complete new mapping, and application change publication happens only after the latter is visible.
 
 Committed dictionary ids form a dense, append-only range beginning at one; aborted tail ids may be reused, while committed ids are never reclaimed or rebound.
@@ -93,8 +96,11 @@ Published strings are immutable and use stable storage, so a borrowed view remai
 Its collision replacement may cause another store lookup but cannot change a result; empty values are simply not retained.
 `DictionaryReadContext` is the bounded synchronous read/binding port used by query and format evaluation.
 
-Store types own physical representation and transaction-scoped access.
-`MusicLibrary` exposes stores as const service handles; read capability comes from `ReadTransaction` or `WriteTransaction`, and mutation additionally requires a mutable `WriteTransaction`.
+Store types own physical representation and transaction-scoped read access.
+`MusicLibrary` exposes stores as const read service handles; read capability comes from `ReadTransaction` or `WriteTransaction`.
+Mutation is available only through the `LibraryWrite` operation context supplied by `WriteTransaction::apply()`.
+The Track writer owns dictionary/resource preparation plus every Track/manifest relationship; the List writer owns live parent topology and deletion ordering.
+Physical Store writer factories are implementation details, with one source-private access seam limited to representation, corruption, and isolated Store-backed tests.
 Raw LMDB transactions are not part of the public store operation surface.
 They do not publish application events or construct frontend projections.
 
@@ -105,14 +111,29 @@ coordinated cursor traversal internally, so predicate evaluators and
 projections do not duplicate LMDB access policy.
 The open-time integrity gate proves that the hot and cold key sets match; combined traversal then advances both cursors in lockstep and treats any later divergence as an internal invariant failure rather than skipping an orphan.
 Every record mutation uses an immutable prepared value, fills one LMDB reservation at a time, validates it before the next storage update, and never exposes caller-supplied record bytes or the mutable reservation.
+The logical Track writer is the only production owner of Track preparation and physical Track, manifest, dictionary, and resource mutation.
+Its public operations accept semantic `TrackBuilder` and `FileManifestBuilder` inputs, validate any caller-supplied existing Resource ids against the live write snapshot, and create transaction-bound prepared snapshots internally.
+The transaction lazily opens at most one physical writer for each touched Store and reuses its native cursor until that transaction terminates, including across successive successful `apply()` callbacks.
+Creation writes the hot/cold pair and its manifest binding together; deletion and clear remove both sides; a normal update must retain its URI; relink is the sole URI-changing operation and replaces the manifest key in the same transaction.
+These operations preserve the relationship for accepted writes, and the open gate proves the historical Track-to-manifest bijection before any logical mutation is admitted.
+A later missing or mismatched binding is therefore an invariant failure rather than damaged input discovered lazily.
+Manifest-only status and audio-identity updates identify the owning Track and pass only mutable manifest facts; the logical writer derives the URI and Track binding from the live aggregate.
 Paired create/update operations abort the complete library transaction when a later physical step fails, so a caller cannot commit one side of an application-level Track change by swallowing that error.
 Complete Track preparation runs pure hot and cold preflight before dictionary interning, cover-resource creation, or record mutation.
 The corresponding item is neutral relative to its entry transaction state when preflight rejects it; after its first staged effect, a failure must reach the root operation boundary, which aborts the complete transaction before exposing the error.
+Prepared Track sides retain typed snapshots rather than a second encoded copy, so the canonical byte validators run after the zero-copy encoder fills storage and again during open admission.
 
-`FileManifestStore` applies one exact validator at its point-read, iterator, and write boundaries.
+`FileManifestStore` applies one exact validator at its point-read, iterator, prepared-write, and open-validation boundaries.
+`FileManifestBuilder::prepare()` parses the manifest URI, applies the complete key/value validator, and snapshots a locally valid record before mutation; the Store writer accepts only that prepared value.
+After filling the LMDB reservation, the writer checks the same validator as an `AO_ENSURES` encoder postcondition.
 Only `NotFound` denotes absence at a point read.
-A malformed point-read value uses that method's typed `CorruptData` channel, while an iterator row that violates the already-established open invariant raises the general infrastructure exception instead of becoming a skippable item or partial output.
-`ListStore` follows the same validated-iterator rule, and its optional point reads throw on a post-open structural breach because `nullopt` means absence only.
+A malformed manifest point-read or iterator row violates the already-established open invariant and fails fast instead of becoming a skippable item or partial output.
+`ListBuilder::prepare()` similarly snapshots one canonical List record, including bounded field sizes and nonzero unique saved-order ids.
+The logical List writer accepts the semantic `ListBuilder`, performs preparation internally, and never exposes prepared bytes as a logical mutation input.
+Its encoder checks with `AO_ENSURES` that the storage reservation exactly equals that already validated immutable snapshot, avoiding a second allocating saved-order validation pass.
+The local validator treats filter bytes as opaque and does not parse application query grammar; parent existence and cycle checks are cross-row logical-writer responsibilities rather than record facts.
+The logical List writer performs those cross-row checks against the live write snapshot, rejects ordinary deletion while children exist, and performs explicit subtree deletion children-first.
+`ListStore` otherwise follows the same validated-iterator rule, and its optional point reads abort through `AO_INVARIANT` on a post-open structural breach because `nullopt` means absence only.
 
 `LibraryUri` is the shared core value for paths in the music-root namespace.
 YAML import, runtime Writer, scanner, `FileManifestStore`, and runtime file consumers converge on this value instead of maintaining independent path checks.
@@ -211,7 +232,7 @@ runtime command
   -> LibraryWriter
   -> LibraryMutationService admission
   -> WriteTransaction + transaction-local dictionary overlay
-  -> root apply boundary
+  -> root apply boundary + callback-scoped LibraryWrite ports
   -> one LMDB commit with records, dictionary rows, and new library revision
   -> complete dictionary-index publication
   -> ordered LibraryChanges publication on the callback executor
@@ -282,7 +303,8 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 
 - One `MusicLibrary` instance and its runtime facade belong to one `CoreRuntime` and one music root.
 - One persisted Track identity has exactly one canonical hot record and one canonical cold record.
-- Every runtime-visible persisted dictionary, Track pair, dictionary reference, List row, and manifest row has passed the current open-time integrity gate.
+- Every runtime-visible current-schema catalog entry, metadata record, dictionary and Resource row, Track pair and reference, List graph edge, and manifest binding has passed the open-time integrity gate.
+- Every persisted Track has exactly one manifest row at its canonical URI, that row names the same Track id, and no extra manifest row exists.
 - One prepared Track write fills and consumes each reserved value before issuing another LMDB update; reservation pointers never cross that boundary.
 - A scan plan can mutate only the library id and immediate successor revision captured by its construction snapshot.
 - A library import plan can mutate only its captured runtime, library identity, committed revision, and exact source-byte snapshot, and applying it consumes the plan.
@@ -292,7 +314,8 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 - A recoverable error from a root write body aborts the complete transaction before it is returned; the current library layer has no item-local savepoint or continuation after a failed body.
 - One OS lease excludes another writable process, and an active transaction retains that lease even if its originating capability is destroyed.
 - Live-runtime commits can begin only through the one coordinator-owned writable capability.
-- A mutation becomes observable through the revisioned change bus only after its write transaction commits.
+- A write transaction exposes one in-memory candidate successor revision, persists it immediately before native commit, and does not consume it on abort or failed commit.
+- A mutation becomes observable through the revisioned change bus only after its write transaction commits and the cached metadata state publishes that candidate.
 - The coordinator admits the next mutation only after publication completion, and callback-thread reentrant mutation during publication is rejected.
 - Availability observers execute without coordinator mutex ownership, while a logical notification gate keeps writer admission closed until synchronous delivery completes.
 - One replica applies a revision before it is announced; notification observers only learn of revisions that replica already applied.
@@ -322,10 +345,10 @@ No failed root can be continued or committed, even while its C++ wrapper remains
 Once durable commit succeeds, revision-admission, publication admission, or delivery failure in a live runtime is an infrastructure fault and terminates the process.
 It is not translated to a transaction `Result` or a recoverable authoring state; the next process open reconstructs runtime state from the durable database.
 Coordinated Closing is the only exception: it seals writer and task admission before callback admission closes and may retire publication or maintenance-finalization work that has not begun.
-`MusicLibrary::readTransaction()` treats transaction-begin failure as an exceptional storage failure rather than a recoverable typed result.
-Notification callbacks do not translate that failure; crossing their `noexcept` boundary is fatal.
-Malformed dictionary, Track, List, and manifest state that can be inspected safely before exposure rejects `MusicLibrary::open()` with `CorruptData`.
-A later List or manifest iterator integrity breach is an infrastructure exception because supported writers preserve the validated invariant and iteration has no safe partial-result contract.
+`MusicLibrary::readTransaction()` and `WritableMusicLibrary::writeTransaction()` treat native begin failure as fatal because a live library has no alternate storage authority.
+Malformed current-schema catalog, metadata, dictionary, Resource, Track, List, or manifest state that can be inspected safely before exposure rejects `MusicLibrary::open()` with `CorruptData`; a valid non-current metadata version returns `NotSupported` before current-schema closure.
+A later Store structural breach is an `AO_INVARIANT` failure, and a later non-miss native read fault is `AO_FATAL`, because supported writers preserve the validated facts and no safe partial-result or degraded-library contract exists.
+The same native read fault inside an active write transaction uses the private transaction carrier so the root owner aborts every staged effect before exposing a typed operation error.
 Arbitrary LMDB or mapped-file corruption may still terminate the process; the storage contract prevents Aobus-authored partial records but does not promise row salvage, degraded operation, or in-process repair for a physically damaged database.
 Media rescan does not preserve database-only curation, and a damaged database cannot be assumed exportable; recovery preserves that state only when a usable export or other backup already exists.
 
@@ -346,6 +369,9 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns the physical library environment and public read snapshots.
 - [`WritableMusicLibrary`](../../include/ao/library/WritableMusicLibrary.h) owns explicit offline/live composition write authority and the process writer lease.
 - [`WriteTransaction`](../../include/ao/library/WriteTransaction.h) owns native write lifetime, root-operation failure containment, transaction-local dictionary interning, commit, rollback, and publication ordering.
+- [`LibraryWrite`](../../include/ao/library/LibraryWrite.h) is the callback-scoped logical mutation capability supplied only by `WriteTransaction::apply()`.
+- [`TrackWriter`](../../include/ao/library/TrackWriter.h) owns logical Track/manifest mutation and transaction-local Track preparation.
+- [`ListWriter`](../../include/ao/library/ListWriter.h) owns logical List topology mutation and deletion ordering.
 - [`DictionaryStore`](../../include/ao/library/DictionaryStore.h) owns committed synchronized dictionary access, stable published values, generation, and bounded read contexts/caches.
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`LibraryUri`](../../include/ao/library/LibraryUri.h) owns the canonical music-root-relative path namespace and resolved containment check.
@@ -362,11 +388,16 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 
 ## Test map
 
-- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects physical environment, store composition, cross-library transaction rejection, writer exclusion, and transaction-anchored lease lifetime.
-- [`WriteTransactionTest.cpp`](../../test/unit/library/WriteTransactionTest.cpp) protects root operation success, recoverable and native failure rollback, unexpected-exception containment, terminal state, and immediate writer-gate reuse.
+- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects closed-world admission, complete Store and cross-Store validation, accepted opaque states, linear open work, store composition, writer exclusion, and transaction-anchored lease lifetime.
+- [`MetadataStoreTest.cpp`](../../test/unit/library/MetadataStoreTest.cpp) protects logical metadata snapshots and durable-snapshot candidate revision publication across commit failure and multiple library instances.
+- [`WriteTransactionTest.cpp`](../../test/unit/library/WriteTransactionTest.cpp) protects the callback-scoped mutation capability, root operation success, recoverable mutation/read failure rollback, unexpected-exception containment, terminal state, and immediate writer-gate reuse.
+- [`TrackWriterTest.cpp`](../../test/unit/library/TrackWriterTest.cpp) protects the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior.
+- [`ListWriterTest.cpp`](../../test/unit/library/ListWriterTest.cpp) protects live parent validation, leaf-delete conflict, subtree ordering, and coherent clear behavior.
 - [`TrackStoreTest.cpp`](../../test/unit/library/TrackStoreTest.cpp) and [`TrackStoreRawLayoutTest.cpp`](../../test/unit/library/TrackStoreRawLayoutTest.cpp) protect batch order, missing-row behavior, coordinated hot/cold traversal, and prepared record writes.
 - [`TrackStoreIntegrityTest.cpp`](../../test/unit/library/TrackStoreIntegrityTest.cpp) protects reserved-id rejection and fail-closed rejection of non-canonical persisted records.
-- [`ListStoreTest.cpp`](../../test/unit/library/ListStoreTest.cpp) and [`FileManifestStoreTest.cpp`](../../test/unit/library/FileManifestStoreTest.cpp) protect writer validation and post-open iterator fail-fast behavior.
+- [`ListBuilderTest.cpp`](../../test/unit/library/ListBuilderTest.cpp), [`ListStoreTest.cpp`](../../test/unit/library/ListStoreTest.cpp), [`FileManifestBuilderTest.cpp`](../../test/unit/library/FileManifestBuilderTest.cpp), and [`FileManifestStoreTest.cpp`](../../test/unit/library/FileManifestStoreTest.cpp) protect prepared snapshots, prepared-only writer surfaces, local record validation, and post-open iterator fail-fast behavior.
+- [`LibraryFatalProbeTest.cpp`](../../test/unit/library/LibraryFatalProbeTest.cpp) protects prepared-write preconditions, post-open Store and cross-Store trust, revision exhaustion, and LMDB lifetime contracts with owned subprocess fatal diagnostics.
+- [`RuntimeFatalProbeTest.cpp`](../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) protects runtime consumers that enforce admitted cross-Store references before producing external output.
 - [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
 - [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.
 - [`LibraryReaderTest.cpp`](../../test/unit/runtime/library/LibraryReaderTest.cpp) and [`LibraryWriterTest.cpp`](../../test/unit/runtime/library/LibraryWriterTest.cpp) protect runtime access roles.

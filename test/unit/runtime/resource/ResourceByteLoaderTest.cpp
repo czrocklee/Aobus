@@ -11,8 +11,6 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -41,16 +39,10 @@ namespace ao::rt::test
 {
   namespace
   {
-    class InjectedResourceReadFailure final : public Exception
-    {
-    public:
-      using Exception::Exception;
-    };
-
     class RuntimeOwner final
     {
     public:
-      explicit RuntimeOwner(async::AsyncExceptionHandler exceptionHandler = {})
+      RuntimeOwner()
       {
         auto executorPtr = std::make_unique<QueuedExecutor>();
         _executor = executorPtr.get();
@@ -58,9 +50,7 @@ namespace ao::rt::test
           ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
                                                      _tempDir.path(),
                                                      LibraryPaths{_tempDir.path()}.databasePath(),
-                                                     library::test::kTestMusicLibraryMapSize,
-                                                     nullptr,
-                                                     std::move(exceptionHandler)))};
+                                                     library::test::kTestMusicLibraryMapSize))};
       }
 
       ~RuntimeOwner()
@@ -89,7 +79,7 @@ namespace ao::rt::test
     {
       auto library = library::test::makeTestMusicLibrary(musicRoot, databasePath);
       auto transaction = library::test::writeTransaction(library);
-      auto result = library.resources().writer(transaction).create(bytes);
+      auto result = library::test::physicalWriter(library.resources(), transaction).create(bytes);
       REQUIRE(result);
       REQUIRE(transaction.commit());
       return *result;
@@ -124,7 +114,7 @@ namespace ao::rt::test
 
       if (failNextPtr->exchange(false))
       {
-        throwException<InjectedResourceReadFailure>("injected resource read failure");
+        co_return makeError(Error::Code::IoError, "injected resource read failure");
       }
 
       co_return std::optional{std::move(bytes)};
@@ -357,11 +347,10 @@ namespace ao::rt::test
     CHECK(laterBytes == expected);
   }
 
-  TEST_CASE("ResourceByteLoader - read failure reports once, completes empty, and permits retry",
+  TEST_CASE("ResourceByteLoader - read result failure completes empty and permits retry",
             "[runtime][regression][resource-byte][concurrency]")
   {
-    auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto owner = RuntimeOwner{exceptionRecorder.handler()};
+    auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto failNextPtr = std::make_shared<std::atomic_bool>(true);
     auto const expected = std::vector{std::byte{0x41}, std::byte{0x42}};
@@ -374,8 +363,6 @@ namespace ao::rt::test
     REQUIRE(first);
     REQUIRE(owner.executor().drainUntil([&] { return received.size() == 1; }));
     CHECK(received.front().empty());
-    REQUIRE(exceptionRecorder.waitForCount(1));
-    requireSingleRecordedException<InjectedResourceReadFailure>(exceptionRecorder, "resource byte delivery");
 
     auto retry = loader.request(
       ResourceId{8}, [&](ResourceBytes bytes) { received.emplace_back(bytes.view().begin(), bytes.view().end()); });
@@ -383,14 +370,12 @@ namespace ao::rt::test
     REQUIRE(owner.executor().drainUntil([&] { return received.size() == 2; }));
     CHECK(readCount.load() == 2);
     CHECK(received.back() == expected);
-    CHECK(exceptionRecorder.snapshot().size() == 1);
   }
 
   TEST_CASE("ResourceByteLoader - cancellation escapes without invoking a waiter",
             "[runtime][regression][resource-byte][concurrency]")
   {
-    auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto owner = RuntimeOwner{exceptionRecorder.handler()};
+    auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto loader = ResourceByteLoader{owner.runtimePtr()->async(), std::bind_front(cancelRead, readCount)};
     auto callbackCount = AsyncTestState<std::size_t>::create(0);
@@ -401,14 +386,12 @@ namespace ao::rt::test
     owner.runtimePtr()->async().requestStop();
     owner.runtimePtr()->async().join();
     CHECK(callbackCount.load() == 0);
-    CHECK(exceptionRecorder.snapshot().empty());
   }
 
   TEST_CASE("ResourceByteLoader - unbind fences an old flight from a same-id replacement",
             "[runtime][regression][resource-byte][concurrency]")
   {
-    auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto owner = RuntimeOwner{exceptionRecorder.handler()};
+    auto owner = RuntimeOwner{};
     auto release = AsyncBarrier{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto firstReadReleased = AsyncTestState<bool>::create(false);
@@ -440,6 +423,5 @@ namespace ao::rt::test
     owner.runtimePtr()->async().requestStop();
     owner.runtimePtr()->async().join();
     CHECK(callbackCount.load() == 1);
-    CHECK(exceptionRecorder.snapshot().empty());
   }
 } // namespace ao::rt::test

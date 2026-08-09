@@ -5,7 +5,6 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/utility/ByteView.h>
@@ -134,6 +133,35 @@ namespace ao::lmdb::test
     REQUIRE(optData2);
     CHECK(utility::bytes::stringView(*optData1) == std::string(8, 'a'));
     CHECK(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
+  }
+
+  TEST_CASE("Database::Writer - clear resets integer append allocation on the same writer",
+            "[lmdb][regression][database][writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    auto db = openDatabase(transaction, "test");
+    auto writer = db.writer(transaction);
+    auto const firstIdRes = writer.append(createStringData("first"));
+    auto const secondIdRes = writer.append(createStringData("second"));
+    REQUIRE(firstIdRes);
+    REQUIRE(secondIdRes);
+    CHECK(*firstIdRes == 1);
+    CHECK(*secondIdRes == 2);
+
+    REQUIRE(writer.clear());
+    auto const replacementIdRes = writer.append(createStringData("replacement"));
+    REQUIRE(replacementIdRes);
+    CHECK(*replacementIdRes == 1);
+    REQUIRE(transaction.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const reader = db.reader(readTransaction);
+    auto const optReplacement = reader.get(1);
+    REQUIRE(optReplacement);
+    CHECK(utility::bytes::stringView(*optReplacement) == "replacement");
+    CHECK_FALSE(reader.get(2));
   }
 
   TEST_CASE("Database::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
@@ -418,37 +446,6 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optPersisted) == "persisted");
     CHECK_FALSE(reader.get(2));
     CHECK_FALSE(reader.get(3));
-  }
-
-  TEST_CASE("Database::Writer - throws when used after commit", "[lmdb][unit][database][writer]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
-    auto writer = db.writer(wtxn);
-    REQUIRE(writer.create(1, createStringData("before")));
-    REQUIRE(wtxn.commit());
-
-    // After commit LMDB has closed the writer's cursor; every operation must
-    // throw instead of dereferencing the dangling handle.
-    REQUIRE_THROWS_AS(writer.create(2, createStringData("after")), Exception);
-    REQUIRE_THROWS_AS(writer.update(1, createStringData("after")), Exception);
-    REQUIRE_THROWS_AS(writer.del(1), Exception);
-    REQUIRE_THROWS_AS(writer.get(1), Exception);
-    REQUIRE_THROWS_AS(writer.clear(), Exception);
-  }
-
-  TEST_CASE("Database::Writer - construction rejects a finished transaction", "[lmdb][unit][database][writer]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto transaction = beginWriteTransaction(env);
-    auto db = openDatabase(transaction, "test");
-    REQUIRE(transaction.commit());
-
-    CHECK_THROWS_AS(db.writer(transaction), Exception);
   }
 
   TEST_CASE("Database::Writer - move assignment releases a finished cursor without closing it",

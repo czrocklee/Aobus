@@ -5,7 +5,6 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -13,9 +12,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <atomic>
-#include <semaphore>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 
 namespace ao::cli::test
@@ -39,16 +37,7 @@ namespace ao::cli::test
     async::Task<void> failOnWorker(async::Runtime* runtime)
     {
       co_await runtime->resumeOnWorker();
-      throwException<Exception>("worker task failed");
-    }
-
-    async::Task<void> finishAfterOwnerRelease(async::Runtime* runtime,
-                                              std::binary_semaphore* release,
-                                              std::atomic_bool* completed)
-    {
-      co_await runtime->resumeOnWorker();
-      release->acquire();
-      completed->store(true, std::memory_order_release);
+      throw std::runtime_error{"worker task failed"};
     }
   } // namespace
 
@@ -78,7 +67,7 @@ namespace ao::cli::test
     cli.options().root = temp.path();
     auto& asyncRuntime = cli.core().async();
 
-    CHECK_THROWS_AS(cli.runTask(failOnWorker(&asyncRuntime)), Exception);
+    CHECK_THROWS_AS(cli.runTask(failOnWorker(&asyncRuntime)), std::runtime_error);
   }
 
   TEST_CASE("CliRuntime - teardown drains callbacks queued by a foreign producer", "[cli][unit][runtime][concurrency]")
@@ -99,24 +88,5 @@ namespace ao::cli::test
     }
 
     CHECK(callbackRan);
-  }
-
-  TEST_CASE("CliRuntime - callback failure does not outlive the task boundary", "[cli][unit][runtime][concurrency]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto out = std::ostringstream{};
-    auto err = std::ostringstream{};
-    auto cli = CliRuntime{out, err, library::test::kTestMusicLibraryMapSize};
-    cli.options().root = temp.path();
-    auto& asyncRuntime = cli.core().async();
-    auto& callbackExecutor = asyncRuntime.callbackExecutor();
-    auto release = std::binary_semaphore{0};
-    auto taskCompleted = std::atomic_bool{false};
-
-    callbackExecutor.defer([] { throwException<Exception>("callback failed"); });
-    callbackExecutor.defer([&] { release.release(); });
-
-    CHECK_THROWS_AS(cli.runTask(finishAfterOwnerRelease(&asyncRuntime, &release, &taskCompleted)), Exception);
-    CHECK(taskCompleted.load(std::memory_order_acquire));
   }
 } // namespace ao::cli::test

@@ -41,7 +41,7 @@ Managed-state schemas are owner-local application code layered above the adapter
 - A **map writer** creates one mapping and writes only the literal scalar or child fields requested by its caller.
 - A **map reader** validates one caller-supplied key policy and assigns only the required or optional scalar and child fields requested by its caller.
 - A **sequence helper** traverses one explicitly selected sequence through a caller-supplied element writer or reader; it does not discover an aggregate schema.
-- A **translation boundary** is a caller that catches adapter exceptions or interprets boolean conversion failure and maps them to its public outcome contract.
+- A **translation boundary** is an adapter operation that converts its private RapidYAML callback carrier, or a caller that interprets a returned failure, according to the public outcome contract.
 
 ## Invariants
 
@@ -84,14 +84,15 @@ A helper that returns a tree parsed with a local callback state must replace tho
 
 ### Callback construction
 
-`callbacks()` returns RapidYAML callbacks for basic, parse, and visit errors with no user data.
-Those callbacks use `<buffer>` as diagnostic context.
+`callbacks()` returns fail-fast RapidYAML callbacks for basic, parse, and visit errors outside an admitted parse operation.
+Such a callback indicates an internal tree-operation fault and enters the AO fatal facility with `<buffer>` context.
 
-`callbacks(state)` installs the same callback functions and stores a raw pointer to `state` as user data.
-The callback functions throw `ao::Exception` with the callback category, owned filename, location values supplied by RapidYAML, and RapidYAML message.
+`callbacks(state)` is used by `parseInPlace()`, `parseInArena()`, and
+`resolve()` to install private throwing callbacks whose user data points to
+`state`.
+Those callbacks build a bounded parser diagnostic and throw one implementation-only carrier.
 
-The callbacks are an internal exception containment mechanism.
-They do not return `Result` and do not independently classify a parser failure as `FormatRejected`.
+The private carrier is caught inside the same public parse function and never becomes part of the public API.
 
 ### Parsing
 
@@ -102,10 +103,14 @@ They do not return `Result` and do not independently classify a parser failure a
 3. Parse and mutate the complete `buffer` in place into `tree`.
 
 `parseInArena(tree, source, state)` performs the same callback and source-name setup but asks RapidYAML to copy `source` into the tree arena before building nodes.
+`resolve(tree, state)` applies the same private-carrier containment to RapidYAML alias resolution after a successful parse.
 
-Both operations return `void` on success.
-A RapidYAML diagnostic invokes the configured callback and throws `ao::Exception`; neither operation catches or translates that exception.
-The tree's exact partial state after a thrown parser exception is not a usable document contract.
+All three operations return `Result<>`.
+A RapidYAML diagnostic invokes the configured private callback; the owning
+adapter operation catches its exact carrier, restores fail-fast callbacks that
+do not borrow `state`, and returns `FormatRejected` with the callback
+diagnostic.
+The tree's exact partial state after a rejected parse is not a usable document contract.
 
 ### File reading
 
@@ -122,8 +127,8 @@ The ceiling defaults to absent; the adapter does not select a document-size poli
 The helper does not impose text serialization, terminator, newline, or YAML validation.
 Allocation, path-string conversion, and unrelated standard-library exceptions are not broadly converted to `IoError`.
 
-`readFile(path)` is a throwing compatibility wrapper.
-It returns the vector on success and otherwise throws `ao::Exception` using the recoverable error's message and diagnostic source location.
+There is no throwing file-read compatibility wrapper.
+Callers use `readFileResult()` and preserve or deliberately translate its `Error`.
 
 ### Tree and node helpers
 
@@ -202,17 +207,16 @@ The low-level channel depends on the operation:
 
 | Operation family | Failure channel |
 |---|---|
-| RapidYAML parsing or tree callback | `ao::Exception` thrown by the configured callback. |
+| `parseInPlace()`, `parseInArena()`, or `resolve()` RapidYAML diagnostic | `Result<>` with `FormatRejected`; the private callback carrier is caught inside the adapter operation. |
+| RapidYAML callback outside an admitted parse operation | AO fatal invariant; the caller has no usable partial tree contract. |
 | Complete-file read | `Result` with `IoError`, or `ValueTooLarge` for a configured/representational size violation. |
-| `readFile()` compatibility wrapper | `ao::Exception`. |
 | Strict `tryParseScalar` or `tryReadScalar` | `false`, with destination retained. |
 | Node-kind, key, child, `MapReader`, sequence, or `scalarAs` validation | `Result` with `FormatRejected` and bounded caller context. |
 | Caller-supplied sequence or string-map writer or reader | The first returned error, without adapter-side logging or translation. |
 | Empty string-map key | `InvalidState` while serialization live state; `FormatRejected` while deserialization persisted input. |
 | Lenient `asBool` or `asInt` | Caller-supplied default. |
 
-A public configuration, interchange, layout, or component-state boundary chooses the externally observable translation.
-For example, `ConfigStore` catches parse exceptions and returns `FormatRejected`, while library import owns its own schema and rollback behavior.
+A public configuration, interchange, layout, or component-state boundary preserves the parse result or adds owner context while retaining `FormatRejected`.
 Wrong node kinds, unsupported schema versions, and semantic rejection are not parser errors at this layer.
 
 All operations are synchronous and expose no cooperative cancellation point.
@@ -244,7 +248,7 @@ A frontend file adapter may log or fall back only according to the specification
 
 ## Test map
 
-- [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, file-byte ceiling boundaries, missing-file `IoError`, and callback filename ownership.
+- [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, parser-result diagnostics, file-byte ceiling boundaries, missing-file `IoError`, and callback filename ownership.
 - [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects quoted string type preservation, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects translation of malformed YAML through a containing store and retry after initialization failure.
 - Library transfer, layout model, and component-state tests protect their domain-specific use of the adapter without making those schemas part of this contract.

@@ -47,7 +47,10 @@ namespace ao::rt
     Impl(AppRuntime& runtime,
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
          ConfigStore* playbackSessionConfigStoreValue)
-      : viewService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.sources()}
+      : viewService{runtime.async().callbackExecutor(),
+                    runtime.musicLibrary(),
+                    runtime.sources(),
+                    runtime.library().changes()}
       , playbackTransport{runtime.async().callbackExecutor(),
                           runtime.musicLibrary(),
                           runtime.notifications(),
@@ -113,8 +116,7 @@ namespace ao::rt
                                                 std::move(dependencies.musicRoot),
                                                 std::move(dependencies.databasePath),
                                                 dependencies.musicLibraryMapSize,
-                                                dependencies.sleeper,
-                                                std::move(dependencies.asyncExceptionHandler));
+                                                dependencies.sleeper);
 
     if (!initializeRes)
     {
