@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySwitch.h>
 
 #include <filesystem>
 #include <optional>
@@ -23,14 +24,12 @@ namespace ao::gtk
   };
 
   Result<SuccessorLaunchPlan> planSuccessorLaunch(
-    std::filesystem::path const& libraryRoot,
-    bool scanAfterOpen,
+    desktop::LibrarySwitchRequest const& request,
     std::optional<std::string_view> optActivationToken = std::nullopt,
     std::optional<std::filesystem::path> optAppImageExecutable = std::nullopt);
 
   Result<> launchDetachedSuccessor(SuccessorLaunchPlan const& plan);
 
-  Result<> launchDetachedSuccessor(std::filesystem::path const& libraryRoot,
-                                   bool scanAfterOpen,
+  Result<> launchDetachedSuccessor(desktop::LibrarySwitchRequest const& request,
                                    std::optional<std::string_view> optActivationToken = std::nullopt);
 } // namespace ao::gtk

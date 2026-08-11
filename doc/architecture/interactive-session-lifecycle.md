@@ -31,9 +31,14 @@ GTK, WinUI, or TUI composition root
   -> callback producers stopped before runtime dependencies
 ```
 
-There is no current frontend-neutral lifecycle service.
-GTK and WinUI each keep one library-bound graph per desktop process and open a different root by destroying that graph before launching a successor process.
-Their process launchers, application-registration systems, state stores, and native activation mechanisms remain frontend-owned.
+There is no frontend-neutral stateful lifecycle service. GTK and WinUI share
+the `ao_app_desktop` value/mechanism boundary for root identity, pure
+startup/switch plans, the private successor protocol, and Boost.Process-based
+detached creation. Each still keeps one library-bound graph per desktop process
+and opens a different root by destroying that graph before launching a
+successor. Application registration, queued-work admission, state stores,
+checkpoint presentation, graph release, native activation, and process exit
+remain frontend-owned.
 TUI creates one runtime for the selected root and does not run either desktop transition sequence.
 
 ## Responsibilities
@@ -60,9 +65,13 @@ Ordinary restore admits playback observation immediately; successor idle start k
 Workspace restoration retains the exact presentation stored with every restored view.
 GTK resolves a per-list preference or recommendation and submits it as new-view-default intent; `WorkspaceService` decides whether navigation reuses a plain view or creates one.
 `app/linux-gtk/main.cpp` owns the destructive handoff because it must return from the picker callback, terminally retire playback persistence, unwind the complete GTK graph, and only then launch the successor.
-`GtkStartupPlan` owns the paired private successor-marker/explicit-root protocol and partitions Aobus-owned options from GTK passthrough arguments before application construction.
+The shared successor parser owns the paired private marker/root request;
+`GtkStartupPlan` partitions the remaining Aobus-owned options from GTK
+passthrough arguments before application construction.
 Every primary permits GApplication replacement, while a valid private successor requests replacement programmatically; the standard `--gapplication-replace` option remains in the GTK-owned argument partition.
-`SuccessorProcessLauncher` uses Boost.Process V2, inherits standard streams, carries optional scan and desktop-activation intent, and detaches only after successful process creation.
+`SuccessorProcessLauncher` selects the GTK executable, environment, activation,
+and inherited-standard-stream policy around the shared Boost.Process V2
+launcher.
 
 ### TUI composition root
 
@@ -77,12 +86,22 @@ That owner contains one `MainWindow` and one `LibrarySession`; the session owns 
 Neither the window owner nor the session can replace or retarget its runtime.
 
 Opening a different root posts a restart request to the application dispatcher.
-After the picker coroutine returns, `App` checkpoints and retires the old window graph, releases the session, runtime, and application-state stores, launches the exact current executable with the requested root, and exits.
+After the picker coroutine returns, `App` checkpoints the old window graph and
+terminally retires its global playback payload. Retirement failure leaves the
+old graph running. Success releases the session, runtime, and application-state
+stores, launches the exact current executable through the shared detached
+launcher with the paired private request, and exits.
 The successor process validates and opens that explicit root as its only graph.
 No parent and successor `LibrarySession` overlap on the supported restart path, and WinUI does not retain old-library playback across the process boundary.
 
-An explicit successor root remains a pending desktop-setting value during construction.
-After native window and process-adapter activation, the successor commits the selected root best effort and starts an initial scan only when the canonical database did not already exist.
+Ordinary startup starts playback-session observation and restores listening
+intent before UI controllers bind. An explicit successor root remains a
+pending desktop-setting value during construction and starts playback idle with
+persistence dormant. After native window and process-adapter activation, the
+successor saves a desktop-settings candidate. Success installs the candidate and
+starts playback observation; failure retains the prior live settings root and
+permanently seals playback writes. It starts an initial scan when the carried
+intent requests one or the canonical database did not already exist.
 Startup failure is presented by the successor and cannot reconstruct the old process; because the parent never records the request, a later ordinary launch can still select the prior durable root.
 Initial-scan failure leaves the successor root active and retryable.
 Explicit Rescan uses the same transactional workflow and relies on `LibraryChanges` for projection updates instead of manually reloading projections.
@@ -105,7 +124,8 @@ Each constructed session reloads library-backed sources before restoring its per
 
 ```text
 load global application session
-  -> resolve the last existing library root or empty fallback root
+  -> shared pure planner selects strict successor, existing durable root, or empty fallback
+  -> GTK creates the fallback directory when selected
   -> derive database and per-library workspace paths
   -> construct stores, providers, and AppRuntime
   -> construct MainWindow, UIModel, controllers, and adapters
@@ -159,22 +179,29 @@ The [GTK active-library lifecycle specification](../spec/linux-gtk/active-librar
 
 ```text
 folder-picker completion
-  -> App queues an absolute-root restart request
+  -> shared switch planner validates identity and returns an absolute-root request
+  -> App queues that request once
   -> picker coroutine returns
-  -> retire and release MainWindow
+  -> checkpoint MainWindow and terminally retire playback persistence
+       failure -> report against the live window and return to Running
+  -> release MainWindow
   -> release LibrarySession, AppRuntime, settings stores, and playback store
-  -> CreateProcessW(exact executable, --library-root <selected root>)
+  -> shared detached launcher(exact executable, paired private successor request)
   -> parent exits
-  -> successor validates and constructs its only session
+  -> successor shared planner validates and constructs its only session with idle playback
   -> activate native window and process adapters
-  -> record the selected root best effort
+  -> save a selected-root settings candidate
+       success -> install candidate and start playback observation
+       failure -> retain prior root and seal playback writes
   -> optionally scan the selected root
 ```
 
 The old process performs no target-library validation beyond path normalization and same-root detection.
 Target directory, database, writer-lease, runtime, and window failures therefore belong to successor startup.
 There is no readiness handshake or rollback protocol.
-Process creation itself remains parent-owned: failure is reported after teardown and the parent still exits.
+Process creation policy is shared, while executable discovery, diagnostics, and
+exit remain parent-owned: failure is reported after teardown and the parent
+still exits. The native default passes no inheritable handle list.
 [Decision 0005](../decision/0005-use-process-restart-for-winui-library-switching.md) records the accepted tradeoff.
 
 ### Shutdown
@@ -198,8 +225,12 @@ A destructive restart in either desktop frontend uses its ordinary shutdown dire
 - Frontend observers and callbacks cannot outlive the runtime services they address.
 - Runtime callback producers quiesce before their targets are destroyed.
 - On each supported parent-spawned restart path, GTK and WinUI do not construct the successor library graph until that original parent graph and its configuration writers are gone.
-- GTK admits a successor's global playback writer only after the matching root is durable; commit failure leaves the prior root and no playback payload.
-- Current GTK, WinUI, and TUI lifecycle asymmetry is explicit and cannot be hidden behind a proposed common abstraction.
+- Both desktop frontends admit a successor's global playback writer only after
+  the matching root is durable; commit failure leaves the prior root and no
+  playback payload.
+- Shared root/protocol/launch rules do not imply a common teardown proof. GTK,
+  WinUI, and TUI lifecycle asymmetry remains explicit rather than hidden behind
+  a stateful common abstraction.
 - Workspace, playback, persistence, presentation, and runtime execution retain ownership of their internal state and behavior.
 
 ## Failure, cancellation, and lifetime boundaries
@@ -231,8 +262,13 @@ The successor then replaces it, but GApplication name transfer does not wait for
 Such overlap is outside the supported private restart protocol and is not a supported multi-library mode.
 
 WinUI accepts a restart request only once and dispatches destructive work after the picker callback returns.
-The parent never persists the requested root.
+Terminal playback-retirement failure returns the process to `Running`, retains
+the old window/session, and launches nothing. The parent never persists the
+requested root.
 After teardown, process-launch failure is reported without rollback; target open and activation failures are successor startup outcomes and leave the prior durable root unchanged.
+The successor restores no playback before its root commit. Commit failure
+preserves the prior in-memory settings snapshot, permanently seals playback
+writes, and leaves the target runtime usable for non-playback persistence.
 After successor activation, initial-scan or explicit-rescan planning and application failures are presented against that active session and do not resurrect the previous process.
 An Open Library request may cancel an active scan through ordinary parent teardown; explicit Rescan still has no public cancellation or supersession command.
 The dispatcher executor is the only route by which runtime callbacks may update XAML.
@@ -242,6 +278,9 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 ## Implementation map
 
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) and [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) own interactive composition and playback-first teardown.
+- [`app/include/ao/desktop/`](../../app/include/ao/desktop/) and
+  [`app/desktop/`](../../app/desktop/) own shared root identity, pure startup and
+  switch plans, the private successor protocol, and detached process creation.
 - [`GtkStartupPlan.cpp`](../../app/linux-gtk/app/GtkStartupPlan.cpp), [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`MainWindowCoordinator.cpp`](../../app/linux-gtk/app/MainWindowCoordinator.cpp), [`SuccessorProcessLauncher.cpp`](../../app/linux-gtk/platform/SuccessorProcessLauncher.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK startup planning, prepare/activate composition, terminal retirement, complete unwind, direct process launch, diagnostics, and pair lifetime.
 - [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
@@ -261,7 +300,12 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects the current TUI composition path.
-- WinUI app-policy tests under [`test/unit/winui/app/`](../../test/unit/winui/app/) protect startup arguments, explicit-root commit timing, command-line quoting, and destructive restart order; bounded-cache tests and native WinUI builds protect native composition.
+- Tests under [`test/unit/desktop/`](../../test/unit/desktop/) run on Linux and
+  Windows and protect shared startup, switch, protocol, argv, detach, and handle
+  inheritance behavior.
+- WinUI app-policy tests under [`test/unit/winui/app/`](../../test/unit/winui/app/)
+  protect transactional explicit-root commit and destructive preparation/restart
+  order; bounded-cache tests and native WinUI builds protect native composition.
 
 ## Related documents
 
@@ -273,5 +317,7 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Presentation architecture](presentation.md)
 - [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md)
+- [Desktop library lifecycle specification](../spec/application/desktop-library-lifecycle.md)
+- [Desktop successor protocol reference](../reference/application/desktop-successor-protocol.md)
 - [Windows desktop shell specification](../spec/shell/windows-desktop.md)
 - [Workspace session specification](../spec/workspace/session.md)

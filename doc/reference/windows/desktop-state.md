@@ -116,12 +116,16 @@ classic:
 
 - [`DesktopSettingsYamlSchema`](../../../app/windows-winui/include/ao/winui/DesktopSettingsYamlSchema.h)
 - [`ThemeYamlSchema`](../../../app/windows-winui/include/ao/winui/Theme.h)
-- [`LibraryStartupPlan`](../../../app/windows-winui/include/ao/winui/app/LibraryStartupPlan.h), [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.cpp), and [`ThemeCoordinator`](../../../app/windows-winui/theme/ThemeCoordinator.cpp)
+- [`LibraryStartupPlanner`](../../../app/include/ao/desktop/LibraryStartupPlanner.h),
+  [`SelectedRootCommit`](../../../app/windows-winui/include/ao/winui/app/SelectedRootCommit.h),
+  [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.cpp), and
+  [`ThemeCoordinator`](../../../app/windows-winui/theme/ThemeCoordinator.cpp)
 
 ## Test authority
 
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp)
-- [`LibraryStartupPlanTest.cpp`](../../../test/unit/winui/app/LibraryStartupPlanTest.cpp)
+- [`LibraryStartupPlannerTest.cpp`](../../../test/unit/desktop/LibraryStartupPlannerTest.cpp)
+- [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
 - [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp)
 
 ## Related documents

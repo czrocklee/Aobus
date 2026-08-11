@@ -9,16 +9,17 @@ summary: Defines GTK startup library selection, same-root reuse, destructive suc
 
 ## Scope
 
-This specification defines how the GTK application selects, constructs,
-restores, reuses, switches, and releases its one active library runtime. It owns
-the application and window transitions around startup, Open Library, optional
-bootstrap scanning, hide, quit, process replacement, and handled process
+This specification defines the GTK-specific application and window transitions
+around the [shared desktop library lifecycle](../application/desktop-library-lifecycle.md):
+GApplication registration, runtime/window composition, optional bootstrap
+scanning, activation-token handoff, hide, quit, replacement, and handled process
 signals.
 
-It does not define workspace payload fields, playback-session contents, scan
-semantics, file-dialog rendering, or runtime-internal teardown. Those facts
-belong to their workspace, playback, library, presentation, persistence, and
-runtime-execution owners.
+It does not redefine shared root identity, startup planning, successor argument
+grammar, detached launch, workspace payload fields, playback-session contents,
+scan semantics, file-dialog rendering, or runtime-internal teardown. Those
+facts belong to their application, workspace, playback, library, presentation,
+persistence, and runtime-execution owners.
 
 ## Code boundary
 
@@ -27,7 +28,9 @@ This is a **GTK frontend composition-root** contract under the
 [interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md).
 Its implementation is `app/linux-gtk/main.cpp`, `GtkStartupPlan.cpp`,
 `LibraryWindowLifecycle.cpp`, `MainWindow.cpp`, `MainWindowCoordinator.cpp`, and
-`SuccessorProcessLauncher.cpp`.
+`SuccessorProcessLauncher.cpp`. Common root, protocol, startup, and detached
+process rules are supplied by `ao_app_desktop` under `app/include/ao/desktop/`
+and `app/desktop/`.
 
 GTK may select platform paths, construct stores and executors, register audio
 providers, own windows, coordinate lifecycle commands, and launch its own
@@ -86,7 +89,8 @@ persistence payload semantics.
   empty root.
 - The private `--aobus-successor` marker and explicit root must appear together
   and are removed before GTK receives its argument vector. Scan intent is valid
-  only for such a successor.
+  only for such a successor; the exact grammar belongs to the
+  [desktop successor protocol reference](../../reference/application/desktop-successor-protocol.md).
 - The standard `--gapplication-replace` option is GTK-owned passthrough syntax,
   not the private successor marker.
 - An invocation with neither private successor mode nor the standard GTK
@@ -139,13 +143,12 @@ violate fatal preconditions.
 
 ### Parse and register the application
 
-Startup planning runs before `Gtk::Application` construction. It consumes the
-private successor options `--aobus-successor` and
-`--library-root <absolute-path>`, plus optional `--scan-after-open`. It rejects
-duplicates, missing values, relative roots, unpaired successor/root requests,
-and scan intent on an ordinary startup. It separates Aobus-owned verbosity,
-logging, help, and version options from GTK passthrough arguments while
-preserving each partition's original order. The standard
+Startup planning runs before `Gtk::Application` construction. The shared parser
+consumes the private protocol defined by its
+[reference](../../reference/application/desktop-successor-protocol.md).
+`GtkStartupPlan` then separates Aobus-owned verbosity, logging, help, and
+version options from GTK passthrough arguments while preserving each
+partition's original order. The standard
 `--gapplication-replace` option stays in the GTK partition.
 
 Every GTK application is created with `ALLOW_REPLACEMENT`. A valid successor is also
@@ -163,10 +166,11 @@ activates that primary, and exits without replacing it.
 
 ### Select a startup root
 
-An ordinary startup loads global application session state. When
-`lastLibraryPath` is non-empty and currently exists, GTK selects it, derives its
-default database path, and determines whether a bootstrap scan is needed.
-Otherwise it creates and selects `<temporary-directory>/aobus-empty`.
+An ordinary startup loads global application session state and passes its
+optional root plus `<temporary-directory>/aobus-empty` to the shared pure
+planner. A persisted root is selected only when it is an accessible directory;
+otherwise GTK creates the planner's fallback directory. It then derives the
+default database path and determines whether a bootstrap scan is needed.
 
 A successor selects only its normalized absolute explicit root. The root must
 still be a directory when activation begins. A recoverable typed failure while
@@ -200,10 +204,11 @@ GTK then requests the carried bootstrap scan.
 
 ### Open the active root
 
-Open Library validates and normalizes the selected directory to an absolute
-lexical path. When it equals the current runtime root, GTK keeps the existing
-pair, optionally requests a bootstrap scan, and presents the existing window.
-No process is launched and no lifecycle state changes.
+Open Library delegates validation, normalization, and identity comparison to
+the shared switch planner. When the selected directory is the same filesystem
+object as the current runtime root, including a symlink alias, GTK keeps the
+existing pair, optionally requests a bootstrap scan, and presents the existing
+window. No process is launched and no lifecycle state changes.
 
 ### Switch to another root
 
@@ -224,17 +229,18 @@ For a different valid directory, GTK performs:
    runtime services, stores, style state, and `Gtk::Application` are destroyed
    in their owned shutdown order.
 7. After the composition function returns, process signal sources are removed.
-8. `main()` directly uses Boost.Process V2 to create and detach the exact
-   executable with `--aobus-successor`, the paired `--library-root` value, and
-   optional scan intent, then exits.
+8. `main()` delegates to the shared Boost.Process V2 launcher to create and
+   detach the exact executable with the encoded private successor request, then
+   exits.
 9. The successor derives `REPLACE` from that private mode, registers the fixed
    application ID, and follows the strict startup and activation path above.
 
-The launcher inherits standard streams. A valid executable `$APPIMAGE` path is
-preferred for AppImage packaging; otherwise the literal `/proc/self/exe` path
-is used while the parent still exists. It preserves the child environment
-except that any inherited `XDG_ACTIVATION_TOKEN` is removed; a newly obtained
-non-empty token is then supplied under that name.
+GTK explicitly requests inherited standard streams from the shared launcher.
+A valid executable `$APPIMAGE` path is preferred for AppImage packaging;
+otherwise the literal `/proc/self/exe` path is used while the parent still
+exists. The GTK adapter preserves the child environment except that any
+inherited `XDG_ACTIVATION_TOKEN` is removed; a newly obtained non-empty token is
+then supplied under that name.
 
 Successor activation and selected-root commit run without another GTK main-loop
 turn between them. The commit therefore settles playback observation and
@@ -361,17 +367,19 @@ reopen the previous durable root.
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) owns ordinary and
   successor composition, guarded switch handoff, complete unwind, selected-root
   commit, activation-token completion, and standalone startup diagnostics.
-- [`GtkStartupPlan`](../../../app/linux-gtk/app/GtkStartupPlan.h) owns private
-  argument pairing, strict-root syntax, registration mode, scan intent, and
-  Aobus/GTK argument partitioning.
+- [`ao_app_desktop`](../../../app/desktop/) owns root identity, switch/startup
+  planning, the private protocol, and detached process creation.
+- [`GtkStartupPlan`](../../../app/linux-gtk/app/GtkStartupPlan.h) owns
+  registration mode and Aobus/GTK argument partitioning around the shared
+  protocol.
 - [`LibraryWindowLifecycle`](../../../app/linux-gtk/app/LibraryWindowLifecycle.h)
   owns only pair preparation and application activation.
 - [`MainWindow`](../../../app/linux-gtk/app/MainWindow.h) owns lifecycle phases,
   checkpoint entry, activation mode, terminal retirement, and stale-write
   prevention.
 - [`SuccessorProcessLauncher`](../../../app/linux-gtk/platform/SuccessorProcessLauncher.h)
-  owns executable selection, child arguments and environment, Boost.Process
-  creation, and detach.
+  owns executable selection, activation, child environment, and GTK standard
+  stream policy around the shared launcher.
 - [`AppRuntime`](../../../app/include/ao/rt/AppRuntime.h) and
   [`PlaybackSessionPersistence`](../../../app/runtime/PlaybackSessionPersistence.h)
   own terminal playback-persistence sealing and runtime shutdown.
@@ -380,10 +388,12 @@ reopen the previous durable root.
 
 ## Test map
 
+- Tests under [`test/unit/desktop/`](../../../test/unit/desktop/) prove shared
+  root identity, startup planning, protocol round trips, and detached-launch
+  behavior on both hosts.
 - [`GtkStartupPlanTest.cpp`](../../../test/unit/linux-gtk/app/GtkStartupPlanTest.cpp)
-  proves private option pairing, strict absolute roots, scan admission, and
-  exact Aobus/GTK argument partitioning, including standard replacement-option
-  passthrough.
+  proves exact Aobus/GTK argument partitioning, registration mode, and standard
+  replacement-option passthrough around the shared protocol.
 - [`SuccessorProcessLauncherTest.cpp`](../../../test/unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp)
   proves executable selection, argument and token planning, child-environment
   token cleanup, exec-failure reporting, and successful detach.
@@ -405,6 +415,8 @@ reopen the previous durable root.
 ## Related documents
 
 - [Decision 0009: use process restart for GTK library switching](../../decision/0009-use-process-restart-for-gtk-library-switching.md)
+- [Desktop library lifecycle specification](../application/desktop-library-lifecycle.md)
+- [Desktop successor protocol reference](../../reference/application/desktop-successor-protocol.md)
 - [Interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md)
 - [Runtime execution architecture](../../architecture/runtime-execution.md)
 - [Workspace session](../workspace/session.md)

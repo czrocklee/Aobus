@@ -3,9 +3,10 @@
 
 #include "platform/SuccessorProcessLauncher.h"
 
-#include "app/GtkStartupPlan.h"
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySuccessorProtocol.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -187,14 +188,17 @@ namespace ao::gtk::test
     auto const appImage = ao::test::TempFile{".AppImage"};
     std::filesystem::permissions(appImage.path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
 
-    auto result = planSuccessorLaunch("/music/../library", true, std::string_view{"activation-token"}, appImage.path);
+    auto result =
+      planSuccessorLaunch(desktop::LibrarySwitchRequest{.libraryRoot = "/music/../library", .scanAfterOpen = true},
+                          std::string_view{"activation-token"},
+                          appImage.path);
 
     REQUIRE(result);
     CHECK(result->executable == appImage.path);
-    CHECK(result->arguments == std::vector<std::string>{std::string{kSuccessorOption},
-                                                        std::string{kLibraryRootOption},
+    CHECK(result->arguments == std::vector<std::string>{std::string{desktop::kLibrarySuccessorOption},
+                                                        std::string{desktop::kLibraryRootOption},
                                                         "/library",
-                                                        std::string{kScanAfterOpenOption}});
+                                                        std::string{desktop::kScanAfterOpenOption}});
     CHECK(result->optActivationToken == std::optional<std::string>{"activation-token"});
   }
 
@@ -203,18 +207,20 @@ namespace ao::gtk::test
   {
     auto const nonExecutableAppImage = ao::test::TempFile{".AppImage"};
 
-    auto result = planSuccessorLaunch("/music", false, std::string_view{}, nonExecutableAppImage.path);
+    auto result = planSuccessorLaunch(
+      desktop::LibrarySwitchRequest{.libraryRoot = "/music"}, std::string_view{}, nonExecutableAppImage.path);
 
     REQUIRE(result);
     CHECK(result->executable == std::filesystem::path{"/proc/self/exe"});
-    CHECK(result->arguments ==
-          std::vector<std::string>{std::string{kSuccessorOption}, std::string{kLibraryRootOption}, "/music"});
+    CHECK(result->arguments == std::vector<std::string>{std::string{desktop::kLibrarySuccessorOption},
+                                                        std::string{desktop::kLibraryRootOption},
+                                                        "/music"});
     CHECK_FALSE(result->optActivationToken);
   }
 
   TEST_CASE("SuccessorProcessLauncher - relative library root cannot produce a launch plan", "[gtk][unit][process]")
   {
-    auto result = planSuccessorLaunch("music", false);
+    auto result = planSuccessorLaunch(desktop::LibrarySwitchRequest{.libraryRoot = "music"});
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidInput);

@@ -7,6 +7,20 @@ add_library(ao_prepared_next_contract STATIC
 target_include_directories(ao_prepared_next_contract PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_prepared_next_contract PRIVATE ao_utility)
 
+# ao_app_desktop: shared pure desktop lifecycle rules and process mechanism.
+# Toolkit registration, windows, dispatchers, stores, and diagnostics stay in
+# the GTK and WinUI composition roots.
+add_library(ao_app_desktop STATIC
+    desktop/DetachedProcessLauncher.cpp
+    desktop/LibraryPath.cpp
+    desktop/LibraryStartupPlanner.cpp
+    desktop/LibrarySuccessorProtocol.cpp
+    desktop/LibrarySwitch.cpp
+)
+target_include_directories(ao_app_desktop PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(ao_app_desktop PUBLIC ao_utility)
+target_link_libraries(ao_app_desktop PRIVATE Boost::process)
+
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
@@ -379,7 +393,7 @@ add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
 
 add_custom_target(ao_playback_internal_boundary_check
   COMMAND ${CMAKE_COMMAND}
-          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt;${CMAKE_SOURCE_DIR}/app/include/ao/uimodel;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt;${CMAKE_SOURCE_DIR}/app/include/ao/uimodel;${CMAKE_SOURCE_DIR}/app/include/ao/desktop;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/desktop;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
@@ -423,7 +437,7 @@ add_dependencies(ao_app_runtime ao_presentation_vocabulary_boundary_check)
 
 add_custom_target(ao_managed_state_schema_boundary_check
   COMMAND ${CMAKE_COMMAND}
-          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include;${CMAKE_SOURCE_DIR}/app/runtime;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/linux-gtk"
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include;${CMAKE_SOURCE_DIR}/app/runtime;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/desktop;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
@@ -443,6 +457,7 @@ add_custom_target(ao_core_yaml_domain_boundary_check
 
 add_dependencies(ao_app_runtime ao_managed_state_schema_boundary_check ao_core_yaml_domain_boundary_check)
 add_dependencies(ao_app_uimodel ao_managed_state_schema_boundary_check)
+add_dependencies(ao_app_desktop ao_managed_state_schema_boundary_check ao_playback_internal_boundary_check)
 
 add_custom_target(ao_rt_public_boundary_report
   COMMAND ${CMAKE_COMMAND}
@@ -522,6 +537,18 @@ add_custom_target(ao_windows_winui_core_boundary_report
   VERBATIM
 )
 
+add_custom_target(ao_app_desktop_core_boundary_report
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/desktop;${CMAKE_SOURCE_DIR}/app/desktop"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking direct storage/library dependencies in ao_app_desktop"
+  VERBATIM
+)
+
+add_dependencies(ao_app_desktop ao_app_desktop_core_boundary_report)
+
 # Hand-revoked WinRT events are what grew the frontend's teardown catches, and
 # no lint the project runs can see them: a comment in the catch satisfies
 # bugprone-empty-catch.
@@ -555,7 +582,7 @@ add_custom_target(ao_windows_winui_leaf_capability_guardrail
 
 add_custom_target(ao_frontend_library_path_boundary_check
   COMMAND ${CMAKE_COMMAND}
-          "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/desktop;${CMAKE_SOURCE_DIR}/app/desktop;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
@@ -565,6 +592,7 @@ add_custom_target(ao_frontend_library_path_boundary_check
 
 add_custom_target(ao_layering_boundary_report
   DEPENDS
+    ao_app_desktop_core_boundary_report
     ao_core_yaml_domain_boundary_check
     ao_frontend_library_path_boundary_check
     ao_managed_state_schema_boundary_check
@@ -576,6 +604,8 @@ add_custom_target(ao_layering_boundary_report
     ao_uimodel_core_boundary_report
     ao_uimodel_frontend_vocabulary_guardrail
 )
+
+add_dependencies(ao_app_desktop ao_frontend_library_path_boundary_check)
 if(AOBUS_BUILD_GTK)
   add_dependencies(ao_layering_boundary_report ao_linux_gtk_core_boundary_report)
 endif()

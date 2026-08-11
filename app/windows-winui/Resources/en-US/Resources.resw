@@ -53,6 +53,7 @@
   <data name="SaveSettingsFailedFormat" xml:space="preserve"><value>Could not save settings: {0}</value></data>
   <data name="OpenLibraryPickerButton" xml:space="preserve"><value>Open library</value></data>
   <data name="FolderPickerFailedFormat" xml:space="preserve"><value>Folder picker failed: {0}</value></data>
+  <data name="LibrarySwitchFailedFormat" xml:space="preserve"><value>Could not switch libraries: {0}</value></data>
   <data name="ThemeOverrideRemoved" xml:space="preserve"><value>Theme override removed; following Windows appearance</value></data>
   <data name="ThemeReloadFailedFormat" xml:space="preserve"><value>Theme reload failed: {0}</value></data>
   <data name="ThemeReloadedFormat" xml:space="preserve"><value>Theme reloaded: {0}</value></data>

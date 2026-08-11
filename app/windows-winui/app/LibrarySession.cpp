@@ -12,6 +12,8 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/desktop/LibraryStartupPlanner.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -38,8 +40,7 @@
 #include <ao/utility/Path.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/WinUiErrorBoundary.h>
-#include <ao/winui/app/LibraryStartupPlan.h>
-#include <ao/winui/app/StartupOptions.h>
+#include <ao/winui/app/SelectedRootCommit.h>
 
 #include <exception>
 #include <expected>
@@ -92,11 +93,11 @@ namespace ao::winui
   Result<std::unique_ptr<LibrarySession>> LibrarySession::create(
     std::filesystem::path stateRoot,
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-    StartupOptions startupOptions)
+    std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
   {
     auto sessionPtr = std::unique_ptr<LibrarySession>{new LibrarySession{std::move(stateRoot), std::move(dispatcher)}};
 
-    if (auto initializedRes = sessionPtr->initialize(std::move(startupOptions)); !initializedRes)
+    if (auto initializedRes = sessionPtr->initialize(std::move(optSuccessorRequest)); !initializedRes)
     {
       return std::unexpected{initializedRes.error()};
     }
@@ -113,7 +114,7 @@ namespace ao::winui
   {
   }
 
-  Result<> LibrarySession::initialize(StartupOptions startupOptions)
+  Result<> LibrarySession::initialize(std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
   {
     auto directoryEc = std::error_code{};
     std::filesystem::create_directories(_stateRoot, directoryEc);
@@ -144,7 +145,25 @@ namespace ao::winui
       APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
     }
 
-    auto startupPlanRes = planLibraryStartup(startupOptions, _settings, _stateRoot / "empty-library");
+    auto optPersistedRoot = std::optional<std::filesystem::path>{};
+
+    if (!_settings.lastLibraryPath.empty())
+    {
+      try
+      {
+        optPersistedRoot = utility::pathFromUtf8(_settings.lastLibraryPath);
+      }
+      catch (std::filesystem::filesystem_error const&)
+      {
+        optPersistedRoot.reset();
+      }
+    }
+
+    auto startupPlanRes = desktop::planLibraryStartup({
+      .optSuccessorRequest = std::move(optSuccessorRequest),
+      .optPersistedRoot = std::move(optPersistedRoot),
+      .emptyLibraryRoot = _stateRoot / "empty-library",
+    });
 
     if (!startupPlanRes)
     {
@@ -152,7 +171,7 @@ namespace ao::winui
                        std::format("Failed to select the startup library: {}", startupPlanRes.error().message));
     }
 
-    if (startupPlanRes->source == LibraryStartupRootSource::EmptyLibraryFallback)
+    if (startupPlanRes->source == desktop::LibraryStartupRootSource::EmptyLibraryFallback)
     {
       std::filesystem::create_directories(startupPlanRes->libraryRoot, directoryEc);
 
@@ -165,7 +184,10 @@ namespace ao::winui
 
     auto root = std::move(startupPlanRes->libraryRoot);
     _optSelectedRootCommit = std::move(startupPlanRes->optSelectedRootCommit);
-    _scanAfterOpen = !rt::LibraryPaths{root}.hasExistingDatabase();
+    _playbackPersistenceAdmission = startupPlanRes->playbackPersistence == desktop::PlaybackPersistenceStartup::Restore
+                                      ? PlaybackPersistenceAdmission::Ready
+                                      : PlaybackPersistenceAdmission::AwaitingRootCommit;
+    _scanAfterOpen = startupPlanRes->scanAfterOpen || !rt::LibraryPaths{root}.hasExistingDatabase();
     auto runtimeRes = createRuntime(root);
 
     if (!runtimeRes)
@@ -175,6 +197,19 @@ namespace ao::winui
     }
 
     _runtimePtr = std::move(*runtimeRes);
+
+    if (_playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready)
+    {
+      _runtimePtr->startPlaybackSessionPersistence();
+
+      if (auto restoredRes = _runtimePtr->restorePlaybackSession(); !restoredRes)
+      {
+        APP_LOG_WARN("LibrarySession: failed to restore Windows playback session for '{}': {}",
+                     utility::pathToUtf8(root),
+                     restoredRes.error().message);
+      }
+    }
+
     bindRuntimeServices();
     return {};
   }
@@ -263,9 +298,14 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
     }
 
+    return saveSettingsCandidate(_settings);
+  }
+
+  Result<> LibrarySession::saveSettingsCandidate(DesktopSettings const& settings)
+  {
     _runtimePtr->workspace().saveSession(_runtimePtr->workspaceConfigStore());
     return _settingsStorePtr->saveTogether(
-      rt::configWrite("desktop", _settings, winui::DesktopSettingsYamlSchema{}),
+      rt::configWrite("desktop", settings, winui::DesktopSettingsYamlSchema{}),
       rt::configWrite("trackView.columnLayouts", _columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
       rt::configWrite(
         "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{}));
@@ -273,23 +313,59 @@ namespace ao::winui
 
   Result<> LibrarySession::commitSelectedRoot()
   {
-    if (!_optSelectedRootCommit)
+    if (_playbackPersistenceAdmission != PlaybackPersistenceAdmission::AwaitingRootCommit || !_optSelectedRootCommit)
     {
       return {};
     }
 
-    try
+    auto candidateRes = prepareSelectedRootCommit(_settings, *_optSelectedRootCommit);
+
+    if (!candidateRes)
     {
-      _optSelectedRootCommit->apply(_settings);
       _optSelectedRootCommit.reset();
-    }
-    catch (std::filesystem::filesystem_error const& error)
-    {
-      return makeError(
-        Error::Code::InvalidInput, std::format("Failed to encode the selected library path: {}", error.what()));
+      _runtimePtr->sealPlaybackSessionPersistenceWrites();
+      _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      return std::unexpected{candidateRes.error()};
     }
 
-    return saveSettings();
+    auto commitRes = saveSettingsCandidate(*candidateRes);
+
+    _optSelectedRootCommit.reset();
+
+    if (!commitRes)
+    {
+      _runtimePtr->sealPlaybackSessionPersistenceWrites();
+      _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      return commitRes;
+    }
+
+    _settings = std::move(*candidateRes);
+    _runtimePtr->startPlaybackSessionPersistence();
+    _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
+    return {};
+  }
+
+  Result<> LibrarySession::retirePlaybackSessionForLibrarySwitch()
+  {
+    if (_playbackPersistenceAdmission == PlaybackPersistenceAdmission::Retired)
+    {
+      return {};
+    }
+
+    if (_shutdown || _runtimePtr == nullptr)
+    {
+      return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
+    }
+
+    auto retiredRes = _runtimePtr->retirePlaybackSessionForLibrarySwitch();
+
+    if (!retiredRes)
+    {
+      return retiredRes;
+    }
+
+    _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Retired;
+    return {};
   }
 
   void LibrarySession::setCallbacks(LibrarySessionCallbacks callbacks)

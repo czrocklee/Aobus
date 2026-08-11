@@ -8,6 +8,7 @@
 #include "platform/StringResources.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/Log.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>
@@ -26,7 +27,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <tuple>
 #include <utility>
 
@@ -80,32 +80,6 @@ namespace winrt::Aobus::implementation
         ::MessageBoxW(nullptr, L"Aobus could not start.", L"Aobus", kErrorDialogFlags);
       }
     }
-
-    bool sameDirectory(std::filesystem::path const& left, std::filesystem::path const& right) noexcept
-    {
-      auto error = std::error_code{};
-      auto const equivalent = std::filesystem::equivalent(left, right, error);
-      return !error ? equivalent : left.lexically_normal() == right.lexically_normal();
-    }
-
-    ao::Result<std::filesystem::path> normalizeRestartRoot(std::filesystem::path root)
-    {
-      if (root.empty())
-      {
-        return ao::makeError(ao::Error::Code::InvalidInput, "The selected library path is empty");
-      }
-
-      auto error = std::error_code{};
-      auto absolute = std::filesystem::absolute(std::move(root), error);
-
-      if (error)
-      {
-        return ao::makeError(
-          ao::Error::Code::IoError, std::format("Failed to resolve the selected library path: {}", error.message()));
-      }
-
-      return absolute.lexically_normal();
-    }
   } // namespace
 
   App::App()
@@ -157,14 +131,14 @@ namespace winrt::Aobus::implementation
       return ao::makeError(ao::Error::Code::ResourceBusy, "A WinUI process transition is already in progress");
     }
 
-    auto normalizedRes = normalizeRestartRoot(std::move(root));
+    auto switchPlanRes = ao::desktop::planLibrarySwitch(_windowSessionPtr->musicRoot(), std::move(root), false);
 
-    if (!normalizedRes)
+    if (!switchPlanRes)
     {
-      return std::unexpected{normalizedRes.error()};
+      return std::unexpected{switchPlanRes.error()};
     }
 
-    if (sameDirectory(*normalizedRes, _windowSessionPtr->musicRoot()))
+    if (switchPlanRes->disposition == ao::desktop::LibrarySwitchDisposition::ReuseActive)
     {
       return {};
     }
@@ -180,11 +154,11 @@ namespace winrt::Aobus::implementation
     try
     {
       auto const queued = _dispatcher.TryEnqueue(
-        [weak, root = std::move(*normalizedRes)] mutable
+        [weak, request = std::move(switchPlanRes->request)] mutable
         {
           if (auto self = weak.get(); self)
           {
-            self->performLibraryRestart(std::move(root));
+            self->performLibraryRestart(std::move(request));
           }
         });
 
@@ -205,7 +179,7 @@ namespace winrt::Aobus::implementation
     return {};
   }
 
-  void App::performLibraryRestart(std::filesystem::path root) noexcept
+  void App::performLibraryRestart(ao::desktop::LibrarySwitchRequest request) noexcept
   {
     if (_processPhase != ProcessPhase::RestartQueued)
     {
@@ -217,12 +191,20 @@ namespace winrt::Aobus::implementation
     // Releasing the owner releases its window first: LibraryWindowSession
     // declares its session before its window, so reverse member destruction
     // fixes that order without this call site restating it.
-    std::ignore = ao::winui::executeDestructiveLibraryRestart({
+    auto const outcome = ao::winui::executeDestructiveLibraryRestart({
+      .prepareActiveGraph = [this] { return _windowSessionPtr->prepareLibraryRestart(); },
       .releaseActiveGraph = [this] { _windowSessionPtr.reset(); },
-      .launchSuccessor = [root = std::move(root)] { return ao::winui::launchLibraryProcess(root); },
+      .launchSuccessor = [request = std::move(request)] { return ao::winui::launchLibraryProcess(request); },
+      .reportPreparationFailure = [](ao::Error const& error) noexcept
+      { ao::winui::logWinUiCritical("WinUI library restart preparation failed", error.message); },
       .reportLaunchFailure = [this](ao::Error const& error) noexcept { reportRestartLaunchFailure(error); },
       .exitProcess = [this] noexcept { exitApplication(); },
     });
+
+    if (outcome == ao::winui::DestructiveLibraryRestartOutcome::PreparationFailed)
+    {
+      _processPhase = ProcessPhase::Running;
+    }
   }
 
   void App::handleWindowClosed() noexcept
@@ -268,18 +250,18 @@ namespace winrt::Aobus::implementation
 
       auto const appStateRoot = std::move(*appStateRootRes);
       ao::rt::Log::initialize(ao::rt::LogLevel::Info, appStateRoot / "logs", ao::rt::LogConsoleMode::Disabled);
-      auto startupOptionsRes = ao::winui::readStartupOptions();
+      auto startupRequestRes = ao::winui::readLibrarySuccessorRequest();
 
-      if (!startupOptionsRes)
+      if (!startupRequestRes)
       {
-        failLaunch(startupOptionsRes.error().message);
+        failLaunch(startupRequestRes.error().message);
         return;
       }
 
       _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(appStateRoot, _dispatcher);
       auto const weak = get_weak();
       auto startedRes = _windowSessionPtr->start(
-        std::move(*startupOptionsRes),
+        std::move(*startupRequestRes),
         [weak](std::filesystem::path root) -> ao::Result<>
         {
           if (auto self = weak.get(); self)

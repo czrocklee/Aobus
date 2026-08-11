@@ -21,10 +21,12 @@ Aobus ships four interactive or automation frontends over a shared C++ core and
 application runtime, including a native WinUI desktop frontend.
 
 ```text
-GTK -> ao_app_uimodel -> ao_app_runtime -> core libraries
-TUI -> ao_app_uimodel -> ao_app_runtime -> core libraries
-WinUI -> ao_app_uimodel -> ao_app_runtime -> core libraries
-CLI -----------------> ao_app_runtime -> core libraries
+GTK ---+-> ao_app_uimodel -> ao_app_runtime -> core libraries
+TUI ---+
+WinUI -+
+CLI -------------------> ao_app_runtime -> core libraries
+
+GTK and WinUI -> ao_app_desktop -> utility / Boost.Process
 
 core libraries: utility, async, lmdb, media, library, query, audio
 ```
@@ -34,6 +36,9 @@ An arrow in this diagram means “depends on.”
 The core libraries provide storage, encoded-media reading, query, asynchronous, and audio primitives without depending on application services or frontends.
 `ao_app_runtime` composes those primitives into frontend-neutral services.
 `ao_app_uimodel` turns runtime state and commands into platform-neutral presentation state and interaction policy.
+`ao_app_desktop` supplies GTK and WinUI with pure library-root, startup, and
+successor-protocol rules plus detached process creation; it is not an
+interactive runtime or frontend-lifecycle owner.
 GTK and TUI bind runtime and UIModel state to their native event loops and rendering systems.
 WinUI binds the same runtime and UIModel authorities to C++/WinRT, XAML,
 DispatcherQueue, WASAPI, SMTC, and native Windows picker services.
@@ -72,6 +77,18 @@ The [interactive session lifecycle architecture](interactive-session-lifecycle.m
 `ao_app_uimodel` owns platform-neutral display projection, editing models, interaction policy, layout document models, and UI-local preference state.
 It consumes runtime services and stable value types but does not become a second authority for storage, playback, or workspace state.
 
+### Desktop application support
+
+`ao_app_desktop` owns application-level values and mechanisms shared only by
+the two graphical desktop composition roots. Its public surface under
+`app/include/ao/desktop/` contains library root identity, startup/switch plans,
+the private successor protocol, and detached-launch policy. Sources under
+`app/desktop/` perform filesystem inspection and Boost.Process creation.
+
+It remains below GTK and WinUI and beside, rather than above, `AppRuntime` and
+UIModel. It cannot inspect state stores, drive a toolkit event loop, checkpoint
+a runtime, show failures, or claim graph teardown. TUI and CLI do not link it.
+
 ### Frontends
 
 Each frontend is a composition root and platform adapter.
@@ -89,8 +106,9 @@ frontend implementation, and the thin `aobus-winui` executable, which owns the
 final link and deployed resources. The library includes the shell's own layout
 catalog and dialect, element lattice, style resolution, themed surfaces,
 responsive policy, desktop and theme schemas, XAML, and native adapters.
-Windows-owned rules are tested only by the native Windows suite; the Linux gate
-does not compile a second WinUI model target.
+Windows-owned rules are tested only by the native Windows suite. Cross-desktop
+rules in `ao_app_desktop` compile and run on both Linux and Windows without
+creating a second WinUI model target on Linux.
 The CLI owns argument parsing and output encoding around `CoreRuntime` operations.
 
 ## Boundaries and dependency direction
@@ -99,14 +117,16 @@ Dependencies follow the arrows toward core libraries and never reverse from runt
 
 - Core libraries cannot include application or frontend headers.
 - Runtime cannot depend on UIModel or platform UI types.
+- Desktop support cannot depend on runtime, UIModel, storage/library internals,
+  or platform UI types.
 - UIModel may depend on runtime, but cannot include platform UI or direct storage/audio-control headers, and cannot name or speak for any one frontend even in portable code.
 - Frontends may depend on runtime and UIModel and may contain platform adapters for core facilities.
 - CLI behavior-bearing mutations use runtime facades where those roles exist; low-level inspection, dump, verification, relink, and interchange commands still use the `MusicLibrary` escape hatch exposed by `CoreRuntime`.
 - Shared signal mechanisms live in `ao_async`, while the runtime or UIModel service that owns an event remains responsible for its payload, execution domain, and exception-containment policy.
 
 Public runtime headers deliberately hide direct LMDB stores, library store/view types, and audio control-plane implementation types.
-The build attaches include-boundary checks to the runtime, UIModel, GTK, and
-WinUI targets so these edges are executable constraints rather than
+The build attaches include-boundary checks to desktop support, runtime, UIModel,
+GTK, and WinUI targets so these edges are executable constraints rather than
 diagram-only guidance.
 
 ## Data and control flow
@@ -154,7 +174,9 @@ The [architecture landscape](README.md) owns the portfolio classification, relat
 ## Structural constraints
 
 - One frontend runtime represents one active music library and owns every service tied to that library; [interactive session lifecycle](interactive-session-lifecycle.md) owns desktop successor-process restart and the TUI's single-runtime lifetime, while [workspace](workspace.md) owns state within the graph.
-- Cross-frontend behavioral policy belongs in runtime or UIModel, not in parallel GTK and TUI implementations.
+- Cross-frontend domain behavior belongs in runtime or UIModel. Pure
+  desktop-process selection and launch rules belong in `ao_app_desktop`, not in
+  parallel GTK and WinUI implementations.
 - Runtime services expose stable application values and narrow command surfaces instead of leaking storage transactions or audio engine objects.
 - UIModel state can be discarded and reconstructed from runtime state plus UI-local persisted preferences.
 - Platform-specific names, widget types, CSS classes, terminal geometry, and event-loop handles stop at the frontend boundary.
@@ -177,6 +199,9 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`Signal`](../../include/ao/async/Signal.h) and [`Subscription`](../../include/ao/async/Subscription.h) define the shared callback-delivery and connection-lifetime mechanisms below application layers.
 - [`include/ao/media/file/`](../../include/ao/media/file/) and [`lib/media/file/`](../../lib/media/file/) form the library-neutral media-file sub-boundary within `ao_media`.
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines runtime, UIModel, frontend targets, and layer guardrails.
+- [`app/include/ao/desktop/`](../../app/include/ao/desktop/) and
+  [`app/desktop/`](../../app/desktop/) define the cross-desktop application
+  support boundary.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) is the interactive application composition.
 - [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) derives the canonical per-library managed-data, database, and log locations from a selected music root.
@@ -192,8 +217,12 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.
 - [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects shared signal ordering, reentrancy, exceptions, and deferred lifetime.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`TuiRenderTestSupport.h`](../../test/unit/tui/TuiRenderTestSupport.h) support frontend-boundary tests.
+- Tests under [`test/unit/desktop/`](../../test/unit/desktop/) protect the shared
+  desktop boundary on Linux and Windows.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects CLI use of the shared runtime.
-- Building `ao_app_runtime`, `ao_app_uimodel`, or `aobus-gtk-lib` runs the attached boundary guardrails from [`app/CMakeLists.txt`](../../app/CMakeLists.txt).
+- Building `ao_app_desktop`, `ao_app_runtime`, `ao_app_uimodel`, or
+  `aobus-gtk-lib` runs the attached boundary guardrails from
+  [`app/CMakeLists.txt`](../../app/CMakeLists.txt).
 
 ## Related documents
 

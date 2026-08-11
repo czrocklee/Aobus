@@ -5,8 +5,9 @@
 
 #include "pch.h"
 #include <ao/Error.h>
-#include <ao/winui/app/CommandLine.h>
-#include <ao/winui/app/StartupOptions.h>
+#include <ao/desktop/DetachedProcessLauncher.h>
+#include <ao/desktop/LibrarySuccessorProtocol.h>
+#include <ao/desktop/LibrarySwitch.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 #include <shellapi.h>
@@ -17,11 +18,11 @@
 #include <filesystem>
 #include <format>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -116,7 +117,7 @@ namespace ao::winui
     }
   } // namespace
 
-  Result<StartupOptions> readStartupOptions()
+  Result<std::optional<desktop::LibrarySwitchRequest>> readLibrarySuccessorRequest()
   {
     std::int32_t argumentCount = 0;
     auto** const arguments = ::CommandLineToArgvW(::GetCommandLineW(), &argumentCount);
@@ -153,14 +154,29 @@ namespace ao::winui
       views.emplace_back(argument);
     }
 
-    return parseStartupOptions(std::span<std::string_view const>{views});
+    auto parsedRes = desktop::parseLibrarySuccessorProtocol(std::span<std::string_view const>{views});
+
+    if (!parsedRes)
+    {
+      return std::unexpected{parsedRes.error()};
+    }
+
+    if (!parsedRes->remainingArguments.empty())
+    {
+      return makeError(Error::Code::InvalidInput,
+                       std::format("Unknown WinUI startup argument '{}'", parsedRes->remainingArguments.front()));
+    }
+
+    return std::move(parsedRes->optRequest);
   }
 
-  Result<> launchLibraryProcess(std::filesystem::path const& libraryRoot)
+  Result<> launchLibraryProcess(desktop::LibrarySwitchRequest const& request)
   {
-    if (libraryRoot.empty())
+    auto argumentsRes = desktop::librarySuccessorArguments(request);
+
+    if (!argumentsRes)
     {
-      return makeError(Error::Code::InvalidInput, "A successor process requires a library root");
+      return std::unexpected{argumentsRes.error()};
     }
 
     auto executableRes = currentExecutablePath();
@@ -170,35 +186,15 @@ namespace ao::winui
       return std::unexpected{executableRes.error()};
     }
 
-    auto commandLine = quoteCommandLineArgument(executableRes->native());
-    commandLine.push_back(L' ');
-    commandLine += quoteCommandLineArgument(L"--library-root");
-    commandLine.push_back(L' ');
-    commandLine += quoteCommandLineArgument(libraryRoot.native());
-    auto mutableCommandLine = std::vector<wchar_t>{commandLine.begin(), commandLine.end()};
-    mutableCommandLine.push_back(L'\0');
-    auto startup = STARTUPINFOW{};
-    startup.cb = sizeof(startup);
-    auto process = PROCESS_INFORMATION{};
+    auto launchedRes =
+      desktop::launchDetachedProcess({.executable = std::move(*executableRes), .arguments = std::move(*argumentsRes)});
 
-    if (::CreateProcessW(executableRes->c_str(),
-                         mutableCommandLine.data(),
-                         nullptr,
-                         nullptr,
-                         FALSE,
-                         0,
-                         nullptr,
-                         nullptr,
-                         &startup,
-                         &process) == FALSE)
+    if (!launchedRes)
     {
-      auto const code = ::GetLastError();
-      return makeError(Error::Code::InitFailed,
-                       std::format("Failed to launch the successor Aobus process: {}", windowsErrorMessage(code)));
+      return makeError(launchedRes.error().code,
+                       std::format("Failed to launch the successor Aobus process: {}", launchedRes.error().message));
     }
 
-    std::ignore = ::CloseHandle(process.hThread);
-    std::ignore = ::CloseHandle(process.hProcess);
     return {};
   }
 } // namespace ao::winui

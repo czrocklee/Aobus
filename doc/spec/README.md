@@ -46,6 +46,10 @@ Use the [specification template](../template/spec.md).
 
 - [Library specifications](library/README.md) route reads, mutations, changes, scans, sources, projections, and transfers.
 
+## Application
+
+- [Desktop library lifecycle](application/desktop-library-lifecycle.md) defines the shared GTK and WinUI root selection, successor-process handoff, durable-root admission, and detached-launch contract.
+
 ## Playback
 
 - [Playback application commits](playback/application-commit.md) defines command admission, supersession, coherent snapshot publication, observer reentrancy, transient events, and shutdown.
@@ -82,7 +86,7 @@ Use the [specification template](../template/spec.md).
 
 ## Linux GTK
 
-- [GTK active-library lifecycle](linux-gtk/active-library-lifecycle.md) defines startup selection, runtime construction, same-root reuse, destructive successor restart, checkpointing, and shutdown.
+- [GTK active-library lifecycle](linux-gtk/active-library-lifecycle.md) defines GApplication registration, GTK composition, activation handoff, checkpoint presentation, and teardown around the shared desktop lifecycle.
 - [GTK dialog lifecycle](linux-gtk/dialog-lifecycle.md) defines custom-dialog roles, preferences, native chooser handoff, and layout-editor actions.
 - [GTK MPRIS](linux-gtk/mpris.md) defines protocol ownership, command routing, observation, name lifecycle, and degradation.
 - [GTK track detail](linux-gtk/track-detail.md) defines field-grid, inline editing, custom-metadata undo, tag-chip flow, and constrained layout.

@@ -22,6 +22,26 @@ namespace ao::winui
                    .message = std::format("Destructive restart operation '{}' is missing", name)};
     }
 
+    std::string_view missingOperationName(DestructiveLibraryRestartOperations const& operations)
+    {
+      if (!operations.prepareActiveGraph)
+      {
+        return "prepareActiveGraph";
+      }
+
+      if (!operations.releaseActiveGraph)
+      {
+        return "releaseActiveGraph";
+      }
+
+      if (!operations.launchSuccessor)
+      {
+        return "launchSuccessor";
+      }
+
+      return {};
+    }
+
     void report(std::move_only_function<void(Error const&)>& reportFailure, Error const& error) noexcept
     {
       if (!reportFailure)
@@ -60,12 +80,28 @@ namespace ao::winui
   DestructiveLibraryRestartOutcome executeDestructiveLibraryRestart(
     DestructiveLibraryRestartOperations operations) noexcept
   {
-    if (!operations.releaseActiveGraph || !operations.launchSuccessor)
+    if (auto const missingName = missingOperationName(operations); !missingName.empty())
     {
-      report(operations.reportLaunchFailure,
-             missingOperation(!operations.releaseActiveGraph ? "releaseActiveGraph" : "launchSuccessor"));
+      report(operations.reportLaunchFailure, missingOperation(missingName));
       exitProcess(operations.exitProcess);
       return DestructiveLibraryRestartOutcome::LaunchFailed;
+    }
+
+    auto preparedRes = Result<>{};
+
+    try
+    {
+      preparedRes = operations.prepareActiveGraph();
+    }
+    catch (...)
+    {
+      AO_FATAL_EXCEPTION(std::current_exception(), "destructive restart active-graph preparation");
+    }
+
+    if (!preparedRes)
+    {
+      report(operations.reportPreparationFailure, preparedRes.error());
+      return DestructiveLibraryRestartOutcome::PreparationFailed;
     }
 
     auto releaseExceptionPtr = std::exception_ptr{};

@@ -70,6 +70,10 @@ Use the [reference template](../template/reference.md).
 - [Layout catalog and actions](shell/layout-catalog.md) enumerate descriptor vocabulary plus registered component and action ids.
 - [Keyboard map](shell/keymap.md) enumerates neutral chord syntax, defaults, eligibility, and the override shape.
 
+## Application
+
+- [Desktop successor protocol](application/desktop-successor-protocol.md) enumerates the private GTK and WinUI marker, root, scan, validation, and remainder rules.
+
 ## Linux GTK
 
 - [GTK MPRIS surface](linux-gtk/mpris.md) enumerates D-Bus identity, interfaces, members, mappings, metadata, and signals.

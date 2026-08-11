@@ -258,6 +258,24 @@ namespace winrt::Aobus::implementation
     _session = nullptr;
   }
 
+  ao::Result<> MainWindow::prepareLibraryRestart()
+  {
+    if (_sessionPhase != SessionPhase::Active || _session == nullptr)
+    {
+      return ao::makeError(ao::Error::Code::InvalidState, "The WinUI library window is not active");
+    }
+
+    saveWindowState();
+    auto retiredRes = _session->retirePlaybackSessionForLibrarySwitch();
+
+    if (!retiredRes)
+    {
+      updateStatus(ao::winui::formatResource("LibrarySwitchFailedFormat", retiredRes.error().message));
+    }
+
+    return retiredRes;
+  }
+
   void MainWindow::retire() noexcept
   {
     if (_sessionPhase == SessionPhase::Active)

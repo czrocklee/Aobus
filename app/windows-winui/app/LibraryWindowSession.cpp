@@ -8,8 +8,8 @@
 #include "pch.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/Log.h>
-#include <ao/winui/app/StartupOptions.h>
 
 #include <winrt/Microsoft.UI.Xaml.h>
 
@@ -19,6 +19,7 @@
 #include <format>
 #include <memory>
 #include <new>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -55,7 +56,9 @@ namespace ao::winui
                            winrt::Microsoft::UI::Xaml::WindowEventArgs const&) noexcept { handleClosed(); });
   }
 
-  Result<> LibraryWindowSession::start(StartupOptions options, RestartRequest requestRestart, ClosedCallback onClosed)
+  Result<> LibraryWindowSession::start(std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest,
+                                       RestartRequest requestRestart,
+                                       ClosedCallback onClosed)
   {
     if (_started)
     {
@@ -67,7 +70,7 @@ namespace ao::winui
 
     try
     {
-      auto sessionRes = LibrarySession::create(_stateRoot, _dispatcher, std::move(options));
+      auto sessionRes = LibrarySession::create(_stateRoot, _dispatcher, std::move(optSuccessorRequest));
 
       if (!sessionRes)
       {
@@ -97,8 +100,7 @@ namespace ao::winui
       }
 
       // The explicit successor root becomes durable only after both the native
-      // window and its process-wide adapters are active. A failed save leaves
-      // the usable process live and later settings saves retry the in-memory root.
+      // window and its process-wide adapters are active.
       if (auto committedRes = _sessionPtr->commitSelectedRoot(); !committedRes)
       {
         APP_LOG_WARN("LibraryWindowSession: failed to persist the selected library: {}", committedRes.error().message);
@@ -131,6 +133,17 @@ namespace ao::winui
   bool LibraryWindowSession::active() const noexcept
   {
     return _window != nullptr && _sessionPtr != nullptr;
+  }
+
+  Result<> LibraryWindowSession::prepareLibraryRestart()
+  {
+    if (!_window || !_sessionPtr)
+    {
+      return makeError(Error::Code::InvalidState, "No active WinUI library window can be restarted");
+    }
+
+    auto* const implementation = winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>());
+    return implementation->prepareLibraryRestart();
   }
 
   void LibraryWindowSession::retireWindow() noexcept

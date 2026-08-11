@@ -394,6 +394,17 @@ class CompileCommandCoverageTest(unittest.TestCase):
                 tidyengine._is_platform_incompatible(root / "lib" / "utility" / "AtomicFilePosix.cpp", root)
             )
 
+    def test_linux_gtk_integration_sources_are_incompatible_with_the_windows_native_graph(self):
+        root = Path("/repo")
+        source = root / "test" / "integration" / "linux-gtk" / "GApplicationReplacementProbeMain.cpp"
+
+        with mock.patch.object(
+            tidyengine.builddir,
+            "platform_profile",
+            return_value=tidyengine.builddir.WINDOWS_PROFILE,
+        ):
+            self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+
     def test_explicit_lint_fixture_can_borrow_native_flags(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"

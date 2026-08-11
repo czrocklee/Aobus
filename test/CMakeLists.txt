@@ -501,10 +501,16 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryExportImportTest.cpp
     unit/runtime/resource/ResourceByteCacheTest.cpp
     unit/runtime/resource/ResourceByteLoaderTest.cpp
+    unit/desktop/DetachedProcessLauncherTest.cpp
+    unit/desktop/DetachedProcessLauncherWindowsTest.cpp
+    unit/desktop/LibraryStartupPlannerTest.cpp
+    unit/desktop/LibrarySuccessorProtocolTest.cpp
+    unit/desktop/LibrarySwitchTest.cpp
 )
 
 target_link_libraries(ao_core_test PRIVATE
     ao_fatal_probe_support
+    ao_app_desktop
     ao_app_uimodel
     ao_test_support_runtime
     ao_test_options
@@ -525,6 +531,12 @@ if(LINUX)
   )
 endif()
 if(WIN32)
+  add_executable(ao_detached_process_probe
+    helper/DetachedProcessProbeWindows.cpp
+  )
+  target_link_libraries(ao_detached_process_probe PRIVATE shell32)
+  add_dependencies(ao_core_test ao_detached_process_probe)
+
   target_sources(ao_core_test PRIVATE
     unit/FilesystemTestSupportWindows.cpp
     unit/audio/backend/WasapiProviderTest.cpp
@@ -534,14 +546,11 @@ if(WIN32)
     unit/windows/platform/MemoryRandomAccessStreamTest.cpp
 
     # Windows-owned shell rules are tested only by the native Windows suite.
-    # The normal Windows test graph uses Ninja while aobus-winui-lib requires
-    # the Visual Studio/XAML graph, so this target compiles the pure rule sources
-    # directly instead of exporting a second cross-platform frontend library.
+    # Cross-desktop startup/protocol/launcher rules are supplied by
+    # ao_app_desktop above; the remaining WinUI rules stay native here.
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DestructiveLibraryRestart.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopSettingsYamlSchema.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/LibraryStartupPlan.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/StartupOptions.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/CommandLine.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SelectedRootCommit.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutCatalog.cpp
@@ -553,9 +562,7 @@ if(WIN32)
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ThemeSurface.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/theme/Theme.cpp
     unit/winui/app/DestructiveLibraryRestartTest.cpp
-    unit/winui/app/LibraryStartupPlanTest.cpp
-    unit/winui/app/StartupOptionsTest.cpp
-    unit/winui/app/CommandLineTest.cpp
+    unit/winui/app/SelectedRootCommitTest.cpp
     unit/winui/DesktopSettingsYamlSchemaTest.cpp
     unit/winui/FrameResourceTest.cpp
     unit/winui/StringResourceTest.cpp

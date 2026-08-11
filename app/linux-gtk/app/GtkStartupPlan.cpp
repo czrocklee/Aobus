@@ -4,14 +4,13 @@
 #include "app/GtkStartupPlan.h"
 
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/rt/Log.h>
-#include <ao/utility/Path.h>
 
 #include <CLI/CLI.hpp>
 
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 #include <format>
 #include <map>
 #include <optional>
@@ -50,33 +49,6 @@ namespace ao::gtk
       mutableArguments.pointers.push_back(nullptr);
       return mutableArguments;
     }
-
-    Result<std::filesystem::path> parseAbsoluteLibraryRoot(std::string_view const value)
-    {
-      if (value.empty())
-      {
-        return makeError(
-          Error::Code::InvalidInput, std::format("GTK startup argument '{}' requires a path", kLibraryRootOption));
-      }
-
-      try
-      {
-        auto root = utility::pathFromUtf8(value);
-
-        if (!root.is_absolute())
-        {
-          return makeError(Error::Code::InvalidInput,
-                           std::format("GTK startup argument '{}' requires an absolute path", kLibraryRootOption));
-        }
-
-        return root.lexically_normal();
-      }
-      catch (std::filesystem::filesystem_error const& error)
-      {
-        return makeError(
-          Error::Code::InvalidInput, std::format("Invalid UTF-8 library root '{}': {}", value, error.what()));
-      }
-    }
   } // namespace
 
   Result<GtkStartupPlan> planGtkStartup(std::span<std::string_view const> const arguments)
@@ -87,6 +59,14 @@ namespace ao::gtk
     }
 
     auto plan = GtkStartupPlan{};
+    auto protocolRes = desktop::parseLibrarySuccessorProtocol(arguments.subspan(1));
+
+    if (!protocolRes)
+    {
+      return std::unexpected{protocolRes.error()};
+    }
+
+    plan.optSuccessorRequest = std::move(protocolRes->optRequest);
     auto cliApp = CLI::App{"Aobus Music Library"};
     cliApp.allow_extras();
 
@@ -98,27 +78,26 @@ namespace ao::gtk
                                                                 {"critical", rt::LogLevel::Critical},
                                                                 {"off", rt::LogLevel::Off}};
     std::int32_t verbosity = 0;
-    bool successorRequested = false;
-    bool scanAfterOpen = false;
-    auto libraryRootValue = std::string{};
-    auto mutableArguments = makeMutableArguments(arguments);
+    auto frontendArguments = std::vector{std::string{arguments.front()}};
+    frontendArguments.append_range(protocolRes->remainingArguments);
+    auto frontendArgumentViews = std::vector<std::string_view>{};
+    frontendArgumentViews.reserve(frontendArguments.size());
+
+    for (auto const& argument : frontendArguments)
+    {
+      frontendArgumentViews.emplace_back(argument);
+    }
+
+    auto mutableArguments = makeMutableArguments(frontendArgumentViews);
 
     auto* const verbosityOption = cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
     cliApp.add_option("--log-level", plan.logLevel, "Set the logging level")
       ->transform(CLI::CheckedTransformer{logMapping, CLI::ignore_case});
     cliApp.add_flag("--version", plan.showVersion, "Show version information");
-    auto* const successorOption =
-      cliApp.add_flag(std::string{kSuccessorOption}, successorRequested, "Internal successor startup")->group("");
-    auto* const libraryRootOption =
-      cliApp.add_option(std::string{kLibraryRootOption}, libraryRootValue, "Internal successor library root")
-        ->take_last()
-        ->group("");
-    auto* const scanAfterOpenOption =
-      cliApp.add_flag(std::string{kScanAfterOpenOption}, scanAfterOpen, "Internal successor bootstrap scan")->group("");
 
     try
     {
-      cliApp.parse(static_cast<std::int32_t>(arguments.size()), mutableArguments.pointers.data());
+      cliApp.parse(static_cast<std::int32_t>(frontendArgumentViews.size()), mutableArguments.pointers.data());
     }
     catch (CLI::ParseError const& error)
     {
@@ -144,54 +123,9 @@ namespace ao::gtk
       plan.logLevel = verbosity == 1 ? rt::LogLevel::Debug : rt::LogLevel::Trace;
     }
 
-    if (successorOption->count() > 1)
+    if (plan.optSuccessorRequest)
     {
-      return makeError(Error::Code::InvalidInput,
-                       std::format("GTK startup argument '{}' may only be specified once", kSuccessorOption));
-    }
-
-    if (libraryRootOption->count() > 1)
-    {
-      return makeError(Error::Code::InvalidInput,
-                       std::format("GTK startup argument '{}' may only be specified once", kLibraryRootOption));
-    }
-
-    if (scanAfterOpenOption->count() > 1)
-    {
-      return makeError(Error::Code::InvalidInput,
-                       std::format("GTK startup argument '{}' may only be specified once", kScanAfterOpenOption));
-    }
-
-    auto const hasSuccessorOption = successorOption->count() == 1;
-    auto const hasLibraryRootOption = libraryRootOption->count() == 1;
-    auto const hasScanAfterOpenOption = scanAfterOpenOption->count() == 1;
-
-    if (hasSuccessorOption != hasLibraryRootOption)
-    {
-      return makeError(
-        Error::Code::InvalidInput,
-        std::format(
-          "GTK successor arguments '{}' and '{}' must be specified together", kSuccessorOption, kLibraryRootOption));
-    }
-
-    if (hasScanAfterOpenOption && !hasSuccessorOption)
-    {
-      return makeError(Error::Code::InvalidInput,
-                       std::format("GTK startup argument '{}' requires a successor startup", kScanAfterOpenOption));
-    }
-
-    if (hasSuccessorOption)
-    {
-      auto rootRes = parseAbsoluteLibraryRoot(libraryRootValue);
-
-      if (!rootRes)
-      {
-        return std::unexpected{rootRes.error()};
-      }
-
       plan.registrationMode = GtkApplicationRegistrationMode::ReplaceExisting;
-      plan.optSuccessorLibraryRoot = std::move(*rootRes);
-      plan.scanAfterOpen = hasScanAfterOpenOption;
     }
 
     return plan;

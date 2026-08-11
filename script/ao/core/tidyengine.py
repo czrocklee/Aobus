@@ -382,6 +382,7 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
         return (
             parts[:2] == ("app", "linux-gtk")
             or parts[:3] == ("test", "unit", "linux-gtk")
+            or parts[:3] == ("test", "integration", "linux-gtk")
             or "alsa" in joined
             or "pipewire" in joined
             or stem.endswith("linux")

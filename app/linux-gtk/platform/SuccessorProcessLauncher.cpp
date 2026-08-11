@@ -3,17 +3,13 @@
 
 #include "platform/SuccessorProcessLauncher.h"
 
-#include "app/GtkStartupPlan.h"
 #include <ao/Error.h>
+#include <ao/desktop/DetachedProcessLauncher.h>
+#include <ao/desktop/LibrarySuccessorProtocol.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/utility/Path.h>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/process/v2/default_launcher.hpp>
 #include <boost/process/v2/environment.hpp>
-#include <boost/process/v2/process.hpp>
-#include <boost/process/v2/stdio.hpp>
-#include <boost/system/error_code.hpp>
 #include <unistd.h>
 
 #include <cstdlib>
@@ -24,7 +20,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -84,54 +79,26 @@ namespace ao::gtk
 
       return environment;
     }
-
-    template<typename... Initializers>
-    Result<> spawnDetached(SuccessorLaunchPlan const& plan, Initializers&&... initializers)
-    {
-      auto ioContext = boost::asio::io_context{};
-      auto launcher = bp::default_process_launcher{};
-      auto error = boost::system::error_code{};
-      auto const executable = boost::filesystem::path{utility::pathToUtf8(plan.executable)};
-      auto process =
-        launcher(ioContext, error, executable, plan.arguments, std::forward<Initializers>(initializers)...);
-
-      if (error)
-      {
-        return makeError(Error::Code::InitFailed,
-                         std::format("Failed to launch successor Aobus process '{}': {}",
-                                     utility::pathToUtf8(plan.executable),
-                                     error.message()));
-      }
-
-      std::ignore = process.detach();
-      return {};
-    }
   } // namespace
 
-  Result<SuccessorLaunchPlan> planSuccessorLaunch(std::filesystem::path const& libraryRoot,
-                                                  bool const scanAfterOpen,
+  Result<SuccessorLaunchPlan> planSuccessorLaunch(desktop::LibrarySwitchRequest const& request,
                                                   std::optional<std::string_view> const optActivationToken,
                                                   std::optional<std::filesystem::path> const optAppImageExecutable)
   {
-    if (libraryRoot.empty() || !libraryRoot.is_absolute())
+    auto argumentsRes = desktop::librarySuccessorArguments(request);
+
+    if (!argumentsRes)
     {
-      return makeError(Error::Code::InvalidInput, "A successor process requires an absolute library root");
+      return std::unexpected{argumentsRes.error()};
     }
 
     auto plan = SuccessorLaunchPlan{
       .executable = optAppImageExecutable && isUsableAppImage(*optAppImageExecutable)
                       ? *optAppImageExecutable
                       : std::filesystem::path{kProcSelfExecutable},
-      .arguments = {std::string{kSuccessorOption},
-                    std::string{kLibraryRootOption},
-                    utility::pathToUtf8(libraryRoot.lexically_normal())},
+      .arguments = std::move(*argumentsRes),
       .optActivationToken = std::nullopt,
     };
-
-    if (scanAfterOpen)
-    {
-      plan.arguments.emplace_back(kScanAfterOpenOption);
-    }
 
     if (optActivationToken && !optActivationToken->empty())
     {
@@ -148,17 +115,26 @@ namespace ao::gtk
       return makeError(Error::Code::InvalidInput, "A successor launch plan requires an executable");
     }
 
-    auto environmentStorage = makeChildEnvironment(plan.optActivationToken);
-    auto processEnvironment = bp::process_environment{environmentStorage};
-    return spawnDetached(plan, bp::process_stdio{}, processEnvironment);
+    auto launchedRes = desktop::launchDetachedProcess({
+      .executable = plan.executable,
+      .arguments = plan.arguments,
+      .optEnvironment = makeChildEnvironment(plan.optActivationToken),
+      .standardStreams = desktop::DetachedProcessStandardStreams::InheritParent,
+    });
+
+    if (!launchedRes)
+    {
+      return makeError(launchedRes.error().code,
+                       std::format("Failed to launch successor Aobus process: {}", launchedRes.error().message));
+    }
+
+    return {};
   }
 
-  Result<> launchDetachedSuccessor(std::filesystem::path const& libraryRoot,
-                                   bool const scanAfterOpen,
+  Result<> launchDetachedSuccessor(desktop::LibrarySwitchRequest const& request,
                                    std::optional<std::string_view> const optActivationToken)
   {
-    auto planRes =
-      planSuccessorLaunch(libraryRoot, scanAfterOpen, optActivationToken, appImageExecutableFromEnvironment());
+    auto planRes = planSuccessorLaunch(request, optActivationToken, appImageExecutableFromEnvironment());
 
     if (!planRes)
     {

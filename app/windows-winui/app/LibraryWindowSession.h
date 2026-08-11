@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/winui/app/StartupOptions.h>
+#include <ao/desktop/LibrarySwitch.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ao::winui
 {
@@ -41,10 +42,15 @@ namespace ao::winui
     LibraryWindowSession& operator=(LibraryWindowSession&&) = delete;
 
     /// Construct and activate the process's only window and library session.
-    Result<> start(StartupOptions options, RestartRequest requestRestart, ClosedCallback onClosed);
+    Result<> start(std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest,
+                   RestartRequest requestRestart,
+                   ClosedCallback onClosed);
 
     std::filesystem::path const& musicRoot() const noexcept;
     bool active() const noexcept;
+
+    /// Checkpoint the active window and terminally retire playback persistence.
+    Result<> prepareLibraryRestart();
 
     /// Retire the window, then release the session and its runtime.
     void retire() noexcept;

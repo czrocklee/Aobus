@@ -5,6 +5,7 @@
 
 #include "App.xaml.g.h"
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySwitch.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -39,7 +40,7 @@ namespace winrt::Aobus::implementation
     };
 
     ao::Result<> requestLibraryRestart(std::filesystem::path root);
-    void performLibraryRestart(std::filesystem::path root) noexcept;
+    void performLibraryRestart(ao::desktop::LibrarySwitchRequest request) noexcept;
     void handleWindowClosed() noexcept;
     void reportRestartLaunchFailure(ao::Error const& error) noexcept;
     void exitApplication() noexcept;

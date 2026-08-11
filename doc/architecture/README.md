@@ -66,7 +66,7 @@ These documents own interactive composition or shared application policy above t
 | Document | Owns |
 |---|---|
 | [Workspace architecture](workspace.md) | Runtime view identity, source and projection ownership, open/focused workspace state, navigation, and semantic sessions. |
-| [Interactive session lifecycle architecture](interactive-session-lifecycle.md) | Interactive runtime construction, restoration, checkpointing, frontend-specific library transition, and teardown. |
+| [Interactive session lifecycle architecture](interactive-session-lifecycle.md) | Interactive runtime construction, restoration, checkpointing, shared desktop transition rules, frontend-owned teardown, and TUI lifetime. |
 | [Application shell architecture](application-shell.md) | Shared layout language, GTK declarative shell ownership, WinUI Modern/Classic composition, frontend policy, actions, state, and teardown. |
 | [Presentation architecture](presentation.md) | Runtime, UIModel, GTK, WinUI, TUI, and CLI presentation responsibilities. |
 
@@ -121,7 +121,7 @@ The table tracks capability families with architecture-bearing boundaries, not e
 | Audio-quality evidence and presentation | [Audio quality](audio-quality.md) | Current | The slice remains subordinate to playback and presentation ownership. |
 | Resource and cover-art delivery | [Resource delivery](resource-delivery.md) | Current | Interactive reads are bounded and asynchronous; runtime owns shared encoded-byte delivery while GTK, WinUI, TUI, and MPRIS own their frontend transforms and stale-result suppression. |
 | Workspace views, navigation, and semantic sessions | [Workspace](workspace.md) | Current | Exact navigation and restore behavior remains delegated to workspace specifications. |
-| Interactive startup, checkpointing, switching, and shutdown | [Interactive session lifecycle](interactive-session-lifecycle.md) | Current | GTK and WinUI use frontend-owned destructive successor-process restart protocols, while TUI retains a single-runtime lifecycle without switching. |
+| Interactive startup, checkpointing, switching, and shutdown | [Interactive session lifecycle](interactive-session-lifecycle.md) | Current | GTK and WinUI share pure root/startup/protocol/launcher infrastructure while retaining frontend-owned admission, checkpoint, teardown, and exit; TUI retains a single-runtime lifecycle without switching. |
 | Application shell, layout document, actions, component state, and widget construction | [Application shell](application-shell.md) | Current | GTK and WinUI share the layout language while retaining frontend-owned catalogs, presets, construction, and runtime policy; TUI retains an independent terminal shell. |
 | Shared presentation policy and frontend adaptation | [Presentation](presentation.md) | Current | Exact UI behavior remains delegated to the presentation, shell, and frontend specification and reference owners. |
 | Metadata ingestion and editing from frontend intent through library publication | [Presentation](presentation.md) | Current | Presentation owns edit-session and frontend adaptation structure and delegates revision-bound admission, commit, and publication to the library architecture. |

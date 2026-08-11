@@ -30,13 +30,11 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   app/DesktopSettingsYamlSchema.cpp
   app/DispatcherQueueExecutor.cpp
   app/DispatcherQueueExecutor.h
-  app/LibraryStartupPlan.cpp
   app/LibraryWindowSession.cpp
   app/LibraryWindowSession.h
   app/LibrarySession.cpp
   app/LibrarySession.h
-  app/StartupOptions.cpp
-  app/CommandLine.cpp
+  app/SelectedRootCommit.cpp
   app/UiCoordinator.cpp
   app/UiCoordinator.h
   image/CoverArtPresenter.cpp
@@ -166,6 +164,7 @@ target_include_directories(aobus-winui-lib PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(aobus-winui-lib
   PUBLIC
+    ao_app_desktop
     ao_app_runtime
     ao_app_uimodel
     ao_windows_platform

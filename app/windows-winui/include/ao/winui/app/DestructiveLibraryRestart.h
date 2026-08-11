@@ -12,6 +12,7 @@ namespace ao::winui
 {
   enum class DestructiveLibraryRestartOutcome : std::uint8_t
   {
+    PreparationFailed,
     Launched,
     LaunchFailed,
   };
@@ -27,6 +28,9 @@ namespace ao::winui
    */
   struct DestructiveLibraryRestartOperations final
   {
+    /** Checkpoint and terminally retire persistence while the active graph remains usable on failure. */
+    std::move_only_function<Result<>()> prepareActiveGraph;
+
     /**
      * @brief Release the window, session, runtime, and application-state stores.
      *
@@ -37,12 +41,13 @@ namespace ao::winui
      */
     std::move_only_function<void()> releaseActiveGraph;
     std::move_only_function<Result<>()> launchSuccessor;
+    std::move_only_function<void(Error const&)> reportPreparationFailure;
     std::move_only_function<void(Error const&)> reportLaunchFailure;
     std::move_only_function<void()> exitProcess;
   };
 
   /**
-   * @brief Releases the current process graph, attempts the successor launch, and exits.
+   * @brief Prepares and releases the current graph, attempts the successor launch, and exits.
    *
    * The launch is attempted even when release reports an unexpected exception.
    * The parent is exiting either way, so a successor that never starts is the
@@ -50,7 +55,8 @@ namespace ao::winui
    * release exception enters AO fatal handling rather than being laundered into
    * a recoverable launch result.
    *
-   * This function never reconstructs or rolls back the released graph.
+   * A failed preparation keeps the graph live and returns without launch or exit.
+   * After preparation succeeds, this function never reconstructs or rolls back the released graph.
    */
   DestructiveLibraryRestartOutcome executeDestructiveLibraryRestart(
     DestructiveLibraryRestartOperations operations) noexcept;

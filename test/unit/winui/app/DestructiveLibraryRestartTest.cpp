@@ -28,18 +28,24 @@ namespace ao::winui::test
   {
     auto events = EventLog{};
     auto const outcome = executeDestructiveLibraryRestart({
+      .prepareActiveGraph = [&events] -> Result<>
+      {
+        events.add("prepare");
+        return {};
+      },
       .releaseActiveGraph = [&events] { events.add("release"); },
       .launchSuccessor = [&events] -> Result<>
       {
         events.add("launch");
         return {};
       },
+      .reportPreparationFailure = {},
       .reportLaunchFailure = [&events](Error const&) noexcept { events.add("report"); },
       .exitProcess = [&events] noexcept { events.add("exit"); },
     });
 
     CHECK(outcome == DestructiveLibraryRestartOutcome::Launched);
-    CHECK(events.values == std::vector<std::string_view>{"release", "launch", "exit"});
+    CHECK(events.values == std::vector<std::string_view>{"prepare", "release", "launch", "exit"});
   }
 
   TEST_CASE("DestructiveLibraryRestart - reports launch failure, does not roll back, and still exits",
@@ -48,12 +54,18 @@ namespace ao::winui::test
     auto events = EventLog{};
     auto reportedCode = Error::Code::Generic;
     auto const outcome = executeDestructiveLibraryRestart({
+      .prepareActiveGraph = [&events] -> Result<>
+      {
+        events.add("prepare");
+        return {};
+      },
       .releaseActiveGraph = [&events] { events.add("release"); },
       .launchSuccessor = [&events] -> Result<>
       {
         events.add("launch");
         return makeError(Error::Code::IoError, "CreateProcessW failed");
       },
+      .reportPreparationFailure = {},
       .reportLaunchFailure =
         [&events, &reportedCode](Error const& error) noexcept
       {
@@ -65,7 +77,39 @@ namespace ao::winui::test
 
     CHECK(outcome == DestructiveLibraryRestartOutcome::LaunchFailed);
     CHECK(reportedCode == Error::Code::IoError);
-    CHECK(events.values == std::vector<std::string_view>{"release", "launch", "report", "exit"});
+    CHECK(events.values == std::vector<std::string_view>{"prepare", "release", "launch", "report", "exit"});
+  }
+
+  TEST_CASE("DestructiveLibraryRestart - preparation failure retains the active graph without launch or exit",
+            "[winui][unit][app]")
+  {
+    auto events = EventLog{};
+    auto reportedCode = Error::Code::Generic;
+    auto const outcome = executeDestructiveLibraryRestart({
+      .prepareActiveGraph = [&events] -> Result<>
+      {
+        events.add("prepare");
+        return makeError(Error::Code::IoError, "playback removal failed");
+      },
+      .releaseActiveGraph = [&events] { events.add("release"); },
+      .launchSuccessor = [&events] -> Result<>
+      {
+        events.add("launch");
+        return {};
+      },
+      .reportPreparationFailure =
+        [&events, &reportedCode](Error const& error) noexcept
+      {
+        events.add("report");
+        reportedCode = error.code;
+      },
+      .reportLaunchFailure = {},
+      .exitProcess = [&events] noexcept { events.add("exit"); },
+    });
+
+    CHECK(outcome == DestructiveLibraryRestartOutcome::PreparationFailed);
+    CHECK(reportedCode == Error::Code::IoError);
+    CHECK(events.values == std::vector<std::string_view>{"prepare", "report"});
   }
 
   TEST_CASE("DestructiveLibraryRestart - a missing required operation exits without releasing anything",
@@ -75,8 +119,10 @@ namespace ao::winui::test
     auto reportedCode = Error::Code::Generic;
     auto reportedMessage = std::string{};
     auto const outcome = executeDestructiveLibraryRestart({
+      .prepareActiveGraph = [] -> Result<> { return {}; },
       .releaseActiveGraph = [&events] { events.add("release"); },
       .launchSuccessor = {},
+      .reportPreparationFailure = {},
       .reportLaunchFailure =
         [&events, &reportedCode, &reportedMessage](Error const& error) noexcept
       {
@@ -98,8 +144,10 @@ namespace ao::winui::test
   {
     bool released = false;
     auto const outcome = executeDestructiveLibraryRestart({
+      .prepareActiveGraph = [] -> Result<> { return {}; },
       .releaseActiveGraph = [&released] { released = true; },
       .launchSuccessor = [] -> Result<> { return makeError(Error::Code::IoError, "no successor"); },
+      .reportPreparationFailure = {},
       .reportLaunchFailure = {},
       .exitProcess = {},
     });

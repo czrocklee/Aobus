@@ -135,7 +135,11 @@ A specialized store may bypass `ConfigStore` when its document boundary, synchro
 It does not discover XDG, GLib, terminal, or command-line locations.
 
 GTK and TUI select platform directories, a music root, and explicit overrides; use `LibraryPaths` for standard per-library locations; construct stores before `AppRuntime`; and keep any borrowed store alive until runtime persistence has shut down.
-WinUI selects the Windows local application-data root, retains independent desktop-settings, playback-session, and theme files across Modern/Classic switches and destructive library restarts, and uses the selected music root only for library-bound runtime state.
+WinUI selects the Windows local application-data root and retains independent
+desktop-settings, playback-session, and theme files across Modern/Classic shell
+switches. A destructive library restart explicitly removes the global playback
+payload before release; desktop settings and theme state survive. The selected
+music root is used only for library-bound runtime state.
 `AppRuntime` owns its workspace store and borrows an explicitly supplied playback-session store; when none is supplied, playback session and workspace use the same owned instance.
 
 GTK supplies its global `AppConfigStore` as the playback-session store while supplying a per-library workspace store separately.
@@ -203,25 +207,48 @@ Workspace, GTK preference, layout, and presentation owners currently use their o
 
 ### Library switching
 
-Library switching in GTK checkpoints the active pair, removes the global restorable playback group, terminally seals playback persistence, and releases its complete window/runtime/store graph before launching a successor process.
-The parent never records the requested root.
-Only after the successor's strict explicit-root graph is active does GTK record the newly selected library in global application state.
-That selected-path save is best-effort.
-Success admits playback observation and later playback checkpoints.
-Failure retains the previous durable path without rolling back the usable successor, permanently seals playback writes, and excludes both the selected root and playback from later window checkpoints, so the global file cannot acquire new-library playback under the old root.
-Those restricted checkpoints still save window geometry, output selection while preserving the loaded root, per-library column layout, and workspace state.
-Global layout customization and application preferences survive through their durable stores; library database, workspace, and per-library presentation state change with the selected root.
-The original parent releases its `ConfigStore` before launching the intended successor, so that parent-spawned edge has no concurrent snapshots of the application configuration file.
-The fixed GApplication name does not serialize an independently launched instance that becomes primary before successor registration; such an out-of-protocol graph may overlap the successor after replacement.
-The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns the orchestration and lifetime order; this document owns which state and stores survive that transition, while the [workspace architecture](workspace.md) owns the workspace candidate's semantics.
+Both desktop frontends checkpoint eligible state, remove the global restorable
+playback group, terminally seal playback persistence, and release their
+complete window/runtime/store graph before launching a successor process.
+Physical playback-group removal is the last transition failure that retains the
+old graph: failure leaves it usable and launches nothing. The parent never
+records the requested root.
 
-WinUI independently performs a destructive process restart for a different root.
-The parent checkpoints its current desktop and workspace state, releases its `MainWindow`, `LibrarySession`, runtime, desktop-settings store, and playback store, and only then launches the successor.
-The supported path therefore has no concurrent stale `ConfigStore` snapshots for the same application files.
-The parent never writes the requested root; the successor holds it as pending state until its one window/session is active, then records it best effort.
-Successor startup failure leaves the previous durable root available for a later ordinary launch, while selected-root save failure does not roll back the usable successor.
-A new root without a database scans only after successor activation, and a scan failure leaves that root active and retryable.
-Same-root selection is a no-op, while Rescan uses the active session's transactional workflow and relies on `LibraryChanges` rather than manually reloading projections.
+The successor opens the strict explicit root with playback persistence dormant.
+Only after its one graph is active does it save a state candidate containing
+the selected root. Success installs that candidate, admits playback observation,
+and permits later playback checkpoints. Failure preserves the previous live and
+durable root snapshot without rolling back the usable target runtime and
+permanently seals playback writes, so new-library identities cannot be stored
+under that prior root.
+
+GTK's shared application file requires its later restricted checkpoints to
+exclude both selected-root and playback mutations while still saving window
+geometry, output selection, per-library column layout, and workspace. WinUI
+uses a separate playback file and retains its unchanged live desktop settings;
+later ordinary settings saves therefore continue with the previous root while
+the runtime write seal protects `windows-playback.yaml`.
+
+Ordinary WinUI startup now starts playback observation and restores that global
+playback file; ordinary GTK startup retains the same behavior. A successor
+reads no old playback payload before root durability. Global layout,
+application preferences, desktop settings, and themes survive through their
+durable stores; library database, workspace, and per-library presentation state
+change with the selected root.
+
+Each original parent releases its writer authorities before launching the
+intended successor, so that supported parent-spawned edge has no concurrent
+snapshots of the application files. GTK's fixed GApplication name does not
+serialize an independently launched instance that becomes primary before
+successor registration; that out-of-protocol caveat remains GTK-specific.
+
+A new root without a database scans only after successor activation, and scan
+failure leaves that root active and retryable. Same-root selection is a no-op;
+explicit Rescan uses the active session's transactional workflow and relies on
+`LibraryChanges` rather than manually reloading projections. The
+[desktop lifecycle specification](../spec/application/desktop-library-lifecycle.md)
+owns common behavior, while interactive lifecycle owns platform orchestration
+and workspace architecture owns workspace-candidate semantics.
 
 ## Structural constraints
 
@@ -274,6 +301,8 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h), [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h), and [`GtkLayoutStateStore`](../../app/linux-gtk/app/GtkLayoutStateStore.h) are GTK file adapters.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/Main.cpp`](../../app/tui/Main.cpp), and [`CliRuntime.cpp`](../../app/cli/CliRuntime.cpp) select roots, platform locations, and overrides before composing runtime paths and stores.
 - WinUI [`App`](../../app/windows-winui/App.xaml.cpp), [`LibraryWindowSession`](../../app/windows-winui/app/LibraryWindowSession.cpp), and [`LibrarySession`](../../app/windows-winui/app/LibrarySession.cpp) sequence parent writer release, successor startup, and post-activation selected-root commit.
+- [`SelectedRootCommit`](../../app/windows-winui/include/ao/winui/app/SelectedRootCommit.h)
+  prepares WinUI's immutable desktop-settings candidate for that commit.
 
 ## Test map
 
@@ -287,7 +316,12 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects exact deserialization, semantic validation, event-driven saving, discard, failure propagation, and store selection.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect global GTK groups and delta-from-default keymaps.
-- [`LibraryStartupPlanTest.cpp`](../../test/unit/winui/app/LibraryStartupPlanTest.cpp) and [`DestructiveLibraryRestartTest.cpp`](../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp) protect deferred WinUI root commit and writer-release-before-launch ordering.
+- Shared tests under [`test/unit/desktop/`](../../test/unit/desktop/) protect
+  strict startup planning and durable-root admission on both hosts.
+- [`SelectedRootCommitTest.cpp`](../../test/unit/winui/app/SelectedRootCommitTest.cpp)
+  and [`DestructiveLibraryRestartTest.cpp`](../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)
+  protect transactional WinUI root candidates, preparation failure, and
+  writer-release-before-launch ordering.
 - [`ShellLayoutStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp), [`ShellLayoutComponentStateStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect the specialized GTK file boundaries.
 
 ## Related documents
@@ -301,6 +335,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [Application shell architecture](application-shell.md)
 - [Workspace architecture](workspace.md)
 - [Interactive session lifecycle architecture](interactive-session-lifecycle.md)
+- [Desktop library lifecycle specification](../spec/application/desktop-library-lifecycle.md)
 - [Reusable YAML adapter specification](../spec/persistence/yaml-adapter.md)
 - [Grouped configuration store specification](../spec/persistence/config-store.md)
 - [Managed-state schema development guide](../development/managed-state-schemas.md)

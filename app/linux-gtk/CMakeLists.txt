@@ -184,8 +184,8 @@ add_library(aobus-gtk-lib STATIC
     layout/editor/LayoutEditorDialog.cpp
 )
 
-target_link_libraries(aobus-gtk-lib PUBLIC ao_app_uimodel ao_app_runtime)
-target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::headers Boost::process)
+target_link_libraries(aobus-gtk-lib PUBLIC ao_app_desktop ao_app_uimodel ao_app_runtime)
+target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::process)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 add_dependencies(aobus-gtk-lib ao_frontend_library_path_boundary_check ao_linux_gtk_core_boundary_report)
 

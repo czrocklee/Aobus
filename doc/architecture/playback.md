@@ -289,6 +289,10 @@ stored payload
 ```
 
 The persistence coordinator owns validation and installation order; it does not serialize projection rows, prepared audio, thread generations, or other regenerable execution state.
+GTK and WinUI composition roots decide when a successor's selected library root
+is durable, then use the runtime lifecycle to start observation, seal writes, or
+terminally retire the payload. That admission timing does not create another
+playback-state owner above `PlaybackSessionPersistence`.
 
 ### Realtime PCM data plane
 
@@ -385,7 +389,7 @@ None of these mechanisms substitutes for another layer's lifetime proof.
 
 Shutdown proceeds from callback producers toward their dependencies:
 
-1. `PlaybackSessionPersistence` has one lifecycle in `Dormant`, `Observing`, `WriteSealed`, `Retired`, or `Shutdown`. Ordinary shutdown cancels scheduled work and releases subscriptions while sequence, transport, `ConfigStore`, and async runtime remain alive; only an `Observing` owner performs the final checkpoint. GTK library-switch retirement removes the payload and moves the owner to `Retired`, making later shutdown idempotent. A GTK successor whose root commit fails moves to `WriteSealed`: it admits no later checkpoint, while a subsequent library-switch retirement may still retry physical group removal and move it to `Retired`.
+1. `PlaybackSessionPersistence` has one lifecycle in `Dormant`, `Observing`, `WriteSealed`, `Retired`, or `Shutdown`. Ordinary shutdown cancels scheduled work and releases subscriptions while sequence, transport, `ConfigStore`, and async runtime remain alive; only an `Observing` owner performs the final checkpoint. GTK and WinUI library-switch retirement remove the payload and move the owner to `Retired`, making later shutdown idempotent. A desktop successor whose root commit fails moves to `WriteSealed`: it admits no later checkpoint, while a subsequent library-switch retirement may still retry physical group removal and move it to `Retired`.
 2. `PlaybackService::shutdown` closes public command admission, drops pending commands, disconnects lower observations, and revokes deferred service tasks.
 3. `PlaybackBootstrap::shutdown` asks PlaybackTransport and Player to quiesce lower activity while succession and other runtime consumers still exist.
 4. Player closes its callback gate, cancels preparation tasks, unsubscribes provider observations, shuts down provider event sources, then shuts down Engine while provider-owned dependencies still exist.

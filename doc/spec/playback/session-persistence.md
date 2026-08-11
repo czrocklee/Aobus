@@ -134,7 +134,9 @@ Subject changes, final seeks, and transitions to paused or idle request an immed
 
 From `Dormant`, an explicit observation start, restore, checkpoint, or discard establishes the observation baseline, connects state subscriptions, and admits debounce work.
 No other lifecycle can transition back to `Observing`.
-GTK starts observation when it activates a restoring session. A successor idle session reads no stored payload and starts observation only after its selected root is durable.
+GTK and WinUI start observation when they activate an ordinary restoring
+session. A desktop successor idle session reads no stored payload and starts
+observation only after its selected root is durable.
 An explicit checkpoint writes only from `Dormant` or `Observing`; ordinary
 shutdown applies the lifecycle-specific final-save policy below.
 
@@ -160,8 +162,8 @@ and makes observation start, natural triggers, explicit checkpoints, and
 shutdown saves no-ops. It does not mutate the store or clear the runtime's
 last-restorable snapshots.
 
-GTK uses this seal when a successor's selected-root commit fails after the
-parent has already removed the global payload. The active successor remains
+GTK and WinUI use this seal when a successor's selected-root commit fails after
+the parent has already removed the global payload. The active successor remains
 usable, but it cannot persist resume intent under the prior durable root.
 A later terminal retirement may still attempt physical group removal and clear
 the retained runtime snapshots.
@@ -196,9 +198,14 @@ Terminal retirement instead cancels and enters `Retired` without a final save.
 The literal group is `playback-session`.
 Only schema version `3` is accepted; older or newer values are rejected rather than migrated.
 
-GTK injects the global application config as the playback-session store, while current TUI composition uses its runtime workspace config when no separate store is injected.
+GTK injects its global application config as the playback-session store. WinUI
+injects its separate global `windows-playback.yaml` store. Current TUI
+composition uses its runtime workspace config when no separate store is
+injected.
 The payload itself contains library-scoped track/list ids but no durable library identity.
-The GTK switch lifecycle checkpoints the active pair, physically removes this group, and terminally seals playback persistence in the parent before that graph is destroyed.
+Both desktop switch lifecycles checkpoint the active graph, physically remove
+this group, and terminally seal playback persistence in the parent before that
+graph is destroyed.
 Only after complete parent teardown does a successor activate the explicit target with idle playback.
 Successful selected-root persistence admits future playback writes; failure keeps the prior root, no payload, and the permanent write seal, so no process interprets one library's ids against another root.
 
@@ -206,7 +213,9 @@ Successful selected-root persistence admits future playback writes; failure keep
 
 Restore returns whether a session was restored plus current track and source identities.
 It never starts audio.
-GTK may use a successful restore to reveal the actual current track.
+GTK may use a successful restore to reveal the actual current track. WinUI
+restores before its controllers bind and then projects the restored snapshot
+through its ordinary playback command and presentation adapters.
 TUI currently does not run the same startup/checkpoint sequence; that asymmetry belongs to interactive lifecycle architecture.
 
 ## Implementation map
@@ -220,6 +229,10 @@ TUI currently does not run the same startup/checkpoint sequence; that asymmetry 
 
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, and structural failure atomicity.
 - [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the successor root-commit gate and no-I/O playback-write seal against natural, explicit, window, and shutdown playback saves while ordinary window, output, layout, and workspace saves continue over the shared GTK store.
+- [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
+  and [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)
+  protect WinUI's immutable root candidate and preparation-failure boundary;
+  native WinUI builds protect the runtime store injection and restore call path.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
 
 ## Related documents

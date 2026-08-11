@@ -9,13 +9,13 @@ summary: Defines the native Windows desktop shell, mode switching, destructive l
 
 ## Scope
 
-This specification owns the observable behavior of the native WinUI 3 desktop frontend. It covers its Modern and Classic shells, shared session lifetime, library selection and rescan, track-list interaction, Soul behavior, theme reload, and Windows media integration.
+This specification owns the observable behavior of the native WinUI 3 desktop frontend. It covers its Modern and Classic shells, shared session lifetime, WinUI adaptation of library selection and rescan, track-list interaction, Soul behavior, theme reload, and Windows media integration.
 
-It does not define library scan semantics, playback engine behavior, or the exact Windows YAML fields. Those remain with their subsystem specifications and the [Windows desktop state reference](../../reference/windows/desktop-state.md).
+It does not redefine the [shared desktop library lifecycle](../application/desktop-library-lifecycle.md), its [private successor arguments](../../reference/application/desktop-successor-protocol.md), library scan semantics, playback engine behavior, or the exact Windows YAML fields. Those remain with their shared owners and the [Windows desktop state reference](../../reference/windows/desktop-state.md).
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) defines the runtime-to-UIModel-to-frontend dependency direction. The [application shell architecture](../../architecture/application-shell.md) owns shell composition. Shared policy lives under `app/include/ao/uimodel/`; Windows-only policy, XAML, controls, and adapters live in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, while `aobus-winui` is the thin final-link and deployed-resource target.
+The [system architecture](../../architecture/system-overview.md) defines the runtime-to-UIModel-to-frontend dependency direction. The [application shell architecture](../../architecture/application-shell.md) owns shell composition. Cross-desktop root, startup, protocol, and detached-launch rules live in `ao_app_desktop`; shared presentation policy lives under `app/include/ao/uimodel/`. Windows-only lifecycle effects, policy, XAML, controls, and adapters live in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, while `aobus-winui` is the thin final-link and deployed-resource target.
 
 ## Terminology
 
@@ -26,6 +26,8 @@ The [system architecture](../../architecture/system-overview.md) defines the run
 ## Invariants
 
 - One process owns at most one `LibrarySession`, one unique runtime, and one main window; opening a different root replaces the process rather than adding another graph.
+- A different-root restart prepares the still-live graph by checkpointing state and terminally retiring playback persistence. Retirement failure leaves that graph usable and launches no successor.
+- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot and permanently seals playback writes.
 - Switching shells changes presentation only; it neither scans the library nor interrupts playback.
 - All runtime and UIModel callbacks that touch XAML state execute through the window dispatcher.
 - The window detaches its observers and controllers before its session destroys the unique runtime.
@@ -47,6 +49,11 @@ narrow tier the Now Playing artwork and text yield their space to transport,
 time, volume, and overflow commands.
 
 Library reads, playback, runtime resources, commands, and activity status always derive from the same active runtime.
+An ordinary startup starts playback-session observation and restores listening
+intent after workspace and providers are ready but before controllers bind. A
+successor startup instead begins in `AwaitingRootCommit`; commit success moves
+it to ready observation, commit failure moves it to the runtime write seal, and
+terminal parent preparation moves it to retired.
 
 Soul frame updates run only while the control is loaded, its app window is
 visible and not minimized, and playback requires animation. Window focus alone
@@ -68,13 +75,25 @@ workspace at the inspector's persisted width without taking width from it, does
 not take the pointer, and keeps following the selection underneath.
 
 Open Library uses the Windows folder picker initialized from the current `AppWindow` id.
-Selecting the already active root is a no-op.
+Selecting the already active filesystem directory, including an equivalent
+alias, is a no-op.
 A different-root request is accepted once and posted to the application dispatcher; the picker coroutine returns before destructive work begins.
-The parent captures current window and workspace state best effort, retires all window/runtime borrowers, releases its `MainWindow`, `LibrarySession`, unique runtime, and application-state stores, and then calls `CreateProcessW` for the exact current executable with the selected root.
+The parent captures current window and workspace state best effort and
+terminally retires the playback-session payload while the window remains
+usable. Retirement failure reports in that window and returns the application
+to its running phase. Success retires all window/runtime borrowers, releases
+its `MainWindow`, `LibrarySession`, unique runtime, and application-state
+stores, and then invokes the shared Boost.Process V2 adapter for the exact
+current executable with the paired private successor request.
 The parent exits after the launch attempt and never reconstructs its old graph.
 
 The successor treats that explicit root strictly: a missing, inaccessible, non-directory, database, writer-lease, runtime, or window failure is a successor startup failure rather than an empty-library fallback.
-After its native window and process-wide playback adapters are active, the successor records the selected root best effort.
+It starts playback idle and leaves playback persistence dormant. After its
+native window and process-wide playback adapters are active, the successor
+saves a desktop-settings candidate containing the selected root. A successful
+save installs that candidate and starts playback observation. A failed save
+keeps the previous in-memory and durable root, seals playback writes, and keeps
+the active target session otherwise usable.
 When the selected root already contains the canonical database, it opens without an implicit scan.
 When it has no canonical database, the successor becomes active before its ordinary initial scan starts.
 An initial-scan failure leaves the selected root active and permits a later Rescan.
@@ -121,10 +140,15 @@ SMTC commands route through the shared playback command surface. Playback observ
 ## Failure and cancellation
 
 Folder-picker cancellation makes no change.
-Once a different-root restart is queued, the old process is not a rollback target.
+Before terminal playback retirement succeeds, a preparation failure leaves the
+old process as the active retry target. Once preparation succeeds and release
+begins, the old process is not a rollback target.
 The restart coordinator attempts the successor launch after an explicit release operation either completes or throws an ordinary exception: the parent is exiting either way, so a half-released dying parent is not observable while a successor that never starts costs the user their session.
 An exception that violates a destructor or other no-throw teardown boundary is instead an invariant fault and enters the process terminate boundary before successor launch; it is not a recoverable release result.
-Native process-creation failure is reported by the already-retired parent, which then exits.
+Native process-creation failure is reported by the already-retired parent,
+which then exits. The shared launcher does not inherit unrelated handles and
+preserves UTF-8 arguments across native quoting, including whitespace, quotes,
+Unicode, and trailing backslashes.
 Target validation, open, and window-activation failures are reported by the successor, which exits without changing the prior durable root.
 A later ordinary launch may therefore reopen that prior root.
 After successor activation, an initial-scan failure produces a visible diagnostic but retains the new active root; explicit-rescan planning or application failure likewise leaves the active session usable and retryable.
@@ -152,7 +176,14 @@ The three groups are saved in one atomic settings candidate independently from `
 Workspace owns the active view's current presentation and sorting.
 `LibrarySession` restores that per-library workspace before controllers bind and checkpoints it with Windows settings changes and at shutdown.
 The parent checkpoints the retiring workspace before launching a successor but never stores the requested root.
-The successor saves that root best effort only after its window/session and process adapters are active; save failure does not roll back the usable successor and a later settings checkpoint retries the in-memory value.
+The successor attempts that root only after its window/session and process
+adapters are active. It persists a copied settings candidate and replaces the
+live snapshot only after the atomic save succeeds. Save failure does not roll
+back the usable successor, but later ordinary settings checkpoints retain the
+previous root rather than retrying the failed target. The process-global
+`windows-playback.yaml` store is injected into `AppRuntime`: ordinary startup
+restores it, while successor root durability gates observation and terminal
+parent preparation removes its payload.
 Exact paths, fields, defaults, validation, and versioning are defined by the [Windows desktop state reference](../../reference/windows/desktop-state.md).
 
 ## Frontend observations
@@ -165,8 +196,11 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 
 - [`app/windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) owns the `aobus-winui-lib` static-library and thin `aobus-winui` executable boundary.
 - [`App`](../../../app/windows-winui/App.xaml.h) owns the dispatcher, queued restart state, and [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.h).
-- [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one runtime, deferred selected-root commit, and the active-session scan workflow using the shared [`LibraryScanWorkflow`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h).
-- [`ProcessLauncher`](../../../app/windows-winui/platform/ProcessLauncher.cpp) owns real Win32 argument extraction, exact-executable process creation, and native handle release.
+- [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one runtime, playback restore/admission, transactional selected-root commit, and the active-session scan workflow using the shared [`LibraryScanWorkflow`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h).
+- [`ao_app_desktop`](../../../app/desktop/) owns common root, startup, protocol,
+  and detached-launch rules. [`ProcessLauncher`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
+  owns real Win32 argument extraction and exact-executable discovery before
+  delegating process creation.
 - [`MainWindow`](../../../app/windows-winui/MainWindow.xaml) defines the window frame, its resources, and the single region a shell is built into; [`ShellStatePolicy`](../../../app/windows-winui/include/ao/winui/layout/ShellStatePolicy.h) resolves its Windows-only responsive state, and the two shipped preset documents under [`app/windows-winui/layout/`](../../../app/windows-winui/layout/) define both native shells.
 - [`MainWindowShell.cpp`](../../../app/windows-winui/shell/MainWindowShell.cpp), [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp), and [`MainWindowPlayback.cpp`](../../../app/windows-winui/playback/MainWindowPlayback.cpp) partition code-behind behavior by owner; XAML and generated code-behind declarations remain at the target root because WinUI generated-file association requires them.
 - [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), and [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h) own the grouped lazy table.
@@ -183,14 +217,25 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`LibraryScanWorkflowTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) protects the scan decision shared by GTK and WinUI.
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
-- [`StartupOptionsTest.cpp`](../../../test/unit/winui/app/StartupOptionsTest.cpp), [`LibraryStartupPlanTest.cpp`](../../../test/unit/winui/app/LibraryStartupPlanTest.cpp), [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp), and [`CommandLineTest.cpp`](../../../test/unit/winui/app/CommandLineTest.cpp) protect successor arguments, strict root planning, deferred commit, release-before-launch ordering, and quoting.
+- Tests under [`test/unit/desktop/`](../../../test/unit/desktop/) protect shared
+  successor arguments, strict root planning, same-root identity, detached
+  launch, native quoting, and handle inheritance on both hosts.
+- [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)
+  and [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
+  protect preparation failure, release-before-launch ordering, and fail-closed
+  root candidate mutation.
 - [`WinUiErrorBoundaryTest.cpp`](../../../test/unit/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
-- The tests under [`test/unit/winui/`](../../../test/unit/winui/) are compiled into `ao_core_test` only by the native Windows profile; the Linux gate does not compile WinUI-owned rules.
+- WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui/) are
+  compiled only by the native Windows profile. The shared desktop rule tests
+  compile into `ao_core_test` on Linux and Windows.
 - Native Debug and Release `winui` builds protect `aobus-winui-lib`, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.
 
 ## Related documents
 
 - [Interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md)
+- [Desktop library lifecycle specification](../application/desktop-library-lifecycle.md)
+- [Desktop successor protocol reference](../../reference/application/desktop-successor-protocol.md)
+- [Playback session persistence specification](../playback/session-persistence.md)
 - [Presentation architecture](../../architecture/presentation.md)
 - [Windows desktop state reference](../../reference/windows/desktop-state.md)
 - [Use the Windows desktop](../../user/use-windows-desktop.md)

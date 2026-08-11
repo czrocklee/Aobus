@@ -850,12 +850,14 @@ namespace ao::rt::test
       }
 
       std::ignore = winui::executeDestructiveLibraryRestart({
+        .prepareActiveGraph = [] -> Result<> { return {}; },
         .releaseActiveGraph = [] { throw std::runtime_error{"probe exception"}; },
         .launchSuccessor = [&launched] -> Result<>
         {
           launched.store(true);
           return {};
         },
+        .reportPreparationFailure = {},
         .reportLaunchFailure = {},
         .exitProcess = {},
       });
@@ -865,8 +867,10 @@ namespace ao::rt::test
     std::int32_t runDestructiveRestartLaunchException()
     {
       std::ignore = winui::executeDestructiveLibraryRestart({
+        .prepareActiveGraph = [] -> Result<> { return {}; },
         .releaseActiveGraph = [] {},
         .launchSuccessor = [] -> Result<> { throw std::runtime_error{"probe exception"}; },
+        .reportPreparationFailure = {},
         .reportLaunchFailure = {},
         .exitProcess = {},
       });

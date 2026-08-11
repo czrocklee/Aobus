@@ -4,10 +4,10 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/Log.h>
 
 #include <cstdint>
-#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -16,10 +16,6 @@
 
 namespace ao::gtk
 {
-  inline constexpr std::string_view kSuccessorOption = "--aobus-successor";
-  inline constexpr std::string_view kLibraryRootOption = "--library-root";
-  inline constexpr std::string_view kScanAfterOpenOption = "--scan-after-open";
-
   enum class GtkApplicationRegistrationMode : std::uint8_t
   {
     AllowReplacement,
@@ -29,10 +25,9 @@ namespace ao::gtk
   struct GtkStartupPlan final
   {
     GtkApplicationRegistrationMode registrationMode = GtkApplicationRegistrationMode::AllowReplacement;
-    std::optional<std::filesystem::path> optSuccessorLibraryRoot{};
+    std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest{};
     rt::LogLevel logLevel = rt::LogLevel::Info;
     std::int32_t exitCode = 0;
-    bool scanAfterOpen = false;
     bool shouldExit = false;
     bool showVersion = false;
     std::vector<std::string> gtkArguments{};

@@ -4,6 +4,7 @@
 #include "app/GtkStartupPlan.h"
 
 #include <ao/Error.h>
+#include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/rt/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -25,8 +26,7 @@ namespace ao::gtk::test
 
     REQUIRE(result);
     CHECK(result->registrationMode == GtkApplicationRegistrationMode::AllowReplacement);
-    CHECK_FALSE(result->optSuccessorLibraryRoot);
-    CHECK_FALSE(result->scanAfterOpen);
+    CHECK_FALSE(result->optSuccessorRequest);
     CHECK(result->logLevel == rt::LogLevel::Trace);
     CHECK_FALSE(result->shouldExit);
     CHECK(result->gtkArguments == std::vector<std::string>{"aobus-gtk", "--display=:7", "music.aobus", "--name=Aobus"});
@@ -40,7 +40,7 @@ namespace ao::gtk::test
 
     REQUIRE(result);
     CHECK(result->registrationMode == GtkApplicationRegistrationMode::AllowReplacement);
-    CHECK_FALSE(result->optSuccessorLibraryRoot);
+    CHECK_FALSE(result->optSuccessorRequest);
     CHECK(result->gtkArguments == std::vector<std::string>{"aobus-gtk", "--gapplication-replace", "--display=:7"});
   }
 
@@ -76,9 +76,9 @@ namespace ao::gtk::test
   {
     auto const arguments = std::array<std::string_view, 7>{"aobus-gtk",
                                                            "--display=:7",
-                                                           kSuccessorOption,
+                                                           desktop::kLibrarySuccessorOption,
                                                            "--library-root=/music/../library",
-                                                           kScanAfterOpenOption,
+                                                           desktop::kScanAfterOpenOption,
                                                            "--gtk-debug=actions",
                                                            "--name=Aobus"};
 
@@ -86,9 +86,9 @@ namespace ao::gtk::test
 
     REQUIRE(result);
     CHECK(result->registrationMode == GtkApplicationRegistrationMode::ReplaceExisting);
-    REQUIRE(result->optSuccessorLibraryRoot);
-    CHECK(*result->optSuccessorLibraryRoot == std::filesystem::path{"/library"});
-    CHECK(result->scanAfterOpen);
+    REQUIRE(result->optSuccessorRequest);
+    CHECK(result->optSuccessorRequest->libraryRoot == std::filesystem::path{"/library"});
+    CHECK(result->optSuccessorRequest->scanAfterOpen);
     CHECK(result->gtkArguments ==
           std::vector<std::string>{"aobus-gtk", "--display=:7", "--gtk-debug=actions", "--name=Aobus"});
   }
@@ -97,7 +97,7 @@ namespace ao::gtk::test
   {
     SECTION("library root without replacement")
     {
-      auto const arguments = std::array<std::string_view, 3>{"aobus-gtk", kLibraryRootOption, "/music"};
+      auto const arguments = std::array<std::string_view, 3>{"aobus-gtk", desktop::kLibraryRootOption, "/music"};
 
       auto result = planGtkStartup(arguments);
 
@@ -108,7 +108,7 @@ namespace ao::gtk::test
 
     SECTION("replacement without library root")
     {
-      auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", kSuccessorOption};
+      auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", desktop::kLibrarySuccessorOption};
 
       auto result = planGtkStartup(arguments);
 
@@ -119,8 +119,11 @@ namespace ao::gtk::test
 
     SECTION("duplicate replacement")
     {
-      auto const arguments =
-        std::array<std::string_view, 5>{"aobus-gtk", kSuccessorOption, kSuccessorOption, kLibraryRootOption, "/music"};
+      auto const arguments = std::array<std::string_view, 5>{"aobus-gtk",
+                                                             desktop::kLibrarySuccessorOption,
+                                                             desktop::kLibrarySuccessorOption,
+                                                             desktop::kLibraryRootOption,
+                                                             "/music"};
 
       auto result = planGtkStartup(arguments);
 
@@ -131,8 +134,12 @@ namespace ao::gtk::test
 
     SECTION("duplicate library root")
     {
-      auto const arguments = std::array<std::string_view, 6>{
-        "aobus-gtk", kSuccessorOption, kLibraryRootOption, "/music", "--library-root=/other", "--debug"};
+      auto const arguments = std::array<std::string_view, 6>{"aobus-gtk",
+                                                             desktop::kLibrarySuccessorOption,
+                                                             desktop::kLibraryRootOption,
+                                                             "/music",
+                                                             "--library-root=/other",
+                                                             "--debug"};
 
       auto result = planGtkStartup(arguments);
 
@@ -143,19 +150,20 @@ namespace ao::gtk::test
 
     SECTION("missing library root value")
     {
-      auto const arguments = std::array<std::string_view, 3>{"aobus-gtk", kSuccessorOption, kLibraryRootOption};
+      auto const arguments =
+        std::array<std::string_view, 3>{"aobus-gtk", desktop::kLibrarySuccessorOption, desktop::kLibraryRootOption};
 
       auto result = planGtkStartup(arguments);
 
-      REQUIRE(result);
-      CHECK(result->shouldExit);
-      CHECK(result->exitCode != 0);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidInput);
+      CHECK(result.error().message.contains("requires a path"));
     }
 
     SECTION("relative library root")
     {
-      auto const arguments =
-        std::array<std::string_view, 4>{"aobus-gtk", kSuccessorOption, kLibraryRootOption, "music"};
+      auto const arguments = std::array<std::string_view, 4>{
+        "aobus-gtk", desktop::kLibrarySuccessorOption, desktop::kLibraryRootOption, "music"};
 
       auto result = planGtkStartup(arguments);
 
@@ -166,7 +174,7 @@ namespace ao::gtk::test
 
     SECTION("scan intent without successor")
     {
-      auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", kScanAfterOpenOption};
+      auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", desktop::kScanAfterOpenOption};
 
       auto result = planGtkStartup(arguments);
 

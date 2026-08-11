@@ -66,6 +66,7 @@ namespace winrt::Aobus::implementation
 
     void initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart);
     ao::Result<> activate();
+    ao::Result<> prepareLibraryRestart();
     void retire() noexcept;
 
     void OnRootSizeChanged(Windows::Foundation::IInspectable const&,

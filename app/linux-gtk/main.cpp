@@ -19,12 +19,15 @@
 #include <ao/AppVersion.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/desktop/LibraryStartupPlanner.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gdkmm/display.h>
@@ -78,8 +81,7 @@ namespace
 
   struct LibraryRestartRequest final
   {
-    std::filesystem::path libraryRoot;
-    bool scanAfterOpen = false;
+    desktop::LibrarySwitchRequest switchRequest;
     ActivationRequest activation;
   };
 
@@ -92,40 +94,53 @@ namespace
 
   Result<ResolvedLibraryPaths> resolveLibraryPaths(AppConfigStore const& configStore, GtkStartupPlan const& startupPlan)
   {
-    if (startupPlan.optSuccessorLibraryRoot)
-    {
-      auto const& musicRoot = *startupPlan.optSuccessorLibraryRoot;
-
-      if (!std::filesystem::is_directory(musicRoot))
-      {
-        return makeError(Error::Code::InvalidInput,
-                         std::format("The selected library directory is unavailable: {}", musicRoot.string()));
-      }
-
-      return ResolvedLibraryPaths{.musicRoot = musicRoot,
-                                  .databasePath = rt::LibraryPaths{musicRoot}.databasePath(),
-                                  .scanAfterOpen = startupPlan.scanAfterOpen};
-    }
-
     auto snapshot = rt::AppSessionState{};
     configStore.loadAppSession(snapshot);
+    auto optPersistedRoot = std::optional<std::filesystem::path>{};
 
     if (!snapshot.lastLibraryPath.empty())
     {
-      auto musicRoot = std::filesystem::path{snapshot.lastLibraryPath};
-
-      if (std::filesystem::exists(musicRoot))
+      try
       {
-        auto const libraryPaths = rt::LibraryPaths{musicRoot};
-        return ResolvedLibraryPaths{.musicRoot = musicRoot,
-                                    .databasePath = libraryPaths.databasePath(),
-                                    .scanAfterOpen = !libraryPaths.hasExistingDatabase()};
+        optPersistedRoot = utility::pathFromUtf8(snapshot.lastLibraryPath);
+      }
+      catch (std::filesystem::filesystem_error const&)
+      {
+        optPersistedRoot.reset();
       }
     }
 
-    auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
-    std::filesystem::create_directories(emptyPath);
-    return ResolvedLibraryPaths{.musicRoot = emptyPath, .databasePath = rt::LibraryPaths{emptyPath}.databasePath()};
+    auto startupRes = desktop::planLibraryStartup({
+      .optSuccessorRequest = startupPlan.optSuccessorRequest,
+      .optPersistedRoot = std::move(optPersistedRoot),
+      .emptyLibraryRoot = std::filesystem::temp_directory_path() / "aobus-empty",
+    });
+
+    if (!startupRes)
+    {
+      return std::unexpected{startupRes.error()};
+    }
+
+    if (startupRes->source == desktop::LibraryStartupRootSource::EmptyLibraryFallback)
+    {
+      auto error = std::error_code{};
+      std::filesystem::create_directories(startupRes->libraryRoot, error);
+
+      if (error)
+      {
+        return makeError(
+          Error::Code::IoError, std::format("Failed to create the empty library directory: {}", error.message()));
+      }
+    }
+
+    auto const libraryPaths = rt::LibraryPaths{startupRes->libraryRoot};
+    auto const scanAfterOpen =
+      startupRes->source == desktop::LibraryStartupRootSource::ExplicitSuccessor
+        ? startupRes->scanAfterOpen
+        : startupRes->source == desktop::LibraryStartupRootSource::Persisted && !libraryPaths.hasExistingDatabase();
+    return ResolvedLibraryPaths{.musicRoot = std::move(startupRes->libraryRoot),
+                                .databasePath = libraryPaths.databasePath(),
+                                .scanAfterOpen = scanAfterOpen};
   }
 
   ActivationRequest requestDesktopActivation()
@@ -165,17 +180,22 @@ namespace
                             std::optional<LibraryRestartRequest>& optRestartRequest,
                             bool const scanAfterOpen)
   {
-    if (!mainWindowPtr || !std::filesystem::is_directory(path))
+    if (!mainWindowPtr)
     {
       return;
     }
 
-    auto const requestedPath = std::filesystem::absolute(path).lexically_normal();
-    auto const activeRoot = std::filesystem::absolute(mainWindowPtr->musicRoot()).lexically_normal();
+    auto switchPlanRes = desktop::planLibrarySwitch(mainWindowPtr->musicRoot(), path, scanAfterOpen);
 
-    if (requestedPath == activeRoot)
+    if (!switchPlanRes)
     {
-      if (scanAfterOpen)
+      APP_LOG_WARN("Ignoring invalid GTK library switch request: {}", switchPlanRes.error().message);
+      return;
+    }
+
+    if (switchPlanRes->disposition == desktop::LibrarySwitchDisposition::ReuseActive)
+    {
+      if (switchPlanRes->request.scanAfterOpen)
       {
         mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
       }
@@ -191,7 +211,7 @@ namespace
     }
 
     optRestartRequest = LibraryRestartRequest{
-      .libraryRoot = requestedPath, .scanAfterOpen = scanAfterOpen, .activation = requestDesktopActivation()};
+      .switchRequest = std::move(switchPlanRes->request), .activation = requestDesktopActivation()};
     appPtr->quit();
   }
 
@@ -534,8 +554,8 @@ namespace
     configureOpenLibraryCallback(
       mainWindowPtr, appPtr, mainWindowPtr, callbackScope, openLibraryIdleRegistration, optRestartRequest);
 
-    auto const restoreMode = startupPlan.optSuccessorLibraryRoot ? MainWindow::PlaybackRestoreMode::StartIdle
-                                                                 : MainWindow::PlaybackRestoreMode::Restore;
+    auto const restoreMode = startupPlan.optSuccessorRequest ? MainWindow::PlaybackRestoreMode::StartIdle
+                                                             : MainWindow::PlaybackRestoreMode::Restore;
 
     if (auto const activatedRes = activateLibraryWindow(*appPtr, mainWindowPtr, restoreMode); !activatedRes)
     {
@@ -546,7 +566,7 @@ namespace
       return;
     }
 
-    if (startupPlan.optSuccessorLibraryRoot)
+    if (startupPlan.optSuccessorRequest)
     {
       if (auto const persistedRes = mainWindowPtr->commitSuccessorLibrarySelection(); !persistedRes)
       {
@@ -807,7 +827,7 @@ int main(int argc, char* argv[])
       auto& request = *result.optRestartRequest;
       auto const optToken =
         request.activation.optToken ? std::optional<std::string_view>{*request.activation.optToken} : std::nullopt;
-      auto const launchedRes = launchDetachedSuccessor(request.libraryRoot, request.scanAfterOpen, optToken);
+      auto const launchedRes = launchDetachedSuccessor(request.switchRequest, optToken);
 
       if (!launchedRes)
       {

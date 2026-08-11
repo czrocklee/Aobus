@@ -7,21 +7,23 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/desktop/LibraryStartupPlanner.h>
+#include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
-#include <ao/winui/app/LibraryStartupPlan.h>
-#include <ao/winui/app/StartupOptions.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -49,9 +51,10 @@ namespace ao::winui
   class [[nodiscard]] LibrarySession final
   {
   public:
-    static Result<std::unique_ptr<LibrarySession>> create(std::filesystem::path stateRoot,
-                                                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                                                          StartupOptions startupOptions);
+    static Result<std::unique_ptr<LibrarySession>> create(
+      std::filesystem::path stateRoot,
+      winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+      std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
     ~LibrarySession();
 
     LibrarySession(LibrarySession const&) = delete;
@@ -79,6 +82,8 @@ namespace ao::winui
     Result<> saveSettings();
     /// Apply and save an explicit startup root only after native activation.
     Result<> commitSelectedRoot();
+    /// Remove playback intent and seal persistence before a destructive restart.
+    Result<> retirePlaybackSessionForLibrarySwitch();
 
     void setCallbacks(LibrarySessionCallbacks callbacks);
     void rescan() noexcept;
@@ -90,11 +95,20 @@ namespace ao::winui
     struct CallbackLifetime final
     {};
 
-    Result<> initialize(StartupOptions startupOptions);
+    enum class PlaybackPersistenceAdmission : std::uint8_t
+    {
+      Ready,
+      AwaitingRootCommit,
+      Sealed,
+      Retired,
+    };
+
+    Result<> initialize(std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
     /// Quiesce all callback and runtime-facing owners before releasing the runtime.
     void shutdown() noexcept;
 
     Result<std::unique_ptr<rt::AppRuntime>> createRuntime(std::filesystem::path const& root);
+    Result<> saveSettingsCandidate(DesktopSettings const& settings);
     void bindRuntimeServices();
     void startActiveScan();
     void finishActiveScan(
@@ -112,7 +126,7 @@ namespace ao::winui
     DesktopSettings _settings{};
     uimodel::TrackColumnLayoutState _columnLayouts{};
     uimodel::ListPresentationPreferenceState _presentationPreferences{};
-    std::optional<SelectedRootCommit> _optSelectedRootCommit;
+    std::optional<std::filesystem::path> _optSelectedRootCommit;
     std::unique_ptr<rt::AppRuntime> _runtimePtr;
     std::unique_ptr<uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
     std::unique_ptr<uimodel::ListPresentationPreferenceLifecycle> _presentationPreferenceLifecyclePtr;
@@ -124,5 +138,6 @@ namespace ao::winui
     bool _operationActive = false;
     bool _scanAfterOpen = false;
     bool _shutdown = false;
+    PlaybackPersistenceAdmission _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
   };
 } // namespace ao::winui
