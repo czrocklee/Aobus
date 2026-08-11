@@ -200,9 +200,9 @@ namespace ao::rt::test
         databasePath,
         {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
       auto transaction = lmdb::test::beginWriteTransaction(environment);
-      auto hotDatabase = lmdb::test::openDatabase(transaction, "tracks_hot");
-      auto coldDatabase = lmdb::test::openDatabase(transaction, "tracks_cold");
-      auto manifestDatabase = lmdb::test::openDatabase(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      auto hotDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_hot");
+      auto coldDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_cold");
+      auto manifestDatabase = lmdb::test::openByteKeyDatabase(transaction, "file_manifest");
       constexpr auto kLastTrackId = std::numeric_limits<std::uint32_t>::max();
       REQUIRE(hotDatabase.writer(transaction).create(kLastTrackId, library::test::makeHotData({}, "Last Track")));
       REQUIRE(coldDatabase.writer(transaction).create(kLastTrackId, library::test::makeColdData({}, "missing.flac")));

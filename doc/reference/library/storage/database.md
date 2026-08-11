@@ -27,9 +27,10 @@ Application composition keeps only one live environment for a database path in e
 Independent processes may open the same environment under LMDB's normal locking rules.
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and defaults to a 1 GiB map unless `MusicLibrary::Options::mapSize` overrides it.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It enumerates the main LMDB catalog before any named database is created and initializes the exact version-5 schema only when that catalog is empty.
-Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction; existing admission reuses the `meta` token used for the version gate.
-The resulting tokens remain internal to the library and are reused by later read and write transactions.
+It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-5 schema only when that catalog is empty.
+Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
+Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
+The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.
 A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
 After the version gate accepts version 5, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
 
@@ -148,16 +149,17 @@ The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI
 Production callers pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
 The writer performs preparation itself and keeps the resulting immutable `TrackBuilder::PreparedHot` and `PreparedCold` values inside `ao_library`.
 This binds resolved dictionary ids and byte-backed Resource creation to the same library and transaction that performs the physical write; caller-supplied existing Resource ids must already exist in that write snapshot.
-The physical `TrackStore::Writer` accepts no caller-supplied record bytes and exposes no callback-filled or mutable LMDB span, and it is unavailable to production callers, so there is one record-writing path rather than a prepared path beside a raw one.
-That also removes the defensive copy a caller span would need, because a reservation is already four-byte-aligned storage the canonical validators can view as typed records.
+The physical `TrackStore::Writer` accepts no caller-supplied record bytes and exposes no mutable LMDB span, and it is unavailable to production callers, so there is one record-writing path rather than a prepared path beside a raw one.
+Public LMDB create, update, and append operations accept only copied input bytes.
+The Track writer is the only production consumer that reaches the integer writer's private reservation primitives through source-private `lmdb::detail::ReservationWriterAccess`; its synchronous no-throw encoder receives the four-byte-aligned reservation only for that invocation, and the span is never returned to the Store.
 Writes reject the reserved zero `TrackId` as a `CorruptData` fault.
 Complete internal preparation first runs both pure hot and cold validators; single-side logical updates run the validator for that side.
 Private serialization helpers used by representation tests follow the same preflight rules.
 Those gates check every representable size and the canonical Track URI before dictionary interning, resource creation, or Track mutation begins, so a recoverable rejection adds no item-relative dictionary, resource, or Track delta.
 They validate builder input and representability rather than encoded bytes: a prepared Track side is a typed zero-copy snapshot and does not retain a second serialized record.
-That private zero-copy path reserves the hot value, fills every byte, validates it, and lets the reservation leave scope before reserving the cold value.
+That private zero-copy path reserves the hot value, fills every byte, and validates it before its encoder callback returns, then repeats the sequence for the cold value.
 Updates follow the same per-side sequence.
-Prepared writes fill a transaction-owned reservation and validate the complete bytes before the reservation leaves scope.
+Prepared writes fill and validate transaction-owned storage entirely inside the synchronous encoder invocation.
 A canonical post-fill validation failure violates the encoder's `AO_ENSURES` postcondition and aborts immediately.
 
 Create requires both canonical payloads and allocates the identity by appending to `tracks_hot`, then creates the same key in `tracks_cold`.
@@ -243,8 +245,8 @@ Text fields retain an independent 65,535-byte product limit; the 32-bit physical
 `ListBuilder` owns copies of its name, description, and filter inputs, so a logical mutation may stage the semantic value without retaining a caller or LMDB view.
 `ListBuilder::prepare()` snapshots one immutable prepared value after checking the product limits, exact canonical layout, nonzero unique saved-order ids, and every derived extent.
 The filter field is opaque at this boundary: any byte string within the size limit is locally valid, and no query parse or compile occurs.
-`ListStore::Writer` accepts only the prepared value, fills one LMDB reservation, and uses `AO_ENSURES` to prove that the output exactly equals the validated immutable snapshot.
-It does not allocate and rebuild a second saved-order uniqueness set after copying those bytes.
+`ListStore::Writer` accepts only the prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
+It does not serialize again or allocate and rebuild a second saved-order uniqueness set before copying those bytes.
 Creation allocates the nonzero List key; update requires a nonzero key.
 Parent existence and parent-cycle checks are cross-row logical-writer rules and are not part of this local prepared-record gate.
 
@@ -274,7 +276,7 @@ Manifest point reads, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
 Values must be exactly 48 bytes, carry a nonzero Track id, a declared status, three zero reserved bytes, and either both parts of an audio identity or neither.
 `FileManifestBuilder::prepare()` parses the URI, applies the complete canonical key/value validator without allocating a serialized payload, and snapshots the header before mutation.
-`FileManifestStore::Writer::put()` accepts only the prepared value, fills one LMDB reservation, and applies the complete key/value validator as an `AO_ENSURES` encoder postcondition.
+`FileManifestStore::Writer::put()` accepts only the prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
 Only a point-read `NotFound` may be interpreted as absence.
 Point reads and iterator dereference after a successful open assume the validated Store invariant; a malformed row fails through `AO_INVARIANT` rather than being skipped, returned as partial output, or exposed through a private library error carrier.
 
@@ -285,12 +287,15 @@ The logical Track port accepts `TrackBuilder` and `FileManifestBuilder`, the log
 Manifest-only Track updates likewise accept the owning `TrackId` plus `FileManifestBuilder`; the port derives and preserves the live URI-to-Track binding itself.
 Track preflight, List preparation, and manifest preparation return recoverable validation errors before their first related mutation, while passing an invalid prepared value is impossible through the public construction surface.
 Once Track preparation starts interning dictionary text or creating byte-backed Resources, any later failure reaches the root operation boundary and aborts the complete transaction.
-Track and manifest encoders validate the bytes they fill with the same canonical local validators used by open and treat a mismatch as an `AO_ENSURES` failure.
-Because a prepared List already owns its validated encoded bytes, its encoder instead uses `AO_ENSURES` to compare the filled reservation with that exact snapshot; repeating the allocating uniqueness validator cannot add evidence.
+Track encoders validate the bytes they fill with the same canonical local validators used by open and treat a mismatch as an `AO_ENSURES` failure.
+Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
-Open first reads only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-5 catalog closure, exact header size, flags, or extra-database checks; migration remains a separate facility.
-For version 5, the header is exactly 40 bytes with zero flags, the catalog is exactly the seven named databases above, every integer-key database has `MDB_INTEGERKEY`, `file_manifest` has no key flags, and `meta` contains only header record `1` plus optional revision record `2`.
+After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
+A valid non-current version returns `NotSupported` before version-5 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
+The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
+For version 5, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
+Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
+The typed `meta` token contains only header record `1` plus optional revision record `2`.
 
 The current-schema gate then validates Resource keys as nonzero four-byte ids and Resource values as nonempty opaque bytes; orphan Resources and orphan dictionary rows are accepted.
 It validates dictionary key width, dense ids, and unique text while building the in-memory index.
@@ -325,7 +330,10 @@ A structurally invalid stored value after successful open fails through `AO_INVA
 Callers therefore cannot mistake storage corruption for a missing List or silently omit a corrupt row from a full scan.
 The check aborts rather than unwinding into an application catch boundary because the open-time proof or a supported writer invariant has been violated.
 
-`TrackStore::Reader::get()` and `visitTracks()` treat absence as the only normal miss.
+`TrackStore::Reader` itself is the complete hot-and-cold input range: its public `begin()` and `end()` traverse paired Track rows, and it has no public modeful `begin()` or `end()` overload and no `both()` projection.
+Its `hot()` and `cold()` ranges are explicit projections over one physical side for intentional tier-specific traversal.
+`entryCount()` reports complete logical Track rows only and fails through `AO_INVARIANT` if the hot and cold physical row counts diverge.
+`TrackStore::Reader::get()` and `visitTracks()` retain `LoadMode` for point and ordered-batch side selection and treat absence as the only normal miss.
 A loaded but structurally invalid hot or cold side after successful open fails through `AO_INVARIANT`; it is not returned as a poisoned live Store row.
 Directly constructed `TrackView` remains available for bounded binary diagnostics and preserves its independent validity queries.
 
@@ -360,19 +368,20 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, version, and metadata sizes.
 - [`TrackLayout.h`](../../../../include/ao/library/TrackLayout.h), [`ListLayout.h`](../../../../include/ao/library/ListLayout.h), and [`FileManifestLayout.h`](../../../../include/ao/library/FileManifestLayout.h) own binary structs and static size checks.
 - [`TrackRecordValidation.cpp`](../../../../lib/library/TrackRecordValidation.cpp), [`ListRecordValidation.cpp`](../../../../lib/library/ListRecordValidation.cpp), [`FileManifestValidation.cpp`](../../../../lib/library/FileManifestValidation.cpp), and [`LibraryUriValidation.h`](../../../../lib/library/LibraryUriValidation.h) own the canonical persisted-record validation implementations.
-- [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) owns environment, named-database creation, and the complete open gate; [`DictionaryStore.cpp`](../../../../lib/library/DictionaryStore.cpp) establishes the dictionary representation while loading it.
+- [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) owns environment, named-database creation, the private version-before-flags admission sequence, and the complete open gate; [`UnvalidatedDatabase.h`](../../../../lib/lmdb/detail/UnvalidatedDatabase.h) owns its source-private one-DBI read-and-classify capability, while [`DictionaryStore.cpp`](../../../../lib/library/DictionaryStore.cpp) establishes the dictionary representation while loading it.
 - [`OpenValidationMetrics.cpp`](../../../../lib/library/OpenValidationMetrics.cpp)
   is the source-private operation-count probe used only to lock the one-open-per-named-DBI rule and open gate's
   linear Track/manifest growth law; the library build guard limits recording
   and reset to the open owner and prevents other production consumers.
 - [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) and [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) own the public transaction capabilities; [`LibraryWrite.h`](../../../../include/ao/library/LibraryWrite.h) owns the callback-scoped mutation capability.
 - [`TrackWriter.h`](../../../../include/ao/library/TrackWriter.h), [`TrackWriter.cpp`](../../../../lib/library/TrackWriter.cpp), [`ListWriter.h`](../../../../include/ao/library/ListWriter.h), and [`ListWriter.cpp`](../../../../lib/library/ListWriter.cpp) own logical cross-Store and cross-row mutation invariants.
+- [`TrackWrite.cpp`](../../../../lib/library/TrackWrite.cpp) and [`ReservationWriterAccess.h`](../../../../lib/lmdb/detail/ReservationWriterAccess.h) own the source-private path from prepared hot/cold Track values to callback-scoped integer-key reservations.
 - Store and builder implementations under [`lib/library/`](../../../../lib/library/) own key allocation, private preparation, and physical write validation.
 - [`lib/library/CMakeLists.txt`](../../../../lib/library/CMakeLists.txt) enforces that production code cannot include, define, or invoke the source-private physical access seam or call internal Track encoder helpers.
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision admission, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
+- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision admission, non-current-version precedence over current key flags, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
 - [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, identity publication, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
 - [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
@@ -383,8 +392,9 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, named-DBI-open, cursor-row, and manifest-point-read evidence.
 - [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior.
 - [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) locks live parent validation, leaf-delete conflict, children-first subtree deletion, and coherent clear behavior.
-- [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, load modes, and ordinary store behavior.
+- [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, the complete Reader range and count surface, physical-side projections, retained point and batch load modes, and ordinary store behavior.
 - [`TrackStoreIntegrityTest.cpp`](../../../../test/unit/library/TrackStoreIntegrityTest.cpp) locks reserved-id rejection and the canonical sweep over persisted records.
+- [`DatabaseWriterTest.cpp`](../../../../test/unit/lmdb/DatabaseWriterTest.cpp) locks the copied-data-only public LMDB writer surface and the source-private reservation encoder constraints and failure paths.
 - Other layout and serialization tests under [`test/unit/library/`](../../../../test/unit/library/) lock the remaining record sizes, alignment, validation, and store behavior.
 
 ## Related documents

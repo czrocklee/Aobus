@@ -157,7 +157,7 @@ namespace ao::library::test
     REQUIRE(transaction.commit());
 
     auto readTransaction = library.readTransaction();
-    CHECK(library.tracks().reader(readTransaction).entryCount(TrackStore::Reader::LoadMode::Hot) == 1);
+    CHECK(library.tracks().reader(readTransaction).entryCount() == 1);
     CHECK_FALSE(library.manifest().reader(readTransaction).get("missing-resource.flac"));
     REQUIRE(library.manifest().reader(readTransaction).get("accepted.flac"));
     CHECK(library.dictionary().size() == 0);
@@ -180,7 +180,7 @@ namespace ao::library::test
     REQUIRE_FALSE(createRes);
     CHECK(createRes.error().code == Error::Code::Conflict);
     auto readTransaction = library.readTransaction();
-    CHECK(library.tracks().reader(readTransaction).entryCount(TrackStore::Reader::LoadMode::Hot) == 1);
+    CHECK(library.tracks().reader(readTransaction).entryCount() == 1);
   }
 
   TEST_CASE("TrackWriter - validate accepts complete builders and rejects hot-only builders as input",
@@ -387,7 +387,7 @@ namespace ao::library::test
     REQUIRE(transaction.commit());
 
     auto readTransaction = library.readTransaction();
-    CHECK(library.tracks().reader(readTransaction).entryCount(TrackStore::Reader::LoadMode::Hot) == 0);
+    CHECK(library.tracks().reader(readTransaction).entryCount() == 0);
     CHECK(library.manifest().reader(readTransaction).begin() == FileManifestStore::Reader::EndSentinel{});
   }
 

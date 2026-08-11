@@ -89,3 +89,43 @@ add_custom_target(ao_lmdb_database_open_admission_probe_boundary_check ALL
   VERBATIM
 )
 add_dependencies(ao_lmdb ao_lmdb_database_open_admission_probe_boundary_check)
+
+set(AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX
+    "#[ \t]*include[ \t]*[<\"][^\">]*UnvalidatedDatabase\\.h[>\"]|(^|[^A-Za-z0-9_])UnvalidatedDatabase([^A-Za-z0-9_]|$)"
+)
+foreach(AO_FORBIDDEN_UNVALIDATED_DATABASE_SPELLING IN ITEMS
+    "#include \"lib/lmdb/detail/UnvalidatedDatabase.h\""
+    "auto database = UnvalidatedDatabase::openExisting(transaction, name)")
+  if(NOT "${AO_FORBIDDEN_UNVALIDATED_DATABASE_SPELLING}" MATCHES
+         "${AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX}")
+    message(FATAL_ERROR
+      "LMDB unvalidated-database guardrail does not reject '${AO_FORBIDDEN_UNVALIDATED_DATABASE_SPELLING}'")
+  endif()
+endforeach()
+if("UnvalidatedDatabasePolicy" MATCHES "${AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX}")
+  message(FATAL_ERROR "LMDB unvalidated-database guardrail rejects a longer identifier")
+endif()
+ao_write_guardrail_regex(
+  AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX_FILE
+  "lmdb-unvalidated-database"
+  "${AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX}"
+)
+set(AO_LMDB_UNVALIDATED_DATABASE_OWNER_REGEX
+    "/lib/(lmdb/(Database\\.cpp|detail/UnvalidatedDatabase\\.h)|library/MusicLibrary\\.cpp)$"
+)
+ao_write_guardrail_regex(
+  AO_LMDB_UNVALIDATED_DATABASE_OWNER_REGEX_FILE
+  "lmdb-unvalidated-database-owners"
+  "${AO_LMDB_UNVALIDATED_DATABASE_OWNER_REGEX}"
+)
+add_custom_target(ao_lmdb_unvalidated_database_boundary_check ALL
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
+          "-DFORBIDDEN_REGEX_FILE=${AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX_FILE}"
+          "-DEXCLUDE_REGEX_FILE=${AO_LMDB_UNVALIDATED_DATABASE_OWNER_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking LMDB unvalidated database stays source-private"
+  VERBATIM
+)
+add_dependencies(ao_lmdb ao_lmdb_unvalidated_database_boundary_check)

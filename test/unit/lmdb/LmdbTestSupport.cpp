@@ -58,16 +58,16 @@ namespace ao::lmdb::test
     return std::move(*result);
   }
 
-  WriteTransaction beginWriteTransaction(WriteTransaction& parent)
+  IntegerKeyDatabase openIntegerKeyDatabase(WriteTransaction& txn, std::string const& name)
   {
-    auto result = WriteTransaction::begin(parent);
+    auto result = IntegerKeyDatabase::open(txn, name);
     REQUIRE(result);
     return std::move(*result);
   }
 
-  Database openDatabase(WriteTransaction& txn, std::string const& name, Database::KeyKind const kind)
+  ByteKeyDatabase openByteKeyDatabase(WriteTransaction& txn, std::string const& name)
   {
-    auto result = Database::open(txn, name, kind);
+    auto result = ByteKeyDatabase::open(txn, name);
     REQUIRE(result);
     return std::move(*result);
   }

@@ -72,11 +72,11 @@ namespace ao::lmdb
     ::mdb_txn_abort(txn);
   }
 
-  Result<ReadTransaction::TxnPtr> ReadTransaction::create(::MDB_env* env, ::MDB_txn* parent, std::uint32_t flags)
+  Result<ReadTransaction::TxnPtr> ReadTransaction::create(::MDB_env* env, std::uint32_t flags)
   {
     ::MDB_txn* handle = nullptr;
 
-    if (auto result = resultFromCode("mdb_txn_begin", ::mdb_txn_begin(env, parent, flags, &handle)); !result)
+    if (auto result = resultFromCode("mdb_txn_begin", ::mdb_txn_begin(env, nullptr, flags, &handle)); !result)
     {
       return std::unexpected{result.error()};
     }
@@ -86,7 +86,7 @@ namespace ao::lmdb
 
   Result<ReadTransaction> ReadTransaction::begin(Environment const& env)
   {
-    auto txnPtrRes = create(env.handle(), nullptr, MDB_RDONLY);
+    auto txnPtrRes = create(env.handle(), MDB_RDONLY);
 
     if (!txnPtrRes)
     {
@@ -98,28 +98,14 @@ namespace ao::lmdb
 
   Result<WriteTransaction> WriteTransaction::begin(Environment& env)
   {
-    auto txnPtrRes = create(env.handle(), nullptr, 0);
+    auto txnPtrRes = create(env.handle(), 0);
 
     if (!txnPtrRes)
     {
       return std::unexpected{txnPtrRes.error()};
     }
 
-    return WriteTransaction{std::move(*txnPtrRes), false};
-  }
-
-  Result<WriteTransaction> WriteTransaction::begin(WriteTransaction& parent)
-  {
-    AO_EXPECTS(parent.isActive(), "Cannot begin a child transaction from a finished parent");
-
-    auto txnPtrRes = create(::mdb_txn_env(parent.handle()), parent.handle(), 0);
-
-    if (!txnPtrRes)
-    {
-      return std::unexpected{txnPtrRes.error()};
-    }
-
-    return WriteTransaction{std::move(*txnPtrRes), true};
+    return WriteTransaction{std::move(*txnPtrRes)};
   }
 
   WriteTransaction::WriteTransaction(WriteTransaction&&) noexcept = default;
@@ -133,7 +119,6 @@ namespace ao::lmdb
   void WriteTransaction::acquireDatabaseOpenAdmission()
   {
     AO_EXPECTS(isActive(), "Cannot open a database with a finished write transaction");
-    AO_EXPECTS(!_isNested, "Cannot open a database from a nested write transaction");
 
     if (!_databaseOpenLock.owns_lock())
     {

@@ -9,13 +9,14 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Database::Reader - maxKey returns zero for empty databases", "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey returns zero for empty databases",
+            "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(wtxn.commit());
 
     auto const rtxn = beginReadTransaction(env);
@@ -23,13 +24,13 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 0);
   }
 
-  TEST_CASE("Database::Reader - maxKey after append", "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after append", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.append(createStringData("first")));
@@ -42,13 +43,14 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == *id2Res);
   }
 
-  TEST_CASE("Database::Reader - maxKey tracks explicitly created keys", "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey tracks explicitly created keys",
+            "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.create(5, createStringData("five")));
@@ -61,13 +63,13 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 10);
   }
 
-  TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after delete", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.create(1, createStringData("one")));
@@ -87,13 +89,14 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 2);
   }
 
-  TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after deleting middle element",
+            "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.create(1, createStringData("one")));

@@ -54,8 +54,8 @@ namespace ao::library::test
       initializeLibraryStorage(path);
       auto environment = lmdb::test::openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = lmdb::test::beginWriteTransaction(environment);
-      std::ignore = lmdb::test::openDatabase(transaction, "tracks_hot");
-      auto coldDatabase = lmdb::test::openDatabase(transaction, "tracks_cold");
+      std::ignore = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_hot");
+      auto coldDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_cold");
       REQUIRE(coldDatabase.writer(transaction).create(1, makeColdData()));
       REQUIRE(transaction.commit());
     }

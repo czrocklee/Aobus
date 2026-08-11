@@ -30,8 +30,6 @@ namespace ao::library::test
 
     static_assert(!HasRawListCreate<ListStore::Writer>);
     static_assert(!HasRawListUpdate<ListStore::Writer>);
-    static_assert(noexcept(std::declval<ListBuilder::Prepared const&>().writeTo(std::span<std::byte>{})));
-
     std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, ListBuilder::Prepared const& prepared)
     {
       auto result = writer.create(prepared);

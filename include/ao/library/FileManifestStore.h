@@ -43,12 +43,12 @@ namespace ao::library
 
   private:
     Writer writer(WriteTransaction& transaction) const;
-    FileManifestStore(lmdb::Database db, detail::LibraryIdentity const& identity)
+    FileManifestStore(lmdb::ByteKeyDatabase db, detail::LibraryIdentity const& identity)
       : _db{std::move(db)}, _identity{&identity}
     {
     }
 
-    lmdb::Database _db;
+    lmdb::ByteKeyDatabase _db;
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
@@ -84,7 +84,7 @@ namespace ao::library
       using iterator_category = std::input_iterator_tag;
       Iterator() = default;
       bool operator==(Iterator const& other) const { return _it == other._it; }
-      bool operator==(EndSentinel /*unused*/) const { return _it == lmdb::Database::Reader::Iterator{}; }
+      bool operator==(EndSentinel /*unused*/) const { return _it == lmdb::ByteKeyDatabase::Reader::Iterator{}; }
       bool operator!=(Iterator const& other) const { return _it != other._it; }
 
       Iterator& operator++();
@@ -93,12 +93,12 @@ namespace ao::library
       std::pair<std::string_view, FileManifestView> operator*() const;
 
     private:
-      explicit Iterator(lmdb::Database::Reader::Iterator it)
+      explicit Iterator(lmdb::ByteKeyDatabase::Reader::Iterator it)
         : _it{std::move(it)}
       {
       }
 
-      lmdb::Database::Reader::Iterator _it;
+      lmdb::ByteKeyDatabase::Reader::Iterator _it;
 
       friend class Reader;
     };
@@ -107,12 +107,12 @@ namespace ao::library
     EndSentinel end() const { return {}; }
 
   private:
-    explicit Reader(lmdb::Database::Reader reader)
+    explicit Reader(lmdb::ByteKeyDatabase::Reader reader)
       : _reader{std::move(reader)}
     {
     }
 
-    lmdb::Database::Reader _reader;
+    lmdb::ByteKeyDatabase::Reader _reader;
 
     friend class FileManifestStore;
   };
@@ -132,12 +132,12 @@ namespace ao::library
     Result<> clear();
 
   private:
-    explicit Writer(lmdb::Database::Writer writer)
+    explicit Writer(lmdb::ByteKeyDatabase::Writer writer)
       : _writer{std::move(writer)}
     {
     }
 
-    lmdb::Database::Writer _writer;
+    lmdb::ByteKeyDatabase::Writer _writer;
 
     friend class FileManifestStore;
   };

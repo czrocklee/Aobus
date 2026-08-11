@@ -13,7 +13,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <expected>
 #include <format>
 #include <limits>
@@ -116,12 +115,6 @@ namespace ao::library
   ListBuilder::Prepared::Prepared(std::vector<std::byte> bytes)
     : _bytes{std::move(bytes)}
   {
-  }
-
-  void ListBuilder::Prepared::writeTo(std::span<std::byte> out) const noexcept
-  {
-    AO_EXPECTS(out.size() == _bytes.size(), "Prepared List output size does not match its snapshot");
-    std::memcpy(out.data(), _bytes.data(), _bytes.size());
   }
 
   Result<ListBuilder::Prepared> ListBuilder::prepare() const

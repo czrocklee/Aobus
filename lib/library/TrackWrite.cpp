@@ -4,6 +4,7 @@
 #include "TrackWrite.h"
 
 #include "TrackRecordValidation.h"
+#include "lmdb/detail/ReservationWriterAccess.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -12,13 +13,48 @@
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Database.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <format>
+#include <span>
 #include <utility>
 
 namespace ao::library::detail
 {
+  namespace
+  {
+    struct PreparedHotEncoder final
+    {
+      TrackBuilder::PreparedHot const& prepared;
+
+      void operator()(std::span<std::byte> const bytes) const noexcept
+      {
+        prepared.writeTo(bytes);
+
+        auto const validationRes = validateSerializedHotTrack(bytes);
+        AO_ENSURES(validationRes,
+                   "Prepared hot Track encoder produced a non-canonical record: {}",
+                   validationRes.error().message);
+      }
+    };
+
+    struct PreparedColdEncoder final
+    {
+      TrackBuilder::PreparedCold const& prepared;
+
+      void operator()(std::span<std::byte> const bytes) const noexcept
+      {
+        prepared.writeTo(bytes);
+
+        auto const validationRes = validateSerializedColdTrack(bytes);
+        AO_ENSURES(validationRes,
+                   "Prepared cold Track encoder produced a non-canonical record: {}",
+                   validationRes.error().message);
+      }
+    };
+  } // namespace
+
   class TrackWriteAccess final
   {
   public:
@@ -29,25 +65,19 @@ namespace ao::library::detail
       std::uint32_t rawTrackId = 0;
 
       {
-        auto hotRes = writer._hotWriter.append(preparedHot.size());
+        auto hotRes = lmdb::detail::ReservationWriterAccess::append(
+          writer._hotWriter, preparedHot.size(), PreparedHotEncoder{preparedHot});
 
         if (!hotRes)
         {
           return std::unexpected{hotRes.error()};
         }
 
-        rawTrackId = hotRes->first;
-
-        auto const hotBytes = hotRes->second;
-        preparedHot.writeTo(hotBytes);
-
-        auto const validationRes = validateSerializedHotTrack(hotBytes);
-        AO_ENSURES(validationRes,
-                   "Prepared hot Track encoder produced a non-canonical record: {}",
-                   validationRes.error().message);
+        rawTrackId = *hotRes;
       }
 
-      auto coldRes = writer._coldWriter.create(rawTrackId, preparedCold.size());
+      auto coldRes = lmdb::detail::ReservationWriterAccess::create(
+        writer._coldWriter, rawTrackId, preparedCold.size(), PreparedColdEncoder{preparedCold});
 
       if (!coldRes)
       {
@@ -57,14 +87,6 @@ namespace ao::library::detail
                      rawTrackId);
         lmdb::detail::throwTransactionFailure(std::move(error));
       }
-
-      auto const coldBytes = *coldRes;
-      preparedCold.writeTo(coldBytes);
-
-      auto const validationRes = validateSerializedColdTrack(coldBytes);
-      AO_ENSURES(validationRes,
-                 "Prepared cold Track encoder produced a non-canonical record: {}",
-                 validationRes.error().message);
 
       return TrackId{rawTrackId};
     }
@@ -109,7 +131,7 @@ namespace ao::library::detail
     }
 
   private:
-    static Result<> validateUpdateTarget(lmdb::Database::Writer const& target, TrackId const trackId)
+    static Result<> validateUpdateTarget(lmdb::IntegerKeyDatabase::Writer const& target, TrackId const trackId)
     {
       if (trackId == kInvalidTrackId)
       {
@@ -128,39 +150,26 @@ namespace ao::library::detail
                            TrackId const trackId,
                            TrackBuilder::PreparedHot const& preparedHot)
     {
-      auto hotRes = writer._hotWriter.update(trackId.raw(), preparedHot.size());
+      auto hotRes = lmdb::detail::ReservationWriterAccess::update(
+        writer._hotWriter, trackId.raw(), preparedHot.size(), PreparedHotEncoder{preparedHot});
 
       if (!hotRes)
       {
         lmdb::detail::throwTransactionFailure(std::move(hotRes.error()));
       }
-
-      auto const hotBytes = *hotRes;
-      preparedHot.writeTo(hotBytes);
-
-      auto const validationRes = validateSerializedHotTrack(hotBytes);
-      AO_ENSURES(
-        validationRes, "Prepared hot Track encoder produced a non-canonical record: {}", validationRes.error().message);
     }
 
     static void replaceCold(TrackStore::Writer& writer,
                             TrackId const trackId,
                             TrackBuilder::PreparedCold const& preparedCold)
     {
-      auto coldRes = writer._coldWriter.update(trackId.raw(), preparedCold.size());
+      auto coldRes = lmdb::detail::ReservationWriterAccess::update(
+        writer._coldWriter, trackId.raw(), preparedCold.size(), PreparedColdEncoder{preparedCold});
 
       if (!coldRes)
       {
         lmdb::detail::throwTransactionFailure(std::move(coldRes.error()));
       }
-
-      auto const coldBytes = *coldRes;
-      preparedCold.writeTo(coldBytes);
-
-      auto const validationRes = validateSerializedColdTrack(coldBytes);
-      AO_ENSURES(validationRes,
-                 "Prepared cold Track encoder produced a non-canonical record: {}",
-                 validationRes.error().message);
     }
   };
 } // namespace ao::library::detail

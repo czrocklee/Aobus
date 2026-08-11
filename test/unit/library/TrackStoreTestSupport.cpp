@@ -74,8 +74,8 @@ namespace ao::library::test
   {
     auto environment = lmdb::test::openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
     auto transaction = lmdb::test::beginWriteTransaction(environment);
-    auto hotDatabase = lmdb::test::openDatabase(transaction, "tracks_hot");
-    auto coldDatabase = lmdb::test::openDatabase(transaction, "tracks_cold");
+    auto hotDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_hot");
+    auto coldDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_cold");
 
     if (!hotData.empty())
     {

@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,25 @@ namespace ao::library::test
 {
   namespace
   {
+    template<typename Reader>
+    concept HasModeBegin = requires(Reader const& reader) { reader.begin(TrackStore::Reader::LoadMode::Hot); };
+
+    template<typename Reader>
+    concept HasModeEnd = requires(Reader const& reader) { reader.end(TrackStore::Reader::LoadMode::Hot); };
+
+    template<typename Reader>
+    concept HasBothProjection = requires(Reader const& reader) { reader.both(); };
+
+    template<typename Reader>
+    concept HasModeEntryCount =
+      requires(Reader const& reader) { reader.entryCount(TrackStore::Reader::LoadMode::Hot); };
+
+    static_assert(std::ranges::input_range<TrackStore::Reader const>);
+    static_assert(!HasModeBegin<TrackStore::Reader>);
+    static_assert(!HasModeEnd<TrackStore::Reader>);
+    static_assert(!HasBothProjection<TrackStore::Reader>);
+    static_assert(!HasModeEntryCount<TrackStore::Reader>);
+
     TrackBuilder makeBuilder(TrackSpec const& spec)
     {
       auto builder = TrackBuilder::makeEmpty();
@@ -203,8 +223,9 @@ namespace ao::library::test
 
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
-    auto it = reader.begin(TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(it != reader.end(TrackStore::Reader::LoadMode::Hot));
+    auto rows = reader.hot();
+    auto it = rows.begin();
+    REQUIRE(it != rows.end());
     auto&& [trackId, trackView] = *it;
     CHECK(trackId == id);
     CHECK(trackView.isHotValid());
@@ -219,8 +240,9 @@ namespace ao::library::test
 
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
-    auto it = reader.begin(TrackStore::Reader::LoadMode::Cold);
-    REQUIRE(it != reader.end(TrackStore::Reader::LoadMode::Cold));
+    auto rows = reader.cold();
+    auto it = rows.begin();
+    REQUIRE(it != rows.end());
     auto&& [trackId, trackView] = *it;
     CHECK(trackId == id);
     CHECK_FALSE(trackView.isHotValid());
@@ -236,7 +258,7 @@ namespace ao::library::test
 
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
-    auto it = reader.begin(TrackStore::Reader::LoadMode::Both);
+    auto it = reader.begin();
     REQUIRE(it != reader.end());
     auto&& [trackId, trackView] = *it;
     CHECK(trackId == id);
@@ -260,7 +282,7 @@ namespace ao::library::test
     auto reader = fixture.store.reader(transaction);
     auto actualIds = std::vector<TrackId>{};
 
-    for (auto const& [id, view] : reader.both())
+    for (auto const& [id, view] : reader)
     {
       actualIds.push_back(id);
       CHECK(view.isHotValid());
@@ -313,8 +335,9 @@ namespace ao::library::test
 
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
-    auto it = reader.begin(TrackStore::Reader::LoadMode::Cold);
-    auto endIt = reader.end(TrackStore::Reader::LoadMode::Cold);
+    auto rows = reader.cold();
+    auto it = rows.begin();
+    auto endIt = rows.end();
     auto collectedIds = std::vector<TrackId>{};
 
     while (it != endIt)
@@ -334,27 +357,9 @@ namespace ao::library::test
     auto fixture = TrackStoreFixture{};
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
+    auto rows = reader.cold();
 
-    CHECK(reader.begin(TrackStore::Reader::LoadMode::Cold) == reader.end(TrackStore::Reader::LoadMode::Cold));
-  }
-
-  TEST_CASE("TrackStore - iterators from different load modes are distinct", "[library][unit][track-store][raw-layout]")
-  {
-    auto fixture = TrackStoreFixture{};
-    addCommittedTrack(fixture.library, TrackSpec{});
-
-    auto rtxn = fixture.library.readTransaction();
-    auto reader = fixture.store.reader(rtxn);
-    auto coldBegin = reader.begin(TrackStore::Reader::LoadMode::Cold);
-    auto hotBegin = reader.begin(TrackStore::Reader::LoadMode::Hot);
-    auto bothBegin = reader.begin(TrackStore::Reader::LoadMode::Both);
-
-    CHECK(coldBegin != hotBegin);
-    CHECK(hotBegin != bothBegin);
-    CHECK(coldBegin != bothBegin);
-    CHECK(reader.end() != coldBegin);
-    CHECK(reader.end() != hotBegin);
-    CHECK(reader.end() != bothBegin);
+    CHECK(rows.begin() == rows.end());
   }
 
   TEST_CASE("MusicLibrary - open rejects a missing cold Track record", "[library][regression][track-store][raw-layout]")

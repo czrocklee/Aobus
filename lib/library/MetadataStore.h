@@ -25,7 +25,7 @@ namespace ao::library
   class MetadataStore final
   {
   private:
-    MetadataStore(lmdb::Database db, detail::LibraryIdentity const& identity)
+    MetadataStore(lmdb::IntegerKeyDatabase db, detail::LibraryIdentity const& identity)
       : _database{std::move(db)}, _identity{&identity}
     {
     }
@@ -37,7 +37,7 @@ namespace ao::library
                          std::uint64_t candidateRevision,
                          std::uint64_t previousRevision) const;
 
-    lmdb::Database _database;
+    lmdb::IntegerKeyDatabase _database;
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;

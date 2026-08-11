@@ -15,7 +15,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 
 // LMDB native handles, kept opaque (see Environment.h).
@@ -24,123 +23,146 @@ struct MDB_txn;
 
 namespace ao::lmdb
 {
+  namespace detail
+  {
+    class DatabaseAccess;
+    class ReservationWriterAccess;
+  } // namespace detail
+
   class ReadTransaction;
   class WriteTransaction;
 
   /**
-   * Database - Wrapper for an LMDB named database (DBI).
+   * IntegerKeyDatabase - An LMDB DBI with native uint32 integer keys.
    */
-  class Database final
+  class IntegerKeyDatabase final
   {
   public:
-    enum class KeyKind : std::uint8_t
-    {
-      Integer,
-      Blob
-    };
-
     class Reader;
     class Writer;
 
-    static Result<Database> open(WriteTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
-    static Result<Database> openExisting(WriteTransaction& txn, std::string const& name);
-    static Result<Database> openExisting(WriteTransaction& txn, std::string const& name, KeyKind kind);
-    static Database main(WriteTransaction& txn);
+    static Result<IntegerKeyDatabase> open(WriteTransaction& transaction, std::string const& name);
+    static Result<IntegerKeyDatabase> openExisting(WriteTransaction& transaction, std::string const& name);
 
-    Reader reader(ReadTransaction const& txn) const;
-    Writer writer(WriteTransaction& txn) const;
-
-    KeyKind kind() const noexcept { return _kind; }
-    Result<> validateExactKeyKind(std::string_view databaseName, KeyKind expected) const;
+    Reader reader(ReadTransaction const& transaction) const;
+    Writer writer(WriteTransaction& transaction) const;
 
   private:
-    Database(DbiHandle dbi, KeyKind kind, std::uint32_t nativeFlags);
-    static bool transactionOwned(ReadTransaction const& transaction) noexcept;
+    explicit IntegerKeyDatabase(DbiHandle dbi) noexcept
+      : _dbi{dbi}
+    {
+    }
 
     DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
-    KeyKind _kind = KeyKind::Integer;
-    std::uint32_t _nativeFlags = 0;
+
+    friend class detail::DatabaseAccess;
   };
 
   /**
-   * Database::Reader - Read-only access to a database within a transaction.
+   * ByteKeyDatabase - An LMDB DBI with arbitrary byte-string keys.
    */
-  class Database::Reader final
+  class ByteKeyDatabase final
   {
   public:
-    /**
-     * KeyView - Strong view of a key, convertible to uint32_t for integer keys.
-     */
-    struct KeyView final : std::span<std::byte const>
+    class Reader;
+    class Writer;
+
+    static Result<ByteKeyDatabase> open(WriteTransaction& transaction, std::string const& name);
+    static Result<ByteKeyDatabase> openExisting(WriteTransaction& transaction, std::string const& name);
+    static Result<ByteKeyDatabase> main(WriteTransaction& transaction);
+
+    Reader reader(ReadTransaction const& transaction) const;
+    Writer writer(WriteTransaction& transaction) const;
+
+  private:
+    explicit ByteKeyDatabase(DbiHandle dbi) noexcept
+      : _dbi{dbi}
     {
-      using std::span<std::byte const>::span;
-      // Coerce an admitted integer key to uint32. A size mismatch violates the
-      // database/key-kind invariant and terminates instead of yielding a bogus id.
-      operator std::uint32_t() const;
+    }
+
+    DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
+
+    friend class detail::DatabaseAccess;
+  };
+
+  /**
+   * IntegerKeyDatabase::Reader - Read-only integer-key access within a transaction.
+   */
+  class IntegerKeyDatabase::Reader final
+  {
+  public:
+    class Iterator;
+
+    /**
+     * KeyView - Raw integer-key bytes retained for storage-integrity checks.
+     */
+    class KeyView final
+    {
+    public:
+      ~KeyView() = default;
+      KeyView(KeyView const&) = default;
+      KeyView& operator=(KeyView const&) = default;
+      KeyView(KeyView&&) = default;
+      KeyView& operator=(KeyView&&) = default;
+
+      std::byte const* data() const noexcept { return _bytes.data(); }
+      std::size_t size() const noexcept { return _bytes.size(); }
+      bool empty() const noexcept { return _bytes.empty(); }
+      auto begin() const noexcept { return _bytes.begin(); }
+      auto end() const noexcept { return _bytes.end(); }
+      std::span<std::byte const> bytes() const noexcept { return _bytes; }
+
+      explicit operator std::uint32_t() const;
+
+    private:
+      explicit KeyView(std::span<std::byte const> bytes) noexcept
+        : _bytes{bytes}
+      {
+      }
+
+      std::span<std::byte const> _bytes;
+
+      friend class Iterator;
     };
 
     struct EndSentinel
     {};
     using Value = std::pair<KeyView, std::span<std::byte const>>;
-    class Iterator;
 
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
-    // Point lookups. A missing key is normal. Other native faults are fatal for
-    // an exposed read snapshot and use the private transaction carrier when the
-    // reader belongs to a write/open transaction.
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
-    std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
-
-    // Number of rows visible to this transaction. Fault ownership follows the
-    // same read-snapshot versus transaction phase split.
     std::size_t entryCount() const;
-
-    // Largest integer key, or 0 when the database is empty.
     std::uint32_t maxKey() const;
 
     ~Reader() = default;
-
-    // copyable and movable
     Reader(Reader const&) = default;
     Reader& operator=(Reader const&) = default;
     Reader(Reader&&) = default;
     Reader& operator=(Reader&&) = default;
 
-    KeyKind kind() const noexcept { return _kind; }
-
   private:
-    Reader(DbiHandle dbi, MDB_txn* txn, ReadTransaction const& owner, KeyKind kind);
+    Reader(DbiHandle dbi, MDB_txn* transaction, ReadTransaction const& owner);
 
     struct MdbCursorDeleter final
     {
-      void operator()(MDB_cursor* cur) const noexcept;
+      void operator()(MDB_cursor* cursor) const noexcept;
     };
 
     using CursorPtr = std::unique_ptr<MDB_cursor, MdbCursorDeleter>;
-    static CursorPtr create(MDB_txn* txn, ReadTransaction const& owner, DbiHandle dbi);
+    static CursorPtr create(MDB_txn* transaction, ReadTransaction const& owner, DbiHandle dbi);
     void ensureActive() const;
 
     DbiHandle _dbi;
     MDB_txn* _txn;
     ReadTransaction const* _owner;
-    KeyKind _kind;
 
-    friend class Database;
+    friend class IntegerKeyDatabase;
     friend class Writer;
   };
 
-  /**
-   * Database::Reader::Iterator - Input iterator over database entries.
-   *
-   * Cursor EOF (MDB_NOTFOUND) is normal and compares equal to EndSentinel.
-   * Other cursor failures use the owner selected by the transaction: exposed
-   * read snapshots terminate, while write/open transactions unwind through the
-   * private transaction carrier so their root owner can abort and return a
-   * typed failure.
-   */
-  class Database::Reader::Iterator final
+  class IntegerKeyDatabase::Reader::Iterator final
   {
   public:
     using iterator_category = std::input_iterator_tag;
@@ -154,7 +176,6 @@ namespace ao::lmdb
     Iterator(Iterator&& other) noexcept;
     Iterator& operator=(Iterator&& other) noexcept;
 
-    // Not copyable because of the cursor
     Iterator(Iterator const&) = delete;
     Iterator& operator=(Iterator const&) = delete;
 
@@ -167,7 +188,90 @@ namespace ao::lmdb
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
 
   private:
-    Iterator(MDB_txn* txn, ReadTransaction const& owner, DbiHandle dbi, bool end);
+    Iterator(MDB_txn* transaction, ReadTransaction const& owner, DbiHandle dbi);
+
+    void ensureActive() const;
+    void releaseFinishedCursor() noexcept;
+    void next();
+
+    Reader::CursorPtr _cursorPtr;
+    Reader::Value _value{Reader::KeyView{std::span<std::byte const>{}}, std::span<std::byte const>{}};
+    ReadTransaction const* _owner = nullptr;
+
+    friend class Reader;
+  };
+
+  /**
+   * ByteKeyDatabase::Reader - Read-only byte-key access within a transaction.
+   */
+  class ByteKeyDatabase::Reader final
+  {
+  public:
+    using KeyView = std::span<std::byte const>;
+    struct EndSentinel
+    {};
+    using Value = std::pair<KeyView, std::span<std::byte const>>;
+    class Iterator;
+
+    Iterator begin() const;
+    EndSentinel end() const { return {}; }
+
+    std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
+    std::size_t entryCount() const;
+
+    ~Reader() = default;
+    Reader(Reader const&) = default;
+    Reader& operator=(Reader const&) = default;
+    Reader(Reader&&) = default;
+    Reader& operator=(Reader&&) = default;
+
+  private:
+    Reader(DbiHandle dbi, MDB_txn* transaction, ReadTransaction const& owner);
+
+    struct MdbCursorDeleter final
+    {
+      void operator()(MDB_cursor* cursor) const noexcept;
+    };
+
+    using CursorPtr = std::unique_ptr<MDB_cursor, MdbCursorDeleter>;
+    static CursorPtr create(MDB_txn* transaction, ReadTransaction const& owner, DbiHandle dbi);
+    void ensureActive() const;
+
+    DbiHandle _dbi;
+    MDB_txn* _txn;
+    ReadTransaction const* _owner;
+
+    friend class ByteKeyDatabase;
+    friend class Writer;
+  };
+
+  class ByteKeyDatabase::Reader::Iterator final
+  {
+  public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = Reader::Value;
+    using difference_type = std::ptrdiff_t;
+    using pointer = value_type const*;
+    using reference = value_type const&;
+
+    Iterator() = default;
+    ~Iterator() noexcept;
+    Iterator(Iterator&& other) noexcept;
+    Iterator& operator=(Iterator&& other) noexcept;
+
+    Iterator(Iterator const&) = delete;
+    Iterator& operator=(Iterator const&) = delete;
+
+    reference operator*() const;
+    pointer operator->() const;
+
+    Iterator& operator++();
+    void operator++(std::int32_t) { ++*this; }
+    bool operator==(Iterator const& other) const;
+    bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
+
+  private:
+    Iterator(MDB_txn* transaction, ReadTransaction const& owner, DbiHandle dbi);
 
     void ensureActive() const;
     void releaseFinishedCursor() noexcept;
@@ -181,67 +285,77 @@ namespace ao::lmdb
   };
 
   /**
-   * Database::Writer - Write access to a database within a transaction.
+   * IntegerKeyDatabase::Writer - Integer-key write access within a transaction.
    */
-  class [[nodiscard]] Database::Writer final
+  class [[nodiscard]] IntegerKeyDatabase::Writer final
   {
   public:
     ~Writer() noexcept;
 
-    // Not copyable
     Writer(Writer const&) = delete;
     Writer& operator=(Writer const&) = delete;
-
-    // Movable
     Writer(Writer&& other) noexcept;
     Writer& operator=(Writer&& other) noexcept;
 
     Result<> create(std::uint32_t id, std::span<std::byte const> data);
-    Result<> create(std::span<std::byte const> key, std::span<std::byte const> data);
-
-    // MDB_RESERVE writes. The returned span must be filled completely before
-    // any subsequent LMDB update in the transaction and must not be read or
-    // written after that update or after the transaction finishes.
-    Result<std::span<std::byte>> create(std::uint32_t id, std::size_t size);
-    Result<std::span<std::byte>> create(std::span<std::byte const> key, std::size_t size);
 
     std::uint32_t maxKey() const noexcept { return _lastId; }
     Result<std::uint32_t> append(std::span<std::byte const> data);
-    Result<std::pair<std::uint32_t, std::span<std::byte>>> append(std::size_t size);
 
     Result<> update(std::uint32_t id, std::span<std::byte const> data);
-    Result<> update(std::span<std::byte const> key, std::span<std::byte const> data);
 
-    // The same MDB_RESERVE lifetime and complete-fill contract applies here.
-    Result<std::span<std::byte>> update(std::uint32_t id, std::size_t size);
-    Result<std::span<std::byte>> update(std::span<std::byte const> key, std::size_t size);
-
-    // Delete a key. Returns true if a row was removed, false if it was absent.
-    // Other native failures terminate the owning write transaction.
     bool del(std::uint32_t id);
-    bool del(std::span<std::byte const> key);
-
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
-    std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
-
     Result<> clear();
 
-    KeyKind kind() const noexcept { return _kind; }
+  private:
+    Writer(DbiHandle dbi, WriteTransaction& transaction);
+
+    void ensureActive() const;
+    void releaseFinishedCursor() noexcept;
+
+    Result<std::span<std::byte>> reserveCreate(std::uint32_t id, std::size_t size);
+    Result<std::pair<std::uint32_t, std::span<std::byte>>> reserveAppend(std::size_t size);
+    Result<std::span<std::byte>> reserveUpdate(std::uint32_t id, std::size_t size);
+
+    DbiHandle _dbi;
+    WriteTransaction* _txn;
+    Reader::CursorPtr _cursorPtr;
+    std::uint32_t _lastId = 0;
+
+    friend class IntegerKeyDatabase;
+    friend class detail::ReservationWriterAccess;
+  };
+
+  /**
+   * ByteKeyDatabase::Writer - Copied-value byte-key write access within a transaction.
+   */
+  class [[nodiscard]] ByteKeyDatabase::Writer final
+  {
+  public:
+    ~Writer() noexcept;
+
+    Writer(Writer const&) = delete;
+    Writer& operator=(Writer const&) = delete;
+    Writer(Writer&& other) noexcept;
+    Writer& operator=(Writer&& other) noexcept;
+
+    Result<> create(std::span<std::byte const> key, std::span<std::byte const> data);
+    Result<> update(std::span<std::byte const> key, std::span<std::byte const> data);
+    bool del(std::span<std::byte const> key);
+    std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
+    Result<> clear();
 
   private:
-    Writer(DbiHandle dbi, WriteTransaction& txn, KeyKind kind);
+    Writer(DbiHandle dbi, WriteTransaction& transaction);
 
-    // After commit LMDB has closed every cursor; reuse is a caller precondition
-    // violation and terminates before dereferencing the dangling handle.
     void ensureActive() const;
     void releaseFinishedCursor() noexcept;
 
     DbiHandle _dbi;
     WriteTransaction* _txn;
     Reader::CursorPtr _cursorPtr;
-    std::uint32_t _lastId = 0; // Start from 1 (0 = null, so first append returns 1)
-    KeyKind _kind;
 
-    friend class Database;
+    friend class ByteKeyDatabase;
   };
 } // namespace ao::lmdb

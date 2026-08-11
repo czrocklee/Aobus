@@ -43,9 +43,9 @@ namespace ao::library
 
   private:
     Writer writer(WriteTransaction& transaction) const;
-    ListStore(lmdb::Database db, detail::LibraryIdentity const& identity);
+    ListStore(lmdb::IntegerKeyDatabase db, detail::LibraryIdentity const& identity);
 
-    lmdb::Database _database;
+    lmdb::IntegerKeyDatabase _database;
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
@@ -72,9 +72,9 @@ namespace ao::library
     std::optional<ListView> get(ListId id) const;
 
   private:
-    Reader(lmdb::Database::Reader reader);
+    Reader(lmdb::IntegerKeyDatabase::Reader reader);
 
-    lmdb::Database::Reader _reader;
+    lmdb::IntegerKeyDatabase::Reader _reader;
     friend class ListStore;
   };
 
@@ -103,9 +103,9 @@ namespace ao::library
     value_type operator*() const;
 
   private:
-    Iterator(lmdb::Database::Reader::Iterator&& iter);
+    Iterator(lmdb::IntegerKeyDatabase::Reader::Iterator&& iter);
 
-    lmdb::Database::Reader::Iterator _iter;
+    lmdb::IntegerKeyDatabase::Reader::Iterator _iter;
     friend class Reader;
   };
 
@@ -126,9 +126,9 @@ namespace ao::library
     std::optional<ListView> get(ListId id) const;
 
   private:
-    explicit Writer(lmdb::Database::Writer&& writer);
+    explicit Writer(lmdb::IntegerKeyDatabase::Writer&& writer);
 
-    lmdb::Database::Writer _writer;
+    lmdb::IntegerKeyDatabase::Writer _writer;
     friend class ListStore;
   };
 } // namespace ao::library

@@ -102,7 +102,7 @@ namespace ao::library
     std::size_t size() const;
 
   private:
-    DictionaryStore(lmdb::Database db,
+    DictionaryStore(lmdb::IntegerKeyDatabase db,
                     lmdb::ReadTransaction const& transaction,
                     detail::LibraryIdentity const& identity);
 
@@ -133,7 +133,7 @@ namespace ao::library
 
     std::uint64_t bindSymbols(std::span<std::string const> symbols, std::span<DictionaryId> ids) const;
 
-    lmdb::Database _database;
+    lmdb::IntegerKeyDatabase _database;
     detail::LibraryIdentity const* _identity;
 
     // Serializes the complete native-write/publish boundary. LMDB itself has one

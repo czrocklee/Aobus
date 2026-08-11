@@ -40,9 +40,7 @@ namespace ao::library
     {
     public:
       std::string_view uri() const noexcept { return _uri.value(); }
-      std::size_t size() const noexcept { return sizeof(FileManifestHeader); }
       std::span<std::byte const> bytes() const noexcept { return std::as_bytes(std::span{&_header, std::size_t{1}}); }
-      void writeTo(std::span<std::byte> out) const noexcept;
 
     private:
       Prepared(LibraryUri uri, FileManifestHeader header);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/lmdb/detail/ReservationWriterAccess.h"
 #include "lib/lmdb/detail/TransactionFailure.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
@@ -16,18 +17,164 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <span>
 #include <string>
 #include <utility>
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Database::Writer - create with id and data", "[lmdb][unit][database][writer]")
+  namespace
+  {
+    struct PotentiallyThrowingEncoder final
+    {
+      void operator()(std::span<std::byte> /*unused*/) const {}
+    };
+
+    struct ValueReturningEncoder final
+    {
+      std::int32_t operator()(std::span<std::byte> /*unused*/) const noexcept { return 0; }
+    };
+
+    struct LvalueReferenceEncoder final
+    {
+      void operator()(std::span<std::byte>& /*unused*/) const noexcept {}
+    };
+
+    struct NoexceptEncoder final
+    {
+      void operator()(std::span<std::byte> /*unused*/) const noexcept {}
+    };
+
+    template<typename Writer>
+    concept HasIntegerCreateSize = requires(Writer& writer) { writer.create(std::uint32_t{1}, std::size_t{1}); };
+
+    template<typename Writer>
+    concept HasIntegerCreate =
+      requires(Writer& writer) { writer.create(std::uint32_t{1}, std::span<std::byte const>{}); };
+
+    template<typename Writer>
+    concept HasByteCreate =
+      requires(Writer& writer) { writer.create(std::span<std::byte const>{}, std::span<std::byte const>{}); };
+
+    template<typename Writer>
+    concept HasBlobCreateSize =
+      requires(Writer& writer) { writer.create(std::span<std::byte const>{}, std::size_t{1}); };
+
+    template<typename Writer>
+    concept HasAppendSize = requires(Writer& writer) { writer.append(std::size_t{1}); };
+
+    template<typename Writer>
+    concept HasAppend = requires(Writer& writer) { writer.append(std::span<std::byte const>{}); };
+
+    template<typename Writer>
+    concept HasMaxKey = requires(Writer const& writer) { writer.maxKey(); };
+
+    template<typename Writer>
+    concept HasIntegerUpdateSize = requires(Writer& writer) { writer.update(std::uint32_t{1}, std::size_t{1}); };
+
+    template<typename Writer>
+    concept HasBlobUpdateSize =
+      requires(Writer& writer) { writer.update(std::span<std::byte const>{}, std::size_t{1}); };
+
+    template<typename Writer>
+    concept HasIntegerUpdate =
+      requires(Writer& writer) { writer.update(std::uint32_t{1}, std::span<std::byte const>{}); };
+
+    template<typename Writer>
+    concept HasByteUpdate =
+      requires(Writer& writer) { writer.update(std::span<std::byte const>{}, std::span<std::byte const>{}); };
+
+    template<typename Writer>
+    concept HasIntegerGet = requires(Writer const& writer) { writer.get(std::uint32_t{1}); };
+
+    template<typename Writer>
+    concept HasByteGet = requires(Writer const& writer) { writer.get(std::span<std::byte const>{}); };
+
+    template<typename Writer>
+    concept AcceptsCreateEncoder =
+      requires(Writer& writer) { writer.create(std::uint32_t{1}, std::size_t{1}, NoexceptEncoder{}); };
+
+    template<typename Writer>
+    concept AcceptsByteCreateEncoder =
+      requires(Writer& writer) { writer.create(std::span<std::byte const>{}, std::size_t{1}, NoexceptEncoder{}); };
+
+    template<typename Writer>
+    concept AcceptsAppendEncoder = requires(Writer& writer) { writer.append(std::size_t{1}, NoexceptEncoder{}); };
+
+    template<typename Writer>
+    concept AcceptsUpdateEncoder =
+      requires(Writer& writer) { writer.update(std::uint32_t{1}, std::size_t{1}, NoexceptEncoder{}); };
+
+    template<typename Writer>
+    concept AcceptsByteUpdateEncoder =
+      requires(Writer& writer) { writer.update(std::span<std::byte const>{}, std::size_t{1}, NoexceptEncoder{}); };
+
+    using IntegerWriter = IntegerKeyDatabase::Writer;
+    using ByteWriter = ByteKeyDatabase::Writer;
+    using ReservationAccess = detail::ReservationWriterAccess;
+
+    template<typename Encoder>
+    concept ReservationAccessAcceptsCreateEncoder = requires(IntegerWriter& writer) {
+      ReservationAccess::create(writer, std::uint32_t{1}, std::size_t{1}, Encoder{});
+    };
+
+    template<typename Encoder>
+    concept ReservationAccessAcceptsAppendEncoder =
+      requires(IntegerWriter& writer) { ReservationAccess::append(writer, std::size_t{1}, Encoder{}); };
+
+    template<typename Encoder>
+    concept ReservationAccessAcceptsUpdateEncoder = requires(IntegerWriter& writer) {
+      ReservationAccess::update(writer, std::uint32_t{1}, std::size_t{1}, Encoder{});
+    };
+
+    static_assert(HasIntegerCreate<IntegerWriter>);
+    static_assert(!HasByteCreate<IntegerWriter>);
+    static_assert(!HasIntegerCreate<ByteWriter>);
+    static_assert(HasByteCreate<ByteWriter>);
+    static_assert(HasAppend<IntegerWriter>);
+    static_assert(!HasAppend<ByteWriter>);
+    static_assert(HasMaxKey<IntegerWriter>);
+    static_assert(!HasMaxKey<ByteWriter>);
+    static_assert(HasIntegerUpdate<IntegerWriter>);
+    static_assert(!HasByteUpdate<IntegerWriter>);
+    static_assert(!HasIntegerUpdate<ByteWriter>);
+    static_assert(HasByteUpdate<ByteWriter>);
+    static_assert(HasIntegerGet<IntegerWriter>);
+    static_assert(!HasByteGet<IntegerWriter>);
+    static_assert(!HasIntegerGet<ByteWriter>);
+    static_assert(HasByteGet<ByteWriter>);
+
+    static_assert(!HasIntegerCreateSize<IntegerWriter>);
+    static_assert(!HasBlobCreateSize<IntegerWriter>);
+    static_assert(!HasBlobCreateSize<ByteWriter>);
+    static_assert(!HasAppendSize<IntegerWriter>);
+    static_assert(!HasAppendSize<ByteWriter>);
+    static_assert(!HasIntegerUpdateSize<IntegerWriter>);
+    static_assert(!HasBlobUpdateSize<IntegerWriter>);
+    static_assert(!HasBlobUpdateSize<ByteWriter>);
+    static_assert(!AcceptsCreateEncoder<IntegerWriter>);
+    static_assert(!AcceptsByteCreateEncoder<ByteWriter>);
+    static_assert(!AcceptsAppendEncoder<IntegerWriter>);
+    static_assert(!AcceptsUpdateEncoder<IntegerWriter>);
+    static_assert(!AcceptsByteUpdateEncoder<ByteWriter>);
+
+    static_assert(ReservationAccessAcceptsCreateEncoder<NoexceptEncoder>);
+    static_assert(!ReservationAccessAcceptsCreateEncoder<PotentiallyThrowingEncoder>);
+    static_assert(ReservationAccessAcceptsAppendEncoder<NoexceptEncoder>);
+    static_assert(!ReservationAccessAcceptsAppendEncoder<PotentiallyThrowingEncoder>);
+    static_assert(!ReservationAccessAcceptsAppendEncoder<ValueReturningEncoder>);
+    static_assert(!ReservationAccessAcceptsAppendEncoder<LvalueReferenceEncoder>);
+    static_assert(ReservationAccessAcceptsUpdateEncoder<NoexceptEncoder>);
+    static_assert(!ReservationAccessAcceptsUpdateEncoder<PotentiallyThrowingEncoder>);
+  } // namespace
+
+  TEST_CASE("IntegerKeyDatabase::Writer - create with id and data", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(1, createStringData("hello")));
     REQUIRE(wtxn.commit());
@@ -40,21 +187,29 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == "hello");
   }
 
-  TEST_CASE("Database::Writer - create with id and size", "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - create encoder receives exact storage once and persists bytes",
+            "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
-    auto const result = writer.create(1, 10);
+    std::int32_t encoderCalls = 0;
+    std::size_t encodedSize = 0;
+    auto const result = ReservationAccess::create(writer,
+                                                  1,
+                                                  10,
+                                                  [&](std::span<std::byte> output) noexcept
+                                                  {
+                                                    ++encoderCalls;
+                                                    encodedSize = output.size();
+                                                    std::memset(output.data(), 'x', output.size());
+                                                  });
     REQUIRE(result);
-    REQUIRE(!result->empty());
-    REQUIRE(result->size() == 10);
-
-    // Write data into the reserved space
-    std::memset(result->data(), 'x', 10);
+    CHECK(encoderCalls == 1);
+    CHECK(encodedSize == 10);
 
     REQUIRE(wtxn.commit());
 
@@ -67,13 +222,13 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == std::string(10, 'x'));
   }
 
-  TEST_CASE("Database::Writer - append with data", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - append with data", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     auto const id1Res = writer.append(createStringData("first"));
@@ -97,30 +252,45 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData2) == "second");
   }
 
-  TEST_CASE("Database::Writer - append with size", "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - append encoders receive exact storage once and persist bytes",
+            "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
-    auto append1Res = writer.append(8);
+    std::int32_t firstEncoderCalls = 0;
+    std::size_t firstEncodedSize = 0;
+    auto append1Res = ReservationAccess::append(writer,
+                                                8,
+                                                [&](std::span<std::byte> output) noexcept
+                                                {
+                                                  ++firstEncoderCalls;
+                                                  firstEncodedSize = output.size();
+                                                  std::memset(output.data(), 'a', output.size());
+                                                });
     REQUIRE(append1Res);
-    auto const& [id1, result1] = *append1Res;
-    CHECK(id1 == 1);
-    REQUIRE(!result1.empty());
-    REQUIRE(result1.size() == 8);
-    std::memset(result1.data(), 'a', 8);
+    CHECK(*append1Res == 1);
+    CHECK(firstEncoderCalls == 1);
+    CHECK(firstEncodedSize == 8);
 
-    auto append2Res = writer.append(12);
+    std::int32_t secondEncoderCalls = 0;
+    std::size_t secondEncodedSize = 0;
+    auto append2Res = ReservationAccess::append(writer,
+                                                12,
+                                                [&](std::span<std::byte> output) noexcept
+                                                {
+                                                  ++secondEncoderCalls;
+                                                  secondEncodedSize = output.size();
+                                                  std::memset(output.data(), 'b', output.size());
+                                                });
     REQUIRE(append2Res);
-    auto const& [id2, result2] = *append2Res;
-    CHECK(id2 == 2);
-    REQUIRE(!result2.empty());
-    REQUIRE(result2.size() == 12);
-    std::memset(result2.data(), 'b', 12);
+    CHECK(*append2Res == 2);
+    CHECK(secondEncoderCalls == 1);
+    CHECK(secondEncodedSize == 12);
 
     REQUIRE(wtxn.commit());
 
@@ -135,13 +305,37 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
   }
 
-  TEST_CASE("Database::Writer - clear resets integer append allocation on the same writer",
+  TEST_CASE("ReservationWriterAccess - append conflict restores cached maximum and skips encoder",
+            "[lmdb][unit][database][writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(transaction, "test");
+    auto writer = db.writer(transaction);
+
+    REQUIRE(writer.create(1, createStringData("explicit")));
+    CHECK(writer.maxKey() == 0);
+
+    std::int32_t encoderCalls = 0;
+    auto appendRes = ReservationAccess::append(writer, 8, [&](std::span<std::byte>) noexcept { ++encoderCalls; });
+
+    REQUIRE_FALSE(appendRes);
+    CHECK(appendRes.error().code == Error::Code::Conflict);
+    CHECK(encoderCalls == 0);
+    CHECK(writer.maxKey() == 0);
+
+    REQUIRE(writer.update(1, createStringData("still active")));
+    REQUIRE(transaction.commit());
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Writer - clear resets integer append allocation on the same writer",
             "[lmdb][regression][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
-    auto db = openDatabase(transaction, "test");
+    auto db = openIntegerKeyDatabase(transaction, "test");
     auto writer = db.writer(transaction);
     auto const firstIdRes = writer.append(createStringData("first"));
     auto const secondIdRes = writer.append(createStringData("second"));
@@ -164,13 +358,13 @@ namespace ao::lmdb::test
     CHECK_FALSE(reader.get(2));
   }
 
-  TEST_CASE("Database::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.create(std::numeric_limits<std::uint32_t>::max(), createStringData("last")));
@@ -183,9 +377,12 @@ namespace ao::lmdb::test
     REQUIRE(!dataRes);
     CHECK(dataRes.error().code == Error::Code::ResourceExhausted);
 
-    auto const reserveRes = writer2.append(4);
+    std::int32_t encoderCalls = 0;
+    auto const reserveRes =
+      ReservationAccess::append(writer2, 4, [&](std::span<std::byte>) noexcept { ++encoderCalls; });
     REQUIRE(!reserveRes);
     CHECK(reserveRes.error().code == Error::Code::ResourceExhausted);
+    CHECK(encoderCalls == 0);
 
     REQUIRE(writer2.update(std::numeric_limits<std::uint32_t>::max(), createStringData("still active")));
     REQUIRE(wtxn2.commit());
@@ -196,13 +393,13 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "still active");
   }
 
-  TEST_CASE("Database::Writer - update existing record", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - update existing record", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     // Create initial record
@@ -224,13 +421,80 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "updated");
   }
 
-  TEST_CASE("Database::Writer - delete record", "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - update encoder receives exact storage once and persists bytes",
+            "[lmdb][unit][database][writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    auto setupTransaction = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(setupTransaction, "test");
+    REQUIRE(db.writer(setupTransaction).create(1, createStringData("original")));
+    REQUIRE(setupTransaction.commit());
+
+    auto updateTransaction = beginWriteTransaction(env);
+    auto writer = db.writer(updateTransaction);
+    std::int32_t encoderCalls = 0;
+    std::size_t encodedSize = 0;
+    auto const result = ReservationAccess::update(writer,
+                                                  1,
+                                                  7,
+                                                  [&](std::span<std::byte> output) noexcept
+                                                  {
+                                                    ++encoderCalls;
+                                                    encodedSize = output.size();
+                                                    std::memcpy(output.data(), "changed", output.size());
+                                                  });
+    REQUIRE(result);
+    CHECK(encoderCalls == 1);
+    CHECK(encodedSize == 7);
+    REQUIRE(updateTransaction.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const optData = db.reader(readTransaction).get(1);
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "changed");
+  }
+
+  TEST_CASE("ByteKeyDatabase::Writer - copied create and update persist bytes", "[lmdb][unit][database][writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    auto writeTransaction = beginWriteTransaction(env);
+    auto db = openByteKeyDatabase(writeTransaction, "test");
+    auto writer = db.writer(writeTransaction);
+    auto const key = createStringData("blob-key");
+    auto const result = writer.create(key, createStringData("blob-value"));
+    REQUIRE(result);
+    REQUIRE(writeTransaction.commit());
+
+    {
+      auto const readTransaction = beginReadTransaction(env);
+      auto const optData = db.reader(readTransaction).get(key);
+      REQUIRE(optData);
+      CHECK(utility::bytes::stringView(*optData) == "blob-value");
+    }
+
+    auto updateTransaction = beginWriteTransaction(env);
+    auto updateWriter = db.writer(updateTransaction);
+    auto const updateRes = updateWriter.update(key, createStringData("updated-blob"));
+    REQUIRE(updateRes);
+    REQUIRE(updateTransaction.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const optData = db.reader(readTransaction).get(key);
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "updated-blob");
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Writer - delete record", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(1, createStringData("test")));
     REQUIRE(wtxn.commit());
@@ -260,13 +524,13 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database::Writer - delete missing record returns false", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - delete missing record returns false", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE_FALSE(writer.del(123));
@@ -279,13 +543,13 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "after miss");
   }
 
-  TEST_CASE("Database::Writer - get within write transaction", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - get within write transaction", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.create(42, createStringData("answer")));
@@ -295,31 +559,32 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optDataRes) == "answer");
   }
 
-  TEST_CASE("Database::Writer - move constructor", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - move constructor", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
 
     auto writer1 = db.writer(wtxn);
     REQUIRE(writer1.create(1, createStringData("test")));
 
-    auto writer2 = Database::Writer{std::move(writer1)};
+    auto writer2 = IntegerKeyDatabase::Writer{std::move(writer1)};
     // writer1 is now in moved-from state
     // writer2 should still be usable
 
     REQUIRE(wtxn.commit());
   }
 
-  TEST_CASE("Database::Writer - create returns Conflict on duplicate id with data", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - create returns Conflict on duplicate id with data",
+            "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
     REQUIRE(writer.create(1, createStringData("first")));
@@ -340,25 +605,35 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optSecond) == "after conflict");
   }
 
-  TEST_CASE("Database::Writer - create returns Conflict on duplicate id with size", "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - duplicate create does not invoke encoder", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
-    auto const initialRes = writer.create(1, 10);
-    REQUIRE(initialRes);
-    std::memset(initialRes->data(), 'i', initialRes->size());
+    REQUIRE(writer.create(1, createStringData("initial")));
 
-    auto const result = writer.create(1, 5);
+    std::int32_t duplicateEncoderCalls = 0;
+    auto const result =
+      ReservationAccess::create(writer, 1, 5, [&](std::span<std::byte>) noexcept { ++duplicateEncoderCalls; });
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::Conflict);
-    auto const afterConflictRes = writer.create(2, 6);
+    CHECK(duplicateEncoderCalls == 0);
+
+    std::int32_t successEncoderCalls = 0;
+    auto const afterConflictRes = ReservationAccess::create(writer,
+                                                            2,
+                                                            6,
+                                                            [&](std::span<std::byte> output) noexcept
+                                                            {
+                                                              ++successEncoderCalls;
+                                                              std::memset(output.data(), 'a', output.size());
+                                                            });
     REQUIRE(afterConflictRes);
-    std::memset(afterConflictRes->data(), 'a', afterConflictRes->size());
+    CHECK(successEncoderCalls == 1);
     REQUIRE(wtxn.commit());
 
     auto const rtxn = beginReadTransaction(env);
@@ -367,7 +642,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "aaaaaa");
   }
 
-  TEST_CASE("Database::Writer - non-conflict mutation failure unwinds and rolls back its transaction",
+  TEST_CASE("IntegerKeyDatabase::Writer - non-conflict mutation failure unwinds and rolls back its transaction",
             "[lmdb][regression][database][writer]")
   {
     constexpr std::size_t kMapSize = std::size_t{64} * 1024;
@@ -376,7 +651,7 @@ namespace ao::lmdb::test
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20, .mapSize = kMapSize});
 
     auto setupTransaction = beginWriteTransaction(env);
-    auto db = openDatabase(setupTransaction, "test");
+    auto db = openIntegerKeyDatabase(setupTransaction, "test");
     auto setupWriter = db.writer(setupTransaction);
     REQUIRE(setupWriter.create(1, createStringData("persisted")));
     REQUIRE(setupTransaction.commit());
@@ -401,15 +676,20 @@ namespace ao::lmdb::test
 
       SECTION("create with reserved data")
       {
+        std::int32_t encoderCalls = 0;
+
         try
         {
-          std::ignore = writer.create(3, oversized.size());
+          std::ignore = ReservationAccess::create(
+            writer, 3, oversized.size(), [&](std::span<std::byte>) noexcept { ++encoderCalls; });
           FAIL("oversized reserved create should throw");
         }
         catch (detail::TransactionFailure const& failure)
         {
           CHECK(failure.error().code == Error::Code::IoError);
         }
+
+        CHECK(encoderCalls == 0);
       }
 
       SECTION("update with copied data")
@@ -427,15 +707,20 @@ namespace ao::lmdb::test
 
       SECTION("update with reserved data")
       {
+        std::int32_t encoderCalls = 0;
+
         try
         {
-          std::ignore = writer.update(1, oversized.size());
+          std::ignore = ReservationAccess::update(
+            writer, 1, oversized.size(), [&](std::span<std::byte>) noexcept { ++encoderCalls; });
           FAIL("oversized reserved update should throw");
         }
         catch (detail::TransactionFailure const& failure)
         {
           CHECK(failure.error().code == Error::Code::IoError);
         }
+
+        CHECK(encoderCalls == 0);
       }
     }
 
@@ -448,14 +733,14 @@ namespace ao::lmdb::test
     CHECK_FALSE(reader.get(3));
   }
 
-  TEST_CASE("Database::Writer - move assignment releases a finished cursor without closing it",
+  TEST_CASE("IntegerKeyDatabase::Writer - move assignment releases a finished cursor without closing it",
             "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto firstTransaction = beginWriteTransaction(env);
-    auto db = openDatabase(firstTransaction, "test");
+    auto db = openIntegerKeyDatabase(firstTransaction, "test");
     auto writer = db.writer(firstTransaction);
     REQUIRE(writer.create(1, createStringData("first")));
     REQUIRE(firstTransaction.commit());

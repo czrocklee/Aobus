@@ -40,7 +40,9 @@ namespace ao::library
   } // namespace
 
   // TrackStore implementation
-  TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity)
+  TrackStore::TrackStore(lmdb::IntegerKeyDatabase hotDb,
+                         lmdb::IntegerKeyDatabase coldDb,
+                         detail::LibraryIdentity const& identity)
     : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}, _identity{&identity}
   {
   }
@@ -70,7 +72,7 @@ namespace ao::library
   }
 
   // TrackStore::Reader implementation
-  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader)
+  TrackStore::Reader::Reader(lmdb::IntegerKeyDatabase::Reader hotReader, lmdb::IntegerKeyDatabase::Reader coldReader)
     : _hotReader{std::move(hotReader)}, _coldReader{std::move(coldReader)}
   {
   }
@@ -110,14 +112,24 @@ namespace ao::library
     return view;
   }
 
-  bool TrackStore::Reader::shouldUseCursorScan(std::span<TrackId const> ids, LoadMode mode) const
+  bool TrackStore::Reader::shouldUseCursorScan(std::span<TrackId const> ids, LoadMode const mode) const
   {
     if (ids.empty())
     {
       return false;
     }
 
-    auto const rowCount = entryCount(mode);
+    auto const rowCount = [&]
+    {
+      switch (mode)
+      {
+        case LoadMode::Hot: return _hotReader.entryCount();
+        case LoadMode::Cold: return _coldReader.entryCount();
+        case LoadMode::Both: return entryCount();
+      }
+
+      AO_FATAL("Unknown Track load mode");
+    }();
 
     constexpr std::size_t kCursorScanDensityDenominator = 4;
     auto const minimumDenseSelection = (rowCount / kCursorScanDensityDenominator) +
@@ -131,49 +143,40 @@ namespace ao::library
     return std::ranges::adjacent_find(ids, std::ranges::greater_equal{}) == ids.end();
   }
 
-  std::size_t TrackStore::Reader::entryCount(LoadMode const mode) const
+  std::size_t TrackStore::Reader::entryCount() const
   {
+    auto const hotCount = _hotReader.entryCount();
+    auto const coldCount = _coldReader.entryCount();
+    AO_INVARIANT(hotCount == coldCount, "Track hot/cold row counts diverged after library validation");
+    return hotCount;
+  }
+
+  TrackStore::Reader::Iterator TrackStore::Reader::begin() const
+  {
+    return beginFor(LoadMode::Both);
+  }
+
+  TrackStore::Reader::Iterator TrackStore::Reader::beginFor(LoadMode mode) const
+  {
+    using DatabaseIterator = lmdb::IntegerKeyDatabase::Reader::Iterator;
+
     switch (mode)
     {
-      case LoadMode::Hot: return _hotReader.entryCount();
-      case LoadMode::Cold: return _coldReader.entryCount();
-      case LoadMode::Both:
-      {
-        auto const hotCount = _hotReader.entryCount();
-        auto const coldCount = _coldReader.entryCount();
-        AO_INVARIANT(hotCount == coldCount);
-        return hotCount;
-      }
+      case LoadMode::Hot: return Iterator{_hotReader.begin(), DatabaseIterator{}, mode};
+      case LoadMode::Cold: return Iterator{DatabaseIterator{}, _coldReader.begin(), mode};
+      case LoadMode::Both: return Iterator{_hotReader.begin(), _coldReader.begin(), mode};
     }
 
-    return 0;
-  }
-
-  TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const
-  {
-    return Iterator{_hotReader.begin(), _coldReader.begin(), mode};
-  }
-
-  TrackStore::Reader::Iterator TrackStore::Reader::end(LoadMode mode) const
-  {
-    return Iterator{lmdb::Database::Reader::Iterator{}, lmdb::Database::Reader::Iterator{}, mode};
+    AO_FATAL("Unknown Track load mode");
   }
 
   // TrackStore::Reader::Iterator implementation
-  TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& hotIter,
-                                         lmdb::Database::Reader::Iterator&& coldIter,
+  TrackStore::Reader::Iterator::Iterator(lmdb::IntegerKeyDatabase::Reader::Iterator&& hotIter,
+                                         lmdb::IntegerKeyDatabase::Reader::Iterator&& coldIter,
                                          Reader::LoadMode mode)
     : _hotIter{std::move(hotIter)}, _coldIter{std::move(coldIter)}, _mode{mode}
   {
-    if (_mode == LoadMode::Hot)
-    {
-      _coldIter = lmdb::Database::Reader::Iterator{};
-    }
-    else if (_mode == LoadMode::Cold)
-    {
-      _hotIter = lmdb::Database::Reader::Iterator{};
-    }
-    else
+    if (_mode == LoadMode::Both)
     {
       validateBothPosition();
     }
@@ -186,7 +189,7 @@ namespace ao::library
       return;
     }
 
-    auto const end = lmdb::Database::Reader::Iterator{};
+    auto const end = lmdb::IntegerKeyDatabase::Reader::Iterator{};
     auto const hotAtEnd = _hotIter == end;
     auto const coldAtEnd = _coldIter == end;
     AO_INVARIANT(hotAtEnd == coldAtEnd);
@@ -221,7 +224,7 @@ namespace ao::library
 
   bool TrackStore::Reader::Iterator::operator==(EndSentinel /*unused*/) const
   {
-    auto const end = lmdb::Database::Reader::Iterator{};
+    auto const end = lmdb::IntegerKeyDatabase::Reader::Iterator{};
 
     if (_mode == LoadMode::Hot)
     {
@@ -270,7 +273,7 @@ namespace ao::library
     if (_mode != LoadMode::Cold)
     {
       auto const item = *_hotIter;
-      trackId = TrackId{item.first};
+      trackId = TrackId{static_cast<std::uint32_t>(item.first)};
       hotBuffer = item.second;
     }
 
@@ -280,7 +283,7 @@ namespace ao::library
 
       if (_mode == LoadMode::Cold)
       {
-        trackId = TrackId{item.first};
+        trackId = TrackId{static_cast<std::uint32_t>(item.first)};
       }
 
       coldBuffer = item.second;
@@ -293,7 +296,7 @@ namespace ao::library
   }
 
   // TrackStore::Writer implementation
-  TrackStore::Writer::Writer(lmdb::Database::Writer hotWriter, lmdb::Database::Writer coldWriter)
+  TrackStore::Writer::Writer(lmdb::IntegerKeyDatabase::Writer hotWriter, lmdb::IntegerKeyDatabase::Writer coldWriter)
     : _hotWriter{std::move(hotWriter)}, _coldWriter{std::move(coldWriter)}
   {
   }

@@ -73,6 +73,51 @@ namespace ao::library::test
       return 0;
     }
 
+    bool seedInvalidIntegerKeyDatabase(std::filesystem::path const& path)
+    {
+      auto* rawEnvironment = static_cast<MDB_env*>(nullptr);
+
+      if (::mdb_env_create(&rawEnvironment) != MDB_SUCCESS)
+      {
+        return false;
+      }
+
+      auto environmentPtr = std::unique_ptr<MDB_env, decltype(&::mdb_env_close)>{rawEnvironment, &::mdb_env_close};
+
+      if (::mdb_env_set_maxdbs(environmentPtr.get(), 8) != MDB_SUCCESS ||
+          ::mdb_env_open(environmentPtr.get(), path.string().c_str(), MDB_NOTLS, 0644) != MDB_SUCCESS)
+      {
+        return false;
+      }
+
+      auto* rawTransaction = static_cast<MDB_txn*>(nullptr);
+
+      if (::mdb_txn_begin(environmentPtr.get(), nullptr, 0, &rawTransaction) != MDB_SUCCESS)
+      {
+        return false;
+      }
+
+      auto transactionPtr = std::unique_ptr<MDB_txn, decltype(&::mdb_txn_abort)>{rawTransaction, &::mdb_txn_abort};
+      MDB_dbi database = 0;
+
+      if (::mdb_dbi_open(transactionPtr.get(), "probe", MDB_CREATE | MDB_INTEGERKEY, &database) != MDB_SUCCESS)
+      {
+        return false;
+      }
+
+      auto key = std::string{"xy"};
+      auto payload = std::string{"probe"};
+      auto nativeKey = MDB_val{.mv_size = key.size(), .mv_data = key.data()};
+      auto nativePayload = MDB_val{.mv_size = payload.size(), .mv_data = payload.data()};
+
+      if (::mdb_put(transactionPtr.get(), database, &nativeKey, &nativePayload, MDB_NOOVERWRITE) != MDB_SUCCESS)
+      {
+        return false;
+      }
+
+      return ::mdb_txn_commit(transactionPtr.release()) == MDB_SUCCESS;
+    }
+
     std::int32_t runWriterConflict(std::string_view const scratchName)
     {
       if (scratchName.empty())
@@ -584,7 +629,7 @@ namespace ao::library::test
           return 3;
         }
 
-        auto metadataRes = lmdb::Database::open(*transactionRes, "meta");
+        auto metadataRes = lmdb::IntegerKeyDatabase::open(*transactionRes, "meta");
         constexpr auto kMaximumValidRevision = std::numeric_limits<std::uint64_t>::max() - 1U;
 
         if (!metadataRes ||
@@ -623,6 +668,13 @@ namespace ao::library::test
       }
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto const invalidIntegerKey = scenario == "lmdb-invalid-integer-key";
+
+      if (invalidIntegerKey && !seedInvalidIntegerKeyDatabase(scratchPath))
+      {
+        return 3;
+      }
+
       auto environmentRes = lmdb::Environment::open(
         scratchPath.string(), lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
 
@@ -638,22 +690,8 @@ namespace ao::library::test
         return 3;
       }
 
-      if (scenario == "lmdb-nested-database-open")
-      {
-        auto childRes = lmdb::WriteTransaction::begin(*setupRes);
-
-        if (!childRes)
-        {
-          return 3;
-        }
-
-        std::ignore = lmdb::Database::open(*childRes, "nested");
-        return 3;
-      }
-
-      auto const keyKind =
-        scenario == "lmdb-invalid-integer-key" ? lmdb::Database::KeyKind::Blob : lmdb::Database::KeyKind::Integer;
-      auto databaseRes = lmdb::Database::open(*setupRes, "probe", keyKind);
+      auto databaseRes = invalidIntegerKey ? lmdb::IntegerKeyDatabase::openExisting(*setupRes, "probe")
+                                           : lmdb::IntegerKeyDatabase::open(*setupRes, "probe");
 
       if (!databaseRes)
       {
@@ -704,13 +742,9 @@ namespace ao::library::test
         return 3;
       }
 
-      if (scenario == "lmdb-invalid-integer-key")
+      if (invalidIntegerKey)
       {
-        auto writer = databaseRes->writer(*setupRes);
-
-        if (!writer.create(
-              utility::bytes::view(std::string_view{"xy"}), utility::bytes::view(std::string_view{"probe"})) ||
-            !setupRes->commit())
+        if (!setupRes->commit())
         {
           return 3;
         }
@@ -788,7 +822,7 @@ namespace ao::library::test
 
       auto firstTransactionPtr = std::make_unique<lmdb::WriteTransaction>(std::move(*firstTransactionRes));
 
-      if (!lmdb::Database::open(*firstTransactionPtr, "first"))
+      if (!lmdb::IntegerKeyDatabase::open(*firstTransactionPtr, "first"))
       {
         return 3;
       }
@@ -806,7 +840,7 @@ namespace ao::library::test
 
                                  [[maybe_unused]] auto probe =
                                    lmdb::detail::DatabaseOpenAdmissionProbe{contentionSignal};
-                                 auto databaseRes = lmdb::Database::open(*transactionRes, "second");
+                                 auto databaseRes = lmdb::IntegerKeyDatabase::open(*transactionRes, "second");
                                  return databaseRes.has_value() && transactionRes->commit().has_value();
                                });
 
@@ -965,32 +999,6 @@ namespace ao::library::test
       std::ignore = FileManifestBuilder::fromView(FileManifestView{std::span<std::byte const>{}});
     }
 
-    if (name == "list-prepared-output-size")
-    {
-      auto preparedRes = ListBuilder::makeEmpty().prepare();
-
-      if (!preparedRes)
-      {
-        return 3;
-      }
-
-      auto output = std::array<std::byte, 1>{};
-      preparedRes->writeTo(output);
-    }
-
-    if (name == "manifest-prepared-output-size")
-    {
-      auto preparedRes = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).prepare("probe.flac");
-
-      if (!preparedRes)
-      {
-        return 3;
-      }
-
-      auto output = std::array<std::byte, 1>{};
-      preparedRes->writeTo(output);
-    }
-
     if (name == "list-store-zero-update")
     {
       return runZeroListUpdate(scratchName);
@@ -1053,7 +1061,7 @@ namespace ao::library::test
 
     if (name == "lmdb-reader-moved-from" || name == "lmdb-writer-after-commit" || name == "lmdb-writer-from-finished" ||
         name == "lmdb-reader-after-write-commit" || name == "lmdb-iterator-after-write-commit" ||
-        name == "lmdb-invalid-integer-key" || name == "lmdb-nested-database-open")
+        name == "lmdb-invalid-integer-key")
     {
       return runLmdbContract(scratchName, name);
     }

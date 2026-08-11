@@ -12,13 +12,13 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Database - supports blob keys for reader and writer operations", "[lmdb][unit][database][blob]")
+  TEST_CASE("ByteKeyDatabase - supports reader and writer operations", "[lmdb][unit][database][byte-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "blobdb", Database::KeyKind::Blob);
+    auto db = openByteKeyDatabase(wtxn, "byte_database");
     auto writer = db.writer(wtxn);
 
     auto const key1 = createStringData("key1");
@@ -33,7 +33,7 @@ namespace ao::lmdb::test
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
 
-    SECTION("get works with blob keys")
+    SECTION("get works with byte keys")
     {
       auto const optRes1 = reader.get(key1);
       REQUIRE(optRes1);
@@ -44,7 +44,7 @@ namespace ao::lmdb::test
       REQUIRE(utility::bytes::stringView(*optRes2) == "value2");
     }
 
-    SECTION("Iteration works with blob keys")
+    SECTION("iteration follows byte-key order")
     {
       auto it = reader.begin();
       REQUIRE(it != reader.end());
@@ -61,7 +61,7 @@ namespace ao::lmdb::test
       REQUIRE(it == reader.end());
     }
 
-    SECTION("Writer::get works with blob keys")
+    SECTION("Writer::get works with byte keys")
     {
       auto wtxn2 = beginWriteTransaction(env);
       auto writer2 = db.writer(wtxn2);
@@ -70,7 +70,7 @@ namespace ao::lmdb::test
       REQUIRE(utility::bytes::stringView(*optRes) == "value1");
     }
 
-    SECTION("Writer::del works with blob keys")
+    SECTION("Writer::del works with byte keys")
     {
       auto wtxn2 = beginWriteTransaction(env);
       auto writer2 = db.writer(wtxn2);

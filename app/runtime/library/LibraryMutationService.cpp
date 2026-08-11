@@ -366,7 +366,7 @@ namespace ao::rt
     }
 
     auto trackReader = _library.tracks().reader(transaction);
-    auto const rowCount = trackReader.entryCount(library::TrackStore::Reader::LoadMode::Hot);
+    auto const rowCount = trackReader.entryCount();
     constexpr std::size_t kCursorScanDensityDenominator = 4;
     auto const minimumDenseSelection = (rowCount / kCursorScanDensityDenominator) +
                                        static_cast<std::size_t>(rowCount % kCursorScanDensityDenominator != 0);

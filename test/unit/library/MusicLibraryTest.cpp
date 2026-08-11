@@ -62,11 +62,17 @@ namespace ao::library::test
 
   namespace
   {
+    enum class RawKeyKind : std::uint8_t
+    {
+      Integer,
+      Byte
+    };
+
     void createLibraryMetadataHeader(std::filesystem::path const& path, std::uint32_t libraryVersion)
     {
       auto env = lmdb::test::openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = lmdb::test::beginWriteTransaction(env);
-      auto metadataDatabase = lmdb::test::openDatabase(transaction, "meta");
+      auto metadataDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "meta");
       auto header = MetadataHeader{.magic = kMetadataMagic,
                                    .libraryVersion = libraryVersion,
                                    .flags = 0,
@@ -88,7 +94,7 @@ namespace ao::library::test
     {
       auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = beginWriteTransaction(environment);
-      auto database = openDatabase(transaction, databaseName);
+      auto database = openIntegerKeyDatabase(transaction, databaseName);
       REQUIRE(database.writer(transaction).create(id, payload));
       REQUIRE(transaction.commit());
     }
@@ -98,11 +104,23 @@ namespace ao::library::test
                                 std::span<std::byte const> const key,
                                 std::span<std::byte const> const payload)
     {
-      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
-      auto transaction = beginWriteTransaction(environment);
-      auto database = openDatabase(transaction, databaseName);
-      REQUIRE(database.writer(transaction).create(key, payload));
-      REQUIRE(transaction.commit());
+      auto* rawEnvironment = static_cast<MDB_env*>(nullptr);
+      REQUIRE(::mdb_env_create(&rawEnvironment) == MDB_SUCCESS);
+      auto environmentPtr = std::unique_ptr<MDB_env, decltype(&::mdb_env_close)>{rawEnvironment, &::mdb_env_close};
+      REQUIRE(::mdb_env_set_maxdbs(environmentPtr.get(), 8) == MDB_SUCCESS);
+      REQUIRE(::mdb_env_open(environmentPtr.get(), path.string().c_str(), MDB_NOTLS, 0644) == MDB_SUCCESS);
+      auto* rawTransaction = static_cast<MDB_txn*>(nullptr);
+      REQUIRE(::mdb_txn_begin(environmentPtr.get(), nullptr, 0, &rawTransaction) == MDB_SUCCESS);
+      auto transactionPtr = std::unique_ptr<MDB_txn, decltype(&::mdb_txn_abort)>{rawTransaction, &::mdb_txn_abort};
+      MDB_dbi dbi = 0;
+      REQUIRE(::mdb_dbi_open(transactionPtr.get(), databaseName.c_str(), MDB_INTEGERKEY, &dbi) == MDB_SUCCESS);
+      auto mutableKey = std::vector<std::byte>{key.begin(), key.end()};
+      auto mutablePayload = std::vector<std::byte>{payload.begin(), payload.end()};
+      auto nativeKey = MDB_val{.mv_size = mutableKey.size(), .mv_data = mutableKey.data()};
+      auto nativePayload = MDB_val{.mv_size = mutablePayload.size(), .mv_data = mutablePayload.data()};
+      REQUIRE(::mdb_put(transactionPtr.get(), dbi, &nativeKey, &nativePayload, MDB_NOOVERWRITE) == MDB_SUCCESS);
+      auto* commitTransaction = transactionPtr.release();
+      REQUIRE(::mdb_txn_commit(commitTransaction) == MDB_SUCCESS);
     }
 
     void createRawBlobRow(std::filesystem::path const& path,
@@ -112,7 +130,7 @@ namespace ao::library::test
     {
       auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = beginWriteTransaction(environment);
-      auto database = openDatabase(transaction, databaseName, Database::KeyKind::Blob);
+      auto database = openByteKeyDatabase(transaction, databaseName);
       REQUIRE(database.writer(transaction).create(key, payload));
       REQUIRE(transaction.commit());
     }
@@ -124,7 +142,7 @@ namespace ao::library::test
     {
       auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = beginWriteTransaction(environment);
-      auto database = openDatabase(transaction, databaseName);
+      auto database = openIntegerKeyDatabase(transaction, databaseName);
       REQUIRE(database.writer(transaction).update(id, payload));
       REQUIRE(transaction.commit());
     }
@@ -138,7 +156,7 @@ namespace ao::library::test
 
     void dropNamedDatabase(std::filesystem::path const& path,
                            std::string const& databaseName,
-                           std::optional<Database::KeyKind> const optReplacementKind = std::nullopt)
+                           std::optional<RawKeyKind> const optReplacementKind = std::nullopt)
     {
       auto* rawEnvironment = static_cast<MDB_env*>(nullptr);
       REQUIRE(::mdb_env_create(&rawEnvironment) == MDB_SUCCESS);
@@ -156,7 +174,7 @@ namespace ao::library::test
       {
         std::uint32_t flags = MDB_CREATE;
 
-        if (*optReplacementKind == Database::KeyKind::Integer)
+        if (*optReplacementKind == RawKeyKind::Integer)
         {
           flags |= MDB_INTEGERKEY;
         }
@@ -172,7 +190,9 @@ namespace ao::library::test
     {
       auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = beginWriteTransaction(environment);
-      auto mainDatabase = Database::main(transaction);
+      auto mainDatabaseRes = ByteKeyDatabase::main(transaction);
+      REQUIRE(mainDatabaseRes);
+      auto mainDatabase = std::move(*mainDatabaseRes);
       REQUIRE(mainDatabase.writer(transaction).create(utility::bytes::view(key), createStringData("ordinary")));
       REQUIRE(transaction.commit());
     }
@@ -264,7 +284,7 @@ namespace ao::library::test
       {
         auto environment = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
         auto transaction = beginWriteTransaction(environment);
-        std::ignore = openDatabase(transaction, "future_extension");
+        std::ignore = openIntegerKeyDatabase(transaction, "future_extension");
         REQUIRE(transaction.commit());
       }
 
@@ -279,7 +299,7 @@ namespace ao::library::test
 
     SECTION("wrong named-database key flags")
     {
-      dropNamedDatabase(temp.path(), "resources", Database::KeyKind::Blob);
+      dropNamedDatabase(temp.path(), "resources", RawKeyKind::Byte);
       requireCorruptLibrary(temp.path());
     }
 
@@ -290,7 +310,7 @@ namespace ao::library::test
         auto library = makeTestMusicLibrary(temp.path(), temp.path());
         return library.metadataHeader();
       }();
-      dropNamedDatabase(temp.path(), "meta", Database::KeyKind::Blob);
+      dropNamedDatabase(temp.path(), "meta", RawKeyKind::Byte);
       createRawBlobRow(
         temp.path(), "meta", utility::bytes::view(kMetadataHeaderRecordId), utility::bytes::view(header));
 
@@ -333,6 +353,19 @@ namespace ao::library::test
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("future version takes precedence over current metadata key flags")
+    {
+      auto const header = MetadataHeader{.magic = kMetadataMagic, .libraryVersion = kLibraryVersion + 1};
+      createRawBlobRow(
+        temp.path(), "meta", utility::bytes::view(kMetadataHeaderRecordId), utility::bytes::view(header));
+
+      auto const result = openTestMusicLibrary(temp.path(), temp.path());
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotSupported);
+      CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
     }
 
     SECTION("old version")
@@ -383,7 +416,7 @@ namespace ao::library::test
     {
       auto environment = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = beginWriteTransaction(environment);
-      std::ignore = openDatabase(transaction, "future_extension", Database::KeyKind::Blob);
+      std::ignore = openByteKeyDatabase(transaction, "future_extension");
       REQUIRE(transaction.commit());
     }
 

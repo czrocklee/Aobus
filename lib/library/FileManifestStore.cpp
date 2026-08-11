@@ -13,9 +13,7 @@
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 
-#include <expected>
 #include <optional>
-#include <span>
 #include <string_view>
 #include <utility>
 
@@ -123,19 +121,7 @@ namespace ao::library
   Result<> FileManifestStore::Writer::put(FileManifestBuilder::Prepared const& prepared)
   {
     auto const key = detail::PaddedFileManifestKey{prepared.uri()};
-    auto bytesRes = _writer.update(key.bytes(), prepared.size());
-
-    if (!bytesRes)
-    {
-      return std::unexpected{bytesRes.error()};
-    }
-
-    prepared.writeTo(*bytesRes);
-    auto const validationRes = validateFileManifestEntry(key.bytes(), *bytesRes);
-    AO_ENSURES(validationRes,
-               "Prepared file manifest encoder produced a non-canonical entry: {}",
-               validationRes.error().message);
-    return {};
+    return _writer.update(key.bytes(), prepared.bytes());
   }
 
   bool FileManifestStore::Writer::remove(std::string_view uri)

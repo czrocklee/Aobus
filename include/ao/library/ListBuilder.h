@@ -56,9 +56,7 @@ namespace ao::library
     class Prepared final
     {
     public:
-      std::size_t size() const noexcept { return _bytes.size(); }
       std::span<std::byte const> bytes() const noexcept { return _bytes; }
-      void writeTo(std::span<std::byte> out) const noexcept;
 
     private:
       explicit Prepared(std::vector<std::byte> bytes);

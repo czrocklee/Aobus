@@ -32,7 +32,7 @@
 
 namespace ao::library
 {
-  DictionaryStore::DictionaryStore(lmdb::Database db,
+  DictionaryStore::DictionaryStore(lmdb::IntegerKeyDatabase db,
                                    lmdb::ReadTransaction const& transaction,
                                    detail::LibraryIdentity const& identity)
     : _database{std::move(db)}
@@ -307,7 +307,7 @@ namespace ao::library
 
     DictionaryStore* dictionary;
     lmdb::WriteTransaction* transaction;
-    std::optional<lmdb::Database::Writer> optWriter;
+    std::optional<lmdb::IntegerKeyDatabase::Writer> optWriter;
     std::map<std::string, DictionaryId, std::less<>> overlay;
     std::vector<Delta> delta;
     std::unique_lock<std::shared_mutex> publicationLock;

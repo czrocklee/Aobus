@@ -11,9 +11,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
 #include <string>
-#include <vector>
 
 namespace ao::library::test
 {
@@ -79,8 +77,7 @@ namespace ao::library::test
 
     uri = "mutated.flac";
     builder.trackId(TrackId{9}).fileSize(17);
-    auto bytes = std::vector<std::byte>(prepared.size());
-    prepared.writeTo(bytes);
+    auto const bytes = prepared.bytes();
     auto const view = FileManifestView{bytes};
 
     CHECK(prepared.uri() == "snapshot.flac");

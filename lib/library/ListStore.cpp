@@ -14,14 +14,14 @@
 #include <ao/lmdb/Database.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
-#include <algorithm>
+#include <cstdint>
 #include <expected>
 #include <optional>
 #include <utility>
 
 namespace ao::library
 {
-  ListStore::ListStore(lmdb::Database db, detail::LibraryIdentity const& identity)
+  ListStore::ListStore(lmdb::IntegerKeyDatabase db, detail::LibraryIdentity const& identity)
     : _database{std::move(db)}, _identity{&identity}
   {
   }
@@ -47,7 +47,7 @@ namespace ao::library
   }
 
   // Reader implementation
-  ListStore::Reader::Reader(lmdb::Database::Reader reader)
+  ListStore::Reader::Reader(lmdb::IntegerKeyDatabase::Reader reader)
     : _reader{std::move(reader)}
   {
   }
@@ -79,7 +79,7 @@ namespace ao::library
   }
 
   // Iterator implementation
-  ListStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& iter)
+  ListStore::Reader::Iterator::Iterator(lmdb::IntegerKeyDatabase::Reader::Iterator&& iter)
     : _iter{std::move(iter)}
   {
   }
@@ -98,7 +98,7 @@ namespace ao::library
   ListStore::Reader::Iterator::value_type ListStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    auto const listId = ListId{id};
+    auto const listId = ListId{static_cast<std::uint32_t>(id)};
     auto view = ListView{buffer};
 
     AO_INVARIANT(view.isValid(), "List {} record is structurally corrupt after library validation", listId);
@@ -107,25 +107,22 @@ namespace ao::library
   }
 
   // Writer implementation
-  ListStore::Writer::Writer(lmdb::Database::Writer&& writer)
+  ListStore::Writer::Writer(lmdb::IntegerKeyDatabase::Writer&& writer)
     : _writer{std::move(writer)}
   {
   }
 
   Result<ListId> ListStore::Writer::create(ListBuilder::Prepared const& prepared)
   {
-    auto idRes = _writer.append(prepared.size());
+    auto idRes = _writer.append(prepared.bytes());
 
     if (!idRes)
     {
       return std::unexpected{idRes.error()};
     }
 
-    auto const& [rawListId, bytes] = *idRes;
+    auto const rawListId = *idRes;
     AO_ENSURES(rawListId != kInvalidListId.raw(), "List key allocation produced the reserved id zero");
-    prepared.writeTo(bytes);
-    AO_ENSURES(
-      std::ranges::equal(bytes, prepared.bytes()), "Prepared List encoder did not reproduce its validated snapshot");
     return ListId{rawListId};
   }
 
@@ -133,17 +130,7 @@ namespace ao::library
   {
     AO_EXPECTS(id != kInvalidListId, "Cannot update the reserved List id zero");
 
-    auto bytesRes = _writer.update(id.raw(), prepared.size());
-
-    if (!bytesRes)
-    {
-      return std::unexpected{bytesRes.error()};
-    }
-
-    prepared.writeTo(*bytesRes);
-    AO_ENSURES(std::ranges::equal(*bytesRes, prepared.bytes()),
-               "Prepared List encoder did not reproduce its validated snapshot");
-    return {};
+    return _writer.update(id.raw(), prepared.bytes());
   }
 
   bool ListStore::Writer::remove(ListId id)

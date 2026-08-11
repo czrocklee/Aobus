@@ -15,12 +15,21 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace ao::lmdb::test
 {
+  namespace
+  {
+    template<typename Transaction>
+    concept SupportsNestedBegin = requires(Transaction& transaction) { WriteTransaction::begin(transaction); };
+
+    static_assert(!SupportsNestedBegin<WriteTransaction>);
+  } // namespace
+
   TEST_CASE("ReadTransaction - helper starts transaction", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
@@ -28,7 +37,7 @@ namespace ao::lmdb::test
 
     // First create database with write transaction
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(wtxn.commit());
 
     // Then use read transaction
@@ -54,7 +63,7 @@ namespace ao::lmdb::test
 
     // Create database with write transaction
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(wtxn.commit());
 
     // Read transaction - destructor should abort
@@ -76,7 +85,7 @@ namespace ao::lmdb::test
 
     // Create database first with write transaction
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(wtxn.commit());
 
     auto txn1 = beginReadTransaction(env);
@@ -96,7 +105,7 @@ namespace ao::lmdb::test
 
     auto txn = beginWriteTransaction(env);
     // Verify transaction is valid by using it to create a database
-    auto db = openDatabase(txn, "test");
+    auto db = openIntegerKeyDatabase(txn, "test");
     [[maybe_unused]] auto writer = db.writer(txn);
   }
 
@@ -117,7 +126,7 @@ namespace ao::lmdb::test
 
     // Create database, write data, commit
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(1, createStringData("test data")));
     CHECK(wtxn.isActive());
@@ -131,7 +140,7 @@ namespace ao::lmdb::test
     auto reader = db.reader(wtxn2);
     auto it = reader.begin();
     REQUIRE(it != reader.end());
-    REQUIRE(it->first == 1);
+    REQUIRE(static_cast<std::uint32_t>(it->first) == 1);
   }
 
   TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][unit][transaction]")
@@ -141,7 +150,7 @@ namespace ao::lmdb::test
 
     // Create database
     auto dbTxn = beginWriteTransaction(env);
-    auto db = openDatabase(dbTxn, "test");
+    auto db = openIntegerKeyDatabase(dbTxn, "test");
     REQUIRE(dbTxn.commit());
 
     // Write data without committing - transaction should abort on destruction
@@ -163,7 +172,7 @@ namespace ao::lmdb::test
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
-    auto db = openDatabase(transaction, "test");
+    auto db = openIntegerKeyDatabase(transaction, "test");
     auto writer = db.writer(transaction);
     REQUIRE(writer.create(1, createStringData("aborted")));
 
@@ -180,7 +189,7 @@ namespace ao::lmdb::test
 
     // First create the database
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(wtxn.commit());
 
     // Now test move
@@ -219,61 +228,5 @@ namespace ao::lmdb::test
       CHECK(result.standardOutput == scenarioName);
       CHECK(result.standardError.empty());
     }
-  }
-
-  // ============================================================================
-  // Nested Transaction Tests
-  // ============================================================================
-  TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][unit][nested]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    // Create parent write transaction and open database
-    auto parentTxn = beginWriteTransaction(env);
-    auto db = openDatabase(parentTxn, "test");
-
-    // Create nested write transaction
-    auto childTxn = beginWriteTransaction(parentTxn);
-    auto writer = db.writer(childTxn);
-    REQUIRE(writer.create(1, createStringData("nested data")));
-
-    // Commit child - merges to parent
-    REQUIRE(childTxn.commit());
-    // Parent should still be valid
-    REQUIRE(parentTxn.commit());
-
-    // Verify data is visible
-    auto rtxn = beginReadTransaction(env);
-    auto reader = db.reader(rtxn);
-    auto it = reader.begin();
-    REQUIRE(it != reader.end());
-    REQUIRE(it->first == 1);
-  }
-
-  TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][unit][nested]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    // Create parent transaction and open database
-    auto parentTxn = beginWriteTransaction(env);
-    auto db = openDatabase(parentTxn, "test");
-
-    // Create child transaction and write data
-    {
-      auto childTxn = beginWriteTransaction(parentTxn);
-      auto writer = db.writer(childTxn);
-      REQUIRE(writer.create(1, createStringData("child data")));
-      // Child transaction aborts on destruction without commit
-    }
-
-    // Parent commits - child data should NOT be included
-    REQUIRE(parentTxn.commit());
-
-    // Verify data is NOT visible
-    auto rtxn = beginReadTransaction(env);
-    auto reader = db.reader(rtxn);
-    REQUIRE_FALSE(reader.get(1).has_value());
   }
 } // namespace ao::lmdb::test

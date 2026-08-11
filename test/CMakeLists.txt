@@ -276,7 +276,7 @@ add_executable(ao_core_test
     unit/lmdb/DatabaseReaderTest.cpp
     unit/lmdb/DatabaseMaxKeyTest.cpp
     unit/lmdb/DatabaseWriterTest.cpp
-    unit/lmdb/DatabaseBlobKeyTest.cpp
+    unit/lmdb/DatabaseByteKeyTest.cpp
     unit/lmdb/ResultErrorTest.cpp
 
     # audio unit tests

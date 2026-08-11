@@ -17,7 +17,10 @@ struct MDB_txn;
 
 namespace ao::lmdb
 {
-  class WriteTransaction; // Forward declaration
+  namespace detail
+  {
+    class DatabaseAccess;
+  }
 
   // Read-only transaction
   class [[nodiscard]] ReadTransaction
@@ -54,7 +57,7 @@ namespace ao::lmdb
     {
     }
 
-    static Result<TxnPtr> create(MDB_env* env, MDB_txn* parent, std::uint32_t flags);
+    static Result<TxnPtr> create(MDB_env* env, std::uint32_t flags);
 
     MDB_txn* handle() const noexcept { return _txnPtr.get(); }
     MDB_txn* releaseHandle() noexcept { return _txnPtr.release(); }
@@ -62,7 +65,7 @@ namespace ao::lmdb
   private:
     TxnPtr _txnPtr;
     ReadFailureMode _failureMode = ReadFailureMode::Fatal;
-    friend class Database;
+    friend class detail::DatabaseAccess;
   };
 
   // Read-write transaction (inherits from ReadTransaction for read capabilities)
@@ -70,7 +73,6 @@ namespace ao::lmdb
   {
   public:
     static Result<WriteTransaction> begin(Environment& env);
-    static Result<WriteTransaction> begin(WriteTransaction& parent);
 
     WriteTransaction(WriteTransaction const&) = delete;
     WriteTransaction& operator=(WriteTransaction const&) = delete;
@@ -88,16 +90,15 @@ namespace ao::lmdb
     bool isFinished() const noexcept { return !isActive(); }
 
   private:
-    explicit WriteTransaction(TxnPtr txnPtr, bool isNested)
-      : ReadTransaction{std::move(txnPtr), ReadFailureMode::Transaction}, _isNested{isNested}
+    explicit WriteTransaction(TxnPtr txnPtr)
+      : ReadTransaction{std::move(txnPtr), ReadFailureMode::Transaction}
     {
     }
 
     void acquireDatabaseOpenAdmission();
 
     std::unique_lock<std::mutex> _databaseOpenLock;
-    bool _isNested = false;
 
-    friend class Database;
+    friend class detail::DatabaseAccess;
   };
 } // namespace ao::lmdb

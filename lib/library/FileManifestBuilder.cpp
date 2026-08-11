@@ -14,7 +14,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <expected>
 #include <span>
 #include <string_view>
@@ -81,12 +80,6 @@ namespace ao::library
   FileManifestBuilder::Prepared::Prepared(LibraryUri uri, FileManifestHeader header)
     : _uri{std::move(uri)}, _header{header}
   {
-  }
-
-  void FileManifestBuilder::Prepared::writeTo(std::span<std::byte> out) const noexcept
-  {
-    AO_EXPECTS(out.size() == sizeof(_header), "Prepared file manifest output size does not match its snapshot");
-    std::memcpy(out.data(), bytes().data(), bytes().size());
   }
 
   Result<FileManifestBuilder::Prepared> FileManifestBuilder::prepare(std::string_view uri) const

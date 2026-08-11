@@ -12,6 +12,7 @@
 #include "TrackRecordValidation.h"
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
+#include "lmdb/detail/UnvalidatedDatabase.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
@@ -58,8 +59,7 @@ namespace ao::library
   {
     // LMDB configuration constants
     constexpr std::size_t kLmdbMapSize = std::size_t{1} * 1024 * 1024 * 1024; // 1 GB
-    constexpr std::uint32_t kLmdbMaxDatabases =
-      8; // tracks_hot, tracks_cold, lists, resources, dictionary, meta (+ spare)
+    constexpr std::uint32_t kLmdbMaxDatabases = 8;                            // Seven named stores plus one spare.
     constexpr std::uint32_t kLmdbFileMode = 0664;
     constexpr std::size_t kLibraryIdBytes = 16;
 
@@ -114,19 +114,19 @@ namespace ao::library
 
     struct SchemaDatabases final
     {
-      lmdb::Database metadata;
-      lmdb::Database tracksHot;
-      lmdb::Database tracksCold;
-      lmdb::Database lists;
-      lmdb::Database resources;
-      lmdb::Database dictionary;
-      lmdb::Database manifest;
+      lmdb::IntegerKeyDatabase metadata;
+      lmdb::IntegerKeyDatabase tracksHot;
+      lmdb::IntegerKeyDatabase tracksCold;
+      lmdb::IntegerKeyDatabase lists;
+      lmdb::IntegerKeyDatabase resources;
+      lmdb::IntegerKeyDatabase dictionary;
+      lmdb::ByteKeyDatabase manifest;
     };
 
-    Result<std::span<std::byte const>> loadMetadataHeaderBytes(lmdb::Database const& database,
+    Result<std::span<std::byte const>> loadMetadataHeaderBytes(lmdb::detail::UnvalidatedDatabase const& database,
                                                                lmdb::ReadTransaction const& transaction)
     {
-      auto const optBytes = database.reader(transaction).get(kMetadataHeaderRecordId);
+      auto const optBytes = database.getRaw(transaction, utility::bytes::view(kMetadataHeaderRecordId));
 
       if (!optBytes)
       {
@@ -179,17 +179,18 @@ namespace ao::library
       return header;
     }
 
-    bool catalogKeyEquals(lmdb::Database::Reader::KeyView const key, std::string_view const expected) noexcept
+    bool catalogKeyEquals(std::span<std::byte const> const key, std::string_view const expected) noexcept
     {
       return key.size() == expected.size() && std::ranges::equal(key, std::as_bytes(std::span{expected}));
     }
 
-    bool catalogIsEmpty(lmdb::Database const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    bool catalogIsEmpty(lmdb::ByteKeyDatabase const& mainDatabase, lmdb::WriteTransaction const& transaction)
     {
       return mainDatabase.reader(transaction).entryCount() == 0;
     }
 
-    Result<> requireMetadataCatalogEntry(lmdb::Database const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    Result<> requireMetadataCatalogEntry(lmdb::ByteKeyDatabase const& mainDatabase,
+                                         lmdb::WriteTransaction const& transaction)
     {
       for (auto const& [key, value] : mainDatabase.reader(transaction))
       {
@@ -204,7 +205,8 @@ namespace ao::library
       return makeError(Error::Code::CorruptData, "Nonempty library environment has no meta database");
     }
 
-    Result<> validateCurrentCatalog(lmdb::Database const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    Result<> validateCurrentCatalog(lmdb::ByteKeyDatabase const& mainDatabase,
+                                    lmdb::WriteTransaction const& transaction)
     {
       auto seen = std::array<bool, kCurrentDatabaseNames.size()>{};
       std::size_t count = 0;
@@ -239,38 +241,63 @@ namespace ao::library
       return {};
     }
 
-    Result<lmdb::Database> openSchemaDatabase(lmdb::WriteTransaction& transaction,
-                                              bool const create,
-                                              std::string const& name,
-                                              lmdb::Database::KeyKind const kind)
+    Result<lmdb::IntegerKeyDatabase> openIntegerKeySchemaDatabase(lmdb::WriteTransaction& transaction,
+                                                                  bool const create,
+                                                                  std::string const& name)
     {
       detail::recordOpenValidationNamedDatabaseOpen();
-      return create ? lmdb::Database::open(transaction, name, kind)
-                    : lmdb::Database::openExisting(transaction, name, kind);
+      return create ? lmdb::IntegerKeyDatabase::open(transaction, name)
+                    : lmdb::IntegerKeyDatabase::openExisting(transaction, name);
+    }
+
+    Result<lmdb::ByteKeyDatabase> openByteKeySchemaDatabase(lmdb::WriteTransaction& transaction,
+                                                            bool const create,
+                                                            std::string const& name)
+    {
+      detail::recordOpenValidationNamedDatabaseOpen();
+      return create ? lmdb::ByteKeyDatabase::open(transaction, name)
+                    : lmdb::ByteKeyDatabase::openExisting(transaction, name);
     }
 
     Result<SchemaDatabases> openSchemaWithMetadata(lmdb::WriteTransaction& transaction,
                                                    bool const create,
-                                                   lmdb::Database metadata)
+                                                   lmdb::IntegerKeyDatabase metadata)
     {
-      if (auto validationRes = metadata.validateExactKeyKind("meta", lmdb::Database::KeyKind::Integer); !validationRes)
+      auto tracksHotRes = openIntegerKeySchemaDatabase(transaction, create, "tracks_hot");
+      auto tracksColdRes = openIntegerKeySchemaDatabase(transaction, create, "tracks_cold");
+      auto listsRes = openIntegerKeySchemaDatabase(transaction, create, "lists");
+      auto resourcesRes = openIntegerKeySchemaDatabase(transaction, create, "resources");
+      auto dictionaryRes = openIntegerKeySchemaDatabase(transaction, create, "dictionary");
+      auto manifestRes = openByteKeySchemaDatabase(transaction, create, "file_manifest");
+
+      if (!tracksHotRes)
       {
-        return std::unexpected{validationRes.error()};
+        return std::unexpected{tracksHotRes.error()};
       }
 
-      auto tracksHotRes = openSchemaDatabase(transaction, create, "tracks_hot", lmdb::Database::KeyKind::Integer);
-      auto tracksColdRes = openSchemaDatabase(transaction, create, "tracks_cold", lmdb::Database::KeyKind::Integer);
-      auto listsRes = openSchemaDatabase(transaction, create, "lists", lmdb::Database::KeyKind::Integer);
-      auto resourcesRes = openSchemaDatabase(transaction, create, "resources", lmdb::Database::KeyKind::Integer);
-      auto dictionaryRes = openSchemaDatabase(transaction, create, "dictionary", lmdb::Database::KeyKind::Integer);
-      auto manifestRes = openSchemaDatabase(transaction, create, "file_manifest", lmdb::Database::KeyKind::Blob);
-
-      for (auto const* result : {&tracksHotRes, &tracksColdRes, &listsRes, &resourcesRes, &dictionaryRes, &manifestRes})
+      if (!tracksColdRes)
       {
-        if (!*result)
-        {
-          return std::unexpected{result->error()};
-        }
+        return std::unexpected{tracksColdRes.error()};
+      }
+
+      if (!listsRes)
+      {
+        return std::unexpected{listsRes.error()};
+      }
+
+      if (!resourcesRes)
+      {
+        return std::unexpected{resourcesRes.error()};
+      }
+
+      if (!dictionaryRes)
+      {
+        return std::unexpected{dictionaryRes.error()};
+      }
+
+      if (!manifestRes)
+      {
+        return std::unexpected{manifestRes.error()};
       }
 
       return SchemaDatabases{.metadata = std::move(metadata),
@@ -284,7 +311,7 @@ namespace ao::library
 
     Result<SchemaDatabases> openSchema(lmdb::WriteTransaction& transaction, bool const create)
     {
-      auto metadataRes = openSchemaDatabase(transaction, create, "meta", lmdb::Database::KeyKind::Integer);
+      auto metadataRes = openIntegerKeySchemaDatabase(transaction, create, "meta");
 
       if (!metadataRes)
       {
@@ -301,7 +328,7 @@ namespace ao::library
       SchemaDatabases databases;
     };
 
-    Result<std::uint64_t> validateMetadataDatabase(lmdb::Database const& database,
+    Result<std::uint64_t> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
                                                    lmdb::ReadTransaction const& transaction);
 
     Result<AdmittedSchema> createFreshSchema(lmdb::WriteTransaction& transaction)
@@ -331,7 +358,8 @@ namespace ao::library
       return AdmittedSchema{.header = *headerRes, .revision = 0, .databases = std::move(*schemaRes)};
     }
 
-    Result<AdmittedSchema> admitCurrentSchema(lmdb::Database const& mainDatabase, lmdb::WriteTransaction& transaction)
+    Result<AdmittedSchema> admitCurrentSchema(lmdb::ByteKeyDatabase const& mainDatabase,
+                                              lmdb::WriteTransaction& transaction)
     {
       if (auto metadataEntryRes = requireMetadataCatalogEntry(mainDatabase, transaction); !metadataEntryRes)
       {
@@ -339,7 +367,7 @@ namespace ao::library
       }
 
       detail::recordOpenValidationNamedDatabaseOpen();
-      auto rawMetadataRes = lmdb::Database::openExisting(transaction, "meta");
+      auto rawMetadataRes = lmdb::detail::UnvalidatedDatabase::openExisting(transaction, "meta");
 
       if (!rawMetadataRes)
       {
@@ -379,7 +407,14 @@ namespace ao::library
         return std::unexpected{headerRes.error()};
       }
 
-      auto schemaRes = openSchemaWithMetadata(transaction, false, std::move(*rawMetadataRes));
+      auto metadataRes = std::move(*rawMetadataRes).intoIntegerKey("meta");
+
+      if (!metadataRes)
+      {
+        return std::unexpected{metadataRes.error()};
+      }
+
+      auto schemaRes = openSchemaWithMetadata(transaction, false, std::move(*metadataRes));
 
       if (!schemaRes)
       {
@@ -396,7 +431,8 @@ namespace ao::library
       return AdmittedSchema{.header = *headerRes, .revision = *revisionRes, .databases = std::move(*schemaRes)};
     }
 
-    Result<std::uint32_t> decodePersistedId(lmdb::Database::Reader::KeyView const key, std::string_view const database)
+    Result<std::uint32_t> decodePersistedId(lmdb::IntegerKeyDatabase::Reader::KeyView const key,
+                                            std::string_view const database)
     {
       if (key.size() != sizeof(std::uint32_t))
       {
@@ -409,7 +445,7 @@ namespace ao::library
       return value;
     }
 
-    Result<std::uint64_t> validateMetadataDatabase(lmdb::Database const& database,
+    Result<std::uint64_t> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
                                                    lmdb::ReadTransaction const& transaction)
     {
       auto const reader = database.reader(transaction);
@@ -466,7 +502,8 @@ namespace ao::library
       return revision;
     }
 
-    Result<> validateResourceDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    Result<> validateResourceDatabase(lmdb::IntegerKeyDatabase const& database,
+                                      lmdb::ReadTransaction const& transaction)
     {
       for (auto const& [key, payload] : database.reader(transaction))
       {
@@ -491,7 +528,7 @@ namespace ao::library
       return {};
     }
 
-    Result<> validateManifestDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    Result<> validateManifestDatabase(lmdb::ByteKeyDatabase const& database, lmdb::ReadTransaction const& transaction)
     {
       auto const reader = database.reader(transaction);
 
@@ -506,10 +543,10 @@ namespace ao::library
       return {};
     }
 
-    Result<> validateTrackDatabases(lmdb::Database const& hotDatabase,
-                                    lmdb::Database const& coldDatabase,
-                                    lmdb::Database const& resourceDatabase,
-                                    lmdb::Database const& manifestDatabase,
+    Result<> validateTrackDatabases(lmdb::IntegerKeyDatabase const& hotDatabase,
+                                    lmdb::IntegerKeyDatabase const& coldDatabase,
+                                    lmdb::IntegerKeyDatabase const& resourceDatabase,
+                                    lmdb::ByteKeyDatabase const& manifestDatabase,
                                     lmdb::ReadTransaction const& transaction,
                                     std::size_t const dictionarySize)
     {
@@ -604,7 +641,7 @@ namespace ao::library
       return {};
     }
 
-    Result<> validateListDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    Result<> validateListDatabase(lmdb::IntegerKeyDatabase const& database, lmdb::ReadTransaction const& transaction)
     {
       auto const reader = database.reader(transaction);
       enum class Color : std::uint8_t
@@ -720,13 +757,13 @@ namespace ao::library
          lmdb::WriteTransaction initializationTransaction,
          MetadataHeader metadataHeader,
          std::uint64_t committedRevision,
-         lmdb::Database metadataDb,
-         lmdb::Database tracksHotDb,
-         lmdb::Database tracksColdDb,
-         lmdb::Database listsDb,
-         lmdb::Database resourcesDb,
-         lmdb::Database dictionaryDb,
-         lmdb::Database manifestDb)
+         lmdb::IntegerKeyDatabase metadataDb,
+         lmdb::IntegerKeyDatabase tracksHotDb,
+         lmdb::IntegerKeyDatabase tracksColdDb,
+         lmdb::IntegerKeyDatabase listsDb,
+         lmdb::IntegerKeyDatabase resourcesDb,
+         lmdb::IntegerKeyDatabase dictionaryDb,
+         lmdb::ByteKeyDatabase manifestDb)
       : musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , env{std::move(env)}
@@ -769,7 +806,14 @@ namespace ao::library
         return std::unexpected{initializationTransactionRes.error()};
       }
 
-      auto const mainDatabase = lmdb::Database::main(*initializationTransactionRes);
+      auto mainDatabaseRes = lmdb::ByteKeyDatabase::main(*initializationTransactionRes);
+
+      if (!mainDatabaseRes)
+      {
+        return std::unexpected{std::move(mainDatabaseRes.error())};
+      }
+
+      auto const mainDatabase = std::move(*mainDatabaseRes);
       auto const catalogEmpty = catalogIsEmpty(mainDatabase, *initializationTransactionRes);
       auto admittedSchemaRes = catalogEmpty ? createFreshSchema(*initializationTransactionRes)
                                             : admitCurrentSchema(mainDatabase, *initializationTransactionRes);

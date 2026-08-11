@@ -100,7 +100,7 @@ namespace ao::rt
 
         // Pagination relies on the manifest reader yielding URIs in strictly
         // increasing lexicographic byte order (LMDB's default memcmp
-        // comparator for blob keys); a custom comparator would break it.
+        // comparator for byte keys); a custom comparator would break it.
         if (optAfterUri && uri <= *optAfterUri)
         {
           continue;

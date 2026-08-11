@@ -358,7 +358,7 @@ namespace ao::cli
       auto stats = LibraryStats{};
       {
         auto const transaction = ml.readTransaction();
-        stats.tracks = ml.tracks().reader(transaction).entryCount(library::TrackStore::Reader::LoadMode::Hot);
+        stats.tracks = ml.tracks().reader(transaction).entryCount();
 
         for ([[maybe_unused]] auto const& entry : ml.lists().reader(transaction))
         {

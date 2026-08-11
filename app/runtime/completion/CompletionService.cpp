@@ -254,7 +254,7 @@ namespace ao::rt
 
     auto const reader = _library.tracks().reader(transaction);
 
-    for (auto const& [_, view] : reader.both())
+    for (auto const& [_, view] : reader)
     {
       if (!view.isHotValid() || !view.isColdValid())
       {

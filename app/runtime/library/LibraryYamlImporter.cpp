@@ -1077,7 +1077,7 @@ namespace ao::rt
 
     if (val.payloadMode != ExportMode::ListOnly)
     {
-      rep.tracksDeleted = ml.tracks().reader(readTransaction).entryCount(library::TrackStore::Reader::LoadMode::Hot);
+      rep.tracksDeleted = ml.tracks().reader(readTransaction).entryCount();
     }
 
     for ([[maybe_unused]] auto const& row : ml.lists().reader(readTransaction))

@@ -38,8 +38,8 @@ It deliberately cannot preserve earlier root work after one already-mutated item
 A batch that is specified to skip an item and continue must therefore complete every recoverable item check before staging, or abort the entire batch.
 Several lower helpers still use short-range transaction markers internally, but their current library-owned boundaries contain them; root containment does not by itself normalize every helper signature or enable item-local recovery.
 
-The core LMDB adapter already supports a native child write transaction through `lmdb::WriteTransaction::begin(parent)` and tests child commit and abort in [`TransactionTest.cpp`](../../test/unit/lmdb/TransactionTest.cpp).
-The library layer deliberately does not expose that capability today.
+The core LMDB adapter intentionally exposes only top-level write transactions today.
+This proposal would introduce native child handles as a source-private mechanism owned exclusively by a callback-scoped library savepoint boundary, rather than restoring a freely managed low-level child transaction API.
 Its root write wrapper owns one dictionary overlay, one native writer, one process writer gate, and one publication sequence, while the current specifications explicitly prohibit nested library transactions as item savepoints.
 
 Naively adding a child `library::WriteTransaction` would not solve the problem.
@@ -141,7 +141,7 @@ The following constraints apply:
 - Root abort discards the complete chain.
 
 The implementation uses “writer” consistently for two different concepts.
-The root chain owns one logical writer authority, while store-specific `Database::Writer` values are cursor wrappers bound to the current active leaf.
+The root chain owns one logical writer authority, while store-specific typed LMDB database writers are cursor wrappers bound to the current active leaf.
 Several Track, List, Manifest, Resource, Metadata, and Dictionary cursor wrappers may exist inside one leaf, but they confer no additional writer authority and cannot cross a savepoint transition as usable handles.
 
 ### Implemented root-operation prerequisite
@@ -168,7 +168,7 @@ The only supported child entry point is stack-scoped callback execution through 
 
 ```cpp
 auto itemResult = root.withSavepoint(
-  [&](library::WriteContext& child) -> Result<ItemChange>
+  [&](library::LibraryWrite& child) -> Result<ItemChange>
   {
     auto trackWriter = child.tracks();
     auto manifestWriter = child.manifest();
@@ -337,7 +337,7 @@ The library wrapper adds an active-leaf epoch or equivalent identity check that 
 
 Each store writer records the leaf identity or epoch under which it was created.
 Entering or leaving a child advances that identity.
-A writer created before the transition fails before any native call and must be reacquired from the resumed `WriteContext`.
+A writer created before the transition fails before any native call and must be reacquired from the resumed `LibraryWrite`.
 The same rule applies to transaction-bound readers and views: they are not dereferenced across a savepoint transition.
 
 The callback API limits the normal lifetime of child writers to the callback body.
@@ -366,7 +366,7 @@ A late recoverable error is safe because it returns to an owner that aborts the 
 
 ```cpp
 Result<ValidatedTrackPreparation> TrackBuilder::preflight() const;
-Result<PreparedTrack> ValidatedTrackPreparation::stage(WriteContext& context) const;
+Result<PreparedTrack> ValidatedTrackPreparation::stage(LibraryWrite& context) const;
 ```
 
 The exact type shape remains an implementation decision, but one `Result`-returning prepare function must not require callers to know that some recoverable errors instead throw after interning begins.
@@ -476,13 +476,14 @@ Runtime and CLI code consume `Result` at operation boundaries.
 
 Existing command success, no-op, preview, stale, unavailable, and failure semantics remain unchanged unless an owning subsystem specification explicitly adopts a new item-continuation policy.
 Existing post-commit infrastructure termination behavior remains unchanged.
+The removed low-level `WriteTransaction::begin(parent)` surface has no compatibility wrapper; native child construction is introduced only together with the active-leaf owner described by this RFC.
 
 ### Incremental implementation
 
 Root-owner containment is an implemented prerequisite rather than a remaining RFC phase.
 The remaining implementation proceeds in reversible phases.
 
-1. Add an explicit root `WriteSession`, active-leaf identity, parent suspension, and callback-scoped child execution around the already-supported native LMDB child transaction.
+1. Add an explicit root `WriteSession`, active-leaf identity, parent suspension, and callback-scoped child execution together with a source-private native LMDB child mechanism.
 2. Split committed Dictionary state from the root-owned `DictionaryWriteSession`, replace child-local allocation with the chain journal and checkpoints, and preserve root-only publication.
 3. Add cursor/epoch rejection and reacquisition across child transitions for every store writer and transaction-bound reader surface.
 4. Enable savepoints in one batch path whose existing semantics already distinguish item-local failure, initially the scan apply path or an isolated test operation.
@@ -596,6 +597,6 @@ If accepted and implemented, this RFC updates the following current authorities:
 
 Acceptance also creates a decision record for the durable rationale behind nested savepoints and the chain-wide Dictionary journal, including rejection of gapped IDs, content-derived IDs, a persistent reverse index, and child-overlay adoption.
 
-Implementation and test maps in the promoted documents will link the final `WriteTransaction`, `WriteContext`, `DictionaryWriteSession`, `LibraryMutationService`, LMDB transaction, and focused test symbols.
+Implementation and test maps in the promoted documents will link the final `WriteTransaction`, `LibraryWrite`, `DictionaryWriteSession`, `LibraryMutationService`, LMDB transaction, and focused test symbols.
 No user guide is expected because the proposal changes no user task or visible command surface.
 After implementation or rejection, every retained fact and inbound link moves to its authoritative current document or decision record, the RFC index is updated, and this RFC is deleted.

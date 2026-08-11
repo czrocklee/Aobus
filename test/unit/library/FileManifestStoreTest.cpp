@@ -33,7 +33,6 @@ namespace ao::library::test
       requires(Writer& writer) { writer.put(std::string_view{}, std::span<std::byte const>{}); };
 
     static_assert(!HasRawManifestPut<FileManifestStore::Writer>);
-    static_assert(noexcept(std::declval<FileManifestBuilder::Prepared const&>().writeTo(std::span<std::byte>{})));
   } // namespace
 
   TEST_CASE("FileManifestStore - writes and reads back manifests", "[library][unit][manifest]")

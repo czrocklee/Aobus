@@ -38,7 +38,7 @@ namespace ao::library::test
     {
       auto env = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 20});
       auto wtxn = beginWriteTransaction(env);
-      auto db = openDatabase(wtxn, "meta");
+      auto db = openIntegerKeyDatabase(wtxn, "meta");
       // Seed an invalid physical record; public reads still enter through MusicLibrary.
       auto writer = db.writer(wtxn);
       auto invalidData = std::vector{std::byte{0x42}};

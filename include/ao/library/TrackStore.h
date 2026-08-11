@@ -52,10 +52,12 @@ namespace ao::library
 
   private:
     Writer writer(WriteTransaction& transaction) const;
-    TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity);
+    TrackStore(lmdb::IntegerKeyDatabase hotDb,
+               lmdb::IntegerKeyDatabase coldDb,
+               detail::LibraryIdentity const& identity);
 
-    lmdb::Database _hotDb;
-    lmdb::Database _coldDb;
+    lmdb::IntegerKeyDatabase _hotDb;
+    lmdb::IntegerKeyDatabase _coldDb;
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
@@ -85,8 +87,8 @@ namespace ao::library
     struct EndSentinel
     {};
 
-    Iterator begin(LoadMode mode = LoadMode::Both) const;
-    Iterator end(LoadMode mode = LoadMode::Both) const;
+    Iterator begin() const;
+    EndSentinel end() const { return {}; }
 
     /**
      * Get a track by ID.
@@ -99,8 +101,8 @@ namespace ao::library
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
-    /** Number of rows visible for the selected load mode. */
-    std::size_t entryCount(LoadMode mode = LoadMode::Both) const;
+    /** Number of complete Track rows visible in this snapshot. */
+    std::size_t entryCount() const;
 
     /**
      * Visit tracks selected by ID, preserving the requested order.
@@ -119,15 +121,15 @@ namespace ao::library
 
     auto hot() const;
     auto cold() const;
-    auto both() const;
 
   private:
-    explicit Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
+    explicit Reader(lmdb::IntegerKeyDatabase::Reader hotReader, lmdb::IntegerKeyDatabase::Reader coldReader);
 
+    Iterator beginFor(LoadMode mode) const;
     bool shouldUseCursorScan(std::span<TrackId const> ids, LoadMode mode) const;
 
-    lmdb::Database::Reader _hotReader;
-    lmdb::Database::Reader _coldReader;
+    lmdb::IntegerKeyDatabase::Reader _hotReader;
+    lmdb::IntegerKeyDatabase::Reader _coldReader;
     friend class TrackStore;
   };
 
@@ -156,31 +158,26 @@ namespace ao::library
     value_type operator*() const;
 
   private:
-    Iterator(lmdb::Database::Reader::Iterator&& hotIter,
-             lmdb::Database::Reader::Iterator&& coldIter,
+    Iterator(lmdb::IntegerKeyDatabase::Reader::Iterator&& hotIter,
+             lmdb::IntegerKeyDatabase::Reader::Iterator&& coldIter,
              Reader::LoadMode mode);
 
     void validateBothPosition() const;
 
-    lmdb::Database::Reader::Iterator _hotIter;
-    lmdb::Database::Reader::Iterator _coldIter;
+    lmdb::IntegerKeyDatabase::Reader::Iterator _hotIter;
+    lmdb::IntegerKeyDatabase::Reader::Iterator _coldIter;
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };
 
   inline auto TrackStore::Reader::hot() const
   {
-    return std::ranges::subrange{begin(LoadMode::Hot), EndSentinel{}};
+    return std::ranges::subrange{beginFor(LoadMode::Hot), EndSentinel{}};
   }
 
   inline auto TrackStore::Reader::cold() const
   {
-    return std::ranges::subrange{begin(LoadMode::Cold), EndSentinel{}};
-  }
-
-  inline auto TrackStore::Reader::both() const
-  {
-    return std::ranges::subrange{begin(LoadMode::Both), EndSentinel{}};
+    return std::ranges::subrange{beginFor(LoadMode::Cold), EndSentinel{}};
   }
 
   template<typename Visitor>
@@ -202,7 +199,7 @@ namespace ao::library
 
     auto requested = ids.begin();
 
-    for (auto iterator = begin(mode); iterator != EndSentinel{} && requested != ids.end(); ++iterator)
+    for (auto iterator = beginFor(mode); iterator != EndSentinel{} && requested != ids.end(); ++iterator)
     {
       auto&& [storedId, view] = *iterator;
 
@@ -255,10 +252,10 @@ namespace ao::library
     Result<> clear();
 
   private:
-    Writer(lmdb::Database::Writer hotWriter, lmdb::Database::Writer coldWriter);
+    Writer(lmdb::IntegerKeyDatabase::Writer hotWriter, lmdb::IntegerKeyDatabase::Writer coldWriter);
 
-    lmdb::Database::Writer _hotWriter;
-    lmdb::Database::Writer _coldWriter;
+    lmdb::IntegerKeyDatabase::Writer _hotWriter;
+    lmdb::IntegerKeyDatabase::Writer _coldWriter;
 
     friend class TrackStore;
     friend class detail::TrackWriteAccess;

@@ -10,17 +10,39 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <span>
 #include <utility>
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Database::Reader::Iterator - reaches end as normal state", "[lmdb][unit][database][reader]")
+  namespace
+  {
+    template<typename Reader>
+    concept HasIntegerGet = requires(Reader const& reader) { reader.get(std::uint32_t{1}); };
+
+    template<typename Reader>
+    concept HasByteGet = requires(Reader const& reader) { reader.get(std::span<std::byte const>{}); };
+
+    template<typename Reader>
+    concept HasMaxKey = requires(Reader const& reader) { reader.maxKey(); };
+
+    static_assert(HasIntegerGet<IntegerKeyDatabase::Reader>);
+    static_assert(!HasByteGet<IntegerKeyDatabase::Reader>);
+    static_assert(HasMaxKey<IntegerKeyDatabase::Reader>);
+    static_assert(!HasIntegerGet<ByteKeyDatabase::Reader>);
+    static_assert(HasByteGet<ByteKeyDatabase::Reader>);
+    static_assert(!HasMaxKey<ByteKeyDatabase::Reader>);
+  } // namespace
+
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - reaches end as normal state", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(1, createStringData("one")));
     REQUIRE(writer.create(2, createStringData("two")));
@@ -31,23 +53,23 @@ namespace ao::lmdb::test
 
     auto it = reader.begin();
     REQUIRE(it != reader.end());
-    REQUIRE(it->first == 1);
+    REQUIRE(static_cast<std::uint32_t>(it->first) == 1);
 
     REQUIRE_NOTHROW(++it);
     REQUIRE(it != reader.end());
-    REQUIRE(it->first == 2);
+    REQUIRE(static_cast<std::uint32_t>(it->first) == 2);
 
     REQUIRE_NOTHROW(++it);
     CHECK(it == reader.end());
   }
 
-  TEST_CASE("Database::Reader - iterates no records for empty databases", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader - iterates no records for empty databases", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(wtxn.commit());
 
     auto const rtxn = beginReadTransaction(env);
@@ -55,13 +77,13 @@ namespace ao::lmdb::test
     CHECK(reader.begin() == reader.end());
   }
 
-  TEST_CASE("Database::Reader - get returns records by integer key", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader - get returns records by integer key", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(42, createStringData("answer")));
     REQUIRE(wtxn.commit());
@@ -83,14 +105,14 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database::Reader - entryCount reports visible row cardinality",
+  TEST_CASE("IntegerKeyDatabase::Reader - entryCount reports visible row cardinality",
             "[lmdb][unit][database-reader][entry-count]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
 
     SECTION("empty database")
     {
@@ -129,19 +151,19 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database::Reader::Iterator - default constructor", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - default constructor", "[lmdb][unit][database][reader]")
   {
-    auto const it = Database::Reader::Iterator{};
-    CHECK(it == Database::Reader::Iterator{});
+    auto const it = IntegerKeyDatabase::Reader::Iterator{};
+    CHECK(it == IntegerKeyDatabase::Reader::Iterator{});
   }
 
-  TEST_CASE("Database::Reader::Iterator - compares equal to itself", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - compares equal to itself", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(db.writer(wtxn).create(1, createStringData("data")));
     REQUIRE(wtxn.commit());
 
@@ -154,13 +176,13 @@ namespace ao::lmdb::test
     REQUIRE(it1 == it2);
   }
 
-  TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - move constructor", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     REQUIRE(db.writer(wtxn).create(1, createStringData("data")));
     REQUIRE(wtxn.commit());
 
@@ -168,19 +190,19 @@ namespace ao::lmdb::test
     auto const reader = db.reader(rtxn);
 
     auto it1 = reader.begin();
-    auto const it2 = Database::Reader::Iterator{std::move(it1)};
+    auto const it2 = IntegerKeyDatabase::Reader::Iterator{std::move(it1)};
     REQUIRE(it2 != reader.end());
-    CHECK(it2->first == 1);
+    CHECK(static_cast<std::uint32_t>(it2->first) == 1);
     CHECK(utility::bytes::stringView(it2->second) == "data");
   }
 
-  TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - dereference", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "test");
+    auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(100, createStringData("value")));
     REQUIRE(wtxn.commit());

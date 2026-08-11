@@ -39,12 +39,12 @@ namespace ao::library
 
   private:
     Writer writer(WriteTransaction& transaction) const;
-    ResourceStore(lmdb::Database db, detail::LibraryIdentity const& identity)
+    ResourceStore(lmdb::IntegerKeyDatabase db, detail::LibraryIdentity const& identity)
       : _database{std::move(db)}, _identity{&identity}
     {
     }
 
-    lmdb::Database _database;
+    lmdb::IntegerKeyDatabase _database;
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
@@ -70,12 +70,12 @@ namespace ao::library
     ResourceId maxKey() const { return ResourceId{_reader.maxKey()}; }
 
   private:
-    explicit Reader(lmdb::Database::Reader reader)
+    explicit Reader(lmdb::IntegerKeyDatabase::Reader reader)
       : _reader{std::move(reader)}
     {
     }
 
-    lmdb::Database::Reader _reader;
+    lmdb::IntegerKeyDatabase::Reader _reader;
     friend class ResourceStore;
   };
 
@@ -95,17 +95,20 @@ namespace ao::library
     Iterator& operator++();
 
     void operator++(std::int32_t) { ++*this; }
-    bool operator==(EndSentinel /*unused*/) const { return _iterator == lmdb::Database::Reader::EndSentinel{}; }
+    bool operator==(EndSentinel /*unused*/) const
+    {
+      return _iterator == lmdb::IntegerKeyDatabase::Reader::EndSentinel{};
+    }
 
   private:
-    explicit Iterator(lmdb::Database::Reader::Iterator iterator)
+    explicit Iterator(lmdb::IntegerKeyDatabase::Reader::Iterator iterator)
       : _iterator{std::move(iterator)}
     {
     }
 
     void refresh() const;
 
-    lmdb::Database::Reader::Iterator _iterator;
+    lmdb::IntegerKeyDatabase::Reader::Iterator _iterator;
     mutable value_type _value{};
 
     friend class Reader;
@@ -127,12 +130,12 @@ namespace ao::library
     Result<> clear() { return _writer.clear(); }
 
   private:
-    explicit Writer(lmdb::Database::Writer writer)
+    explicit Writer(lmdb::IntegerKeyDatabase::Writer writer)
       : _writer{std::move(writer)}
     {
     }
 
-    lmdb::Database::Writer _writer;
+    lmdb::IntegerKeyDatabase::Writer _writer;
     friend class ResourceStore;
   };
 } // namespace ao::library

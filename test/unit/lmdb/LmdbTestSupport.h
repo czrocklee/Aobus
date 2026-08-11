@@ -31,9 +31,7 @@ namespace ao::lmdb::test
 
   WriteTransaction beginWriteTransaction(Environment& env);
 
-  WriteTransaction beginWriteTransaction(WriteTransaction& parent);
+  IntegerKeyDatabase openIntegerKeyDatabase(WriteTransaction& txn, std::string const& name);
 
-  Database openDatabase(WriteTransaction& txn,
-                        std::string const& name,
-                        Database::KeyKind kind = Database::KeyKind::Integer);
+  ByteKeyDatabase openByteKeyDatabase(WriteTransaction& txn, std::string const& name);
 } // namespace ao::lmdb::test

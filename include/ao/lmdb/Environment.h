@@ -69,7 +69,6 @@ namespace ao::lmdb
 
     EnvPtr _envPtr;
 
-    friend class Database;
     friend class ReadTransaction;
     friend class WriteTransaction;
   };

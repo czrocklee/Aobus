@@ -327,7 +327,7 @@ namespace ao::cli::test
       auto transactionRes = lmdb::WriteTransaction::begin(environment);
       REQUIRE(transactionRes);
       auto transaction = std::move(*transactionRes);
-      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      auto manifestRes = lmdb::ByteKeyDatabase::open(transaction, "file_manifest");
       REQUIRE(manifestRes);
       auto& manifest = *manifestRes;
       auto const malformedKey = utility::bytes::view(std::string_view{"bad"});
