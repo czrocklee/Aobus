@@ -3,13 +3,13 @@ id: playback.session-persistence
 type: spec
 status: current
 domain: playback
-summary: Defines restorable playback-state capture, validation, restoration, best-effort saving, discard, and shutdown.
+summary: Defines restorable playback-state capture, validation, restoration, best-effort saving, discard, terminal library-switch retirement, and shutdown.
 ---
 # Playback session persistence
 
 ## Scope
 
-This specification defines current behavior for capturing, validating, restoring, normalizing, saving on natural application events, discarding, and shutting down the last restorable playback state.
+This specification defines current behavior for capturing, validating, restoring, normalizing, saving on natural application events, discarding, terminally retiring for a library switch, and shutting down the last restorable playback state.
 The [playback session state reference](../../reference/playback/session-state.md) owns the exact version 3 payload.
 
 It does not persist a materialized queue, workspace selection, prepared-next token, Engine generation, or decoder/output state.
@@ -24,6 +24,8 @@ This contract belongs to the **application runtime** layer in the [system archit
 - **Restorable state**: the serialized succession context, current subject, offset, modes, volume, and mute.
 - **Deferred transport**: a restored idle current subject consumed by a later Play or PlayPause.
 - **Normalization**: a valid restore whose live result differs from stored state because of fallback, replacement, or clamp.
+- **Write seal**: the `WriteSealed` lifecycle, a permanent no-I/O rejection of observation start and every automatic, explicit, or shutdown save; it does not itself remove a group.
+- **Terminal retirement**: successful group removal followed by the `Retired` lifecycle and its permanent save/rearm seal for the remaining process lifetime.
 
 ## Invariants
 
@@ -35,12 +37,31 @@ This contract belongs to the **application runtime** layer in the [system archit
 - Cursor and transport snapshots must name the same current track before save.
 - A save captures one coherent cursor and transport value synchronously on the callback executor.
 - A failed save leaves live playback state unchanged.
-- Only explicit discard forgets the last-restorable snapshots and stored group.
+- Explicit discard and terminal retirement forget the last-restorable snapshots and stored group.
 - Discard does not stop active playback.
+- A write seal cannot be reversed by observation start, active-session mutation, queued snapshot publication, explicit checkpoint, or shutdown.
+- Terminal retirement cannot be reversed by a later active-session mutation, queued snapshot publication, explicit checkpoint, or shutdown.
 
 ## State model
 
-The owner retains started/shutdown/restoring/discarded flags, the last observed `PlaybackService` snapshot, subscriptions to succession restorable-state changes and committed snapshots, and one scheduled debounce task.
+The owner retains one lifecycle enum, an orthogonal restore-in-progress guard, a
+discarded-payload guard, the last observed `PlaybackService` snapshot,
+subscriptions to succession restorable-state changes and committed snapshots,
+and one scheduled debounce task.
+
+| Lifecycle | Observation and save admission | Exit behavior |
+|---|---|---|
+| `Dormant` | No subscriptions or natural saves. Start, restore, checkpoint, or discard may establish the observation baseline. | Ordinary shutdown moves to `Shutdown` without saving; successful retirement moves to `Retired`. |
+| `Observing` | Subscriptions and natural, explicit, and lifecycle checkpoints are admitted. | Ordinary shutdown performs the one final save and moves to `Shutdown`; write sealing moves to `WriteSealed`; successful retirement moves to `Retired`. |
+| `WriteSealed` | Subscriptions and debounce are absent; start, natural triggers, explicit checkpoint, and shutdown perform no store write. | Retirement may still retry physical group removal and move to `Retired`; ordinary shutdown moves to `Shutdown` without saving. |
+| `Retired` | The group was removed successfully, runtime restorable snapshots were discarded, and no save can be rearmed. | Repeated retirement and shutdown are no-ops. |
+| `Shutdown` | Subscriptions and debounce are absent and no later save is admitted. | Repeated shutdown is a no-op; retirement returns `InvalidState`. |
+
+Only `Dormant` moves to `Observing` when observation is ensured; calls made in a
+sealed or terminal lifecycle do not rearm subscriptions. Restore-in-progress
+suppresses checkpoints independently of that enum. The discarded-payload guard
+suppresses saves after ordinary discard until a qualifying active-session
+mutation admits a new payload; it is not a terminal lifecycle.
 
 The succession and transport services each retain a last-restorable snapshot after ordinary stop, exhaustion, or invalidation removes live state.
 A later successful launch replaces those snapshots.
@@ -111,8 +132,11 @@ Subject changes, final seeks, and transitions to paused or idle request an immed
 
 ### Schedule, save, and checkpoint
 
-The first restore, explicit checkpoint, or discard establishes the observation baseline, connects state subscriptions, and admits debounce work.
-Explicit lifecycle requests and shutdown also request checkpoints.
+From `Dormant`, an explicit observation start, restore, checkpoint, or discard establishes the observation baseline, connects state subscriptions, and admits debounce work.
+No other lifecycle can transition back to `Observing`.
+GTK starts observation when it activates a restoring session. A successor idle session reads no stored payload and starts observation only after its selected root is durable.
+An explicit checkpoint writes only from `Dormant` or `Observing`; ordinary
+shutdown applies the lifecycle-specific final-save policy below.
 
 Save writes the payload through an explicit `PlaybackSessionYamlSchema` and one result-bearing `ConfigStore::save` candidate commit.
 There is no playback-specific dirty bit, durable acknowledgement, or retry scheduler.
@@ -128,17 +152,44 @@ Discard atomically removes the `playback-session` group through `ConfigStore`.
 Only after removal succeeds does it clear succession/transport restorable snapshots and enter discarded state.
 Explicit and lifecycle checkpoints remain no-ops while discarded until a later discrete active-session mutation admits future saves again.
 
+### Seal writes without removal
+
+The no-I/O write seal moves `Dormant` or `Observing` to `WriteSealed`,
+disconnects observation, cancels debounce,
+and makes observation start, natural triggers, explicit checkpoints, and
+shutdown saves no-ops. It does not mutate the store or clear the runtime's
+last-restorable snapshots.
+
+GTK uses this seal when a successor's selected-root commit fails after the
+parent has already removed the global payload. The active successor remains
+usable, but it cannot persist resume intent under the prior durable root.
+A later terminal retirement may still attempt physical group removal and clear
+the retained runtime snapshots.
+
+### Retire for a library switch
+
+Terminal retirement is idempotent in `Retired` and fails with `InvalidState` while restore is in progress or after ordinary shutdown has reached `Shutdown`.
+It atomically removes the same `playback-session` group as ordinary discard.
+Removal failure changes no terminal state, so the caller may retain the current library and retry.
+
+Only after removal succeeds does retirement enter `Retired`, disconnect succession and snapshot subscriptions, cancel the debounce task, and clear succession and transport restorable snapshots.
+`Retired` shares shutdown's save-admission barrier but is distinguished so a repeated retirement remains a successful no-op.
+Already queued playback commands may still change live playback before runtime teardown, but their publications have no persistence subscriber and every explicit checkpoint is a no-op.
+Later ordinary shutdown is idempotent and cannot perform a final save.
+
 ## Failure and cancellation
 
 Malformed structural deserialize, unsupported versions, schema semantic validation, source/filter/projection construction, transport preparation, and store failures return typed results.
 Structural and transport-preparation failures are fail-closed with respect to live/restorable state.
 An invalid retained source filter is one such source-construction failure; the frontend may log it and leave default playback active, but the runtime does not reinterpret it as a successful empty session.
 Volume/mute property failure follows the sequential best-effort contract above; the stored payload remains unchanged, while the public snapshot reflects any property write that succeeded.
-Discard remains fail-closed.
+Discard and terminal retirement remain fail-closed with respect to physical group removal.
+The no-I/O write seal has no store failure path and does not claim physical removal.
 
 Scheduled debounce uses one cancellable shared-runtime task and a cancellation-checked callback-executor hop; replacement or checkpoint retires that task before admitting another.
 Automatic failures do not create background retry work.
-Shutdown cancels pending debounce, then performs its final checkpoint while borrowed services and store still exist.
+Ordinary shutdown cancels pending debounce and enters `Shutdown`; it performs its final checkpoint while borrowed services and store still exist only when leaving `Observing`.
+Terminal retirement instead cancels and enters `Retired` without a final save.
 
 ## Persistence and versioning
 
@@ -147,7 +198,9 @@ Only schema version `3` is accepted; older or newer values are rejected rather t
 
 GTK injects the global application config as the playback-session store, while current TUI composition uses its runtime workspace config when no separate store is injected.
 The payload itself contains library-scoped track/list ids but no durable library identity.
-The GTK switch lifecycle prepares the replacement without restoring the payload, then requires the active old pair to discard it before the candidate is activated with idle playback.
+The GTK switch lifecycle checkpoints the active pair, physically removes this group, and terminally seals playback persistence in the parent before that graph is destroyed.
+Only after complete parent teardown does a successor activate the explicit target with idle playback.
+Successful selected-root persistence admits future playback writes; failure keeps the prior root, no payload, and the permanent write seal, so no process interprets one library's ids against another root.
 
 ## Frontend observations
 
@@ -165,7 +218,8 @@ TUI currently does not run the same startup/checkpoint sequence; that asymmetry 
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, discard, store selection, and structural failure atomicity.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, and structural failure atomicity.
+- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the successor root-commit gate and no-I/O playback-write seal against natural, explicit, window, and shutdown playback saves while ordinary window, output, layout, and workspace saves continue over the shared GTK store.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
 
 ## Related documents

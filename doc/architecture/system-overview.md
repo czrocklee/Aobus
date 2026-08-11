@@ -153,7 +153,7 @@ The [architecture landscape](README.md) owns the portfolio classification, relat
 
 ## Structural constraints
 
-- One frontend runtime represents one active music library and owns every service tied to that library; [interactive session lifecycle](interactive-session-lifecycle.md) owns in-process replacement or process restart of that graph, while [workspace](workspace.md) owns state within it.
+- One frontend runtime represents one active music library and owns every service tied to that library; [interactive session lifecycle](interactive-session-lifecycle.md) owns desktop successor-process restart and the TUI's single-runtime lifetime, while [workspace](workspace.md) owns state within the graph.
 - Cross-frontend behavioral policy belongs in runtime or UIModel, not in parallel GTK and TUI implementations.
 - Runtime services expose stable application values and narrow command surfaces instead of leaking storage transactions or audio engine objects.
 - UIModel state can be discarded and reconstructed from runtime state plus UI-local persisted preferences.

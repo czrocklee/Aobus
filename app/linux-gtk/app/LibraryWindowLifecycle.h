@@ -8,9 +8,7 @@
 
 #include <glibmm/refptr.h>
 
-#include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 
 namespace Gtk
@@ -39,28 +37,4 @@ namespace ao::gtk
   Result<> activateLibraryWindow(Gtk::Application& app,
                                  Glib::RefPtr<MainWindow> const& windowPtr,
                                  MainWindow::PlaybackRestoreMode restoreMode);
-
-  enum class LibraryWindowOpenOutcome : std::uint8_t
-  {
-    Reused,
-    Replaced,
-  };
-
-  struct LibraryWindowReplacementCallbacks final
-  {
-    std::function<Result<>()> prepareCandidate;
-    std::function<void()> configureCandidate;
-    std::function<Result<>()> retireActive;
-    std::function<Result<>()> activateCandidate;
-    std::function<void()> replaceActiveSlot;
-    std::function<void()> releaseRetired;
-    std::function<Result<>()> persistSelectedPath;
-    std::function<void()> scanActive;
-    std::function<void()> presentActive;
-  };
-
-  Result<LibraryWindowOpenOutcome> openLibraryWindow(std::filesystem::path const& activeRoot,
-                                                     std::filesystem::path const& requestedRoot,
-                                                     bool scanAfterOpen,
-                                                     LibraryWindowReplacementCallbacks const& callbacks);
 } // namespace ao::gtk

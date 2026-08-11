@@ -11,7 +11,7 @@ summary: Defines GTK custom-dialog roles, preferences lifetime, native chooser b
 
 This specification owns GTK window/dialog classification and the interaction lifetime of application-owned dialogs.
 It also defines the native Open Library chooser handoff and layout-editor apply/save/cancel semantics.
-The active runtime replacement itself belongs to the [GTK active-library lifecycle specification](active-library-lifecycle.md).
+The active-library switch and successor restart belong to the [GTK active-library lifecycle specification](active-library-lifecycle.md).
 
 ## Code boundary
 
@@ -38,7 +38,7 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 - Saved-List create/edit dialogs remain open with their draft intact when submission fails and close only after success or cancellation.
 - Native chooser cancellation is a no-op.
 - The export-mode response and native folder, open, and save completions can access `ImportExportCoordinator` only while its callback scope remains live.
-- Open Library selecting the active normalized root reuses and presents the current window; selecting a different valid root replaces the active library/window pair.
+- Open Library selecting the active normalized root reuses and presents the current window; selecting a different valid root requests a destructive successor-process restart.
 - The Open Library dialog does not create an additional independent main-window/library pair.
 - A new library root starts bootstrap scan after successful activation when the open policy requests it.
 - Long-running scan/import progress uses activity and notification surfaces, not a modal progress dialog.
@@ -62,7 +62,8 @@ Default layout-preset choice affects the next layout load; structural edits use 
 Open Library launches a native folder chooser.
 A successful folder selection is normalized and handed to the single active-library host.
 Same-root selection may trigger a fast bootstrap scan and presents the existing window.
-Different-root selection prepares and configures a candidate while the current pair remains active, retires and releases the old pair, activates the candidate, records the new global path, and optionally begins bootstrap scan.
+Different-root selection returns from the native completion, terminally retires the old playback session, fully releases the old pair and GTK composition, and then launches a strict explicit-root successor.
+The successor activates with idle playback, records the new global path best effort, and optionally begins the carried bootstrap scan.
 
 The layout editor uses:
 
@@ -79,7 +80,8 @@ Other native file-dialog failures are logged and presented in a parent-bound tra
 A saved-List preview-source acquisition failure uses the editor's existing error label.
 Saved-List create or edit rejection retains the draft and editor, while delete rejection presents a parent-bound transient message without changing the tree or selection.
 Deferred track-presentation selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message.
-Candidate preparation failure or active-pair retirement failure presents a parent-bound transient message and leaves the old pair visible, as specified by the active-library lifecycle.
+Active-pair terminal-retirement failure presents a parent-bound transient message and leaves the old pair visible.
+After retirement, process-launch or successor-startup failure presents a standalone native diagnostic without reconstructing the old pair, as specified by the active-library lifecycle.
 Layout-editor validation or persistence failure retains the draft and keeps the editor open.
 A persistence failure presents a transient error message; partial multi-preset persistence and retry behavior belong to the [shell layout lifecycle](../shell/layout-lifecycle.md).
 
@@ -110,7 +112,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`ImportExportCoordinator.cpp`](../../../app/linux-gtk/portal/ImportExportCoordinator.cpp) owns native chooser handoff.
 - [`LibraryImportExportWorkflow.cpp`](../../../app/linux-gtk/portal/LibraryImportExportWorkflow.cpp) owns guarded post-await task presentation and delegates committed refresh to `LibraryChanges`.
 - [`MainContextCallbackScope.h`](../../../app/linux-gtk/common/MainContextCallbackScope.h) owns main-context callback-lifetime validation; `ImportExportCoordinator` supplies native cancellation as its close action.
-- [`main.cpp`](../../../app/linux-gtk/main.cpp) owns active-library replacement.
+- [`main.cpp`](../../../app/linux-gtk/main.cpp) owns the active-library restart handoff.
 - [`LayoutEditorDialog.cpp`](../../../app/linux-gtk/layout/editor/LayoutEditorDialog.cpp) owns editor preview and commit interaction.
 
 ## Test map

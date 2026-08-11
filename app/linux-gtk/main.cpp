@@ -4,6 +4,7 @@
 #include <glibmm/main.h>
 
 #include "app/AppConfigStore.h"
+#include "app/GtkStartupPlan.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/KeymapApplicator.h"
 #include "app/LibraryWindowLifecycle.h"
@@ -11,6 +12,7 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "common/MainContextCallbackScope.h"
+#include "platform/SuccessorProcessLauncher.h"
 #include "portal/ImportExportCoordinator.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include "preference/PreferencesWindow.h"
@@ -25,7 +27,8 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/utility/ScopedRegistration.h>
 
-#include <CLI/CLI.hpp>
+#include <gdkmm/display.h>
+#include <giomm/applaunchcontext.h>
 #include <giomm/simpleaction.h>
 #include <glib-unix.h>
 #include <glibmm/exceptionhandler.h>
@@ -33,8 +36,8 @@
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
 #include <gtkmm/aboutdialog.h>
+#include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
-#include <gtkmm/window.h>
 
 #include <array>
 #include <csignal>
@@ -43,11 +46,13 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <map>
+#include <format>
 #include <memory>
+#include <optional>
 #include <print>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -56,6 +61,8 @@ using namespace ao::gtk;
 
 namespace
 {
+  constexpr auto kGtkApplicationId = "org.aobus.app";
+
   struct ResolvedLibraryPaths final
   {
     std::filesystem::path musicRoot;
@@ -63,8 +70,43 @@ namespace
     bool scanAfterOpen = false;
   };
 
-  ResolvedLibraryPaths resolveLibraryPaths(AppConfigStore const& configStore)
+  struct ActivationRequest final
   {
+    Glib::RefPtr<Gio::AppLaunchContext> contextPtr;
+    std::optional<std::string> optToken;
+  };
+
+  struct LibraryRestartRequest final
+  {
+    std::filesystem::path libraryRoot;
+    bool scanAfterOpen = false;
+    ActivationRequest activation;
+  };
+
+  struct RunAppResult final
+  {
+    std::int32_t exitCode = 0;
+    std::optional<LibraryRestartRequest> optRestartRequest;
+    std::optional<std::string> optDiagnosticMessage;
+  };
+
+  Result<ResolvedLibraryPaths> resolveLibraryPaths(AppConfigStore const& configStore, GtkStartupPlan const& startupPlan)
+  {
+    if (startupPlan.optSuccessorLibraryRoot)
+    {
+      auto const& musicRoot = *startupPlan.optSuccessorLibraryRoot;
+
+      if (!std::filesystem::is_directory(musicRoot))
+      {
+        return makeError(Error::Code::InvalidInput,
+                         std::format("The selected library directory is unavailable: {}", musicRoot.string()));
+      }
+
+      return ResolvedLibraryPaths{.musicRoot = musicRoot,
+                                  .databasePath = rt::LibraryPaths{musicRoot}.databasePath(),
+                                  .scanAfterOpen = startupPlan.scanAfterOpen};
+    }
+
     auto snapshot = rt::AppSessionState{};
     configStore.loadAppSession(snapshot);
 
@@ -75,80 +117,39 @@ namespace
       if (std::filesystem::exists(musicRoot))
       {
         auto const libraryPaths = rt::LibraryPaths{musicRoot};
-        return {.musicRoot = musicRoot,
-                .databasePath = libraryPaths.databasePath(),
-                .scanAfterOpen = !libraryPaths.hasExistingDatabase()};
+        return ResolvedLibraryPaths{.musicRoot = musicRoot,
+                                    .databasePath = libraryPaths.databasePath(),
+                                    .scanAfterOpen = !libraryPaths.hasExistingDatabase()};
       }
     }
 
     auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
-    return {.musicRoot = emptyPath, .databasePath = rt::LibraryPaths{emptyPath}.databasePath()};
+    return ResolvedLibraryPaths{.musicRoot = emptyPath, .databasePath = rt::LibraryPaths{emptyPath}.databasePath()};
   }
 
-  struct CliOptions final
+  ActivationRequest requestDesktopActivation()
   {
-    rt::LogLevel logLevel = rt::LogLevel::Info;
-    std::int32_t exitCode = 0;
-    bool shouldExit = false;
-  };
+    auto const displayPtr = Gdk::Display::get_default();
 
-  CliOptions parseCommandLine(std::span<char*> args)
-  {
-    auto cliApp = CLI::App{"Aobus Music Library"};
-    cliApp.allow_extras(); // Allow GTK specific arguments
+    if (!displayPtr)
+    {
+      return {};
+    }
 
-    auto options = CliOptions{};
-
-    // Map strings to LogLevel enum for CLI11
-    auto const logMapping = std::map<std::string, rt::LogLevel>{{"trace", rt::LogLevel::Trace},
-                                                                {"debug", rt::LogLevel::Debug},
-                                                                {"info", rt::LogLevel::Info},
-                                                                {"warn", rt::LogLevel::Warn},
-                                                                {"error", rt::LogLevel::Error},
-                                                                {"critical", rt::LogLevel::Critical},
-                                                                {"off", rt::LogLevel::Off}};
-
-    std::int32_t verbosity = 0;
-    cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
-
-    cliApp.add_option("--log-level", options.logLevel, "Set the logging level")
-      ->transform(CLI::CheckedTransformer{logMapping, CLI::ignore_case});
-
-    cliApp.add_flag_callback(
-      "--version",
-      []
-      {
-        std::println("Aobus {}", kAppVersion);
-        std::exit(0);
-      },
-      "Show version information");
+    auto contextPtr = displayPtr->get_app_launch_context();
 
     try
     {
-      cliApp.parse(static_cast<std::int32_t>(args.size()), args.data());
+      auto token = contextPtr->get_startup_notify_id({}, {});
+      return {.contextPtr = std::move(contextPtr),
+              .optToken = token.empty() ? std::nullopt : std::optional<std::string>{std::move(token)}};
     }
-    catch (CLI::ParseError const& e)
+    catch (Glib::Error const& e)
     {
-      options.exitCode = cliApp.exit(e);
-      options.shouldExit = true;
-      return options;
+      APP_LOG_WARN("Failed to request a desktop activation token for library restart: {}", e.what());
+      return {.contextPtr = std::move(contextPtr), .optToken = std::nullopt};
     }
-
-    // Handle -v shortcuts if --log-level wasn't explicitly provided (or to override)
-    if (cliApp.count("-v") > 0)
-    {
-      if (verbosity == 1)
-      {
-        options.logLevel = rt::LogLevel::Debug;
-      }
-      else if (verbosity >= 2)
-      {
-        options.logLevel = rt::LogLevel::Trace;
-      }
-    }
-
-    return options;
   }
 
   void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
@@ -156,18 +157,12 @@ namespace
                                     Glib::RefPtr<MainWindow>& mainWindowPtr,
                                     MainContextCallbackScope const& callbackScope,
                                     utility::ScopedRegistration& openLibraryIdleRegistration,
-                                    std::shared_ptr<AppConfigStore> appConfigStorePtr,
-                                    std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                                    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr);
+                                    std::optional<LibraryRestartRequest>& optRestartRequest);
 
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& appPtr,
                             Glib::RefPtr<MainWindow>& mainWindowPtr,
-                            MainContextCallbackScope const& callbackScope,
-                            utility::ScopedRegistration& openLibraryIdleRegistration,
-                            std::shared_ptr<AppConfigStore> appConfigStorePtr,
-                            std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                            std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+                            std::optional<LibraryRestartRequest>& optRestartRequest,
                             bool const scanAfterOpen)
   {
     if (!mainWindowPtr || !std::filesystem::is_directory(path))
@@ -176,72 +171,28 @@ namespace
     }
 
     auto const requestedPath = std::filesystem::absolute(path).lexically_normal();
-    auto const libraryPaths = rt::LibraryPaths{requestedPath};
+    auto const activeRoot = std::filesystem::absolute(mainWindowPtr->musicRoot()).lexically_normal();
 
-    auto candidateWindowPtr = Glib::RefPtr<MainWindow>{};
-    auto retiredWindowPtr = Glib::RefPtr<MainWindow>{};
-    auto const activeRoot = mainWindowPtr->musicRoot();
-
-    auto const openedRes = openLibraryWindow(
-      activeRoot,
-      requestedPath,
-      scanAfterOpen,
-      LibraryWindowReplacementCallbacks{
-        .prepareCandidate = [&] -> Result<>
-        {
-          auto candidateRes =
-            prepareLibraryWindow({.musicRoot = requestedPath, .databasePath = libraryPaths.databasePath()},
-                                 appConfigStorePtr,
-                                 shellLayoutStorePtr,
-                                 componentStateStorePtr);
-
-          if (!candidateRes)
-          {
-            return std::unexpected{candidateRes.error()};
-          }
-
-          candidateWindowPtr = std::move(*candidateRes);
-          return {};
-        },
-        .configureCandidate =
-          [&]
-        {
-          configureOpenLibraryCallback(candidateWindowPtr,
-                                       appPtr,
-                                       mainWindowPtr,
-                                       callbackScope,
-                                       openLibraryIdleRegistration,
-                                       appConfigStorePtr,
-                                       shellLayoutStorePtr,
-                                       componentStateStorePtr);
-        },
-        .retireActive = [&] { return mainWindowPtr->retireForLibrarySwitch(); },
-        .activateCandidate = [&]
-        { return activateLibraryWindow(*appPtr, candidateWindowPtr, MainWindow::PlaybackRestoreMode::StartIdle); },
-        .replaceActiveSlot = [&] { retiredWindowPtr = std::exchange(mainWindowPtr, candidateWindowPtr); },
-        .releaseRetired =
-          [&]
-        {
-          appPtr->remove_window(*retiredWindowPtr);
-          retiredWindowPtr.reset();
-        },
-        .persistSelectedPath =
-          [&]
-        {
-          auto appSession = rt::AppSessionState{};
-          appConfigStorePtr->loadAppSession(appSession);
-          appSession.lastLibraryPath = requestedPath.string();
-          return appConfigStorePtr->saveAppSession(appSession);
-        },
-        .scanActive = [&]
-        { mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap); },
-        .presentActive = [&] { mainWindowPtr->present(); },
-      });
-
-    if (!openedRes)
+    if (requestedPath == activeRoot)
     {
-      APP_LOG_ERROR("Failed to retire active library for replacement: {}", openedRes.error().message);
+      if (scanAfterOpen)
+      {
+        mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
+      }
+
+      mainWindowPtr->present();
+      return;
     }
+
+    if (auto const retiredRes = mainWindowPtr->retireForLibrarySwitch(); !retiredRes)
+    {
+      APP_LOG_ERROR("Failed to retire the active library for process restart: {}", retiredRes.error().message);
+      return;
+    }
+
+    optRestartRequest = LibraryRestartRequest{
+      .libraryRoot = requestedPath, .scanAfterOpen = scanAfterOpen, .activation = requestDesktopActivation()};
+    appPtr->quit();
   }
 
   void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
@@ -249,41 +200,16 @@ namespace
                                     Glib::RefPtr<MainWindow>& mainWindowPtr,
                                     MainContextCallbackScope const& callbackScope,
                                     utility::ScopedRegistration& openLibraryIdleRegistration,
-                                    std::shared_ptr<AppConfigStore> appConfigStorePtr,
-                                    std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                                    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
+                                    std::optional<LibraryRestartRequest>& optRestartRequest)
   {
     windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary = callbackScope.guard(
-      [appPtr,
-       &mainWindowPtr,
-       &callbackScope,
-       &openLibraryIdleRegistration,
-       appConfigStorePtr,
-       shellLayoutStorePtr,
-       componentStateStorePtr](std::filesystem::path const& path, bool const scanAfterOpen)
+      [appPtr, &mainWindowPtr, &callbackScope, &openLibraryIdleRegistration, &optRestartRequest](
+        std::filesystem::path const& path, bool const scanAfterOpen)
       {
         openLibraryIdleRegistration.reset();
-        auto guardedOpen = callbackScope.guard(
-          [path,
-           scanAfterOpen,
-           appPtr,
-           &mainWindowPtr,
-           &callbackScope,
-           &openLibraryIdleRegistration,
-           appConfigStorePtr,
-           shellLayoutStorePtr,
-           componentStateStorePtr]
-          {
-            handleOpenNewLibrary(path,
-                                 appPtr,
-                                 mainWindowPtr,
-                                 callbackScope,
-                                 openLibraryIdleRegistration,
-                                 appConfigStorePtr,
-                                 shellLayoutStorePtr,
-                                 componentStateStorePtr,
-                                 scanAfterOpen);
-          });
+        auto guardedOpen =
+          callbackScope.guard([path, scanAfterOpen, appPtr, &mainWindowPtr, &optRestartRequest]
+                              { handleOpenNewLibrary(path, appPtr, mainWindowPtr, optRestartRequest, scanAfterOpen); });
         auto connection = Glib::signal_idle().connect(
           [guardedOpen = std::move(guardedOpen)] mutable
           {
@@ -321,16 +247,31 @@ namespace
 
     void install(Glib::RefPtr<Gtk::Application> const& appPtr)
     {
+      uninstall();
+      _terminationRequested = false;
       _appPtr = appPtr;
       _registrations = {registerSignal(SIGINT, &ProcessSignalHandlers::handleTermination, this),
                         registerSignal(SIGTERM, &ProcessSignalHandlers::handleTermination, this),
                         registerSignal(SIGUSR1, &ProcessSignalHandlers::handleStyleReload, nullptr)};
     }
 
+    void uninstall()
+    {
+      for (auto& registration : _registrations)
+      {
+        registration.reset();
+      }
+
+      _appPtr.reset();
+    }
+
+    bool terminationRequested() const noexcept { return _terminationRequested; }
+
   private:
     static ::gboolean handleTermination(void* data)
     {
       auto* const handlers = static_cast<ProcessSignalHandlers*>(data);
+      handlers->_terminationRequested = true;
       APP_LOG_INFO("Received termination signal, shutting down...");
 
       if (auto const appPtr = handlers->_appPtr.lock(); appPtr)
@@ -363,6 +304,7 @@ namespace
 
     std::weak_ptr<Gtk::Application> _appPtr;
     std::array<utility::ScopedRegistration, 3> _registrations;
+    bool _terminationRequested = false;
   };
 
   MainWindow* activeMainWindow(Glib::RefPtr<Gtk::Application> const& appPtr)
@@ -510,6 +452,14 @@ namespace
     appPtr->set_accels_for_action("app.preferences", {"<Control>comma"});
   }
 
+  void removeAppActions(Gtk::Application& app)
+  {
+    app.set_accels_for_action("app.preferences", {});
+    app.remove_action("preferences");
+    app.remove_action("quit");
+    app.remove_action("about");
+  }
+
   std::filesystem::path layoutStateDir()
   {
     auto const* const xdgStateHome = std::getenv("XDG_STATE_HOME");
@@ -522,13 +472,27 @@ namespace
     return std::filesystem::path{Glib::get_user_data_dir()}.parent_path() / "state" / "aobus" / "layout-state";
   }
 
+  void failStartup(Glib::RefPtr<Gtk::Application> const& appPtr,
+                   std::optional<std::string>& optDiagnosticMessage,
+                   std::string message)
+  {
+    APP_LOG_CRITICAL("{}", message);
+    std::println(stderr, "{}", message);
+    optDiagnosticMessage = std::move(message);
+    appPtr->quit();
+  }
+
   void handleAppActivate(Glib::RefPtr<Gtk::Application>& appPtr,
                          Glib::RefPtr<MainWindow>& mainWindowPtr,
                          MainContextCallbackScope const& callbackScope,
                          utility::ScopedRegistration& openLibraryIdleRegistration,
                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
                          std::shared_ptr<ShellLayoutStore> const& shellLayoutStorePtr,
-                         std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr)
+                         std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr,
+                         GtkStartupPlan const& startupPlan,
+                         std::optional<LibraryRestartRequest>& optRestartRequest,
+                         std::optional<std::string>& optDiagnosticMessage,
+                         bool& startupCompleted)
   {
     GtkStyleRuntime::instance().initialize();
 
@@ -540,7 +504,17 @@ namespace
       return;
     }
 
-    auto paths = resolveLibraryPaths(*appConfigStorePtr);
+    auto pathsRes = resolveLibraryPaths(*appConfigStorePtr, startupPlan);
+
+    if (!pathsRes)
+    {
+      failStartup(appPtr,
+                  optDiagnosticMessage,
+                  std::format("Aobus could not select the startup library: {}", pathsRes.error().message));
+      return;
+    }
+
+    auto paths = std::move(*pathsRes);
 
     auto const scanAfterOpen = paths.scanAfterOpen;
     auto windowRes =
@@ -551,32 +525,36 @@ namespace
 
     if (!windowRes)
     {
-      APP_LOG_CRITICAL("Failed to prepare the initial library window: {}", windowRes.error().message);
-      std::println(stderr, "Aobus could not open the library: {}", windowRes.error().message);
-      appPtr->quit();
+      failStartup(
+        appPtr, optDiagnosticMessage, std::format("Aobus could not open the library: {}", windowRes.error().message));
       return;
     }
 
     mainWindowPtr = std::move(*windowRes);
-    configureOpenLibraryCallback(mainWindowPtr,
-                                 appPtr,
-                                 mainWindowPtr,
-                                 callbackScope,
-                                 openLibraryIdleRegistration,
-                                 appConfigStorePtr,
-                                 shellLayoutStorePtr,
-                                 componentStateStorePtr);
+    configureOpenLibraryCallback(
+      mainWindowPtr, appPtr, mainWindowPtr, callbackScope, openLibraryIdleRegistration, optRestartRequest);
 
-    if (auto const activatedRes =
-          activateLibraryWindow(*appPtr, mainWindowPtr, MainWindow::PlaybackRestoreMode::Restore);
-        !activatedRes)
+    auto const restoreMode = startupPlan.optSuccessorLibraryRoot ? MainWindow::PlaybackRestoreMode::StartIdle
+                                                                 : MainWindow::PlaybackRestoreMode::Restore;
+
+    if (auto const activatedRes = activateLibraryWindow(*appPtr, mainWindowPtr, restoreMode); !activatedRes)
     {
-      APP_LOG_CRITICAL("Failed to activate the initial library window: {}", activatedRes.error().message);
-      std::println(stderr, "Aobus could not activate the library: {}", activatedRes.error().message);
       mainWindowPtr.reset();
-      appPtr->quit();
+      failStartup(appPtr,
+                  optDiagnosticMessage,
+                  std::format("Aobus could not activate the library: {}", activatedRes.error().message));
       return;
     }
+
+    if (startupPlan.optSuccessorLibraryRoot)
+    {
+      if (auto const persistedRes = mainWindowPtr->commitSuccessorLibrarySelection(); !persistedRes)
+      {
+        APP_LOG_WARN("Failed to persist the selected GTK library path: {}", persistedRes.error().message);
+      }
+    }
+
+    startupCompleted = true;
 
     if (scanAfterOpen)
     {
@@ -585,37 +563,25 @@ namespace
   }
 
   // CLI11 and GTK both expose the process entry-point's mutable C argv array.
-  struct GtkArguments final
+  struct MutableArguments final
   {
     std::vector<std::string> strings;
     std::vector<char*> pointers;
   };
 
-  GtkArguments buildGtkArgv(std::int32_t argc, char** argv)
+  MutableArguments buildMutableArgv(std::vector<std::string> arguments)
   {
-    auto cliApp = CLI::App{};
-    cliApp.allow_extras();
+    auto mutableArguments = MutableArguments{.strings = std::move(arguments), .pointers = {}};
+    mutableArguments.pointers.reserve(mutableArguments.strings.size() + 1);
 
-    try
+    for (auto& argument : mutableArguments.strings)
     {
-      cliApp.parse(argc, argv);
-    }
-    catch (CLI::ParseError const& e)
-    {
-      APP_LOG_DEBUG("Internal CLI parse for GTK passthrough: {}", e.what());
+      mutableArguments.pointers.push_back(argument.data());
     }
 
-    auto remaining = cliApp.remaining_for_passthrough();
-    remaining.insert(remaining.begin(), argv[0]);
-    auto gtkArguments = GtkArguments{.strings = std::move(remaining), .pointers = {}};
-    gtkArguments.pointers.reserve(gtkArguments.strings.size());
+    mutableArguments.pointers.push_back(nullptr);
 
-    for (auto& argument : gtkArguments.strings)
-    {
-      gtkArguments.pointers.push_back(argument.data());
-    }
-
-    return gtkArguments;
+    return mutableArguments;
   }
 
   void handleSignalException()
@@ -623,23 +589,52 @@ namespace
     AO_FATAL_EXCEPTION(std::current_exception(), "GTK signal handler");
   }
 
-  std::int32_t runApp(std::span<char*> args, ProcessSignalHandlers& processSignalHandlers)
+  RunAppResult runApp(std::span<char*> args, ProcessSignalHandlers& processSignalHandlers)
   {
-    auto const options = parseCommandLine(args);
+    auto argumentViews = std::vector<std::string_view>{};
+    argumentViews.reserve(args.size());
 
-    if (options.shouldExit)
+    for (auto const* const argument : args)
     {
-      return options.exitCode;
+      argumentViews.emplace_back(argument);
+    }
+
+    auto startupPlanRes = planGtkStartup(argumentViews);
+
+    if (!startupPlanRes)
+    {
+      std::println(stderr, "Aobus could not plan GTK startup: {}", startupPlanRes.error().message);
+      return {.exitCode = EXIT_FAILURE, .optRestartRequest = std::nullopt, .optDiagnosticMessage = std::nullopt};
+    }
+
+    auto startupPlan = std::move(*startupPlanRes);
+
+    if (startupPlan.shouldExit)
+    {
+      if (startupPlan.showVersion)
+      {
+        std::println("Aobus {}", kAppVersion);
+      }
+
+      return {
+        .exitCode = startupPlan.exitCode, .optRestartRequest = std::nullopt, .optDiagnosticMessage = std::nullopt};
     }
 
     auto const logDir = std::filesystem::path{Glib::get_user_cache_dir()} / "aobus" / "logs";
-    rt::Log::initialize(options.logLevel, logDir);
+    rt::Log::initialize(startupPlan.logLevel, logDir);
 
     APP_LOG_INFO("Aobus {} starting...", kAppVersion);
 
     Glib::set_application_name("Aobus");
 
-    auto appPtr = Gtk::Application::create("org.aobus.app");
+    auto applicationFlags = Gio::Application::Flags::ALLOW_REPLACEMENT;
+
+    if (startupPlan.registrationMode == GtkApplicationRegistrationMode::ReplaceExisting)
+    {
+      applicationFlags |= Gio::Application::Flags::REPLACE;
+    }
+
+    auto appPtr = Gtk::Application::create(std::string{kGtkApplicationId}, applicationFlags);
     processSignalHandlers.install(appPtr);
 
     // Top-level boundary for exceptions that escape a GTK signal/action handler.
@@ -649,6 +644,9 @@ namespace
 
     auto mainWindowPtr = Glib::RefPtr<MainWindow>{};
     auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};
+    auto optRestartRequest = std::optional<LibraryRestartRequest>{};
+    auto optDiagnosticMessage = std::optional<std::string>{};
+    bool startupCompleted = false;
 
     auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
     auto appConfigStorePtr = std::make_shared<AppConfigStore>(globalConfigPath);
@@ -656,6 +654,9 @@ namespace
     auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
     auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());
 
+    // Preserve reverse-destruction order: application signals/actions close
+    // first, then callback admission and the idle source, then windows and
+    // their attached runtime, style, stores, and finally Gtk::Application.
     auto styleRuntimeRegistration = utility::ScopedRegistration{[] { GtkStyleRuntime::instance().shutdown(); }};
     auto windowRegistration =
       utility::ScopedRegistration{[&appPtr, &mainWindowPtr, &preferencesWindowPtr]
@@ -701,15 +702,20 @@ namespace
       MainContextCallbackScope{[&openLibraryIdleRegistration] { openLibraryIdleRegistration.reset(); }};
 
     addAppActions(appPtr, preferencesWindowPtr, appConfigStorePtr);
+    auto appActionsRegistration = utility::ScopedRegistration{[appPtr] { removeAppActions(*appPtr); }};
 
-    appPtr->signal_activate().connect(
+    auto activateConnection = appPtr->signal_activate().connect(
       [&appPtr,
        &mainWindowPtr,
        &callbackScope,
        &openLibraryIdleRegistration,
        appConfigStorePtr,
        shellLayoutStorePtr,
-       componentStateStorePtr]
+       componentStateStorePtr,
+       &startupPlan,
+       &optRestartRequest,
+       &optDiagnosticMessage,
+       &startupCompleted]
       {
         handleAppActivate(appPtr,
                           mainWindowPtr,
@@ -717,26 +723,113 @@ namespace
                           openLibraryIdleRegistration,
                           appConfigStorePtr,
                           shellLayoutStorePtr,
-                          componentStateStorePtr);
+                          componentStateStorePtr,
+                          startupPlan,
+                          optRestartRequest,
+                          optDiagnosticMessage,
+                          startupCompleted);
       });
+    auto activateRegistration =
+      utility::ScopedRegistration{[connection = std::move(activateConnection)] mutable { connection.disconnect(); }};
 
-    auto gtkArguments = buildGtkArgv(static_cast<std::int32_t>(args.size()), args.data());
-    std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArguments.pointers.size());
+    auto gtkArguments = buildMutableArgv(std::move(startupPlan.gtkArguments));
+    std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArguments.strings.size());
 
     APP_LOG_INFO("Entering GTK main loop");
-    return appPtr->run(gtkArgc, gtkArguments.pointers.data());
+    auto const exitCode = appPtr->run(gtkArgc, gtkArguments.pointers.data());
+
+    if (!optDiagnosticMessage && !processSignalHandlers.terminationRequested())
+    {
+      optDiagnosticMessage =
+        incompleteSuccessorStartupDiagnostic(startupPlan.registrationMode, startupCompleted, exitCode);
+
+      if (optDiagnosticMessage)
+      {
+        APP_LOG_CRITICAL("{}", *optDiagnosticMessage);
+        std::println(stderr, "{}", *optDiagnosticMessage);
+      }
+    }
+
+    return {.exitCode = optDiagnosticMessage ? EXIT_FAILURE : exitCode,
+            .optRestartRequest = std::move(optRestartRequest),
+            .optDiagnosticMessage = std::move(optDiagnosticMessage)};
+  }
+
+  std::int32_t runDiagnosticApp(std::string const& message, ProcessSignalHandlers& processSignalHandlers)
+  {
+    auto appPtr = Gtk::Application::create({}, Gio::Application::Flags::NON_UNIQUE);
+    processSignalHandlers.install(appPtr);
+
+    auto diagnosticActivateConnection = appPtr->signal_activate().connect(
+      [appPtr, message]
+      {
+        auto alertPtr = Gtk::AlertDialog::create("Aobus Startup Failed");
+        alertPtr->set_detail(message);
+        appPtr->hold();
+        alertPtr->choose(
+          [alertPtr, appPtr](Glib::RefPtr<Gio::AsyncResult> const& resultPtr)
+          {
+            try
+            {
+              std::ignore = alertPtr->choose_finish(resultPtr);
+            }
+            catch (Glib::Error const&) // NOLINT(bugprone-empty-catch) -- Closing the native dialog is expected.
+            {
+              // Closing or cancelling the standalone diagnostic is expected.
+            }
+
+            appPtr->release();
+          });
+      });
+
+    auto const exitCode = appPtr->run();
+    diagnosticActivateConnection.disconnect();
+    processSignalHandlers.uninstall();
+    return exitCode;
   }
 } // namespace
 
 int main(int argc, char* argv[])
 {
+  Glib::set_prgname("aobus");
   auto processSignalHandlers = ProcessSignalHandlers{};
 
   try
   {
-    auto const exitCode = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers);
+    auto result = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers);
+    processSignalHandlers.uninstall();
+
+    if (result.optRestartRequest)
+    {
+      // Reaching the caller proves every local in runApp's GTK composition
+      // scope has completed destruction; process creation must stay below
+      // this boundary so parent and successor library graphs cannot overlap.
+      auto& request = *result.optRestartRequest;
+      auto const optToken =
+        request.activation.optToken ? std::optional<std::string_view>{*request.activation.optToken} : std::nullopt;
+      auto const launchedRes = launchDetachedSuccessor(request.libraryRoot, request.scanAfterOpen, optToken);
+
+      if (!launchedRes)
+      {
+        if (request.activation.contextPtr && request.activation.optToken)
+        {
+          request.activation.contextPtr->launch_failed(*request.activation.optToken);
+        }
+
+        auto const message = std::format("Aobus could not start the selected library: {}", launchedRes.error().message);
+        APP_LOG_ERROR("{}", message);
+        std::ignore = runDiagnosticApp(message, processSignalHandlers);
+        rt::Log::shutdown();
+        return EXIT_FAILURE;
+      }
+    }
+    else if (result.optDiagnosticMessage)
+    {
+      std::ignore = runDiagnosticApp(*result.optDiagnosticMessage, processSignalHandlers);
+    }
+
     rt::Log::shutdown();
-    return exitCode;
+    return result.exitCode;
   }
   catch (...)
   {

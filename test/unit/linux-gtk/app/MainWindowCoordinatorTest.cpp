@@ -82,7 +82,7 @@ namespace ao::gtk::test
     coordinator.loadSession();
 
     coordinator.themeCoordinator()->setTheme(uimodel::ThemePreset::Classic);
-    coordinator.saveSession();
+    coordinator.saveSession(MainWindowCoordinator::SessionSavePolicy::Full);
 
     auto loadedPrefs = rt::AppPrefsState{};
     configStorePtr->loadAppPrefs(loadedPrefs);

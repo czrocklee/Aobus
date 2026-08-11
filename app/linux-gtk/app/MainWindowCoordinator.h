@@ -8,6 +8,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 
@@ -38,6 +39,12 @@ namespace ao::gtk
   class MainWindowCoordinator final
   {
   public:
+    enum class SessionSavePolicy : std::uint8_t
+    {
+      Full,
+      ExcludeSelectedRootAndPlayback,
+    };
+
     MainWindowCoordinator(Gtk::Window& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfigStore> configStorePtr);
     ~MainWindowCoordinator();
 
@@ -50,7 +57,7 @@ namespace ao::gtk
     void prepareSession();
     void restorePlaybackSession();
 
-    void saveSession();
+    void saveSession(SessionSavePolicy policy);
     void loadSession();
 
     GtkUiDependencies uiDependencies();

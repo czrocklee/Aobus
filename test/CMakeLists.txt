@@ -128,6 +128,11 @@ target_link_libraries(ao_test_support_runtime
 )
 
 if(AOBUS_BUILD_GTK)
+  add_executable(ao_gapplication_probe
+      integration/linux-gtk/GApplicationReplacementProbeMain.cpp
+  )
+  target_link_libraries(ao_gapplication_probe PRIVATE PkgGTKMM)
+
   add_library(ao_test_support_gtk STATIC
       unit/linux-gtk/GtkApplicationTestSupport.cpp
       unit/linux-gtk/GtkLayoutTestSupport.cpp
@@ -711,13 +716,14 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
     unit/linux-gtk/app/KeymapApplicatorTest.cpp
-    unit/linux-gtk/app/LibraryWindowLifecycleTest.cpp
     unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp
     unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/GtkMainContextExecutorTest.cpp
+    unit/linux-gtk/app/GtkStartupPlanTest.cpp
     unit/linux-gtk/app/AppConfigStoreTest.cpp
+    unit/linux-gtk/app/GApplicationReplacementTest.cpp
     unit/linux-gtk/app/MainWindowTest.cpp
     unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutStoreTest.cpp
@@ -744,6 +750,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp
     unit/linux-gtk/platform/MprisArtUrlSessionTest.cpp
     unit/linux-gtk/platform/MprisBridgeTest.cpp
+    unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
       unit/linux-gtk/layout/runtime/ActionBinderTest.cpp
@@ -788,6 +795,7 @@ add_executable(ao_gtk_test
 
 target_link_libraries(ao_gtk_test PRIVATE
     aobus-gtk-lib
+    ao_fatal_probe_support
     ao_test_support_gtk
     ao_test_support_runtime
     PkgGTKMM
@@ -795,6 +803,7 @@ target_link_libraries(ao_gtk_test PRIVATE
     Catch2::Catch2
     FakeIt::FakeIt-catch
 )
+add_dependencies(ao_gtk_test ao_gapplication_probe)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
 endif()

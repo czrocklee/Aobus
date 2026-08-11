@@ -1701,6 +1701,150 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("PlaybackSession - observation starts natural saves without restoring a payload",
+            "[runtime][regression][playback-session]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    addReadyAudioProvider(*runtimePtr);
+    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
+    auto const viewId = createView(*runtimePtr);
+
+    runtimePtr->startPlaybackSessionPersistence();
+    REQUIRE_FALSE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
+    runtimePtr->playback().commands().pause();
+    executor->drain();
+
+    REQUIRE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
+    CHECK(storedSession(runtimePtr->playbackSessionConfigStore()).currentTrackId == track);
+  }
+
+  TEST_CASE("PlaybackSession - shutdown checkpoints only an observing lifecycle",
+            "[runtime][regression][playback-session][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    addReadyAudioProvider(*runtimePtr);
+    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
+    auto const viewId = createView(*runtimePtr);
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
+    REQUIRE_FALSE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
+
+    SECTION("dormant lifecycle stays inert")
+    {
+      runtimePtr->shutdown();
+      CHECK_FALSE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
+    }
+
+    SECTION("observing lifecycle performs the final checkpoint")
+    {
+      runtimePtr->startPlaybackSessionPersistence();
+      runtimePtr->shutdown();
+
+      REQUIRE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
+      CHECK(storedSession(runtimePtr->playbackSessionConfigStore()).currentTrackId == track);
+    }
+
+    SECTION("write-sealed lifecycle stays inert")
+    {
+      runtimePtr->startPlaybackSessionPersistence();
+      runtimePtr->sealPlaybackSessionPersistenceWrites();
+      runtimePtr->shutdown();
+      CHECK_FALSE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
+    }
+  }
+
+  TEST_CASE("PlaybackSession - library-switch retirement permanently seals persistence",
+            "[runtime][regression][playback-session][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto sleeper = ControlledSleeper{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+
+    addReadyAudioProvider(*runtimePtr);
+    executor->runUntilIdle();
+    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
+    auto const viewId = createView(*runtimePtr);
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
+    runtimePtr->playback().commands().pause();
+    executor->runUntilIdle();
+    REQUIRE(runtimePtr->savePlaybackSession());
+    executor->runUntilIdle();
+    REQUIRE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+
+    auto const scheduledSaveIndex = sleeper.callCount();
+    runtimePtr->playback().commands().setVolume(0.4F);
+    REQUIRE(sleeper.waitForCallCount(scheduledSaveIndex + 1));
+    auto const beforeFinalSeekRevision = runtimePtr->playback().snapshot().transport.finalSeekRevision;
+    executor->defer([runtime = runtimePtr.get()]
+                    { runtime->playback().commands().seek(std::chrono::milliseconds{450}); });
+    REQUIRE(executor->queuedCount() == 1);
+
+    runtimePtr->sealPlaybackSessionPersistenceWrites();
+    REQUIRE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+    REQUIRE(sleeper.waitForCancellation(scheduledSaveIndex));
+
+    REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
+    REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
+    CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+
+    REQUIRE(executor->runOne());
+    CHECK(runtimePtr->playback().snapshot().transport.finalSeekRevision != beforeFinalSeekRevision);
+    executor->runUntilIdle();
+    CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+
+    REQUIRE(runtimePtr->savePlaybackSession());
+    CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+
+    runtimePtr->shutdown();
+    runtimePtr->shutdown();
+    executor->runUntilIdle();
+    CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+  }
+
+  TEST_CASE("PlaybackSession - library-switch retirement wins an expired debounce callback collision",
+            "[runtime][regression][playback-session][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto sleeper = ControlledSleeper{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+
+    addReadyAudioProvider(*runtimePtr);
+    executor->runUntilIdle();
+    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
+    auto const viewId = createView(*runtimePtr);
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
+    runtimePtr->playback().commands().pause();
+    executor->runUntilIdle();
+    REQUIRE(runtimePtr->savePlaybackSession());
+    executor->runUntilIdle();
+    REQUIRE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+
+    auto const scheduledSaveIndex = sleeper.callCount();
+    runtimePtr->playback().commands().setVolume(0.4F);
+    REQUIRE(sleeper.waitForCallCount(scheduledSaveIndex + 1));
+    REQUIRE(sleeper.fire(scheduledSaveIndex));
+    REQUIRE(executor->waitUntilQueued());
+
+    REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
+    CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+    executor->runUntilIdle();
+    CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+
+    runtimePtr->shutdown();
+    executor->runUntilIdle();
+    CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
+  }
+
   TEST_CASE("PlaybackSession - output capability changes do not revive a discarded session",
             "[runtime][regression][playback-session]")
   {

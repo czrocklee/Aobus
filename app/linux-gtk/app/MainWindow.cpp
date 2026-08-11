@@ -23,6 +23,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/WorkspaceService.h>
@@ -172,7 +173,10 @@ namespace ao::gtk
       return;
     }
 
-    _mainWindowCoordinatorPtr->saveSession();
+    auto const persistenceReady = _playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready;
+    auto const policy = persistenceReady ? MainWindowCoordinator::SessionSavePolicy::Full
+                                         : MainWindowCoordinator::SessionSavePolicy::ExcludeSelectedRootAndPlayback;
+    _mainWindowCoordinatorPtr->saveSession(policy);
   }
 
   Result<> MainWindow::retireForLibrarySwitch()
@@ -186,9 +190,9 @@ namespace ao::gtk
 
     saveSession();
 
-    if (auto discardedRes = _runtime.discardRestorablePlaybackSession(); !discardedRes)
+    if (auto discardedRes = _runtime.retirePlaybackSessionForLibrarySwitch(); !discardedRes)
     {
-      APP_LOG_ERROR("Failed to retire active library for replacement: {}", discardedRes.error().message);
+      APP_LOG_ERROR("Failed to retire active library for process restart: {}", discardedRes.error().message);
       auto* const dialog = AppDialog::presentMessage(
         *this,
         "Unable to Switch Libraries",
@@ -253,10 +257,14 @@ namespace ao::gtk
   {
     AO_EXPECTS(_sessionPhase == SessionPhase::Prepared, "Only a prepared GTK session can be activated");
 
+    _playbackPersistenceAdmission = restoreMode == PlaybackRestoreMode::Restore
+                                      ? PlaybackPersistenceAdmission::Ready
+                                      : PlaybackPersistenceAdmission::AwaitingRootCommit;
     _sessionPhase = SessionPhase::Active;
 
     if (restoreMode == PlaybackRestoreMode::Restore)
     {
+      _runtime.startPlaybackSessionPersistence();
       _mainWindowCoordinatorPtr->restorePlaybackSession();
     }
 
@@ -270,6 +278,29 @@ namespace ao::gtk
       APP_LOG_WARN("Failed to activate MPRIS for GTK session: {}", e.what());
     }
 
+    return {};
+  }
+
+  Result<> MainWindow::commitSuccessorLibrarySelection()
+  {
+    AO_EXPECTS(_sessionPhase == SessionPhase::Active, "Only an active GTK successor can commit its library");
+    AO_EXPECTS(_playbackPersistenceAdmission == PlaybackPersistenceAdmission::AwaitingRootCommit,
+               "GTK successor library selection can only be committed once");
+
+    auto appSession = rt::AppSessionState{};
+    _configStorePtr->loadAppSession(appSession);
+    appSession.lastLibraryPath = _runtime.musicRoot().string();
+    auto persistedRes = _configStorePtr->saveAppSession(appSession);
+
+    if (!persistedRes)
+    {
+      _runtime.sealPlaybackSessionPersistenceWrites();
+      _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      return persistedRes;
+    }
+
+    _runtime.startPlaybackSessionPersistence();
+    _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
     return {};
   }
 

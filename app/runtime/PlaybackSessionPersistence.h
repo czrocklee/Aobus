@@ -11,6 +11,7 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <chrono>
+#include <cstdint>
 #include <stop_token>
 
 namespace ao::rt
@@ -39,12 +40,24 @@ namespace ao::rt
     PlaybackSessionPersistence& operator=(PlaybackSessionPersistence&&) = delete;
 
     Result<> checkpoint();
+    void start();
+    void sealWrites();
     Result<> shutdown();
     Result<PlaybackSessionRestoreResult> restore();
     Result<> discardRestorableSession();
+    Result<> retireForLibrarySwitch();
 
   private:
     using Delay = std::chrono::milliseconds;
+
+    enum class Lifecycle : std::uint8_t
+    {
+      Dormant,
+      Observing,
+      WriteSealed,
+      Retired,
+      Shutdown,
+    };
 
     static constexpr Delay kSaveDebounceDelay = std::chrono::seconds{1};
 
@@ -76,7 +89,6 @@ namespace ao::rt
     bool _sessionDiscarded = false;
     bool _restorePublicationPending = false;
     bool _restoring = false;
-    bool _started = false;
-    bool _shuttingDown = false;
+    Lifecycle _lifecycle = Lifecycle::Dormant;
   };
 } // namespace ao::rt

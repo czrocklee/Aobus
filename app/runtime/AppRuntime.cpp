@@ -200,6 +200,21 @@ namespace ao::rt
     return _implPtr->playbackSessionPersistencePtr->discardRestorableSession();
   }
 
+  void AppRuntime::startPlaybackSessionPersistence()
+  {
+    _implPtr->playbackSessionPersistencePtr->start();
+  }
+
+  void AppRuntime::sealPlaybackSessionPersistenceWrites()
+  {
+    _implPtr->playbackSessionPersistencePtr->sealWrites();
+  }
+
+  Result<> AppRuntime::retirePlaybackSessionForLibrarySwitch()
+  {
+    return _implPtr->playbackSessionPersistencePtr->retireForLibrarySwitch();
+  }
+
   void AppRuntime::reloadAllTracks()
   {
     sources().reloadAllTracks();

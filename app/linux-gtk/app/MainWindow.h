@@ -70,6 +70,7 @@ namespace ao::gtk
     void saveSession();
     Result<> prepareSession();
     Result<> activateSession(PlaybackRestoreMode restoreMode);
+    Result<> commitSuccessorLibrarySelection();
     Result<> retireForLibrarySwitch();
     std::filesystem::path const& musicRoot() const noexcept;
     SessionPhase sessionPhase() const noexcept;
@@ -90,6 +91,13 @@ namespace ao::gtk
     void on_hide() override;
 
   private:
+    enum class PlaybackPersistenceAdmission : std::uint8_t
+    {
+      Ready,
+      AwaitingRootCommit,
+      Sealed,
+    };
+
     void installPlaybackSpaceShortcut();
     void installOrderKeyRepeatSuppression();
 
@@ -104,6 +112,7 @@ namespace ao::gtk
     uimodel::KeymapModel _keymap;
     uimodel::KeyRepeatGuard _orderKeyRepeatGuard;
     SessionPhase _sessionPhase = SessionPhase::Constructed;
+    PlaybackPersistenceAdmission _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
     bool _mprisStarted = false;
   };
 } // namespace ao::gtk

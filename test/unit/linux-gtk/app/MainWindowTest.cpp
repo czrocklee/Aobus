@@ -11,6 +11,7 @@
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -22,6 +23,8 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
@@ -32,6 +35,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <utility>
 
@@ -81,7 +85,7 @@ namespace ao::gtk::test
 
     auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
     REQUIRE(window.prepareSession());
-    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
 
     auto before = rt::AppSessionState{};
     configStorePtr->loadAppSession(before);
@@ -105,7 +109,7 @@ namespace ao::gtk::test
 
     auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
     REQUIRE(window.prepareSession());
-    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
 
     auto before = rt::AppSessionState{};
     configStorePtr->loadAppSession(before);
@@ -147,6 +151,119 @@ namespace ao::gtk::test
     CHECK(persistedSession.lastLibraryPath == "/tmp/new-library");
   }
 
+  TEST_CASE("MainWindow - failed successor root commit isolates root and playback persistence",
+            "[gtk][regression][main-window][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto tempDir = ao::test::TempDir{};
+    auto const musicRoot = tempDir.path() / "music";
+    auto const databasePath = tempDir.path() / "database";
+    auto const configDir = tempDir.path() / "global-config";
+    auto const parkedConfigDir = tempDir.path() / "parked-global-config";
+    auto const configPath = configDir / "config.yaml";
+    auto const workspacePath = tempDir.path() / "workspace.yaml";
+    auto const layoutPath = musicRoot / ".aobus" / "gtk_layout.yaml";
+    std::filesystem::create_directories(musicRoot);
+    std::filesystem::create_directories(databasePath);
+    std::filesystem::create_directories(configDir);
+
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto oldSession = rt::AppSessionState{};
+    oldSession.lastLibraryPath = "/old/durable/library";
+    oldSession.lastOutputBackendId = "old-backend";
+    oldSession.lastOutputDeviceId = "old-device";
+    oldSession.lastOutputProfileId = "old-profile";
+    REQUIRE(configStorePtr->saveAppSession(oldSession));
+    REQUIRE_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
+
+    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+      .musicRoot = musicRoot,
+      .databasePath = databasePath,
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspacePath),
+      .playbackSessionConfigStore = &configStorePtr->playbackSessionStore(),
+    }));
+    rt::test::addReadyAudioProvider(*runtimePtr);
+    drainGtkEvents();
+
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId = addRuntimeTrack(*runtimePtr, {.title = "Successor Track", .uri = fixturePath});
+
+    {
+      auto window = MainWindow{*runtimePtr, configStorePtr, nullptr};
+      REQUIRE(window.prepareSession());
+      REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
+      auto const viewId = runtimePtr->workspace().snapshot().activeViewId;
+      REQUIRE(viewId != rt::kInvalidViewId);
+      runtimePtr->playback().commands().setOutputDevice(
+        audio::BackendId{"test_backend"}, audio::DeviceId{"test_device"}, audio::kProfileShared);
+      drainGtkEvents();
+      std::filesystem::remove(workspacePath);
+      std::filesystem::remove(layoutPath);
+
+      std::filesystem::rename(configDir, parkedConfigDir);
+
+      {
+        auto blocker = std::ofstream{configDir};
+        REQUIRE(blocker);
+        blocker << "not a directory";
+      }
+
+      auto const committedRes = window.commitSuccessorLibrarySelection();
+      REQUIRE_FALSE(committedRes);
+      CHECK(committedRes.error().code == Error::Code::IoError);
+
+      REQUIRE(std::filesystem::remove(configDir));
+      std::filesystem::rename(parkedConfigDir, configDir);
+
+      auto durableSession = rt::AppSessionState{};
+      configStorePtr->loadAppSession(durableSession);
+      CHECK(durableSession.lastLibraryPath == oldSession.lastLibraryPath);
+      REQUIRE_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
+
+      SECTION("playback stays blocked while ordinary window state saves")
+      {
+        REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
+        REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+        runtimePtr->playback().commands().pause();
+        drainGtkEvents();
+        CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
+
+        REQUIRE(runtimePtr->savePlaybackSession());
+        CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
+
+        window.saveSession();
+        window.present();
+        window.hide();
+        drainGtkEvents();
+        configStorePtr->loadAppSession(durableSession);
+        CHECK(durableSession.lastLibraryPath == oldSession.lastLibraryPath);
+        CHECK(durableSession.lastOutputBackendId == "test_backend");
+        CHECK(durableSession.lastOutputDeviceId == "test_device");
+        CHECK(durableSession.lastOutputProfileId == audio::kProfileShared.raw());
+        REQUIRE(*configStorePtr->playbackSessionStore().contains("window"));
+        CHECK(std::filesystem::exists(workspacePath));
+        CHECK(std::filesystem::exists(layoutPath));
+        CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
+      }
+
+      SECTION("a later library switch retries durable payload removal")
+      {
+        REQUIRE(configStorePtr->playbackSessionStore().save(
+          rt::kPlaybackSessionConfigGroup, rt::PlaybackSessionState{}, rt::PlaybackSessionYamlSchema{}));
+        REQUIRE(window.retireForLibrarySwitch());
+        CHECK(window.sessionPhase() == MainWindow::SessionPhase::Retired);
+        CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
+      }
+    }
+
+    runtimePtr->shutdown();
+    runtimePtr->shutdown();
+    drainGtkEvents();
+    CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
+  }
+
   TEST_CASE("MainWindow - failed library preparation stays visible and keeps the active window usable",
             "[gtk][regression][main-window][session]")
   {
@@ -170,7 +287,7 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
     auto window = MainWindow{*runtimePtr, configStorePtr, nullptr};
     REQUIRE(window.prepareSession());
-    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     window.applyTheme(uimodel::ThemePreset::Modern);
 
     auto const retiredRes = window.retireForLibrarySwitch();

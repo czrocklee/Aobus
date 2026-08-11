@@ -9,11 +9,9 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "platform/AudioBackendBootstrap.h"
-#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/Log.h>
 
 #include <gtkmm/application.h>
 
@@ -82,54 +80,5 @@ namespace ao::gtk
 
     windowPtr->present();
     return {};
-  }
-
-  Result<LibraryWindowOpenOutcome> openLibraryWindow(std::filesystem::path const& activeRoot,
-                                                     std::filesystem::path const& requestedRoot,
-                                                     bool const scanAfterOpen,
-                                                     LibraryWindowReplacementCallbacks const& callbacks)
-  {
-    if (activeRoot == requestedRoot)
-    {
-      if (scanAfterOpen)
-      {
-        callbacks.scanActive();
-      }
-
-      callbacks.presentActive();
-      return LibraryWindowOpenOutcome::Reused;
-    }
-
-    if (auto const preparedRes = callbacks.prepareCandidate(); !preparedRes)
-    {
-      return std::unexpected{preparedRes.error()};
-    }
-
-    callbacks.configureCandidate();
-
-    if (auto const retiredRes = callbacks.retireActive(); !retiredRes)
-    {
-      return std::unexpected<Error>{retiredRes.error()};
-    }
-
-    if (auto const activatedRes = callbacks.activateCandidate(); !activatedRes)
-    {
-      AO_FATAL("Candidate library activation failed after active-library retirement: {}", activatedRes.error().message);
-    }
-
-    callbacks.replaceActiveSlot();
-    callbacks.releaseRetired();
-
-    if (auto const persistedRes = callbacks.persistSelectedPath(); !persistedRes)
-    {
-      APP_LOG_WARN("Failed to persist the selected GTK library path: {}", persistedRes.error().message);
-    }
-
-    if (scanAfterOpen)
-    {
-      callbacks.scanActive();
-    }
-
-    return LibraryWindowOpenOutcome::Replaced;
   }
 } // namespace ao::gtk

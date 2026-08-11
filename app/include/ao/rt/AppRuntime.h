@@ -70,6 +70,12 @@ namespace ao::rt
     Result<> savePlaybackSession();
     Result<PlaybackSessionRestoreResult> restorePlaybackSession();
     Result<> discardRestorablePlaybackSession();
+    /** Establishes playback save observation without loading a persisted session. */
+    void startPlaybackSessionPersistence();
+    /** Permanently disables playback-session writes without performing persistence I/O. */
+    void sealPlaybackSessionPersistenceWrites();
+    /** Removes persisted playback intent and permanently seals persistence for a library switch. */
+    Result<> retirePlaybackSessionForLibrarySwitch();
 
     void reloadAllTracks();
 

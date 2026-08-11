@@ -53,7 +53,7 @@ Use the [specification template](../template/spec.md).
 - [Playback succession cursor](playback/cursor.md) defines live-projection launch, anchors, navigation, repeat, shuffle, prepared-next, and failure walking.
 - [Decoder session](playback/decoder-session.md) defines decoder lifecycle, inspection, exact PCM output selection, and failures.
 - [Audio execution and concurrency](playback/audio-execution.md) defines control serialization, event delivery, realtime rendering, gapless transitions, generation fences, backend lifetime, and shutdown.
-- [Playback session persistence](playback/session-persistence.md) defines strict restore, normalization, deferred transport, event-driven best-effort saving, discard, and shutdown.
+- [Playback session persistence](playback/session-persistence.md) defines strict restore, normalization, deferred transport, event-driven best-effort saving, discard, write sealing, terminal retirement, and shutdown.
 
 ## Query
 
@@ -82,7 +82,7 @@ Use the [specification template](../template/spec.md).
 
 ## Linux GTK
 
-- [GTK active-library lifecycle](linux-gtk/active-library-lifecycle.md) defines startup selection, runtime construction, same-root reuse, replacement, checkpointing, and shutdown.
+- [GTK active-library lifecycle](linux-gtk/active-library-lifecycle.md) defines startup selection, runtime construction, same-root reuse, destructive successor restart, checkpointing, and shutdown.
 - [GTK dialog lifecycle](linux-gtk/dialog-lifecycle.md) defines custom-dialog roles, preferences, native chooser handoff, and layout-editor actions.
 - [GTK MPRIS](linux-gtk/mpris.md) defines protocol ownership, command routing, observation, name lifecycle, and degradation.
 - [GTK track detail](linux-gtk/track-detail.md) defines field-grid, inline editing, custom-metadata undo, tag-chip flow, and constrained layout.

@@ -84,7 +84,8 @@ Version `3` also includes the current numeric `TrackSortField` mapping.
 Changing a sort-field raw value requires a playback schema version or an explicit version-3 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
 List and track ids are scoped to one library, but version 3 stores no library UUID.
-The current GTK lifecycle prevents cross-library interpretation by preparing the candidate without restore, discarding the group through the active old pair, and activating the replacement with idle playback.
+The current GTK lifecycle prevents cross-library interpretation by physically deleting the group and terminally sealing persistence in the old process, fully destroying that graph, and activating a successor process with idle playback.
+The successor admits future playback writes only after the matching root is durable; root-commit failure keeps the prior root, no payload, and a permanent write seal.
 
 ## Examples
 

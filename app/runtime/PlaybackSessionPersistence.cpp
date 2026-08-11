@@ -102,12 +102,12 @@ namespace ao::rt
 
   void PlaybackSessionPersistence::ensureStarted()
   {
-    if (_started || _shuttingDown)
+    if (_lifecycle != Lifecycle::Dormant)
     {
       return;
     }
 
-    _started = true;
+    _lifecycle = Lifecycle::Observing;
     _lastSnapshot = _playback.snapshot();
     _successionStateSubscription = _succession.onRestorableStateChanged([this] { requestDebouncedSave(); });
     _snapshotSubscription =
@@ -116,7 +116,7 @@ namespace ao::rt
 
   Result<> PlaybackSessionPersistence::checkpoint()
   {
-    if (_shuttingDown || _restoring)
+    if (_restoring || (_lifecycle != Lifecycle::Dormant && _lifecycle != Lifecycle::Observing))
     {
       return {};
     }
@@ -124,6 +124,25 @@ namespace ao::rt
     ensureStarted();
     cancelScheduledSave();
     return save();
+  }
+
+  void PlaybackSessionPersistence::start()
+  {
+    ensureStarted();
+  }
+
+  void PlaybackSessionPersistence::sealWrites()
+  {
+    if (_lifecycle == Lifecycle::Retired || _lifecycle == Lifecycle::Shutdown)
+    {
+      return;
+    }
+
+    _lifecycle = Lifecycle::WriteSealed;
+    _sessionDiscarded = true;
+    _successionStateSubscription.reset();
+    _snapshotSubscription.reset();
+    cancelScheduledSave();
   }
 
   void PlaybackSessionPersistence::checkpointBestEffort()
@@ -136,13 +155,13 @@ namespace ao::rt
 
   Result<> PlaybackSessionPersistence::shutdown()
   {
-    if (_shuttingDown)
+    if (_lifecycle == Lifecycle::Retired || _lifecycle == Lifecycle::Shutdown)
     {
       return {};
     }
 
-    auto const shouldSave = _started;
-    _shuttingDown = true;
+    auto const shouldSave = _lifecycle == Lifecycle::Observing;
+    _lifecycle = Lifecycle::Shutdown;
     _successionStateSubscription.reset();
     _snapshotSubscription.reset();
     cancelScheduledSave();
@@ -156,6 +175,11 @@ namespace ao::rt
 
   void PlaybackSessionPersistence::handleSnapshot(PlaybackSnapshot const& snapshot)
   {
+    if (_lifecycle != Lifecycle::Observing)
+    {
+      return;
+    }
+
     auto const previous = _lastSnapshot;
     _lastSnapshot = snapshot;
 
@@ -189,7 +213,7 @@ namespace ao::rt
                                   (snapshot.transport.transport == audio::Transport::Paused ||
                                    snapshot.transport.transport == audio::Transport::Idle);
 
-    if (_started && (subjectChanged || committedPositionChanged || settledTransport))
+    if (subjectChanged || committedPositionChanged || settledTransport)
     {
       checkpointBestEffort();
     }
@@ -206,7 +230,7 @@ namespace ao::rt
   void PlaybackSessionPersistence::requestDebouncedSave()
   {
     if (auto const active = hasActiveSession();
-        !_started || _shuttingDown || _restoring || !hasRestorableSession() || (_sessionDiscarded && !active))
+        _lifecycle != Lifecycle::Observing || _restoring || !hasRestorableSession() || (_sessionDiscarded && !active))
     {
       return;
     }
@@ -235,7 +259,7 @@ namespace ao::rt
 
   void PlaybackSessionPersistence::handleScheduledSave()
   {
-    if (_shuttingDown)
+    if (_lifecycle != Lifecycle::Observing)
     {
       return;
     }
@@ -430,6 +454,38 @@ namespace ao::rt
     _succession.discardPlaybackSessionSnapshot();
     _playbackTransport.discardPlaybackTransportSnapshot();
     _sessionDiscarded = true;
+    return {};
+  }
+
+  Result<> PlaybackSessionPersistence::retireForLibrarySwitch()
+  {
+    if (_lifecycle == Lifecycle::Retired)
+    {
+      return {};
+    }
+
+    if (_lifecycle == Lifecycle::Shutdown)
+    {
+      return makeError(Error::Code::InvalidState, "Playback session persistence is already shut down");
+    }
+
+    if (_restoring)
+    {
+      return makeError(Error::Code::InvalidState, "Playback session restore is in progress");
+    }
+
+    if (auto const removedRes = _config.removeGroup(kPlaybackSessionConfigGroup); !removedRes)
+    {
+      return std::unexpected{removedRes.error()};
+    }
+
+    _sessionDiscarded = true;
+    _lifecycle = Lifecycle::Retired;
+    _successionStateSubscription.reset();
+    _snapshotSubscription.reset();
+    cancelScheduledSave();
+    _succession.discardPlaybackSessionSnapshot();
+    _playbackTransport.discardPlaybackTransportSnapshot();
     return {};
   }
 } // namespace ao::rt

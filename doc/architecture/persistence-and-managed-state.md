@@ -203,13 +203,19 @@ Workspace, GTK preference, layout, and presentation owners currently use their o
 
 ### Library switching
 
-Library switching in GTK prepares a candidate runtime and its per-library stores while the current pair remains active, then retires the old pair and activates the candidate.
-Only after the candidate is active and the old pair is released does GTK record the newly selected library in global application state.
-That selected-path save is best-effort: failure retains the previous durable path without rolling back the usable in-process candidate.
-Global layout customization and application preferences survive the replacement; library database, workspace, and per-library presentation state change with the selected root.
+Library switching in GTK checkpoints the active pair, removes the global restorable playback group, terminally seals playback persistence, and releases its complete window/runtime/store graph before launching a successor process.
+The parent never records the requested root.
+Only after the successor's strict explicit-root graph is active does GTK record the newly selected library in global application state.
+That selected-path save is best-effort.
+Success admits playback observation and later playback checkpoints.
+Failure retains the previous durable path without rolling back the usable successor, permanently seals playback writes, and excludes both the selected root and playback from later window checkpoints, so the global file cannot acquire new-library playback under the old root.
+Those restricted checkpoints still save window geometry, output selection while preserving the loaded root, per-library column layout, and workspace state.
+Global layout customization and application preferences survive through their durable stores; library database, workspace, and per-library presentation state change with the selected root.
+The original parent releases its `ConfigStore` before launching the intended successor, so that parent-spawned edge has no concurrent snapshots of the application configuration file.
+The fixed GApplication name does not serialize an independently launched instance that becomes primary before successor registration; such an out-of-protocol graph may overlap the successor after replacement.
 The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns the orchestration and lifetime order; this document owns which state and stores survive that transition, while the [workspace architecture](workspace.md) owns the workspace candidate's semantics.
 
-WinUI performs a destructive process restart for a different root.
+WinUI independently performs a destructive process restart for a different root.
 The parent checkpoints its current desktop and workspace state, releases its `MainWindow`, `LibrarySession`, runtime, desktop-settings store, and playback store, and only then launches the successor.
 The supported path therefore has no concurrent stale `ConfigStore` snapshots for the same application files.
 The parent never writes the requested root; the successor holds it as pending state until its one window/session is active, then records it best effort.
@@ -222,7 +228,7 @@ Same-root selection is a no-op, while Rescan uses the active session's transacti
 - Library truth is never reconstructed from UI configuration when the library database is available.
 - Every managed group or standalone document has one semantic schema owner and one file-writer owner; these roles may be different components.
 - Global application state and per-library state have separate owners and lifetimes.
-- One process path has one active writer authority, and sibling groups in a shared file are mutated through the same live document; WinUI destroys that authority before launching a successor.
+- One process path has one active writer authority, and sibling groups in a shared file are mutated through the same live document; on their supported parent-spawned restart paths, GTK and WinUI destroy that original authority before launching a successor.
 - Defaults are typed model state, not values inferred by the YAML parser.
 - Version and migration policy is declared by the semantic owner; managed-state schemas are never derived solely from unannotated aggregate reflection or member layout.
 - A restore that can invalidate live cross-service state prepares and validates a candidate before changing the live authority.
@@ -279,6 +285,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) protects workspace absence, restore rollback, and failure propagation.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects stable workspace presentation conversion and strict semantic rejection.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects exact deserialization, semantic validation, event-driven saving, discard, failure propagation, and store selection.
+- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect global GTK groups and delta-from-default keymaps.
 - [`LibraryStartupPlanTest.cpp`](../../test/unit/winui/app/LibraryStartupPlanTest.cpp) and [`DestructiveLibraryRestartTest.cpp`](../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp) protect deferred WinUI root commit and writer-release-before-launch ordering.
 - [`ShellLayoutStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp), [`ShellLayoutComponentStateStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect the specialized GTK file boundaries.

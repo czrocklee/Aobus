@@ -95,6 +95,9 @@ class TidyChecksTest(unittest.TestCase):
     def test_specialization_provider_header_is_narrowly_ignored_by_include_cleaner(self):
         self.assertIn(r".*ao[/\\]utility[/\\]StrongTypeFormatter\.h$", tidyconfig.CONFIG_BASE)
 
+    def test_boost_process_definition_header_is_narrowly_ignored_by_include_cleaner(self):
+        self.assertIn(r".*boost[/\\]process[/\\]v2[/\\]process\.hpp$", tidyconfig.CONFIG_BASE)
+
 
 class StaleNolintAuditTest(unittest.TestCase):
     def test_reports_only_checks_disabled_for_the_file_mode(self):

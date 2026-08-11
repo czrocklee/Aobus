@@ -259,8 +259,10 @@ namespace ao::gtk
     _implPtr->restorePlaybackSession(_runtime);
   }
 
-  void MainWindowCoordinator::saveSession()
+  void MainWindowCoordinator::saveSession(SessionSavePolicy const policy)
   {
+    auto const fullSave = policy == SessionSavePolicy::Full;
+
     // Window state
     auto windowState = WindowState{};
 
@@ -283,7 +285,11 @@ namespace ao::gtk
     auto session = rt::AppSessionState{};
     _configStorePtr->loadAppSession(session);
 
-    session.lastLibraryPath = _runtime.musicRoot().string();
+    if (fullSave)
+    {
+      session.lastLibraryPath = _runtime.musicRoot().string();
+    }
+
     auto const& pb = _runtime.playback().snapshot().transport;
     session.lastOutputBackendId = pb.output.selectedDevice.backendId.raw();
     session.lastOutputDeviceId = pb.output.selectedDevice.deviceId.raw();
@@ -294,9 +300,12 @@ namespace ao::gtk
       APP_LOG_WARN("MainWindowCoordinator: Failed to save application session - {}", savedRes.error().message);
     }
 
-    if (auto const savedRes = _runtime.savePlaybackSession(); !savedRes)
+    if (fullSave)
     {
-      APP_LOG_WARN("MainWindowCoordinator: Failed to checkpoint playback session - {}", savedRes.error().message);
+      if (auto const savedRes = _runtime.savePlaybackSession(); !savedRes)
+      {
+        APP_LOG_WARN("MainWindowCoordinator: Failed to checkpoint playback session - {}", savedRes.error().message);
+      }
     }
 
     _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
