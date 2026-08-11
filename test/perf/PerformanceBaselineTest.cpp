@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 //
-// Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
+// Synthetic baseline measurement — no machine-dependent pass/fail thresholds.
 
 #include "lib/library/OpenValidationMetrics.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -2223,10 +2223,12 @@ namespace ao::rt::test
                      metric("sampled_rss_growth", rssGrowth, "KiB"),
                      metric("track_cursor_rows", static_cast<std::int64_t>(metrics.trackCursorRows), "count"),
                      metric("manifest_point_reads", static_cast<std::int64_t>(metrics.manifestPointReads), "count"),
+                     metric("named_database_opens", static_cast<std::int64_t>(metrics.namedDatabaseOpens), "count"),
                    });
 
     CHECK(metrics.trackCursorRows == kTrackCount);
     CHECK(metrics.manifestPointReads == kTrackCount);
+    CHECK(metrics.namedDatabaseOpens == 7);
   }
 
   TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][unit][baseline]")

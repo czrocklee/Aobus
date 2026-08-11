@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/fatal/FatalProbeProcess.h"
+#include "test/fatal/ProbeProcess.h"
 #include "test/fatal/RuntimeFatalProbeProtocol.h"
 #include "test/unit/TestFixtureSupport.h"
 
@@ -25,13 +25,13 @@ namespace ao::rt::test
       auto scratch = ao::test::TempDir{};
       auto scenario = std::string{expectation.scenario};
       scenario.append(":").append(scratch.path().filename().string());
-      auto const result = ao::test::runFatalProbe(executablePath, scenario, kTimeout);
+      auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
 
       REQUIRE(result.started);
       CHECK(result.launchError.empty());
       CHECK_FALSE(result.timedOut);
-      CHECK(result.endedByFatalTermination());
-      CHECK(result.endedByPlatformAbort());
+      CHECK(result.hasFatalTermination());
+      CHECK(result.hasPlatformAbort());
       CHECK(result.standardError.contains("AOBUS_FATAL"));
       CHECK(result.standardError.contains("category=" + std::string{expectation.category}));
 
@@ -66,14 +66,9 @@ namespace ao::rt::test
     for (auto const scenario : runtimeCleanProbeScenarios())
     {
       INFO("probe: " << scenario);
-      auto const result = ao::test::runFatalProbe(executablePath, scenario, kTimeout);
+      auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
 
-      REQUIRE(result.started);
-      CHECK(result.launchError.empty());
-      CHECK_FALSE(result.timedOut);
-      CHECK(result.exited);
-      CHECK(result.exitCode == 0);
-      CHECK_FALSE(result.signaled);
+      REQUIRE(result.hasSuccessfulExit());
       CHECK_FALSE(result.standardError.contains("AOBUS_FATAL"));
     }
   }

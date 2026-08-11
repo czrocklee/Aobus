@@ -50,6 +50,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -59,12 +60,6 @@ namespace ao::rt
 {
   namespace
   {
-    enum class MutationMode : std::uint8_t
-    {
-      Commit,
-      Preview,
-    };
-
     struct PatchResult final
     {
       bool changedHot = false;
@@ -321,6 +316,46 @@ namespace ao::rt
         .message = std::format("{}: {}", prefix, error.message),
         .location = error.location,
       }};
+    }
+
+    template<typename Operation,
+             typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>>
+    OperationResult applyInteractivePreview(LibraryMutationService& mutationService, Operation&& operation)
+    {
+      auto mutationRes = mutationService.beginInteractiveMutation();
+
+      if (!mutationRes)
+      {
+        return OperationResult{std::unexpected{mutationRes.error()}};
+      }
+
+      auto mutation = std::move(*mutationRes);
+      auto result = mutation.apply(std::forward<Operation>(operation));
+
+      if (result)
+      {
+        mutation.abort();
+      }
+
+      return result;
+    }
+
+    template<typename Operation,
+             typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>,
+             typename Value = detail::OperationResultTraits<OperationResult>::ValueType>
+    Result<MutationExecution<Value>> executeInteractiveMutation(LibraryMutationService& mutationService,
+                                                                std::string_view operationName,
+                                                                Operation&& operation)
+    {
+      auto mutationRes = mutationService.beginInteractiveMutation();
+
+      if (!mutationRes)
+      {
+        return std::unexpected{mutationRes.error()};
+      }
+
+      auto mutation = std::move(*mutationRes);
+      return mutation.execute(std::forward<Operation>(operation), operationName);
     }
 
     struct ImportTarget final
@@ -592,10 +627,59 @@ namespace ao::rt
       return reply;
     }
 
-    PreviewCreateTrackReply previewReply(CreateTrackReply reply)
+    Result<ListId> createListInTransaction(library::LibraryWrite& transaction, LibraryWriter::ListDraft const& draft)
     {
-      return PreviewCreateTrackReply{
-        .uri = std::move(reply.uri), .title = std::move(reply.title), .artist = std::move(reply.artist)};
+      auto listWriter = transaction.lists();
+      auto list = listForDraft(draft);
+
+      if (auto result = validateListDraft(draft); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      auto result = listWriter.create(list);
+
+      if (!result)
+      {
+        return storageError("Failed to create list", result.error());
+      }
+
+      return *result;
+    }
+
+    Result<UpdateListReply> updateListInTransaction(library::LibraryWrite& transaction,
+                                                    LibraryWriter::ListDraft const& draft)
+    {
+      auto listWriter = transaction.lists();
+      auto optExisting = listWriter.get(draft.listId);
+
+      if (!optExisting)
+      {
+        return makeError(Error::Code::NotFound, std::format("list not found: {}", draft.listId));
+      }
+
+      auto list = listForDraft(draft, optExisting);
+
+      if (auto result = validateListDraft(draft); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      auto reply = diffListUpdate(*optExisting, draft);
+
+      if (reply.fieldChanges.empty())
+      {
+        return reply;
+      }
+
+      reply.changed = true;
+
+      if (auto result = listWriter.update(draft.listId, list); !result)
+      {
+        return storageError("Failed to update list", result.error());
+      }
+
+      return reply;
     }
 
     Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::MusicLibrary& library,
@@ -1310,6 +1394,225 @@ namespace ao::rt
       work.changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedTrackIds), .listsDeleted = {listId}};
       return work;
     }
+
+    struct DeleteListSubtreeWork final
+    {
+      DeleteListSubtreeReply reply{};
+      LibraryChangeSet changeSet{};
+    };
+
+    Result<DeleteListSubtreeWork> applyDeleteListSubtreeInTransaction(library::MusicLibrary& library,
+                                                                      library::LibraryWrite& transaction,
+                                                                      ListId const listId,
+                                                                      DeleteListOptions const options)
+    {
+      auto deletedListsRes = collectDeleteListSubtree(library, transaction, listId);
+
+      if (!deletedListsRes)
+      {
+        return std::unexpected{deletedListsRes.error()};
+      }
+
+      auto work = DeleteListSubtreeWork{
+        .reply = DeleteListSubtreeReply{.rootListId = listId, .deletedLists = std::move(*deletedListsRes)},
+      };
+      auto deletedIds =
+        work.reply.deletedLists | std::views::transform(&DeleteListReply::listId) | std::ranges::to<std::vector>();
+      auto optRootView = library.lists().reader(transaction).get(listId);
+
+      if (!optRootView)
+      {
+        return makeError(Error::Code::NotFound, std::format("list not found: {}", listId));
+      }
+
+      auto tagImpactWorkRes = analyzeDeleteListTagImpact(library, transaction, *optRootView, deletedIds);
+
+      if (!tagImpactWorkRes)
+      {
+        return std::unexpected{tagImpactWorkRes.error()};
+      }
+
+      auto optTagImpactWork = std::move(*tagImpactWorkRes);
+      auto listWriter = transaction.lists();
+      auto removedIdsRes = listWriter.removeSubtree(listId);
+
+      if (!removedIdsRes)
+      {
+        return std::unexpected{removedIdsRes.error()};
+      }
+
+      AO_INVARIANT(std::ranges::is_permutation(*removedIdsRes, deletedIds),
+                   "Logical List subtree membership disagreed with the application snapshot");
+
+      auto mutatedTrackIds = std::vector<TrackId>{};
+
+      if (options.removeWritableTagFromTracks)
+      {
+        if (!optTagImpactWork)
+        {
+          return makeError(
+            Error::Code::InvalidInput, std::format("List {} does not have directly editable tag membership", listId));
+        }
+
+        auto& tagImpactWork = *optTagImpactWork;
+        auto const tags = std::array{tagImpactWork.impact.tag};
+        auto tagEditRes = applyTagPatchInTransaction(library, transaction, tagImpactWork.taggedTrackIds, {}, tags);
+
+        if (!tagEditRes)
+        {
+          return std::unexpected{tagEditRes.error()};
+        }
+
+        tagImpactWork.impact.removedFromTrackCount = tagEditRes->changes.size();
+        mutatedTrackIds =
+          tagEditRes->changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
+      }
+
+      if (optTagImpactWork)
+      {
+        work.reply.deletedLists.front().optTagImpact = optTagImpactWork->impact;
+      }
+
+      work.changeSet =
+        LibraryChangeSet{.tracksMutated = std::move(mutatedTrackIds), .listsDeleted = std::move(deletedIds)};
+      return work;
+    }
+
+    struct DeleteTrackWork final
+    {
+      DeleteTrackReply reply{};
+      LibraryChangeSet changeSet{};
+    };
+
+    Result<DeleteTrackWork> applyDeleteTrackInTransaction(library::MusicLibrary& library,
+                                                          library::LibraryWrite& transaction,
+                                                          TrackId const trackId)
+    {
+      auto writer = transaction.tracks();
+      auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+
+      if (!optView)
+      {
+        return makeError(Error::Code::NotFound, std::format("track not found: {}", trackId));
+      }
+
+      auto const uri = std::string{optView->property().uri()};
+      auto const title = std::string{optView->metadata().title()};
+      auto changedListsRes = removeTrackFromListOrders(library, transaction, trackId);
+
+      if (!changedListsRes)
+      {
+        return std::unexpected{changedListsRes.error()};
+      }
+
+      auto changedLists = std::move(*changedListsRes);
+      auto work = DeleteTrackWork{
+        .reply =
+          DeleteTrackReply{
+            .trackId = trackId,
+            .uri = uri,
+            .title = title,
+            .removedFromListIds = changedLists.changedListIds,
+          },
+      };
+
+      auto removeRes = writer.remove(trackId);
+
+      if (!removeRes)
+      {
+        return std::unexpected{removeRes.error()};
+      }
+
+      if (!*removeRes)
+      {
+        return makeError(Error::Code::NotFound, std::format("track not found: {}", trackId));
+      }
+
+      work.changeSet = LibraryChangeSet{.tracksDeleted = {trackId},
+                                        .listsUpserted = work.reply.removedFromListIds,
+                                        .listOrderChanges = std::move(changedLists.orderChanges)};
+      return work;
+    }
+
+    struct CreateTrackFacts final
+    {
+      TrackId provisionalTrackId{};
+      std::string uri{};
+      std::string title{};
+      std::string artist{};
+    };
+
+    CreateTrackReply committedCreateTrackReply(CreateTrackFacts facts)
+    {
+      return CreateTrackReply{
+        .trackId = facts.provisionalTrackId,
+        .uri = std::move(facts.uri),
+        .title = std::move(facts.title),
+        .artist = std::move(facts.artist),
+      };
+    }
+
+    PreviewCreateTrackReply previewCreateTrackReply(CreateTrackFacts facts)
+    {
+      return PreviewCreateTrackReply{
+        .uri = std::move(facts.uri), .title = std::move(facts.title), .artist = std::move(facts.artist)};
+    }
+
+    Result<CreateTrackFacts> applyCreateTrackInTransaction(library::LibraryWrite& transaction,
+                                                           ImportTarget const& target,
+                                                           MediaTrack& mediaTrack)
+    {
+      auto writer = transaction.tracks();
+
+      if (auto const optExistingManifest = writer.manifest(target.uri); optExistingManifest)
+      {
+        return makeError(Error::Code::Conflict, std::format("track file is already imported: {}", target.uri));
+      }
+
+      auto& builder = mediaTrack.builder();
+      builder.property().uri(target.uri);
+      auto const title = std::string{builder.metadata().title()};
+      auto const artist = std::string{builder.metadata().artist()};
+
+      auto fileEc = std::error_code{};
+      auto const fileSize = std::filesystem::file_size(target.fullPath, fileEc);
+
+      if (fileEc)
+      {
+        return makeError(
+          Error::Code::IoError,
+          std::format("failed to inspect track file '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
+      }
+
+      auto const lastWriteTime = std::filesystem::last_write_time(target.fullPath, fileEc);
+
+      if (fileEc)
+      {
+        return makeError(
+          Error::Code::IoError,
+          std::format(
+            "failed to read track file timestamp '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
+      }
+
+      auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
+      manifestBuilder.fileSize(static_cast<std::uint64_t>(fileSize))
+        .mtime(static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
+
+      auto createRes = writer.create(builder, manifestBuilder);
+
+      if (!createRes)
+      {
+        return storageError("Failed to create track data", createRes.error());
+      }
+
+      return CreateTrackFacts{
+        .provisionalTrackId = *createRes,
+        .uri = target.uri,
+        .title = title,
+        .artist = artist,
+      };
+    }
   } // namespace
 
   struct LibraryWriter::Impl final
@@ -1327,19 +1630,23 @@ namespace ao::rt
     Result<AddToListAuthoringResult> applyAddTracksToList(ListId listId, BoundTrackTargets const& targets);
     Result<RemoveTracksFromListReply> previewRemoveTracksFromList(ListId listId, std::span<TrackId const> trackIds);
     Result<RemoveFromListAuthoringResult> applyRemoveTracksFromList(ListId listId, BoundTrackTargets const& targets);
-    Result<ListId> applyCreateList(ListDraft const& draft, MutationMode mode);
-    Result<UpdateListReply> applyUpdateList(ListDraft const& draft, MutationMode mode);
+    Result<ListId> createList(ListDraft const& draft);
+    Result<> previewCreateList(ListDraft const& draft);
+    Result<UpdateListReply> updateList(ListDraft const& draft);
+    Result<UpdateListReply> previewUpdateList(ListDraft const& draft);
     Result<MoveOrderAuthoringResult> applyMoveListOrder(BoundListOrder const& order,
                                                         std::span<TrackId const> selectedTrackIds,
                                                         std::optional<TrackId> optBeforeTrackId);
     Result<ResetOrderAuthoringResult> applyResetListOrder(BoundListOrder const& order);
     Result<ForgetHiddenOrderAuthoringResult> applyForgetHiddenListOrder(BoundListOrder const& order);
-    Result<DeleteListReply> applyDeleteList(ListId listId, DeleteListOptions options, MutationMode mode);
-    Result<DeleteListSubtreeReply> applyDeleteListAndDescendants(ListId listId,
-                                                                 DeleteListOptions options,
-                                                                 MutationMode mode);
-    Result<DeleteTrackReply> applyDeleteTrack(TrackId trackId, MutationMode mode);
-    Result<CreateTrackReply> applyCreateTrackFromFile(std::filesystem::path const& path, MutationMode mode);
+    Result<DeleteListReply> deleteList(ListId listId, DeleteListOptions options);
+    Result<DeleteListReply> previewDeleteList(ListId listId, DeleteListOptions options);
+    Result<DeleteListSubtreeReply> deleteListAndDescendants(ListId listId, DeleteListOptions options);
+    Result<DeleteListSubtreeReply> previewDeleteListAndDescendants(ListId listId, DeleteListOptions options);
+    Result<DeleteTrackReply> deleteTrack(TrackId trackId);
+    Result<DeleteTrackReply> previewDeleteTrack(TrackId trackId);
+    Result<CreateTrackReply> createTrackFromFile(std::filesystem::path const& path);
+    Result<PreviewCreateTrackReply> previewCreateTrackFromFile(std::filesystem::path const& path);
 
     library::MusicLibrary& library;
     LibraryMutationService& mutationService;
@@ -1405,29 +1712,22 @@ namespace ao::rt
 
   Result<ListId> LibraryWriter::createList(ListDraft const& draft)
   {
-    return _implPtr->applyCreateList(draft, MutationMode::Commit);
+    return _implPtr->createList(draft);
   }
 
   Result<> LibraryWriter::previewCreateList(ListDraft const& draft)
   {
-    auto result = _implPtr->applyCreateList(draft, MutationMode::Preview);
-
-    if (!result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    return {};
+    return _implPtr->previewCreateList(draft);
   }
 
   Result<UpdateListReply> LibraryWriter::updateList(ListDraft const& draft)
   {
-    return _implPtr->applyUpdateList(draft, MutationMode::Commit);
+    return _implPtr->updateList(draft);
   }
 
   Result<UpdateListReply> LibraryWriter::previewUpdateList(ListDraft const& draft)
   {
-    return _implPtr->applyUpdateList(draft, MutationMode::Preview);
+    return _implPtr->previewUpdateList(draft);
   }
 
   Result<LibraryWriter::MoveOrderAuthoringResult> LibraryWriter::moveListOrder(
@@ -1451,73 +1751,52 @@ namespace ao::rt
 
   Result<DeleteListReply> LibraryWriter::deleteList(ListId listId, DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteList(listId, options, MutationMode::Commit);
+    return _implPtr->deleteList(listId, options);
   }
 
   Result<DeleteListReply> LibraryWriter::previewDeleteList(ListId listId, DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteList(listId, options, MutationMode::Preview);
+    return _implPtr->previewDeleteList(listId, options);
   }
 
   Result<DeleteListSubtreeReply> LibraryWriter::deleteListAndDescendants(ListId const listId,
                                                                          DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteListAndDescendants(listId, options, MutationMode::Commit);
+    return _implPtr->deleteListAndDescendants(listId, options);
   }
 
   Result<DeleteListSubtreeReply> LibraryWriter::previewDeleteListAndDescendants(ListId const listId,
                                                                                 DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteListAndDescendants(listId, options, MutationMode::Preview);
+    return _implPtr->previewDeleteListAndDescendants(listId, options);
   }
 
   Result<DeleteTrackReply> LibraryWriter::deleteTrack(TrackId trackId)
   {
-    return _implPtr->applyDeleteTrack(trackId, MutationMode::Commit);
+    return _implPtr->deleteTrack(trackId);
   }
 
   Result<DeleteTrackReply> LibraryWriter::previewDeleteTrack(TrackId trackId)
   {
-    return _implPtr->applyDeleteTrack(trackId, MutationMode::Preview);
+    return _implPtr->previewDeleteTrack(trackId);
   }
 
   Result<CreateTrackReply> LibraryWriter::createTrackFromFile(std::filesystem::path const& path)
   {
-    return _implPtr->applyCreateTrackFromFile(path, MutationMode::Commit);
+    return _implPtr->createTrackFromFile(path);
   }
 
   Result<PreviewCreateTrackReply> LibraryWriter::previewCreateTrackFromFile(std::filesystem::path const& path)
   {
-    auto result = _implPtr->applyCreateTrackFromFile(path, MutationMode::Preview);
-
-    if (!result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    return previewReply(std::move(*result));
+    return _implPtr->previewCreateTrackFromFile(path);
   }
 
   Result<UpdateTrackMetadataReply> LibraryWriter::Impl::previewUpdateMetadata(std::span<TrackId const> trackIds,
                                                                               MetadataPatch const& patch)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
-
-    if (!mutationRes)
-    {
-      return std::unexpected{mutationRes.error()};
-    }
-
-    auto mutation = std::move(*mutationRes);
-    auto replyRes = mutation.apply([this, trackIds, &patch](library::LibraryWrite& transaction)
+    return applyInteractivePreview(mutationService,
+                                   [this, trackIds, &patch](library::LibraryWrite& transaction)
                                    { return applyMetadataPatchInTransaction(library, transaction, trackIds, patch); });
-
-    if (!replyRes)
-    {
-      return std::unexpected{replyRes.error()};
-    }
-
-    return std::move(*replyRes);
   }
 
   Result<LibraryWriter::MetadataAuthoringResult> LibraryWriter::Impl::applyUpdateMetadata(
@@ -1532,34 +1811,47 @@ namespace ao::rt
       return result;
     }
 
-    auto replyRes = start.optMutation->apply(
-      [this, &targets, &patch](library::LibraryWrite& transaction)
-      { return applyMetadataPatchInTransaction(library, transaction, targets.trackIds(), patch); });
+    auto executionRes = start.optMutation->execute(
+      [this, &targets, &patch](library::LibraryWrite& transaction) -> Result<OperationOutcome<UpdateTrackMetadataReply>>
+      {
+        auto replyRes = applyMetadataPatchInTransaction(library, transaction, targets.trackIds(), patch);
 
-    if (!replyRes)
+        if (!replyRes)
+        {
+          return std::unexpected{replyRes.error()};
+        }
+
+        auto reply = std::move(*replyRes);
+
+        if (reply.changes.empty())
+        {
+          return Unchanged<UpdateTrackMetadataReply>{.value = std::move(reply)};
+        }
+
+        auto mutatedIds =
+          reply.changes | std::views::transform(&TrackChangeRecord::trackId) | std::ranges::to<std::vector>();
+        return Changed<UpdateTrackMetadataReply>{
+          .value = std::move(reply),
+          .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
+        };
+      },
+      "Update track metadata");
+
+    if (!executionRes)
     {
-      return std::unexpected{replyRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    result.reply = std::move(*replyRes);
+    result.reply = std::move(executionRes->value);
 
-    if (result.reply.changes.empty())
+    if (!executionRes->optCommittedRevision)
     {
       result.status = TrackAuthoringStatus::NoOp;
       return result;
     }
 
-    auto mutatedIds =
-      result.reply.changes | std::views::transform(&TrackChangeRecord::trackId) | std::ranges::to<std::vector>();
-    auto commitRes = start.optMutation->commit(LibraryChangeSet{.tracksMutated = std::move(mutatedIds)});
-
-    if (!commitRes)
-    {
-      return storageError("Failed to commit metadata update", commitRes.error());
-    }
-
     result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitRes->libraryRevision));
+    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
     return result;
   }
 
@@ -1567,24 +1859,10 @@ namespace ao::rt
                                                                   std::span<std::string const> tagsToAdd,
                                                                   std::span<std::string const> tagsToRemove)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
-
-    if (!mutationRes)
-    {
-      return std::unexpected{mutationRes.error()};
-    }
-
-    auto mutation = std::move(*mutationRes);
-    auto replyRes =
-      mutation.apply([this, trackIds, tagsToAdd, tagsToRemove](library::LibraryWrite& transaction)
-                     { return applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove); });
-
-    if (!replyRes)
-    {
-      return std::unexpected{replyRes.error()};
-    }
-
-    return std::move(*replyRes);
+    return applyInteractivePreview(
+      mutationService,
+      [this, trackIds, tagsToAdd, tagsToRemove](library::LibraryWrite& transaction)
+      { return applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove); });
   }
 
   Result<LibraryWriter::TagAuthoringResult> LibraryWriter::Impl::applyEditTags(
@@ -1600,50 +1878,58 @@ namespace ao::rt
       return result;
     }
 
-    auto replyRes = start.optMutation->apply(
-      [this, &targets, tagsToAdd, tagsToRemove](library::LibraryWrite& transaction)
-      { return applyTagPatchInTransaction(library, transaction, targets.trackIds(), tagsToAdd, tagsToRemove); });
+    auto executionRes = start.optMutation->execute(
+      [this, &targets, tagsToAdd, tagsToRemove](
+        library::LibraryWrite& transaction) -> Result<OperationOutcome<EditTrackTagsReply>>
+      {
+        auto replyRes = applyTagPatchInTransaction(library, transaction, targets.trackIds(), tagsToAdd, tagsToRemove);
 
-    if (!replyRes)
+        if (!replyRes)
+        {
+          return std::unexpected{replyRes.error()};
+        }
+
+        auto reply = std::move(*replyRes);
+
+        if (reply.changes.empty())
+        {
+          return Unchanged<EditTrackTagsReply>{.value = std::move(reply)};
+        }
+
+        auto mutatedIds =
+          reply.changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
+        return Changed<EditTrackTagsReply>{
+          .value = std::move(reply),
+          .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
+        };
+      },
+      "Edit track tags");
+
+    if (!executionRes)
     {
-      return std::unexpected{replyRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    result.reply = std::move(*replyRes);
+    result.reply = std::move(executionRes->value);
 
-    if (result.reply.changes.empty())
+    if (!executionRes->optCommittedRevision)
     {
       result.status = TrackAuthoringStatus::NoOp;
       return result;
     }
 
-    auto mutatedIds =
-      result.reply.changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
-    auto commitRes = start.optMutation->commit(LibraryChangeSet{.tracksMutated = std::move(mutatedIds)});
-
-    if (!commitRes)
-    {
-      return storageError("Failed to commit tag update", commitRes.error());
-    }
-
     result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitRes->libraryRevision));
+    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
     return result;
   }
 
   Result<AddTracksToListReply> LibraryWriter::Impl::previewAddTracksToList(ListId const listId,
                                                                            std::span<TrackId const> const trackIds)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
-
-    if (!mutationRes)
-    {
-      return std::unexpected{mutationRes.error()};
-    }
-
-    auto mutation = std::move(*mutationRes);
-    return mutation.apply([this, listId, trackIds](library::LibraryWrite& transaction)
-                          { return applyAddTracksToListInTransaction(library, transaction, listId, trackIds); });
+    return applyInteractivePreview(
+      mutationService,
+      [this, listId, trackIds](library::LibraryWrite& transaction)
+      { return applyAddTracksToListInTransaction(library, transaction, listId, trackIds); });
   }
 
   Result<LibraryWriter::AddToListAuthoringResult> LibraryWriter::Impl::applyAddTracksToList(
@@ -1658,34 +1944,47 @@ namespace ao::rt
       return result;
     }
 
-    auto replyRes = start.optMutation->apply(
-      [this, listId, &targets](library::LibraryWrite& transaction)
-      { return applyAddTracksToListInTransaction(library, transaction, listId, targets.trackIds()); });
+    auto executionRes = start.optMutation->execute(
+      [this, listId, &targets](library::LibraryWrite& transaction) -> Result<OperationOutcome<AddTracksToListReply>>
+      {
+        auto replyRes = applyAddTracksToListInTransaction(library, transaction, listId, targets.trackIds());
 
-    if (!replyRes)
+        if (!replyRes)
+        {
+          return std::unexpected{replyRes.error()};
+        }
+
+        auto reply = std::move(*replyRes);
+
+        if (reply.tagEdit.changes.empty())
+        {
+          return Unchanged<AddTracksToListReply>{.value = std::move(reply)};
+        }
+
+        auto mutatedIds =
+          reply.tagEdit.changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
+        return Changed<AddTracksToListReply>{
+          .value = std::move(reply),
+          .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
+        };
+      },
+      "Add tracks to list");
+
+    if (!executionRes)
     {
-      return std::unexpected{replyRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    result.reply = std::move(*replyRes);
+    result.reply = std::move(executionRes->value);
 
-    if (result.reply.tagEdit.changes.empty())
+    if (!executionRes->optCommittedRevision)
     {
       result.status = TrackAuthoringStatus::NoOp;
       return result;
     }
 
-    auto mutatedIds =
-      result.reply.tagEdit.changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
-    auto commitRes = start.optMutation->commit(LibraryChangeSet{.tracksMutated = std::move(mutatedIds)});
-
-    if (!commitRes)
-    {
-      return storageError("Failed to commit Add to List", commitRes.error());
-    }
-
     result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitRes->libraryRevision));
+    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
     return result;
   }
 
@@ -1693,17 +1992,10 @@ namespace ao::rt
     ListId const listId,
     std::span<TrackId const> const trackIds)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
-
-    if (!mutationRes)
-    {
-      return std::unexpected{mutationRes.error()};
-    }
-
-    auto mutation = std::move(*mutationRes);
-    auto workRes =
-      mutation.apply([this, listId, trackIds](library::LibraryWrite& transaction)
-                     { return applyRemoveTracksFromListInTransaction(library, transaction, listId, trackIds); });
+    auto workRes = applyInteractivePreview(
+      mutationService,
+      [this, listId, trackIds](library::LibraryWrite& transaction)
+      { return applyRemoveTracksFromListInTransaction(library, transaction, listId, trackIds); });
 
     if (!workRes)
     {
@@ -1725,160 +2017,143 @@ namespace ao::rt
       return result;
     }
 
-    auto workRes = start.optMutation->apply(
-      [this, listId, &targets](library::LibraryWrite& transaction)
-      { return applyRemoveTracksFromListInTransaction(library, transaction, listId, targets.trackIds()); });
+    auto executionRes = start.optMutation->execute(
+      [this, listId, &targets](
+        library::LibraryWrite& transaction) -> Result<OperationOutcome<RemoveTracksFromListReply>>
+      {
+        auto workRes = applyRemoveTracksFromListInTransaction(library, transaction, listId, targets.trackIds());
 
-    if (!workRes)
+        if (!workRes)
+        {
+          return std::unexpected{workRes.error()};
+        }
+
+        auto work = std::move(*workRes);
+        auto mutatedIds = work.reply.tagEdit.changes | std::views::transform(&TrackTagsChange::trackId) |
+                          std::ranges::to<std::vector>();
+
+        if (auto const orderChanged = work.optOrderChange.has_value(); mutatedIds.empty() && !orderChanged)
+        {
+          return Unchanged<RemoveTracksFromListReply>{.value = std::move(work.reply)};
+        }
+
+        auto changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)};
+
+        if (work.optOrderChange)
+        {
+          changeSet.listsUpserted.push_back(listId);
+          changeSet.listOrderChanges.push_back(std::move(*work.optOrderChange));
+        }
+
+        return Changed<RemoveTracksFromListReply>{
+          .value = std::move(work.reply),
+          .changeSet = std::move(changeSet),
+        };
+      },
+      "Remove tracks from list");
+
+    if (!executionRes)
     {
-      return std::unexpected{workRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    auto work = std::move(*workRes);
-    result.reply = std::move(work.reply);
-    auto mutatedIds =
-      result.reply.tagEdit.changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
+    result.reply = std::move(executionRes->value);
 
-    if (auto const orderChanged = work.optOrderChange.has_value(); mutatedIds.empty() && !orderChanged)
+    if (!executionRes->optCommittedRevision)
     {
       result.status = TrackAuthoringStatus::NoOp;
       return result;
     }
 
-    auto changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)};
-
-    if (work.optOrderChange)
-    {
-      changeSet.listsUpserted.push_back(listId);
-      changeSet.listOrderChanges.push_back(std::move(*work.optOrderChange));
-    }
-
-    auto commitRes = start.optMutation->commit(std::move(changeSet));
-
-    if (!commitRes)
-    {
-      return storageError("Failed to commit Remove from List", commitRes.error());
-    }
-
     result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitRes->libraryRevision));
+    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
     return result;
   }
 
-  Result<ListId> LibraryWriter::Impl::applyCreateList(ListDraft const& draft, MutationMode mode)
+  Result<ListId> LibraryWriter::Impl::createList(ListDraft const& draft)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
+    auto executionRes =
+      executeInteractiveMutation(mutationService,
+                                 "Create list",
+                                 [&draft](library::LibraryWrite& transaction) -> Result<OperationOutcome<ListId>>
+                                 {
+                                   auto listIdRes = createListInTransaction(transaction, draft);
 
-    if (!mutationRes)
+                                   if (!listIdRes)
+                                   {
+                                     return std::unexpected{listIdRes.error()};
+                                   }
+
+                                   auto const listId = *listIdRes;
+                                   return Changed<ListId>{
+                                     .value = listId,
+                                     .changeSet = LibraryChangeSet{.listsUpserted = {listId}},
+                                   };
+                                 });
+
+    if (!executionRes)
     {
-      return std::unexpected{mutationRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    auto mutation = std::move(*mutationRes);
-    auto createRes = mutation.apply(
-      [&draft](library::LibraryWrite& transaction) -> Result<ListId>
-      {
-        auto listWriter = transaction.lists();
-        auto list = listForDraft(draft);
-
-        if (auto result = validateListDraft(draft); !result)
-        {
-          return std::unexpected{result.error()};
-        }
-
-        auto result = listWriter.create(list);
-
-        if (!result)
-        {
-          return storageError("Failed to create list", result.error());
-        }
-
-        return *result;
-      });
-
-    if (!createRes)
-    {
-      return std::unexpected{createRes.error()};
-    }
-
-    auto const listId = *createRes;
-
-    if (mode == MutationMode::Preview)
-    {
-      return listId;
-    }
-
-    if (auto result = mutation.commit(LibraryChangeSet{.listsUpserted = {listId}}); !result)
-    {
-      return storageError("Failed to commit list creation", result.error());
-    }
-
-    return listId;
+    AO_INVARIANT(executionRes->optCommittedRevision, "List creation did not commit its generated identity");
+    return executionRes->value;
   }
 
-  Result<UpdateListReply> LibraryWriter::Impl::applyUpdateList(ListDraft const& draft, MutationMode mode)
+  Result<> LibraryWriter::Impl::previewCreateList(ListDraft const& draft)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
+    auto listIdRes = applyInteractivePreview(mutationService,
+                                             [&draft](library::LibraryWrite& transaction)
+                                             { return createListInTransaction(transaction, draft); });
 
-    if (!mutationRes)
+    if (!listIdRes)
     {
-      return std::unexpected{mutationRes.error()};
+      return std::unexpected{listIdRes.error()};
     }
 
-    auto mutation = std::move(*mutationRes);
-    auto replyRes = mutation.apply(
-      [&draft](library::LibraryWrite& transaction) -> Result<UpdateListReply>
+    return {};
+  }
+
+  Result<UpdateListReply> LibraryWriter::Impl::updateList(ListDraft const& draft)
+  {
+    auto executionRes = executeInteractiveMutation(
+      mutationService,
+      "Update list",
+      [&draft](library::LibraryWrite& transaction) -> Result<OperationOutcome<UpdateListReply>>
       {
-        auto listWriter = transaction.lists();
-        auto optExisting = listWriter.get(draft.listId);
+        auto replyRes = updateListInTransaction(transaction, draft);
 
-        if (!optExisting)
+        if (!replyRes)
         {
-          return makeError(Error::Code::NotFound, std::format("list not found: {}", draft.listId));
+          return std::unexpected{replyRes.error()};
         }
 
-        auto list = listForDraft(draft, optExisting);
+        auto reply = std::move(*replyRes);
 
-        if (auto result = validateListDraft(draft); !result)
+        if (!reply.changed)
         {
-          return std::unexpected{result.error()};
+          return Unchanged<UpdateListReply>{.value = std::move(reply)};
         }
 
-        auto reply = diffListUpdate(*optExisting, draft);
-
-        if (reply.fieldChanges.empty())
-        {
-          return reply;
-        }
-
-        reply.changed = true;
-
-        if (auto result = listWriter.update(draft.listId, list); !result)
-        {
-          return storageError("Failed to update list", result.error());
-        }
-
-        return reply;
+        return Changed<UpdateListReply>{
+          .value = std::move(reply),
+          .changeSet = LibraryChangeSet{.listsUpserted = {draft.listId}},
+        };
       });
 
-    if (!replyRes)
+    if (!executionRes)
     {
-      return std::unexpected{replyRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    auto reply = std::move(*replyRes);
+    return std::move(executionRes->value);
+  }
 
-    if (!reply.changed || mode == MutationMode::Preview)
-    {
-      return reply;
-    }
-
-    if (auto result = mutation.commit(LibraryChangeSet{.listsUpserted = {draft.listId}}); !result)
-    {
-      return storageError("Failed to commit list update", result.error());
-    }
-
-    return reply;
+  Result<UpdateListReply> LibraryWriter::Impl::previewUpdateList(ListDraft const& draft)
+  {
+    return applyInteractivePreview(mutationService,
+                                   [&draft](library::LibraryWrite& transaction)
+                                   { return updateListInTransaction(transaction, draft); });
   }
 
   Result<LibraryWriter::MoveOrderAuthoringResult> LibraryWriter::Impl::applyMoveListOrder(
@@ -1958,25 +2233,31 @@ namespace ao::rt
       return result;
     }
 
-    auto changeSetRes = start.optMutation->apply(
-      [&order, &desiredEffectiveTrackIds, &result, optBeforeTrackId](library::LibraryWrite& transaction)
+    auto executionRes = start.optMutation->execute(
+      [&order, &desiredEffectiveTrackIds, &result, optBeforeTrackId](
+        library::LibraryWrite& transaction) -> Result<OperationOutcome<MoveListOrderReply>>
       {
-        return applyMoveListOrderInTransaction(
+        auto changeSetRes = applyMoveListOrderInTransaction(
           transaction, order, result.reply.selectedTrackIds, desiredEffectiveTrackIds, optBeforeTrackId);
-      });
 
-    if (!changeSetRes)
+        if (!changeSetRes)
+        {
+          return std::unexpected{changeSetRes.error()};
+        }
+
+        return Changed<MoveListOrderReply>{
+          .value = std::move(result.reply),
+          .changeSet = std::move(*changeSetRes),
+        };
+      },
+      "Move list order");
+
+    if (!executionRes)
     {
-      return std::unexpected{changeSetRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    auto commitRes = start.optMutation->commit(std::move(*changeSetRes));
-
-    if (!commitRes)
-    {
-      return storageError("Failed to commit List order move", commitRes.error());
-    }
-
+    result.reply = std::move(executionRes->value);
     result.status = ListOrderAuthoringStatus::Applied;
     return result;
   }
@@ -1991,8 +2272,8 @@ namespace ao::rt
       return result;
     }
 
-    auto changedRes = start.optMutation->apply(
-      [&order, &result](library::LibraryWrite& transaction) -> Result<bool>
+    auto executionRes = start.optMutation->execute(
+      [&order](library::LibraryWrite& transaction) -> Result<OperationOutcome<ResetListOrderReply>>
       {
         auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, order.listId());
@@ -2003,11 +2284,11 @@ namespace ao::rt
         }
 
         auto const oldOrderTrackIds = orderTrackIdsFrom(*viewRes);
-        result.reply.forgottenPositionCount = oldOrderTrackIds.size();
+        auto reply = ResetListOrderReply{.forgottenPositionCount = oldOrderTrackIds.size()};
 
         if (oldOrderTrackIds.empty())
         {
-          return false;
+          return Unchanged<ResetListOrderReply>{.value = std::move(reply)};
         }
 
         auto list = listWithOrder(*viewRes, {});
@@ -2017,29 +2298,28 @@ namespace ao::rt
           return storageError("Failed to reset List order", updateRes.error());
         }
 
-        return true;
-      });
+        return Changed<ResetListOrderReply>{
+          .value = std::move(reply),
+          .changeSet = LibraryChangeSet{.listsUpserted = {order.listId()},
+                                        .listOrderChanges =
+                                          {
+                                            ListOrderChange{.listId = order.listId(), .operation = ListOrderReset{}},
+                                          }},
+        };
+      },
+      "Reset list order");
 
-    if (!changedRes)
+    if (!executionRes)
     {
-      return std::unexpected{changedRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    if (!*changedRes)
+    result.reply = std::move(executionRes->value);
+
+    if (!executionRes->optCommittedRevision)
     {
       result.status = ListOrderAuthoringStatus::NoOp;
       return result;
-    }
-
-    auto commitRes = start.optMutation->commit(
-      LibraryChangeSet{.listsUpserted = {order.listId()},
-                       .listOrderChanges = {
-                         ListOrderChange{.listId = order.listId(), .operation = ListOrderReset{}},
-                       }});
-
-    if (!commitRes)
-    {
-      return storageError("Failed to commit List order reset", commitRes.error());
     }
 
     result.status = ListOrderAuthoringStatus::Applied;
@@ -2057,8 +2337,8 @@ namespace ao::rt
       return result;
     }
 
-    auto changeSetRes = start.optMutation->apply(
-      [&order, &result](library::LibraryWrite& transaction) -> Result<std::optional<LibraryChangeSet>>
+    auto executionRes = start.optMutation->execute(
+      [&order](library::LibraryWrite& transaction) -> Result<OperationOutcome<ForgetHiddenListOrderReply>>
       {
         auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, order.listId());
@@ -2083,11 +2363,12 @@ namespace ao::rt
           }
         }
 
-        result.reply.forgottenPositionCount = oldOrderTrackIds.size() - nextOrderTrackIds.size();
+        auto reply =
+          ForgetHiddenListOrderReply{.forgottenPositionCount = oldOrderTrackIds.size() - nextOrderTrackIds.size()};
 
-        if (result.reply.forgottenPositionCount == 0)
+        if (reply.forgottenPositionCount == 0)
         {
-          return std::optional<LibraryChangeSet>{};
+          return Unchanged<ForgetHiddenListOrderReply>{.value = std::move(reply)};
         }
 
         auto list = listWithOrder(*viewRes, nextOrderTrackIds);
@@ -2098,254 +2379,168 @@ namespace ao::rt
         }
 
         auto script = delta::diff(oldOrderTrackIds, nextOrderTrackIds);
-        return std::optional{
-          LibraryChangeSet{.listsUpserted = {order.listId()},
-                           .listOrderChanges = {
-                             ListOrderChange{.listId = order.listId(), .operation = std::move(script)},
-                           }}};
-      });
+        return Changed<ForgetHiddenListOrderReply>{
+          .value = std::move(reply),
+          .changeSet = LibraryChangeSet{.listsUpserted = {order.listId()},
+                                        .listOrderChanges =
+                                          {
+                                            ListOrderChange{.listId = order.listId(), .operation = std::move(script)},
+                                          }},
+        };
+      },
+      "Forget hidden list order");
 
-    if (!changeSetRes)
+    if (!executionRes)
     {
-      return std::unexpected{changeSetRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    if (!*changeSetRes)
+    result.reply = std::move(executionRes->value);
+
+    if (!executionRes->optCommittedRevision)
     {
       result.status = ListOrderAuthoringStatus::NoOp;
       return result;
-    }
-
-    auto commitRes = start.optMutation->commit(std::move(**changeSetRes));
-
-    if (!commitRes)
-    {
-      return storageError("Failed to commit hidden List position cleanup", commitRes.error());
     }
 
     result.status = ListOrderAuthoringStatus::Applied;
     return result;
   }
 
-  Result<DeleteListReply> LibraryWriter::Impl::applyDeleteList(ListId listId,
-                                                               DeleteListOptions const options,
-                                                               MutationMode mode)
+  Result<DeleteListReply> LibraryWriter::Impl::deleteList(ListId const listId, DeleteListOptions const options)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
+    auto executionRes = executeInteractiveMutation(
+      mutationService,
+      "Delete list",
+      [this, listId, options](library::LibraryWrite& transaction) -> Result<OperationOutcome<DeleteListReply>>
+      {
+        auto workRes = applyDeleteListInTransaction(library, transaction, listId, options);
 
-    if (!mutationRes)
+        if (!workRes)
+        {
+          return std::unexpected{workRes.error()};
+        }
+
+        auto work = std::move(*workRes);
+        return Changed<DeleteListReply>{
+          .value = std::move(work.reply),
+          .changeSet = std::move(work.changeSet),
+        };
+      });
+
+    if (!executionRes)
     {
-      return std::unexpected{mutationRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    auto mutation = std::move(*mutationRes);
-    auto workRes = mutation.apply([this, listId, options](library::LibraryWrite& transaction)
-                                  { return applyDeleteListInTransaction(library, transaction, listId, options); });
+    return std::move(executionRes->value);
+  }
+
+  Result<DeleteListReply> LibraryWriter::Impl::previewDeleteList(ListId const listId, DeleteListOptions const options)
+  {
+    auto workRes =
+      applyInteractivePreview(mutationService,
+                              [this, listId, options](library::LibraryWrite& transaction)
+                              { return applyDeleteListInTransaction(library, transaction, listId, options); });
 
     if (!workRes)
     {
       return std::unexpected{workRes.error()};
     }
 
-    auto work = std::move(*workRes);
-
-    if (mode == MutationMode::Preview)
-    {
-      return std::move(work.reply);
-    }
-
-    if (auto result = mutation.commit(std::move(work.changeSet)); !result)
-    {
-      return storageError("Failed to commit list delete", result.error());
-    }
-
-    return std::move(work.reply);
+    return std::move(workRes->reply);
   }
 
-  Result<DeleteListSubtreeReply> LibraryWriter::Impl::applyDeleteListAndDescendants(ListId const listId,
-                                                                                    DeleteListOptions const options,
-                                                                                    MutationMode const mode)
+  Result<DeleteListSubtreeReply> LibraryWriter::Impl::deleteListAndDescendants(ListId const listId,
+                                                                               DeleteListOptions const options)
   {
-    auto mutationRes = mutationService.beginInteractiveMutation();
-
-    if (!mutationRes)
-    {
-      return std::unexpected{mutationRes.error()};
-    }
-
-    auto mutation = std::move(*mutationRes);
-    auto reply = DeleteListSubtreeReply{};
-    auto changeSet = LibraryChangeSet{};
-    auto applyRes = mutation.apply(
-      [this, listId, options, &reply, &changeSet](library::LibraryWrite& transaction) -> Result<>
+    auto executionRes = executeInteractiveMutation(
+      mutationService,
+      "Delete list subtree",
+      [this, listId, options](library::LibraryWrite& transaction) -> Result<OperationOutcome<DeleteListSubtreeReply>>
       {
-        auto deletedListsRes = collectDeleteListSubtree(library, transaction, listId);
+        auto workRes = applyDeleteListSubtreeInTransaction(library, transaction, listId, options);
 
-        if (!deletedListsRes)
+        if (!workRes)
         {
-          return std::unexpected{deletedListsRes.error()};
+          return std::unexpected{workRes.error()};
         }
 
-        reply = DeleteListSubtreeReply{.rootListId = listId, .deletedLists = std::move(*deletedListsRes)};
-        auto deletedIds =
-          reply.deletedLists | std::views::transform(&DeleteListReply::listId) | std::ranges::to<std::vector>();
-        auto optRootView = library.lists().reader(transaction).get(listId);
-
-        if (!optRootView)
-        {
-          return makeError(Error::Code::NotFound, std::format("list not found: {}", listId));
-        }
-
-        auto tagImpactWorkRes = analyzeDeleteListTagImpact(library, transaction, *optRootView, deletedIds);
-
-        if (!tagImpactWorkRes)
-        {
-          return std::unexpected{tagImpactWorkRes.error()};
-        }
-
-        auto optTagImpactWork = std::move(*tagImpactWorkRes);
-
-        auto listWriter = transaction.lists();
-        auto removedIdsRes = listWriter.removeSubtree(listId);
-
-        if (!removedIdsRes)
-        {
-          return std::unexpected{removedIdsRes.error()};
-        }
-
-        AO_INVARIANT(std::ranges::is_permutation(*removedIdsRes, deletedIds),
-                     "Logical List subtree membership disagreed with the application snapshot");
-
-        auto mutatedTrackIds = std::vector<TrackId>{};
-
-        if (options.removeWritableTagFromTracks)
-        {
-          if (!optTagImpactWork)
-          {
-            return makeError(
-              Error::Code::InvalidInput, std::format("List {} does not have directly editable tag membership", listId));
-          }
-
-          auto& tagImpactWork = *optTagImpactWork;
-          auto const tags = std::array{tagImpactWork.impact.tag};
-          auto tagEditRes = applyTagPatchInTransaction(library, transaction, tagImpactWork.taggedTrackIds, {}, tags);
-
-          if (!tagEditRes)
-          {
-            return std::unexpected{tagEditRes.error()};
-          }
-
-          tagImpactWork.impact.removedFromTrackCount = tagEditRes->changes.size();
-          mutatedTrackIds =
-            tagEditRes->changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
-        }
-
-        if (optTagImpactWork)
-        {
-          reply.deletedLists.front().optTagImpact = optTagImpactWork->impact;
-        }
-
-        changeSet =
-          LibraryChangeSet{.tracksMutated = std::move(mutatedTrackIds), .listsDeleted = std::move(deletedIds)};
-        return {};
-      });
-
-    if (!applyRes)
-    {
-      return std::unexpected{applyRes.error()};
-    }
-
-    if (mode == MutationMode::Preview)
-    {
-      return reply;
-    }
-
-    if (auto result = mutation.commit(std::move(changeSet)); !result)
-    {
-      return storageError("Failed to commit List subtree delete", result.error());
-    }
-
-    return reply;
-  }
-
-  Result<DeleteTrackReply> LibraryWriter::Impl::applyDeleteTrack(TrackId trackId, MutationMode mode)
-  {
-    auto mutationRes = mutationService.beginInteractiveMutation();
-
-    if (!mutationRes)
-    {
-      return std::unexpected{mutationRes.error()};
-    }
-
-    auto mutation = std::move(*mutationRes);
-    auto reply = DeleteTrackReply{};
-    auto changeSet = LibraryChangeSet{};
-    auto applyRes = mutation.apply(
-      [this, trackId, &reply, &changeSet](library::LibraryWrite& transaction) -> Result<>
-      {
-        auto writer = transaction.tracks();
-        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-        if (!optView)
-        {
-          return makeError(Error::Code::NotFound, std::format("track not found: {}", trackId));
-        }
-
-        auto const uri = std::string{optView->property().uri()};
-        auto const title = std::string{optView->metadata().title()};
-        auto changedListsRes = removeTrackFromListOrders(library, transaction, trackId);
-
-        if (!changedListsRes)
-        {
-          return std::unexpected{changedListsRes.error()};
-        }
-
-        auto changedLists = std::move(*changedListsRes);
-        reply = DeleteTrackReply{
-          .trackId = trackId,
-          .uri = uri,
-          .title = title,
-          .removedFromListIds = changedLists.changedListIds,
+        auto work = std::move(*workRes);
+        return Changed<DeleteListSubtreeReply>{
+          .value = std::move(work.reply),
+          .changeSet = std::move(work.changeSet),
         };
-
-        auto removeRes = writer.remove(trackId);
-
-        if (!removeRes)
-        {
-          return std::unexpected{removeRes.error()};
-        }
-
-        if (!*removeRes)
-        {
-          return makeError(Error::Code::NotFound, std::format("track not found: {}", trackId));
-        }
-
-        changeSet = LibraryChangeSet{.tracksDeleted = {trackId},
-                                     .listsUpserted = reply.removedFromListIds,
-                                     .listOrderChanges = std::move(changedLists.orderChanges)};
-        return {};
       });
 
-    if (!applyRes)
+    if (!executionRes)
     {
-      return std::unexpected{applyRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    if (mode == MutationMode::Preview)
-    {
-      return reply;
-    }
-
-    if (auto result = mutation.commit(std::move(changeSet)); !result)
-    {
-      return storageError("Failed to commit track delete", result.error());
-    }
-
-    return reply;
+    return std::move(executionRes->value);
   }
 
-  Result<CreateTrackReply> LibraryWriter::Impl::applyCreateTrackFromFile(std::filesystem::path const& path,
-                                                                         MutationMode mode)
+  Result<DeleteListSubtreeReply> LibraryWriter::Impl::previewDeleteListAndDescendants(ListId const listId,
+                                                                                      DeleteListOptions const options)
+  {
+    auto workRes =
+      applyInteractivePreview(mutationService,
+                              [this, listId, options](library::LibraryWrite& transaction)
+                              { return applyDeleteListSubtreeInTransaction(library, transaction, listId, options); });
+
+    if (!workRes)
+    {
+      return std::unexpected{workRes.error()};
+    }
+
+    return std::move(workRes->reply);
+  }
+
+  Result<DeleteTrackReply> LibraryWriter::Impl::deleteTrack(TrackId const trackId)
+  {
+    auto executionRes = executeInteractiveMutation(
+      mutationService,
+      "Delete track",
+      [this, trackId](library::LibraryWrite& transaction) -> Result<OperationOutcome<DeleteTrackReply>>
+      {
+        auto workRes = applyDeleteTrackInTransaction(library, transaction, trackId);
+
+        if (!workRes)
+        {
+          return std::unexpected{workRes.error()};
+        }
+
+        auto work = std::move(*workRes);
+        return Changed<DeleteTrackReply>{
+          .value = std::move(work.reply),
+          .changeSet = std::move(work.changeSet),
+        };
+      });
+
+    if (!executionRes)
+    {
+      return std::unexpected{executionRes.error()};
+    }
+
+    return std::move(executionRes->value);
+  }
+
+  Result<DeleteTrackReply> LibraryWriter::Impl::previewDeleteTrack(TrackId const trackId)
+  {
+    auto workRes = applyInteractivePreview(mutationService,
+                                           [this, trackId](library::LibraryWrite& transaction)
+                                           { return applyDeleteTrackInTransaction(library, transaction, trackId); });
+
+    if (!workRes)
+    {
+      return std::unexpected{workRes.error()};
+    }
+
+    return std::move(workRes->reply);
+  }
+
+  Result<CreateTrackReply> LibraryWriter::Impl::createTrackFromFile(std::filesystem::path const& path)
   {
     auto const targetRes = importTargetForPath(library, path);
 
@@ -2362,86 +2557,62 @@ namespace ao::rt
       return std::unexpected{mediaTrackRes.error()};
     }
 
-    auto mutationRes = mutationService.beginInteractiveMutation();
-
-    if (!mutationRes)
-    {
-      return std::unexpected{mutationRes.error()};
-    }
-
-    auto mutation = std::move(*mutationRes);
-    auto reply = CreateTrackReply{};
-    auto changeSet = LibraryChangeSet{};
-    auto applyRes = mutation.apply(
-      [&target, &mediaTrackRes, &reply, &changeSet](library::LibraryWrite& transaction) -> Result<>
+    auto executionRes = executeInteractiveMutation(
+      mutationService,
+      "Create track",
+      [&target, &mediaTrackRes](library::LibraryWrite& transaction) -> Result<OperationOutcome<CreateTrackFacts>>
       {
-        auto writer = transaction.tracks();
+        auto factsRes = applyCreateTrackInTransaction(transaction, target, *mediaTrackRes);
 
-        if (auto const optExistingManifest = writer.manifest(target.uri); optExistingManifest)
+        if (!factsRes)
         {
-          return makeError(Error::Code::Conflict, std::format("track file is already imported: {}", target.uri));
+          return std::unexpected{factsRes.error()};
         }
 
-        auto& builder = mediaTrackRes->builder();
-        builder.property().uri(target.uri);
-        auto const title = std::string{builder.metadata().title()};
-        auto const artist = std::string{builder.metadata().artist()};
-
-        auto fileEc = std::error_code{};
-        auto const fileSize = std::filesystem::file_size(target.fullPath, fileEc);
-
-        if (fileEc)
-        {
-          return makeError(
-            Error::Code::IoError,
-            std::format(
-              "failed to inspect track file '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
-        }
-
-        auto const lastWriteTime = std::filesystem::last_write_time(target.fullPath, fileEc);
-
-        if (fileEc)
-        {
-          return makeError(
-            Error::Code::IoError,
-            std::format(
-              "failed to read track file timestamp '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
-        }
-
-        auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
-        manifestBuilder.fileSize(static_cast<std::uint64_t>(fileSize))
-          .mtime(static_cast<std::uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
-
-        auto createRes = writer.create(builder, manifestBuilder);
-
-        if (!createRes)
-        {
-          return storageError("Failed to create track data", createRes.error());
-        }
-
-        auto const id = *createRes;
-
-        reply = CreateTrackReply{.trackId = id, .uri = target.uri, .title = title, .artist = artist};
-        changeSet = LibraryChangeSet{.tracksInserted = {id}};
-        return {};
+        auto facts = std::move(*factsRes);
+        auto const trackId = facts.provisionalTrackId;
+        return Changed<CreateTrackFacts>{
+          .value = std::move(facts),
+          .changeSet = LibraryChangeSet{.tracksInserted = {trackId}},
+        };
       });
 
-    if (!applyRes)
+    if (!executionRes)
     {
-      return std::unexpected{applyRes.error()};
+      return std::unexpected{executionRes.error()};
     }
 
-    if (mode == MutationMode::Preview)
+    AO_INVARIANT(executionRes->optCommittedRevision, "Track creation did not commit its generated identity");
+    return committedCreateTrackReply(std::move(executionRes->value));
+  }
+
+  Result<PreviewCreateTrackReply> LibraryWriter::Impl::previewCreateTrackFromFile(std::filesystem::path const& path)
+  {
+    auto const targetRes = importTargetForPath(library, path);
+
+    if (!targetRes)
     {
-      return reply;
+      return std::unexpected{targetRes.error()};
     }
 
-    if (auto result = mutation.commit(std::move(changeSet)); !result)
+    auto const& target = *targetRes;
+    auto mediaTrackRes = readMediaTrack(target.fullPath);
+
+    if (!mediaTrackRes)
     {
-      return storageError("Failed to commit track creation", result.error());
+      return std::unexpected{mediaTrackRes.error()};
     }
 
-    return reply;
+    auto factsRes =
+      applyInteractivePreview(mutationService,
+                              [&target, &mediaTrackRes](library::LibraryWrite& transaction)
+                              { return applyCreateTrackInTransaction(transaction, target, *mediaTrackRes); });
+
+    if (!factsRes)
+    {
+      return std::unexpected{factsRes.error()};
+    }
+
+    return previewCreateTrackReply(std::move(*factsRes));
   }
 } // namespace ao::rt

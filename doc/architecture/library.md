@@ -56,8 +56,10 @@ UIModel and frontends begin above these stages and consume runtime values rather
 ### Physical storage
 
 `ao::library::MusicLibrary` owns the LMDB environment and coordinates specialized track, list, resource, dictionary, and file-manifest stores.
+Process composition keeps only one live `MusicLibrary` for a database path because LMDB forbids opening the same database twice in one process; the library does not maintain a canonical-path registry or turn that upstream precondition into `Conflict`.
 It creates public read transactions and owns cached logical metadata-header and committed-revision state; the physical metadata Store is private.
 Its sole public construction boundary is `MusicLibrary::open()`, which returns a typed result, enumerates the LMDB catalog before creation, and validates the current schema, metadata, dictionary, Resources, paired Track records and references, List graph, and Track-to-manifest bijection before exposing the store graph.
+That unpublished initialization write transaction opens each of the seven named DBIs exactly once and retains their non-owning tokens for the library lifetime; normal reads never reopen a DBI.
 Safely detected corruption in those records rejects the complete open; runtime composition cannot receive a partial library or build a partial All Tracks source.
 The environment combines user-authored library truth with scan-derived facts; media rescan cannot reconstruct the complete database.
 Committing writes require a separately acquired `WritableMusicLibrary`; `MusicLibrary` keeps transaction construction private to that capability.
@@ -232,7 +234,8 @@ runtime command
   -> LibraryWriter
   -> LibraryMutationService admission
   -> WriteTransaction + transaction-local dictionary overlay
-  -> root apply boundary + callback-scoped LibraryWrite ports
+  -> root execute boundary + callback-scoped LibraryWrite ports
+  -> operation-owned Changed(value, LibraryChangeSet) or Unchanged(value)
   -> one LMDB commit with records, dictionary rows, and new library revision
   -> complete dictionary-index publication
   -> ordered LibraryChanges publication on the callback executor
@@ -314,6 +317,8 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 - A recoverable error from a root write body aborts the complete transaction before it is returned; the current library layer has no item-local savepoint or continuation after a failed body.
 - One OS lease excludes another writable process, and an active transaction retains that lease even if its originating capability is destroyed.
 - Live-runtime commits can begin only through the one coordinator-owned writable capability.
+- A live committing operation returns its owning value and exact zero-revision changeset together; only the coordinator execute boundary may commit and stamp that payload.
+- A noncommitting apply cannot later be upgraded to execute on the same mutation.
 - A write transaction exposes one in-memory candidate successor revision, persists it immediately before native commit, and does not consume it on abort or failed commit.
 - A mutation becomes observable through the revisioned change bus only after its write transaction commits and the cached metadata state publishes that candidate.
 - The coordinator admits the next mutation only after publication completion, and callback-thread reentrant mutation during publication is rejected.
@@ -339,8 +344,9 @@ Cancellation never reinterprets an already committed transaction as uncommitted.
 
 Failure before commit returns through the operation's typed error channel and leaves the prior availability intact.
 LMDB mutation faults may use a private `lmdb::detail::TransactionFailure` as short-range unwind control below the library wrapper.
-`WriteTransaction::apply()` and `commit()` are the exact containment owners: they explicitly abort and terminalize the root before translating the carried `Error` to `Result`, and no runtime writer, task, scan, or importer catches the marker.
-`LibraryMutationService::Mutation::apply()` additionally terminalizes the live mutation and releases coordinator admission before returning an error or rethrowing an unexpected exception.
+`WriteTransaction::apply()` and `commit()` are the exact lower containment owners: they explicitly abort and terminalize the root before translating the carried `Error` to `Result`, and no runtime writer, task, scan, or importer catches the marker.
+`LibraryMutationService::Mutation::apply()` and `execute()` additionally terminalize the live mutation and release coordinator admission before returning an error or rethrowing an unexpected exception.
+`execute()` is the only live commit boundary; `Unchanged` and preview `apply()` paths explicitly abort and cannot publish.
 No failed root can be continued or committed, even while its C++ wrapper remains alive.
 Once durable commit succeeds, revision-admission, publication admission, or delivery failure in a live runtime is an infrastructure fault and terminates the process.
 It is not translated to a transaction `Result` or a recoverable authoring state; the next process open reconstructs runtime state from the durable database.
@@ -388,15 +394,15 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 
 ## Test map
 
-- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects closed-world admission, complete Store and cross-Store validation, accepted opaque states, linear open work, store composition, writer exclusion, and transaction-anchored lease lifetime.
-- [`MetadataStoreTest.cpp`](../../test/unit/library/MetadataStoreTest.cpp) protects logical metadata snapshots and durable-snapshot candidate revision publication across commit failure and multiple library instances.
+- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects closed-world admission, one-open-per-named-DBI behavior, complete Store and cross-Store validation, accepted opaque states, linear open work, store composition, same-library and cross-process writer exclusion, and transaction-anchored lease lifetime.
+- [`MetadataStoreTest.cpp`](../../test/unit/library/MetadataStoreTest.cpp) protects logical metadata snapshots and durable-snapshot candidate revision publication across commit failure and a child-process commit.
 - [`WriteTransactionTest.cpp`](../../test/unit/library/WriteTransactionTest.cpp) protects the callback-scoped mutation capability, root operation success, recoverable mutation/read failure rollback, unexpected-exception containment, terminal state, and immediate writer-gate reuse.
 - [`TrackWriterTest.cpp`](../../test/unit/library/TrackWriterTest.cpp) protects the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior.
 - [`ListWriterTest.cpp`](../../test/unit/library/ListWriterTest.cpp) protects live parent validation, leaf-delete conflict, subtree ordering, and coherent clear behavior.
 - [`TrackStoreTest.cpp`](../../test/unit/library/TrackStoreTest.cpp) and [`TrackStoreRawLayoutTest.cpp`](../../test/unit/library/TrackStoreRawLayoutTest.cpp) protect batch order, missing-row behavior, coordinated hot/cold traversal, and prepared record writes.
 - [`TrackStoreIntegrityTest.cpp`](../../test/unit/library/TrackStoreIntegrityTest.cpp) protects reserved-id rejection and fail-closed rejection of non-canonical persisted records.
 - [`ListBuilderTest.cpp`](../../test/unit/library/ListBuilderTest.cpp), [`ListStoreTest.cpp`](../../test/unit/library/ListStoreTest.cpp), [`FileManifestBuilderTest.cpp`](../../test/unit/library/FileManifestBuilderTest.cpp), and [`FileManifestStoreTest.cpp`](../../test/unit/library/FileManifestStoreTest.cpp) protect prepared snapshots, prepared-only writer surfaces, local record validation, and post-open iterator fail-fast behavior.
-- [`LibraryFatalProbeTest.cpp`](../../test/unit/library/LibraryFatalProbeTest.cpp) protects prepared-write preconditions, post-open Store and cross-Store trust, revision exhaustion, and LMDB lifetime contracts with owned subprocess fatal diagnostics.
+- [`LibraryProbeTest.cpp`](../../test/unit/library/LibraryProbeTest.cpp) protects prepared-write preconditions, post-open Store and cross-Store trust, revision exhaustion, LMDB lifetime contracts, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) protects runtime consumers that enforce admitted cross-Store references before producing external output.
 - [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
 - [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.

@@ -56,8 +56,9 @@ owner:
 |---|---|---|
 | `library::detail::PhysicalStoreAccess` | Exact malformed library bytes and isolated Store representation state that no logical mutation can create. | Source-private header; production roots cannot include, define, or invoke it. |
 | `WriteTransaction::Options::optInjectedCommitFailure` | Rollback and publication behavior for a native commit result that cannot be induced portably. | Data-only input; production roots cannot reference it, and it invokes no callback while locks are held. |
-| `library::detail::OpenValidationMetrics` | Exact operation counts for the open gate's linear Track/manifest growth law. | Source-private observation; only `MusicLibrary` may record/reset it and production roots cannot consume it. |
+| `library::detail::OpenValidationMetrics` | Exact named-DBI-open counts and operation counts for the open gate's linear Track/manifest growth law. | Source-private observation; only `MusicLibrary` may record/reset it and production roots cannot consume it. |
 | `lmdb::detail::ReadFaultInjection` | Admission, live-read, and writer-read ownership for a native LMDB fault without damaging a mapped environment. | Source-private, single-use, same-thread scope; destruction requires that the next read consumed it, and production roots cannot reference it. |
+| `lmdb::detail::DatabaseOpenAdmissionProbe` | Deterministic observation that a second transaction reached the contended process-wide DBI-open gate. | Source-private, same-thread observation; production roots cannot construct it, and it does not alter gate behavior. |
 
 These seams do not authorize application behavior, arbitrary collaborator
 control, or a general test API. Adding another seam requires updating this

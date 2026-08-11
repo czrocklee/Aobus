@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/fatal/ProbeProcess.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -17,8 +18,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <chrono>
 #include <cstddef>
 #include <span>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -120,18 +123,19 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
-    auto library = makeTestMusicLibrary(temp.path(), databasePath);
-    auto write = writeTransaction(
-      library,
-      WriteTransaction::Options{.optInjectedCommitFailure =
-                                  Error{.code = Error::Code::IoError, .message = "injected commit failure"}});
-
-    CHECK(library.libraryRevision(write) == 1);
-    auto commitRes = write.commit();
-    REQUIRE_FALSE(commitRes);
-    CHECK(commitRes.error().code == Error::Code::IoError);
 
     {
+      auto library = makeTestMusicLibrary(temp.path(), databasePath);
+      auto write = writeTransaction(
+        library,
+        WriteTransaction::Options{.optInjectedCommitFailure =
+                                    Error{.code = Error::Code::IoError, .message = "injected commit failure"}});
+
+      CHECK(library.libraryRevision(write) == 1);
+      auto commitRes = write.commit();
+      REQUIRE_FALSE(commitRes);
+      CHECK(commitRes.error().code == Error::Code::IoError);
+
       auto read = library.readTransaction();
       CHECK(library.libraryRevision(read) == 0);
     }
@@ -144,26 +148,31 @@ namespace ao::library::test
   TEST_CASE("MusicLibrary metadata - candidate revision comes from the durable writer snapshot",
             "[library][regression][write-transaction][concurrency]")
   {
+    constexpr auto kTimeout = std::chrono::seconds{15};
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
-    auto first = makeTestMusicLibrary(temp.path(), databasePath);
-    auto second = makeTestMusicLibrary(temp.path(), databasePath);
+    auto library = makeTestMusicLibrary(temp.path(), databasePath);
+    auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
+    REQUIRE_FALSE(executablePath.empty());
+    auto const scenario = std::string{"commit-revision:"} + temp.path().filename().string();
+    auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
+
+    REQUIRE(result.hasSuccessfulExit());
+    CHECK(result.standardOutput == "committed-revision=1");
+    CHECK(result.standardError.empty());
 
     {
-      auto write = writeTransaction(first);
-      CHECK(first.libraryRevision(write) == 1);
-      REQUIRE(write.commit());
+      auto read = library.readTransaction();
+      CHECK(library.libraryRevision(read) == 1);
     }
 
     {
-      auto write = writeTransaction(second);
-      CHECK(second.libraryRevision(write) == 2);
+      auto write = writeTransaction(library);
+      CHECK(library.libraryRevision(write) == 2);
       REQUIRE(write.commit());
     }
 
-    auto firstRead = first.readTransaction();
-    auto secondRead = second.readTransaction();
-    CHECK(first.libraryRevision(firstRead) == 2);
-    CHECK(second.libraryRevision(secondRead) == 2);
+    auto read = library.readTransaction();
+    CHECK(library.libraryRevision(read) == 2);
   }
 } // namespace ao::library::test

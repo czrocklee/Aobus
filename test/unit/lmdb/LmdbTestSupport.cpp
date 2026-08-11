@@ -71,11 +71,4 @@ namespace ao::lmdb::test
     REQUIRE(result);
     return std::move(*result);
   }
-
-  Database openDatabase(ReadTransaction& txn, std::string const& name, Database::KeyKind const kind)
-  {
-    auto result = Database::open(txn, name, kind);
-    REQUIRE(result);
-    return std::move(*result);
-  }
 } // namespace ao::lmdb::test

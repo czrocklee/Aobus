@@ -164,11 +164,12 @@ ao_write_guardrail_regex(
 )
 
 set(AO_LIBRARY_FORBIDDEN_OPEN_VALIDATION_METRICS_REGEX
-    "#[ \t]*include[ \t]*[<\"][^\">]*OpenValidationMetrics\\.h[>\"]|(^|[^A-Za-z0-9_])(OpenValidationMetrics|resetOpenValidationMetrics|recordOpenValidationTrackRow|recordOpenValidationManifestPointRead|openValidationMetrics)([^A-Za-z0-9_]|$)"
+    "#[ \t]*include[ \t]*[<\"][^\">]*OpenValidationMetrics\\.h[>\"]|(^|[^A-Za-z0-9_])(OpenValidationMetrics|resetOpenValidationMetrics|recordOpenValidationNamedDatabaseOpen|recordOpenValidationTrackRow|recordOpenValidationManifestPointRead|openValidationMetrics)([^A-Za-z0-9_]|$)"
 )
 foreach(AO_FORBIDDEN_OPEN_VALIDATION_METRICS_SPELLING IN ITEMS
     "#include \"OpenValidationMetrics.h\""
     "auto metrics = openValidationMetrics()"
+    "recordOpenValidationNamedDatabaseOpen()"
     "recordOpenValidationTrackRow()")
   if(NOT "${AO_FORBIDDEN_OPEN_VALIDATION_METRICS_SPELLING}" MATCHES
          "${AO_LIBRARY_FORBIDDEN_OPEN_VALIDATION_METRICS_REGEX}")

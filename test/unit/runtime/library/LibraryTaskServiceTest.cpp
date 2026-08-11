@@ -605,6 +605,9 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto changedSubscription =
+      changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
     auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
     auto& service = runtimeLibraryPtr->taskService();
 
@@ -616,6 +619,10 @@ namespace ao::rt::test
     CHECK(result->mutatedIds.empty());
     CHECK(result->relinkedIds.empty());
     CHECK(result->failureCount == 0);
+    CHECK(result->libraryRevision == 0);
+    CHECK(observed.empty());
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == 0);
   }
 
   TEST_CASE("LibraryTaskService - applyScanPlanAsync can defer new audio identity", "[runtime][unit][library][task]")
@@ -815,6 +822,9 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto changedSubscription =
+      changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
     auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
     auto& service = runtimeLibraryPtr->taskService();
 
@@ -852,6 +862,8 @@ namespace ao::rt::test
     auto manifestReader = libraryFixture.library().manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
+    CHECK(libraryFixture.library().libraryRevision(transaction) == 0);
+    CHECK(observed.empty());
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
 
     runtime.requestStop();

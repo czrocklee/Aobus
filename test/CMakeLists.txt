@@ -11,20 +11,20 @@ if(LINUX)
   target_link_libraries(ao_test_options INTERFACE PkgPipeWire PkgALSA PkgUDEV)
 endif()
 
-# Fatal subprocess coverage uses a minimal self-reentering executable so sanitizer
-# startup and abort behavior are independent of Catch2 and the application runtime.
+# Owned subprocess coverage uses minimal self-reentering executables so fatal
+# startup, abort behavior, and normal observations stay independent of Catch2.
 add_library(ao_fatal_probe_support STATIC
     fatal/AudioFatalProbeProtocol.cpp
     fatal/FatalProbeProtocol.cpp
-    fatal/LibraryFatalProbeProtocol.cpp
+    fatal/LibraryProbeProtocol.cpp
     fatal/RuntimeFatalProbeProtocol.cpp
 )
 target_include_directories(ao_fatal_probe_support PUBLIC "${CMAKE_SOURCE_DIR}")
 if(LINUX)
-  target_sources(ao_fatal_probe_support PRIVATE fatal/FatalProbeProcessPosix.cpp)
+  target_sources(ao_fatal_probe_support PRIVATE fatal/ProbeProcessPosix.cpp)
 endif()
 if(WIN32)
-  target_sources(ao_fatal_probe_support PRIVATE fatal/FatalProbeProcessWindows.cpp)
+  target_sources(ao_fatal_probe_support PRIVATE fatal/ProbeProcessWindows.cpp)
 endif()
 
 add_executable(ao_fatal_probe
@@ -49,12 +49,12 @@ add_library(ao_test_support_common STATIC
     unit/TestFixtureSupport.cpp
 )
 
-add_executable(ao_library_fatal_probe
-    fatal/LibraryFatalProbeMain.cpp
-    fatal/LibraryFatalProbeScenario.cpp
+add_executable(ao_library_probe
+    fatal/LibraryProbeMain.cpp
+    fatal/LibraryProbeScenario.cpp
 )
-target_link_libraries(ao_library_fatal_probe PRIVATE ao_fatal_probe_support ao_test_support_common ao_library)
-add_test(NAME ao_library_fatal_probe COMMAND ao_library_fatal_probe)
+target_link_libraries(ao_library_probe PRIVATE ao_fatal_probe_support ao_test_support_common ao_library)
+add_test(NAME ao_library_probe COMMAND ao_library_probe)
 
 target_link_libraries(ao_test_support_common
     PUBLIC
@@ -249,7 +249,7 @@ add_executable(ao_core_test
     unit/library/TrackBuilderSerializationTest.cpp
     unit/library/TrackBuilderOverflowTest.cpp
     unit/library/LibraryErrorTest.cpp
-    unit/library/LibraryFatalProbeTest.cpp
+    unit/library/LibraryProbeTest.cpp
     unit/library/MetadataStoreTest.cpp
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
@@ -575,7 +575,7 @@ if(WIN32)
     AOBUS_WINDOWS_RESW="${CMAKE_SOURCE_DIR}/app/windows-winui/Resources/en-US/Resources.resw")
   target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()
-add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_fatal_probe)
+add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_probe)
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
 if(AOBUS_BUILD_TUI)

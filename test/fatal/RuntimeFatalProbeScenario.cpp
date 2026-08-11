@@ -481,7 +481,63 @@ namespace ao::rt::test
         return 3;
       }
 
-      std::ignore = mutationRes->commit(LibraryChangeSet{});
+      std::ignore = mutationRes->execute([](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                         { return Changed<std::uint8_t>{.value = 1, .changeSet = {}}; });
+      return 3;
+    }
+
+    std::int32_t runLibraryMutationExecuteContract(std::string_view const scratchName, bool const applyFirst)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes = library::MusicLibrary::open(
+        scratchPath, scratchPath / "db", library::MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        return 3;
+      }
+
+      auto writableRes = library::WritableMusicLibrary::acquire(*libraryRes);
+
+      if (!writableRes)
+      {
+        return 3;
+      }
+
+      auto executor = ImmediateProbeExecutor{};
+      auto transaction = libraryRes->readTransaction();
+      auto changes = LibraryChanges{executor, libraryRes->libraryRevision(transaction), "mutation-execute-probe"};
+      auto mutationService = LibraryMutationService{executor, std::move(*writableRes), changes};
+      auto mutationRes = mutationService.beginInteractiveMutation();
+
+      if (!mutationRes)
+      {
+        return 3;
+      }
+
+      if (applyFirst)
+      {
+        auto applyRes = mutationRes->apply([](library::LibraryWrite&) -> Result<> { return {}; });
+
+        if (!applyRes)
+        {
+          return 3;
+        }
+      }
+
+      std::ignore = mutationRes->execute(
+        [applyFirst](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+        {
+          return Changed<std::uint8_t>{
+            .value = 1,
+            .changeSet = LibraryChangeSet{.libraryRevision = applyFirst ? 0U : 1U},
+          };
+        });
       return 3;
     }
 
@@ -851,6 +907,16 @@ namespace ao::rt::test
     if (name == "library-publication-completion-ack-invariant")
     {
       return runLibraryPublicationCompletionAckFailure();
+    }
+
+    if (name == "library-mutation-execute-after-apply")
+    {
+      return runLibraryMutationExecuteContract(scratchName, true);
+    }
+
+    if (name == "library-mutation-prestamped-changeset")
+    {
+      return runLibraryMutationExecuteContract(scratchName, false);
     }
 
     if (name == "runtime-spawn-logged-exception")

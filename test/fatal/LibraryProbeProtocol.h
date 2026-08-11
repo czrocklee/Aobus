@@ -19,5 +19,14 @@ namespace ao::library::test
     bool needsScratchDirectory = false;
   };
 
+  struct LibraryProbeObservationExpectation final
+  {
+    std::string_view scenario;
+    std::string_view standardOutput;
+    std::string_view standardErrorMarker;
+    bool needsScratchDirectory = false;
+  };
+
   std::span<LibraryFatalProbeExpectation const> libraryFatalProbeExpectations() noexcept;
+  std::span<LibraryProbeObservationExpectation const> libraryProbeObservationExpectations() noexcept;
 } // namespace ao::library::test

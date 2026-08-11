@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <utility>
 
 // LMDB native handles, kept opaque (see Environment.h).
@@ -73,9 +74,9 @@ namespace ao::lmdb
 
     WriteTransaction(WriteTransaction const&) = delete;
     WriteTransaction& operator=(WriteTransaction const&) = delete;
-    WriteTransaction(WriteTransaction&&) = default;
-    WriteTransaction& operator=(WriteTransaction&&) = default;
-    ~WriteTransaction() = default;
+    WriteTransaction(WriteTransaction&&) noexcept;
+    WriteTransaction& operator=(WriteTransaction&&) noexcept;
+    ~WriteTransaction();
 
     Result<> commit();
 
@@ -87,10 +88,15 @@ namespace ao::lmdb
     bool isFinished() const noexcept { return !isActive(); }
 
   private:
-    explicit WriteTransaction(TxnPtr txnPtr)
-      : ReadTransaction{std::move(txnPtr), ReadFailureMode::Transaction}
+    explicit WriteTransaction(TxnPtr txnPtr, bool isNested)
+      : ReadTransaction{std::move(txnPtr), ReadFailureMode::Transaction}, _isNested{isNested}
     {
     }
+
+    void acquireDatabaseOpenAdmission();
+
+    std::unique_lock<std::mutex> _databaseOpenLock;
+    bool _isNested = false;
 
     friend class Database;
   };

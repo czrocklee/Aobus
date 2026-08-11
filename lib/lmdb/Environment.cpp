@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/lmdb/Environment.h>
+
 #include "detail/ResultError.h"
 #include <ao/Error.h>
-#include <ao/lmdb/Environment.h>
 
 #include <lmdb.h>
 
@@ -79,7 +80,7 @@ namespace ao::lmdb
     return Environment{std::move(envPtr)};
   }
 
-  Environment::Environment(EnvPtr envPtr)
+  Environment::Environment(EnvPtr envPtr) noexcept
     : _envPtr{std::move(envPtr)}
   {
   }

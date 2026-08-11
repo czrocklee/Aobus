@@ -10,11 +10,13 @@ namespace ao::library::detail
   /** Source-private counters used to prove the open validator's growth law. */
   struct OpenValidationMetrics final
   {
+    std::size_t namedDatabaseOpens = 0;
     std::size_t trackCursorRows = 0;
     std::size_t manifestPointReads = 0;
   };
 
   void resetOpenValidationMetrics() noexcept;
+  void recordOpenValidationNamedDatabaseOpen() noexcept;
   void recordOpenValidationTrackRow() noexcept;
   void recordOpenValidationManifestPointRead() noexcept;
   OpenValidationMetrics openValidationMetrics() noexcept;

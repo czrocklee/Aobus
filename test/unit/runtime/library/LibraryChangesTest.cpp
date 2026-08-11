@@ -5,22 +5,30 @@
 
 #include "runtime/library/LibraryMutationService.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <future>
 #include <memory>
@@ -101,6 +109,12 @@ namespace ao::rt::test
       QueuedExecutor _delegate;
       AsyncTestState<bool> _foreignDispatchReturned = AsyncTestState<bool>::create(false);
     };
+
+    Result<MutationExecution<std::uint8_t>> executeRevisionOnly(LibraryMutationService::Mutation& mutation)
+    {
+      return mutation.execute([](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                              { return Changed<std::uint8_t>{.value = 1, .changeSet = {}}; });
+    }
   } // namespace
 
   TEST_CASE("LibraryChanges - publication completes when no replica is bound", "[runtime][unit][library][changeset]")
@@ -124,6 +138,153 @@ namespace ao::rt::test
     CHECK(appliedCount == 1);
     CHECK(notifiedCount == 2);
     CHECK(writerFixture.library().authoringAvailability().state == LibraryAuthoringState::Available);
+  }
+
+  TEST_CASE("Library mutation execution - Changed commits its value and exact change set",
+            "[runtime][unit][library][changeset]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = InlineExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto mutationService = LibraryMutationService{
+      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
+    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+    auto executionRes = mutation.execute(
+      [&libraryFixture](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
+      {
+        auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+          libraryFixture.library(), write, library::test::TrackSpec{.title = "Executed"});
+        return Changed<TrackId>{.value = trackId, .changeSet = LibraryChangeSet{.tracksInserted = {trackId}}};
+      });
+
+    REQUIRE(executionRes);
+    REQUIRE(executionRes->optCommittedRevision);
+    CHECK(*executionRes->optCommittedRevision == 1);
+    REQUIRE(executionRes->value != kInvalidTrackId);
+    REQUIRE(observed.size() == 1);
+    CHECK(observed.front() == (LibraryChangeSet{.libraryRevision = 1, .tracksInserted = {executionRes->value}}));
+    auto read = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library()
+            .tracks()
+            .reader(read)
+            .get(executionRes->value, library::TrackStore::Reader::LoadMode::Both)
+            .has_value());
+  }
+
+  TEST_CASE("Library mutation execution - Unchanged aborts staged storage and does not publish",
+            "[runtime][unit][library][changeset]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = InlineExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto mutationService = LibraryMutationService{
+      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
+    std::size_t changedCount = 0;
+    auto subscription = changes.onChanged([&changedCount](LibraryChangeSet const&) noexcept { ++changedCount; });
+    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+    auto executionRes = mutation.execute(
+      [&libraryFixture](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
+      {
+        auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+          libraryFixture.library(), write, library::test::TrackSpec{.title = "Rolled back"});
+        return Unchanged<TrackId>{.value = trackId};
+      });
+
+    REQUIRE(executionRes);
+    CHECK_FALSE(executionRes->optCommittedRevision);
+    CHECK(changedCount == 0);
+    auto read = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(read) == 0);
+    CHECK_FALSE(libraryFixture.library().tracks().reader(read).get(
+      executionRes->value, library::TrackStore::Reader::LoadMode::Both));
+    REQUIRE(mutationService.beginInteractiveMutation());
+  }
+
+  TEST_CASE("Library mutation execution - errors and exceptions release admission",
+            "[runtime][unit][library][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = InlineExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto mutationService = LibraryMutationService{
+      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
+
+    SECTION("Result error")
+    {
+      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+      auto executionRes = mutation.execute([](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                           { return makeError(Error::Code::Conflict, "rejected"); });
+
+      REQUIRE_FALSE(executionRes);
+      CHECK(executionRes.error().code == Error::Code::Conflict);
+      REQUIRE(mutationService.beginInteractiveMutation());
+    }
+
+    SECTION("exception")
+    {
+      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+      CHECK_THROWS_WITH(mutation.execute([](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                         { throw std::runtime_error{"execute failure"}; }),
+                        "execute failure");
+      REQUIRE(mutationService.beginInteractiveMutation());
+    }
+
+    SECTION("explicit abort")
+    {
+      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+      mutation.abort();
+      REQUIRE(mutationService.beginInteractiveMutation());
+    }
+  }
+
+  TEST_CASE("Library mutation execution - commit failure rolls back and releases admission",
+            "[runtime][regression][library][changeset]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = InlineExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto mutationService = LibraryMutationService{
+      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
+    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation(library::WriteTransaction::Options{
+      .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected runtime commit failure"},
+    }));
+    auto stagedTrackId = kInvalidTrackId;
+    auto executionRes = mutation.execute(
+      [&libraryFixture, &stagedTrackId](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
+      {
+        stagedTrackId = library::test::addTrackWithUniqueFixtureUri(
+          libraryFixture.library(), write, library::test::TrackSpec{.title = "Rolled back commit"});
+        return Changed<TrackId>{
+          .value = stagedTrackId, .changeSet = LibraryChangeSet{.tracksInserted = {stagedTrackId}}};
+      },
+      "Create track");
+
+    REQUIRE_FALSE(executionRes);
+    CHECK(executionRes.error().code == Error::Code::IoError);
+    CHECK(executionRes.error().message == "Create track commit failed: injected runtime commit failure");
+    CHECK(stagedTrackId != kInvalidTrackId);
+    CHECK(observed.empty());
+    CHECK(mutationService.availability().libraryRevision == 0);
+    {
+      auto read = libraryFixture.library().readTransaction();
+      CHECK(libraryFixture.library().libraryRevision(read) == 0);
+      CHECK_FALSE(
+        libraryFixture.library().tracks().reader(read).get(stagedTrackId, library::TrackStore::Reader::LoadMode::Both));
+    }
+
+    auto retry = ao::test::requireValue(mutationService.beginInteractiveMutation());
+    auto retryRes = executeRevisionOnly(retry);
+    REQUIRE(retryRes);
+    REQUIRE(retryRes->optCommittedRevision);
+    CHECK(*retryRes->optCommittedRevision == 1);
+    REQUIRE(observed.size() == 1);
+    CHECK(observed.front().libraryRevision == 1);
   }
 
   TEST_CASE("LibraryChanges - applies the replica before notifying observers", "[runtime][unit][library][changeset]")
@@ -167,7 +328,7 @@ namespace ao::rt::test
         executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
       auto mutationRes = mutationService.beginInteractiveMutation();
       REQUIRE(mutationRes);
-      REQUIRE(mutationRes->commit(LibraryChangeSet{}));
+      REQUIRE(executeRevisionOnly(*mutationRes));
       CHECK(executor.queuedCount() == 1);
     }
 
@@ -225,7 +386,7 @@ namespace ao::rt::test
 
     auto mutationRes = mutationService.beginMaintenanceMutation(*maintenanceRes);
     REQUIRE(mutationRes);
-    REQUIRE(mutationRes->commit(LibraryChangeSet{}));
+    REQUIRE(executeRevisionOnly(*mutationRes));
     CHECK(executor.queuedCount() == 1);
 
     auto maintenance = std::move(*maintenanceRes);
@@ -263,7 +424,7 @@ namespace ao::rt::test
                                 [&mutationService]
                                 {
                                   auto mutationRes = mutationService.beginInteractiveMutation();
-                                  return mutationRes && mutationRes->commit(LibraryChangeSet{}).has_value();
+                                  return mutationRes && executeRevisionOnly(*mutationRes).has_value();
                                 });
 
     REQUIRE(executor.waitUntilQueued());
@@ -286,7 +447,7 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
     auto firstMutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    REQUIRE(firstMutation.commit(LibraryChangeSet{}));
+    REQUIRE(executeRevisionOnly(firstMutation));
     REQUIRE(executor.queuedCount() == 1);
 
     auto started = AsyncTestState<bool>::create(false);

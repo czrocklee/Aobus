@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/fatal/FatalProbeProcess.h"
+#include "test/fatal/ProbeProcess.h"
 
-#include <fcntl.h>
 #include <spawn.h>
 #include <unistd.h>
 
@@ -23,8 +22,6 @@ namespace ao::test
 {
   namespace
   {
-    constexpr std::size_t kMaximumCapturedBytes = std::size_t{64} * 1024;
-
     void closeFileDescriptor(int descriptor) noexcept
     {
       if (descriptor >= 0)
@@ -33,7 +30,7 @@ namespace ao::test
       }
     }
 
-    void captureStandardError(int descriptor, std::string& output)
+    void captureOutput(int descriptor, std::string& output)
     {
       auto buffer = std::array<char, 4096>{};
 
@@ -43,7 +40,7 @@ namespace ao::test
 
         if (readSize > 0)
         {
-          auto const available = kMaximumCapturedBytes - output.size();
+          auto const available = kMaximumProbeOutputBytes - output.size();
           auto const capturedSize = std::min(static_cast<std::size_t>(readSize), available);
           output.append(buffer.data(), capturedSize);
           continue;
@@ -102,16 +99,26 @@ namespace ao::test
     return executablePath;
   }
 
-  FatalProbeResult runFatalProbe(std::filesystem::path const& executablePath,
-                                 std::string_view scenarioName,
-                                 std::chrono::milliseconds timeout)
+  ProbeProcessResult runProbeProcess(std::filesystem::path const& executablePath,
+                                     std::string_view scenarioName,
+                                     std::chrono::milliseconds timeout)
   {
-    auto result = FatalProbeResult{};
-    auto pipeDescriptors = std::array<int, 2>{-1, -1};
+    auto result = ProbeProcessResult{};
+    auto standardOutputPipe = std::array<int, 2>{-1, -1};
+    auto standardErrorPipe = std::array<int, 2>{-1, -1};
 
-    if (::pipe(pipeDescriptors.data()) != 0)
+    if (::pipe(standardOutputPipe.data()) != 0)
     {
       result.launchError = std::strerror(errno);
+      return result;
+    }
+
+    if (::pipe(standardErrorPipe.data()) != 0)
+    {
+      auto const pipeError = errno;
+      closeFileDescriptor(standardOutputPipe[0]);
+      closeFileDescriptor(standardOutputPipe[1]);
+      result.launchError = std::strerror(pipeError);
       return result;
     }
 
@@ -121,22 +128,32 @@ namespace ao::test
 
     if (actionStatus == 0)
     {
-      actionStatus = ::posix_spawn_file_actions_adddup2(&actions, pipeDescriptors[1], STDERR_FILENO);
+      actionStatus = ::posix_spawn_file_actions_adddup2(&actions, standardOutputPipe[1], STDOUT_FILENO);
     }
 
     if (actionStatus == 0)
     {
-      actionStatus = ::posix_spawn_file_actions_addclose(&actions, pipeDescriptors[0]);
+      actionStatus = ::posix_spawn_file_actions_adddup2(&actions, standardErrorPipe[1], STDERR_FILENO);
     }
 
     if (actionStatus == 0)
     {
-      actionStatus = ::posix_spawn_file_actions_addclose(&actions, pipeDescriptors[1]);
+      actionStatus = ::posix_spawn_file_actions_addclose(&actions, standardOutputPipe[0]);
     }
 
     if (actionStatus == 0)
     {
-      actionStatus = ::posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+      actionStatus = ::posix_spawn_file_actions_addclose(&actions, standardOutputPipe[1]);
+    }
+
+    if (actionStatus == 0)
+    {
+      actionStatus = ::posix_spawn_file_actions_addclose(&actions, standardErrorPipe[0]);
+    }
+
+    if (actionStatus == 0)
+    {
+      actionStatus = ::posix_spawn_file_actions_addclose(&actions, standardErrorPipe[1]);
     }
 
     if (actionStatus != 0)
@@ -146,33 +163,40 @@ namespace ao::test
         [[maybe_unused]] auto const destroyResult = ::posix_spawn_file_actions_destroy(&actions);
       }
 
-      closeFileDescriptor(pipeDescriptors[0]);
-      closeFileDescriptor(pipeDescriptors[1]);
+      closeFileDescriptor(standardOutputPipe[0]);
+      closeFileDescriptor(standardOutputPipe[1]);
+      closeFileDescriptor(standardErrorPipe[0]);
+      closeFileDescriptor(standardErrorPipe[1]);
       result.launchError = std::strerror(actionStatus);
       return result;
     }
 
     auto executable = executablePath.string();
-    auto probeOption = std::string{"--aobus-fatal-probe-child"};
+    auto probeOption = std::string{"--aobus-probe-child"};
     auto scenario = std::string{scenarioName};
     auto arguments = std::array<char*, 4>{executable.data(), probeOption.data(), scenario.data(), nullptr};
     pid_t processId = 0;
     auto const spawnStatus =
       ::posix_spawn(&processId, executable.c_str(), &actions, nullptr, arguments.data(), environ);
     [[maybe_unused]] auto const destroyResult = ::posix_spawn_file_actions_destroy(&actions);
-    closeFileDescriptor(pipeDescriptors[1]);
-    pipeDescriptors[1] = -1;
+    closeFileDescriptor(standardOutputPipe[1]);
+    standardOutputPipe[1] = -1;
+    closeFileDescriptor(standardErrorPipe[1]);
+    standardErrorPipe[1] = -1;
 
     if (spawnStatus != 0)
     {
-      closeFileDescriptor(pipeDescriptors[0]);
+      closeFileDescriptor(standardOutputPipe[0]);
+      closeFileDescriptor(standardErrorPipe[0]);
       result.launchError = std::strerror(spawnStatus);
       return result;
     }
 
     result.started = true;
-    auto standardErrorReader = std::jthread{[descriptor = pipeDescriptors[0], &result]
-                                            { captureStandardError(descriptor, result.standardError); }};
+    auto standardOutputReader =
+      std::jthread{[descriptor = standardOutputPipe[0], &result] { captureOutput(descriptor, result.standardOutput); }};
+    auto standardErrorReader =
+      std::jthread{[descriptor = standardErrorPipe[0], &result] { captureOutput(descriptor, result.standardError); }};
     int waitStatus = 0;
     bool childReaped = false;
     auto const deadline = std::chrono::steady_clock::now() + timeout;
@@ -210,8 +234,10 @@ namespace ao::test
       std::this_thread::sleep_for(std::chrono::milliseconds{5});
     }
 
+    standardOutputReader.join();
     standardErrorReader.join();
-    closeFileDescriptor(pipeDescriptors[0]);
+    closeFileDescriptor(standardOutputPipe[0]);
+    closeFileDescriptor(standardErrorPipe[0]);
 
     if (childReaped && WIFEXITED(waitStatus))
     {

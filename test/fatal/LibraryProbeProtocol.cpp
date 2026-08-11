@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/fatal/LibraryFatalProbeProtocol.h"
+#include "test/fatal/LibraryProbeProtocol.h"
 
 #include <array>
 #include <span>
@@ -155,6 +155,13 @@ namespace ao::library::test
                                    "Database.cpp:",
                                    "Database::Reader::KeyView::operator",
                                    true},
+      LibraryFatalProbeExpectation{"lmdb-nested-database-open",
+                                   "expects",
+                                   "!_isNested",
+                                   "Cannot open a database from a nested write transaction",
+                                   "Transaction.cpp:",
+                                   "WriteTransaction::acquireDatabaseOpenAdmission",
+                                   true},
       LibraryFatalProbeExpectation{"nested-apply",
                                    "expects",
                                    "!_implPtr->operationActive",
@@ -190,6 +197,16 @@ namespace ao::library::test
                                    "WriteTransaction.cpp:",
                                    "WriteTransaction::applyBoundary",
                                    true},
+    };
+
+    return kExpectations;
+  }
+
+  std::span<LibraryProbeObservationExpectation const> libraryProbeObservationExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      LibraryProbeObservationExpectation{
+        "normal-observation", "observation=probe-ready", "Library probe diagnostic-only marker"},
     };
 
     return kExpectations;

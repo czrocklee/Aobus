@@ -23,9 +23,13 @@ This surface belongs to the **core libraries** layer in the [system architecture
 ## Environment
 
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
+Application composition keeps only one live environment for a database path in each process, as required by LMDB; `MusicLibrary` has no canonical-path registry or duplicate-open admission mechanism.
+Independent processes may open the same environment under LMDB's normal locking rules.
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and defaults to a 1 GiB map unless `MusicLibrary::Options::mapSize` overrides it.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
 It enumerates the main LMDB catalog before any named database is created and initializes the exact version-5 schema only when that catalog is empty.
+Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction; existing admission reuses the `meta` token used for the version gate.
+The resulting tokens remain internal to the library and are reused by later read and write transactions.
 A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
 After the version gate accepts version 5, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
 
@@ -358,7 +362,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`TrackRecordValidation.cpp`](../../../../lib/library/TrackRecordValidation.cpp), [`ListRecordValidation.cpp`](../../../../lib/library/ListRecordValidation.cpp), [`FileManifestValidation.cpp`](../../../../lib/library/FileManifestValidation.cpp), and [`LibraryUriValidation.h`](../../../../lib/library/LibraryUriValidation.h) own the canonical persisted-record validation implementations.
 - [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) owns environment, named-database creation, and the complete open gate; [`DictionaryStore.cpp`](../../../../lib/library/DictionaryStore.cpp) establishes the dictionary representation while loading it.
 - [`OpenValidationMetrics.cpp`](../../../../lib/library/OpenValidationMetrics.cpp)
-  is the source-private operation-count probe used only to lock the open gate's
+  is the source-private operation-count probe used only to lock the one-open-per-named-DBI rule and open gate's
   linear Track/manifest growth law; the library build guard limits recording
   and reset to the open owner and prevents other production consumers.
 - [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) and [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) own the public transaction capabilities; [`LibraryWrite.h`](../../../../include/ao/library/LibraryWrite.h) owns the callback-scoped mutation capability.
@@ -368,15 +372,15 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision admission, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, and deterministic `N`/`2N` operation counts.
-- [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, identity publication, failed-commit rollback, and candidate revision sequencing across separately opened library instances.
+- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision admission, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
+- [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, identity publication, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
 - [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
 - [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks the prepared-only writer surface, pre-mutation validation, and post-open fail-fast point-read, writer-read, and iteration behavior.
 - [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock prepared snapshots, the prepared-only writer surface, manifest validation, point-read outcomes, and post-open iterator fail-fast behavior.
-- [`LibraryFatalProbeTest.cpp`](../../../../test/unit/library/LibraryFatalProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, and LMDB lifetime misuse to owned subprocess fatal diagnostics.
+- [`LibraryProbeTest.cpp`](../../../../test/unit/library/LibraryProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, LMDB lifetime misuse, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) locks a runtime YAML consumer's post-open Resource-reference invariant to the same fatal diagnostics.
-- [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, cursor-row, and manifest-point-read evidence.
+- [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, named-DBI-open, cursor-row, and manifest-point-read evidence.
 - [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior.
 - [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) locks live parent validation, leaf-delete conflict, children-first subtree deletion, and coherent clear behavior.
 - [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, load modes, and ordinary store behavior.

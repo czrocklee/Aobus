@@ -230,22 +230,22 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{
       mutationExecutor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto secondIdRes = mutation.apply(
-      [&libraryFixture](library::LibraryWrite& write) -> Result<TrackId>
+    auto executionRes = mutation.execute(
+      [&libraryFixture](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
       {
-        return library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                           write,
-                                                           library::test::TrackSpec{
-                                                             .title = "Second Title",
-                                                             .artist = "Second Artist",
-                                                             .work = "Second Work",
-                                                             .tags = {"Second Tag"},
-                                                             .customMetadata = {{"Second Key", "Value"}},
-                                                           });
+        auto const trackId = library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                                         write,
+                                                                         library::test::TrackSpec{
+                                                                           .title = "Second Title",
+                                                                           .artist = "Second Artist",
+                                                                           .work = "Second Work",
+                                                                           .tags = {"Second Tag"},
+                                                                           .customMetadata = {{"Second Key", "Value"}},
+                                                                         });
+        return Changed<TrackId>{.value = trackId, .changeSet = LibraryChangeSet{.tracksInserted = {trackId}}};
       });
-    REQUIRE(secondIdRes);
-    auto const secondId = *secondIdRes;
-    REQUIRE(mutation.commit(LibraryChangeSet{.tracksInserted = {secondId}}));
+    REQUIRE(executionRes);
+    REQUIRE(executionRes->value != kInvalidTrackId);
 
     // Storage is committed, but publication is still queued. Every vocabulary
     // must keep using the same already-built snapshot until phase two arrives.
@@ -343,8 +343,8 @@ namespace ao::rt::test
 
     SECTION("Library reset")
     {
-      addTrackAndPublish(
-        libraryFixture.library(), changes, library::test::TrackSpec{.title = "Reset", .artist = "Reset Artist"}, true);
+      addTrackAndPublishReset(
+        libraryFixture.library(), changes, library::test::TrackSpec{.title = "Reset", .artist = "Reset Artist"});
 
       CHECK(vocabulary() == std::vector<std::pair<std::string, std::uint32_t>>{
                               {"Original", 1},
@@ -506,14 +506,20 @@ namespace ao::rt::test
       libraryReset = true;
     }
 
-    addTrackAndPublish(libraryFixture.library(),
-                       changes,
-                       library::test::TrackSpec{.title = "Added",
-                                                .artist = "Added Artist",
-                                                .work = "Added Work",
-                                                .tags = {"Added Tag"},
-                                                .customMetadata = {{"Added Key", "Value"}}},
-                       libraryReset);
+    auto const spec = library::test::TrackSpec{.title = "Added",
+                                               .artist = "Added Artist",
+                                               .work = "Added Work",
+                                               .tags = {"Added Tag"},
+                                               .customMetadata = {{"Added Key", "Value"}}};
+
+    if (libraryReset)
+    {
+      addTrackAndPublishReset(libraryFixture.library(), changes, spec);
+    }
+    else
+    {
+      addTrackAndPublish(libraryFixture.library(), changes, spec);
+    }
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Added Tag", 1}});
     CHECK(pairs(service.customKeys()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Added Key", 1}});

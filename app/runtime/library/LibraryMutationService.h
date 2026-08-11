@@ -12,10 +12,13 @@
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <condition_variable>
 #include <cstdint>
 #include <exception>
+#include <expected>
+#include <format>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -25,6 +28,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::async
@@ -39,11 +43,44 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class LibraryChanges;
-  struct LibraryChangeSet;
+  template<typename Value>
+  struct Unchanged final
+  {
+    Value value;
+  };
+
+  template<typename Value>
+  struct Changed final
+  {
+    Value value;
+    LibraryChangeSet changeSet;
+  };
+
+  template<typename Value>
+  using OperationOutcome = std::variant<Unchanged<Value>, Changed<Value>>;
+
+  template<typename Value>
+  struct MutationExecution final
+  {
+    Value value;
+    std::optional<std::uint64_t> optCommittedRevision;
+  };
 
   namespace detail
   {
+    template<typename Type>
+    struct OperationResultTraits final
+    {
+      static constexpr bool kValid = false;
+    };
+
+    template<typename Value>
+    struct OperationResultTraits<Result<std::variant<Unchanged<Value>, Changed<Value>>>> final
+    {
+      static constexpr bool kValid = true;
+      using ValueType = Value;
+    };
+
     // Completion acknowledgement has no recoverable branch after commit.
     void requireMatchingPublicationCompletion(bool publicationInProgress,
                                               std::uint64_t revision,
@@ -55,11 +92,6 @@ namespace ao::rt
   class LibraryMutationService final
   {
   public:
-    struct CommitInfo final
-    {
-      std::uint64_t libraryRevision = 0;
-    };
-
     class [[nodiscard]] Mutation final
     {
     public:
@@ -71,13 +103,14 @@ namespace ao::rt
       Mutation& operator=(Mutation&& other) = delete;
 
       // An error result or exception terminalizes this mutation and releases
-      // writer admission. Later apply() or commit() calls return InvalidState.
+      // writer admission. Later operations violate the terminal-state contract.
       template<typename Function,
                typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Function, library::LibraryWrite&>>>
         requires library::detail::IsResult<OperationResult>::value
       OperationResult apply(Function&& function)
       {
         AO_INVARIANT(_owner != nullptr && !_terminal, "Library mutation is already terminal");
+        _executeEligible = false;
 
         try
         {
@@ -97,18 +130,70 @@ namespace ao::rt
         }
       }
 
-      Result<CommitInfo> commit(LibraryChangeSet changeSet);
+      template<typename Operation,
+               typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>>
+        requires detail::OperationResultTraits<OperationResult>::kValid
+      auto execute(Operation&& operation, std::string_view operationName = "Library mutation")
+      {
+        using Value = detail::OperationResultTraits<OperationResult>::ValueType;
+        using Execution = MutationExecution<Value>;
+
+        static_assert(std::is_nothrow_move_constructible_v<Value>);
+        static_assert(std::is_nothrow_move_constructible_v<LibraryChangeSet>);
+        AO_INVARIANT(_owner != nullptr && !_terminal, "Library mutation is already terminal");
+        AO_INVARIANT(_executeEligible, "Library mutation execute must own the first write operation");
+        _executeEligible = false;
+
+        try
+        {
+          auto outcomeRes = _transaction.apply(std::forward<Operation>(operation));
+
+          if (!outcomeRes)
+          {
+            auto error = std::move(outcomeRes.error());
+            abort();
+            return Result<Execution>{std::unexpected{std::move(error)}};
+          }
+
+          if (auto* unchanged = std::get_if<Unchanged<Value>>(&*outcomeRes); unchanged != nullptr)
+          {
+            auto execution = Execution{.value = std::move(unchanged->value), .optCommittedRevision = std::nullopt};
+            abort();
+            return Result<Execution>{std::move(execution)};
+          }
+
+          auto changed = std::get<Changed<Value>>(std::move(*outcomeRes));
+          auto execution = Execution{.value = std::move(changed.value), .optCommittedRevision = std::nullopt};
+          auto commitRes = _owner->commitMutation(*this, std::move(changed.changeSet));
+
+          if (!commitRes)
+          {
+            auto error = std::move(commitRes.error());
+            error.message = std::format("{} commit failed: {}", operationName, error.message);
+            return Result<Execution>{std::unexpected{std::move(error)}};
+          }
+
+          execution.optCommittedRevision = *commitRes;
+          return Result<Execution>{std::move(execution)};
+        }
+        catch (...)
+        {
+          abort();
+          throw;
+        }
+      }
+
+      void abort() noexcept;
 
     private:
       Mutation(LibraryMutationService& owner,
                std::unique_lock<std::mutex> writerLock,
                library::WriteTransaction transaction);
-      void abort() noexcept;
-
       LibraryMutationService* _owner = nullptr;
       std::unique_lock<std::mutex> _writerLock;
       library::WriteTransaction _transaction;
       bool _terminal = false;
+      bool _executeEligible = true;
 
       friend class LibraryMutationService;
     };
@@ -171,7 +256,7 @@ namespace ao::rt
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
     BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision) const;
 
-    Result<Mutation> beginInteractiveMutation();
+    Result<Mutation> beginInteractiveMutation(library::WriteTransaction::Options options = {});
     AuthoringStart beginAuthoringMutation(BoundTrackTargets const& targets);
     ListOrderAuthoringStart beginListOrderAuthoringMutation(BoundListOrder const& order);
     Result<MaintenanceGuard> beginMaintenance(LibraryMaintenanceKind kind);
@@ -223,7 +308,7 @@ namespace ao::rt
 
     void beginClosing() noexcept;
     Result<std::unique_lock<std::mutex>> acquireWriter(LibraryAuthoringState requiredState, std::string_view operation);
-    Result<CommitInfo> commit(Mutation& mutation, LibraryChangeSet changeSet);
+    Result<std::uint64_t> commitMutation(Mutation& mutation, LibraryChangeSet changeSet);
     void dispatchMaintenanceFinish(std::uint64_t generation) noexcept;
     void handleFinalizationAdmissionFailure(std::exception_ptr exceptionPtr) noexcept;
     void finishMaintenance(std::uint64_t generation) noexcept;

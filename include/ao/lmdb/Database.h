@@ -15,6 +15,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 // LMDB native handles, kept opaque (see Environment.h).
@@ -42,7 +43,6 @@ namespace ao::lmdb
     class Writer;
 
     static Result<Database> open(WriteTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
-    static Result<Database> open(ReadTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
     static Result<Database> openExisting(WriteTransaction& txn, std::string const& name);
     static Result<Database> openExisting(WriteTransaction& txn, std::string const& name, KeyKind kind);
     static Database main(WriteTransaction& txn);
@@ -51,13 +51,15 @@ namespace ao::lmdb
     Writer writer(WriteTransaction& txn) const;
 
     KeyKind kind() const noexcept { return _kind; }
+    Result<> validateExactKeyKind(std::string_view databaseName, KeyKind expected) const;
 
   private:
-    Database(DbiHandle dbi, KeyKind kind);
+    Database(DbiHandle dbi, KeyKind kind, std::uint32_t nativeFlags);
     static bool transactionOwned(ReadTransaction const& transaction) noexcept;
 
     DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
     KeyKind _kind = KeyKind::Integer;
+    std::uint32_t _nativeFlags = 0;
   };
 
   /**

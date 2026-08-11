@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/fatal/FatalProbeProcess.h"
 #include "test/fatal/FatalProbeProtocol.h"
+#include "test/fatal/ProbeProcess.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -25,13 +25,13 @@ namespace ao::test
     for (auto const& expectation : fatalProbeExpectations())
     {
       INFO("probe: " << expectation.scenario);
-      auto const result = runFatalProbe(probeExecutablePath, expectation.scenario, kProbeTimeout);
+      auto const result = runProbeProcess(probeExecutablePath, expectation.scenario, kProbeTimeout);
 
       REQUIRE(result.started);
       CHECK(result.launchError.empty());
       CHECK_FALSE(result.timedOut);
-      CHECK(result.endedByFatalTermination());
-      CHECK(result.endedByPlatformAbort());
+      CHECK(result.hasFatalTermination());
+      CHECK(result.hasPlatformAbort());
       CHECK(result.standardError.contains("AOBUS_FATAL"));
       CHECK(result.standardError.contains(expectation.requiredMarker));
       CHECK(result.standardError.contains(expectation.secondRequiredMarker));

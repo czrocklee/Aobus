@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/fatal/LibraryFatalProbeScenario.h"
+#include "test/fatal/LibraryProbeScenario.h"
 
 #include "lib/library/PhysicalStoreAccess.h"
+#include "lib/lmdb/detail/DatabaseOpenAdmissionProbe.h"
 #include "lib/lmdb/detail/ReadFaultInjection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -32,12 +33,16 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <future>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <semaphore>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <tuple>
 #include <utility>
 
@@ -55,6 +60,83 @@ namespace ao::library::test
       }
 
       return {scenario.substr(0, delimiter), scenario.substr(delimiter + 1U)};
+    }
+
+    std::int32_t writeObservation(std::string_view const observation)
+    {
+      if (std::fwrite(observation.data(), 1, observation.size(), stdout) != observation.size() ||
+          std::fflush(stdout) != 0)
+      {
+        return 3;
+      }
+
+      return 0;
+    }
+
+    std::int32_t runWriterConflict(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes = MusicLibrary::open(
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{64} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        std::fputs("Library probe could not open the writer-conflict library\n", stderr);
+        return 3;
+      }
+
+      auto library = std::move(*libraryRes);
+
+      if (auto writableRes = WritableMusicLibrary::acquire(library);
+          writableRes || writableRes.error().code != Error::Code::Conflict)
+      {
+        std::fputs("Library probe did not observe writer-session conflict\n", stderr);
+        return 3;
+      }
+
+      return writeObservation("writer-conflict");
+    }
+
+    std::int32_t runCommitRevision(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes = MusicLibrary::open(
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{64} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        std::fputs("Library probe could not open the revision library\n", stderr);
+        return 3;
+      }
+
+      auto library = std::move(*libraryRes);
+      auto writableRes = WritableMusicLibrary::acquire(library);
+
+      if (!writableRes)
+      {
+        std::fputs("Library probe could not acquire the revision writer\n", stderr);
+        return 3;
+      }
+
+      auto transaction = writableRes->writeTransaction();
+
+      if (library.libraryRevision(transaction) != 1 || !transaction.commit())
+      {
+        std::fputs("Library probe could not commit revision one\n", stderr);
+        return 3;
+      }
+
+      return writeObservation("committed-revision=1");
     }
 
     std::int32_t runZeroListUpdate(std::string_view const scratchName)
@@ -556,6 +638,19 @@ namespace ao::library::test
         return 3;
       }
 
+      if (scenario == "lmdb-nested-database-open")
+      {
+        auto childRes = lmdb::WriteTransaction::begin(*setupRes);
+
+        if (!childRes)
+        {
+          return 3;
+        }
+
+        std::ignore = lmdb::Database::open(*childRes, "nested");
+        return 3;
+      }
+
       auto const keyKind =
         scenario == "lmdb-invalid-integer-key" ? lmdb::Database::KeyKind::Blob : lmdb::Database::KeyKind::Integer;
       auto databaseRes = lmdb::Database::open(*setupRes, "probe", keyKind);
@@ -649,6 +744,102 @@ namespace ao::library::test
       return 3;
     }
 
+    std::int32_t runDatabaseOpenAdmissionRelease(std::string_view const scratchName, std::string_view const scenario)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto const firstPath = scratchPath / "first-environment";
+      auto const secondPath = scratchPath / "second-environment";
+      auto error = std::error_code{};
+      std::filesystem::create_directories(firstPath, error);
+
+      if (error)
+      {
+        return 3;
+      }
+
+      std::filesystem::create_directories(secondPath, error);
+
+      if (error)
+      {
+        return 3;
+      }
+
+      auto firstEnvironmentRes = lmdb::Environment::open(
+        firstPath.string(), lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
+      auto secondEnvironmentRes = lmdb::Environment::open(
+        secondPath.string(), lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
+
+      if (!firstEnvironmentRes || !secondEnvironmentRes)
+      {
+        return 3;
+      }
+
+      auto firstTransactionRes = lmdb::WriteTransaction::begin(*firstEnvironmentRes);
+
+      if (!firstTransactionRes)
+      {
+        return 3;
+      }
+
+      auto firstTransactionPtr = std::make_unique<lmdb::WriteTransaction>(std::move(*firstTransactionRes));
+
+      if (!lmdb::Database::open(*firstTransactionPtr, "first"))
+      {
+        return 3;
+      }
+
+      auto contentionSignal = std::binary_semaphore{0};
+      auto second = std::async(std::launch::async,
+                               [&]
+                               {
+                                 auto transactionRes = lmdb::WriteTransaction::begin(*secondEnvironmentRes);
+
+                                 if (!transactionRes)
+                                 {
+                                   return false;
+                                 }
+
+                                 [[maybe_unused]] auto probe =
+                                   lmdb::detail::DatabaseOpenAdmissionProbe{contentionSignal};
+                                 auto databaseRes = lmdb::Database::open(*transactionRes, "second");
+                                 return databaseRes.has_value() && transactionRes->commit().has_value();
+                               });
+
+      contentionSignal.acquire();
+
+      if (scenario == "lmdb-database-open-admission-release-commit")
+      {
+        if (!firstTransactionPtr->commit())
+        {
+          return 3;
+        }
+      }
+      else if (scenario == "lmdb-database-open-admission-release-abort")
+      {
+        firstTransactionPtr->abort();
+      }
+      else if (scenario == "lmdb-database-open-admission-release-destruction")
+      {
+        firstTransactionPtr.reset();
+      }
+      else
+      {
+        return 2;
+      }
+
+      if (!second.get())
+      {
+        return 3;
+      }
+
+      return writeObservation(scenario);
+    }
+
     std::int32_t runTransactionOperationContract(std::string_view const scratchName, std::string_view const scenario)
     {
       if (scratchName.empty())
@@ -728,9 +919,41 @@ namespace ao::library::test
     }
   } // namespace
 
-  std::int32_t runLibraryFatalProbeScenario(std::string_view const scenario)
+  std::int32_t runLibraryProbeScenario(std::string_view const scenario)
   {
     auto const [name, scratchName] = splitScenario(scenario);
+
+    if (name == "normal-observation")
+    {
+      if (std::fputs("Library probe diagnostic-only marker\n", stderr) < 0 || std::fflush(stderr) != 0)
+      {
+        return 3;
+      }
+
+      return writeObservation("observation=probe-ready");
+    }
+
+    if (name == "oversized-standard-output")
+    {
+      auto const output = std::string(std::size_t{128} * 1024, 'x');
+
+      if (std::fwrite(output.data(), 1, output.size(), stdout) != output.size() || std::fflush(stdout) != 0)
+      {
+        return 3;
+      }
+
+      return 0;
+    }
+
+    if (name == "writer-conflict")
+    {
+      return runWriterConflict(scratchName);
+    }
+
+    if (name == "commit-revision")
+    {
+      return runCommitRevision(scratchName);
+    }
 
     if (name == "list-builder-invalid-view")
     {
@@ -830,9 +1053,15 @@ namespace ao::library::test
 
     if (name == "lmdb-reader-moved-from" || name == "lmdb-writer-after-commit" || name == "lmdb-writer-from-finished" ||
         name == "lmdb-reader-after-write-commit" || name == "lmdb-iterator-after-write-commit" ||
-        name == "lmdb-invalid-integer-key")
+        name == "lmdb-invalid-integer-key" || name == "lmdb-nested-database-open")
     {
       return runLmdbContract(scratchName, name);
+    }
+
+    if (name == "lmdb-database-open-admission-release-commit" || name == "lmdb-database-open-admission-release-abort" ||
+        name == "lmdb-database-open-admission-release-destruction")
+    {
+      return runDatabaseOpenAdmissionRelease(scratchName, name);
     }
 
     if (name == "nested-apply" || name == "commit-during-apply" || name == "terminated-during-apply" ||

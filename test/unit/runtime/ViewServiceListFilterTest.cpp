@@ -14,10 +14,12 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <expected>
 #include <string>
 #include <utility>
 #include <vector>
@@ -169,9 +171,16 @@ namespace ao::rt::test
       auto mutationRes = mutationService.beginInteractiveMutation();
       REQUIRE(mutationRes);
       auto builder = library::ListBuilder::makeEmpty().name("Parent").filter(std::move(filter));
-      REQUIRE(
-        mutationRes->apply([&](library::LibraryWrite& write) { return write.lists().update(parentId, builder); }));
-      REQUIRE(mutationRes->commit(LibraryChangeSet{.listsUpserted = {parentId}}));
+      REQUIRE(mutationRes->execute(
+        [&](library::LibraryWrite& write) -> Result<OperationOutcome<bool>>
+        {
+          if (auto updateRes = write.lists().update(parentId, builder); !updateRes)
+          {
+            return std::unexpected{updateRes.error()};
+          }
+
+          return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.listsUpserted = {parentId}}};
+        }));
     };
 
     updateParentFilter("(");

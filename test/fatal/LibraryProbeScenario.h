@@ -8,5 +8,5 @@
 
 namespace ao::library::test
 {
-  std::int32_t runLibraryFatalProbeScenario(std::string_view scenario);
+  std::int32_t runLibraryProbeScenario(std::string_view scenario);
 } // namespace ao::library::test

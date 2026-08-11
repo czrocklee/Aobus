@@ -51,9 +51,24 @@ namespace ao::lmdb
     }
   } // namespace
 
-  Database::Database(DbiHandle dbi, KeyKind kind)
-    : _dbi{dbi}, _kind{kind}
+  Database::Database(DbiHandle dbi, KeyKind kind, std::uint32_t const nativeFlags)
+    : _dbi{dbi}, _kind{kind}, _nativeFlags{nativeFlags}
   {
+  }
+
+  Result<> Database::validateExactKeyKind(std::string_view const databaseName, KeyKind const expected) const
+  {
+    auto const expectedFlags = expected == KeyKind::Integer ? static_cast<std::uint32_t>(MDB_INTEGERKEY) : 0U;
+
+    if (_nativeFlags != expectedFlags)
+    {
+      return makeError(
+        Error::Code::CorruptData,
+        std::format(
+          "Named database '{}' has flags 0x{:x} (expected 0x{:x})", databaseName, _nativeFlags, expectedFlags));
+    }
+
+    return {};
   }
 
   bool Database::transactionOwned(ReadTransaction const& transaction) noexcept
@@ -64,6 +79,7 @@ namespace ao::lmdb
   Result<Database> Database::open(WriteTransaction& txn, std::string const& name, KeyKind kind)
   {
     AO_EXPECTS(txn.isActive(), "Cannot open a database with a finished write transaction");
+    txn.acquireDatabaseOpenAdmission();
 
     DbiHandle dbi = {};
     unsigned int flags = MDB_CREATE;
@@ -80,33 +96,28 @@ namespace ao::lmdb
       throwOnMutationError("mdb_dbi_open", code);
     }
 
-    return Database{dbi, kind};
-  }
+    unsigned int nativeFlags = 0;
+    auto const flagsCode = ::mdb_dbi_flags(txn._txnPtr.get(), dbi, &nativeFlags);
 
-  Result<Database> Database::open(ReadTransaction& txn, std::string const& name, KeyKind kind)
-  {
-    AO_EXPECTS(txn.isActive(), "Cannot open a database with an inactive read transaction");
-
-    DbiHandle dbi = {};
-    unsigned int flags = 0;
-
-    if (kind == KeyKind::Integer)
+    if (flagsCode != MDB_SUCCESS)
     {
-      flags |= MDB_INTEGERKEY;
+      throwOnMutationError("mdb_dbi_flags", flagsCode);
     }
 
-    if (auto result = resultFromCode("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &dbi));
-        !result)
+    auto database = Database{dbi, kind, nativeFlags};
+
+    if (auto validationRes = database.validateExactKeyKind(name, kind); !validationRes)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{validationRes.error()};
     }
 
-    return Database{dbi, kind};
+    return database;
   }
 
   Result<Database> Database::openExisting(WriteTransaction& txn, std::string const& name)
   {
     AO_EXPECTS(txn.isActive(), "Cannot open a database with a finished write transaction");
+    txn.acquireDatabaseOpenAdmission();
 
     DbiHandle dbi = {};
     int const code = ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), 0, &dbi);
@@ -135,7 +146,7 @@ namespace ao::lmdb
     }
 
     auto const kind = (flags & MDB_INTEGERKEY) != 0 ? KeyKind::Integer : KeyKind::Blob;
-    return Database{dbi, kind};
+    return Database{dbi, kind, flags};
   }
 
   Result<Database> Database::openExisting(WriteTransaction& txn, std::string const& name, KeyKind const kind)
@@ -147,30 +158,18 @@ namespace ao::lmdb
       return std::unexpected{databaseRes.error()};
     }
 
-    unsigned int actualFlags = 0;
-    auto const flagsCode = ::mdb_dbi_flags(txn._txnPtr.get(), databaseRes->_dbi, &actualFlags);
-
-    if (flagsCode != MDB_SUCCESS)
+    if (auto validationRes = databaseRes->validateExactKeyKind(name, kind); !validationRes)
     {
-      throwOnMutationError("mdb_dbi_flags", flagsCode);
+      return std::unexpected{validationRes.error()};
     }
 
-    auto const expectedFlags = kind == KeyKind::Integer ? static_cast<std::uint32_t>(MDB_INTEGERKEY) : 0U;
-
-    if (actualFlags != expectedFlags)
-    {
-      return makeError(
-        Error::Code::CorruptData,
-        std::format("Named database '{}' has flags 0x{:x} (expected 0x{:x})", name, actualFlags, expectedFlags));
-    }
-
-    databaseRes->_kind = kind;
     return databaseRes;
   }
 
   Database Database::main(WriteTransaction& txn)
   {
     AO_EXPECTS(txn.isActive(), "Cannot access the main database with a finished write transaction");
+    txn.acquireDatabaseOpenAdmission();
     DbiHandle dbi = {};
     auto const code = ::mdb_dbi_open(txn._txnPtr.get(), nullptr, 0, &dbi);
 
@@ -179,7 +178,7 @@ namespace ao::lmdb
       throwOnMutationError("mdb_dbi_open", code);
     }
 
-    return Database{dbi, KeyKind::Blob};
+    return Database{dbi, KeyKind::Blob, 0};
   }
 
   Database::Reader Database::reader(ReadTransaction const& txn) const

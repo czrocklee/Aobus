@@ -17,6 +17,12 @@
 
 namespace ao::lmdb::test
 {
+  namespace
+  {
+    template<typename Transaction>
+    concept SupportsDatabaseOpen = requires(Transaction& transaction) { Database::open(transaction, "database"); };
+  } // namespace
+
   TEST_CASE("Database - helper opens database", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
@@ -43,16 +49,10 @@ namespace ao::lmdb::test
     REQUIRE(wtxn.commit());
   }
 
-  TEST_CASE("Database - read-only open returns NotFound for missing database", "[lmdb][unit][database]")
+  TEST_CASE("Database - named database open requires a write transaction", "[lmdb][unit][database]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto txn = beginReadTransaction(env);
-
-    auto dbRes = Database::open(txn, "missing");
-
-    CHECK_FALSE(dbRes);
-    CHECK(dbRes.error().code == Error::Code::NotFound);
+    STATIC_REQUIRE(SupportsDatabaseOpen<WriteTransaction>);
+    STATIC_REQUIRE_FALSE(SupportsDatabaseOpen<ReadTransaction>);
   }
 
   TEST_CASE("Database - openExisting never creates a missing named database", "[lmdb][unit][database]")
@@ -77,14 +77,48 @@ namespace ao::lmdb::test
     REQUIRE(Database::open(transaction, "integer", Database::KeyKind::Integer));
     REQUIRE(Database::open(transaction, "blob", Database::KeyKind::Blob));
 
-    CHECK(Database::openExisting(transaction, "integer", Database::KeyKind::Integer));
-    CHECK(Database::openExisting(transaction, "blob", Database::KeyKind::Blob));
+    auto integerRes = Database::openExisting(transaction, "integer", Database::KeyKind::Integer);
+    auto blobRes = Database::openExisting(transaction, "blob", Database::KeyKind::Blob);
+    REQUIRE(integerRes);
+    REQUIRE(blobRes);
+    CHECK(integerRes->validateExactKeyKind("integer", Database::KeyKind::Integer));
+    CHECK(blobRes->validateExactKeyKind("blob", Database::KeyKind::Blob));
+    auto integerValidationRes = integerRes->validateExactKeyKind("integer", Database::KeyKind::Blob);
+    auto blobValidationRes = blobRes->validateExactKeyKind("blob", Database::KeyKind::Integer);
+    REQUIRE_FALSE(integerValidationRes);
+    REQUIRE_FALSE(blobValidationRes);
+    CHECK(integerValidationRes.error().message == "Named database 'integer' has flags 0x8 (expected 0x0)");
+    CHECK(blobValidationRes.error().message == "Named database 'blob' has flags 0x0 (expected 0x8)");
     auto wrongIntegerRes = Database::openExisting(transaction, "integer", Database::KeyKind::Blob);
     auto wrongBlobRes = Database::openExisting(transaction, "blob", Database::KeyKind::Integer);
     REQUIRE_FALSE(wrongIntegerRes);
     REQUIRE_FALSE(wrongBlobRes);
     CHECK(wrongIntegerRes.error().code == Error::Code::CorruptData);
     CHECK(wrongBlobRes.error().code == Error::Code::CorruptData);
+  }
+
+  TEST_CASE("Database - create-capable open rejects an existing database with different key flags",
+            "[lmdb][regression][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    {
+      auto setup = beginWriteTransaction(env);
+      REQUIRE(Database::open(setup, "integer", Database::KeyKind::Integer));
+      REQUIRE(Database::open(setup, "blob", Database::KeyKind::Blob));
+      REQUIRE(setup.commit());
+    }
+
+    auto transaction = beginWriteTransaction(env);
+    auto blobAsIntegerRes = Database::open(transaction, "blob", Database::KeyKind::Integer);
+    auto integerAsBlobRes = Database::open(transaction, "integer", Database::KeyKind::Blob);
+
+    REQUIRE_FALSE(blobAsIntegerRes);
+    REQUIRE_FALSE(integerAsBlobRes);
+    CHECK(blobAsIntegerRes.error().code == Error::Code::CorruptData);
+    CHECK(integerAsBlobRes.error().code == Error::Code::CorruptData);
+    CHECK(transaction.isActive());
   }
 
   TEST_CASE("Database - openExisting rejects an ordinary main-database row", "[lmdb][unit][database]")
@@ -122,9 +156,10 @@ namespace ao::lmdb::test
     REQUIRE(optFailure);
     CHECK(optFailure->code == Error::Code::IoError);
 
-    auto readTransaction = beginReadTransaction(env);
-    auto firstRes = Database::open(readTransaction, "first");
+    auto verificationTransaction = beginWriteTransaction(env);
+    auto firstRes = Database::openExisting(verificationTransaction, "first");
     REQUIRE_FALSE(firstRes);
     CHECK(firstRes.error().code == Error::Code::NotFound);
+    REQUIRE(verificationTransaction.commit());
   }
 } // namespace ao::lmdb::test

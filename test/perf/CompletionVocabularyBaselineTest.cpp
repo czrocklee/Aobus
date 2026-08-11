@@ -7,6 +7,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -104,7 +105,9 @@ namespace ao::rt::test
       for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
       {
         auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-        REQUIRE(mutation.commit(LibraryChangeSet{.libraryReset = true}));
+        REQUIRE(mutation.execute(
+          [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
+          { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
         auto const [currentAggregateSize, aggregateElapsed] = timedSize(
           [&]
           {

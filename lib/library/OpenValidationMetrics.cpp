@@ -19,6 +19,11 @@ namespace ao::library::detail
     metrics() = {};
   }
 
+  void recordOpenValidationNamedDatabaseOpen() noexcept
+  {
+    ++metrics().namedDatabaseOpens;
+  }
+
   void recordOpenValidationTrackRow() noexcept
   {
     ++metrics().trackCursorRows;

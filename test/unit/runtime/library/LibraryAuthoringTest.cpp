@@ -167,14 +167,13 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
     auto optListWriter = std::optional<library::ListStore::Writer>{};
-    REQUIRE(mutation.apply(
-      [&musicLibrary, &optListWriter](library::LibraryWrite& write) -> Result<>
+    REQUIRE(mutation.execute(
+      [&musicLibrary, &optListWriter](library::LibraryWrite& write) -> Result<OperationOutcome<bool>>
       {
         optListWriter.emplace(library::test::physicalWriter(musicLibrary.lists(), write));
-        return {};
+        return Changed<bool>{.value = true, .changeSet = {}};
       }));
 
-    REQUIRE(mutation.commit(LibraryChangeSet{}));
     CHECK(optListWriter);
   }
 

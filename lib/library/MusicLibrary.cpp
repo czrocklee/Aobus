@@ -239,25 +239,33 @@ namespace ao::library
       return {};
     }
 
-    Result<SchemaDatabases> openSchema(lmdb::WriteTransaction& transaction, bool const create)
+    Result<lmdb::Database> openSchemaDatabase(lmdb::WriteTransaction& transaction,
+                                              bool const create,
+                                              std::string const& name,
+                                              lmdb::Database::KeyKind const kind)
     {
-      auto open = [&transaction, create](
-                    std::string const& name, lmdb::Database::KeyKind const kind) -> Result<lmdb::Database>
+      detail::recordOpenValidationNamedDatabaseOpen();
+      return create ? lmdb::Database::open(transaction, name, kind)
+                    : lmdb::Database::openExisting(transaction, name, kind);
+    }
+
+    Result<SchemaDatabases> openSchemaWithMetadata(lmdb::WriteTransaction& transaction,
+                                                   bool const create,
+                                                   lmdb::Database metadata)
+    {
+      if (auto validationRes = metadata.validateExactKeyKind("meta", lmdb::Database::KeyKind::Integer); !validationRes)
       {
-        return create ? lmdb::Database::open(transaction, name, kind)
-                      : lmdb::Database::openExisting(transaction, name, kind);
-      };
+        return std::unexpected{validationRes.error()};
+      }
 
-      auto metadataRes = open("meta", lmdb::Database::KeyKind::Integer);
-      auto tracksHotRes = open("tracks_hot", lmdb::Database::KeyKind::Integer);
-      auto tracksColdRes = open("tracks_cold", lmdb::Database::KeyKind::Integer);
-      auto listsRes = open("lists", lmdb::Database::KeyKind::Integer);
-      auto resourcesRes = open("resources", lmdb::Database::KeyKind::Integer);
-      auto dictionaryRes = open("dictionary", lmdb::Database::KeyKind::Integer);
-      auto manifestRes = open("file_manifest", lmdb::Database::KeyKind::Blob);
+      auto tracksHotRes = openSchemaDatabase(transaction, create, "tracks_hot", lmdb::Database::KeyKind::Integer);
+      auto tracksColdRes = openSchemaDatabase(transaction, create, "tracks_cold", lmdb::Database::KeyKind::Integer);
+      auto listsRes = openSchemaDatabase(transaction, create, "lists", lmdb::Database::KeyKind::Integer);
+      auto resourcesRes = openSchemaDatabase(transaction, create, "resources", lmdb::Database::KeyKind::Integer);
+      auto dictionaryRes = openSchemaDatabase(transaction, create, "dictionary", lmdb::Database::KeyKind::Integer);
+      auto manifestRes = openSchemaDatabase(transaction, create, "file_manifest", lmdb::Database::KeyKind::Blob);
 
-      for (auto const* result :
-           {&metadataRes, &tracksHotRes, &tracksColdRes, &listsRes, &resourcesRes, &dictionaryRes, &manifestRes})
+      for (auto const* result : {&tracksHotRes, &tracksColdRes, &listsRes, &resourcesRes, &dictionaryRes, &manifestRes})
       {
         if (!*result)
         {
@@ -265,13 +273,25 @@ namespace ao::library
         }
       }
 
-      return SchemaDatabases{.metadata = std::move(*metadataRes),
+      return SchemaDatabases{.metadata = std::move(metadata),
                              .tracksHot = std::move(*tracksHotRes),
                              .tracksCold = std::move(*tracksColdRes),
                              .lists = std::move(*listsRes),
                              .resources = std::move(*resourcesRes),
                              .dictionary = std::move(*dictionaryRes),
                              .manifest = std::move(*manifestRes)};
+    }
+
+    Result<SchemaDatabases> openSchema(lmdb::WriteTransaction& transaction, bool const create)
+    {
+      auto metadataRes = openSchemaDatabase(transaction, create, "meta", lmdb::Database::KeyKind::Integer);
+
+      if (!metadataRes)
+      {
+        return std::unexpected{metadataRes.error()};
+      }
+
+      return openSchemaWithMetadata(transaction, create, std::move(*metadataRes));
     }
 
     struct AdmittedSchema final
@@ -318,6 +338,7 @@ namespace ao::library
         return std::unexpected{metadataEntryRes.error()};
       }
 
+      detail::recordOpenValidationNamedDatabaseOpen();
       auto rawMetadataRes = lmdb::Database::openExisting(transaction, "meta");
 
       if (!rawMetadataRes)
@@ -358,7 +379,7 @@ namespace ao::library
         return std::unexpected{headerRes.error()};
       }
 
-      auto schemaRes = openSchema(transaction, false);
+      auto schemaRes = openSchemaWithMetadata(transaction, false, std::move(*rawMetadataRes));
 
       if (!schemaRes)
       {

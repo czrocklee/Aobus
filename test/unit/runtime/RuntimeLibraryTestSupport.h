@@ -75,8 +75,10 @@ namespace ao::rt::test
 
   TrackId addTrackAndPublish(library::MusicLibrary& storage,
                              LibraryChanges& changes,
-                             library::test::TrackSpec const& spec,
-                             bool libraryReset = false);
+                             library::test::TrackSpec const& spec);
+  TrackId addTrackAndPublishReset(library::MusicLibrary& storage,
+                                  LibraryChanges& changes,
+                                  library::test::TrackSpec const& spec);
 
   class LibraryWriterFixture final
   {

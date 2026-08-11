@@ -174,36 +174,58 @@ namespace ao::rt
       }
 
       auto mutation = std::move(*mutationRes);
-      auto applyRes = mutation.apply([&operation, stopToken](library::LibraryWrite& transaction)
-                                     { return operation.apply(transaction, stopToken); });
+      auto executionRes = mutation.execute(
+        [&operation, stopToken](library::LibraryWrite& transaction) -> Result<OperationOutcome<CoordinatedScanResult>>
+        {
+          auto applyRes = operation.apply(transaction, stopToken);
 
-      if (!applyRes)
+          if (!applyRes)
+          {
+            return std::unexpected{applyRes.error()};
+          }
+
+          auto result = std::move(*applyRes);
+
+          if (operation.cancelled())
+          {
+            return Unchanged<CoordinatedScanResult>{
+              .value = CoordinatedScanResult{.result = std::move(result), .cancelled = true},
+            };
+          }
+
+          if (!operation.transactionShouldCommit())
+          {
+            return Unchanged<CoordinatedScanResult>{
+              .value = CoordinatedScanResult{.result = std::move(result)},
+            };
+          }
+
+          auto mutatedIds = result.mutatedIds;
+          mutatedIds.append_range(result.relinkedIds);
+          auto changeSet = LibraryChangeSet{
+            .tracksInserted = result.insertedIds,
+            .tracksMutated = std::move(mutatedIds),
+          };
+          return Changed<CoordinatedScanResult>{
+            .value = CoordinatedScanResult{.result = std::move(result)},
+            .changeSet = std::move(changeSet),
+          };
+        },
+        "Apply scan plan");
+
+      if (!executionRes)
       {
-        return std::unexpected{applyRes.error()};
+        return std::unexpected{executionRes.error()};
       }
 
-      if (operation.cancelled())
+      auto coordinated = std::move(executionRes->value);
+
+      if (executionRes->optCommittedRevision)
       {
-        return CoordinatedScanResult{.result = std::move(*applyRes), .cancelled = true};
+        coordinated.result.libraryRevision = *executionRes->optCommittedRevision;
       }
 
-      if (!operation.transactionShouldCommit())
-      {
-        return CoordinatedScanResult{.result = std::move(*applyRes)};
-      }
-
-      auto mutatedIds = applyRes->mutatedIds;
-      mutatedIds.append_range(applyRes->relinkedIds);
-      auto commitRes = mutation.commit(
-        LibraryChangeSet{.tracksInserted = applyRes->insertedIds, .tracksMutated = std::move(mutatedIds)});
-
-      if (!commitRes)
-      {
-        return std::unexpected{commitRes.error()};
-      }
-
-      applyRes->libraryRevision = commitRes->libraryRevision;
-      return CoordinatedScanResult{.result = std::move(*applyRes)};
+      return coordinated;
     }
 
     void logLibraryTaskFailure(std::string_view stage, std::string_view uri, std::string_view message)
@@ -266,20 +288,31 @@ namespace ao::rt
         }
 
         auto mutation = std::move(*mutationRes);
-        auto result = mutation.apply([candidates](library::LibraryWrite& transaction)
-                                     { return applyAudioIdentityBatch(transaction, candidates); });
+        auto executionRes = mutation.execute(
+          [candidates](library::LibraryWrite& transaction) -> Result<OperationOutcome<AudioIdentityBatchCommitResult>>
+          {
+            auto result = applyAudioIdentityBatch(transaction, candidates);
 
-        if (!result || result->completedCount == 0)
+            if (!result)
+            {
+              return std::unexpected{result.error()};
+            }
+
+            if (result->completedCount == 0)
+            {
+              return Unchanged<AudioIdentityBatchCommitResult>{.value = std::move(*result)};
+            }
+
+            return Changed<AudioIdentityBatchCommitResult>{.value = std::move(*result), .changeSet = {}};
+          },
+          "Backfill audio identity");
+
+        if (!executionRes)
         {
-          return result;
+          return std::unexpected{executionRes.error()};
         }
 
-        if (auto commitRes = mutation.commit(LibraryChangeSet{}); !commitRes)
-        {
-          return std::unexpected{commitRes.error()};
-        }
-
-        return result;
+        return std::move(executionRes->value);
       };
     }
 
@@ -476,8 +509,10 @@ namespace ao::rt
             return std::unexpected{reportRes.error()};
           }
 
+          auto report = std::move(*reportRes);
+          mutation.abort();
           return LibraryImportPlan{std::make_unique<LibraryImportPlan::Impl>(
-            std::move(*preparedRes), *reportRes, targetLibraryId, availability.runtimeInstanceId, targetRevision)};
+            std::move(*preparedRes), report, targetLibraryId, availability.runtimeInstanceId, targetRevision)};
         }());
     }
     catch (std::exception const& error)
@@ -590,29 +625,30 @@ namespace ao::rt
           }
 
           auto mutation = std::move(*mutationRes);
-          auto importRes = mutation.apply([&importOperation, &binding](library::LibraryWrite& transaction)
-                                          { return importOperation.apply(binding.prepared, transaction); });
+          auto executionRes = mutation.execute(
+            [&importOperation, &binding](library::LibraryWrite& transaction) -> Result<OperationOutcome<ImportReport>>
+            {
+              auto importRes = importOperation.apply(binding.prepared, transaction);
 
-          if (!importRes)
+              if (!importRes)
+              {
+                return std::unexpected{importRes.error()};
+              }
+
+              auto changeSet = importOperation.buildChangeSet(binding.prepared, transaction);
+              return Changed<ImportReport>{
+                .value = std::move(*importRes),
+                .changeSet = std::move(changeSet),
+              };
+            },
+            "Import library YAML");
+
+          if (!executionRes)
           {
-            return std::unexpected{importRes.error()};
+            return std::unexpected{executionRes.error()};
           }
 
-          auto changeSetRes =
-            mutation.apply([&importOperation, &binding](library::LibraryWrite& transaction) -> Result<LibraryChangeSet>
-                           { return importOperation.buildChangeSet(binding.prepared, transaction); });
-
-          if (!changeSetRes)
-          {
-            return std::unexpected{changeSetRes.error()};
-          }
-
-          if (auto commitRes = mutation.commit(std::move(*changeSetRes)); !commitRes)
-          {
-            return std::unexpected{commitRes.error()};
-          }
-
-          return *importRes;
+          return std::move(executionRes->value);
         }());
     }
     catch (std::exception const& error)

@@ -3,14 +3,19 @@
 
 #include <ao/lmdb/Transaction.h>
 
+#include "test/fatal/ProbeProcess.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <array>
+#include <chrono>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -184,6 +189,36 @@ namespace ao::lmdb::test
     // Verify moved transaction is valid by using it
     [[maybe_unused]] auto writer = db.writer(txn2);
     REQUIRE(txn2.commit());
+  }
+
+  TEST_CASE("WriteTransaction - database-open admission releases after every terminal path",
+            "[lmdb][regression][transaction][concurrency]")
+  {
+    static constexpr auto kScenarios = std::array<std::string_view, 3>{
+      "lmdb-database-open-admission-release-commit",
+      "lmdb-database-open-admission-release-abort",
+      "lmdb-database-open-admission-release-destruction",
+    };
+    constexpr auto kTimeout = std::chrono::seconds{15};
+    auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
+    REQUIRE_FALSE(executablePath.empty());
+
+    for (auto const scenarioName : kScenarios)
+    {
+      INFO("probe: " << scenarioName);
+      auto const scratch = ao::test::TempDir{};
+      auto scenario = std::string{scenarioName};
+      scenario.append(":").append(scratch.path().filename().string());
+      auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
+
+      REQUIRE(result.started);
+      CHECK(result.launchError.empty());
+      CHECK_FALSE(result.timedOut);
+      REQUIRE(result.hasSuccessfulExit());
+      CHECK_FALSE(result.hasFatalTermination());
+      CHECK(result.standardOutput == scenarioName);
+      CHECK(result.standardError.empty());
+    }
   }
 
   // ============================================================================

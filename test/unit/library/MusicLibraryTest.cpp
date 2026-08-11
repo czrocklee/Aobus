@@ -6,6 +6,7 @@
 #include "lib/library/FileManifestValidation.h"
 #include "lib/library/OpenValidationMetrics.h"
 #include "lib/lmdb/detail/ReadFaultInjection.h"
+#include "test/fatal/ProbeProcess.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
@@ -139,9 +140,13 @@ namespace ao::library::test
                            std::string const& databaseName,
                            std::optional<Database::KeyKind> const optReplacementKind = std::nullopt)
     {
-      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto* rawEnvironment = static_cast<MDB_env*>(nullptr);
+      REQUIRE(::mdb_env_create(&rawEnvironment) == MDB_SUCCESS);
+      auto environmentPtr = std::unique_ptr<MDB_env, decltype(&::mdb_env_close)>{rawEnvironment, &::mdb_env_close};
+      REQUIRE(::mdb_env_set_maxdbs(environmentPtr.get(), 8) == MDB_SUCCESS);
+      REQUIRE(::mdb_env_open(environmentPtr.get(), path.string().c_str(), MDB_NOTLS, 0644) == MDB_SUCCESS);
       auto* rawTransaction = static_cast<MDB_txn*>(nullptr);
-      REQUIRE(::mdb_txn_begin(environment.handle(), nullptr, 0, &rawTransaction) == MDB_SUCCESS);
+      REQUIRE(::mdb_txn_begin(environmentPtr.get(), nullptr, 0, &rawTransaction) == MDB_SUCCESS);
       auto transactionPtr = std::unique_ptr<MDB_txn, decltype(&::mdb_txn_abort)>{rawTransaction, &::mdb_txn_abort};
       MDB_dbi dbi = 0;
       REQUIRE(::mdb_dbi_open(transactionPtr.get(), databaseName.c_str(), 0, &dbi) == MDB_SUCCESS);
@@ -230,6 +235,19 @@ namespace ao::library::test
     CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
   }
 
+  TEST_CASE("MusicLibrary - opens each named database once per library admission", "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+
+    {
+      auto library = makeTestMusicLibrary(temp.path(), temp.path());
+      CHECK(detail::openValidationMetrics().namedDatabaseOpens == 7);
+    }
+
+    auto reopened = makeTestMusicLibrary(temp.path(), temp.path());
+    CHECK(detail::openValidationMetrics().namedDatabaseOpens == 7);
+  }
+
   TEST_CASE("MusicLibrary - admits only the exact current main catalog", "[library][unit][music-library][integrity]")
   {
     auto const temp = ao::test::TempDir{};
@@ -263,6 +281,25 @@ namespace ao::library::test
     {
       dropNamedDatabase(temp.path(), "resources", Database::KeyKind::Blob);
       requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("wrong metadata key flags retain exact diagnostics without reopening")
+    {
+      auto const header = [&]
+      {
+        auto library = makeTestMusicLibrary(temp.path(), temp.path());
+        return library.metadataHeader();
+      }();
+      dropNamedDatabase(temp.path(), "meta", Database::KeyKind::Blob);
+      createRawBlobRow(
+        temp.path(), "meta", utility::bytes::view(kMetadataHeaderRecordId), utility::bytes::view(header));
+
+      auto const result = openTestMusicLibrary(temp.path(), temp.path());
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+      CHECK(result.error().message == "Named database 'meta' has flags 0x0 (expected 0x8)");
+      CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
     }
   }
 
@@ -831,14 +868,13 @@ namespace ao::library::test
             "[library][unit][music-library][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
-    auto firstLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto secondLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
 
     {
-      auto firstWriterRes = WritableMusicLibrary::acquire(firstLibrary);
+      auto firstWriterRes = WritableMusicLibrary::acquire(library);
       REQUIRE(firstWriterRes);
 
-      auto secondWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+      auto secondWriterRes = WritableMusicLibrary::acquire(library);
       REQUIRE_FALSE(secondWriterRes);
       CHECK(secondWriterRes.error().code == Error::Code::Conflict);
 
@@ -846,30 +882,47 @@ namespace ao::library::test
       REQUIRE(transaction.commit());
     }
 
-    auto releasedWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+    auto releasedWriterRes = WritableMusicLibrary::acquire(library);
     REQUIRE(releasedWriterRes);
+  }
+
+  TEST_CASE("WritableMusicLibrary - excludes a writer session in another process",
+            "[library][integration][music-library][concurrency]")
+  {
+    constexpr auto kTimeout = std::chrono::seconds{15};
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto writableRes = WritableMusicLibrary::acquire(library);
+    REQUIRE(writableRes);
+    auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
+    REQUIRE_FALSE(executablePath.empty());
+    auto const scenario = std::string{"writer-conflict:"} + temp.path().filename().string();
+    auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
+
+    REQUIRE(result.hasSuccessfulExit());
+    CHECK(result.standardOutput == "writer-conflict");
+    CHECK(result.standardError.empty());
   }
 
   TEST_CASE("WritableMusicLibrary - active transaction retains the writer session",
             "[library][unit][music-library][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
-    auto firstLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto secondLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto optTransaction = std::optional<WriteTransaction>{};
 
     {
-      auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+      auto writerRes = WritableMusicLibrary::acquire(library);
       REQUIRE(writerRes);
       optTransaction.emplace(writerRes->writeTransaction());
     }
 
-    auto activeTransactionWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+    auto activeTransactionWriterRes = WritableMusicLibrary::acquire(library);
     REQUIRE_FALSE(activeTransactionWriterRes);
     CHECK(activeTransactionWriterRes.error().code == Error::Code::Conflict);
 
     REQUIRE(optTransaction->commit());
-    auto committedTransactionWriterRes = WritableMusicLibrary::acquire(secondLibrary);
+    auto committedTransactionWriterRes = WritableMusicLibrary::acquire(library);
     REQUIRE(committedTransactionWriterRes);
   }
 
@@ -877,18 +930,17 @@ namespace ao::library::test
             "[library][unit][music-library][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
-    auto firstLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto secondLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
 
     SECTION("abort by destruction")
     {
       {
-        auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+        auto writerRes = WritableMusicLibrary::acquire(library);
         REQUIRE(writerRes);
         auto transaction = writerRes->writeTransaction();
       }
 
-      REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
+      REQUIRE(WritableMusicLibrary::acquire(library));
     }
 
     SECTION("explicit abort")
@@ -896,13 +948,13 @@ namespace ao::library::test
       auto optTransaction = std::optional<WriteTransaction>{};
 
       {
-        auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+        auto writerRes = WritableMusicLibrary::acquire(library);
         REQUIRE(writerRes);
         optTransaction.emplace(writerRes->writeTransaction());
       }
 
       optTransaction->abort();
-      REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
+      REQUIRE(WritableMusicLibrary::acquire(library));
     }
 
     SECTION("commit failure")
@@ -910,7 +962,7 @@ namespace ao::library::test
       auto optTransaction = std::optional<WriteTransaction>{};
 
       {
-        auto writerRes = WritableMusicLibrary::acquire(firstLibrary);
+        auto writerRes = WritableMusicLibrary::acquire(library);
         REQUIRE(writerRes);
         optTransaction.emplace(writerRes->writeTransaction(WriteTransaction::Options{
           .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected failure"},
@@ -920,15 +972,13 @@ namespace ao::library::test
       auto commitRes = optTransaction->commit();
       REQUIRE_FALSE(commitRes);
       CHECK(commitRes.error().code == Error::Code::IoError);
-      REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
+      REQUIRE(WritableMusicLibrary::acquire(library));
     }
 
     SECTION("storage mutation failure unwinds and rolls back")
     {
       constexpr std::size_t kMapSize = std::size_t{256} * 1024;
       auto smallLibrary = ao::test::requireValue(
-        MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
-      auto secondSmallLibrary = ao::test::requireValue(
         MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
       {
         auto writerRes = WritableMusicLibrary::acquire(smallLibrary);
@@ -942,7 +992,7 @@ namespace ao::library::test
         CHECK(failureRes.error().code == Error::Code::IoError);
       }
 
-      REQUIRE(WritableMusicLibrary::acquire(secondSmallLibrary));
+      REQUIRE(WritableMusicLibrary::acquire(smallLibrary));
     }
   }
 } // namespace ao::library::test

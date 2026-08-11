@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/fatal/FatalProbeProcess.h"
+#include "test/fatal/ProbeProcess.h"
 
 #include <Windows.h>
 
@@ -20,8 +20,6 @@ namespace ao::test
 {
   namespace
   {
-    constexpr std::size_t kMaximumCapturedBytes = 64 * 1024;
-
     class UniqueHandle final
     {
     public:
@@ -95,7 +93,33 @@ namespace ao::test
       return std::string{operation} + " failed with Windows error " + std::to_string(::GetLastError());
     }
 
-    void captureStandardError(HANDLE readHandle, std::string& output)
+    bool createCapturedPipe(SECURITY_ATTRIBUTES& securityAttributes,
+                            UniqueHandle& readHandle,
+                            UniqueHandle& writeHandle,
+                            std::string& launchError)
+    {
+      auto rawReadHandle = HANDLE{};
+      auto rawWriteHandle = HANDLE{};
+
+      if (!::CreatePipe(&rawReadHandle, &rawWriteHandle, &securityAttributes, 0))
+      {
+        launchError = windowsError("CreatePipe");
+        return false;
+      }
+
+      readHandle.reset(rawReadHandle);
+      writeHandle.reset(rawWriteHandle);
+
+      if (!::SetHandleInformation(readHandle.get(), HANDLE_FLAG_INHERIT, 0))
+      {
+        launchError = windowsError("SetHandleInformation");
+        return false;
+      }
+
+      return true;
+    }
+
+    void captureOutput(HANDLE readHandle, std::string& output)
     {
       auto buffer = std::array<char, 4096>{};
       for (;;)
@@ -107,7 +131,7 @@ namespace ao::test
           break;
         }
 
-        auto const available = kMaximumCapturedBytes - output.size();
+        auto const available = kMaximumProbeOutputBytes - output.size();
         auto const capturedSize = std::min<std::size_t>(readSize, available);
         output.append(buffer.data(), capturedSize);
       }
@@ -136,11 +160,11 @@ namespace ao::test
     return executablePath;
   }
 
-  FatalProbeResult runFatalProbe(std::filesystem::path const& executablePath,
-                                 std::string_view scenarioName,
-                                 std::chrono::milliseconds timeout)
+  ProbeProcessResult runProbeProcess(std::filesystem::path const& executablePath,
+                                     std::string_view scenarioName,
+                                     std::chrono::milliseconds timeout)
   {
-    auto result = FatalProbeResult{};
+    auto result = ProbeProcessResult{};
     if (executablePath.empty())
     {
       result.launchError = windowsError("GetModuleFileNameW");
@@ -149,19 +173,15 @@ namespace ao::test
 
     auto securityAttributes = SECURITY_ATTRIBUTES{
       .nLength = sizeof(SECURITY_ATTRIBUTES), .lpSecurityDescriptor = nullptr, .bInheritHandle = TRUE};
-    auto rawReadHandle = HANDLE{};
-    auto rawWriteHandle = HANDLE{};
-    if (!::CreatePipe(&rawReadHandle, &rawWriteHandle, &securityAttributes, 0))
-    {
-      result.launchError = windowsError("CreatePipe");
-      return result;
-    }
+    auto standardOutputReadHandle = UniqueHandle{};
+    auto standardOutputWriteHandle = UniqueHandle{};
+    auto standardErrorReadHandle = UniqueHandle{};
+    auto standardErrorWriteHandle = UniqueHandle{};
 
-    auto readHandle = UniqueHandle{rawReadHandle};
-    auto writeHandle = UniqueHandle{rawWriteHandle};
-    if (!::SetHandleInformation(readHandle.get(), HANDLE_FLAG_INHERIT, 0))
+    if (!createCapturedPipe(
+          securityAttributes, standardOutputReadHandle, standardOutputWriteHandle, result.launchError) ||
+        !createCapturedPipe(securityAttributes, standardErrorReadHandle, standardErrorWriteHandle, result.launchError))
     {
-      result.launchError = windowsError("SetHandleInformation");
       return result;
     }
 
@@ -179,7 +199,7 @@ namespace ao::test
     }
 
     auto wideTestName = std::wstring{scenarioName.begin(), scenarioName.end()};
-    auto commandLine = L"\"" + executablePath.native() + L"\" --aobus-fatal-probe-child \"" + wideTestName + L"\"";
+    auto commandLine = L"\"" + executablePath.native() + L"\" --aobus-probe-child \"" + wideTestName + L"\"";
     auto mutableCommandLine = std::vector<wchar_t>{commandLine.begin(), commandLine.end()};
     mutableCommandLine.push_back(L'\0');
 
@@ -187,8 +207,8 @@ namespace ao::test
     startupInfo.cb = sizeof(STARTUPINFOW);
     startupInfo.dwFlags = STARTF_USESTDHANDLES;
     startupInfo.hStdInput = nullHandle.get();
-    startupInfo.hStdOutput = nullHandle.get();
-    startupInfo.hStdError = writeHandle.get();
+    startupInfo.hStdOutput = standardOutputWriteHandle.get();
+    startupInfo.hStdError = standardErrorWriteHandle.get();
     auto processInfo = PROCESS_INFORMATION{};
 
     if (!::CreateProcessW(executablePath.c_str(),
@@ -209,10 +229,13 @@ namespace ao::test
     result.started = true;
     auto processHandle = UniqueHandle{processInfo.hProcess};
     auto threadHandle = UniqueHandle{processInfo.hThread};
-    writeHandle.reset();
+    standardOutputWriteHandle.reset();
+    standardErrorWriteHandle.reset();
     nullHandle.reset();
+    auto standardOutputReader = std::jthread{[handle = standardOutputReadHandle.get(), &result]
+                                             { captureOutput(handle, result.standardOutput); }};
     auto standardErrorReader =
-      std::jthread{[handle = readHandle.get(), &result] { captureStandardError(handle, result.standardError); }};
+      std::jthread{[handle = standardErrorReadHandle.get(), &result] { captureOutput(handle, result.standardError); }};
 
     auto const boundedTimeout =
       std::clamp<std::int64_t>(timeout.count(), 0, static_cast<std::int64_t>(std::numeric_limits<DWORD>::max() - 1));
@@ -241,6 +264,7 @@ namespace ao::test
       result.launchError = windowsError("GetExitCodeProcess");
     }
 
+    standardOutputReader.join();
     standardErrorReader.join();
 
     return result;

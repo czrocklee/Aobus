@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "test/fatal/AudioFatalProbeProtocol.h"
-#include "test/fatal/FatalProbeProcess.h"
+#include "test/fatal/ProbeProcess.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -21,13 +21,13 @@ namespace ao::audio::test
     for (auto const& expectation : audioFatalProbeExpectations())
     {
       INFO("probe: " << expectation.scenario);
-      auto const result = ao::test::runFatalProbe(executablePath, expectation.scenario, kTimeout);
+      auto const result = ao::test::runProbeProcess(executablePath, expectation.scenario, kTimeout);
 
       REQUIRE(result.started);
       CHECK(result.launchError.empty());
       CHECK_FALSE(result.timedOut);
-      CHECK(result.endedByFatalTermination());
-      CHECK(result.endedByPlatformAbort());
+      CHECK(result.hasFatalTermination());
+      CHECK(result.hasPlatformAbort());
       CHECK(result.standardError.contains("AOBUS_FATAL"));
       CHECK(result.standardError.contains(expectation.category));
       CHECK(result.standardError.contains(expectation.context));

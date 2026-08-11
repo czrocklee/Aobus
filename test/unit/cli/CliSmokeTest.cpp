@@ -318,21 +318,23 @@ namespace ao::cli::test
       std::ignore = library::test::makeTestMusicLibrary(fixture.root(), databasePath);
     }
 
-    auto environmentRes = lmdb::Environment::open(
-      databasePath.string(),
-      {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
-    REQUIRE(environmentRes);
-    auto environment = std::move(*environmentRes);
-    auto transactionRes = lmdb::WriteTransaction::begin(environment);
-    REQUIRE(transactionRes);
-    auto transaction = std::move(*transactionRes);
-    auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
-    REQUIRE(manifestRes);
-    auto& manifest = *manifestRes;
-    auto const malformedKey = utility::bytes::view(std::string_view{"bad"});
-    auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
-    REQUIRE(manifest.writer(transaction).create(malformedKey, payload));
-    REQUIRE(transaction.commit());
+    {
+      auto environmentRes = lmdb::Environment::open(
+        databasePath.string(),
+        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
+      REQUIRE(environmentRes);
+      auto environment = std::move(*environmentRes);
+      auto transactionRes = lmdb::WriteTransaction::begin(environment);
+      REQUIRE(transactionRes);
+      auto transaction = std::move(*transactionRes);
+      auto manifestRes = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      REQUIRE(manifestRes);
+      auto& manifest = *manifestRes;
+      auto const malformedKey = utility::bytes::view(std::string_view{"bad"});
+      auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
+      REQUIRE(manifest.writer(transaction).create(malformedKey, payload));
+      REQUIRE(transaction.commit());
+    }
 
     auto const result = fixture.run({"lib", "dump", "--manifest"});
     CHECK(result.status == 1);

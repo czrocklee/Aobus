@@ -19,6 +19,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/utility/Path.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -233,23 +234,43 @@ namespace ao::rt::test
     return LibraryChanges{executor, storage.libraryRevision(transaction), utility::pathToUtf8(storage.databasePath())};
   }
 
+  namespace
+  {
+    TrackId addTrackAndPublishImpl(library::MusicLibrary& storage,
+                                   LibraryChanges& changes,
+                                   library::test::TrackSpec const& spec,
+                                   bool const libraryReset)
+    {
+      auto executor = InlineExecutor{};
+      auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(storage), changes};
+      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+      auto executionRes = mutation.execute(
+        [&storage, &spec, libraryReset](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
+        {
+          auto const trackId = library::test::addTrackWithUniqueFixtureUri(storage, write, spec);
+          return Changed<TrackId>{
+            .value = trackId,
+            .changeSet = LibraryChangeSet{.libraryReset = libraryReset, .tracksInserted = {trackId}},
+          };
+        });
+      REQUIRE(executionRes);
+      REQUIRE(executionRes->optCommittedRevision);
+      return executionRes->value;
+    }
+  } // namespace
+
   TrackId addTrackAndPublish(library::MusicLibrary& storage,
                              LibraryChanges& changes,
-                             library::test::TrackSpec const& spec,
-                             bool const libraryReset)
+                             library::test::TrackSpec const& spec)
   {
-    auto executor = InlineExecutor{};
-    auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(storage), changes};
-    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto trackIdRes = mutation.apply([&storage, &spec](library::LibraryWrite& write) -> Result<TrackId>
-                                     { return library::test::addTrackWithUniqueFixtureUri(storage, write, spec); });
-    REQUIRE(trackIdRes);
-    auto const trackId = *trackIdRes;
-    REQUIRE(mutation.commit(LibraryChangeSet{
-      .libraryReset = libraryReset,
-      .tracksInserted = {trackId},
-    }));
-    return trackId;
+    return addTrackAndPublishImpl(storage, changes, spec, false);
+  }
+
+  TrackId addTrackAndPublishReset(library::MusicLibrary& storage,
+                                  LibraryChanges& changes,
+                                  library::test::TrackSpec const& spec)
+  {
+    return addTrackAndPublishImpl(storage, changes, spec, true);
   }
 
   struct LibraryWriterFixture::Impl final

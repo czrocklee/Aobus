@@ -36,8 +36,4 @@ namespace ao::lmdb::test
   Database openDatabase(WriteTransaction& txn,
                         std::string const& name,
                         Database::KeyKind kind = Database::KeyKind::Integer);
-
-  Database openDatabase(ReadTransaction& txn,
-                        std::string const& name,
-                        Database::KeyKind kind = Database::KeyKind::Integer);
 } // namespace ao::lmdb::test

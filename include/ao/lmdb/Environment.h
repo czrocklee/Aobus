@@ -55,8 +55,6 @@ namespace ao::lmdb
 
     ~Environment() noexcept;
 
-    MDB_env* handle() const noexcept { return _envPtr.get(); }
-
   private:
     struct MdbEnvDeleter final
     {
@@ -65,7 +63,9 @@ namespace ao::lmdb
 
     using EnvPtr = std::unique_ptr<MDB_env, MdbEnvDeleter>;
 
-    explicit Environment(EnvPtr envPtr);
+    explicit Environment(EnvPtr envPtr) noexcept;
+
+    MDB_env* handle() const noexcept { return _envPtr.get(); }
 
     EnvPtr _envPtr;
 

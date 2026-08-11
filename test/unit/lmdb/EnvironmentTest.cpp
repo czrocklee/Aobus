@@ -11,11 +11,17 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
-#include <filesystem>
+#include <type_traits>
 #include <utility>
 
 namespace ao::lmdb::test
 {
+  namespace
+  {
+    template<typename T>
+    concept HasPublicEnvironmentHandle = requires(T const& environment) { environment.handle(); };
+  } // namespace
+
   TEST_CASE("Environment - openEnvironment creates usable environments", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
@@ -47,33 +53,32 @@ namespace ao::lmdb::test
 
   TEST_CASE("Environment - move constructor transfers ownership", "[lmdb][unit][environment]")
   {
-    auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_test";
-    std::filesystem::create_directory(path);
-
-    {
-      auto env1 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-      auto env2 = Environment{std::move(env1)};
-      // env1 is now in moved-from state
-      // env2 should own the environment
-    }
-
-    std::filesystem::remove_all(path);
+    auto const temp = ao::test::TempDir{};
+    auto env1 = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 20});
+    auto env2 = Environment{std::move(env1)};
+    auto transaction = beginReadTransaction(env2);
+    CHECK(transaction.isActive());
   }
 
   TEST_CASE("Environment - move assignment transfers ownership", "[lmdb][unit][environment]")
   {
-    auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_assign_test";
-    std::filesystem::create_directory(path);
+    auto const firstTemp = ao::test::TempDir{};
+    auto const secondTemp = ao::test::TempDir{};
+    auto env1 = openEnvironment(firstTemp.path(), {.flags = MDB_NOTLS, .maxDatabases = 20});
+    auto env2 = openEnvironment(secondTemp.path(), {.flags = MDB_NOTLS, .maxDatabases = 20});
 
-    {
-      auto env1 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    env2 = std::move(env1);
+    auto transaction = beginReadTransaction(env2);
+    CHECK(transaction.isActive());
+  }
 
-      auto env2 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
-      env2 = std::move(env1);
-    }
-
-    std::filesystem::remove_all(path);
+  TEST_CASE("Environment - exposes move-only ownership and a private native handle", "[lmdb][unit][environment]")
+  {
+    STATIC_REQUIRE(std::is_move_constructible_v<Environment>);
+    STATIC_REQUIRE(std::is_move_assignable_v<Environment>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<Environment>);
+    STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<Environment>);
+    STATIC_REQUIRE_FALSE(HasPublicEnvironmentHandle<Environment>);
   }
 
   TEST_CASE("Environment - helper opens path", "[lmdb][unit][environment]")

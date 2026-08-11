@@ -34,7 +34,8 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - **Order binding** is runtime-created evidence containing one runtime instance id, committed library revision, saved List id, and complete effective source order.
 - **Interactive admission** accepts a command only while authoring is `Available` and no earlier commit is awaiting publication completion.
 - **Dictionary overlay** is the write-transaction-local text/id delta used while serializing records; it is not visible through committed dictionary reads.
-- **Root operation boundary** is `WriteTransaction::apply()` and, for live writes, `LibraryMutationService::Mutation::apply()`; it owns rollback before a failed body can return or throw outward.
+- **Root operation boundary** is `WriteTransaction::apply()` and, for live writes, either `LibraryMutationService::Mutation::apply()` or `Mutation::execute()`; it owns rollback before a failed body can return or throw outward.
+- **Operation outcome** is the runtime-private `Unchanged<Value>` or `Changed<Value>` classification returned inside `Result`; `Changed` carries the exact owning `LibraryChangeSet` that the coordinator commits and publishes.
 - **Write operation context** is the callback-scoped `LibraryWrite` passed by that boundary; it exposes logical mutation ports but cannot commit or abort the transaction.
 - **Logical mutation ports** are `LibraryWrite::tracks()` and `LibraryWrite::lists()`; runtime code composes user-facing behavior through them and never pairs physical Store writes itself.
 - **Raw order** is a saved List's persisted rank sequence, including ids currently hidden by its parent or local expression.
@@ -51,6 +52,9 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - Any error returned by that body aborts and terminalizes the complete root before the error is exposed; an unexpected exception does the same before being rethrown.
 - Private `lmdb::detail::TransactionFailure` and `library::detail::LibraryException` carriers may unwind lower mutation helpers only as far as `WriteTransaction`, which catches them exactly, aborts, and returns the carried error.
 - Library code does not expose nested transactions or item savepoints, so no batch owner continues after a failed root body.
+- Every live committing body classifies its staged result before returning: `Unchanged` aborts, while `Changed` supplies one owning value and the exact zero-revision changeset to commit.
+- Only `Mutation::execute()` consumes `Changed`; no caller can replace its changeset after the operation returns.
+- A successful `Mutation::apply()` is noncommitting and makes that mutation ineligible for later `execute()`; preview owners explicitly abort after projecting their owning reply.
 - An effective command commits one revision and publishes exactly one matching changeset through the coordinator before authoring becomes available at that revision.
 - Interactive commands are rejected throughout import, scan-apply, and audio-identity maintenance.
 - Metadata and tag commits require a current target binding and revalidate runtime identity, availability, revision, and every target while holding coordinator writer ownership.
@@ -62,6 +66,24 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - Runtime return values own their data and never retain transaction-bound `TrackView`, `ListView`, or manifest views.
 - Native commit or abort makes transaction-borrowing logical writers terminal without destroying their C++ transaction owner; retained writers fail on use and remain safe to destroy while that owner remains alive.
 - `LibraryWrite` itself is callback-scoped, and every logical writer must be destroyed before its borrowed `WriteTransaction` owner; using either through a dangling reference is outside the API contract.
+
+## Live operation handoff
+
+`Mutation::execute()` accepts exactly one callback returning `Result<OperationOutcome<Value>>`.
+`Value` and `LibraryChangeSet` must own everything needed after the callback, and both must be nothrow movable across the pre-commit handoff.
+The coordinator does not recursively inspect `Value` and has no reply traits.
+The caller also supplies a diagnostic operation name when command-specific context is available; a native commit error retains its code and source location and prefixes its message with that operation.
+
+An operation error or exception aborts and releases writer admission.
+`Unchanged<Value>` moves out the value, explicitly aborts, returns no committed revision, and publishes nothing.
+`Changed<Value>` must carry a changeset whose `libraryRevision` is zero; a pre-stamped value is an invariant failure.
+The coordinator prepares the return value and the type-erased publication-completion handoff before native commit.
+It then commits the transaction, stamps the exact changeset with the candidate revision, arms publication admission while still holding writer ownership, releases the writer mutex, and passes only already-prepared nothrow-movable values into the non-throwing publication boundary.
+The returned `MutationExecution<Value>` carries the operation value plus an optional committed revision; command-specific code uses that revision where its public reply or next binding needs it.
+
+`Mutation::apply()` is the noncommitting counterpart used by preview.
+It accepts the broader existing `Result<T>` shape, but it cannot be followed by `execute()` on the same mutation.
+Preview wrappers project command-specific public values before calling `abort()`; create-track and create-list therefore discard provisional identifiers even though their shared staging kernels allocate them inside the aborted transaction.
 
 ## Read model
 
@@ -190,11 +212,12 @@ All recoverable input and persistence failures use `Result`; malformed internal 
 Native transaction begin and candidate-revision construction from that writer snapshot's durable metadata occur before a `Mutation` is exposed and have no recoverable authoring branch; failure releases writer admission and aborts through the fatal facility.
 
 Pure validation may return before a transaction is acquired.
-Once a root exists, a command-body `Result` error is exposed only by `apply()`, which explicitly aborts and releases writer ownership even when the C++ transaction or mutation wrapper remains alive.
+Once a root exists, a command-body `Result` error is exposed only after the root operation boundary explicitly aborts and releases writer ownership, even when the C++ transaction or mutation wrapper remains alive.
 Storage mutation faults and recoverable library failures carried by the two private markers are translated at that same boundary after abort; runtime code never catches either marker.
 The current non-nested model provides whole-root rollback only, so a multi-item owner cannot catch an item failure and continue writing later items.
 
 No command publishes a change for a failed, previewed, or no-op transaction.
+Scan cancellation and a prepared scan with no committable work are `Unchanged` outcomes, so both intentionally roll back staged work without advancing revision.
 When commit fails, staged dictionary mappings are rolled back before readers resume, and allocated ids and prepared resources are not observable as successful command results.
 The deterministic commit-result test seam is data-only: it terminates the native transaction and supplies an error without invoking application callbacks while writer and dictionary locks are held.
 
@@ -231,6 +254,9 @@ Exact records and identifier allocation belong to the [library database referenc
 - `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
 - [`LibraryWriterListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListMembershipTest.cpp) additionally proves that an invalid stored parent expression returns contextual `FormatRejected` before mutation or publication.
 - [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, failed-mutation admission release, no-op binding retention, and publication reentrancy closure.
+- [`LibraryChangesTest.cpp`](../../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves every `execute()` transition, including injected native commit failure, exact operation-owned publication, revision return, rollback, and writer-admission release.
+- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves scan cancellation and no-committable-work outcomes leave storage, revision, and publication unchanged.
+- [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) proves that execute-after-apply and a pre-stamped operation changeset fail at the invariant boundary.
 
 ## Related documents
 

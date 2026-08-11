@@ -12,7 +12,8 @@ depends-on: none
 
 The current [library architecture](../architecture/library.md), [outcome channel specification](../spec/failure/outcome-channel.md), and [runtime mutation specification](../spec/library/runtime/mutation.md) already define a non-nested root execution boundary.
 `WriteTransaction::apply()` accepts a `Result<T>`-returning body, aborts the complete root on an error or private native transaction marker, and aborts before rethrowing an unrelated exception.
-`LibraryMutationService::Mutation::apply()` additionally releases live writer admission, and offline scan/import owners use the same core boundary.
+For live commits, `LibraryMutationService::Mutation::execute()` accepts one operation-owned `Changed` or `Unchanged` outcome, commits and publishes only `Changed`, and releases writer admission on every terminal path.
+`Mutation::apply()` is the noncommitting preview boundary, and offline scan/import owners use the same core `WriteTransaction::apply()` containment.
 No runtime writer, task, scan, or importer catches `lmdb::detail::TransactionFailure`.
 Root construction is deliberately outside that recoverable operation channel: native begin and candidate-revision construction occur before the wrapper is exposed, and failure unwinds writer ownership before aborting through the fatal facility.
 
@@ -23,6 +24,14 @@ root body returns Result error or a private mutation marker escapes a helper
   -> WriteTransaction aborts and terminalizes the root
   -> Mutation releases coordinator admission when present
   -> caller receives Result error
+
+live root body returns Unchanged
+  -> Mutation aborts the root and releases coordinator admission
+  -> caller receives its owned value without a committed revision
+
+live root body returns Changed
+  -> Mutation commits and publishes its exact operation-owned change set
+  -> caller receives its owned value and committed revision
 ```
 
 It deliberately cannot preserve earlier root work after one already-mutated item fails.
@@ -122,6 +131,7 @@ The following constraints apply:
 
 - One `MusicLibrary` write session owns the process writer gate and writer-lease anchor.
 - LMDB still admits only one top-level write transaction for the environment.
+- The root opens and retains every required DBI before creating a child; a child reuses those tokens and never calls `mdb_dbi_open`.
 - A parent native handle remains alive while its child exists, but parent operations are forbidden until that child ends.
 - Only the deepest child is usable when nesting depth is greater than one.
 - Sibling savepoints execute sequentially.
@@ -137,18 +147,19 @@ Several Track, List, Manifest, Resource, Metadata, and Dictionary cursor wrapper
 ### Implemented root-operation prerequisite
 
 Single-command mutation does not require a native child merely to hide an exception.
-The current authorities cited in [Problem](#problem) own the implemented behavior; this RFC relies on the following shape only as a prerequisite:
+The current authorities cited in [Problem](#problem) own the implemented behavior; this RFC relies on the following live shape only as a prerequisite:
 
 ```cpp
-template<typename Function>
-auto Mutation::apply(Function&& function)
-  -> std::invoke_result_t<Function, library::WriteTransaction&>;
+auto execution = mutation.execute(
+  [&](library::LibraryWrite& write) -> Result<OperationOutcome<Value>>
+  {
+    return Changed<Value>{.value = makeValue(write), .changeSet = makeChangeSet()};
+  });
 ```
 
-The callback result is constrained to `Result<T>` and is returned without another wrapper.
-Any error terminalizes the root; success leaves it active for a separate commit.
-The callback cannot nest `apply()` or call `commit()`, so the current API does not accidentally imply savepoint behavior.
-This RFC adds children only where a parent must remain usable after a recoverable sub-operation failure.
+An operation error terminalizes the root, `Unchanged` explicitly aborts it, and `Changed` commits the exact supplied change set through the coordinator.
+The callback cannot commit, and a successful `Mutation::apply()` used for preview makes that mutation ineligible for later `execute()`, so the current API does not imply a caller-controlled apply/commit gap.
+This RFC adds children only inside a root operation where a parent must remain usable after a recoverable sub-operation failure.
 
 ### Savepoint execution API
 
@@ -395,7 +406,7 @@ The ownership assumptions are:
 
 ### Keep the current root-only boundary
 
-The current root `apply` boundary already preserves atomicity and hides native mutation markers from ordinary application code.
+The current root `apply` and live `execute` boundaries already preserve atomicity and hide native mutation markers from ordinary application code.
 Stopping there has the smallest further implementation risk and is sufficient for every command that abandons its complete root transaction on any error.
 It retains preflight as the only way for a batch to reject one item and continue, and it cannot preserve a parent while rolling back only that already-mutated item.
 It remains the fallback if savepoint performance or cursor safety cannot be demonstrated.
@@ -496,6 +507,7 @@ No frontend API or toolkit lifetime changes.
 - Child abort leaves parent-staged state intact and discards only the child delta.
 - Sequential siblings observe successful earlier siblings and do not observe aborted siblings.
 - Nested grandchildren obey LIFO commit and abort.
+- A nested transaction's attempt to open the main database or a named DBI fails at the adapter contract before native access.
 - Root commit or abort is rejected while a child is active.
 - Parent operations fail while a child is active.
 - A failed child commit terminalizes and aborts the root under the conservative policy.
@@ -564,7 +576,7 @@ No frontend API or toolkit lifetime changes.
 - Which exact `Error::Code` values, if any, are sufficient to authorize sibling continuation, and which operations require a more specific typed item outcome?
 - Should the public core API support arbitrary nested depth, or should only the internal mechanism support depth while product operations are limited to one child level?
 - Should active-leaf invalidation use a monotonically increasing epoch, an explicit registered-cursor set, or only callback-scoped non-retainable writer wrappers?
-- Should root `Mutation::apply` and child `withSavepoint` be separate APIs, or two policies of one internal execution primitive?
+- Should child `withSavepoint` be exposed only inside the root `execute`/preview callback, or should both use one lower internal execution primitive?
 - Should `TrackBuilder` expose a durable `ValidatedTrackPreparation` type or retain one prepare call after recoverable exception leakage is removed?
 - Which current success-only `Result<>` methods should become `void`, and which should retain `Result` for future or third-party failures?
 - Should the LMDB adapter eventually replace internal transaction exceptions with a terminalizing result API for child-bound writers, or is exact owner containment sufficient?

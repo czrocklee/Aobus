@@ -26,6 +26,7 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 ## Terminology
 
 - An **environment** owns one native LMDB environment handle.
+- **Database-open admission** is the process-wide serialization held from an outermost write transaction's first `mdb_dbi_open` call until that transaction commits or aborts.
 - A **read transaction** owns one read snapshot until destruction.
 - A **write transaction** owns staged mutations until commit or destruction and also provides read capability.
 - A **nested write transaction** stages changes into its parent; only the outer transaction can make them durable.
@@ -38,6 +39,13 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 ## Invariants
 
 - Environments, transactions, iterators, writers, and their native handles follow RAII ownership and are movable but not copyable unless their public type explicitly provides copying.
+- `Environment` is move-constructible and move-assignable. It directly owns its native handle and has no shared implementation ownership.
+- Callers keep at most one live environment for a database path in a process, as required by LMDB. The adapter deliberately has no canonical-path registry and does not attempt to detect aliases.
+- At most one active outermost write transaction in the process performs database-open calls at a time, including transactions for different environments.
+- Only an outermost write transaction may open the main database or a named database; nested transactions reuse retained `Database` tokens.
+- An outermost write transaction acquires database-open admission lazily on its first main or named database open and releases it only after native commit or abort finishes.
+- Lock acquisition is environment writer transaction before process-wide database-open admission. A thread that holds database-open admission does not begin or wait for a write transaction on another environment before releasing admission.
+- Native environment handles are private to the adapter; public callers compose transactions and databases rather than bypassing their ownership checks.
 - A byte span, key view, iterator value, reader, or writer obtained from a transaction does not outlive the transaction that supplies its storage or cursor state.
 - Explicitly aborting or destroying an uncommitted write transaction aborts all of its staged changes.
 - An unexpected failure from a mutating LMDB primitive aborts the complete write transaction before control returns; swallowing the reported error cannot make earlier staged writes committable.
@@ -58,7 +66,9 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 ### Environment
 
 An environment is either owned or moved-from.
-Successful `Environment::open` produces the owned state; destruction closes the native handle.
+Successful `Environment::open` produces the owned state with one native handle.
+Move construction or assignment transfers that handle and leaves the source moved-from.
+Destruction closes the native handle; the same process may then reopen that path.
 
 ### Transaction
 
@@ -91,14 +101,17 @@ Callers that mix explicit integer-key creation with append in one writer must no
 ### Environment and database opening
 
 `Environment::open` applies nonzero map-size, maximum-database, and maximum-reader options before opening the requested path, then uses the supplied flags and mode for the native environment open.
-Failure at environment creation, option application, or path opening returns a recoverable `Result` error and releases any partially created native handle.
+Failure at environment creation, option application, or path opening returns a recoverable `Result` error and closes any partially created native handle.
+The adapter does not canonicalize or register paths; application composition owns LMDB's one-live-environment-per-path process constraint.
+The independent outermost-write-transaction database-open admission serializes the native DBI-open interval across environment paths without entering later reads or writes through retained `Database` tokens.
 
 Opening a database through the create-capable write overload creates the named database when missing and otherwise opens the existing database.
 The existing-only write overload never creates and reports a missing or incompatible catalog entry as a typed schema-admission result.
+Named databases can be opened only through an active outermost write transaction; a retained `Database` token can then create readers for later read or nested write transactions without reopening its DBI.
 The main-database handle permits catalog enumeration before any named database creation.
 An unexpected write-open failure throws `lmdb::detail::TransactionFailure`; the transaction owner must unwind, which aborts that complete transaction, including named databases created earlier in it.
-Opening through a read transaction never creates; a missing database returns `NotFound`.
-Current-schema admission inspects each opened database's native flags instead of assuming that the requested key interpretation changed an existing database.
+Both create-capable and existing-only opens inspect the returned database's native flags instead of assuming that requested flags changed an existing database.
+A mismatch between requested and actual persistent flags is `CorruptData`, and no `Database` token with a false key interpretation is returned.
 
 An integer-key database uses native `std::uint32_t` keys and integer ordering.
 A blob-key database accepts arbitrary byte-span keys and iterates in LMDB byte order.
@@ -108,6 +121,8 @@ Converting an iterator `KeyView` to `std::uint32_t` requires exactly four key by
 
 Beginning a read or write transaction returns `Result<Transaction>`.
 Beginning a child write transaction borrows an active parent write transaction.
+A child write transaction cannot open any database; initialization opens and retains DBI tokens in the root transaction before nested mutation work.
+While a child is active, callers do not operate on, finish, replace, or destroy its ancestors; child completion precedes parent reuse.
 
 A successful child commit merges the child's staged state into its parent but does not make it independently durable.
 Destroying an uncommitted child aborts only the child changes.
@@ -116,7 +131,8 @@ The parent remains responsible for the final commit or abort.
 A successful outer commit publishes all staged changes atomically.
 Destruction without commit aborts the complete transaction.
 Explicit `abort()` consumes the native handle immediately and is idempotent.
-Beginning a child, opening a database, or creating a reader/writer from an inactive transaction violates `AO_EXPECTS` before calling LMDB.
+Commit, explicit abort, destruction, and move replacement finish the native transaction before an outermost transaction releases database-open admission.
+Beginning a child from an inactive parent, opening a database from a nested or inactive transaction, or creating a reader/writer from an inactive transaction violates `AO_EXPECTS` before calling LMDB.
 
 ### Reads and iteration
 
@@ -221,7 +237,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 ## Implementation map
 
 - [`Environment.h`](../../../include/ao/lmdb/Environment.h) and [`Environment.cpp`](../../../lib/lmdb/Environment.cpp) own environment options, opening, and handle lifetime.
-- [`Transaction.h`](../../../include/ao/lmdb/Transaction.h) and [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own read/write begin, nesting, abort, commit, and terminal state.
+- [`Transaction.h`](../../../include/ao/lmdb/Transaction.h) and [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own read/write begin, nesting, root-only process-wide database-open admission, abort, commit, and terminal state.
 - [`Database.h`](../../../include/ao/lmdb/Database.h) and [`Database.cpp`](../../../lib/lmdb/Database.cpp) own named-database access, readers, iterators, writers, and key allocation.
 - [`ResultError.h`](../../../lib/lmdb/detail/ResultError.h) owns recoverable native-code mapping and source-location capture.
 - [`ThrowError.h`](../../../lib/lmdb/detail/ThrowError.h) dispatches native read faults to the owning transaction channel and constructs mutation-failure control flow; the private [`TransactionFailure.h`](../../../lib/lmdb/detail/TransactionFailure.h) carries the narrow transaction-control error to an owner boundary.
@@ -229,13 +245,18 @@ UIModel and normal frontends consume retained values and snapshots rather than t
   [`ThrowError.cpp`](../../../lib/lmdb/detail/ThrowError.cpp) own the
   source-private, single-use native-read test seam; [`lib/lmdb/CMakeLists.txt`](../../../lib/lmdb/CMakeLists.txt)
   guards its production boundary.
+- [`DatabaseOpenAdmissionProbe.h`](../../../lib/lmdb/detail/DatabaseOpenAdmissionProbe.h) and
+  [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own the source-private
+  contention observation used by deterministic gate tests; the LMDB build
+  guard prevents production consumers from constructing it.
 - [`lib/lmdb/CMakeLists.txt`](../../../lib/lmdb/CMakeLists.txt) defines the independent `ao_lmdb` target and external dependency.
 
 ## Test map
 
-- [`EnvironmentTest.cpp`](../../../test/unit/lmdb/EnvironmentTest.cpp) protects environment opening, errors, defaults, and move ownership.
-- [`TransactionTest.cpp`](../../../test/unit/lmdb/TransactionTest.cpp) protects read/write lifetime, commit, abort, moves, and nested transaction behavior.
-- [`DatabaseTest.cpp`](../../../test/unit/lmdb/DatabaseTest.cpp) protects named-database creation, failed-open rollback, and read-only `NotFound`.
+- [`EnvironmentTest.cpp`](../../../test/unit/lmdb/EnvironmentTest.cpp) protects environment opening, errors, private native-handle access, and move-only ownership.
+- [`TransactionTest.cpp`](../../../test/unit/lmdb/TransactionTest.cpp) protects read/write lifetime, commit, abort, moves, valid nested transaction behavior, and bounded deterministic database-open serialization plus commit/abort/destruction release across environments.
+- [`LibraryProbeTest.cpp`](../../../test/unit/library/LibraryProbeTest.cpp) protects nested database-open rejection through the fatal subprocess contract.
+- [`DatabaseTest.cpp`](../../../test/unit/lmdb/DatabaseTest.cpp) protects write-transaction-only named-database admission, create-capable and existing-only exact key-kind validation, missing existing databases, and failed-open rollback.
 - [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseBlobKeyTest.cpp`](../../../test/unit/lmdb/DatabaseBlobKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, iteration, key kinds, key coercion, and maximum-key behavior.
 - [`DatabaseWriterTest.cpp`](../../../test/unit/lmdb/DatabaseWriterTest.cpp) protects create, reservation, append, clear-and-reappend allocation, exhaustion, update, delete, write reads, conflicts, mutation-failure exception unwinding and rollback, moves, and use-after-commit faults.
 - [`ResultErrorTest.cpp`](../../../test/unit/lmdb/ResultErrorTest.cpp) protects native-code mapping and caller source-location capture.

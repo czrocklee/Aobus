@@ -36,7 +36,9 @@ This contract belongs to the **application runtime** layer in the [system archit
 - An aborted or preview transaction does not advance the revision.
 - A producer submits a changeset only after the corresponding transaction commits.
 - Only `LibraryMutationService` can submit committed content changes; ordinary consumers receive a const observation surface.
+- A live operation supplies its complete zero-revision changeset inside `Changed`; `Mutation::execute()` stamps and publishes that exact moved value, so a caller cannot choose a different post-operation payload.
 - The coordinator submits exactly the expected successor revision and keeps a second commit closed while publication is active.
+- The coordinator constructs every allocation-capable type-erased completion handoff before native commit; after commit it moves only already-prepared handoff state into the non-throwing publication owner boundary.
 - The bus rejects rather than buffers any revision other than that exact successor.
 - A revision is announced to observers only after the bound replica applies it.
 - A callback observes the complete committed library state described by its changeset, including every dictionary mapping referenced by changed records.
@@ -94,7 +96,8 @@ An `Available(R)` handler may bind targets at `R` because projections are alread
 A callback-thread attempt to mutate through the same coordinator while publication is active is rejected as reentrant.
 A foreign worker waits for publication completion before acquiring writer ownership.
 
-The coordinator holds physical writer ownership through native commit, establishes publication and submission-admission gates, and then releases the writer mutex before submitting the mandatory publication task `P(R)`.
+Before native commit, the coordinator prepares the publication completion callable and determines submission affinity.
+It then holds physical writer ownership through native commit, updates the committed revision and arms publication plus submission-admission gates in one state-mutex critical section, and releases the writer mutex before submitting the mandatory publication task `P(R)` with that prepared callable.
 The submission-admission gate blocks another writer or Closing until that submission call has either completed `P(R)` inline or returned after the callback executor accepted it.
 The publication gate remains closed until `P(R)` completes or coordinated Closing retires a not-yet-running submission.
 An owner-thread submission executes `P(R)` inline before commit returns.

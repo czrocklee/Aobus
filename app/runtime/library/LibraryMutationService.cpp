@@ -168,6 +168,7 @@ namespace ao::rt
     , _writerLock{std::move(other._writerLock)}
     , _transaction{std::move(other._transaction)}
     , _terminal{std::exchange(other._terminal, true)}
+    , _executeEligible{std::exchange(other._executeEligible, false)}
   {
   }
 
@@ -184,21 +185,6 @@ namespace ao::rt
     if (_writerLock.owns_lock())
     {
       _writerLock.unlock();
-    }
-  }
-
-  Result<LibraryMutationService::CommitInfo> LibraryMutationService::Mutation::commit(LibraryChangeSet changeSet)
-  {
-    AO_INVARIANT(_owner != nullptr && !_terminal, "Library mutation is already terminal");
-
-    try
-    {
-      return _owner->commit(*this, std::move(changeSet));
-    }
-    catch (...)
-    {
-      abort();
-      throw;
     }
   }
 
@@ -487,7 +473,8 @@ namespace ao::rt
     }
   }
 
-  Result<LibraryMutationService::Mutation> LibraryMutationService::beginInteractiveMutation()
+  Result<LibraryMutationService::Mutation> LibraryMutationService::beginInteractiveMutation(
+    library::WriteTransaction::Options options)
   {
     auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "Library mutation");
 
@@ -496,7 +483,7 @@ namespace ao::rt
       return std::unexpected{writerLockRes.error()};
     }
 
-    return Mutation{*this, std::move(*writerLockRes), _writableLibrary.writeTransaction()};
+    return Mutation{*this, std::move(*writerLockRes), _writableLibrary.writeTransaction(std::move(options))};
   }
 
   LibraryMutationService::AuthoringStart LibraryMutationService::beginAuthoringMutation(
@@ -625,11 +612,11 @@ namespace ao::rt
     return Mutation{*this, std::move(*writerLockRes), _writableLibrary.writeTransaction()};
   }
 
-  Result<LibraryMutationService::CommitInfo> LibraryMutationService::commit(Mutation& mutation,
-                                                                            LibraryChangeSet changeSet)
+  Result<std::uint64_t> LibraryMutationService::commitMutation(Mutation& mutation, LibraryChangeSet changeSet)
   {
     AO_EXPECTS(mutation._owner == this && mutation._writerLock.owns_lock() && !mutation._terminal,
                "Library mutation does not belong to this service");
+    AO_INVARIANT(changeSet.libraryRevision == 0, "Library operation produced a pre-stamped change set");
 
     auto finishTransaction = [&mutation]
     {
@@ -661,6 +648,20 @@ namespace ao::rt
         std::format("Library revision gap before commit: expected {}, got {}", expectedRevision, revision));
     }
 
+    auto const submissionFromOwner = _callbackExecutor.isCurrent();
+    auto publicationCompletion = std::move_only_function<void(std::string, std::string)>{
+      [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, revision](
+        std::string libraryIdentity, std::string replicaName)
+      {
+        if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
+        {
+          lifetimeStatePtr->invokeIfAlive(
+            [revision, libraryIdentity = std::move(libraryIdentity), replicaName = std::move(replicaName)](
+              LibraryMutationService& owner) mutable
+            { owner.finishPublication(revision, std::move(libraryIdentity), std::move(replicaName)); });
+        }
+      }};
+
     auto commitRes = Result<>{};
 
     try
@@ -679,8 +680,6 @@ namespace ao::rt
       return std::unexpected{commitRes.error()};
     }
 
-    auto const submissionFromOwner = _callbackExecutor.isCurrent();
-
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
       _lastCommittedRevision = revision;
@@ -697,19 +696,7 @@ namespace ao::rt
     mutation._writerLock.unlock();
     AO_INVARIANT(!mutation._writerLock.owns_lock());
 
-    _changes.publishFromCoordinator(
-      std::move(changeSet),
-      [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, revision](
-        std::string libraryIdentity, std::string replicaName)
-      {
-        if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
-        {
-          lifetimeStatePtr->invokeIfAlive(
-            [revision, libraryIdentity = std::move(libraryIdentity), replicaName = std::move(replicaName)](
-              LibraryMutationService& owner) mutable
-            { owner.finishPublication(revision, std::move(libraryIdentity), std::move(replicaName)); });
-        }
-      });
+    _changes.publishFromCoordinator(std::move(changeSet), std::move(publicationCompletion));
 
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
@@ -718,7 +705,7 @@ namespace ao::rt
     }
 
     _writerAdmissionChanged.notify_all();
-    return CommitInfo{.libraryRevision = revision};
+    return revision;
   }
 
   void LibraryMutationService::beginClosing() noexcept
