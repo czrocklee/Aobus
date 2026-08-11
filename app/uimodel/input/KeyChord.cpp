@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/uimodel/input/KeyChord.h>
+
 #include <ao/utility/String.h>
 
 #include <array>

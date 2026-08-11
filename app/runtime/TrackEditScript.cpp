@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/TrackEditScript.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/TrackEditScript.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>

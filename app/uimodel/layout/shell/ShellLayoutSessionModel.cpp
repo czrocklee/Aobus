@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
-#include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 
 #include <algorithm>
 #include <optional>

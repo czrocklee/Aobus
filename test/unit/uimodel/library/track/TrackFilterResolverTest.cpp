@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/track/TrackFilterResolver.h>
+
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
-#include <ao/uimodel/library/track/TrackFilterResolver.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/list/SmartListTrackPresentationResolver.h>
+
+#include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <algorithm>

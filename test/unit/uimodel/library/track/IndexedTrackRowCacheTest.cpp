@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/track/IndexedTrackRowCache.h>
+
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackRow.h>
-#include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/rt/TrackPresentation.h>
-#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
 

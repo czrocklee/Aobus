@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/track/TrackFilterCompleter.h>
+
 #include "TrackFilterPolicy.h"
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
@@ -8,7 +10,6 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/CompletionText.h>
-#include <ao/uimodel/library/track/TrackFilterCompleter.h>
 
 #include <algorithm>
 #include <cstddef>

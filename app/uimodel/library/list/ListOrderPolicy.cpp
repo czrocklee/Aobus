@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/ListOrderPolicy.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
 
 #include <algorithm>
 #include <cstddef>

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+
 #include <ao/uimodel/layout/action/LayoutActionBinding.h>
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 
 #include <algorithm>
 #include <optional>

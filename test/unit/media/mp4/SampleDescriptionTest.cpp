@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/media/mp4/SampleDescription.h>
+
+#include "test/unit/media/mp4/TestAtoms.h"
 
 #include <catch2/catch_test_macros.hpp>
 

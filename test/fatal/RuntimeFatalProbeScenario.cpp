@@ -990,6 +990,7 @@ namespace ao::rt::test
     }
 
 #ifdef _WIN32
+
     if (name == "destructive-restart-release-exception")
     {
       return runDestructiveRestartReleaseException();
@@ -999,6 +1000,7 @@ namespace ao::rt::test
     {
       return runDestructiveRestartLaunchException();
     }
+
 #endif
 
     return 2;

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
@@ -9,7 +11,6 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 

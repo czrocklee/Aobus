@@ -7,6 +7,9 @@
 #include "test/unit/TestFixtureSupport.h"
 
 #include <chrono>
+#ifdef _WIN32
+#include <cstdio>
+#endif
 #include <optional>
 #include <print>
 #include <string>

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
+
+#include <ao/CoreIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/projection/TrackProjectionEditScript.h>
 

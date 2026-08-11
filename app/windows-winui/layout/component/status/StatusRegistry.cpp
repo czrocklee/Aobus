@@ -22,8 +22,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
-#include <format>
 #include <memory>
 #include <string>
 #include <string_view>

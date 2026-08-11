@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -14,7 +16,6 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
+
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
-#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>

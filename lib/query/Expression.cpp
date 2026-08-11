@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "detail/Normalize.h"
 #include <ao/query/Expression.h>
+
+#include "detail/Normalize.h"
 
 #include <memory>
 #include <utility>

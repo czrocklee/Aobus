@@ -6,6 +6,9 @@
 #include "test/fatal/ProbeProcess.h"
 
 #include <chrono>
+#ifdef _WIN32
+#include <cstdio>
+#endif
 #include <print>
 #include <string_view>
 

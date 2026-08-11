@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/TrackBuilder.h>
+
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
-#include <ao/library/TrackBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>
 

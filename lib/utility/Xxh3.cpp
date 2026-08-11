@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/utility/Hash128.h>
 #include <ao/utility/Xxh3.h>
+
+#include <ao/utility/Hash128.h>
 
 // XXH_STATIC_LINKING_ONLY exposes the XXH3_state_t definition so the state
 // can live behind the wrapper's pimpl. Header and library come from the same

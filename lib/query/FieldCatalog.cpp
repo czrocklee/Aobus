@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/FieldCatalog.h>
+
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/FieldCatalog.h>
 
 #include <algorithm>
 #include <array>

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/completion/QueryExpressionCompleter.h>
+
 #include "../detail/CompletionVocabulary.h"
 #include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
@@ -10,7 +12,6 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/rt/completion/QueryExpressionCompleter.h>
 
 #include <algorithm>
 #include <cstddef>

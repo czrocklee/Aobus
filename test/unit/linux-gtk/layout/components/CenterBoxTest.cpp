@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <gtkmm/centerbox.h>
+
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -8,7 +10,6 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
 
 namespace ao::gtk::layout::test

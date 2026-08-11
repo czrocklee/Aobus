@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/TrackField.h>
+
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
-#include <ao/rt/TrackField.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>

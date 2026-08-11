@@ -4,6 +4,7 @@
 #include "layout/runtime/LayoutHost.h"
 
 #include "pch.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
@@ -11,6 +12,7 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <exception>
 #include <expected>
 #include <memory>
 #include <utility>

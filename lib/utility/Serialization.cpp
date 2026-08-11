@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/yaml/Serialization.h>
+
 #include <ao/Error.h>
 #include <ao/yaml/RymlAdapter.h>
-#include <ao/yaml/Serialization.h>
 
 #include <c4/format.hpp>
 #include <ryml.hpp>

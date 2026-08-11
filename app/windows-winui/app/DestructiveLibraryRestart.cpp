@@ -7,11 +7,10 @@
 #include <ao/Error.h>
 
 #include <exception>
-#include <expected>
 #include <format>
 #include <functional>
 #include <string_view>
-#include <tuple>
+#include <utility>
 
 namespace ao::winui
 {
@@ -70,6 +69,7 @@ namespace ao::winui
     }
 
     auto releaseExceptionPtr = std::exception_ptr{};
+
     try
     {
       operations.releaseActiveGraph();
@@ -82,6 +82,7 @@ namespace ao::winui
     }
 
     auto launchedRes = Result<>{};
+
     try
     {
       launchedRes = operations.launchSuccessor();

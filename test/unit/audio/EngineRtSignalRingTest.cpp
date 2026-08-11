@@ -135,12 +135,12 @@ namespace ao::audio::test
     timeline.armLookahead(makeTimelineNode(std::byte{0x21}, std::byte{0x22}));
     auto thirdNodePtr = makeTimelineNode(std::byte{0x31}, std::byte{0x32});
 
-    auto spliceHandoffInProgress = std::atomic<bool>{false};
+    auto spliceHandoffInProgress = std::atomic{false};
     auto accumulatedFrames = std::atomic<std::uint64_t>{0};
     auto engineSampleRate = std::atomic<std::uint32_t>{1000};
     auto engineFrameBytes = std::atomic<std::uint32_t>{2};
     auto underrunCount = std::atomic<std::uint32_t>{0};
-    auto playbackDrainPending = std::atomic<bool>{false};
+    auto playbackDrainPending = std::atomic{false};
     std::size_t pendingSignals = 0;
     std::size_t maximumPendingSignals = 0;
     std::size_t spliceCount = 0;

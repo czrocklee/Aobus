@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
+
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <array>

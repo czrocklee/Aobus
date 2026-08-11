@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
+
+#include <ao/AudioCodec.h>
 
 #include <array>
 #include <cstddef>

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/utility/AtomicFile.h>
+
 #include "lib/utility/AtomicFileTransaction.h"
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
-#include <ao/utility/AtomicFile.h>
 
 #ifdef _WIN32
 #include <catch2/catch_message.hpp>

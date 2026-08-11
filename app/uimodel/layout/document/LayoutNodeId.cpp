@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/layout/document/LayoutNodeId.h>
+
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/utility/TransparentStringHash.h>
 

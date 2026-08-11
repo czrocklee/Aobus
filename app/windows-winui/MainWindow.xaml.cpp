@@ -37,7 +37,6 @@
 #include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.h>
 
-#include <exception>
 #include <format>
 #include <memory>
 #include <string>

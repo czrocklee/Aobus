@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/ListTreeProjection.h>
+
 #include <ao/CoreIds.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <algorithm>
 #include <cstdint>

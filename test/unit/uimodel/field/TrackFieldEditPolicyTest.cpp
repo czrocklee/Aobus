@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/field/TrackFieldEditPolicy.h>
+
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <catch2/catch_message.hpp>

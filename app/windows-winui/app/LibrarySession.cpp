@@ -315,6 +315,7 @@ namespace ao::winui
     }
 
     auto runtimePtr = std::move(*runtimeRes);
+
     for (auto& providerPtr : audio::createPlatformBackendProviders())
     {
       runtimePtr->addAudioProvider(std::move(providerPtr));

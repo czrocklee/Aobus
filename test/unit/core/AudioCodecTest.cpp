@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/AudioCodec.h>
+
 #include <ao/AudioCodecText.h>
 
 #include <catch2/catch_test_macros.hpp>

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
+
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 
 #include <catch2/catch_test_macros.hpp>
 

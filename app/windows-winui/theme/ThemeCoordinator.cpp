@@ -10,7 +10,6 @@
 #include <ao/yaml/RymlAdapter.h>
 
 #include <cstddef>
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <utility>

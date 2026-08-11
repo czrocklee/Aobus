@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/library/AudioIdentity.h>
+
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Xxh3.h>
 

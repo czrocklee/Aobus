@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/detail/Predicate.h>
+
 #include <ao/query/Expression.h>
 #include <ao/query/detail/OperatorTable.h>
-#include <ao/query/detail/Predicate.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <cstddef>

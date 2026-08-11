@@ -9,6 +9,7 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <limits>
 #include <string>
@@ -20,7 +21,7 @@ namespace ao::test
 {
   namespace
   {
-    class UniqueHandle final
+    class [[nodiscard]] UniqueHandle final
     {
     public:
       UniqueHandle() = default;
@@ -42,6 +43,7 @@ namespace ao::test
         {
           reset(other.release());
         }
+
         return *this;
       }
 
@@ -51,7 +53,7 @@ namespace ao::test
 
       HANDLE release() noexcept
       {
-        auto const handle = _handle;
+        auto* const handle = _handle;
         _handle = nullptr;
         return handle;
       }
@@ -62,6 +64,7 @@ namespace ao::test
         {
           [[maybe_unused]] auto const result = ::CloseHandle(_handle);
         }
+
         _handle = handle;
       }
 
@@ -76,14 +79,17 @@ namespace ao::test
       for (;;)
       {
         auto const written = ::GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+
         if (written == 0)
         {
           return {};
         }
+
         if (written < buffer.size() - 1)
         {
           return std::filesystem::path{std::wstring_view{buffer.data(), written}};
         }
+
         buffer.resize(buffer.size() * 2);
       }
     }
@@ -98,10 +104,10 @@ namespace ao::test
                             UniqueHandle& writeHandle,
                             std::string& launchError)
     {
-      auto rawReadHandle = HANDLE{};
-      auto rawWriteHandle = HANDLE{};
+      auto* rawReadHandle = HANDLE{};
+      auto* rawWriteHandle = HANDLE{};
 
-      if (!::CreatePipe(&rawReadHandle, &rawWriteHandle, &securityAttributes, 0))
+      if (::CreatePipe(&rawReadHandle, &rawWriteHandle, &securityAttributes, 0) == 0)
       {
         launchError = windowsError("CreatePipe");
         return false;
@@ -110,7 +116,7 @@ namespace ao::test
       readHandle.reset(rawReadHandle);
       writeHandle.reset(rawWriteHandle);
 
-      if (!::SetHandleInformation(readHandle.get(), HANDLE_FLAG_INHERIT, 0))
+      if (::SetHandleInformation(readHandle.get(), HANDLE_FLAG_INHERIT, 0) == 0)
       {
         launchError = windowsError("SetHandleInformation");
         return false;
@@ -122,10 +128,12 @@ namespace ao::test
     void captureOutput(HANDLE readHandle, std::string& output)
     {
       auto buffer = std::array<char, 4096>{};
+
       for (;;)
       {
-        auto readSize = DWORD{};
-        if (!::ReadFile(readHandle, buffer.data(), static_cast<DWORD>(buffer.size()), &readSize, nullptr) ||
+        DWORD readSize = 0;
+
+        if (::ReadFile(readHandle, buffer.data(), static_cast<DWORD>(buffer.size()), &readSize, nullptr) == 0 ||
             readSize == 0)
         {
           break;
@@ -151,12 +159,14 @@ namespace ao::test
   std::filesystem::path siblingProbeExecutablePath(std::string_view const executableStem)
   {
     auto executablePath = currentProbeExecutablePath();
+
     if (!executablePath.empty())
     {
       auto executableName = std::wstring{executableStem.begin(), executableStem.end()};
       executableName += L".exe";
       executablePath.replace_filename(executableName);
     }
+
     return executablePath;
   }
 
@@ -165,6 +175,7 @@ namespace ao::test
                                      std::chrono::milliseconds timeout)
   {
     auto result = ProbeProcessResult{};
+
     if (executablePath.empty())
     {
       result.launchError = windowsError("GetModuleFileNameW");
@@ -192,6 +203,7 @@ namespace ao::test
                                                  OPEN_EXISTING,
                                                  FILE_ATTRIBUTE_NORMAL,
                                                  nullptr)};
+
     if (nullHandle.get() == INVALID_HANDLE_VALUE)
     {
       result.launchError = windowsError("CreateFileW(NUL)");
@@ -211,16 +223,16 @@ namespace ao::test
     startupInfo.hStdError = standardErrorWriteHandle.get();
     auto processInfo = PROCESS_INFORMATION{};
 
-    if (!::CreateProcessW(executablePath.c_str(),
-                          mutableCommandLine.data(),
-                          nullptr,
-                          nullptr,
-                          TRUE,
-                          CREATE_NO_WINDOW,
-                          nullptr,
-                          nullptr,
-                          &startupInfo,
-                          &processInfo))
+    if (::CreateProcessW(executablePath.c_str(),
+                         mutableCommandLine.data(),
+                         nullptr,
+                         nullptr,
+                         TRUE,
+                         CREATE_NO_WINDOW,
+                         nullptr,
+                         nullptr,
+                         &startupInfo,
+                         &processInfo) == 0)
     {
       result.launchError = windowsError("CreateProcessW");
       return result;
@@ -240,6 +252,7 @@ namespace ao::test
     auto const boundedTimeout =
       std::clamp<std::int64_t>(timeout.count(), 0, static_cast<std::int64_t>(std::numeric_limits<DWORD>::max() - 1));
     auto const waitResult = ::WaitForSingleObject(processHandle.get(), static_cast<DWORD>(boundedTimeout));
+
     if (waitResult == WAIT_TIMEOUT)
     {
       result.timedOut = true;
@@ -253,8 +266,7 @@ namespace ao::test
       [[maybe_unused]] auto const finalWait = ::WaitForSingleObject(processHandle.get(), INFINITE);
     }
 
-    auto exitCode = DWORD{};
-    if (::GetExitCodeProcess(processHandle.get(), &exitCode))
+    if (DWORD exitCode = 0; ::GetExitCodeProcess(processHandle.get(), &exitCode) != 0)
     {
       result.exited = true;
       result.exitCode = exitCode;

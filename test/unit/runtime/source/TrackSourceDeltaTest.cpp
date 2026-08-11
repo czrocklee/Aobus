@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/source/TrackSourceDelta.h>
+
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/TrackSourceDelta.h>
 
 #include <catch2/catch_test_macros.hpp>
 

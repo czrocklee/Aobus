@@ -23,6 +23,10 @@
 #include "lib/audio/backend/WasapiProvider.h"
 #include "lib/audio/backend/detail/WasapiGraphRegistry.h"
 #include "lib/audio/backend/detail/WasapiProviderMonitorHooks.h"
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+
+#include <atomic>
 #endif
 
 #include <array>
@@ -172,6 +176,7 @@ namespace ao::audio::test
     }
 
 #ifdef _WIN32
+
     if (scenario == "wasapi-device-observer-exception")
     {
       auto hooksPtr = std::make_shared<backend::detail::WasapiProviderMonitorHooks>();
@@ -198,6 +203,7 @@ namespace ao::audio::test
       hooksPtr->requestRefresh();
       callbackEntered.acquire();
     }
+
 #endif
 
     return 2;

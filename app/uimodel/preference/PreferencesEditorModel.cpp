@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/preference/PreferencesEditorModel.h>
+
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <string_view>

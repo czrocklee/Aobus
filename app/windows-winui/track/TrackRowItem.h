@@ -24,6 +24,8 @@ namespace ao::winui
 
 namespace winrt::Aobus::implementation
 {
+  // C++/WinRT generates the projected virtual metadata plumbing in this CRTP base.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct TrackRowItem : TrackRowItemT<TrackRowItem>
   {
     TrackRowItem(std::uint32_t index,
@@ -46,13 +48,15 @@ namespace winrt::Aobus::implementation
                  std::string tertiary,
                  std::string coverArtMonogram);
 
+    // These names are the IDL-projected properties consumed by XAML bindings.
+    // NOLINTBEGIN(readability-identifier-naming)
     std::uint32_t DisplayIndex() const noexcept { return _displayIndex; }
     std::uint32_t Index() const noexcept { return _index; }
     std::uint32_t TrackId() const noexcept { return _trackId; }
     std::uint32_t CoverArtId() const noexcept { return _coverArtId; }
     bool IsGroupHeader() const noexcept { return _isGroupHeader; }
-    double RowHeight() const noexcept { return _isGroupHeader ? 0.0 : 32.0; }
-    double GroupHeight() const noexcept { return _isGroupHeader ? 72.0 : 0.0; }
+    double RowHeight() const noexcept { return _isGroupHeader ? 0.0 : kTrackRowHeight; }
+    double GroupHeight() const noexcept { return _isGroupHeader ? kGroupHeadingHeight : 0.0; }
     std::uint32_t GroupCount() const noexcept { return _groupCount; }
     hstring Title() const noexcept { return _title; }
     hstring Artist() const noexcept { return _artist; }
@@ -62,8 +66,12 @@ namespace winrt::Aobus::implementation
     {
       return _cells.GetView();
     }
+    // NOLINTEND(readability-identifier-naming)
 
   private:
+    static constexpr double kTrackRowHeight = 32.0;
+    static constexpr double kGroupHeadingHeight = 72.0;
+
     std::uint32_t _displayIndex = 0;
     std::uint32_t _index = 0;
     std::uint32_t _trackId = 0;
@@ -81,6 +89,8 @@ namespace winrt::Aobus::implementation
 
 namespace winrt::Aobus::factory_implementation
 {
+  // C++/WinRT generates the projected virtual metadata plumbing in this CRTP base.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct TrackRowItem : TrackRowItemT<TrackRowItem, implementation::TrackRowItem>
   {};
 } // namespace winrt::Aobus::factory_implementation

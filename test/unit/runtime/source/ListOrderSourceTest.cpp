@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/source/ListOrderSource.h>
+
 #include "test/unit/runtime/source/ListOrderSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/ListOrderSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 

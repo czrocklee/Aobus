@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/property/TagEdit.h>
+
 #include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <catch2/catch_test_macros.hpp>

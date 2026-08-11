@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/Field.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
-#include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
 #include <ao/query/Serializer.h>
 #include <ao/query/detail/FieldResolver.h>

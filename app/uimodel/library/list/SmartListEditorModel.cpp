@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/SmartListEditorModel.h>
+
 #include <ao/CoreIds.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/WritableTagList.h>
-#include <ao/uimodel/library/list/SmartListEditorModel.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 

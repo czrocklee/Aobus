@@ -32,9 +32,7 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 
-#include <exception>
 #include <expected>
-#include <format>
 #include <functional>
 #include <memory>
 #include <optional>

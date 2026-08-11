@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/rt/source/AllTracksSource.h>
+
 #include "runtime/source/TrackSourceDeltaBuilder.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/source/AllTracksSource.h>
 #include <ao/rt/source/TrackSource.h>
 
 #include <algorithm>

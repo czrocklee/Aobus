@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/FileManifestView.h>
+
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
-#include <ao/library/FileManifestView.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>

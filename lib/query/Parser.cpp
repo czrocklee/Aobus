@@ -19,11 +19,12 @@
 #pragma warning(disable : 4305)
 #endif
 
+#include <ao/query/Parser.h>
+
 #include "detail/Lexical.h"
 #include "detail/Normalize.h"
 #include <ao/Error.h>
 #include <ao/query/Expression.h>
-#include <ao/query/Parser.h>
 
 #include <lexy/action/match.hpp>
 #include <lexy/action/parse.hpp>

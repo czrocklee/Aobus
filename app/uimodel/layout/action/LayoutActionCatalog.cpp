@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <algorithm>

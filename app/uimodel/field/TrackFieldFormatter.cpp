@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/field/TrackFieldFormatter.h>
+
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <chrono>
 #include <cstdint>

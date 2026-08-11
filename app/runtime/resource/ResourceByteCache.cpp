@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/CoreIds.h>
 #include <ao/rt/resource/ResourceByteCache.h>
+
+#include <ao/CoreIds.h>
 #include <ao/rt/resource/ResourceBytes.h>
 
 #include <algorithm>

@@ -27,7 +27,12 @@ namespace ao
     auto wideName = std::array<wchar_t, 64>{};
     auto const sourceSize = static_cast<std::int32_t>(std::min(name.size(), wideName.size() - 1));
     auto const convertedSize = ::MultiByteToWideChar(
-      CP_UTF8, 0, name.data(), sourceSize, wideName.data(), static_cast<std::int32_t>(wideName.size() - 1));
+      CP_UTF8,
+      0,
+      name.data(), // NOLINT(bugprone-suspicious-stringview-data-usage) -- sourceSize explicitly bounds the input.
+      sourceSize,
+      wideName.data(),
+      static_cast<std::int32_t>(wideName.size() - 1));
 
     if (convertedSize > 0)
     {

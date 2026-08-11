@@ -98,7 +98,7 @@ namespace ao
     void writeEmergency(std::string_view text) noexcept
     {
 #ifdef _WIN32
-      [[maybe_unused]] auto const written = ::_write(2, text.data(), static_cast<unsigned int>(text.size()));
+      [[maybe_unused]] auto const written = ::_write(2, text.data(), static_cast<std::uint32_t>(text.size()));
 #else
       auto blockedSignals = ::sigset_t{};
       ::sigemptyset(&blockedSignals);

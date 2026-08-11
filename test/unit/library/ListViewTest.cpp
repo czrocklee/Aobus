@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/ListView.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
-#include <ao/library/ListView.h>
 
 #include <catch2/catch_test_macros.hpp>
 

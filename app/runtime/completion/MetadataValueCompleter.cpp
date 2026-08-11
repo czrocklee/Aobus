@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/completion/MetadataValueCompleter.h>
+
 #include "../detail/CompletionVocabulary.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/rt/completion/MetadataValueCompleter.h>
 
 #include <algorithm>
 #include <cstddef>

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
+
+#include <ao/query/Expression.h>
 #include <ao/query/detail/OperatorTable.h>
 #include <ao/utility/VariantVisitor.h>
 

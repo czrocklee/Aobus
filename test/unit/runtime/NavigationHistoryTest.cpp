@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/CoreIds.h>
 #include <ao/rt/NavigationHistory.h>
+
+#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 

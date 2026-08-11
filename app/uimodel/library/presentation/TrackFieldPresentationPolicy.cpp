@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
+
+#include <ao/rt/TrackField.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
