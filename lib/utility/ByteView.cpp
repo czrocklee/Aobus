@@ -16,7 +16,7 @@ namespace ao::utility::bytes
       return {};
     }
 
-    auto const* const data = layout::asPtr<char>(span);
+    auto const* const data = layout::view<char>(span);
     return {data, span.size()};
   }
 } // namespace ao::utility::bytes

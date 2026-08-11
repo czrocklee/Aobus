@@ -64,7 +64,8 @@ The graph crosses the top-level layers from the [system architecture](system-ove
 |---|---|---|---|
 | Sequence, transport, and session lifecycle | Application runtime | `app/include/ao/rt/` | `app/runtime/` and `app/runtime/playback/` |
 | Commands and display adaptation | UIModel | `app/include/ao/uimodel/playback/` | `app/uimodel/playback/` |
-| Player, engine, decode, routing, and backend interfaces | Core libraries | `include/ao/audio/` | `lib/audio/` |
+| Player, Engine, decoder-session and backend interfaces | Core libraries | `include/ao/audio/` | `lib/audio/` |
+| Concrete decoding, streaming, and routing mechanisms | Core libraries | Source-private | `lib/audio/` |
 | Provider construction and native presentation | Frontends/platform adapters | Frontend-local | `app/linux-gtk/` and `app/tui/` |
 
 Playback is not one state machine stretched across these layers.
@@ -404,7 +405,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackCommandSurface`](../../app/include/ao/uimodel/playback/command/PlaybackCommandSurface.h) is the reusable UIModel command boundary.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h) and [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) own shared output-device presentation.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
-- [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and [`StreamingSource`](../../include/ao/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../include/ao/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
+- [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and the source-private [`StreamingSource`](../../lib/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../lib/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
 - [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary.
 - [`AudioBackendBootstrap.cpp`](../../app/linux-gtk/platform/AudioBackendBootstrap.cpp) and [`app/tui/AudioBackendBootstrap.cpp`](../../app/tui/AudioBackendBootstrap.cpp) construct concrete providers at frontend composition roots.
 

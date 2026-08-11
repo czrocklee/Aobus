@@ -155,7 +155,7 @@ namespace ao::audio::test
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](SignalFormat const& sourceFormat, RenderTarget*&) -> Result<OpenedPcmMode>
+        [&](SignalFormat const& sourceFormat, RenderTarget&) -> Result<OpenedPcmMode>
         {
           openedSignals.push_back(sourceFormat);
           return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};
@@ -191,7 +191,7 @@ namespace ao::audio::test
     auto& mockBackend = spy.mock();
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](SignalFormat const& sourceFormat, RenderTarget*&) -> Result<OpenedPcmMode>
+        [&](SignalFormat const& sourceFormat, RenderTarget&) -> Result<OpenedPcmMode>
         {
           openedSignals.push_back(sourceFormat);
           return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed24In32Le)};
@@ -462,7 +462,7 @@ namespace ao::audio::test
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](SignalFormat const& sourceFormat, RenderTarget*&) -> Result<OpenedPcmMode>
+        [&](SignalFormat const& sourceFormat, RenderTarget&) -> Result<OpenedPcmMode>
         {
           openedSignals.push_back(sourceFormat);
           return makeError(Error::Code::FormatRejected, "test backend rejected native sample rate");

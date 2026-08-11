@@ -4,7 +4,6 @@
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,8 +12,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches year equality and rejects different years", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year = 2020");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
@@ -29,8 +27,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches duration above an exclusive threshold", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@duration > 179000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
@@ -45,8 +42,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches year inequality only for different years", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year != 2020");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
@@ -65,8 +61,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches duration at an inclusive threshold", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@duration >= 180000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
@@ -81,8 +76,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches years below an exclusive threshold", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year < 2021");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
@@ -98,8 +92,7 @@ namespace ao::query::test
   {
     // Note: $trackNumber is a cold field, so we use $year instead which is hot
     auto expr = parseOk("$year = 2020");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5};
@@ -115,8 +108,7 @@ namespace ao::query::test
   {
     // Verify $year > 2000 returns false for year 1980
     auto expr = parseOk("$year > 2000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track = TestTrack{"Title", "Artist", "Album", "path", 1980};
@@ -128,8 +120,7 @@ namespace ao::query::test
   {
     // Simple year > test to verify year comparison works
     auto expr = parseOk("$year > 2000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Title", "Artist", "Album", "path", 2021};

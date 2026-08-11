@@ -21,6 +21,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace ao::async
 {
@@ -51,11 +52,22 @@ namespace ao::async
     void requestStop() noexcept;
     void join();
 
-    boost::asio::thread_pool& workerPool() noexcept;
-
     Task<void> resumeOnCallbackExecutor(std::stop_token stopToken = {});
     Task<void> resumeOnWorker(std::stop_token stopToken = {});
     Task<void> sleepFor(std::chrono::milliseconds delay, std::stop_token stopToken = {});
+
+    /**
+     * Run @p tasks concurrently on this Runtime's worker pool and complete
+     * once every task has finished.
+     *
+     * The awaiting coroutine is suspended while the tasks run and holds no
+     * worker thread, so `whenAll` cannot starve the pool: with a pool of one
+     * thread the tasks simply run sequentially. If any task exits with an
+     * exception, the first one in task order is rethrown after all tasks have
+     * completed. Cancellation of the awaiting coroutine is forwarded to the
+     * spawned tasks.
+     */
+    Task<> whenAll(std::vector<Task<>> tasks);
 
     void spawnLogged(Task<void> task, std::string_view fatalContext = "root coroutine");
     TaskHandle spawnCancellable(CancellableTask task, std::string_view fatalContext = "cancellable coroutine");
@@ -77,7 +89,7 @@ namespace ao::async
       }
     }
 
-    void spawnWithLifetime(LifetimeScope* scope,
+    void spawnWithLifetime(LifetimeScope& scope,
                            CancellableTask task,
                            std::string_view fatalContext = "lifetime-bound coroutine");
 
@@ -87,6 +99,8 @@ namespace ao::async
 
     std::move_only_function<void()> startCancellable(CancellableTask task,
                                                      std::function<void(std::exception_ptr)> completion);
+
+    boost::asio::thread_pool& workerPool() noexcept;
 
     Executor& _callbackExecutor;
     std::shared_ptr<CallbackState> _callbackStatePtr;

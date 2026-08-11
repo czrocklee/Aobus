@@ -60,7 +60,6 @@ namespace ao::library::test
     auto const id = requireIntern(transaction, "Bach");
 
     CHECK(id == DictionaryId{1});
-    CHECK_FALSE(dictionary.contains("Bach"));
     CHECK_FALSE(dictionary.findId("Bach"));
     CHECK(dictionary.size() == 0);
     CHECK(dictionary.generation() == initialGeneration);
@@ -68,7 +67,6 @@ namespace ao::library::test
     REQUIRE(transaction.commit());
 
     CHECK(dictionary.get(id) == "Bach");
-    CHECK(dictionary.lookupId("Bach") == id);
     CHECK(dictionary.findId("Bach") == id);
     CHECK(dictionary.size() == 1);
     CHECK(dictionary.generation() == initialGeneration + 1);
@@ -86,7 +84,7 @@ namespace ao::library::test
       CHECK(requireIntern(preview, "preview-only") == DictionaryId{1});
     }
 
-    CHECK_FALSE(dictionary.contains("preview-only"));
+    CHECK_FALSE(dictionary.findId("preview-only"));
     CHECK(dictionary.size() == 0);
 
     auto committed = writeTransaction(library);
@@ -116,7 +114,7 @@ namespace ao::library::test
     auto result = transaction.commit();
     REQUIRE_FALSE(result);
     CHECK(result.error().message == "injected commit failure");
-    CHECK_FALSE(dictionary.contains("failed"));
+    CHECK_FALSE(dictionary.findId("failed"));
     CHECK(dictionary.size() == 0);
     CHECK(dictionary.generation() == initialGeneration);
 
@@ -158,7 +156,7 @@ namespace ao::library::test
 
     auto reopened = makeTestMusicLibrary(temp.path(), databasePath);
     CHECK(reopened.dictionary().get(id) == "persistent");
-    CHECK(reopened.dictionary().lookupId("persistent") == id);
+    CHECK(reopened.dictionary().findId("persistent") == id);
   }
 
   TEST_CASE("DictionaryStore - validates invalid lookups and defaults", "[library][unit][dictionary]")
@@ -194,7 +192,7 @@ namespace ao::library::test
 
     REQUIRE(growth.commit());
     CHECK(stableView == "stable");
-    CHECK(library.dictionary().lookupId("stable") == stableId);
+    CHECK(library.dictionary().findId("stable") == stableId);
   }
 
   TEST_CASE("DictionaryReadCache - resolves values after bounded collisions", "[library][unit][dictionary]")
@@ -289,7 +287,7 @@ namespace ao::library::test
 
       while (true)
       {
-        if (library.dictionary().get(stableId) != "stable" || library.dictionary().lookupId("stable") != stableId)
+        if (library.dictionary().get(stableId) != "stable" || library.dictionary().findId("stable") != stableId)
         {
           failed.store(true, std::memory_order_relaxed);
         }

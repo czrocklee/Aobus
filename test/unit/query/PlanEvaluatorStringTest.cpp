@@ -4,7 +4,6 @@
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,8 +12,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches unquoted title LIKE substrings", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title ~ Test");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test Title"};
@@ -29,8 +27,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches title equality case-sensitively", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title = 'Hello World'");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Hello World"};
@@ -49,8 +46,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches title inequality case-sensitively", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title != 'Hello'");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Hello World"};
@@ -65,8 +61,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - compares titles below a string bound", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title < 'zoo'");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"apple"};
@@ -85,8 +80,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - compares titles above a string bound case-sensitively", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title > 'apple'");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"banana"};
@@ -106,8 +100,7 @@ namespace ao::query::test
   {
     // Simple title LIKE test with quoted string
     auto expr = parseOk(R"($title ~ "Bach")");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     // Track with title containing "Bach"
@@ -130,8 +123,7 @@ namespace ao::query::test
   {
     // Test LIKE with a Track that has multiple fields set
     auto expr = parseOk(R"($title ~ "Bach")");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track = TestTrack{"Bach Greatest Hits", "Artist", "Album", "path", 2021};

@@ -44,6 +44,13 @@ namespace ao::library::test
       return ((size + 3U) / 4U) * 4U;
     }
 
+    DictionaryId requireDictionaryId(DictionaryStore const& dictionary, std::string_view text)
+    {
+      auto const optId = dictionary.findId(text);
+      REQUIRE(optId);
+      return *optId;
+    }
+
     std::vector<TrackColdBlockSlot> coldBlockSlots(std::span<std::byte const> coldData)
     {
       auto const reader = detail::TrackColdReader{coldData};
@@ -191,9 +198,9 @@ namespace ao::library::test
     CHECK(header->uriOffset == sizeof(TrackColdHeader) + sizeof(TrackClassicalBlock));
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};
-    CHECK(view.classical().conductorId() == context.dictionary().lookupId("Carlos Kleiber"));
-    CHECK(view.classical().ensembleId() == context.dictionary().lookupId("Vienna Philharmonic"));
-    CHECK(view.classical().soloistId() == context.dictionary().lookupId("Yo-Yo Ma"));
+    CHECK(view.classical().conductorId() == requireDictionaryId(context.dictionary(), "Carlos Kleiber"));
+    CHECK(view.classical().ensembleId() == requireDictionaryId(context.dictionary(), "Vienna Philharmonic"));
+    CHECK(view.classical().soloistId() == requireDictionaryId(context.dictionary(), "Yo-Yo Ma"));
   }
 
   TEST_CASE("TrackBuilder - writes extension blocks in deterministic order",
@@ -251,7 +258,7 @@ namespace ao::library::test
     auto const* entry = utility::layout::view<CustomMetadataEntry>(
       customPayload.subspan(sizeof(CustomMetadataBlockHeader), sizeof(CustomMetadataEntry)));
     REQUIRE(entry != nullptr);
-    CHECK(entry->keyId == context.dictionary().lookupId("odd"));
+    CHECK(entry->keyId == requireDictionaryId(context.dictionary(), "odd"));
     CHECK(entry->valueOffset == customHeader->valueOffset);
     CHECK(entry->valueLength == 3);
 
@@ -262,8 +269,9 @@ namespace ao::library::test
     CHECK(std::ranges::all_of(uriPadding, [](std::byte value) { return value == std::byte{0}; }));
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};
-    REQUIRE(view.customMetadata().get(context.dictionary().lookupId("odd")));
-    CHECK(*view.customMetadata().get(context.dictionary().lookupId("odd")) == "abc");
+    auto const oddId = requireDictionaryId(context.dictionary(), "odd");
+    REQUIRE(view.customMetadata().get(oddId));
+    CHECK(*view.customMetadata().get(oddId) == "abc");
     CHECK(view.property().uri() == "uri");
   }
 
@@ -290,23 +298,25 @@ namespace ao::library::test
 
     SECTION("conductor")
     {
-      checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().conductor("Conductor"); },
-                                [](TrackView const& view, DictionaryStore const& dictionary)
-                                { CHECK(view.classical().conductorId() == dictionary.lookupId("Conductor")); });
+      checkSingleClassicalBlock(
+        [](TrackBuilder& builder) { builder.metadata().conductor("Conductor"); },
+        [](TrackView const& view, DictionaryStore const& dictionary)
+        { CHECK(view.classical().conductorId() == requireDictionaryId(dictionary, "Conductor")); });
     }
 
     SECTION("ensemble")
     {
-      checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().ensemble("Ensemble"); },
-                                [](TrackView const& view, DictionaryStore const& dictionary)
-                                { CHECK(view.classical().ensembleId() == dictionary.lookupId("Ensemble")); });
+      checkSingleClassicalBlock(
+        [](TrackBuilder& builder) { builder.metadata().ensemble("Ensemble"); },
+        [](TrackView const& view, DictionaryStore const& dictionary)
+        { CHECK(view.classical().ensembleId() == requireDictionaryId(dictionary, "Ensemble")); });
     }
 
     SECTION("soloist")
     {
       checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().soloist("Soloist"); },
                                 [](TrackView const& view, DictionaryStore const& dictionary)
-                                { CHECK(view.classical().soloistId() == dictionary.lookupId("Soloist")); });
+                                { CHECK(view.classical().soloistId() == requireDictionaryId(dictionary, "Soloist")); });
     }
   }
 
@@ -387,11 +397,11 @@ namespace ao::library::test
     CHECK(view.metadata().discTotal() == 3);
     REQUIRE(view.coverArt().primary());
     CHECK(view.coverArt().primary()->resourceId == ResourceId{42});
-    CHECK(view.metadata().albumId() == context.dictionary().lookupId("Album"));
-    CHECK(view.metadata().genreId() == context.dictionary().lookupId("Genre"));
-    CHECK(view.metadata().albumArtistId() == context.dictionary().lookupId("Album Artist"));
-    CHECK(view.classical().conductorId() == context.dictionary().lookupId("Conductor"));
-    CHECK(view.classical().ensembleId() == context.dictionary().lookupId("Ensemble"));
-    CHECK(view.classical().soloistId() == context.dictionary().lookupId("Soloist"));
+    CHECK(view.metadata().albumId() == requireDictionaryId(context.dictionary(), "Album"));
+    CHECK(view.metadata().genreId() == requireDictionaryId(context.dictionary(), "Genre"));
+    CHECK(view.metadata().albumArtistId() == requireDictionaryId(context.dictionary(), "Album Artist"));
+    CHECK(view.classical().conductorId() == requireDictionaryId(context.dictionary(), "Conductor"));
+    CHECK(view.classical().ensembleId() == requireDictionaryId(context.dictionary(), "Ensemble"));
+    CHECK(view.classical().soloistId() == requireDictionaryId(context.dictionary(), "Soloist"));
   }
 } // namespace ao::library::test

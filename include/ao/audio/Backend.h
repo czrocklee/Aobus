@@ -79,7 +79,7 @@ namespace ao::audio
      * the absence of a lossless mode is reported as an error and is never
      * translated into an implicit lower-precision fallback.
      */
-    virtual Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) = 0;
+    virtual Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) = 0;
 
     virtual void start() = 0;
     virtual void pause() = 0;

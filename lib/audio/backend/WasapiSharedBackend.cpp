@@ -537,7 +537,7 @@ namespace ao::audio::backend
     }
   }
 
-  Result<OpenedPcmMode> WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget* target)
+  Result<OpenedPcmMode> WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
     close();
 
@@ -684,7 +684,7 @@ namespace ao::audio::backend
     _implPtr->renderEvent = renderEvent;
     _implPtr->audioClient = std::move(audioClient);
     _implPtr->renderClient = std::move(renderClient);
-    _implPtr->renderTarget = target;
+    _implPtr->renderTarget = &target;
 
     {
       auto const lock = std::scoped_lock{_implPtr->sessionMutex};
@@ -697,7 +697,7 @@ namespace ao::audio::backend
 
     // The input stays in the negotiated decoder-side format. The graph records
     // the separately queried endpoint mix format when Windows exposes one.
-    _implPtr->renderTarget->handleRouteReady(_implPtr->routeAnchor);
+    target.handleRouteReady(_implPtr->routeAnchor);
 
     _implPtr->publishGraphState();
 

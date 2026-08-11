@@ -5,13 +5,13 @@
 
 // Opaque handle for a compiled query.
 //
-// ExecutionPlan is produced by query::QueryCompiler and consumed by
+// ExecutionPlan is produced by query::compileQuery() and consumed by
 // query::PlanEvaluator. Code that only stores or passes a compiled plan around
 // (e.g. holding a std::unique_ptr<ExecutionPlan>) needs nothing more than this
 // forward declaration, which keeps the bytecode layout and its heavy
-// dependencies (boost flat_set, DictionaryStore) out of public headers.
+// dependencies out of storage-only consumers.
 //
-// To build a plan, include <ao/query/QueryCompiler.h>. To inspect the bytecode
+// To build a plan, include <ao/query/QueryCompilation.h>. To inspect the bytecode
 // layout directly (engine internals and white-box tests), include
 // <ao/query/detail/Bytecode.h>.
 

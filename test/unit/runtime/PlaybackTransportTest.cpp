@@ -6,7 +6,7 @@
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/audio/BackendTestSupport.h"
+#include "test/unit/audio/BackendTestSupport.h" // NOLINT(misc-include-cleaner) -- provides SpyBackend to FakeIt.
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
@@ -328,7 +328,7 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     fakeit::When(Method(fixture.spyBackendPtr->mock(), open))
-      .AlwaysDo([](audio::SignalFormat const&, audio::RenderTarget*&) -> Result<audio::OpenedPcmMode>
+      .AlwaysDo([](audio::SignalFormat const&, audio::RenderTarget&) -> Result<audio::OpenedPcmMode>
                 { return makeError(Error::Code::ResourceBusy, "Device is in use by another application"); });
 
     auto const fixtureUri = fixture.installAudioFixture();

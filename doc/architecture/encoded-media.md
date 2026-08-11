@@ -150,6 +150,7 @@ Each decoder session owns the state needed by its execution path.
 - `MediaTrack` declares `File` before `TrackBuilder`, so reverse member destruction releases the member builder before its borrowed backing; it is move-constructible but not move-assignable because assignment would replace the backing first.
 - A copied or moved-out `TrackBuilder` that still contains media-derived views must not outlive its source `MediaTrack`; URI, tag, and custom-metadata values added by callers retain their own separate owners.
 - A consumer cannot retain a container view beyond the byte storage from which it was constructed.
+- The public MP4 demux boundary returns a `Demuxer` only after the requested audio track has parsed successfully; a failed parse exposes no partially populated object.
 - Required file evidence is prepared before visitor callbacks begin, so a failed required read cannot partially mutate the runtime adapter.
 - Reusable container structures remain non-owning and policy-neutral; product-layer ownership is added only at the runtime library or core audio consumer edge.
 - Media reading writes no source file and owns no persisted state.

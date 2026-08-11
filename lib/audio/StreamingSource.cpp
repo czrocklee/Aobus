@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/StreamingSource.h>
+#include "StreamingSource.h"
 
 #include "detail/DecoderError.h"
 #include "detail/StreamingBufferPolicy.h"
@@ -47,12 +47,10 @@ namespace ao::audio
 
   StreamingSource::StreamingSource(std::unique_ptr<DecoderSession> decoderPtr,
                                    DecodedStreamInfo streamInfo,
-                                   std::function<void(Error const&)> onError,
                                    std::chrono::milliseconds prerollDuration,
                                    std::chrono::milliseconds decodeHighWatermarkThreshold)
     : _decoderPtr{std::move(decoderPtr)}
     , _streamInfo{streamInfo}
-    , _onError{std::move(onError)}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
     , _prerollDuration{prerollDuration}
     , _decodeHighWatermarkByteCount{
@@ -65,26 +63,10 @@ namespace ao::audio
     stopDecodeThread();
   }
 
-  Result<> StreamingSource::initialize()
-  {
-    auto callback = std::move(_onError);
-
-    if (auto preparedRes = prepare(); !preparedRes)
-    {
-      if (callback)
-      {
-        callback(preparedRes.error());
-      }
-
-      return preparedRes;
-    }
-
-    return activate(std::move(callback));
-  }
-
   Result<> StreamingSource::prepare()
   {
-    AO_EXPECTS((!_prepared && !_activated), "Streaming source preparation may only run once");
+    AO_EXPECTS((!_prepared && !_activated && !_failed.load(std::memory_order_relaxed)),
+               "Streaming source preparation requires a fresh inactive source");
 
     auto const seekToken = _seekStopSource.get_token();
 
@@ -96,7 +78,7 @@ namespace ao::audio
       {
         auto const lock = std::scoped_lock{_errorMutex};
         return std::unexpected(_optLastError.value_or(
-          Error{.code = Error::Code::InvalidState, .message = "Streaming source failed during initialization"}));
+          Error{.code = Error::Code::InvalidState, .message = "Streaming source failed during preparation"}));
       }
 
       _prepared = true;
@@ -104,23 +86,18 @@ namespace ao::audio
     }
     catch (detail::DecoderException const& ex)
     {
-      bool const failedExchanged = !_failed.exchange(true, std::memory_order_relaxed);
+      _failed.store(true, std::memory_order_relaxed);
 
       {
         auto const lock = std::scoped_lock{_errorMutex};
         _optLastError = ex.error();
       }
 
-      if (failedExchanged && _onError)
-      {
-        _onError(ex.error());
-      }
-
       return std::unexpected{ex.error()};
     }
   }
 
-  Result<> StreamingSource::activate(std::function<void(Error const&)> onError)
+  void StreamingSource::activate(std::function<void(Error const&)> onError)
   {
     AO_EXPECTS((_prepared && !_activated), "Streaming source activation requires one prepared source");
 
@@ -131,8 +108,6 @@ namespace ao::audio
     {
       startDecodeThread();
     }
-
-    return {};
   }
 
   std::size_t StreamingSource::read(std::span<std::byte> output) noexcept

@@ -62,9 +62,9 @@ namespace ao::async
     return _statePtr->tasks.empty();
   }
 
-  void Runtime::spawnWithLifetime(LifetimeScope* scope, CancellableTask task, std::string_view const fatalContext)
+  void Runtime::spawnWithLifetime(LifetimeScope& scope, CancellableTask task, std::string_view const fatalContext)
   {
-    auto statePtr = scope->_statePtr;
+    auto statePtr = scope._statePtr;
     auto taskPtr = std::make_shared<LifetimeScopeTask>();
     taskPtr->cancel =
       startCancellable(std::move(task),

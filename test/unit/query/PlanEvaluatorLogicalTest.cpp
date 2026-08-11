@@ -4,7 +4,6 @@
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,8 +12,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - requires all AND operands to match", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year = 2020 && @duration > 100000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
@@ -33,8 +31,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches when any OR operand matches", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year = 2020 || $year = 2019");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
@@ -54,8 +51,7 @@ namespace ao::query::test
   {
     // Use "not(" for explicit grouping, or check if parser handles precedence
     auto expr = parseOk("!($year = 2020)");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
@@ -71,8 +67,7 @@ namespace ao::query::test
   {
     // Note: genre comparison requires dictionary resolution, so we use numeric genreId
     auto expr = parseOk("@duration > 180000 && $year >= 2020");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
@@ -87,8 +82,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - treats true plans as matching every track", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("true");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     CHECK(plan.matchesAll == true);
@@ -107,8 +101,7 @@ namespace ao::query::test
   {
     // Test that $title ~ "Bach" or $year > 2021 evaluates correctly
     auto expr = parseOk(R"($title ~ "Bach" or $year > 2021)");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     // Track with title containing "Bach"
@@ -131,8 +124,7 @@ namespace ao::query::test
   {
     // Test $year > 2000 or $year > 1990 to verify OR works with two numeric comparisons
     auto expr = parseOk("$year > 2000 or $year > 1990");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     // year 2021: 2021 > 2000 is true, so OR should be true

@@ -5,7 +5,6 @@
 
 #include <ao/Error.h>
 #include <ao/query/Expression.h>
-#include <ao/query/QueryCompiler.h>
 #include <ao/query/detail/Bytecode.h>
 
 #include <string_view>
@@ -13,7 +12,6 @@
 namespace ao::query::test
 {
   Expression parseOk(std::string_view text);
-  ExecutionPlan compileOk(QueryCompiler& compiler, Expression const& expr);
-  ExecutionPlan compileOk(QueryCompiler&& compiler, Expression const& expr);
-  Error compileError(QueryCompiler& compiler, Expression const& expr);
+  ExecutionPlan compileOk(Expression const& expr);
+  Error compileError(Expression const& expr);
 } // namespace ao::query::test

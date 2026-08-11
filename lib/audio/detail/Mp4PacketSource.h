@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -39,7 +39,7 @@ namespace ao::audio::detail
 
   private:
     utility::MappedFile _mappedFile;
-    std::unique_ptr<media::mp4::Demuxer> _demuxerPtr;
+    std::optional<media::mp4::Demuxer> _optDemuxer;
     std::uint32_t _sampleIndex = 0;
   };
 } // namespace ao::audio::detail

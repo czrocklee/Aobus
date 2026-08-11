@@ -24,7 +24,7 @@
 #include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/query/Parser.h>
-#include <ao/query/QueryCompiler.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>

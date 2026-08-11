@@ -5,7 +5,6 @@
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -16,8 +15,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches bitrate comparisons", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@bitrate >= 320000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000};
@@ -32,8 +30,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches sample-rate comparisons", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@sampleRate >= 48000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 48000};
@@ -49,8 +46,7 @@ namespace ao::query::test
             "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@duration >= 3m && @bitrate >= 256k && @sampleRate >= 44.1k");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100};
@@ -75,11 +71,10 @@ namespace ao::query::test
 
     auto track = TrackFixture{spec};
     auto evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{};
 
-    CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("@duration > 3m")), track.view()) == true);
-    CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("@duration > 4m")), track.view()) == false);
-    CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("@bitrate = 320k")), track.view()) == true);
+    CHECK(evaluator.evaluateFull(compileOk(parseOk("@duration > 3m")), track.view()) == true);
+    CHECK(evaluator.evaluateFull(compileOk(parseOk("@duration > 4m")), track.view()) == false);
+    CHECK(evaluator.evaluateFull(compileOk(parseOk("@bitrate = 320k")), track.view()) == true);
   }
 
   TEST_CASE("PlanEvaluator - matches AAC codec expressions", "[query][unit][plan-evaluator]")
@@ -88,9 +83,8 @@ namespace ao::query::test
     spec.codec = AudioCodec::Aac;
     auto track = TestTrack{spec};
 
-    auto compiler = QueryCompiler{};
     auto evaluator = PlanEvaluator{};
-    auto plan = compileOk(compiler, parseOk("@codec = AAC"));
+    auto plan = compileOk(parseOk("@codec = AAC"));
 
     CHECK(evaluator.evaluateFull(plan, track.view()) == true);
   }

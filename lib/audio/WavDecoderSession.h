@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
+#include "detail/DecoderSessionBase.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>
@@ -16,17 +16,16 @@
 
 namespace ao::audio
 {
-  class [[nodiscard]] FlacDecoderSession final : public detail::DecoderSessionBase<FlacDecoderSession>
+  class [[nodiscard]] WavDecoderSession final : public detail::DecoderSessionBase<WavDecoderSession>
   {
   public:
-    explicit FlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
-    ~FlacDecoderSession() override;
+    explicit WavDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
+    ~WavDecoderSession() override;
 
-    // Not copyable or movable
-    FlacDecoderSession(FlacDecoderSession const&) = delete;
-    FlacDecoderSession& operator=(FlacDecoderSession const&) = delete;
-    FlacDecoderSession(FlacDecoderSession&&) = delete;
-    FlacDecoderSession& operator=(FlacDecoderSession&&) = delete;
+    WavDecoderSession(WavDecoderSession const&) = delete;
+    WavDecoderSession& operator=(WavDecoderSession const&) = delete;
+    WavDecoderSession(WavDecoderSession&&) = delete;
+    WavDecoderSession& operator=(WavDecoderSession&&) = delete;
 
     Result<> openCodec(std::filesystem::path const& filePath);
     void close() noexcept override;

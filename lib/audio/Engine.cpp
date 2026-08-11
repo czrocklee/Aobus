@@ -3,12 +3,14 @@
 
 #include <ao/audio/Engine.h>
 
+#include "PcmSource.h"
 #include "detail/DecoderOutput.h"
 #include "detail/EngineEventQueueInvariants.h"
 #include "detail/EngineRtSignalRing.h"
 #include "detail/OpenedModeValidation.h"
 #include "detail/RenderPath.h"
 #include "detail/RenderTimeline.h"
+#include "detail/RouteTracker.h"
 #include "detail/TrackPreparation.h"
 #include "detail/TrackSession.h"
 #include <ao/AudioCodec.h>
@@ -20,12 +22,10 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/PcmSource.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
-#include <ao/audio/detail/RouteTracker.h>
 
 #include <atomic>
 #include <chrono>
@@ -1031,13 +1031,13 @@ namespace ao::audio
 
     void resetRenderTarget() noexcept { renderTargetPtr.reset(); }
 
-    RenderTarget* createRenderTarget(Backend& backend, std::uint64_t playbackGeneration)
+    RenderTarget& createRenderTarget(Backend& backend, std::uint64_t playbackGeneration)
     {
       auto const generation = nextRenderTargetGeneration++;
       renderTargetPtr =
         std::make_unique<EngineRenderTarget>(*this, backend.backendId(), generation, playbackGeneration);
       activeRenderTargetGeneration.store(generation, std::memory_order_release);
-      return renderTargetPtr.get();
+      return *renderTargetPtr;
     }
 
     // ── Playback State Helpers ─────────────────────────────────────
@@ -1598,15 +1598,10 @@ namespace ao::audio
         return std::unexpected{preparedRes.error()};
       }
 
-      auto sessionRes = detail::TrackSession::activate(
+      auto session = detail::TrackSession::activate(
         std::move(*preparedRes), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
 
-      if (!sessionRes)
-      {
-        return std::unexpected{sessionRes.error()};
-      }
-
-      return makeTrackNode(item, std::move(*sessionRes), sourceGeneration, playbackGeneration);
+      return makeTrackNode(item, std::move(session), sourceGeneration, playbackGeneration);
     }
 
     void publishCurrentTrackState(TrackNode const& session)
@@ -2013,7 +2008,7 @@ namespace ao::audio
       syncBackendIdentity();
     }
 
-    auto* const renderTarget = createRenderTarget(*backendPtr, playbackGeneration);
+    auto& renderTarget = createRenderTarget(*backendPtr, playbackGeneration);
     auto openedModeRes = backendPtr->open(inspection.info.sourceFormat, renderTarget);
 
     if (!openedModeRes)
@@ -2065,16 +2060,11 @@ namespace ao::audio
     {
       if (optPreparedTrack && samePcmMode(optPreparedTrack->backendFormat, clientFormat))
       {
-        auto sessionRes = detail::TrackSession::activate(
+        auto session = detail::TrackSession::activate(
           std::move(*optPreparedTrack), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
         optPreparedTrack.reset();
 
-        if (!sessionRes)
-        {
-          return std::unexpected{sessionRes.error()};
-        }
-
-        return makeTrackNode(item, std::move(*sessionRes), sourceGeneration, playbackGeneration);
+        return makeTrackNode(item, std::move(session), sourceGeneration, playbackGeneration);
       }
 
       optPreparedTrack.reset();
@@ -2587,18 +2577,13 @@ namespace ao::audio
       {
         auto const sourceGeneration = engine._implPtr->nextSourceGeneration++;
 
-        auto activatedRes =
+        auto activatedTrack =
           detail::TrackSession::activate(std::move(*preparationImpl->optPreparedTrack),
                                          engine._implPtr->makeSourceErrorHandler(sourceGeneration, currentGeneration));
         preparationImpl->optPreparedTrack.reset();
 
-        if (!activatedRes)
-        {
-          return std::unexpected{activatedRes.error()};
-        }
-
         nodePtr = std::make_unique<Engine::Impl::TrackNode>(Engine::Impl::makeTrackNode(
-          preparationImpl->item, std::move(*activatedRes), sourceGeneration, currentGeneration));
+          preparationImpl->item, std::move(activatedTrack), sourceGeneration, currentGeneration));
       }
     }
 

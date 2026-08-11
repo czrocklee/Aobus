@@ -142,16 +142,6 @@ namespace ao::utility
       return reinterpret_cast<T*>(span.data());
     }
 
-    template<typename T>
-    inline T const* asPtr(std::span<std::byte const> span) noexcept
-    {
-      detail::requireTrivialLayout<T>();
-      AO_EXPECTS(span.size() >= sizeof(T));
-      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      return reinterpret_cast<T const*>(span.data());
-    }
-
     /**
      * Adapt a const span for legacy C APIs that take non-const pointers but don't mutate.
      * Uses const_cast internally. Use with caution.
@@ -159,7 +149,7 @@ namespace ao::utility
     template<typename T>
     inline T* asLegacyPtr(std::span<std::byte const> span) noexcept
     {
-      return const_cast<T*>(asPtr<T>(span));
+      return const_cast<T*>(view<T>(span));
     }
 
     /**
@@ -178,16 +168,6 @@ namespace ao::utility
     inline std::uint32_t size32(std::span<std::byte const> span) noexcept
     {
       return static_cast<std::uint32_t>(span.size());
-    }
-
-    template<typename T>
-    inline T* asMutablePtr(std::span<std::byte> span) noexcept
-    {
-      detail::requireTrivialLayout<T>();
-      AO_EXPECTS(span.size() >= sizeof(T));
-      AO_EXPECTS(detail::isAligned(span.data(), alignof(T)));
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      return reinterpret_cast<T*>(span.data());
     }
 
     template<typename T>

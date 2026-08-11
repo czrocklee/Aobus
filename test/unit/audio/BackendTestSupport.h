@@ -9,23 +9,40 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 
 #include <fakeit.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 
 namespace ao::audio
 {
-  class RenderTarget;
   struct Device;
 }
 
 namespace ao::audio::test
 {
+  class NoopRenderTarget final : public RenderTarget
+  {
+  public:
+    RenderPcmResult renderPcm(std::span<std::byte> output) noexcept override;
+    void handleUnderrun() noexcept override;
+    void handlePositionAdvanced(std::uint32_t frames) noexcept override;
+    void handleDrainComplete() noexcept override;
+    void handleRouteReady(std::string_view routeAnchor) noexcept override;
+    void handleFormatChanged(PcmFormat const& format) noexcept override;
+    void handlePropertyChanged(PropertySnapshot snapshot) noexcept override;
+    void handleBackendError(std::string_view message) noexcept override;
+  };
+
   /**
    * @brief A proxy that allows using a FakeIt mock (which is a reference)
    * where a unique_ptr is required. It forwards all calls to the provided reference.
@@ -35,7 +52,7 @@ namespace ao::audio::test
   public:
     explicit MockBackendProxy(Backend& real);
 
-    Result<OpenedPcmMode> open(SignalFormat const& f, RenderTarget* t) override;
+    Result<OpenedPcmMode> open(SignalFormat const& f, RenderTarget& t) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -88,7 +105,7 @@ namespace ao::audio::test
     {
       // Provide default 'fake' behavior for all common methods to avoid UnexpectedMethodCallException
       fakeit::When(Method(_mock, open))
-        .AlwaysDo([this](SignalFormat const& sourceFormat, RenderTarget*& target) -> Result<OpenedPcmMode>
+        .AlwaysDo([this](SignalFormat const& sourceFormat, RenderTarget& target) -> Result<OpenedPcmMode>
                   { return _base.open(sourceFormat, target); });
       fakeit::Fake(Method(_mock, start));
       fakeit::Fake(Method(_mock, pause));

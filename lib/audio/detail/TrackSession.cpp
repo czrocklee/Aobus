@@ -3,16 +3,15 @@
 
 #include "TrackSession.h"
 
+#include "../StreamingSource.h"
 #include "DecoderError.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/PcmSource.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/StreamingSource.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <chrono>
@@ -136,25 +135,22 @@ namespace ao::audio::detail
     }
   }
 
-  Result<TrackSession::OpenedTrack> TrackSession::activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError)
+  TrackSession::OpenedTrack TrackSession::activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError)
   {
     AO_INVARIANT(preparedTrack.sourcePtr, "Prepared track has no streaming source");
 
-    if (auto activatedRes = preparedTrack.sourcePtr->activate(std::move(onSourceError)); !activatedRes)
-    {
-      return std::unexpected{activatedRes.error()};
-    }
+    auto sourcePtr = std::shared_ptr<StreamingSource>{std::move(preparedTrack.sourcePtr)};
+    sourcePtr->activate(std::move(onSourceError));
 
-    return OpenedTrack{.sourcePtr = std::shared_ptr<PcmSource>{std::move(preparedTrack.sourcePtr)},
-                       .backendFormat = preparedTrack.backendFormat,
-                       .info = preparedTrack.info};
+    return OpenedTrack{
+      .sourcePtr = std::move(sourcePtr), .backendFormat = preparedTrack.backendFormat, .info = preparedTrack.info};
   }
 
   std::unique_ptr<StreamingSource> TrackSession::preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,
                                                                   DecodedStreamInfo const& info)
   {
-    auto streamingSourcePtr = std::make_unique<StreamingSource>(
-      std::move(decoderPtr), info, OnSourceErrorFn{}, kPrerollDuration, kDecodeHighWatermarkThreshold);
+    auto streamingSourcePtr =
+      std::make_unique<StreamingSource>(std::move(decoderPtr), info, kPrerollDuration, kDecodeHighWatermarkThreshold);
 
     if (auto const prepareRes = streamingSourcePtr->prepare(); !prepareRes)
     {

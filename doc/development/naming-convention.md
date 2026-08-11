@@ -439,8 +439,8 @@ Enforced by `PointerNamingConventionCheck` (see *Enforcement*).
   observers, cursors, or iterators.
 - The `Ptr` suffix rule applies to variables, fields, and parameters that hold
   pointer values. Raw-pointer-returning helper functions may use established
-  names such as `asPtr()` when the function name describes a view/conversion
-  contract rather than ownership.
+  semantic names such as `view()` and `viewMutable()` when the function name
+  describes a view/conversion contract rather than ownership.
 - Do not use Hungarian notation for pointer types: avoid `pBuffer` and `_pRow`;
   use semantic names such as `bufferData` or `_activeRow`.
 

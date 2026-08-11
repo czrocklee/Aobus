@@ -18,7 +18,8 @@ namespace ao::query::detail
 {
   // Short-range control-flow exception internal to the query-compilation layer.
   // It carries a recoverable Error raised with throwQueryError and caught once
-  // at the Result boundary (QueryCompiler::compile, FormatCompiler::compile).
+  // by the source-private compiler directly below the public compileQuery or
+  // compileFormat Result boundary.
   // It replaces the previous pattern of threading Result<T> through every
   // private compile helper.
   //

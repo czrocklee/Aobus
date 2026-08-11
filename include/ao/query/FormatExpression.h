@@ -12,7 +12,6 @@
 #include <limits>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ao::library
@@ -45,27 +44,6 @@ namespace ao::query
     std::vector<std::string> dictionarySymbols;
     bool requiresDictionary = false;
     AccessProfile accessProfile = AccessProfile::NoTrackData;
-  };
-
-  class FormatCompiler final
-  {
-  public:
-    explicit FormatCompiler() = default;
-
-    Result<FormatPlan> compile(Expression const& expr);
-
-  private:
-    std::uint32_t addLiteral(std::string_view value);
-    std::uint32_t addDictionarySymbol(std::string_view text);
-    void compileExpression(Expression const& expr);
-    void compileBinary(BinaryExpression const& binary);
-    void compileVariable(VariableExpression const& variable);
-    void compileConstant(ConstantExpression const& constant);
-
-    FormatPlan _plan;
-    bool _hasHotAccess = false;
-    bool _hasColdAccess = false;
-    bool _hasDictionaryAccess = false;
   };
 
   /**

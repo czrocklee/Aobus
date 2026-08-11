@@ -69,25 +69,10 @@ namespace ao::library
     std::string_view getOrDefault(DictionaryId id, std::string_view defaultValue = {}) const;
 
     /**
-     * Look up an ID by its string.
-     * @param str The string to look up
-     * @return The ID
-     * The text must already be present; absence violates the Store invariant.
-     */
-    DictionaryId lookupId(std::string_view str) const;
-
-    /**
      * Look up a committed ID by text.
      * @return The committed ID, or std::nullopt when the text is absent.
      */
     std::optional<DictionaryId> findId(std::string_view str) const;
-
-    /**
-     * Check if a string exists.
-     * @param str The string to look up
-     * @return true if the string exists
-     */
-    bool contains(std::string_view str) const;
 
     /**
      * Return the process-local committed dictionary generation.

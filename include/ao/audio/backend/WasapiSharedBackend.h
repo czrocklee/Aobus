@@ -46,7 +46,7 @@ namespace ao::audio::backend
     WasapiSharedBackend(WasapiSharedBackend&&) = delete;
     WasapiSharedBackend& operator=(WasapiSharedBackend&&) = delete;
 
-    Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override;
+    Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;
     void resume() override;

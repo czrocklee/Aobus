@@ -34,6 +34,25 @@ namespace ao::query
 {
   namespace
   {
+    class FormatCompiler final
+    {
+    public:
+      Result<FormatPlan> compile(Expression const& expr);
+
+    private:
+      std::uint32_t addLiteral(std::string_view value);
+      std::uint32_t addDictionarySymbol(std::string_view text);
+      void compileExpression(Expression const& expr);
+      void compileBinary(BinaryExpression const& binary);
+      void compileVariable(VariableExpression const& variable);
+      void compileConstant(ConstantExpression const& constant);
+
+      FormatPlan _plan;
+      bool _hasHotAccess = false;
+      bool _hasColdAccess = false;
+      bool _hasDictionaryAccess = false;
+    };
+
     bool isUnsupportedScalarField(Field field)
     {
       return field == Field::Tag || field == Field::TagBloom || field == Field::TagCount || field == Field::CoverArtId;
@@ -248,11 +267,6 @@ namespace ao::query
 
   try
   {
-    _plan = FormatPlan{};
-    _hasHotAccess = false;
-    _hasColdAccess = false;
-    _hasDictionaryAccess = false;
-
     compileExpression(expr);
 
     if (_hasHotAccess && _hasColdAccess)

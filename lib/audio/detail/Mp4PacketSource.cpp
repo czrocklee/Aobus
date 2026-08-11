@@ -4,6 +4,7 @@
 #include "Mp4PacketSource.h"
 
 #include "TimeConversion.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/AudioTime.h>
 #include <ao/media/mp4/Demuxer.h>
@@ -13,9 +14,9 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
-#include <memory>
 #include <span>
 #include <string_view>
+#include <utility>
 
 namespace ao::audio::detail
 {
@@ -28,29 +29,30 @@ namespace ao::audio::detail
       return std::unexpected{result.error()};
     }
 
-    _demuxerPtr = std::make_unique<media::mp4::Demuxer>(_mappedFile.bytes());
+    auto demuxerRes = media::mp4::Demuxer::parse(_mappedFile.bytes(), sampleEntry);
 
-    if (auto const result = _demuxerPtr->parseTrack(sampleEntry); !result)
+    if (!demuxerRes)
     {
-      auto const& error = result.error();
+      auto error = demuxerRes.error();
       close();
-      return std::unexpected{error};
+      return std::unexpected{std::move(error)};
     }
 
+    _optDemuxer.emplace(std::move(*demuxerRes));
     _sampleIndex = 0;
     return {};
   }
 
   void Mp4PacketSource::close() noexcept
   {
-    _demuxerPtr.reset();
+    _optDemuxer.reset();
     _mappedFile.unmap();
     _sampleIndex = 0;
   }
 
   Result<> Mp4PacketSource::seek(std::chrono::milliseconds offset, std::uint32_t fallbackTimescale)
   {
-    if (!_demuxerPtr)
+    if (!_optDemuxer)
     {
       return makeError(Error::Code::SeekFailed, "MP4 packet source is not open");
     }
@@ -63,33 +65,45 @@ namespace ao::audio::detail
     }
 
     auto const targetTime = durationToSamples(offset, effectiveTimescale);
-    _sampleIndex = _demuxerPtr->sampleIndexAtTime(targetTime);
+    _sampleIndex = _optDemuxer->sampleIndexAtTime(targetTime);
     return {};
   }
 
   bool Mp4PacketSource::isOpen() const noexcept
   {
-    return _demuxerPtr != nullptr;
+    return _optDemuxer.has_value();
   }
 
   bool Mp4PacketSource::isAtEnd() const noexcept
   {
-    return !_demuxerPtr || _sampleIndex >= _demuxerPtr->sampleCount();
+    return !_optDemuxer || _sampleIndex >= _optDemuxer->sampleCount();
   }
 
   std::span<std::byte const> Mp4PacketSource::packet() const
   {
-    return isAtEnd() ? std::span<std::byte const>{} : _demuxerPtr->samplePayload(_sampleIndex);
+    if (isAtEnd())
+    {
+      return {};
+    }
+
+    AO_INVARIANT(_optDemuxer, "Readable MP4 packet source has no demuxer");
+    return _optDemuxer->samplePayload(_sampleIndex);
   }
 
   std::span<std::byte const> Mp4PacketSource::magicCookie() const
   {
-    return _demuxerPtr ? _demuxerPtr->magicCookie() : std::span<std::byte const>{};
+    return _optDemuxer ? _optDemuxer->magicCookie() : std::span<std::byte const>{};
   }
 
   media::mp4::Demuxer::SampleEntry Mp4PacketSource::sampleInfo() const
   {
-    return isAtEnd() ? media::mp4::Demuxer::SampleEntry{} : _demuxerPtr->sampleInfo(_sampleIndex);
+    if (isAtEnd())
+    {
+      return {};
+    }
+
+    AO_INVARIANT(_optDemuxer, "Readable MP4 packet source has no demuxer");
+    return _optDemuxer->sampleInfo(_sampleIndex);
   }
 
   std::uint32_t Mp4PacketSource::sampleIndex() const noexcept
@@ -99,9 +113,9 @@ namespace ao::audio::detail
 
   std::uint32_t Mp4PacketSource::timescale(std::uint32_t fallback) const noexcept
   {
-    if (_demuxerPtr && _demuxerPtr->timescale() > 0)
+    if (_optDemuxer && _optDemuxer->timescale() > 0)
     {
-      return _demuxerPtr->timescale();
+      return _optDemuxer->timescale();
     }
 
     return fallback;
@@ -111,12 +125,12 @@ namespace ao::audio::detail
   {
     auto const effectiveTimescale = timescale(fallbackTimescale);
 
-    if (!_demuxerPtr || effectiveTimescale == 0)
+    if (!_optDemuxer || effectiveTimescale == 0)
     {
       return std::chrono::milliseconds{0};
     }
 
-    return convertToDuration(_demuxerPtr->duration(), effectiveTimescale);
+    return convertToDuration(_optDemuxer->duration(), effectiveTimescale);
   }
 
   std::uint64_t Mp4PacketSource::firstFrameIndex(std::uint32_t sampleRate,

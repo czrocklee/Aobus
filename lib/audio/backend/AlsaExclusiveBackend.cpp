@@ -1038,7 +1038,7 @@ namespace ao::audio::backend
     return Backend::prewarmFormatHint(sourceFormat);
   }
 
-  Result<OpenedPcmMode> AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget* target)
+  Result<OpenedPcmMode> AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
     close();
 
@@ -1084,7 +1084,7 @@ namespace ao::audio::backend
 
     _implPtr->optOpenedMode = negotiatedRes->mode;
     _implPtr->prewarmCache.store(sourceFormat, negotiatedRes->mode.clientFormat);
-    _implPtr->renderTarget = target;
+    _implPtr->renderTarget = &target;
 
     _implPtr->pcmPtr = std::move(safePcmPtr);
 
@@ -1092,10 +1092,7 @@ namespace ao::audio::backend
 
     _implPtr->publishGraphState();
 
-    if (_implPtr->renderTarget != nullptr)
-    {
-      _implPtr->renderTarget->handleRouteReady(_implPtr->deviceName);
-    }
+    target.handleRouteReady(_implPtr->deviceName);
 
     return negotiatedRes->mode;
   }

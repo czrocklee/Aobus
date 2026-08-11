@@ -7,7 +7,7 @@
 #include <ao/Error.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
-#include <ao/query/QueryCompiler.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/TrackSource.h>

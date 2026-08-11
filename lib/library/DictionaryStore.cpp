@@ -95,18 +95,6 @@ namespace ao::library
     return _idToStringStorage[index - 1];
   }
 
-  DictionaryId DictionaryStore::lookupId(std::string_view str) const
-  {
-    auto const lock = std::shared_lock{_mutex};
-
-    if (auto it = _stringToId.find(str); it != _stringToId.end())
-    {
-      return *it;
-    }
-
-    AO_FATAL("String not found in dictionary");
-  }
-
   std::optional<DictionaryId> DictionaryStore::findId(std::string_view str) const
   {
     auto const lock = std::shared_lock{_mutex};
@@ -117,12 +105,6 @@ namespace ao::library
     }
 
     return std::nullopt;
-  }
-
-  bool DictionaryStore::contains(std::string_view str) const
-  {
-    auto const lock = std::shared_lock{_mutex};
-    return _stringToId.contains(str);
   }
 
   std::uint64_t DictionaryStore::generation() const

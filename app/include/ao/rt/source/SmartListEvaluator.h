@@ -7,8 +7,8 @@
 #include "TrackSourceDelta.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/TrackEditScript.h>
 
-#include <boost/container/small_vector.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
@@ -21,6 +21,11 @@
 namespace ao::library
 {
   class MusicLibrary;
+}
+
+namespace ao::query
+{
+  enum class AccessProfile : std::uint8_t;
 }
 
 namespace ao::rt
@@ -62,13 +67,6 @@ namespace ao::rt
     void rebuild(SmartListSource& list);
 
   private:
-    enum class TrackLoadMode : std::uint8_t
-    {
-      Hot,
-      Cold,
-      Both,
-    };
-
     struct SourceBucket final
     {
       TrackSource* source = nullptr;
@@ -111,7 +109,7 @@ namespace ao::rt
     void evaluatePendingLists(SourceBucket& bucket);
     void rebuildLists(SourceBucket& bucket, std::span<SmartListSource*> lists);
 
-    static TrackLoadMode unionMode(std::span<SmartListSource* const> lists);
+    static query::AccessProfile unionAccessProfile(std::span<SmartListSource* const> lists);
 
     library::MusicLibrary const& _ml;
     boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;

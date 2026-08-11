@@ -11,7 +11,7 @@
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/rt/library/LibraryReader.h>
 
 #include <algorithm>

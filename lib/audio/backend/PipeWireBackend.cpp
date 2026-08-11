@@ -611,7 +611,7 @@ namespace ao::audio::backend
 
   // PipeWire negotiation must remain one transaction under the native thread-loop lock.
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  Result<OpenedPcmMode> PipeWireBackend::open(SignalFormat const& sourceFormat, RenderTarget* target)
+  Result<OpenedPcmMode> PipeWireBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
     bool const useExclusive = _exclusiveMode && !_targetDeviceId.empty();
 
@@ -642,7 +642,7 @@ namespace ao::audio::backend
     auto optRouteAnchor = std::optional<std::string>{};
     {
       auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
-      _implPtr->renderTarget = target;
+      _implPtr->renderTarget = &target;
       _implPtr->sourceFormat = sourceFormat;
       _implPtr->format = {};
       _implPtr->offeredEncodings = offeredEncodings;
@@ -762,9 +762,9 @@ namespace ao::audio::backend
       return std::unexpected{std::move(*optError)};
     }
 
-    if (optRouteAnchor && target != nullptr)
+    if (optRouteAnchor)
     {
-      target->handleRouteReady(*optRouteAnchor);
+      target.handleRouteReady(*optRouteAnchor);
     }
 
     _implPtr->optLastSourceFormat = sourceFormat;

@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "DecoderTestSupport.h"
+#include "lib/audio/Mp3DecoderSession.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include <ao/audio/Mp3DecoderSession.h>
 #include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>

@@ -112,9 +112,6 @@ namespace ao::utility::test
       ptrMut->a = 10;
       CHECK(record.a == 10);
 
-      auto const* p = layout::asPtr<LayoutRecord>(span);
-      CHECK(p->a == 10);
-
       auto* legacy = layout::asLegacyPtr<LayoutRecord>(span);
       CHECK(legacy->a == 10);
 
@@ -124,8 +121,8 @@ namespace ao::utility::test
 
       CHECK(layout::size32(span) == static_cast<std::uint32_t>(sizeof(LayoutRecord)));
 
-      auto* mut = layout::asMutablePtr<LayoutRecord>(spanMut);
-      mut->b = 20;
+      auto* mutableView = layout::viewMutable<LayoutRecord>(spanMut);
+      mutableView->b = 20;
       CHECK(record.b == 20);
 
       auto arr = std::to_array<LayoutRecord>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});

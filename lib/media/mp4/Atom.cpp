@@ -144,11 +144,6 @@ namespace ao::media::mp4
     return OptionalAtom{atom};
   }
 
-  AtomView fromBuffer(std::span<std::byte const> data) noexcept
-  {
-    return AtomView::root(data);
-  }
-
   Result<OptionalAtom> findAtom(AtomView const& root, std::span<std::string_view const> path)
   {
     if (path.empty() || path.front() != root.type())

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/AlacDecoderSession.h>
+#include "lib/audio/AlacDecoderSession.h"
 
 #include "DecoderTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"

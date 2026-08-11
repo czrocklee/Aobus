@@ -80,7 +80,7 @@ namespace ao::query
    */
   enum class AccessProfile : std::uint8_t
   {
-    NoTrackData, // Does not access track storage
+    NoTrackData, // Does not access track fields
     HotOnly,     // Only accesses hot data (metadata, property, tags)
     ColdOnly,    // Only accesses cold data (custom KV)
     HotAndCold   // Mixed access

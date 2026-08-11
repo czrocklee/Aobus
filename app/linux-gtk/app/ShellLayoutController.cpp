@@ -645,7 +645,7 @@ namespace ao::gtk
     auto actionCatalog = _actionRegistry.catalog();
 
     asyncRuntime->spawnWithLifetime(
-      &_tasks,
+      _tasks,
       [controller = this,
        asyncRuntime,
        storePtr = _layoutStorePtr,

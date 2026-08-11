@@ -5,7 +5,6 @@
 
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
-#include <ao/async/Parallel.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
@@ -449,7 +448,7 @@ namespace ao::rt
         workers.push_back(fingerprintWorker(&batch));
       }
 
-      co_await async::whenAll(&_asyncRuntime, std::move(workers));
+      co_await _asyncRuntime.whenAll(std::move(workers));
 
       for (auto const& slot : slots)
       {

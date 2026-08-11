@@ -18,7 +18,7 @@ namespace ao::audio
   NullBackend::NullBackend() noexcept = default;
   NullBackend::~NullBackend() = default;
 
-  Result<OpenedPcmMode> NullBackend::open(SignalFormat const& sourceFormat, RenderTarget* /*target*/)
+  Result<OpenedPcmMode> NullBackend::open(SignalFormat const& sourceFormat, RenderTarget& /*target*/)
   {
     auto const encodings = detail::losslessPcmEncodings(sourceFormat);
 

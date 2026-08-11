@@ -3,6 +3,7 @@
 
 #include "lib/audio/detail/EngineRtSignalRing.h"
 
+#include "lib/audio/PcmSource.h"
 #include "lib/audio/detail/EngineEventQueueInvariants.h"
 #include "lib/audio/detail/RenderPath.h"
 #include "lib/audio/detail/RenderTimeline.h"
@@ -11,7 +12,6 @@
 #include <ao/Error.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/PcmSource.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>

@@ -5,6 +5,9 @@
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/backend/PipeWireBackend.h>
@@ -29,9 +32,11 @@ extern "C"
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -43,6 +48,19 @@ namespace ao::audio::backend::test
 
   namespace
   {
+    class NoopRenderTarget final : public RenderTarget
+    {
+    public:
+      RenderPcmResult renderPcm(std::span<std::byte> /*output*/) noexcept override { return {.drained = true}; }
+      void handleUnderrun() noexcept override {}
+      void handlePositionAdvanced(std::uint32_t /*frames*/) noexcept override {}
+      void handleDrainComplete() noexcept override {}
+      void handleRouteReady(std::string_view /*routeAnchor*/) noexcept override {}
+      void handleFormatChanged(PcmFormat const& /*format*/) noexcept override {}
+      void handlePropertyChanged(PropertySnapshot /*snapshot*/) noexcept override {}
+      void handleBackendError(std::string_view /*message*/) noexcept override {}
+    };
+
     struct [[nodiscard]] NullAudioSinkGuard final
     {
       PipeWireEnvironmentGuard envGuard;
@@ -309,10 +327,11 @@ namespace ao::audio::backend::test
 
     SECTION("Shared backend negotiates the preferred source-native client format")
     {
+      auto target = NoopRenderTarget{};
       auto backend =
         PipeWireBackend{Device{.id = DeviceId{""}, .isDefault = true, .backendId = kBackendPipeWire}, kProfileShared};
       auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
-      auto const openedRes = backend.open(sourceFormat, nullptr);
+      auto const openedRes = backend.open(sourceFormat, target);
       auto const diagnostic = openedRes.has_value() ? std::string{} : openedRes.error().message;
 
       INFO(diagnostic);

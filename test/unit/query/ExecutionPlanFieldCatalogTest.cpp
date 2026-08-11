@@ -15,8 +15,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - maps property aliases to bitrate fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("@br >= 320k");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     REQUIRE_FALSE(plan.instructions.empty());
     CHECK(plan.instructions[0].op == OpCode::LoadField);
@@ -26,8 +25,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - maps metadata aliases to album artist fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("$aa = Bach");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     REQUIRE_FALSE(plan.instructions.empty());
     CHECK(plan.instructions[0].op == OpCode::LoadField);
@@ -37,8 +35,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - rejects unknown metadata fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("$gerne = 'x'");
-    auto compiler = QueryCompiler{};
-    auto const error = compileError(compiler, expr);
+    auto const error = compileError(expr);
     CHECK(error.message.contains("did you mean '$genre'?"));
     CHECK(error.message.contains("available metadata fields:"));
     CHECK(error.message.contains("$movement ($m)"));
@@ -47,8 +44,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - rejects unknown property fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("@samplerate > 0");
-    auto compiler = QueryCompiler{};
-    auto const error = compileError(compiler, expr);
+    auto const error = compileError(expr);
     CHECK(error.message.contains("did you mean '@sampleRate'?"));
     CHECK(error.message.contains("available property fields:"));
   }
@@ -56,8 +52,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - rejects track ids as query fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("$id = 1");
-    auto compiler = QueryCompiler{};
-    auto const error = compileError(compiler, expr);
+    auto const error = compileError(expr);
     CHECK(error.message.contains("unknown metadata field '$id'"));
   }
 
@@ -109,8 +104,7 @@ namespace ao::query::test
       DYNAMIC_SECTION("Field: " << c.name)
       {
         auto expr = parseOk("$" + c.name + " = 'x'");
-        auto compiler = QueryCompiler{};
-        auto plan = compileOk(compiler, expr);
+        auto plan = compileOk(expr);
         REQUIRE_FALSE(plan.instructions.empty());
         CHECK(plan.instructions[0].op == OpCode::LoadField);
         CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(c.expected));
@@ -141,8 +135,7 @@ namespace ao::query::test
       DYNAMIC_SECTION("Field: " << c.name)
       {
         auto expr = parseOk("@" + c.name + " >= 0");
-        auto compiler = QueryCompiler{};
-        auto plan = compileOk(compiler, expr);
+        auto plan = compileOk(expr);
         REQUIRE_FALSE(plan.instructions.empty());
         CHECK(plan.instructions[0].op == OpCode::LoadField);
         CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(c.expected));

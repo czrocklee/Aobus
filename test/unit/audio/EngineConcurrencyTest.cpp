@@ -45,7 +45,7 @@ namespace ao::audio::test
     class FakeBlockingPropertyBackend final : public Backend
     {
     public:
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* /*target*/) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& /*target*/) override
       {
         return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};
       }
@@ -124,10 +124,10 @@ namespace ao::audio::test
     class RenderingBackend final : public Backend
     {
     public:
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         _format = pcmFormat(sourceFormat, SampleEncoding::Signed16Le);
-        _target.store(target, std::memory_order_relaxed);
+        _target.store(&target, std::memory_order_relaxed);
         return OpenedPcmMode{.clientFormat = _format};
       }
 

@@ -3,13 +3,13 @@
 
 #pragma once
 
+#include "../PcmSource.h"
+#include "../StreamingSource.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/PcmSource.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/StreamingSource.h>
 
 #include <chrono>
 #include <filesystem>
@@ -61,7 +61,7 @@ namespace ao::audio::detail
                                          DecoderFactoryFn const& decoderFactory,
                                          std::chrono::milliseconds initialOffset = {});
 
-    static Result<OpenedTrack> activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError);
+    static OpenedTrack activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError);
 
   private:
     static std::unique_ptr<StreamingSource> preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,

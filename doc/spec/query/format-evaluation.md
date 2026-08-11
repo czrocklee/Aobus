@@ -39,7 +39,7 @@ The compiler and evaluator are public under `include/ao/query/` and implemented 
 
 ## Compilation
 
-`compileFormat(ast)` and `FormatCompiler::compile(ast)` return `Result<FormatPlan>` without reading or mutating a dictionary.
+`compileFormat(ast)` returns `Result<FormatPlan>` without reading or mutating a dictionary.
 Compilation flattens grouping and concatenation into ordered append instructions and deduplicates repeated literal storage without changing output order.
 
 Custom key names are retained as deduplicated plan-owned symbols.
@@ -103,7 +103,7 @@ Interactive GTK and TUI track-list organization uses the separate [track-list pr
 
 ## Implementation map
 
-- [`FormatExpression.h`](../../../include/ao/query/FormatExpression.h) defines plan, compiler, and evaluator values.
+- [`FormatExpression.h`](../../../include/ao/query/FormatExpression.h) defines the public compilation function plus plan, binding, and evaluator values.
 - [`FormatExpression.cpp`](../../../lib/query/FormatExpression.cpp) owns compilation and evaluation.
 - [`TrackCommand.cpp`](../../../app/cli/TrackCommand.cpp) owns the current CLI adaptation.
 

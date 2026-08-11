@@ -4,10 +4,12 @@
 #pragma once
 
 // Internal query-engine bytecode layout. This header carries the heavy
-// dependencies (boost flat_set) and the concrete ExecutionPlan
-// fields; the public <ao/query/ExecutionPlan.h> only forward-declares the plan
-// as an opaque handle. Include this header only from the query engine internals
-// (compiler/evaluator) and white-box tests that inspect compiled bytecode.
+// dependencies and the concrete ExecutionPlan fields; the public
+// <ao/query/ExecutionPlan.h> only forward-declares the plan as an opaque
+// handle. <ao/query/QueryCompilation.h> includes this layout because its
+// Result<ExecutionPlan> boundary returns the plan by value. Other application
+// code should not include this header directly; query-engine internals and
+// white-box tests may include it to inspect compiled bytecode.
 
 #include <ao/query/Field.h>
 

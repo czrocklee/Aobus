@@ -199,18 +199,20 @@ namespace ao::query::test
       coldData = *coldDataRes;
       REQUIRE(transaction.commit());
 
-      auto* header = utility::layout::asMutablePtr<library::TrackHotHeader>(hotData);
+      auto* header = utility::layout::viewMutable<library::TrackHotHeader>(hotData);
 
       if (externalDictionary != nullptr && !spec.tags.empty())
       {
         auto const tagByteCount = spec.tags.size() * sizeof(DictionaryId);
         auto tagBytes = std::span<std::byte>{hotData}.subspan(sizeof(library::TrackHotHeader), tagByteCount);
-        auto tagIds = std::span<DictionaryId>{utility::layout::asMutablePtr<DictionaryId>(tagBytes), spec.tags.size()};
+        auto tagIds = std::span<DictionaryId>{utility::layout::viewMutable<DictionaryId>(tagBytes), spec.tags.size()};
         header->tagBloom = 0;
 
         for (std::size_t index = 0; index < spec.tags.size(); ++index)
         {
-          tagIds[index] = externalDictionary->lookupId(spec.tags[index]);
+          auto const optTagId = externalDictionary->findId(spec.tags[index]);
+          REQUIRE(optTagId);
+          tagIds[index] = *optTagId;
           header->tagBloom |= std::uint32_t{1} << (tagIds[index].raw() & 31U);
         }
       }

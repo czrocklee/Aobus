@@ -16,7 +16,8 @@ Succession policy belongs to the [playback cursor specification](cursor.md), dec
 ## Code boundary
 
 This contract belongs primarily to the **Core libraries** layer in the [system architecture](../../architecture/system-overview.md), under the [playback architecture](../../architecture/playback.md).
-`include/ao/audio/` and `lib/audio/` own Engine, Player, sources, and backend contracts; application runtime consumes Player through executor-affine playback services and never takes backend-specific locks.
+`include/ao/audio/` owns the public Engine, Player, decoder-session, and backend contracts; source-private streaming, concrete decoder, and backend implementations live under `lib/audio/`.
+Application runtime consumes Player through executor-affine playback services and never takes backend-specific locks.
 
 ## Terminology
 
@@ -308,7 +309,7 @@ They do not hold locks needed by public methods while invoking `RenderTarget` ca
 It performs no device open, graph connection, wait, or negotiation; the default predicts the signal's first ordered lossless encoding, while a concrete Backend may use a previously successful same-signal mode or monitor-owned cached evidence.
 Unknown or stale evidence is a performance concern only: Engine either skips prewarming or discards a prepared decoder whose complete mode differs from the later `open()` result.
 
-`Backend::open(SignalFormat, RenderTarget*)` performs selection and native activation as one operation.
+`Backend::open(SignalFormat, RenderTarget&)` requires a live target and performs selection and native activation as one operation.
 It returns an `OpenedPcmMode`: the `clientFormat` actually configured, plus an optional `ConfirmedEndpoint` describing the endpoint that mode feeds.
 Probe failure and “16-bit only” are therefore not representable as the same cached value, and no open failure causes an implicit 16-bit retry.
 
@@ -426,7 +427,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 ## Implementation map
 
 - [`Engine.h`](../../../include/ao/audio/Engine.h) and [`Engine.cpp`](../../../lib/audio/Engine.cpp) own control, event, timeline, render, generation, and shutdown behavior.
-- Audio detail timeline and track-session code under [`lib/audio/detail/`](../../../lib/audio/detail/) owns nodes and decode lifetime; [`StreamingSource`](../../../include/ao/audio/StreamingSource.h), [`PcmRingBuffer`](../../../include/ao/audio/PcmRingBuffer.h), and [`StreamingBufferPolicy`](../../../lib/audio/detail/StreamingBufferPolicy.h) own PCM production, bounded storage, and producer admission.
+- Audio detail timeline and track-session code under [`lib/audio/detail/`](../../../lib/audio/detail/) owns nodes and decode lifetime; source-private [`StreamingSource`](../../../lib/audio/StreamingSource.h), [`PcmRingBuffer`](../../../lib/audio/PcmRingBuffer.h), and [`StreamingBufferPolicy`](../../../lib/audio/detail/StreamingBufferPolicy.h) own PCM production, bounded storage, and producer admission.
 - [`Player.h`](../../../include/ao/audio/Player.h) and [`Player.cpp`](../../../lib/audio/Player.cpp) own provider composition, executor marshalling, graph epochs, and teardown gate.
 - [`Backend.h`](../../../include/ao/audio/Backend.h), the private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), and concrete backends under [`lib/audio/backend/`](../../../lib/audio/backend/) own advisory prediction, lossless candidate derivation, native selection, and lifetime.
 - [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) owns executor-affine transport adaptation and prepared metadata; [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) publishes the coherent application snapshot.

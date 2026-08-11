@@ -87,7 +87,8 @@ A reset clears the overlay and restores filtered-parent order.
 
 Expression syntax and per-track truth belong to the [predicate language](../../../reference/query/predicate-language.md) and [predicate evaluation](../../query/predicate-evaluation.md) contracts.
 
-Incremental evaluation reads only inserted or updated track records needed by the compiled expression's hot/cold access profile.
+`SmartListEvaluator` unions the plans' access profiles for each batch and maps that semantic requirement to one physical TrackStore mode: `NoTrackData` and `HotOnly` use `Hot`, `ColdOnly` uses `Cold`, and `HotAndCold` uses `Both`.
+`NoTrackData` still uses the least expensive concrete row side because source traversal and point updates must confirm Track existence, while the predicate itself reads no Track fields and TrackStore has no no-row mode.
 Membership transitions are published as one atomic batch after the final state is installed.
 
 ### Ad-hoc filters

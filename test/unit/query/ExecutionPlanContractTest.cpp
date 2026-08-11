@@ -3,7 +3,7 @@
 
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include <ao/query/Field.h>
-#include <ao/query/QueryCompiler.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/query/detail/Bytecode.h>
 
 #include <catch2/catch_test_macros.hpp>

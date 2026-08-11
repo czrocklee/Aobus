@@ -45,9 +45,9 @@ namespace ao::audio::test
     class DrainOnStopBackend final : public Backend
     {
     public:
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
-        _target = target;
+        _target = &target;
         ++_openCount;
         return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};
       }

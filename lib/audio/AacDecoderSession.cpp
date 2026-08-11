@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/AacDecoderSession.h>
+#include "AacDecoderSession.h"
 
+#include "detail/AacConfigParser.h"
 #include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include "detail/Mp4PacketSource.h"
@@ -12,7 +13,6 @@
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/detail/AacConfigParser.h>
 
 #include <fdk-aac/FDK_audio.h>
 #include <fdk-aac/aacdecoder_lib.h>

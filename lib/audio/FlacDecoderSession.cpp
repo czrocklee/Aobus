@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/FlacDecoderSession.h>
+#include "FlacDecoderSession.h"
 
 #include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
@@ -462,7 +462,7 @@ namespace ao::audio
     if (nativeEncoding == SampleEncoding::Signed16Le)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
-      auto* out = utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
+      auto* out = utility::layout::viewMutable<std::int16_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -475,7 +475,7 @@ namespace ao::audio
     else if (nativeEncoding == SampleEncoding::Signed24PackedLe)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 3);
-      auto* out = utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
+      auto* out = utility::layout::viewMutable<std::uint8_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {

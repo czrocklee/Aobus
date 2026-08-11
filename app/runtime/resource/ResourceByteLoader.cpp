@@ -103,7 +103,7 @@ namespace ao::rt
     auto* const asyncRuntime = _asyncRuntime;
     auto readBytesPtr = _readBytesPtr;
     asyncRuntime->spawnWithLifetime(
-      _scopePtr.get(),
+      *_scopePtr,
       [loader = this, asyncRuntime, readBytesPtr = std::move(readBytesPtr), resourceId, token = std::move(token)](
         std::stop_token const stopToken) mutable
       { return read(loader, asyncRuntime, readBytesPtr, resourceId, std::move(token), stopToken); },

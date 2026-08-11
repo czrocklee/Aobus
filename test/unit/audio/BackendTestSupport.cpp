@@ -9,21 +9,59 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 
 namespace ao::audio::test
 {
+  RenderPcmResult NoopRenderTarget::renderPcm(std::span<std::byte> /*output*/) noexcept
+  {
+    return {.drained = true};
+  }
+
+  void NoopRenderTarget::handleUnderrun() noexcept
+  {
+  }
+
+  void NoopRenderTarget::handlePositionAdvanced(std::uint32_t /*frames*/) noexcept
+  {
+  }
+
+  void NoopRenderTarget::handleDrainComplete() noexcept
+  {
+  }
+
+  void NoopRenderTarget::handleRouteReady(std::string_view /*routeAnchor*/) noexcept
+  {
+  }
+
+  void NoopRenderTarget::handleFormatChanged(PcmFormat const& /*format*/) noexcept
+  {
+  }
+
+  void NoopRenderTarget::handlePropertyChanged(PropertySnapshot /*snapshot*/) noexcept
+  {
+  }
+
+  void NoopRenderTarget::handleBackendError(std::string_view /*message*/) noexcept
+  {
+  }
+
   MockBackendProxy::MockBackendProxy(Backend& real)
     : _real{real}
   {
   }
 
-  Result<OpenedPcmMode> MockBackendProxy::open(SignalFormat const& format, RenderTarget* target)
+  Result<OpenedPcmMode> MockBackendProxy::open(SignalFormat const& format, RenderTarget& target)
   {
     return _real.open(format, target);
   }

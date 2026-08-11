@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/detail/RouteTracker.h>
+#include "RouteTracker.h"
 
 #include <ao/AudioCodec.h>
 #include <ao/audio/BackendIds.h>

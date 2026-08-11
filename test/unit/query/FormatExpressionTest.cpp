@@ -28,16 +28,16 @@ namespace ao::query::test
 {
   namespace
   {
-    FormatPlan compileOk(FormatCompiler& compiler, Expression const& expr)
+    FormatPlan compileFormatOk(Expression const& expr)
     {
-      auto result = compiler.compile(expr);
+      auto result = compileFormat(expr);
       REQUIRE(result.has_value());
       return std::move(*result);
     }
 
-    Error compileError(FormatCompiler& compiler, Expression const& expr)
+    Error compileFormatError(Expression const& expr)
     {
-      auto result = compiler.compile(expr);
+      auto result = compileFormat(expr);
       REQUIRE_FALSE(result.has_value());
       CHECK(result.error().code == Error::Code::FormatRejected);
       return result.error();
@@ -75,8 +75,7 @@ namespace ao::query::test
     std::string evaluate(std::string_view expression, TrackFixture& fixture)
     {
       auto ast = parseOk(expression);
-      auto compiler = FormatCompiler{};
-      auto plan = compileOk(compiler, ast);
+      auto plan = compileFormatOk(ast);
       auto cache = library::DictionaryReadCache{fixture.dictionary()};
       auto context = library::DictionaryReadContext{cache};
       auto const binding = FormatBinding{plan, context};
@@ -110,8 +109,7 @@ namespace ao::query::test
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto ast = parseOk(R"($id + ": " + $title)");
-    auto compiler = FormatCompiler{};
-    auto const error = compileError(compiler, ast);
+    auto const error = compileFormatError(ast);
     CHECK(error.message.contains("unknown metadata field '$id'"));
   }
 
@@ -163,32 +161,28 @@ namespace ao::query::test
     SECTION("HotOnly")
     {
       auto ast = parseOk(R"($artist + " - " + $title)");
-      auto compiler = FormatCompiler{};
-      auto plan = compileOk(compiler, ast);
+      auto plan = compileFormatOk(ast);
       CHECK(plan.accessProfile == AccessProfile::HotOnly);
     }
 
     SECTION("ColdOnly")
     {
       auto ast = parseOk(R"($trackNumber + %catalog)");
-      auto compiler = FormatCompiler{};
-      auto plan = compileOk(compiler, ast);
+      auto plan = compileFormatOk(ast);
       CHECK(plan.accessProfile == AccessProfile::ColdOnly);
     }
 
     SECTION("HotAndCold")
     {
       auto ast = parseOk(R"($artist + " - " + $trackNumber)");
-      auto compiler = FormatCompiler{};
-      auto plan = compileOk(compiler, ast);
+      auto plan = compileFormatOk(ast);
       CHECK(plan.accessProfile == AccessProfile::HotAndCold);
     }
 
     SECTION("NoTrackData")
     {
       auto ast = parseOk(R"("literal")");
-      auto compiler = FormatCompiler{};
-      auto plan = compileOk(compiler, ast);
+      auto plan = compileFormatOk(ast);
       CHECK(plan.accessProfile == AccessProfile::NoTrackData);
     }
   }
@@ -196,8 +190,7 @@ namespace ao::query::test
   TEST_CASE("FormatExpression - evaluates literal-only plans without track data", "[query][unit][format-expression]")
   {
     auto ast = parseOk(R"("literal")");
-    auto compiler = FormatCompiler{};
-    auto plan = compileOk(compiler, ast);
+    auto plan = compileFormatOk(ast);
     auto evaluator = FormatEvaluator{};
     auto emptyTrack = TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
 
@@ -208,8 +201,7 @@ namespace ao::query::test
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto ast = parseOk(R"($artist + "|" + $title + "|" + %catalog + "|" + $year + "|" + @codec)");
-    auto compiler = FormatCompiler{};
-    auto plan = compileOk(compiler, ast);
+    auto plan = compileFormatOk(ast);
     auto evaluator = FormatEvaluator{};
     auto output = std::string{"stale data"};
     auto cache = library::DictionaryReadCache{fixture.dictionary()};
@@ -229,35 +221,29 @@ namespace ao::query::test
   TEST_CASE("FormatExpression - rejects query-only expressions", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
-    auto compiler = FormatCompiler{};
-
-    std::ignore = compileError(compiler, parseOk("$artist = Bach"));
-    std::ignore = compileError(compiler, parseOk("$year?"));
-    std::ignore = compileError(compiler, parseOk("not $title"));
-    std::ignore = compileError(compiler, parseOk("$year in 1720..1730"));
+    std::ignore = compileFormatError(parseOk("$artist = Bach"));
+    std::ignore = compileFormatError(parseOk("$year?"));
+    std::ignore = compileFormatError(parseOk("not $title"));
+    std::ignore = compileFormatError(parseOk("$year in 1720..1730"));
   }
 
   TEST_CASE("FormatExpression - rejects non-scalar fields", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
-    auto compiler = FormatCompiler{};
-
-    std::ignore = compileError(compiler, parseOk("#favorite"));
-    std::ignore = compileError(compiler, parseOk("$coverArt"));
+    std::ignore = compileFormatError(parseOk("#favorite"));
+    std::ignore = compileFormatError(parseOk("$coverArt"));
   }
 
   TEST_CASE("FormatExpression - marks dictionary-backed plans for binding", "[query][unit][format-expression]")
   {
-    auto compiler = FormatCompiler{};
-
-    auto artist = compileOk(compiler, parseOk("$artist"));
+    auto artist = compileFormatOk(parseOk("$artist"));
     CHECK(artist.requiresDictionary);
 
-    auto custom = compileOk(compiler, parseOk("%catalog"));
+    auto custom = compileFormatOk(parseOk("%catalog"));
     CHECK(custom.requiresDictionary);
     CHECK(custom.dictionarySymbols == std::vector<std::string>{"catalog"});
 
-    auto plain = compileOk(compiler, parseOk(R"($title + " " + $year)"));
+    auto plain = compileFormatOk(parseOk(R"($title + " " + $year)"));
     CHECK_FALSE(plain.requiresDictionary);
   }
 

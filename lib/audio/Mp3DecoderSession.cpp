@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Mp3DecoderSession.h>
+#include "Mp3DecoderSession.h"
 
 #include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include "detail/MappedFileCursor.h"
+#include "detail/Mpg123Runtime.h"
 #include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
@@ -15,7 +16,6 @@
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/detail/Mpg123Runtime.h>
 #include <ao/utility/ByteView.h>
 
 #include <mpg123.h>

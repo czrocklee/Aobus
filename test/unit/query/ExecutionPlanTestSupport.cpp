@@ -7,7 +7,7 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
-#include <ao/query/QueryCompiler.h>
+#include <ao/query/QueryCompilation.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -23,22 +23,16 @@ namespace ao::query::test
     return std::move(*result);
   }
 
-  ExecutionPlan compileOk(QueryCompiler& compiler, Expression const& expr)
+  ExecutionPlan compileOk(Expression const& expr)
   {
-    auto result = compiler.compile(expr);
+    auto result = compileQuery(expr);
     REQUIRE(result.has_value());
     return std::move(*result);
   }
 
-  ExecutionPlan compileOk(QueryCompiler&& compiler, Expression const& expr)
+  Error compileError(Expression const& expr)
   {
-    auto local = std::move(compiler);
-    return compileOk(local, expr);
-  }
-
-  Error compileError(QueryCompiler& compiler, Expression const& expr)
-  {
-    auto result = compiler.compile(expr);
+    auto result = compileQuery(expr);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == Error::Code::FormatRejected);
     return result.error();

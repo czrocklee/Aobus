@@ -41,7 +41,7 @@ namespace ao::gtk
                        Workflow workflow)
   {
     runtime.spawnWithLifetime(
-      &scope,
+      scope,
       [runtimeHandle = &runtime, ownerHandle = &owner, workflow = std::move(workflow)](
         std::stop_token const stopToken) mutable
       { return runUiWorkflow(runtimeHandle, ownerHandle, std::move(workflow), stopToken); },

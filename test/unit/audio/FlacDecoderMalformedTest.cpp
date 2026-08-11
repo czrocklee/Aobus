@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "DecoderTestSupport.h"
+#include "lib/audio/FlacDecoderSession.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
-#include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>

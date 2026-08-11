@@ -6,7 +6,6 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 #include <ao/query/detail/Bytecode.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,8 +35,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - evaluates no-track-data plans without storage tiers", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("true");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     auto emptyView = library::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
@@ -48,8 +46,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - executes cold-only plans with cold-only track views", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@duration >= 180000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
@@ -61,8 +58,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - executes mixed-access plans with both storage tiers", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year = 2020 && @duration >= 180000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);

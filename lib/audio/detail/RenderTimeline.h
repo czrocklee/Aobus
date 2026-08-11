@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include "../PcmSource.h"
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/PcmSource.h>
 
 #include <atomic>
 #include <cstdint>

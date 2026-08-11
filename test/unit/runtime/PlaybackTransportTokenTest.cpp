@@ -194,9 +194,9 @@ namespace ao::rt::test
       {
       }
 
-      Result<audio::OpenedPcmMode> open(audio::SignalFormat const& sourceFormat, audio::RenderTarget* target) override
+      Result<audio::OpenedPcmMode> open(audio::SignalFormat const& sourceFormat, audio::RenderTarget& target) override
       {
-        _probePtr->publish(target);
+        _probePtr->publish(&target);
         return audio::NullBackend::open(sourceFormat, target);
       }
 

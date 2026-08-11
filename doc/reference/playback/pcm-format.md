@@ -111,11 +111,11 @@ std::optional<PcmFormat> Backend::prewarmFormatHint(
 
 Result<OpenedPcmMode> Backend::open(
   SignalFormat const& sourceFormat,
-  RenderTarget* target);
+  RenderTarget& target);
 ```
 
 `prewarmFormatHint` returns a non-binding prediction derived without native I/O; an empty result means no optimistic decoder output is prepared.
-`open` returns the mode actually configured for the render target, not a cached device capability or an echo of a requested container.
+`open` requires a live render target and returns the mode actually configured for it, not a cached device capability or an echo of a requested container.
 
 ## Validation rules
 

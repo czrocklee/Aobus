@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "detail/DecoderSessionBase.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>
@@ -16,16 +16,17 @@
 
 namespace ao::audio
 {
-  class [[nodiscard]] AlacDecoderSession final : public detail::DecoderSessionBase<AlacDecoderSession>
+  class [[nodiscard]] FlacDecoderSession final : public detail::DecoderSessionBase<FlacDecoderSession>
   {
   public:
-    explicit AlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
-    ~AlacDecoderSession() override;
+    explicit FlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
+    ~FlacDecoderSession() override;
 
-    AlacDecoderSession(AlacDecoderSession const&) = delete;
-    AlacDecoderSession& operator=(AlacDecoderSession const&) = delete;
-    AlacDecoderSession(AlacDecoderSession&&) = delete;
-    AlacDecoderSession& operator=(AlacDecoderSession&&) = delete;
+    // Not copyable or movable
+    FlacDecoderSession(FlacDecoderSession const&) = delete;
+    FlacDecoderSession& operator=(FlacDecoderSession const&) = delete;
+    FlacDecoderSession(FlacDecoderSession&&) = delete;
+    FlacDecoderSession& operator=(FlacDecoderSession&&) = delete;
 
     Result<> openCodec(std::filesystem::path const& filePath);
     void close() noexcept override;

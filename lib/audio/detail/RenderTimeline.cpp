@@ -3,8 +3,8 @@
 
 #include "RenderTimeline.h"
 
+#include "../PcmSource.h"
 #include <ao/Contract.h>
-#include <ao/audio/PcmSource.h>
 
 #include <atomic>
 #include <cstdint>

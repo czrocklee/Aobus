@@ -23,8 +23,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - compiles simple expressions", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$artist = Bach");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     CHECK_FALSE(plan.instructions.empty());
     CHECK_FALSE(plan.matchesAll);
@@ -35,8 +34,7 @@ namespace ao::query::test
     // Note: matchesAll is not automatically set - it's a hint for optimization
     // The plan should still compile a constant true expression
     auto expr = parseOk("true");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     // The plan should have at least one instruction (LoadConstant)
     CHECK_FALSE(plan.instructions.empty());
@@ -45,8 +43,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - compiles metadata fields", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$title = 'Test'");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     CHECK(plan.instructions.size() >= 2);
     CHECK(plan.instructions[0].op == OpCode::LoadField);
@@ -68,8 +65,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - compiles property fields", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("@duration > 180000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     CHECK(plan.instructions.size() >= 2);
     CHECK(plan.instructions[0].op == OpCode::LoadField);
@@ -90,8 +86,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - compiles codec constants", "[query][unit][execution-plan]")
   {
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, parseOk("@codec = WAV"));
+    auto plan = compileOk(parseOk("@codec = WAV"));
 
     auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
 
@@ -101,17 +96,14 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - rejects unsupported codec constants", "[query][unit][execution-plan]")
   {
-    auto compiler = QueryCompiler{};
-
-    std::ignore = compileError(compiler, parseOk("@codec = OPUS"));
+    std::ignore = compileError(parseOk("@codec = OPUS"));
   }
 
   TEST_CASE("ExecutionPlan - compiles logical and", "[query][unit][execution-plan]")
   {
     // Use && for logical and to ensure it's parsed correctly
     auto expr = parseOk("$artist = Bach && $genre = Classical");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     bool hasAnd = false;
 
@@ -131,8 +123,7 @@ namespace ao::query::test
   {
     // Use || for logical or to ensure it's parsed correctly
     auto expr = parseOk("$artist = Bach || $artist = Mozart");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     bool hasOr = false;
 
@@ -151,8 +142,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - compiles logical not", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("not #favorite");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     bool hasNot = false;
 
@@ -170,11 +160,9 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - compiles existence tests", "[query][unit][execution-plan]")
   {
-    auto compiler = QueryCompiler{};
-
     SECTION("FieldExistenceEmitsExistsOpcode")
     {
-      auto const plan = compileOk(compiler, parseOk("$year?"));
+      auto const plan = compileOk(parseOk("$year?"));
 
       REQUIRE(plan.instructions.size() == 1);
       CHECK(plan.instructions[0].op == OpCode::Exists);
@@ -184,7 +172,7 @@ namespace ao::query::test
 
     SECTION("ColdFieldExistenceUpdatesAccessProfile")
     {
-      auto const plan = compileOk(compiler, parseOk("@duration?"));
+      auto const plan = compileOk(parseOk("@duration?"));
 
       REQUIRE(plan.instructions.size() == 1);
       CHECK(plan.instructions[0].op == OpCode::Exists);
@@ -194,35 +182,34 @@ namespace ao::query::test
 
     SECTION("BareNonTagVariablesAreRejectedAsPredicates")
     {
-      std::ignore = compileError(compiler, parseOk("$year"));
-      std::ignore = compileError(compiler, parseOk("@duration"));
-      std::ignore = compileError(compiler, parseOk("%rating"));
-      std::ignore = compileError(compiler, parseOk("not $year"));
-      CHECK_THAT(compileError(compiler, parseOk("!$year")).message, Catch::Matchers::ContainsSubstring("!$year?"));
-      std::ignore = compileError(compiler, parseOk("$artist and $year = 1990"));
-      std::ignore = compileError(compiler, parseOk("$artist or $year = 1990"));
-      std::ignore = compileError(compiler, parseOk("$year = 1990 or $artist"));
+      std::ignore = compileError(parseOk("$year"));
+      std::ignore = compileError(parseOk("@duration"));
+      std::ignore = compileError(parseOk("%rating"));
+      std::ignore = compileError(parseOk("not $year"));
+      CHECK_THAT(compileError(parseOk("!$year")).message, Catch::Matchers::ContainsSubstring("!$year?"));
+      std::ignore = compileError(parseOk("$artist and $year = 1990"));
+      std::ignore = compileError(parseOk("$artist or $year = 1990"));
+      std::ignore = compileError(parseOk("$year = 1990 or $artist"));
     }
 
     SECTION("ExistenceRequiresVariableOperand")
     {
-      std::ignore = compileError(compiler, parseOk("($year = 1990)?"));
-      std::ignore = compileError(compiler, parseOk("1990?"));
-      std::ignore = compileError(compiler, parseOk(R"("Bach"?)"));
+      std::ignore = compileError(parseOk("($year = 1990)?"));
+      std::ignore = compileError(parseOk("1990?"));
+      std::ignore = compileError(parseOk(R"("Bach"?)"));
     }
 
     SECTION("BareTagsRemainPredicates")
     {
-      std::ignore = compileOk(compiler, parseOk("#favorite"));
-      std::ignore = compileOk(compiler, parseOk("!#favorite"));
+      std::ignore = compileOk(parseOk("#favorite"));
+      std::ignore = compileOk(parseOk("!#favorite"));
     }
   }
 
   TEST_CASE("ExecutionPlan - compiles relational operators", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$year < 2000");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
 
     bool hasLt = false;
 
@@ -238,8 +225,7 @@ namespace ao::query::test
     CHECK(hasLt == true);
 
     expr = parseOk("$year <= 2000");
-    compiler = QueryCompiler{};
-    plan = compileOk(compiler, expr);
+    plan = compileOk(expr);
 
     bool hasLe = false;
 
@@ -258,15 +244,13 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - rejects add operators", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$title + $artist");
-    auto compiler = QueryCompiler{};
-    std::ignore = compileError(compiler, expr);
+    std::ignore = compileError(expr);
   }
 
   TEST_CASE("ExecutionPlan - compiles boolean false to constant zero", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("false");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
+    auto plan = compileOk(expr);
     REQUIRE_FALSE(plan.instructions.empty());
     CHECK(plan.instructions[0].op == OpCode::LoadConstant);
     CHECK(plan.instructions[0].constValue == 0);
@@ -275,12 +259,10 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - rejects invalid AST nodes", "[query][unit][execution-plan]")
   {
-    auto compiler = QueryCompiler{};
-
     SECTION("Unsupported variable type")
     {
       auto var = VariableExpression{.type = static_cast<VariableType>(99), .name = "invalid"};
-      std::ignore = compileError(compiler, var);
+      std::ignore = compileError(var);
     }
 
     SECTION("Unsupported operator in BinaryExpression")
@@ -290,14 +272,14 @@ namespace ao::query::test
       binaryPtr->optOperation =
         BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t{100}}};
 
-      std::ignore = compileError(compiler, std::move(binaryPtr));
+      std::ignore = compileError(std::move(binaryPtr));
 
       auto binaryInvalidPtr = std::make_unique<BinaryExpression>();
       binaryInvalidPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
       binaryInvalidPtr->optOperation =
         BinaryExpression::Operation{.op = static_cast<Operator>(99), .operand = ConstantExpression{std::int64_t{100}}};
 
-      std::ignore = compileError(compiler, std::move(binaryInvalidPtr));
+      std::ignore = compileError(std::move(binaryInvalidPtr));
     }
 
     SECTION("Compiler rejects unsupported unary operators")
@@ -306,7 +288,7 @@ namespace ao::query::test
       unaryPtr->op = Operator::Add; // Unsupported unary operator
       unaryPtr->operand = VariableExpression{.type = VariableType::Tag, .name = "rock"};
 
-      std::ignore = compileError(compiler, std::move(unaryPtr));
+      std::ignore = compileError(std::move(unaryPtr));
     }
   }
 } // namespace ao::query::test

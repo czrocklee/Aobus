@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "PcmRingBuffer.h"
+#include "PcmSource.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/PcmRingBuffer.h>
-#include <ao/audio/PcmSource.h>
 
 #include <atomic>
 #include <chrono>
@@ -34,7 +34,6 @@ namespace ao::audio
 
     StreamingSource(std::unique_ptr<DecoderSession> decoderPtr,
                     DecodedStreamInfo streamInfo,
-                    std::function<void(Error const&)> onError,
                     std::chrono::milliseconds prerollDuration,
                     std::chrono::milliseconds decodeHighWatermarkThreshold);
     StreamingSource(StreamingSource const&) = delete;
@@ -45,16 +44,13 @@ namespace ao::audio
     ~StreamingSource() override;
 
     /// Fills the initial PCM buffer without installing callbacks or starting
-    /// the source-owned decode thread. The source may be moved between owners
-    /// only by moving its owning pointer after this call returns.
+    /// the source-owned decode thread. May be called once; a failed attempt
+    /// leaves the source unusable.
     Result<> prepare();
 
     /// Installs the source-error callback and starts steady-state decoding.
     /// Must be called exactly once after successful prepare().
-    Result<> activate(std::function<void(Error const&)> onError);
-
-    /// Compatibility helper that performs prepare() followed by activate().
-    Result<> initialize();
+    void activate(std::function<void(Error const&)> onError);
 
     // Requires successful prepare() and activate(). The caller quiesces render
     // and query consumers. This method separately stops and joins the
@@ -92,7 +88,7 @@ namespace ao::audio
     bool _prepared = false;
     bool _activated = false;
 
-    // Producer-confined. initialize()/seek() run before the decode worker, and
+    // Producer-confined. prepare()/seek() run before the decode worker, and
     // seek stops and joins that worker before resetting this value.
     std::size_t _previousBlockByteCount = 0;
   };

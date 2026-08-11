@@ -13,7 +13,6 @@
 #include <ao/library/WriteTransaction.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 #include <ao/query/detail/Bytecode.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -34,7 +33,7 @@ namespace ao::query::test
     auto const aimerId = dictionaryFixture.intern("Aimer");
     auto const& dictionary = dictionaryFixture.dictionary();
 
-    auto const plan = compileOk(QueryCompiler{}, parseOk(R"($artist ~ "Aimer" or #Aimer)"));
+    auto const plan = compileOk(parseOk(R"($artist ~ "Aimer" or #Aimer)"));
     CHECK(plan.requiredTagSymbols.empty());
 
     auto cache = library::DictionaryReadCache{dictionary};
@@ -62,7 +61,7 @@ namespace ao::query::test
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto const& dictionary = dictionaryFixture.dictionary();
-    auto const plan = compileOk(QueryCompiler{}, parseOk("#future"));
+    auto const plan = compileOk(parseOk("#future"));
     auto noTagsData = makeHotOnlyTrack();
     auto noTags = library::TrackView{noTagsData, std::span<std::byte const>{}};
 
@@ -75,7 +74,7 @@ namespace ao::query::test
   {
     auto present = TrackFixture{TrackSpec{.tags = {"rock"}}};
     auto absent = TrackFixture{TrackSpec{.tags = {"jazz"}}};
-    auto const plan = compileOk(QueryCompiler{}, parseOk("#rock"));
+    auto const plan = compileOk(parseOk("#rock"));
     auto const evaluator = PlanEvaluator{};
 
     CHECK(matchesWithDictionary(evaluator, plan, present.view(), present.dictionary()));
@@ -88,14 +87,14 @@ namespace ao::query::test
     spec.tags.emplace_back("123");
     spec.customPairs.emplace_back("Replay Gain", "high");
     auto track = TrackFixture{spec};
-    auto const plan = compileOk(QueryCompiler{}, parseOk(R"(#123 and %"Replay Gain" = "high")"));
+    auto const plan = compileOk(parseOk(R"(#123 and %"Replay Gain" = "high")"));
 
     CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
   }
 
   TEST_CASE("PlanEvaluator - compiles tag fields into bindable field loads", "[query][unit][plan-evaluator]")
   {
-    auto const plan = compileOk(QueryCompiler{}, parseOk("#tagname"));
+    auto const plan = compileOk(parseOk("#tagname"));
 
     REQUIRE(plan.instructions.size() >= 3);
     CHECK(plan.instructions[0].op == OpCode::LoadField);
@@ -156,7 +155,7 @@ namespace ao::query::test
     auto collisionData =
       makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, tagIds);
     auto collisionTrack = library::TrackView{collisionData, std::span<std::byte const>{}};
-    auto const plan = compileOk(QueryCompiler{}, parseOk("#target"));
+    auto const plan = compileOk(parseOk("#target"));
 
     CHECK_FALSE(matchesWithDictionary(PlanEvaluator{}, plan, collisionTrack, dictionaryFixture.dictionary()));
   }
@@ -191,7 +190,7 @@ namespace ao::query::test
   {
     auto allTags = TrackFixture{TrackSpec{.tags = {"rock", "jazz", "blues"}}};
     auto rockOnly = TrackFixture{TrackSpec{.tags = {"rock"}}};
-    auto const plan = compileOk(QueryCompiler{}, parseOk("#rock and #jazz"));
+    auto const plan = compileOk(parseOk("#rock and #jazz"));
     auto const evaluator = PlanEvaluator{};
 
     CHECK(matchesWithDictionary(evaluator, plan, allTags.view(), allTags.dictionary()));
@@ -202,7 +201,7 @@ namespace ao::query::test
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto const& dictionary = dictionaryFixture.dictionary();
-    auto const plan = compileOk(QueryCompiler{}, parseOk("#future"));
+    auto const plan = compileOk(parseOk("#future"));
     auto oldContext = library::DictionaryReadContext{dictionary};
     auto const oldBinding = PlanBinding{plan, oldContext};
 

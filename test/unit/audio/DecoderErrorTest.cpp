@@ -3,9 +3,9 @@
 
 #include "lib/audio/detail/DecoderError.h"
 
+#include "lib/audio/PcmSource.h"
 #include <ao/Error.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/PcmSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -5,7 +5,6 @@
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -23,7 +22,7 @@ namespace ao::query::test
       missingSpec.title.clear();
       auto missing = TrackFixture{missingSpec};
       auto present = TrackFixture{TrackSpec{}};
-      auto plan = compileOk(QueryCompiler{}, parseOk("$title?"));
+      auto plan = compileOk(parseOk("$title?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
       CHECK(evaluator.evaluateFull(plan, present.view()));
@@ -35,7 +34,7 @@ namespace ao::query::test
       missingSpec.artist.clear();
       auto missing = TrackFixture{missingSpec};
       auto present = TrackFixture{TrackSpec{}};
-      auto plan = compileOk(QueryCompiler{}, parseOk("$artist?"));
+      auto plan = compileOk(parseOk("$artist?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
       CHECK(evaluator.evaluateFull(plan, present.view()));
@@ -55,12 +54,12 @@ namespace ao::query::test
       presentSpec.trackTotal = 12;
       auto present = TrackFixture{presentSpec};
 
-      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$year?")), missing.view()));
-      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$year?")), present.view()));
-      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackNumber?")), missing.view()));
-      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackNumber?")), present.view()));
-      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackTotal?")), missing.view()));
-      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackTotal?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(parseOk("$year?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(parseOk("$year?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(parseOk("$trackNumber?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(parseOk("$trackNumber?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(parseOk("$trackTotal?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(parseOk("$trackTotal?")), present.view()));
     }
 
     SECTION("PropertiesExistWhenPositiveOrKnown")
@@ -75,10 +74,10 @@ namespace ao::query::test
       presentSpec.codec = AudioCodec::Flac;
       auto present = TrackFixture{presentSpec};
 
-      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@duration?")), missing.view()));
-      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@duration?")), present.view()));
-      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@codec?")), missing.view()));
-      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@codec?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(parseOk("@duration?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(parseOk("@duration?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(parseOk("@codec?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(parseOk("@codec?")), present.view()));
     }
 
     SECTION("CoverArtExistsWhenPrimaryResourceIsValid")
@@ -87,7 +86,7 @@ namespace ao::query::test
       auto presentSpec = TrackSpec{};
       presentSpec.coverArtId = ResourceId{42};
       auto present = TrackFixture{presentSpec};
-      auto plan = compileOk(QueryCompiler{}, parseOk("$coverArt?"));
+      auto plan = compileOk(parseOk("$coverArt?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
       CHECK(evaluator.evaluateFull(plan, present.view()));
@@ -103,7 +102,7 @@ namespace ao::query::test
       nonEmptyValueSpec.customPairs.emplace_back("rating", "5");
       auto nonEmptyValue = TrackFixture{nonEmptyValueSpec};
 
-      auto plan = compileOk(QueryCompiler{}, parseOk("%rating?"));
+      auto plan = compileOk(parseOk("%rating?"));
 
       CHECK_FALSE(evaluateWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
       CHECK(evaluateWithDictionary(evaluator, plan, emptyValue.view(), emptyValue.dictionary()));
@@ -116,7 +115,7 @@ namespace ao::query::test
       auto presentSpec = TrackSpec{};
       presentSpec.tags.emplace_back("favorite");
       auto present = TrackFixture{presentSpec};
-      auto plan = compileOk(QueryCompiler{}, parseOk("#favorite?"));
+      auto plan = compileOk(parseOk("#favorite?"));
 
       CHECK_FALSE(evaluateWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
       CHECK(evaluateWithDictionary(evaluator, plan, present.view(), present.dictionary()));
@@ -128,7 +127,7 @@ namespace ao::query::test
       missingSpec.year = 0;
       auto missing = TrackFixture{missingSpec};
       auto present = TrackFixture{TrackSpec{}};
-      auto plan = compileOk(QueryCompiler{}, parseOk("!$year?"));
+      auto plan = compileOk(parseOk("!$year?"));
 
       CHECK(evaluator.evaluateFull(plan, missing.view()));
       CHECK_FALSE(evaluator.evaluateFull(plan, present.view()));
@@ -145,35 +144,34 @@ namespace ao::query::test
     auto track = TrackFixture{spec};
 
     auto evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{};
 
     SECTION("DictionaryBackedStringMatch")
     {
-      auto plan = compileOk(compiler, parseOk(R"($artist in ["Bach", "Mozart"])"));
+      auto plan = compileOk(parseOk(R"($artist in ["Bach", "Mozart"])"));
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
     }
 
     SECTION("NumericNonMatch")
     {
-      auto plan = compileOk(compiler, parseOk("$year in [1988, 1989]"));
+      auto plan = compileOk(parseOk("$year in [1988, 1989]"));
       CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("UnitConstantMatch")
     {
-      auto plan = compileOk(compiler, parseOk("@duration in [2m, 3m]"));
+      auto plan = compileOk(parseOk("@duration in [2m, 3m]"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("CustomStringMatch")
     {
-      auto plan = compileOk(compiler, parseOk(R"(%mood in ["study", "focus"])"));
+      auto plan = compileOk(parseOk(R"(%mood in ["study", "focus"])"));
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
     }
 
     SECTION("LargeNumericListMatch")
     {
-      auto plan = compileOk(compiler, parseOk("$year in [1984, 1985, 1986, 1987, 1988, 1989, 1990, 1991]"));
+      auto plan = compileOk(parseOk("$year in [1984, 1985, 1986, 1987, 1988, 1989, 1990, 1991]"));
 
       CHECK(plan.inSets.size() == 1);
       CHECK(evaluator.evaluateFull(plan, track.view()));
@@ -181,8 +179,8 @@ namespace ao::query::test
 
     SECTION("LargeDictionaryBackedStringListMatch")
     {
-      auto plan = compileOk(
-        compiler, parseOk(R"($artist in ["Adams", "Bach", "Chopin", "Debussy", "Elgar", "Faure", "Glass", "Haydn"])"));
+      auto plan =
+        compileOk(parseOk(R"($artist in ["Adams", "Bach", "Chopin", "Debussy", "Elgar", "Faure", "Glass", "Haydn"])"));
 
       CHECK(plan.inSets.size() == 1);
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
@@ -190,8 +188,8 @@ namespace ao::query::test
 
     SECTION("LargeCustomStringListMatch")
     {
-      auto plan = compileOk(
-        compiler, parseOk(R"(%mood in ["ambient", "deep", "focus", "late", "mix", "quiet", "study", "warm"])"));
+      auto plan =
+        compileOk(parseOk(R"(%mood in ["ambient", "deep", "focus", "late", "mix", "quiet", "study", "warm"])"));
 
       CHECK(plan.inSets.size() == 1);
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
@@ -199,7 +197,7 @@ namespace ao::query::test
 
     SECTION("LargeListNonMatch")
     {
-      auto plan = compileOk(compiler, parseOk("$year in [1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987]"));
+      auto plan = compileOk(parseOk("$year in [1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987]"));
 
       CHECK(plan.inSets.size() == 1);
       CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
@@ -215,23 +213,22 @@ namespace ao::query::test
     auto track = TrackFixture{spec};
 
     auto evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{};
 
     SECTION("NumericRangeMatch")
     {
-      auto plan = compileOk(compiler, parseOk("$year in 1990..1999"));
+      auto plan = compileOk(parseOk("$year in 1990..1999"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("UnitRangeMatch")
     {
-      auto plan = compileOk(compiler, parseOk("@duration in 2m30s..5m"));
+      auto plan = compileOk(parseOk("@duration in 2m30s..5m"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("OutOfRangeDoesNotMatch")
     {
-      auto plan = compileOk(compiler, parseOk("$year in 1980..1989"));
+      auto plan = compileOk(parseOk("$year in 1980..1989"));
       CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
     }
   }
@@ -242,29 +239,28 @@ namespace ao::query::test
 
     auto track = TrackFixture{spec};
     auto evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{};
 
     SECTION("Custom Field Equality Match")
     {
-      auto plan = compileOk(compiler, parseOk("%isrc = 'US-RC1-12-00001'"));
+      auto plan = compileOk(parseOk("%isrc = 'US-RC1-12-00001'"));
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
     }
 
     SECTION("Custom Field Equality NonMatch")
     {
-      auto plan = compileOk(compiler, parseOk("%isrc = 'UK-XYZ'"));
+      auto plan = compileOk(parseOk("%isrc = 'UK-XYZ'"));
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == false);
     }
 
     SECTION("Custom Field Like Match")
     {
-      auto plan = compileOk(compiler, parseOk("%label ~ 'Grammophon'"));
+      auto plan = compileOk(parseOk("%label ~ 'Grammophon'"));
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
     }
 
     SECTION("Custom Field Missing")
     {
-      auto plan = compileOk(compiler, parseOk("%nonexistent = 'val'"));
+      auto plan = compileOk(parseOk("%nonexistent = 'val'"));
       CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == false);
     }
   }

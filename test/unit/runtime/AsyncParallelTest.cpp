@@ -3,7 +3,6 @@
 
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
-#include <ao/async/Parallel.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
@@ -21,6 +20,11 @@ namespace ao::rt::test
 
   namespace
   {
+    template<typename T>
+    concept HasPublicWorkerPool = requires(T& runtime) { runtime.workerPool(); };
+
+    static_assert(!HasPublicWorkerPool<Runtime>);
+
     Task<> incrementTask(std::atomic<std::int32_t>* counter)
     {
       counter->fetch_add(1);
@@ -42,7 +46,7 @@ namespace ao::rt::test
 
     Task<> awaitAllTask(Runtime* runtime, std::vector<Task<>> tasks)
     {
-      co_await whenAll(runtime, std::move(tasks));
+      co_await runtime->whenAll(std::move(tasks));
     }
   } // namespace
 

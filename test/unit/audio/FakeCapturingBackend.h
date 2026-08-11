@@ -46,7 +46,7 @@ namespace ao::audio::test
     FakeCapturingBackend& operator=(FakeCapturingBackend&&) = delete;
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& format) const noexcept override;
-    Result<OpenedPcmMode> open(SignalFormat const& format, RenderTarget* target) override;
+    Result<OpenedPcmMode> open(SignalFormat const& format, RenderTarget& target) override;
     void start() override;
     void pause() override;
     void resume() override;

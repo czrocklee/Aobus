@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TestAtoms.h"
 #include <ao/media/mp4/Demuxer.h>
+
+#include "TestAtoms.h"
 #include <ao/utility/MappedFile.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,6 +14,7 @@
 #include <filesystem>
 #include <limits>
 #include <span>
+#include <type_traits>
 #include <vector>
 
 namespace ao::media::mp4::test
@@ -66,14 +68,16 @@ namespace ao::media::mp4::test
     }
   } // namespace
 
+  static_assert(!std::is_constructible_v<Demuxer, std::span<std::byte const>>);
+  static_assert(std::is_nothrow_move_constructible_v<Demuxer>);
+  static_assert(!std::is_move_assignable_v<Demuxer>);
+
   TEST_CASE("MP4 Demuxer - rejects malformed sample-table inputs", "[media][unit][mp4][error]")
   {
     SECTION("Empty data returns FormatRejected")
     {
       auto const emptyData = std::vector<std::byte>{};
-      auto demuxer = Demuxer{emptyData};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(emptyData, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
     }
@@ -81,9 +85,7 @@ namespace ao::media::mp4::test
     SECTION("Small garbage data returns FormatRejected")
     {
       auto const garbage = std::array{std::byte{0x00}, std::byte{0x01}, std::byte{0x02}};
-      auto demuxer = Demuxer{garbage};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(garbage, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
     }
@@ -102,8 +104,7 @@ namespace ao::media::mp4::test
         std::byte{'m'},  std::byte{'o'},  std::byte{'o'},  std::byte{'v'}   // type
       };
 
-      auto demuxer = Demuxer{data};
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(data, "alac");
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -115,9 +116,7 @@ namespace ao::media::mp4::test
       auto const stsd = ao::test::mp4::makeStsdAtomFromSampleEntry(shortEntry);
       auto const stbl = ao::test::mp4::makeSampleTableAtom(stsd);
       auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
-      auto demuxer = Demuxer{fileData};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(fileData, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
     }
@@ -130,9 +129,7 @@ namespace ao::media::mp4::test
       auto const stsd = ao::test::mp4::makeStsdAtomFromSampleEntries({alacEntry, mp4aEntry});
       auto const stbl = ao::test::mp4::makeSampleTableAtom(stsd);
       auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
-      auto demuxer = Demuxer{fileData};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(fileData, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
     }
@@ -143,9 +140,7 @@ namespace ao::media::mp4::test
       auto const stbl =
         makeSampleTable(makeAlacStsd(), ao::test::mp4::makeStszAtom(4), stsc, ao::test::mp4::makeStcoAtom());
       auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
-      auto demuxer = Demuxer{fileData};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(fileData, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message == "Invalid MP4 sample-to-chunk entry");
@@ -157,9 +152,7 @@ namespace ao::media::mp4::test
       auto const stbl =
         makeSampleTable(makeAlacStsd(), ao::test::mp4::makeStszAtom(4), stsc, ao::test::mp4::makeStcoAtom());
       auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
-      auto demuxer = Demuxer{fileData};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(fileData, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message == "MP4 sample-to-chunk entry references an invalid chunk");
@@ -174,9 +167,7 @@ namespace ao::media::mp4::test
       auto const stsz = ao::test::mp4::makeAtom("stsz", stszBody);
       auto const stbl = makeSampleTable(makeAlacStsd(), stsz, ao::test::mp4::makeStcoAtom());
       auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
-      auto demuxer = Demuxer{fileData};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(fileData, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message == "Malformed stsz entry table");
@@ -191,9 +182,7 @@ namespace ao::media::mp4::test
       auto const co64 = ao::test::mp4::makeAtom("co64", co64Body);
       auto const stbl = makeSampleTable(makeAlacStsd(), ao::test::mp4::makeStszAtom(4), co64);
       auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
-      auto demuxer = Demuxer{fileData};
-
-      auto const result = demuxer.parseTrack("alac");
+      auto const result = Demuxer::parse(fileData, "alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message == "MP4 sample offset overflow");
@@ -211,9 +200,7 @@ namespace ao::media::mp4::test
       auto const mdat = ao::test::mp4::makeExtendedAtom("mdat", {1, 2, 3});
       data.insert(data.end(), mdat.begin(), mdat.end());
       auto const fileData = toBytes(data);
-      auto demuxer = Demuxer{fileData};
-
-      REQUIRE(demuxer.parseTrack("alac"));
+      REQUIRE(Demuxer::parse(fileData, "alac"));
     }
 
     SECTION("End-of-file mdat after moov")
@@ -222,9 +209,7 @@ namespace ao::media::mp4::test
       auto const mdat = ao::test::mp4::makeEndOfFileAtom("mdat", {1, 2, 3});
       data.insert(data.end(), mdat.begin(), mdat.end());
       auto const fileData = toBytes(data);
-      auto demuxer = Demuxer{fileData};
-
-      REQUIRE(demuxer.parseTrack("alac"));
+      REQUIRE(Demuxer::parse(fileData, "alac"));
     }
 
     SECTION("Malformed sibling after selected track")
@@ -233,9 +218,7 @@ namespace ao::media::mp4::test
       auto const malformedSibling = std::array<std::uint8_t, 8>{0x00, 0x00, 0x00, 0x10, 'f', 'r', 'e', 'e'};
       moovBody.insert(moovBody.end(), malformedSibling.begin(), malformedSibling.end());
       auto const fileData = toBytes(ao::test::mp4::makeAtom("moov", moovBody));
-      auto demuxer = Demuxer{fileData};
-
-      REQUIRE(demuxer.parseTrack("alac"));
+      REQUIRE(Demuxer::parse(fileData, "alac"));
     }
   }
 
@@ -245,11 +228,11 @@ namespace ao::media::mp4::test
     auto const mdhd = ao::test::mp4::makeMdhdVersion1Atom(48000, 96000);
     auto const track = ao::test::mp4::makeTrackAtomWithMdhd("soun", stbl, mdhd);
     auto const fileData = makeFile(track);
-    auto demuxer = Demuxer{fileData};
+    auto const demuxerRes = Demuxer::parse(fileData, "alac");
 
-    REQUIRE(demuxer.parseTrack("alac"));
-    CHECK(demuxer.timescale() == 48000);
-    CHECK(demuxer.duration() == 96000);
+    REQUIRE(demuxerRes);
+    CHECK(demuxerRes->timescale() == 48000);
+    CHECK(demuxerRes->duration() == 96000);
   }
 
   TEST_CASE("MP4 Demuxer - parses extended-size media timing and sample tables", "[media][regression][mp4]")
@@ -262,14 +245,14 @@ namespace ao::media::mp4::test
     auto const mdhd = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeMdhdAtom(48000, 96000));
     auto const track = ao::test::mp4::makeTrackAtomWithMdhd("soun", stbl, mdhd);
     auto const fileData = makeFile(track);
-    auto demuxer = Demuxer{fileData};
+    auto const demuxerRes = Demuxer::parse(fileData, "alac");
 
-    REQUIRE(demuxer.parseTrack("alac"));
-    CHECK(demuxer.timescale() == 48000);
-    CHECK(demuxer.duration() == 96000);
-    CHECK(demuxer.sampleCount() == 1);
-    CHECK(demuxer.sampleInfo(0).offset == 321);
-    CHECK(demuxer.sampleInfo(0).size == 7);
+    REQUIRE(demuxerRes);
+    CHECK(demuxerRes->timescale() == 48000);
+    CHECK(demuxerRes->duration() == 96000);
+    CHECK(demuxerRes->sampleCount() == 1);
+    CHECK(demuxerRes->sampleInfo(0).offset == 321);
+    CHECK(demuxerRes->sampleInfo(0).size == 7);
   }
 
   TEST_CASE("MP4 Demuxer - extracts AAC AudioSpecificConfig", "[media][unit][mp4]")
@@ -284,12 +267,11 @@ namespace ao::media::mp4::test
     auto mappedFile = utility::MappedFile{};
     REQUIRE(mappedFile.map(testFile));
 
-    auto demuxer = Demuxer{mappedFile.bytes()};
-    auto const result = demuxer.parseTrack("mp4a");
+    auto const result = Demuxer::parse(mappedFile.bytes(), "mp4a");
 
     REQUIRE(result);
-    CHECK_FALSE(demuxer.magicCookie().empty());
-    CHECK(demuxer.sampleCount() > 0);
+    CHECK_FALSE(result->magicCookie().empty());
+    CHECK(result->sampleCount() > 0);
   }
 
   TEST_CASE("MP4 Demuxer - binds sample table to selected audio track", "[media][unit][mp4]")
@@ -306,18 +288,17 @@ namespace ao::media::mp4::test
     ao::test::mp4::addAtom(data, "moov", moovBody);
 
     auto fileData = toBytes(data);
-    auto demuxer = Demuxer{fileData};
-    auto const result = demuxer.parseTrack("mp4a");
+    auto const result = Demuxer::parse(fileData, "mp4a");
 
     REQUIRE(result);
-    CHECK(demuxer.timescale() == 48000);
-    CHECK(demuxer.duration() == 96000);
-    CHECK(demuxer.sampleCount() == 1);
-    CHECK(demuxer.sampleInfo(0).offset == 321);
-    CHECK(demuxer.sampleInfo(0).size == 7);
-    CHECK(demuxer.sampleInfo(0).duration == 2048);
-    REQUIRE(demuxer.magicCookie().size() == 2);
-    CHECK(demuxer.magicCookie()[0] == std::byte{0x12});
-    CHECK(demuxer.magicCookie()[1] == std::byte{0x10});
+    CHECK(result->timescale() == 48000);
+    CHECK(result->duration() == 96000);
+    CHECK(result->sampleCount() == 1);
+    CHECK(result->sampleInfo(0).offset == 321);
+    CHECK(result->sampleInfo(0).size == 7);
+    CHECK(result->sampleInfo(0).duration == 2048);
+    REQUIRE(result->magicCookie().size() == 2);
+    CHECK(result->magicCookie()[0] == std::byte{0x12});
+    CHECK(result->magicCookie()[1] == std::byte{0x10});
   }
 } // namespace ao::media::mp4::test

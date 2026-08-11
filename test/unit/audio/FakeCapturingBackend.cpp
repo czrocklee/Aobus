@@ -39,7 +39,7 @@ namespace ao::audio::test
     return Backend::prewarmFormatHint(format);
   }
 
-  Result<OpenedPcmMode> FakeCapturingBackend::open(SignalFormat const& format, RenderTarget* target)
+  Result<OpenedPcmMode> FakeCapturingBackend::open(SignalFormat const& format, RenderTarget& target)
   {
     auto const lock = std::scoped_lock{_mutex};
 
@@ -59,7 +59,7 @@ namespace ao::audio::test
     auto const encoding = optSelected.value_or(encodings.empty() ? SampleEncoding::Unknown : encodings.front());
     _format = pcmFormat(format, encoding);
     recordEvent("open", _format);
-    _target = target;
+    _target = &target;
 
     auto optEndpoint = std::optional<ConfirmedEndpoint>{};
 

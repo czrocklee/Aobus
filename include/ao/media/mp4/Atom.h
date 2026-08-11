@@ -119,8 +119,6 @@ namespace ao::media::mp4
     std::string_view _parentType;
   };
 
-  AtomView fromBuffer(std::span<std::byte const> data) noexcept;
-
   /**
    * Finds the first atom at path, validating sibling boundaries only until a
    * complete match is found.

@@ -205,7 +205,7 @@ namespace ao::rt::test
     bool callbackSawDictionary = false;
     [[maybe_unused]] auto subscription = changes.onChanged(
       [&](LibraryChangeSet const&) noexcept
-      { callbackSawDictionary = dictionary.contains("Preview Artist") && dictionary.contains("Preview Key"); });
+      { callbackSawDictionary = dictionary.findId("Preview Artist") && dictionary.findId("Preview Key"); });
     auto patch = MetadataPatch{.optArtist = "Preview Artist"};
     patch.customUpdates.emplace("Preview Key", "Preview Value");
 

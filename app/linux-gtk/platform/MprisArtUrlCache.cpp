@@ -146,7 +146,7 @@ namespace ao::gtk::platform
                                               Requests::FlightToken token)
   {
     _runtime.spawnWithLifetime(
-      _scopePtr.get(),
+      *_scopePtr,
       [cache = this,
        runtime = &_runtime,
        resourceId,
@@ -191,7 +191,7 @@ namespace ao::gtk::platform
   void MprisArtUrlCache::spawnExport(ResourceId const resourceId, Requests::FlightToken token, rt::ResourceBytes bytes)
   {
     _runtime.spawnWithLifetime(
-      _scopePtr.get(),
+      *_scopePtr,
       [cache = this,
        runtime = &_runtime,
        cacheDir = _cacheDir,

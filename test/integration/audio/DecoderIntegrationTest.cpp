@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "lib/audio/AlacDecoderSession.h"
+#include "lib/audio/FlacDecoderSession.h"
+#include "lib/audio/Mp3DecoderSession.h"
 #include <ao/AudioCodec.h>
-#include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/FlacDecoderSession.h>
-#include <ao/audio/Mp3DecoderSession.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 

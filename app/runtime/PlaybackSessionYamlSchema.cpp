@@ -7,7 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/query/Parser.h>
-#include <ao/query/QueryCompiler.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/yaml/Serialization.h>

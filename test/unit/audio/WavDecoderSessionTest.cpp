@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/WavDecoderSession.h>
+#include "lib/audio/WavDecoderSession.h"
 
 #include "DecoderTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"

@@ -764,7 +764,7 @@ namespace ao::media::file::mp4
       return *_optIndexResult;
     }
 
-    auto const root = fromBuffer(bytes());
+    auto const root = AtomView::root(bytes());
     auto optPayload = std::optional<PayloadView>{};
     std::size_t mdatCount = 0;
 

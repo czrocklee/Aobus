@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/audio/AlacDecoderSession.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/mp4/TestAtoms.h"
-#include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/media/mp4/Demuxer.h>
 
@@ -74,14 +74,14 @@ namespace ao::audio::test
       }
 
       auto const fileData = readFileBytes(path);
-      auto demuxer = media::mp4::Demuxer{asBytes(fileData)};
+      auto const demuxerRes = media::mp4::Demuxer::parse(asBytes(fileData), "alac");
 
-      REQUIRE(demuxer.parseTrack("alac"));
-      REQUIRE(demuxer.sampleCount() > 0);
+      REQUIRE(demuxerRes);
+      REQUIRE(demuxerRes->sampleCount() > 0);
 
       return {
-        .cookie = copyBytes(demuxer.magicCookie()),
-        .firstPacket = copyBytes(demuxer.samplePayload(0)),
+        .cookie = copyBytes(demuxerRes->magicCookie()),
+        .firstPacket = copyBytes(demuxerRes->samplePayload(0)),
       };
     }
 

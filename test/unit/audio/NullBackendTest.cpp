@@ -3,6 +3,7 @@
 
 #include <ao/audio/NullBackend.h>
 
+#include "BackendTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/PcmFormat.h>
@@ -21,6 +22,7 @@ namespace ao::audio::test
 
   TEST_CASE("NullBackend - lifecycle is inert and identifies the shared null route", "[audio][unit][null-backend]")
   {
+    auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
     auto const sourceFormat = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
 
@@ -28,7 +30,7 @@ namespace ao::audio::test
     REQUIRE(optHint);
     CHECK(*optHint == pcmFormat(sourceFormat, SampleEncoding::Signed16Le));
 
-    auto const openRes = backend.open(sourceFormat, nullptr);
+    auto const openRes = backend.open(sourceFormat, target);
     REQUIRE(openRes);
     CHECK(openRes->clientFormat == pcmFormat(sourceFormat, SampleEncoding::Signed16Le));
     // A discarding sink has no direct endpoint evidence, but its client mode
@@ -47,8 +49,9 @@ namespace ao::audio::test
 
   TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected", "[audio][unit][null-backend]")
   {
+    auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
-    auto const openedRes = backend.open(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}, nullptr);
+    auto const openedRes = backend.open(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}, target);
 
     CHECK_FALSE(backend.prewarmFormatHint(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}));
     REQUIRE_FALSE(openedRes);

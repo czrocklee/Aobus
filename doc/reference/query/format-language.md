@@ -36,7 +36,7 @@ constant            ::= boolean | unit-number | integer | string ;
 ```
 
 The shared parser first accepts its expression superset.
-`FormatCompiler` then accepts only variables, constants, grouping, `+`, and adjacency concatenation.
+`compileFormat()` then accepts only variables, constants, grouping, `+`, and adjacency concatenation.
 
 Constants use predicate-language tokenization.
 Booleans format canonically as `true` or `false`; integers format in decimal; unit constants preserve their original lexeme.

@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "detail/DecoderSessionBase.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>

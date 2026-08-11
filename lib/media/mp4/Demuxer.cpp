@@ -23,6 +23,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::media::mp4
@@ -325,6 +326,18 @@ namespace ao::media::mp4
   {
   }
 
+  Result<Demuxer> Demuxer::parse(std::span<std::byte const> fileData, std::string_view targetFormat)
+  {
+    auto demuxer = Demuxer{fileData};
+
+    if (auto const result = demuxer.parseTrack(targetFormat); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    return Result<Demuxer>{std::in_place, std::move(demuxer)};
+  }
+
   void Demuxer::applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample)
   {
     if (samples.empty() || timeToSample.empty())
@@ -619,14 +632,9 @@ namespace ao::media::mp4
 
   Result<> Demuxer::parseTrack(std::string_view targetFormat)
   {
-    _magicCookie.clear();
-    _samples.clear();
-    _timescale = 0;
-    _duration = 0;
-
     auto parse = [&] -> Result<>
     {
-      auto const root = fromBuffer(_fileData);
+      auto const root = AtomView::root(_fileData);
       auto chunkOffsets = std::vector<std::uint64_t>{};
       auto sampleToChunk = std::vector<SampleToChunkEntry>{};
       auto timeToSample = std::vector<TimeToSampleEntry>{};

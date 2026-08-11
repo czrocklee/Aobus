@@ -151,9 +151,9 @@ namespace ao::rt::test
       fakeit::When(Method(spyBackendPtr->mock(), open))
         .AlwaysDo(
           [renderTargetAddress](
-            audio::SignalFormat const& sourceFormat, audio::RenderTarget*& target) -> Result<audio::OpenedPcmMode>
+            audio::SignalFormat const& sourceFormat, audio::RenderTarget& target) -> Result<audio::OpenedPcmMode>
           {
-            *renderTargetAddress = target;
+            *renderTargetAddress = &target;
             auto const encodings = audio::detail::losslessPcmEncodings(sourceFormat);
             REQUIRE_FALSE(encodings.empty());
             return audio::OpenedPcmMode{.clientFormat = audio::pcmFormat(sourceFormat, encodings.front())};

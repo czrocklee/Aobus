@@ -100,8 +100,8 @@ The profile is the union of the storage tiers required by all field loads in the
 
 Supplying every tier required by the plan is a caller precondition of `PlanEvaluator::matches()` and `evaluateFull()`.
 The evaluator enforces that contract before any constant-plan shortcut; absence of an individual field within a supplied tier remains ordinary predicate data and follows the field semantics above.
-Saved-List evaluation uses the plan profile to choose the minimum track-store load mode across the plans evaluated in one batch.
-Constant true and false predicates require no track data.
+Constant true and false predicates require no track fields.
+The [track-source specification](../library/source/track-source.md) owns how Saved-List evaluation maps the semantic profile to the concrete TrackStore modes available for batch traversal and row-existence checks.
 
 ## Commands and transitions
 
@@ -112,7 +112,6 @@ The public stages are:
 3. For a dictionary-using plan, `PlanBinding(plan, context)` resolves its symbols under one committed dictionary lock and records that generation.
 4. `PlanEvaluator::matches(binding, track)` returns one membership decision.
 
-`QueryCompiler::compile()` has the same non-throwing result contract as `compileQuery()`.
 Unknown `$` or `@` fields are rejected with a diagnostic generated from the shared field catalog and may include a close-name suggestion.
 Plans with no dictionary access may use the context-free convenience overloads.
 Supplying an explicit `DictionaryReadContext` or bound plan is a precondition for plans whose `requiresDictionary` flag is true.
@@ -162,7 +161,7 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 
 ## Implementation map
 
-- [`QueryCompiler.h`](../../../include/ao/query/QueryCompiler.h) and [`ExecutionPlan.h`](../../../include/ao/query/ExecutionPlan.h) define compilation and the opaque plan boundary.
+- [`QueryCompilation.h`](../../../include/ao/query/QueryCompilation.h) and [`ExecutionPlan.h`](../../../include/ao/query/ExecutionPlan.h) define compilation and the opaque plan boundary.
 - [`PlanEvaluator.h`](../../../include/ao/query/PlanEvaluator.h) defines evaluation.
 - [`DictionaryStore.h`](../../../include/ao/library/DictionaryStore.h) defines bounded dictionary contexts, caches, and committed generation.
 - [`ExecutionPlan.cpp`](../../../lib/query/ExecutionPlan.cpp) owns semantic compilation and access profiles.

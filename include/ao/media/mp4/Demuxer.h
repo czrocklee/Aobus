@@ -29,26 +29,22 @@ namespace ao::media::mp4
       std::uint32_t duration = 0;
     };
 
-    /**
-     * @brief Construct an MP4 Demuxer over the given span of raw container bytes.
-     */
-    explicit Demuxer(std::span<std::byte const> fileData);
     ~Demuxer() = default;
 
     Demuxer(Demuxer const&) = delete;
     Demuxer& operator=(Demuxer const&) = delete;
-    Demuxer(Demuxer&&) = delete;
+    Demuxer(Demuxer&&) noexcept = default;
     Demuxer& operator=(Demuxer&&) = delete;
 
     /**
-     * @brief Parses the MP4 atoms, looking for an audio track matching the given format (e.g. "alac").
-     * @return Result of the operation.
+     * @brief Parses an MP4 audio track matching the given format (e.g. "alac").
+     * @return A ready-to-use demuxer, or a parse error.
      *
      * Error model: the media decode entry returns Result (it sits on the audio open/seek path);
      * lower-level byte-view parser exceptions are translated to Error::Code::CorruptData here.
      * See doc/spec/media/file-reading.md.
      */
-    Result<> parseTrack(std::string_view targetFormat);
+    static Result<Demuxer> parse(std::span<std::byte const> fileData, std::string_view targetFormat);
 
     /**
      * @brief Returns the codec-specific magic cookie/extradata found during parsing.
@@ -88,6 +84,8 @@ namespace ao::media::mp4
     std::uint64_t duration() const;
 
   private:
+    explicit Demuxer(std::span<std::byte const> fileData);
+
     struct SampleToChunkEntry final
     {
       std::uint32_t firstChunk = 0;
@@ -110,6 +108,7 @@ namespace ao::media::mp4
                           std::vector<std::uint64_t>& chunkOffsets,
                           std::vector<SampleToChunkEntry>& sampleToChunk,
                           std::vector<TimeToSampleEntry>& timeToSample);
+    Result<> parseTrack(std::string_view targetFormat);
 
     static void applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample);
     static void buildSampleOffsets(std::vector<SampleEntry>& samples,

@@ -150,14 +150,16 @@ namespace ao::rt::test
         }));
 
       REQUIRE(transaction.commit());
-      auto const artistId = musicLibrary.dictionary().lookupId("An Artist");
-      auto const albumId = musicLibrary.dictionary().lookupId("The Album");
+      auto const optArtistId = musicLibrary.dictionary().findId("An Artist");
+      auto const optAlbumId = musicLibrary.dictionary().findId("The Album");
+      REQUIRE(optArtistId);
+      REQUIRE(optAlbumId);
 
       return SeededReadModelLibrary{.trackId = trackId,
                                     .otherTrackId = otherTrackId,
                                     .resourceId = resourceId,
-                                    .artistId = artistId,
-                                    .albumId = albumId,
+                                    .artistId = *optArtistId,
+                                    .albumId = *optAlbumId,
                                     .orderedListId = orderedListId,
                                     .filteredListId = filteredListId};
     }

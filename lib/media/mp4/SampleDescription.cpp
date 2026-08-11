@@ -17,7 +17,7 @@ namespace ao::media::mp4
 {
   Result<std::string> audioSampleEntryType(std::span<std::byte const> fileData)
   {
-    auto const root = fromBuffer(fileData);
+    auto const root = AtomView::root(fileData);
     auto selectionRes = findAudioTrack(root);
 
     if (!selectionRes)

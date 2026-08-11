@@ -32,7 +32,7 @@ namespace ao::rt::test
       MemberTaskOwner(Runtime& runtime, LifetimeScope& scope, AsyncTestState<int> completed)
         : runtime{runtime}, completed{std::move(completed)}
       {
-        runtime.spawnWithLifetime(&scope, [this](std::stop_token const stopToken) { return run(stopToken); });
+        runtime.spawnWithLifetime(scope, [this](std::stop_token const stopToken) { return run(stopToken); });
       }
 
       Task<void> run(std::stop_token const stopToken)
@@ -111,7 +111,7 @@ namespace ao::rt::test
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(
-        &scope,
+        scope,
         [&](std::stop_token const stopToken)
         {
           return longRunningTask(
@@ -149,7 +149,7 @@ namespace ao::rt::test
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(
-        &scope,
+        scope,
         [&](std::stop_token const stopToken)
         {
           return longRunningTask(
@@ -178,7 +178,7 @@ namespace ao::rt::test
 
     {
       auto scope = LifetimeScope{};
-      runtime.spawnWithLifetime(&scope,
+      runtime.spawnWithLifetime(scope,
                                 [&runtime, completed](std::stop_token const stopToken)
                                 { return pendingControlResumeTask(&runtime, completed, stopToken); });
       executor.checkQueued();
@@ -279,7 +279,7 @@ namespace ao::rt::test
     {
       auto taskExited = AsyncTestState<bool>::create(false);
       auto scope = LifetimeScope{};
-      runtime.spawnWithLifetime(&scope,
+      runtime.spawnWithLifetime(scope,
                                 [&runtime, taskExited](std::stop_token const stopToken)
                                 { return racingSleep(&runtime, taskExited, stopToken); });
       REQUIRE(sleeper.waitForCallCount(iteration + 1));

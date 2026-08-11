@@ -24,7 +24,7 @@
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackMutation.h>

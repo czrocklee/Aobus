@@ -24,7 +24,6 @@ namespace ao::audio
 {
   class Backend;
   class DecoderSession;
-  class PcmSource;
   struct PlaybackInput;
   using DecoderFactoryFn =
     std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, std::optional<SampleEncoding>)>;

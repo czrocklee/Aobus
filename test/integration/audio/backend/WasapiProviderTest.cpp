@@ -186,7 +186,7 @@ namespace ao::audio::backend::test
       CHECK(backendPtr->backendId() == kBackendWasapi);
       CHECK(backendPtr->profileId() == kProfileShared);
 
-      if (auto const openRes = backendPtr->open(sourceFormat, &target); !openRes)
+      if (auto const openRes = backendPtr->open(sourceFormat, target); !openRes)
       {
         FAIL("open failed: " << openRes.error().message);
       }

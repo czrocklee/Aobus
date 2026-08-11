@@ -35,6 +35,21 @@ namespace ao::rt
 {
   namespace
   {
+    library::TrackStore::Reader::LoadMode loadModeForAccessProfile(query::AccessProfile const profile)
+    {
+      using LoadMode = library::TrackStore::Reader::LoadMode;
+
+      switch (profile)
+      {
+        case query::AccessProfile::NoTrackData:
+        case query::AccessProfile::HotOnly: return LoadMode::Hot;
+        case query::AccessProfile::ColdOnly: return LoadMode::Cold;
+        case query::AccessProfile::HotAndCold: return LoadMode::Both;
+      }
+
+      AO_FATAL("Unknown query access profile");
+    }
+
     std::vector<TrackId> snapshotSource(TrackSource const& source)
     {
       auto result = std::vector<TrackId>{};
@@ -253,8 +268,7 @@ namespace ao::rt
   {
     auto const transaction = _ml.readTransaction();
     auto const reader = _ml.tracks().reader(transaction);
-    auto const mode = unionMode(evaluatableLists);
-    auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
+    auto const storeMode = loadModeForAccessProfile(unionAccessProfile(evaluatableLists));
     auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
     auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
     auto bindings = std::vector<std::optional<query::PlanBinding>>(works.size());
@@ -440,8 +454,8 @@ namespace ao::rt
     {
       auto const transaction = _ml.readTransaction();
       auto const reader = _ml.tracks().reader(transaction);
-      auto const mode = unionMode(std::span<SmartListSource* const>{evaluatableLists});
-      auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
+      auto const storeMode =
+        loadModeForAccessProfile(unionAccessProfile(std::span<SmartListSource* const>{evaluatableLists}));
       auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
       auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
       auto bindings = std::vector<std::optional<query::PlanBinding>>(lists.size());
@@ -496,7 +510,7 @@ namespace ao::rt
     }
   }
 
-  SmartListEvaluator::TrackLoadMode SmartListEvaluator::unionMode(std::span<SmartListSource* const> const lists)
+  query::AccessProfile SmartListEvaluator::unionAccessProfile(std::span<SmartListSource* const> const lists)
   {
     bool needsHot = false;
     bool needsCold = false;
@@ -508,28 +522,26 @@ namespace ao::rt
         continue;
       }
 
-      switch (list->_current.planPtr->accessProfile)
-      {
-        case query::AccessProfile::NoTrackData: break;
-        case query::AccessProfile::HotOnly: needsHot = true; break;
-        case query::AccessProfile::ColdOnly: needsCold = true; break;
-        case query::AccessProfile::HotAndCold:
-          needsHot = true;
-          needsCold = true;
-          break;
-      }
+      auto const profile = list->_current.planPtr->accessProfile;
+      needsHot = needsHot || query::isHotDataRequired(profile);
+      needsCold = needsCold || query::isColdDataRequired(profile);
     }
 
     if (needsHot && needsCold)
     {
-      return TrackLoadMode::Both;
+      return query::AccessProfile::HotAndCold;
     }
 
     if (needsCold)
     {
-      return TrackLoadMode::Cold;
+      return query::AccessProfile::ColdOnly;
     }
 
-    return TrackLoadMode::Hot;
+    if (needsHot)
+    {
+      return query::AccessProfile::HotOnly;
+    }
+
+    return query::AccessProfile::NoTrackData;
   }
 } // namespace ao::rt

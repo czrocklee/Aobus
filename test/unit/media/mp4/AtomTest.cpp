@@ -39,7 +39,7 @@ namespace ao::media::mp4::test
     ao::test::mp4::addAtom(data, "ftyp", {1, 2});
     ao::test::mp4::addAtom(data, "free", {3});
     auto const bytes = toBytes(data);
-    auto cursor = fromBuffer(bytes).children();
+    auto cursor = AtomView::root(bytes).children();
 
     auto firstRes = cursor.next();
     REQUIRE(firstRes);
@@ -64,7 +64,7 @@ namespace ao::media::mp4::test
     auto const endOfFileAtom = ao::test::mp4::makeEndOfFileAtom("mdat", {3, 4, 5});
     data.insert(data.end(), endOfFileAtom.begin(), endOfFileAtom.end());
     auto const bytes = toBytes(data);
-    auto cursor = fromBuffer(bytes).children();
+    auto cursor = AtomView::root(bytes).children();
 
     auto const extendedRes = cursor.next();
     REQUIRE(extendedRes);
@@ -93,7 +93,7 @@ namespace ao::media::mp4::test
       ao::test::mp4::appendBe32(data, 1);
       data.insert(data.end(), {'m', 'd', 'a', 't'});
       auto const bytes = toBytes(data);
-      auto cursor = fromBuffer(bytes).children();
+      auto cursor = AtomView::root(bytes).children();
 
       auto const result = cursor.next();
 
@@ -108,7 +108,7 @@ namespace ao::media::mp4::test
       data.insert(data.end(), {'m', 'd', 'a', 't'});
       ao::test::mp4::appendBe64(data, 15);
       auto const bytes = toBytes(data);
-      auto cursor = fromBuffer(bytes).children();
+      auto cursor = AtomView::root(bytes).children();
 
       auto const result = cursor.next();
 
@@ -123,7 +123,7 @@ namespace ao::media::mp4::test
       data.insert(data.end(), {'m', 'd', 'a', 't'});
       ao::test::mp4::appendBe64(data, 17);
       auto const bytes = toBytes(data);
-      auto cursor = fromBuffer(bytes).children();
+      auto cursor = AtomView::root(bytes).children();
 
       auto const result = cursor.next();
 
@@ -136,7 +136,7 @@ namespace ao::media::mp4::test
   {
     auto const child = ao::test::mp4::makeEndOfFileAtom("free", {1});
     auto const bytes = toBytes(ao::test::mp4::makeAtom("moov", child));
-    auto rootCursor = fromBuffer(bytes).children();
+    auto rootCursor = AtomView::root(bytes).children();
     auto const movieRes = rootCursor.next();
     REQUIRE(movieRes);
     REQUIRE(*movieRes);
@@ -151,7 +151,7 @@ namespace ao::media::mp4::test
   TEST_CASE("MP4 AtomView - short typed layout returns no view", "[media][regression][mp4]")
   {
     auto const bytes = toBytes(ao::test::mp4::makeAtom("stsd", {}));
-    auto cursor = fromBuffer(bytes).children();
+    auto cursor = AtomView::root(bytes).children();
     auto atomRes = cursor.next();
 
     REQUIRE(atomRes);
@@ -167,7 +167,7 @@ namespace ao::media::mp4::test
     auto const bytes = toBytes(ao::test::mp4::makeAtom("moov", track));
     auto const path = std::to_array<std::string_view>({"root", "moov", "trak", "mdia", "minf", "stbl", "stsd"});
 
-    auto result = findAtom(fromBuffer(bytes), path);
+    auto result = findAtom(AtomView::root(bytes), path);
 
     REQUIRE(result);
     REQUIRE(*result);
@@ -182,7 +182,7 @@ namespace ao::media::mp4::test
     ao::test::mp4::appendBe32(data, 100);
     data.insert(data.end(), {'b', 'a', 'd', '!'});
     auto const bytes = toBytes(data);
-    auto cursor = fromBuffer(bytes).children();
+    auto cursor = AtomView::root(bytes).children();
 
     auto firstRes = cursor.next();
     REQUIRE(firstRes);
@@ -203,7 +203,7 @@ namespace ao::media::mp4::test
     auto const bytes = toBytes(data);
     auto const path = std::to_array<std::string_view>({"root", "moov"});
 
-    auto result = findAtom(fromBuffer(bytes), path);
+    auto result = findAtom(AtomView::root(bytes), path);
 
     REQUIRE(result);
     REQUIRE(*result);

@@ -254,7 +254,7 @@ namespace ao::gtk
     // Runtime and its task service outlive this loader. Loader-owned state is
     // touched only after the cancellation-checked callback-executor hop.
     _runtime.spawnWithLifetime(
-      _scopePtr.get(),
+      *_scopePtr,
       [loader = this, runtime = &_runtime, key, token = std::move(token), bytes = std::move(bytes)](
         std::stop_token const stopToken) mutable
       { return decode(loader, runtime, key, std::move(token), std::move(bytes), stopToken); },

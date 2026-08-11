@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/AlacDecoderSession.h>
+#include "AlacDecoderSession.h"
 
 #include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
@@ -245,7 +245,7 @@ namespace ao::audio
     ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
     auto const status = _implPtr->decoderPtr->Decode(
-      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->targetPcm}), maxFrames, channels, &frameCount);
+      &bitBuffer, layout::viewMutable<uint8_t>(std::span{_implPtr->targetPcm}), maxFrames, channels, &frameCount);
 
     if (status != 0)
     {

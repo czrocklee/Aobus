@@ -3,14 +3,14 @@
 
 #include <ao/audio/DecoderFactory.h>
 
+#include "AacDecoderSession.h"
+#include "AlacDecoderSession.h"
+#include "FlacDecoderSession.h"
+#include "Mp3DecoderSession.h"
+#include "WavDecoderSession.h"
 #include <ao/Error.h>
-#include <ao/audio/AacDecoderSession.h>
-#include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/FlacDecoderSession.h>
-#include <ao/audio/Mp3DecoderSession.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/WavDecoderSession.h>
 #include <ao/media/mp4/SampleDescription.h>
 #include <ao/utility/MappedFile.h>
 

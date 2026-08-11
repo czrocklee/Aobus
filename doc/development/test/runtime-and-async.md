@@ -46,7 +46,7 @@ Example shape:
 
 ```cpp
 runtime.spawnWithLifetime(
-  &scope,
+  scope,
   [&runtime](std::stop_token stopToken)
   { return task(&runtime, stopToken); });
 REQUIRE(executor.waitUntilQueued());

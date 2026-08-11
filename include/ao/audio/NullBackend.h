@@ -30,7 +30,7 @@ namespace ao::audio
     NullBackend(NullBackend&&) = delete;
     NullBackend& operator=(NullBackend&&) = delete;
 
-    Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override;
+    Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;
     void resume() override;

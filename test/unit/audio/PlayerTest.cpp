@@ -167,14 +167,14 @@ namespace ao::audio::test
       {
       }
 
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         if (auto const optError = _probePtr->openError(); optError)
         {
           return std::unexpected{*optError};
         }
 
-        _probePtr->publishTarget(target);
+        _probePtr->publishTarget(&target);
         return NullBackend::open(sourceFormat, target);
       }
 
@@ -311,10 +311,10 @@ namespace ao::audio::test
       {
       }
 
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
-        _probePtr->publishTarget(target);
-        target->handleRouteReady(_route);
+        _probePtr->publishTarget(&target);
+        target.handleRouteReady(_route);
         return NullBackend::open(sourceFormat, target);
       }
 
@@ -808,10 +808,10 @@ namespace ao::audio::test
       ReentrantBackend(ReentrantBackend&&) = delete;
       ReentrantBackend& operator=(ReentrantBackend&&) = delete;
 
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         auto const lock = std::scoped_lock{probePtr->mutex};
-        probePtr->target = target;
+        probePtr->target = &target;
         return NullBackend::open(sourceFormat, target);
       }
 

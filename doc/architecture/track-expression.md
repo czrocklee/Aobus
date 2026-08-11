@@ -167,7 +167,7 @@ Metadata-value editors share the runtime vocabulary service but do not become qu
 ```text
 CLI --format text
   -> shared parser
-  -> FormatCompiler
+  -> compileFormat
   -> FormatPlan
   -> FormatBinding + bounded DictionaryReadContext
   -> FormatEvaluator + TrackView
@@ -214,7 +214,7 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 ## Implementation map
 
 - [`lib/query/CMakeLists.txt`](../../lib/query/CMakeLists.txt) defines the core expression module and its dependency on `ao_library`.
-- [`Parser.h`](../../include/ao/query/Parser.h), [`QueryCompiler.h`](../../include/ao/query/QueryCompiler.h), and [`FormatExpression.h`](../../include/ao/query/FormatExpression.h) define the public parse and compile paths.
+- [`Parser.h`](../../include/ao/query/Parser.h), [`QueryCompilation.h`](../../include/ao/query/QueryCompilation.h), and [`FormatExpression.h`](../../include/ao/query/FormatExpression.h) define the public parse and compile paths.
 - [`PlanEvaluator`](../../include/ao/query/PlanEvaluator.h) and `PlanBinding` evaluate predicates against explicit batch dictionary state.
 - [`FormatExpression.h`](../../include/ao/query/FormatExpression.h) defines pure format compilation, `FormatBinding`, and scalar evaluation.
 - [`Completion.h`](../../include/ao/query/Completion.h) defines tolerant core completion analysis.

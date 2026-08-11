@@ -26,7 +26,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - compiles custom field existence as an owned symbol", "[query][unit][execution-plan]")
   {
-    auto const plan = compileOk(QueryCompiler{}, parseOk("%rating?"));
+    auto const plan = compileOk(parseOk("%rating?"));
 
     REQUIRE(plan.instructions.size() == 1);
     REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"rating"});
@@ -39,7 +39,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - dictionary-backed LIKE keeps plan-owned text", "[query][unit][execution-plan]")
   {
-    auto const plan = compileOk(QueryCompiler{}, parseOk(R"($artist ~ "Bach")"));
+    auto const plan = compileOk(parseOk(R"($artist ~ "Bach")"));
 
     REQUIRE(plan.stringConstants == std::vector<std::string>{"Bach"});
     CHECK(plan.dictionarySymbols.empty());
@@ -50,7 +50,7 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - unknown tags compile without dictionary mutation", "[query][unit][execution-plan]")
   {
     auto expression = parseOk("#FutureTag");
-    auto const plan = compileOk(QueryCompiler{}, expression);
+    auto const plan = compileOk(expression);
 
     REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"FutureTag"});
     REQUIRE(plan.requiredTagSymbols == std::vector<std::uint32_t>{0});
@@ -60,7 +60,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - unknown custom keys compile without dictionary mutation", "[query][unit][execution-plan]")
   {
-    auto const plan = compileOk(QueryCompiler{}, parseOk("%FutureKey = 'Value'"));
+    auto const plan = compileOk(parseOk("%FutureKey = 'Value'"));
 
     REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"FutureKey"});
     auto const& load = findInstruction(plan, OpCode::LoadField);
@@ -71,7 +71,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - dictionary-backed equality compiles to a bindable symbol", "[query][unit][execution-plan]")
   {
-    auto const plan = compileOk(QueryCompiler{}, parseOk("$artist = 'Bach'"));
+    auto const plan = compileOk(parseOk("$artist = 'Bach'"));
 
     REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"Bach"});
     CHECK(plan.stringConstants.empty());

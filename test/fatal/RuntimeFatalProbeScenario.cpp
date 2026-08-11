@@ -580,7 +580,7 @@ namespace ao::rt::test
       }
 
       runtime.spawnWithLifetime(
-        &scope,
+        scope,
         [&runtime](std::stop_token const stopToken) { return failingCancellableTask(&runtime, stopToken); },
         "runtime lifetime probe");
       runtime.join();
@@ -603,7 +603,7 @@ namespace ao::rt::test
       }
 
       runtime.spawnWithLifetime(
-        &scope,
+        scope,
         [statePtr](std::stop_token const stopToken) { return failAfterRelease(statePtr, stopToken); },
         "runtime shutdown probe");
 
@@ -626,7 +626,7 @@ namespace ao::rt::test
       auto scope = async::LifetimeScope{};
       auto statePtr = std::make_shared<BlockingTaskState>();
       runtime.spawnWithLifetime(
-        &scope,
+        scope,
         [statePtr](std::stop_token const stopToken) { return cancelAfterRelease(statePtr, stopToken); },
         "runtime shutdown cancellation probe");
 
