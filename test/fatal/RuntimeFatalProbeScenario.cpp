@@ -3,6 +3,7 @@
 
 #include "test/fatal/RuntimeFatalProbeScenario.h"
 
+#include "lib/audio/NullBackend.h"
 #include "lib/library/PhysicalStoreAccess.h"
 #include "runtime/library/LibraryMutationService.h"
 #include <ao/Contract.h>
@@ -22,7 +23,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Subscription.h>
 #include <ao/library/FileManifestBuilder.h>

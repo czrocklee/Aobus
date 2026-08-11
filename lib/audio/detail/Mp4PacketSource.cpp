@@ -3,10 +3,10 @@
 
 #include "Mp4PacketSource.h"
 
+#include "AudioTime.h"
 #include "TimeConversion.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/audio/AudioTime.h>
 #include <ao/media/mp4/Demuxer.h>
 
 #include <chrono>

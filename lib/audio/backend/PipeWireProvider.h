@@ -6,27 +6,31 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
-#include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
 
 #include <memory>
 #include <string_view>
 
+namespace ao::audio
+{
+  struct Device;
+}
+
 namespace ao::audio::backend
 {
   /**
-   * @brief Provider for ALSA audio backends.
+   * @brief Provider for PipeWire audio backends.
    */
-  class AlsaProvider final : public BackendProvider
+  class PipeWireProvider final : public BackendProvider
   {
   public:
-    AlsaProvider();
-    ~AlsaProvider() override;
+    PipeWireProvider();
+    ~PipeWireProvider() override;
 
-    AlsaProvider(AlsaProvider const&) = delete;
-    AlsaProvider& operator=(AlsaProvider const&) = delete;
-    AlsaProvider(AlsaProvider&&) = delete;
-    AlsaProvider& operator=(AlsaProvider&&) = delete;
+    PipeWireProvider(PipeWireProvider const&) = delete;
+    PipeWireProvider& operator=(PipeWireProvider const&) = delete;
+    PipeWireProvider(PipeWireProvider&&) = delete;
+    PipeWireProvider& operator=(PipeWireProvider&&) = delete;
 
     void shutdown() noexcept override;
     Subscription subscribeDevices(OnDevicesChangedCallback callback) override;

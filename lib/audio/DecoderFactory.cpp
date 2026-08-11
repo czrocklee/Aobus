@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/DecoderFactory.h>
+#include "DecoderFactory.h"
 
 #include "AacDecoderSession.h"
 #include "AlacDecoderSession.h"
@@ -25,15 +25,32 @@
 
 namespace ao::audio
 {
-  Result<std::unique_ptr<DecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
-                                                               std::optional<SampleEncoding> optOutputEncoding)
+  namespace
+  {
+    template<typename Session>
+    Result<std::unique_ptr<DecoderSession>> openConcreteSession(std::filesystem::path const& filePath,
+                                                                std::optional<SampleEncoding> optOutputEncoding)
+    {
+      auto sessionRes = Session::open(filePath, optOutputEncoding);
+
+      if (!sessionRes)
+      {
+        return std::unexpected{sessionRes.error()};
+      }
+
+      return std::unique_ptr<DecoderSession>{std::move(*sessionRes)};
+    }
+  } // namespace
+
+  Result<std::unique_ptr<DecoderSession>> openDecoderSession(std::filesystem::path const& filePath,
+                                                             std::optional<SampleEncoding> optOutputEncoding)
   {
     auto ext = filePath.extension().string();
     std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
     if (ext == ".flac")
     {
-      return std::make_unique<FlacDecoderSession>(optOutputEncoding);
+      return openConcreteSession<FlacDecoderSession>(filePath, optOutputEncoding);
     }
 
     if (ext == ".m4a" || ext == ".mp4")
@@ -63,12 +80,12 @@ namespace ao::audio
 
       if (sampleEntryType == "alac")
       {
-        return std::make_unique<AlacDecoderSession>(optOutputEncoding);
+        return openConcreteSession<AlacDecoderSession>(filePath, optOutputEncoding);
       }
 
       if (sampleEntryType == "mp4a")
       {
-        return std::make_unique<AacDecoderSession>(optOutputEncoding);
+        return openConcreteSession<AacDecoderSession>(filePath, optOutputEncoding);
       }
 
       return makeError(Error::Code::NotSupported,
@@ -77,12 +94,12 @@ namespace ao::audio
 
     if (ext == ".mp3")
     {
-      return std::make_unique<Mp3DecoderSession>(optOutputEncoding);
+      return openConcreteSession<Mp3DecoderSession>(filePath, optOutputEncoding);
     }
 
     if (ext == ".wav")
     {
-      return std::make_unique<WavDecoderSession>(optOutputEncoding);
+      return openConcreteSession<WavDecoderSession>(filePath, optOutputEncoding);
     }
 
     return makeError(Error::Code::NotSupported, std::format("Unsupported audio file extension '{}'", ext));

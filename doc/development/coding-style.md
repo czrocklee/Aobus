@@ -225,8 +225,7 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
 - 6\. Platform-Specific Code
   - 6.1. File-Level Separation
     - 6.1.1. Put platform implementations in separate files selected by CMake (`if(WIN32)`/`elseif(LINUX)`), using a platform suffix or a platform file family: `SignalExitWatcherPosix.cpp` / `SignalExitWatcherWindows.cpp`, `backend/WasapiProvider.cpp` / `backend/PipeWireProvider.cpp`.
-    - 6.1.2. Small localized branches — a conditional include plus a call or two, as in `AudioBackendBootstrap.cpp` — may use preprocessor conditionals in place. Once a branch grows beyond that, split it into per-platform files.
-  - 6.2. Platform Capability Macros
-    - 6.2.1. Audio backend availability comes from the generated `<ao/audio/BackendConfig.h>`: test `AOBUS_HAS_WASAPI` / `AOBUS_HAS_PIPEWIRE` / `AOBUS_HAS_ALSA` with `#if` (they are always defined to `0` or `1`).
-    - 6.2.2. Do not introduce new platform macros through target compile definitions; extend the generated config header instead so availability stays visible in one place.
-    - 6.2.3. Raw compiler/OS macros (`_WIN32`, `__linux__`) belong only inside platform-suffixed files or the small branches allowed by 6.1.2.
+    - 6.1.2. A small localized branch containing only a conditional include plus a call or two may use preprocessor conditionals in place. Once a branch grows beyond that, split it into per-platform files.
+  - 6.2. Platform Capability Selection
+    - 6.2.1. Prefer platform-suffixed implementation files selected by CMake over generated availability macros in shared source.
+    - 6.2.2. Raw compiler/OS macros (`_WIN32`, `__linux__`) belong only inside platform-suffixed files or the small branches allowed by 6.1.2.

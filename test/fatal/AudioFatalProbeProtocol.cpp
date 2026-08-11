@@ -16,6 +16,8 @@ namespace ao::audio::test
         "invalid-backend-third-push", "category=realtime-invariant", "RT signal ring capacity exceeded"},
       AudioFatalProbeExpectation{"timeline-owner-overwrite", "category=invariant", "lookahead owner must be empty"},
       AudioFatalProbeExpectation{
+        "decoder-factory-null-success", "category=invariant", "Decoder factory succeeded without a session"},
+      AudioFatalProbeExpectation{
         "queue-worker-joinable", "category=invariant", "must stop the queue before destruction"},
       AudioFatalProbeExpectation{
         "queue-worker-running", "category=invariant", "worker must exit before queue destruction"},

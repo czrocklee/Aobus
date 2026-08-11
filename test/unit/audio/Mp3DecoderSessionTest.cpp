@@ -27,8 +27,8 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
-    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     CHECK(info.codec == AudioCodec::Mp3);
@@ -58,8 +58,8 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
-    auto decoder = Mp3DecoderSession{std::nullopt};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, std::nullopt));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     CHECK(info.sourceFormat.sampleRate == 44100);
@@ -80,8 +80,8 @@ namespace ao::audio::test
     auto const testFile = requireAudioFixture("hires.mp3");
 
     // Aobus often uses 32-bit float for internal processing
-    auto decoder = Mp3DecoderSession{SampleEncoding::Float32Le};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Float32Le));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     CHECK(isFloatEncoding(info.outputFormat.encoding));
@@ -92,28 +92,12 @@ namespace ao::audio::test
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 4U);
   }
 
-  TEST_CASE("Mp3DecoderSession - supports reopening", "[audio][unit][mp3]")
-  {
-    auto const testFile = requireAudioFixture("hires.mp3");
-
-    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-
-    REQUIRE(decoder.open(testFile));
-    CHECK(decoder.readNextBlock());
-
-    // Open same file again
-    REQUIRE(decoder.open(testFile));
-    auto const blockRes = decoder.readNextBlock();
-    REQUIRE(blockRes);
-    CHECK(blockRes->firstFrameIndex == 0); // Should be reset
-  }
-
   TEST_CASE("Mp3DecoderSession - reads until EOF", "[audio][unit][mp3]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
-    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
 
     CHECK(readUntilStableEndOfStream(decoder, 512) == 44100);
   }
@@ -122,9 +106,8 @@ namespace ao::audio::test
             "[audio][regression][mp3]")
   {
     auto const testFile = requireAudioFixture("vbr_no_seek_table.mp3");
-    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
     auto const info = decoder.streamInfo();
     CHECK(info.sourceFormat.sampleRate == 44100);
     CHECK(info.duration == std::chrono::milliseconds{20088});
@@ -149,8 +132,8 @@ namespace ao::audio::test
     data.insert(data.end(), secondData.begin(), secondData.end());
 
     auto const temp = ao::test::TempFile{data, ".mp3"};
-    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-    REQUIRE(decoder.open(temp.path));
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
     auto const initialInfo = decoder.streamInfo();
 
     bool rejectedFormatChange = false;
@@ -183,16 +166,9 @@ namespace ao::audio::test
 
   TEST_CASE("Mp3DecoderSession - reports error paths", "[audio][unit][mp3][error]")
   {
-    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-
-    SECTION("Seek on unopened file")
-    {
-      CHECK(!decoder.seek(std::chrono::milliseconds{100}));
-    }
-
     SECTION("Non-existent file")
     {
-      CHECK(!decoder.open("/path/to/nowhere/nonexistent.mp3"));
+      CHECK(!Mp3DecoderSession::open("/path/to/nowhere/nonexistent.mp3", SampleEncoding::Signed16Le));
     }
 
     SECTION("Invalid file content")
@@ -203,7 +179,7 @@ namespace ao::audio::test
         ofs << "NOT AN MP3 FILE! Random garbage data...";
       }
 
-      auto const result = decoder.open(tempFile.path);
+      auto const result = Mp3DecoderSession::open(tempFile.path, SampleEncoding::Signed16Le);
       REQUIRE_FALSE(result);
       CHECK(result.error().message.contains(":"));
       CHECK(result.error().message != "Failed to get MP3 format: A generic mpg123 error.");
@@ -212,7 +188,8 @@ namespace ao::audio::test
     SECTION("Seek way beyond duration")
     {
       auto const testFile = requireAudioFixture("basic_metadata.mp3");
-      REQUIRE(decoder.open(testFile));
+      auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       // Seek to 1 hour (much longer than basic_metadata.mp3)
       CHECK(!decoder.seek(std::chrono::hours{1}));
     }
@@ -220,9 +197,8 @@ namespace ao::audio::test
     SECTION("Supports lossless wider integer output")
     {
       auto const testFile = requireAudioFixture("basic_metadata.mp3");
-      auto int32Decoder = Mp3DecoderSession{SampleEncoding::Signed32Le};
-
-      REQUIRE(int32Decoder.open(testFile));
+      auto int32DecoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed32Le));
+      auto& int32Decoder = *int32DecoderPtr;
       CHECK(int32Decoder.streamInfo().outputFormat.encoding == SampleEncoding::Signed32Le);
     }
 
@@ -230,23 +206,8 @@ namespace ao::audio::test
     {
       auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
-      CHECK(Mp3DecoderSession{SampleEncoding::Signed24PackedLe}.open(testFile));
-      CHECK(Mp3DecoderSession{SampleEncoding::Signed24In32Le}.open(testFile));
-    }
-
-    SECTION("Close and failed reopen clear stream state")
-    {
-      auto const testFile = requireAudioFixture("basic_metadata.mp3");
-      auto lifecycleDecoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(lifecycleDecoder.open(testFile));
-      lifecycleDecoder.close();
-      lifecycleDecoder.close();
-      checkClosedSession(lifecycleDecoder);
-
-      REQUIRE(lifecycleDecoder.open(testFile));
-      CHECK(!lifecycleDecoder.open("/path/to/nowhere/nonexistent.mp3"));
-      checkClosedSession(lifecycleDecoder);
+      CHECK(Mp3DecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
+      CHECK(Mp3DecoderSession::open(testFile, SampleEncoding::Signed24In32Le));
     }
   }
 } // namespace ao::audio::test

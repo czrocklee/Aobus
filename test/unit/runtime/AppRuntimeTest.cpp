@@ -3,6 +3,7 @@
 
 #include <ao/rt/AppRuntime.h>
 
+#include "lib/audio/NullBackend.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -22,7 +23,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>

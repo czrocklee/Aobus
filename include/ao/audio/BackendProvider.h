@@ -11,12 +11,13 @@
 
 #include <functional>
 #include <memory>
-#include <string>
 #include <string_view>
 #include <vector>
 
 namespace ao::audio
 {
+  struct Device;
+
   /**
    * @brief Interface for audio backend providers (e.g., PipeWire, ALSA).
    * Provides reactive access to audio devices and system routing graphs.
@@ -94,4 +95,11 @@ namespace ao::audio
   protected:
     BackendProvider() = default;
   };
+
+  /**
+   * @brief Creates the native audio backend providers in platform preference order.
+   *
+   * Linux prefers PipeWire and keeps ALSA as the fallback. Windows provides WASAPI.
+   */
+  std::vector<std::unique_ptr<BackendProvider>> createPlatformBackendProviders();
 } // namespace ao::audio

@@ -184,6 +184,55 @@ namespace ao::library::test
       return writeObservation("committed-revision=1");
     }
 
+    std::int32_t runCrossLibraryFact(std::string_view const scratchName, std::string_view const scenario)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto firstRes = MusicLibrary::open(
+        scratchPath, scratchPath / "first-db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+      auto secondRes = MusicLibrary::open(
+        scratchPath, scratchPath / "second-db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+
+      if (!firstRes || !secondRes)
+      {
+        return 3;
+      }
+
+      auto first = std::move(*firstRes);
+      auto second = std::move(*secondRes);
+      auto writableRes = WritableMusicLibrary::acquire(second);
+
+      if (!writableRes)
+      {
+        return 3;
+      }
+
+      auto transaction = writableRes->writeTransaction();
+
+      if (scenario == "cross-library-write-revision")
+      {
+        std::ignore = first.libraryRevision(transaction);
+        return 3;
+      }
+
+      if (scenario == "cross-library-operation-metadata")
+      {
+        std::ignore = transaction.apply(
+          [&first](LibraryWrite& write) -> Result<>
+          {
+            std::ignore = first.metadataHeader(write);
+            return {};
+          });
+        return 3;
+      }
+
+      return 2;
+    }
+
     std::int32_t runZeroListUpdate(std::string_view const scratchName)
     {
       if (scratchName.empty())
@@ -987,6 +1036,11 @@ namespace ao::library::test
     if (name == "commit-revision")
     {
       return runCommitRevision(scratchName);
+    }
+
+    if (name == "cross-library-write-revision" || name == "cross-library-operation-metadata")
+    {
+      return runCrossLibraryFact(scratchName, name);
     }
 
     if (name == "list-builder-invalid-view")

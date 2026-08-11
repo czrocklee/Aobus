@@ -3,6 +3,7 @@
 
 #include <ao/audio/Engine.h>
 
+#include "AudioTime.h"
 #include "PcmSource.h"
 #include "detail/DecoderOutput.h"
 #include "detail/EngineEventQueueInvariants.h"
@@ -16,7 +17,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/audio/AudioTime.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>

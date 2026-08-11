@@ -58,6 +58,7 @@ Their readers accept a read transaction, a write transaction for pre-operation i
 Production mutation does not obtain a physical Store writer: `LibraryWrite::tracks()` and `LibraryWrite::lists()` return callback-scoped logical writers, and `LibraryWrite::restoreLibraryIdentity()` is the only metadata mutation exposed inside the root operation.
 Physical Track, manifest, List, Resource, Dictionary, and metadata writer factories remain inaccessible to production callers; representation, corruption, and isolated Store-backed tests use one source-private access seam.
 `MusicLibrary` exposes logical metadata-header values rather than a physical Metadata Store handle.
+Every overload that reads a transaction-local metadata header or library revision validates the transaction's stable `MusicLibrary` identity before returning the fact; cross-library fact reads fail before exposing either value.
 Native LMDB transaction handles remain private implementation details of `MusicLibrary` and the stores; the wrappers add semantic capability boundaries but no additional storage transaction or heap allocation on the read path.
 
 The logical Track writer has these operation groups:

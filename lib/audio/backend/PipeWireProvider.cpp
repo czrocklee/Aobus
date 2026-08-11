@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "backend/PipeWireProvider.h"
+
+#include "backend/PipeWireBackend.h"
+#include "backend/PipeWireMonitor.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
-#include <ao/audio/backend/PipeWireBackend.h>
-#include <ao/audio/backend/PipeWireMonitor.h>
-#include <ao/audio/backend/PipeWireProvider.h>
 
 #include <memory>
 #include <string_view>

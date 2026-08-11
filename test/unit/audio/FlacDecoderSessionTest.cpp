@@ -21,8 +21,8 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.flac");
 
-    auto decoder = FlacDecoderSession{SampleEncoding::Signed24PackedLe};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     CHECK(info.sourceFormat.sampleRate > 0);
@@ -45,12 +45,12 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.flac");
 
-    auto decoder = FlacDecoderSession{SampleEncoding::Signed24PackedLe};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
+    auto& decoder = *decoderPtr;
     CHECK(decoder.readNextBlock());
 
-    auto paddedDecoder = FlacDecoderSession{SampleEncoding::Signed32Le};
-    REQUIRE(paddedDecoder.open(testFile));
+    auto paddedDecoderPtr = ao::test::requireValue(FlacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
+    auto& paddedDecoder = *paddedDecoderPtr;
     CHECK(encodingContainerBits(paddedDecoder.streamInfo().outputFormat.encoding) == 32);
     auto const blockRes = paddedDecoder.readNextBlock();
     REQUIRE(blockRes);
@@ -60,9 +60,7 @@ namespace ao::audio::test
   TEST_CASE("FlacDecoderSession - rejects precision-losing output", "[audio][unit][flac]")
   {
     auto const testFile = requireAudioFixture("hires.flac");
-    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-
-    auto const result = decoder.open(testFile);
+    auto const result = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotSupported);
   }
@@ -74,9 +72,8 @@ namespace ao::audio::test
     // so the seek lands on the final frame rather than at end of stream; libFLAC
     // builds otherwise disagree on out-of-range seeks and drop the position.
     auto const testFile = requireAudioFixture("basic_metadata.flac");
-    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
     auto const info = decoder.streamInfo();
     REQUIRE(info.duration > std::chrono::milliseconds{0});
 
@@ -89,24 +86,16 @@ namespace ao::audio::test
   TEST_CASE("FlacDecoderSession - stable end of stream", "[audio][unit][flac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
-    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 
   TEST_CASE("FlacDecoderSession - reports error paths", "[audio][unit][flac][error]")
   {
-    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-
-    SECTION("Seek on unopened file")
-    {
-      CHECK(!decoder.seek(std::chrono::milliseconds{100})); // Should fail gracefully
-    }
-
     SECTION("Non-existent file")
     {
-      CHECK(!decoder.open("/path/to/nowhere/nonexistent.flac"));
+      CHECK(!FlacDecoderSession::open("/path/to/nowhere/nonexistent.flac", SampleEncoding::Signed16Le));
     }
 
     SECTION("Invalid file content")
@@ -117,31 +106,16 @@ namespace ao::audio::test
         ofs << "NOT A FLAC FILE! Random garbage data...";
       }
 
-      CHECK(!decoder.open(tempFile.path));
+      CHECK(!FlacDecoderSession::open(tempFile.path, SampleEncoding::Signed16Le));
     }
 
     SECTION("Precision-losing output fails during open")
     {
       auto const testFile = requireAudioFixture("hires.flac");
 
-      CHECK(!FlacDecoderSession{SampleEncoding::Signed16Le}.open(testFile));
-      CHECK(FlacDecoderSession{SampleEncoding::Float32Le}.open(testFile));
-      CHECK(FlacDecoderSession{SampleEncoding::Signed32Le}.open(testFile));
-    }
-
-    SECTION("Close and failed reopen clear stream state")
-    {
-      auto const testFile = requireAudioFixture("hires.flac");
-      auto lifecycleDecoder = FlacDecoderSession{SampleEncoding::Signed24PackedLe};
-
-      REQUIRE(lifecycleDecoder.open(testFile));
-      lifecycleDecoder.close();
-      lifecycleDecoder.close();
-      checkClosedSession(lifecycleDecoder);
-
-      REQUIRE(lifecycleDecoder.open(testFile));
-      CHECK(!lifecycleDecoder.open("/path/to/nowhere/nonexistent.flac"));
-      checkClosedSession(lifecycleDecoder);
+      CHECK(!FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
+      CHECK(FlacDecoderSession::open(testFile, SampleEncoding::Float32Le));
+      CHECK(FlacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
     }
   }
 } // namespace ao::audio::test

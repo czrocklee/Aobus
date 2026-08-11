@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/detail/PipeWireMonitorParsing.h>
+#include "lib/audio/backend/detail/PipeWireMonitorParsing.h"
 
+#include "lib/audio/backend/detail/PipeWireFormatParsing.h"
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/backend/detail/PipeWireFormatParsing.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>

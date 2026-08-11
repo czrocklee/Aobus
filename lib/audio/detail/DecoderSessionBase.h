@@ -5,9 +5,13 @@
 
 #include <ao/Error.h>
 #include <ao/audio/DecoderSession.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <expected>
 #include <filesystem>
+#include <memory>
+#include <optional>
+#include <utility>
 
 namespace ao::audio::detail
 {
@@ -15,20 +19,22 @@ namespace ao::audio::detail
   class DecoderSessionBase : public DecoderSession
   {
   public:
-    // DecoderSession deliberately fail-fast terminates if allocation or another
-    // programming failure escapes this recoverable-error boundary.
-    Result<> open(std::filesystem::path const& filePath) noexcept override
+    // Construction preserves ordinary allocation failure. Once the session
+    // exists, initialize() is the noexcept recoverable-error boundary.
+    static Result<std::unique_ptr<Derived>> open(std::filesystem::path const& filePath,
+                                                 std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto* derived = static_cast<Derived*>(this);
-      derived->close();
+      // make_unique cannot invoke Derived's private constructor from this friend
+      // context. The owning pointer destroys every partial initialization path
+      // before an error is returned.
+      auto sessionPtr = std::unique_ptr<Derived>{new Derived{optOutputEncoding}};
 
-      if (auto const result = derived->openCodec(filePath); !result)
+      if (auto const result = sessionPtr->initialize(filePath); !result)
       {
-        derived->close();
         return std::unexpected{result.error()};
       }
 
-      return {};
+      return std::move(sessionPtr);
     }
 
   private:

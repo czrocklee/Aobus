@@ -160,8 +160,8 @@ namespace ao::library
     TrackWriter tracks();
     ListWriter lists();
     Result<> restoreLibraryIdentity(std::array<std::byte, 16> const& libraryId);
-    std::uint64_t libraryRevision() const;
-    MetadataHeader metadataHeader() const;
+    std::uint64_t libraryRevision(detail::LibraryIdentity const& identity) const;
+    MetadataHeader metadataHeader(detail::LibraryIdentity const& identity) const;
     DictionaryStore::Writer& dictionary();
     void requireOperationActive() const;
 

@@ -82,13 +82,8 @@ namespace ao::audio::test
 
     SECTION("Decoder open failure")
     {
-      auto const factory = [](auto const&, std::optional<SampleEncoding>)
-      {
-        auto decPtr = std::make_unique<ScriptedDecoderSession>(makeScriptedStreamInfo(makeEngineTestFormat()));
-
-        decPtr->setOpenResult(std::unexpected(Error{.message = "open failed"}));
-        return decPtr;
-      };
+      auto const factory = [](auto const&, std::optional<SampleEncoding>) -> Result<std::unique_ptr<DecoderSession>>
+      { return std::unexpected{Error{.message = "open failed"}}; };
 
       auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device, factory};
       auto const desc = PlaybackInput{.filePath = "song.flac"};

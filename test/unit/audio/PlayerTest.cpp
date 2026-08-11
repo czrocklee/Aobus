@@ -7,6 +7,7 @@
 #include "BackendTestSupport.h"
 #include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
+#include "lib/audio/NullBackend.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
@@ -17,7 +18,6 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>

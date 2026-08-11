@@ -21,7 +21,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 namespace ao::query
@@ -257,7 +256,6 @@ namespace ao::query
 
       return QueryCompletionToken{
         .type = variableTypeForTrigger(value.front()),
-        .trigger = value.front(),
         .replaceBegin = token->begin,
         .replaceEnd = cursor,
         .prefix = std::string{value.substr(1)},
@@ -614,23 +612,6 @@ namespace ao::query
     if (auto optOperatorContext = analyzeOperatorCompletion(text, prefixTokens, cursor); optOperatorContext)
     {
       return QueryCompletionAnalysis{*optOperatorContext};
-    }
-
-    return std::nullopt;
-  }
-
-  std::optional<QueryCompletionToken> queryCompletionTokenAtCursor(std::string_view text, std::size_t cursor)
-  {
-    auto optContext = analyzeQueryCompletion(text, cursor);
-
-    if (!optContext)
-    {
-      return std::nullopt;
-    }
-
-    if (auto const* token = std::get_if<QueryCompletionToken>(&*optContext); token != nullptr)
-    {
-      return *token;
     }
 
     return std::nullopt;

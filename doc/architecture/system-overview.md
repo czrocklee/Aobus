@@ -75,7 +75,7 @@ It consumes runtime services and stable value types but does not become a second
 ### Frontends
 
 Each frontend is a composition root and platform adapter.
-It selects the music root, explicit overrides, and platform application directories; constructs the appropriate executor and runtime; registers platform audio providers; binds user events to commands; and owns toolkit or terminal lifecycle.
+It selects the music root, explicit overrides, and platform application directories; constructs the appropriate executor and runtime; transfers the fresh providers returned by core audio's platform factory; binds user events to commands; and owns toolkit or terminal lifecycle.
 Composition roots translate recoverable runtime-factory errors into their existing startup or replacement presentation; no public throwing runtime constructor is retained as an adapter.
 Frontends use the runtime path contract for standard per-library locations while retaining frontend-specific filenames and override policy.
 

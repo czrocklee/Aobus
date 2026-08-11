@@ -3,16 +3,16 @@
 
 #include "FlacDecoderSession.h"
 
+#include "AudioTime.h"
+#include "PcmConversion.h"
 #include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include "detail/MappedFileCursor.h"
 #include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/PcmConversion.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/utility/ByteView.h>
@@ -184,7 +184,7 @@ namespace ao::audio
 
   FlacDecoderSession::~FlacDecoderSession() = default;
 
-  Result<> FlacDecoderSession::openCodec(std::filesystem::path const& filePath)
+  Result<> FlacDecoderSession::initialize(std::filesystem::path const& filePath) noexcept
   {
     try
     {
@@ -226,26 +226,6 @@ namespace ao::audio
     {
       return std::unexpected{ex.error()};
     }
-  }
-
-  void FlacDecoderSession::close() noexcept
-  {
-    if (_implPtr->decoder != nullptr)
-    {
-      ::FLAC__stream_decoder_finish(_implPtr->decoder);
-    }
-
-    _implPtr->fileCursor.close();
-    _implPtr->pcmBuffer.clear();
-    _implPtr->outputBytes = {};
-    _implPtr->outputAdapter.reset();
-    _implPtr->bufferedFrames = 0;
-    _implPtr->nextFrameIndex = 0;
-    _implPtr->totalFrames = 0;
-    _implPtr->optDecodeError.reset();
-    _implPtr->optOutputError.reset();
-    _implPtr->eof = false;
-    _implPtr->info = {};
   }
 
   // Result error materialization may allocate; DecoderSession requires fail-fast

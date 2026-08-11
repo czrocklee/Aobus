@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -46,6 +47,23 @@ namespace ao::query::test
                                           match.canonicalName == descriptor.canonicalName && match.kind == kind;
                                  });
     }
+
+    std::optional<QueryCompletionToken> variableCompletionAtCursor(std::string_view text, std::size_t cursor)
+    {
+      auto optAnalysis = analyzeQueryCompletion(text, cursor);
+
+      if (!optAnalysis)
+      {
+        return std::nullopt;
+      }
+
+      if (auto const* token = std::get_if<QueryCompletionToken>(&*optAnalysis); token != nullptr)
+      {
+        return *token;
+      }
+
+      return std::nullopt;
+    }
   } // namespace
 
   TEST_CASE("Completion - finds query variable tokens at the cursor", "[query][unit][completion]")
@@ -54,34 +72,30 @@ namespace ao::query::test
     {
       auto const text = std::string{"$art @bit #rock %replay"};
 
-      auto optMetadata = queryCompletionTokenAtCursor(text, 4);
+      auto optMetadata = variableCompletionAtCursor(text, 4);
       REQUIRE(optMetadata);
       CHECK(optMetadata->type == VariableType::Metadata);
-      CHECK(optMetadata->trigger == '$');
       CHECK(optMetadata->replaceBegin == 0);
       CHECK(optMetadata->replaceEnd == 4);
       CHECK(optMetadata->prefix == "art");
 
-      auto optProperty = queryCompletionTokenAtCursor(text, 9);
+      auto optProperty = variableCompletionAtCursor(text, 9);
       REQUIRE(optProperty);
       CHECK(optProperty->type == VariableType::Property);
-      CHECK(optProperty->trigger == '@');
       CHECK(optProperty->replaceBegin == 5);
       CHECK(optProperty->replaceEnd == 9);
       CHECK(optProperty->prefix == "bit");
 
-      auto optTag = queryCompletionTokenAtCursor(text, 15);
+      auto optTag = variableCompletionAtCursor(text, 15);
       REQUIRE(optTag);
       CHECK(optTag->type == VariableType::Tag);
-      CHECK(optTag->trigger == '#');
       CHECK(optTag->replaceBegin == 10);
       CHECK(optTag->replaceEnd == 15);
       CHECK(optTag->prefix == "rock");
 
-      auto optCustom = queryCompletionTokenAtCursor(text, text.size());
+      auto optCustom = variableCompletionAtCursor(text, text.size());
       REQUIRE(optCustom);
       CHECK(optCustom->type == VariableType::Custom);
-      CHECK(optCustom->trigger == '%');
       CHECK(optCustom->replaceBegin == 16);
       CHECK(optCustom->replaceEnd == text.size());
       CHECK(optCustom->prefix == "replay");
@@ -89,7 +103,7 @@ namespace ao::query::test
 
     SECTION("Supports an empty prefix after a trigger")
     {
-      auto optToken = queryCompletionTokenAtCursor("$", 1);
+      auto optToken = variableCompletionAtCursor("$", 1);
       REQUIRE(optToken);
       CHECK(optToken->type == VariableType::Metadata);
       CHECK(optToken->replaceBegin == 0);
@@ -100,13 +114,13 @@ namespace ao::query::test
 
   TEST_CASE("Completion - rejects non-token cursor positions", "[query][unit][completion]")
   {
-    CHECK_FALSE(queryCompletionTokenAtCursor("", 0));
-    CHECK_FALSE(queryCompletionTokenAtCursor("$artist", 99));
-    CHECK_FALSE(queryCompletionTokenAtCursor("$artist", 3));
-    CHECK_FALSE(queryCompletionTokenAtCursor("foo$artist", 10));
-    CHECK_FALSE(queryCompletionTokenAtCursor(R"("$artist")", 5));
-    CHECK_FALSE(queryCompletionTokenAtCursor(R"(#"Rock")", 6));
-    CHECK_FALSE(queryCompletionTokenAtCursor(R"(#["Rock"])", 7));
+    CHECK_FALSE(variableCompletionAtCursor("", 0));
+    CHECK_FALSE(variableCompletionAtCursor("$artist", 99));
+    CHECK_FALSE(variableCompletionAtCursor("$artist", 3));
+    CHECK_FALSE(variableCompletionAtCursor("foo$artist", 10));
+    CHECK_FALSE(variableCompletionAtCursor(R"("$artist")", 5));
+    CHECK_FALSE(variableCompletionAtCursor(R"(#"Rock")", 6));
+    CHECK_FALSE(variableCompletionAtCursor(R"(#["Rock"])", 7));
     CHECK_FALSE(analyzeQueryCompletion(R"($artist = "Mil)", 14));
   }
 
@@ -119,7 +133,6 @@ namespace ao::query::test
     auto const* token = std::get_if<QueryCompletionToken>(&*optContext);
     REQUIRE(token != nullptr);
     CHECK(token->type == VariableType::Tag);
-    CHECK(token->trigger == '#');
     CHECK(token->replaceBegin == 0);
     CHECK(token->replaceEnd == text.size());
     CHECK(token->prefix == "rock");
@@ -131,7 +144,7 @@ namespace ao::query::test
     {
       auto const text = std::string{"$ar + $album"};
       auto const cursor = text.find(' ');
-      auto const optToken = queryCompletionTokenAtCursor(text, cursor);
+      auto const optToken = variableCompletionAtCursor(text, cursor);
 
       REQUIRE(optToken);
       CHECK(optToken->type == VariableType::Metadata);

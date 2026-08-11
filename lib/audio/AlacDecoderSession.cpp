@@ -126,7 +126,7 @@ namespace ao::audio
 
   AlacDecoderSession::~AlacDecoderSession() = default;
 
-  Result<> AlacDecoderSession::openCodec(std::filesystem::path const& filePath)
+  Result<> AlacDecoderSession::initialize(std::filesystem::path const& filePath) noexcept
   {
     try
     {
@@ -185,14 +185,6 @@ namespace ao::audio
     {
       return std::unexpected{ex.error()};
     }
-  }
-
-  void AlacDecoderSession::close() noexcept
-  {
-    _implPtr->packetSource.close();
-    _implPtr->targetPcm.clear();
-    _implPtr->outputAdapter.reset();
-    _implPtr->info = {};
   }
 
   Result<> AlacDecoderSession::seek(std::chrono::milliseconds offset) noexcept

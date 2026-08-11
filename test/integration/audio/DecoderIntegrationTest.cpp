@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "lib/audio/AlacDecoderSession.h"
+#include "lib/audio/AudioTime.h"
 #include "lib/audio/FlacDecoderSession.h"
 #include "lib/audio/Mp3DecoderSession.h"
 #include <ao/AudioCodec.h>
-#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/PcmFormat.h>
@@ -148,8 +148,9 @@ namespace ao::audio::test
       // 1. Acquire reference 16-bit samples
       auto samples16 = std::vector<std::int16_t>{};
       {
-        auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-        REQUIRE(decoder.open(testFile));
+        auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+        REQUIRE(decoderRes);
+        auto& decoder = **decoderRes;
         CHECK(decoder.streamInfo().codec == AudioCodec::Flac);
         samples16 = extractSamples<std::int16_t>(decoder, 100);
       }
@@ -157,8 +158,9 @@ namespace ao::audio::test
       // 2. Acquire target 32-bit padded samples
       auto samples32 = std::vector<std::int32_t>{};
       {
-        auto decoder = FlacDecoderSession{SampleEncoding::Signed32Le};
-        REQUIRE(decoder.open(testFile));
+        auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed32Le);
+        REQUIRE(decoderRes);
+        auto& decoder = **decoderRes;
         samples32 = extractSamples<std::int32_t>(decoder, 100);
       }
 
@@ -173,8 +175,9 @@ namespace ao::audio::test
       // 1. Acquire reference 24-bit (packed) samples
       auto samples24 = std::vector<std::int32_t>{};
       {
-        auto decoder = AlacDecoderSession{SampleEncoding::Signed24PackedLe};
-        REQUIRE(decoder.open(testFile));
+        auto decoderRes = AlacDecoderSession::open(testFile, SampleEncoding::Signed24PackedLe);
+        REQUIRE(decoderRes);
+        auto& decoder = **decoderRes;
         CHECK(decoder.streamInfo().codec == AudioCodec::Alac);
         auto const blockRes = decoder.readNextBlock();
 
@@ -185,8 +188,9 @@ namespace ao::audio::test
       // 2. Acquire target 32-bit padded samples
       auto samples32 = std::vector<std::int32_t>{};
       {
-        auto decoder = AlacDecoderSession{SampleEncoding::Signed32Le};
-        REQUIRE(decoder.open(testFile));
+        auto decoderRes = AlacDecoderSession::open(testFile, SampleEncoding::Signed32Le);
+        REQUIRE(decoderRes);
+        auto& decoder = **decoderRes;
         samples32 = extractSamples<std::int32_t>(decoder, samples24.size());
       }
 
@@ -201,8 +205,9 @@ namespace ao::audio::test
 
     SECTION("Metadata Extraction")
     {
-      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-      REQUIRE(decoder.open(testFile));
+      auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+      auto& decoder = **decoderRes;
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.sampleRate == 44100);
@@ -215,8 +220,9 @@ namespace ao::audio::test
 
     SECTION("Seek Consistency")
     {
-      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-      REQUIRE(decoder.open(testFile));
+      auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+      auto& decoder = **decoderRes;
 
       auto const info = decoder.streamInfo();
       auto const seekOffset = std::chrono::milliseconds{100};
@@ -240,8 +246,9 @@ namespace ao::audio::test
 
     SECTION("Hires Metadata")
     {
-      auto decoder = AlacDecoderSession{std::nullopt};
-      REQUIRE(decoder.open(testFile));
+      auto decoderRes = AlacDecoderSession::open(testFile, std::nullopt);
+      REQUIRE(decoderRes);
+      auto& decoder = **decoderRes;
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.sampleRate == 96000);
@@ -256,8 +263,9 @@ namespace ao::audio::test
 
     SECTION("Metadata Extraction")
     {
-      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-      REQUIRE(decoder.open(testFile));
+      auto decoderRes = Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+      auto& decoder = **decoderRes;
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.sampleRate == 48000);
@@ -272,8 +280,7 @@ namespace ao::audio::test
     {
       // Use this source file itself as a fake FLAC
       auto const testFile = std::filesystem::path{__FILE__};
-      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-      auto const resRes = decoder.open(testFile);
+      auto const resRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
 
       CHECK_FALSE(resRes);
     }
@@ -281,8 +288,9 @@ namespace ao::audio::test
     SECTION("MP3: Seek near EOF")
     {
       auto const testFile = requireAudioFixture("hires.mp3");
-      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-      REQUIRE(decoder.open(testFile));
+      auto decoderRes = Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+      auto& decoder = **decoderRes;
 
       auto const info = decoder.streamInfo();
 
@@ -315,8 +323,9 @@ namespace ao::audio::test
     SECTION("Seek near EOF")
     {
       auto const testFile = requireAudioFixture("basic_metadata.flac");
-      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-      REQUIRE(decoder.open(testFile));
+      auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+      auto& decoder = **decoderRes;
 
       auto const info = decoder.streamInfo();
 

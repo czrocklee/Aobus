@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/detail/PipeWireMonitorParsing.h>
+#include "backend/detail/PipeWireMonitorParsing.h"
 
+#include "backend/detail/PipeWireFormatParsing.h"
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/backend/detail/PipeWireFormatParsing.h>
 
 extern "C"
 {

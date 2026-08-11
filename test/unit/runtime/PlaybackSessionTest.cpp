@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "lib/audio/NullBackend.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "runtime/playback/PlaybackCursorSession.h"
@@ -20,7 +21,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>

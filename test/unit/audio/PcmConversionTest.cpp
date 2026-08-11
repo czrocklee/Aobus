@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/PcmConversion.h>
+#include "lib/audio/PcmConversion.h"
 
 #include <ao/Error.h>
 #include <ao/audio/PcmFormat.h>

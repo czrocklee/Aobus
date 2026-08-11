@@ -6,8 +6,10 @@
 #include "lib/audio/detail/EngineEventQueueInvariants.h"
 #include "lib/audio/detail/EngineRtSignalRing.h"
 #include "lib/audio/detail/RenderTimeline.h"
+#include "lib/audio/detail/TrackSession.h"
 #include "test/unit/audio/EngineTestSupport.h"
 #include "test/unit/audio/FakeCapturingBackend.h"
+#include <ao/Error.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
@@ -15,18 +17,20 @@
 #include <ao/audio/SampleEncoding.h>
 
 #ifdef __linux__
-#include <ao/audio/backend/detail/AlsaGraphRegistry.h>
+#include "lib/audio/backend/detail/AlsaGraphRegistry.h"
 #endif
 #ifdef _WIN32
-#include <ao/audio/backend/WasapiProvider.h>
-#include <ao/audio/backend/detail/WasapiGraphRegistry.h>
-#include <ao/audio/backend/detail/WasapiProviderMonitorHooks.h>
+#include "lib/audio/backend/WasapiProvider.h"
+#include "lib/audio/backend/detail/WasapiGraphRegistry.h"
+#include "lib/audio/backend/detail/WasapiProviderMonitorHooks.h"
 #endif
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <semaphore>
 #include <stdexcept>
 #include <string_view>
@@ -111,6 +115,15 @@ namespace ao::audio::test
       timeline.armLookahead(std::make_unique<detail::RenderTimeline::Node>());
       [[maybe_unused]] auto* const consumedNode = timeline.consumeLookaheadForRender();
       timeline.armLookahead(std::make_unique<detail::RenderTimeline::Node>());
+    }
+
+    if (scenario == "decoder-factory-null-success")
+    {
+      auto const factory = [](std::filesystem::path const&,
+                              std::optional<SampleEncoding>) -> Result<std::unique_ptr<DecoderSession>>
+      { return std::unique_ptr<DecoderSession>{}; };
+      [[maybe_unused]] auto const inspectionRes =
+        detail::TrackSession::inspect(PlaybackInput{.filePath = "probe.flac"}, factory);
     }
 
     if (scenario == "queue-worker-joinable")

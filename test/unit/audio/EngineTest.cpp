@@ -593,11 +593,12 @@ namespace ao::audio::test
     auto info = makeScriptedStreamInfo(fmt);
     info.duration = std::chrono::milliseconds{100};
     auto factory = [info, data, path, registryPtr, &orderedEvents](
-                     std::filesystem::path const& requestedPath, std::optional<SampleEncoding> optOutputEncoding)
+                     std::filesystem::path const& requestedPath,
+                     std::optional<SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<DecoderSession>>
     {
       if (requestedPath != path)
       {
-        return std::unique_ptr<ScriptedDecoderSession>{};
+        return makeError(Error::Code::NotSupported, "No scripted decoder is registered for the requested path");
       }
 
       auto requestedInfo = info;
@@ -606,7 +607,7 @@ namespace ao::audio::test
       decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
       decPtr->setSeekObserver([&orderedEvents](std::chrono::milliseconds) { orderedEvents.emplace_back("seek"); });
       (*registryPtr)[path] = decPtr.get();
-      return decPtr;
+      return std::unique_ptr<DecoderSession>{std::move(decPtr)};
     };
 
     auto engine = Engine{std::move(backendPtr), device, std::move(factory)};

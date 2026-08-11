@@ -11,7 +11,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -51,24 +50,18 @@ namespace ao::audio::test
     void setReadObserver(std::function<void(std::size_t)> observer);
     void setDestroyCounter(std::shared_ptr<std::atomic<std::size_t>> counterPtr);
 
-    Result<> open(std::filesystem::path const& path) noexcept override;
-    void close() noexcept override;
     void flush() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
     Result<PcmBlock> readNextBlock() noexcept override;
     DecodedStreamInfo streamInfo() const noexcept override;
 
     // Inspection
-    bool isOpened() const;
-    bool isClosed() const;
     bool isFlushed() const;
     std::chrono::milliseconds lastSeekOffset() const;
     std::size_t seekCount() const;
-    std::filesystem::path const& lastOpenedPath() const;
     std::size_t readCount() const;
 
     // Configuration
-    void setOpenResult(Result<> resRes);
     void setSeekResult(Result<> resRes);
 
   private:
@@ -80,14 +73,10 @@ namespace ao::audio::test
     std::size_t _scriptIndex = 0;
     std::size_t _seekCount = 0;
 
-    Result<> _openRes = {};
     Result<> _seekRes = {};
 
-    bool _opened = false;
-    bool _closed = false;
     bool _flushed = false;
     std::chrono::milliseconds _lastSeekOffset{0};
-    std::filesystem::path _lastOpenedPath;
     std::size_t _readCount = 0;
     std::shared_ptr<std::atomic<std::size_t>> _destroyCounterPtr;
   };

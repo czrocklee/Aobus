@@ -5,7 +5,6 @@
 
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <string_view>
 #include <type_traits>
@@ -31,18 +30,11 @@ namespace ao::utility
     }
 
     constexpr T const& raw() const noexcept { return _value; }
-    constexpr T& raw() noexcept { return _value; }
 
     bool empty() const noexcept
       requires requires(T const& typeVal) { typeVal.empty(); }
     {
       return _value.empty();
-    }
-
-    void clear() noexcept
-      requires requires(T& typeVal) { typeVal.clear(); }
-    {
-      _value.clear();
     }
 
     operator std::string_view() const noexcept
@@ -82,36 +74,6 @@ namespace ao::utility
       requires std::is_integral_v<T>
     {
       return _value <=> rhs;
-    }
-
-    StrongType& operator++()
-      requires std::is_integral_v<T>
-    {
-      ++_value;
-      return *this;
-    }
-
-    StrongType operator++(std::int32_t)
-      requires std::is_integral_v<T>
-    {
-      auto temp = *this;
-      ++_value;
-      return temp;
-    }
-
-    StrongType& operator--()
-      requires std::is_integral_v<T>
-    {
-      --_value;
-      return *this;
-    }
-
-    StrongType operator--(std::int32_t)
-      requires std::is_integral_v<T>
-    {
-      auto temp = *this;
-      --_value;
-      return temp;
     }
 
   private:

@@ -242,15 +242,6 @@ add_custom_target(ao_no_raw_fatal_primitive_check ALL
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/ao")
 configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/ao/AppVersion.h" @ONLY)
 
-# Native audio backend availability, consumed as <ao/audio/BackendConfig.h>.
-if(WIN32)
-  set(AOBUS_HAS_WASAPI 1)
-elseif(LINUX)
-  set(AOBUS_HAS_PIPEWIRE 1)
-  set(AOBUS_HAS_ALSA 1)
-endif()
-configure_file(cmake/AudioBackendConfig.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/ao/audio/BackendConfig.h" @ONLY)
-
 if(AOBUS_BUILD_TESTS)
   enable_testing()
 endif()

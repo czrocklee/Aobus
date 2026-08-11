@@ -3,27 +3,18 @@
 
 #include "AudioBackendBootstrap.h"
 
-#include <ao/audio/BackendConfig.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/rt/AppRuntime.h>
 
-#include <memory>
-
-#if AOBUS_HAS_ALSA
-#include <ao/audio/backend/AlsaProvider.h>
-#endif
-#if AOBUS_HAS_PIPEWIRE
-#include <ao/audio/backend/PipeWireProvider.h>
-#endif
+#include <utility>
 
 namespace ao::gtk
 {
   void registerPlatformAudioBackends(rt::AppRuntime& runtime)
   {
-#if AOBUS_HAS_PIPEWIRE
-    runtime.addAudioProvider(std::make_unique<audio::backend::PipeWireProvider>());
-#endif
-#if AOBUS_HAS_ALSA
-    runtime.addAudioProvider(std::make_unique<audio::backend::AlsaProvider>());
-#endif
+    for (auto& providerPtr : audio::createPlatformBackendProviders())
+    {
+      runtime.addAudioProvider(std::move(providerPtr));
+    }
   }
 } // namespace ao::gtk

@@ -54,25 +54,21 @@ namespace ao::audio
     {
     }
 
-    ~Impl() { closeDecoder(); }
+    ~Impl()
+    {
+      if (decoder != nullptr)
+      {
+        ::aacDecoder_Close(decoder);
+      }
+    }
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    void closeDecoder() noexcept
-    {
-      if (decoder != nullptr)
-      {
-        ::aacDecoder_Close(decoder);
-        decoder = nullptr;
-      }
-    }
-
     void openDecoder()
     {
-      closeDecoder();
       decoder = ::aacDecoder_Open(TT_MP4_RAW, 1);
 
       if (decoder == nullptr)
@@ -183,7 +179,7 @@ namespace ao::audio
 
   AacDecoderSession::~AacDecoderSession() = default;
 
-  Result<> AacDecoderSession::openCodec(std::filesystem::path const& filePath)
+  Result<> AacDecoderSession::initialize(std::filesystem::path const& filePath) noexcept
   {
     try
     {
@@ -211,16 +207,6 @@ namespace ao::audio
     {
       return std::unexpected{ex.error()};
     }
-  }
-
-  void AacDecoderSession::close() noexcept
-  {
-    _implPtr->packetSource.close();
-    _implPtr->closeDecoder();
-    _implPtr->inputBuffer.clear();
-    _implPtr->pcmBuffer.clear();
-    _implPtr->outputAdapter.reset();
-    _implPtr->info = {};
   }
 
   // Result error materialization may allocate; DecoderSession intentionally

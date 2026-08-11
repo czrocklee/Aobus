@@ -285,15 +285,17 @@ namespace ao::library
     return {};
   }
 
-  std::uint64_t WriteTransaction::libraryRevision() const
+  std::uint64_t WriteTransaction::libraryRevision(detail::LibraryIdentity const& identity) const
   {
     AO_EXPECTS(_implPtr != nullptr, "Library write transaction is no longer active");
+    AO_EXPECTS(_implPtr->identity == &identity, "Write transaction belongs to a different MusicLibrary");
     return _implPtr->candidateRevision;
   }
 
-  MetadataHeader WriteTransaction::metadataHeader() const
+  MetadataHeader WriteTransaction::metadataHeader(detail::LibraryIdentity const& identity) const
   {
     AO_EXPECTS(_implPtr != nullptr, "Library write transaction is no longer active");
+    AO_EXPECTS(_implPtr->identity == &identity, "Write transaction belongs to a different MusicLibrary");
     return _implPtr->candidateHeader;
   }
 

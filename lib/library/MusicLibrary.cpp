@@ -982,13 +982,13 @@ namespace ao::library
 
   std::uint64_t MusicLibrary::libraryRevision(WriteTransaction const& transaction) const
   {
-    return transaction.libraryRevision();
+    return transaction.libraryRevision(_implPtr->identity);
   }
 
   std::uint64_t MusicLibrary::libraryRevision(LibraryWrite const& write) const
   {
     write._transaction->requireOperationActive();
-    return write._transaction->libraryRevision();
+    return write._transaction->libraryRevision(_implPtr->identity);
   }
 
   TrackStore const& MusicLibrary::tracks() const
@@ -1029,13 +1029,13 @@ namespace ao::library
 
   MetadataHeader MusicLibrary::metadataHeader(WriteTransaction const& transaction) const
   {
-    return transaction.metadataHeader();
+    return transaction.metadataHeader(_implPtr->identity);
   }
 
   MetadataHeader MusicLibrary::metadataHeader(LibraryWrite const& write) const
   {
     write._transaction->requireOperationActive();
-    return write._transaction->metadataHeader();
+    return write._transaction->metadataHeader(_implPtr->identity);
   }
 
   std::filesystem::path const& MusicLibrary::rootPath() const

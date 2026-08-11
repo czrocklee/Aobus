@@ -2,18 +2,21 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/utility/StrongType.h>
+
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/utility/StrongTypeStream.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <compare>
+#include <concepts>
 #include <cstdint>
 #include <format>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 
 namespace ao::utility::test
 {
@@ -21,7 +24,29 @@ namespace ao::utility::test
   {
     using StringId = StrongType<std::string, struct StringIdTag>;
     using IntId = StrongType<std::int32_t, struct IntIdTag>;
-  }
+
+    template<typename T>
+    concept Clearable = requires(T& value) { value.clear(); };
+
+    template<typename T>
+    concept PreIncrementable = requires(T& value) { ++value; };
+
+    template<typename T>
+    concept PostIncrementable = requires(T& value) { value++; };
+
+    template<typename T>
+    concept PreDecrementable = requires(T& value) { --value; };
+
+    template<typename T>
+    concept PostDecrementable = requires(T& value) { value--; };
+
+    static_assert(std::same_as<decltype(std::declval<StringId&>().raw()), std::string const&>);
+    static_assert(!Clearable<StringId>);
+    static_assert(!PreIncrementable<IntId>);
+    static_assert(!PostIncrementable<IntId>);
+    static_assert(!PreDecrementable<IntId>);
+    static_assert(!PostDecrementable<IntId>);
+  } // namespace
 
   TEST_CASE("StrongType - string-backed wrappers expose value semantics", "[utility][unit][strong-type]")
   {
@@ -34,9 +59,6 @@ namespace ao::utility::test
     CHECK(id1 != id3);
     CHECK(idEmpty.empty());
     CHECK(!id1.empty());
-
-    id1.clear();
-    CHECK(id1.empty());
 
     auto const sv = std::string_view{id2};
     CHECK(sv == "test");
@@ -70,17 +92,6 @@ namespace ao::utility::test
     CHECK(id1 == 42);
     CHECK(id1 != 10);
     CHECK((id1 <=> 10) == std::strong_ordering::greater);
-
-    // Increment / Decrement
-    auto inc = id3;
-    CHECK(inc++ == 10);
-    CHECK(inc == 11);
-    CHECK(++inc == 12);
-
-    auto dec = id3;
-    CHECK(dec-- == 10);
-    CHECK(dec == 9);
-    CHECK(--dec == 8);
 
     // Output stream
     auto oss = std::ostringstream{};

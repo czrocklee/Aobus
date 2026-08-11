@@ -39,6 +39,7 @@ target_link_libraries(ao_audio PUBLIC ao_media ao_utility PkgFLAC PkgALAC PkgFDK
 
 if(WIN32)
     target_sources(ao_audio PRIVATE
+        PlatformBackendProvidersWindows.cpp
         backend/WasapiProvider.cpp
         backend/WasapiSharedBackend.cpp
         backend/detail/WasapiGraphRegistry.cpp
@@ -47,6 +48,7 @@ if(WIN32)
     target_link_libraries(ao_audio PRIVATE avrt ole32)
 elseif(LINUX)
     target_sources(ao_audio PRIVATE
+        PlatformBackendProvidersLinux.cpp
         backend/AlsaExclusiveBackend.cpp
         backend/AlsaProvider.cpp
         backend/PipeWireBackend.cpp

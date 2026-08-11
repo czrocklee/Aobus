@@ -1,167 +1,157 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/DecoderFactory.h>
+#include "lib/audio/DecoderFactory.h"
 
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/mp4/TestAtoms.h"
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstdint>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 namespace ao::audio::test
 {
-  TEST_CASE("DecoderFactory - creates sessions based on extension", "[audio][unit][decoder]")
+  TEST_CASE("DecoderFactory - opens ready sessions for supported audio files", "[audio][unit][decoder]")
   {
-    auto const encoding = SampleEncoding::Signed16Le;
-
-    SECTION("Creates FLAC runtime for .flac")
+    struct Case final
     {
-      auto runtimeRes = createDecoderSession("song.flac", encoding);
-      REQUIRE(runtimeRes);
-      CHECK(*runtimeRes != nullptr);
-    }
+      std::string_view fileName;
+      AudioCodec codec = AudioCodec::Unknown;
+    };
 
-    SECTION("Creates ALAC runtime for MP4 containers with alac sample entries")
+    constexpr auto kCases = std::array{
+      Case{.fileName = "basic_metadata.flac", .codec = AudioCodec::Flac},
+      Case{.fileName = "alac16.m4a", .codec = AudioCodec::Alac},
+      Case{.fileName = "basic_metadata.m4a", .codec = AudioCodec::Aac},
+      Case{.fileName = "basic_metadata.mp3", .codec = AudioCodec::Mp3},
+      Case{.fileName = "basic_metadata.wav", .codec = AudioCodec::Wav},
+    };
+
+    for (auto const& testCase : kCases)
     {
-      auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".m4a"};
-      auto const mp4 = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".mp4"};
+      auto const fixture = requireAudioFixture(testCase.fileName);
+      auto inspectionRes = openDecoderSession(fixture, std::nullopt);
 
-      auto session1Res = createDecoderSession(m4a.path, encoding);
-      REQUIRE(session1Res);
-      CHECK(*session1Res != nullptr);
+      REQUIRE(inspectionRes);
+      REQUIRE(*inspectionRes != nullptr);
+      auto const inspectionInfo = (*inspectionRes)->streamInfo();
+      CHECK(inspectionInfo.codec == testCase.codec);
+      CHECK(inspectionInfo.sourceFormat.sampleRate > 0);
+      CHECK(inspectionInfo.sourceFormat.channels > 0);
+      CHECK(inspectionInfo.outputFormat.encoding != SampleEncoding::Unknown);
 
-      auto session2Res = createDecoderSession(mp4.path, encoding);
-      REQUIRE(session2Res);
-      CHECK(*session2Res != nullptr);
-    }
+      auto sessionRes = openDecoderSession(fixture, SampleEncoding::Signed16Le);
 
-    SECTION("Creates ALAC runtime when a video track appears before the audio track")
-    {
-      auto moovBody = std::vector<std::uint8_t>{};
-      auto const videoTrack = ao::test::mp4::makeVideoTrackAtom("avc1");
-      auto const audioTrack = ao::test::mp4::makeAudioTrackAtom("alac");
-      moovBody.insert(moovBody.end(), videoTrack.begin(), videoTrack.end());
-      moovBody.insert(moovBody.end(), audioTrack.begin(), audioTrack.end());
-
-      auto data = std::vector<std::uint8_t>{};
-      ao::test::mp4::addAtom(data, "moov", moovBody);
-      auto const m4a = ao::test::TempFile{data, ".m4a"};
-
-      auto sessionRes = createDecoderSession(m4a.path, encoding);
       REQUIRE(sessionRes);
-      CHECK(*sessionRes != nullptr);
+      REQUIRE(*sessionRes != nullptr);
+      auto const info = (*sessionRes)->streamInfo();
+      CHECK(info.codec == testCase.codec);
+      CHECK(info.sourceFormat.sampleRate > 0);
+      CHECK(info.sourceFormat.channels > 0);
+      CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
     }
+  }
 
-    SECTION("Creates AAC runtime for MP4 containers with AAC sample entries")
+  TEST_CASE("DecoderFactory - MP4 extension selects a ready AAC session", "[audio][unit][decoder]")
+  {
+    auto const fixture = requireAudioFixture("basic_metadata.m4a");
+    auto const mp4 = ao::test::TempFile{readFileBytes(fixture), ".mp4"};
+
+    auto sessionRes = openDecoderSession(mp4.path, SampleEncoding::Signed16Le);
+
+    REQUIRE(sessionRes);
+    REQUIRE(*sessionRes != nullptr);
+    CHECK((*sessionRes)->streamInfo().codec == AudioCodec::Aac);
+  }
+
+  TEST_CASE("DecoderFactory - reports selection and initialization failures", "[audio][unit][decoder][error]")
+  {
+    SECTION("Unsupported extension")
     {
-      auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("mp4a"), ".m4a"};
+      auto const result = openDecoderSession("song.ogg", SampleEncoding::Signed16Le);
 
-      auto sessionRes = createDecoderSession(m4a.path, encoding);
-      REQUIRE(sessionRes);
-      CHECK(*sessionRes != nullptr);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotSupported);
     }
 
-    SECTION("Creates MP4 runtime when an extended-size mdat follows the selected track")
-    {
-      auto data = ao::test::mp4::makeMinimalAudioMp4("alac");
-      auto const mdat = ao::test::mp4::makeExtendedAtom("mdat", {1, 2, 3});
-      data.insert(data.end(), mdat.begin(), mdat.end());
-      auto const m4a = ao::test::TempFile{data, ".m4a"};
-
-      auto sessionRes = createDecoderSession(m4a.path, encoding);
-      REQUIRE(sessionRes);
-      CHECK(*sessionRes != nullptr);
-    }
-
-    SECTION("Creates MP4 runtime when an extended-size mdat precedes the selected track")
-    {
-      auto data = ao::test::mp4::makeExtendedAtom("mdat", {1, 2, 3});
-      auto const movie = ao::test::mp4::makeMinimalAudioMp4("alac");
-      data.insert(data.end(), movie.begin(), movie.end());
-      auto const m4a = ao::test::TempFile{data, ".m4a"};
-
-      auto sessionRes = createDecoderSession(m4a.path, encoding);
-      REQUIRE(sessionRes);
-      CHECK(*sessionRes != nullptr);
-    }
-
-    SECTION("Creates MP3 runtime for .mp3")
-    {
-      auto sessionRes = createDecoderSession("song.mp3", encoding);
-      REQUIRE(sessionRes);
-      CHECK(*sessionRes != nullptr);
-    }
-
-    SECTION("Creates WAV runtime for .wav")
-    {
-      auto sessionRes = createDecoderSession("song.wav", encoding);
-      REQUIRE(sessionRes);
-      CHECK(*sessionRes != nullptr);
-    }
-
-    SECTION("Reports NotSupported for unsupported extensions")
-    {
-      for (auto const* path : {"song.ogg"})
-      {
-        auto const result = createDecoderSession(path, encoding);
-        REQUIRE_FALSE(result);
-        CHECK(result.error().code == Error::Code::NotSupported);
-      }
-    }
-
-    SECTION("Reports NotSupported for unrecognized MP4 audio codecs")
+    SECTION("Unrecognized MP4 audio codec")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("ec-3"), ".m4a"};
+      auto const result = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
 
-      auto const result = createDecoderSession(m4a.path, encoding);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotSupported);
     }
 
-    SECTION("Reports NotSupported when an MP4 container has no audio track")
+    SECTION("MP4 container without an audio track")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeAtom("moov", {}), ".m4a"};
+      auto const result = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
 
-      auto const result = createDecoderSession(m4a.path, encoding);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotSupported);
     }
 
-    SECTION("Preserves malformed MP4 structure errors")
+    SECTION("Malformed MP4 structure")
     {
       auto const m4a = ao::test::TempFile{std::vector<std::uint8_t>{0, 1, 2}, ".m4a"};
+      auto const result = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
 
-      auto const result = createDecoderSession(m4a.path, encoding);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
 
-    SECTION("Reports IoError when an MP4 container cannot be read")
+    SECTION("Missing supported file")
     {
-      auto const result = createDecoderSession("missing.m4a", encoding);
+      auto const result = openDecoderSession("missing.flac", SampleEncoding::Signed16Le);
+
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::IoError);
     }
 
-    SECTION("Normalizes decoder extensions before dispatch")
+    SECTION("Existing malformed supported file")
     {
-      REQUIRE(createDecoderSession("song.FLAC", encoding));
-      REQUIRE(createDecoderSession("song.MP3", encoding));
-      REQUIRE(createDecoderSession("song.WAV", encoding));
-    }
+      auto const flac = ao::test::TempFile{std::vector<std::uint8_t>{0, 1, 2}, ".flac"};
+      auto const result = openDecoderSession(flac.path, SampleEncoding::Signed16Le);
 
-    SECTION("Normalizes MP4 extensions before probing the container")
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::DecodeFailed);
+    }
+  }
+
+  TEST_CASE("DecoderFactory - normalizes supported extensions before opening", "[audio][unit][decoder]")
+  {
+    struct Case final
     {
-      auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".M4A"};
-      auto sessionRes = createDecoderSession(m4a.path, encoding);
+      std::string_view sourceName;
+      std::string_view suffix;
+      AudioCodec codec = AudioCodec::Unknown;
+    };
+
+    constexpr auto kCases = std::array{
+      Case{.sourceName = "basic_metadata.flac", .suffix = ".FLAC", .codec = AudioCodec::Flac},
+      Case{.sourceName = "basic_metadata.m4a", .suffix = ".M4A", .codec = AudioCodec::Aac},
+      Case{.sourceName = "basic_metadata.mp3", .suffix = ".MP3", .codec = AudioCodec::Mp3},
+      Case{.sourceName = "basic_metadata.wav", .suffix = ".WAV", .codec = AudioCodec::Wav},
+    };
+
+    for (auto const& testCase : kCases)
+    {
+      auto const temp = ao::test::TempFile{readFileBytes(requireAudioFixture(testCase.sourceName)), testCase.suffix};
+      auto sessionRes = openDecoderSession(temp.path, SampleEncoding::Signed16Le);
 
       REQUIRE(sessionRes);
-      CHECK(*sessionRes != nullptr);
+      REQUIRE(*sessionRes != nullptr);
+      CHECK((*sessionRes)->streamInfo().codec == testCase.codec);
     }
   }
 } // namespace ao::audio::test

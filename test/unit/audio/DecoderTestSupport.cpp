@@ -4,33 +4,14 @@
 #include "DecoderTestSupport.h"
 
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/PcmFormat.h>
-#include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 
 namespace ao::audio::test
 {
-  void checkClosedSession(DecoderSession& decoder)
-  {
-    CHECK(!decoder.seek(std::chrono::milliseconds{1}));
-
-    auto const blockRes = decoder.readNextBlock();
-    REQUIRE(blockRes);
-    CHECK(blockRes->endOfStream);
-    CHECK(blockRes->bytes.empty());
-
-    auto const info = decoder.streamInfo();
-    CHECK(info.sourceFormat == SignalFormat{});
-    CHECK(info.outputFormat == PcmFormat{});
-    CHECK(info.duration == std::chrono::milliseconds{0});
-    CHECK_FALSE(info.isLossy);
-  }
-
   std::uint64_t readUntilStableEndOfStream(DecoderSession& decoder, std::size_t maxBlocks)
   {
     std::uint64_t totalFrames = 0;

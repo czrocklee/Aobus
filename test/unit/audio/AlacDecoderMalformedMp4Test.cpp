@@ -134,9 +134,8 @@ namespace ao::audio::test
       auto const mp4Data =
         makeSyntheticAlacMp4(fixture.cookie, {.payload = {0x01, 0x02, 0x03, 0x04}, .chunkOffset = 0x00FF'FFFFU});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       CHECK(!decoder.readNextBlock());
     }
 
@@ -144,9 +143,8 @@ namespace ao::audio::test
     {
       auto const mp4Data = makeSyntheticAlacMp4(fixture.cookie, {.payload = std::vector<std::uint8_t>(32, 0xA5)});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       CHECK(!decoder.readNextBlock());
     }
 
@@ -154,9 +152,8 @@ namespace ao::audio::test
     {
       auto const mp4Data = makeSyntheticAlacMp4(fixture.cookie, {.payload = std::vector<std::uint8_t>(32, 0xA5)});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed32Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(temp.path, SampleEncoding::Signed32Le));
+      auto& decoder = *decoderPtr;
       CHECK(!decoder.readNextBlock());
     }
   }
@@ -173,9 +170,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
 
     SECTION("Zero bit depth")
@@ -186,9 +181,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
 
     SECTION("Oversized frame length is rejected before decoder allocation")
@@ -198,9 +191,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
 
     SECTION("Unsupported channel count is rejected before decoder allocation")
@@ -211,9 +202,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
 
     SECTION("Unsupported sample rate is rejected before decoder allocation")
@@ -223,9 +212,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
   }
 
@@ -238,9 +225,8 @@ namespace ao::audio::test
       auto const mp4Data =
         makeSyntheticAlacMp4(fixture.cookie, {.payload = fixture.firstPacket, .timescale = 0, .duration = 44100});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.sampleRate == 44100);
@@ -252,9 +238,8 @@ namespace ao::audio::test
       auto const mp4Data =
         makeSyntheticAlacMp4(fixture.cookie, {.payload = fixture.firstPacket, .includeTiming = false});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
 
       auto const blockRes = decoder.readNextBlock();
       REQUIRE(blockRes);

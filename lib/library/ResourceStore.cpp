@@ -123,7 +123,7 @@ namespace ao::library
       }
       else
       {
-        ++key;
+        key = ResourceId{key.raw() + 1U};
       }
 
       if (key == firstKey)

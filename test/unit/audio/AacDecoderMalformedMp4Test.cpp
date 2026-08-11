@@ -63,9 +63,8 @@ namespace ao::audio::test
         .chunkOffset = 0x00FF'FFFFU,
       });
       auto const temp = ao::test::TempFile{data, ".m4a"};
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       CHECK(!decoder.readNextBlock());
     }
 
@@ -73,9 +72,8 @@ namespace ao::audio::test
     {
       auto const data = makeSyntheticAacMp4({.payload = std::vector<std::uint8_t>(32, 0xA5)});
       auto const temp = ao::test::TempFile{data, ".m4a"};
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       CHECK(!decoder.readNextBlock());
     }
 
@@ -83,9 +81,8 @@ namespace ao::audio::test
     {
       auto const data = makeSyntheticAacMp4({.payload = std::vector<std::uint8_t>(32, 0xA5)});
       auto const temp = ao::test::TempFile{data, ".m4a"};
-      auto decoder = AacDecoderSession{SampleEncoding::Signed32Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed32Le));
+      auto& decoder = *decoderPtr;
       CHECK(!decoder.readNextBlock());
     }
   }
@@ -96,18 +93,14 @@ namespace ao::audio::test
     {
       auto const data = makeSyntheticAacMp4({.payload = {1, 2, 3, 4}, .includeAsc = false});
       auto const temp = ao::test::TempFile{data, ".m4a"};
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
 
     SECTION("Truncated config")
     {
       auto const data = makeSyntheticAacMp4({.asc = {0x12}, .payload = {1, 2, 3, 4}});
       auto const temp = ao::test::TempFile{data, ".m4a"};
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
   }
 } // namespace ao::audio::test

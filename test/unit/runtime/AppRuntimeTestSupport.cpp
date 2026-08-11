@@ -3,6 +3,7 @@
 
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 
+#include "lib/audio/NullBackend.h"
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -13,7 +14,6 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>

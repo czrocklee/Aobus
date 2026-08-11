@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/detail/AlsaDeviceDiscovery.h>
+#include "backend/detail/AlsaDeviceDiscovery.h"
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>

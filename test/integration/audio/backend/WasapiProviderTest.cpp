@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/WasapiProvider.h>
+#include "lib/audio/backend/WasapiProvider.h"
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>

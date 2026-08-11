@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/detail/WasapiStrings.h>
+#include "backend/detail/WasapiStrings.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX

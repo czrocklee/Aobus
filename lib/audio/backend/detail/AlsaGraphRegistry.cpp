@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/detail/AlsaGraphRegistry.h>
+#include "backend/detail/AlsaGraphRegistry.h"
 
+#include "backend/detail/AudioBackendVolumeMath.h"
 #include <ao/Contract.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/Subscription.h>
-#include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <algorithm>

@@ -3,6 +3,7 @@
 
 #include "PlaybackTransportTestSupport.h"
 
+#include "lib/audio/NullBackend.h"
 #include "lib/audio/detail/DecoderOutput.h"
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackTransport.h"
@@ -14,7 +15,6 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>

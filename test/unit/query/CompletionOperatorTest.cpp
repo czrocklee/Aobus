@@ -23,6 +23,14 @@ namespace ao::query::test
       REQUIRE(context != nullptr);
       return *context;
     }
+
+    QueryCompletionToken variableContext(std::optional<QueryCompletionAnalysis> optContext)
+    {
+      REQUIRE(optContext);
+      auto const* context = std::get_if<QueryCompletionToken>(&*optContext);
+      REQUIRE(context != nullptr);
+      return *context;
+    }
   } // namespace
 
   TEST_CASE("Completion - analyzes operator context after query variables", "[query][unit][completion]")
@@ -64,10 +72,9 @@ namespace ao::query::test
       CHECK(context.replacement.prefix == "i");
       CHECK(completeQueryOperator(context.field, context.replacement.prefix) == std::vector<std::string_view>{"in"});
 
-      auto optGlued = queryCompletionTokenAtCursor("$artistin", 9);
-      REQUIRE(optGlued);
-      CHECK(optGlued->prefix == "artistin");
-      CHECK(completeQueryVariable(optGlued->type, optGlued->prefix).empty());
+      auto const glued = variableContext(analyzeQueryCompletion("$artistin", 9));
+      CHECK(glued.prefix == "artistin");
+      CHECK(completeQueryVariable(glued.type, glued.prefix).empty());
     }
 
     SECTION("Resolves quoted user variables as lvalues")

@@ -24,8 +24,8 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
-    auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     CHECK(info.codec == AudioCodec::Aac);
@@ -49,8 +49,8 @@ namespace ao::audio::test
       SKIP("Test file 'basic_metadata.m4a' missing");
     }
 
-    auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     REQUIRE(info.duration > std::chrono::milliseconds{500});
@@ -72,8 +72,8 @@ namespace ao::audio::test
       SKIP("Test file 'basic_metadata.m4a' missing");
     }
 
-    auto decoder = AacDecoderSession{SampleEncoding::Signed32Le};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     CHECK(info.sourceFormat.precisionBits == 16);
@@ -95,36 +95,17 @@ namespace ao::audio::test
                                 SampleEncoding::Signed32Le,
                                 SampleEncoding::Float32Le})
     {
-      auto decoder = AacDecoderSession{encoding};
-      REQUIRE(decoder.open(testFile));
+      auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, encoding));
+      auto& decoder = *decoderPtr;
       CHECK(decoder.streamInfo().outputFormat.encoding == encoding);
     }
   }
 
   TEST_CASE("AacDecoderSession - reports error paths", "[audio][unit][aac][error]")
   {
-    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.m4a";
-
-    SECTION("Seek on unopened file")
-    {
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-      CHECK(!decoder.seek(std::chrono::milliseconds{100}));
-    }
-
-    SECTION("Read on unopened file returns end of stream")
-    {
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-      auto const blockRes = decoder.readNextBlock();
-
-      REQUIRE(blockRes);
-      CHECK(blockRes->endOfStream);
-      CHECK(blockRes->bytes.empty());
-    }
-
     SECTION("Non-existent file")
     {
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-      CHECK(!decoder.open("/path/to/nowhere/nonexistent.m4a"));
+      CHECK(!AacDecoderSession::open("/path/to/nowhere/nonexistent.m4a", SampleEncoding::Signed16Le));
     }
 
     SECTION("Invalid file content")
@@ -135,29 +116,7 @@ namespace ao::audio::test
         ofs << "NOT AN AAC FILE! Random garbage data...";
       }
 
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-      CHECK(!decoder.open(tempFile.path));
-    }
-
-    SECTION("Read after close returns end of stream")
-    {
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-      REQUIRE(decoder.open(testFile));
-
-      decoder.close();
-      decoder.close();
-      checkClosedSession(decoder);
-    }
-
-    SECTION("Failed reopen clears the previous stream state")
-    {
-      auto const existingFile = requireAudioFixture("basic_metadata.m4a");
-      auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(existingFile));
-      CHECK(decoder.streamInfo().sourceFormat.sampleRate > 0);
-      CHECK(!decoder.open("/path/to/nowhere/nonexistent.m4a"));
-      checkClosedSession(decoder);
+      CHECK(!AacDecoderSession::open(tempFile.path, SampleEncoding::Signed16Le));
     }
   }
 
@@ -165,8 +124,8 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
-    auto decoder = AacDecoderSession{SampleEncoding::Signed16Le};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    auto& decoder = *decoderPtr;
 
     CHECK(readUntilStableEndOfStream(decoder, 256) > 0);
   }

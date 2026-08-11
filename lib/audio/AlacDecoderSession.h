@@ -19,7 +19,6 @@ namespace ao::audio
   class [[nodiscard]] AlacDecoderSession final : public detail::DecoderSessionBase<AlacDecoderSession>
   {
   public:
-    explicit AlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~AlacDecoderSession() override;
 
     AlacDecoderSession(AlacDecoderSession const&) = delete;
@@ -27,8 +26,6 @@ namespace ao::audio
     AlacDecoderSession(AlacDecoderSession&&) = delete;
     AlacDecoderSession& operator=(AlacDecoderSession&&) = delete;
 
-    Result<> openCodec(std::filesystem::path const& filePath);
-    void close() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
     void flush() noexcept override;
 
@@ -36,6 +33,11 @@ namespace ao::audio
     DecodedStreamInfo streamInfo() const noexcept override;
 
   private:
+    friend class detail::DecoderSessionBase<AlacDecoderSession>;
+
+    explicit AlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
+    Result<> initialize(std::filesystem::path const& filePath) noexcept;
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

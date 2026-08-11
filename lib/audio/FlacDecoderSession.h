@@ -19,7 +19,6 @@ namespace ao::audio
   class [[nodiscard]] FlacDecoderSession final : public detail::DecoderSessionBase<FlacDecoderSession>
   {
   public:
-    explicit FlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~FlacDecoderSession() override;
 
     // Not copyable or movable
@@ -28,8 +27,6 @@ namespace ao::audio
     FlacDecoderSession(FlacDecoderSession&&) = delete;
     FlacDecoderSession& operator=(FlacDecoderSession&&) = delete;
 
-    Result<> openCodec(std::filesystem::path const& filePath);
-    void close() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
     void flush() noexcept override;
 
@@ -37,6 +34,11 @@ namespace ao::audio
     DecodedStreamInfo streamInfo() const noexcept override;
 
   private:
+    friend class detail::DecoderSessionBase<FlacDecoderSession>;
+
+    explicit FlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
+    Result<> initialize(std::filesystem::path const& filePath) noexcept;
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

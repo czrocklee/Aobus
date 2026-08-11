@@ -4,9 +4,9 @@
 #include "DecoderOutputAdapter.h"
 
 #include "DecoderOutput.h"
+#include "PcmConversion.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/audio/PcmConversion.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>

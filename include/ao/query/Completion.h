@@ -19,7 +19,6 @@ namespace ao::query
   struct QueryCompletionToken final
   {
     VariableType type = VariableType::Metadata;
-    char trigger = '\0';
     std::size_t replaceBegin = 0;
     std::size_t replaceEnd = 0;
     // Owns its text so the token can safely outlive the source string it was parsed from.
@@ -68,8 +67,6 @@ namespace ao::query
   };
 
   std::optional<QueryCompletionAnalysis> analyzeQueryCompletion(std::string_view text, std::size_t cursor);
-
-  std::optional<QueryCompletionToken> queryCompletionTokenAtCursor(std::string_view text, std::size_t cursor);
 
   std::vector<QueryVariableCompletionMatch> completeQueryVariable(VariableType type, std::string_view prefix);
 

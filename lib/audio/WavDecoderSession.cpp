@@ -3,11 +3,11 @@
 
 #include "WavDecoderSession.h"
 
+#include "AudioTime.h"
 #include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
@@ -213,12 +213,10 @@ namespace ao::audio
 
   WavDecoderSession::~WavDecoderSession() = default;
 
-  Result<> WavDecoderSession::openCodec(std::filesystem::path const& filePath)
+  Result<> WavDecoderSession::initialize(std::filesystem::path const& filePath) noexcept
   {
     try
     {
-      close();
-
       if (auto const result = _implPtr->file.map(filePath); !result)
       {
         detail::throwDecoderError(result.error());
@@ -246,24 +244,8 @@ namespace ao::audio
     }
     catch (detail::DecoderException const& ex)
     {
-      close();
       return std::unexpected{ex.error()};
     }
-  }
-
-  void WavDecoderSession::close() noexcept
-  {
-    _implPtr->file.unmap();
-    _implPtr->info = {};
-    _implPtr->pcmBuffer.clear();
-    _implPtr->outputAdapter.reset();
-    _implPtr->nextFrameIndex = 0;
-    _implPtr->totalFrames = 0;
-    _implPtr->dataOffset = 0;
-    _implPtr->dataSize = 0;
-    _implPtr->sourceBitsPerSample = 0;
-    _implPtr->sourceBlockAlign = 0;
-    _implPtr->eof = false;
   }
 
   // Result error materialization may allocate; DecoderSession intentionally

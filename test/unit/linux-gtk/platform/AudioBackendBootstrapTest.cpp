@@ -5,7 +5,6 @@
 
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include <ao/audio/BackendConfig.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackState.h>
@@ -29,7 +28,6 @@ namespace ao::gtk::test
 
   // The provider metadata is hardcoded, so each compiled-in backend surfaces in
   // availableOutputBackends regardless of whether a daemon or hardware is present.
-  // <ao/audio/BackendConfig.h> states which backends this platform compiles in.
   TEST_CASE("registerPlatformAudioBackends registers the compiled-in audio backends", "[gtk][unit][platform][audio]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -41,11 +39,8 @@ namespace ao::gtk::test
     registerPlatformAudioBackends(fixture.runtime());
     drainGtkEvents();
 
-#if AOBUS_HAS_PIPEWIRE
-    CHECK(hasBackend(playback.snapshot().transport, audio::kBackendPipeWire));
-#endif
-#if AOBUS_HAS_ALSA
-    CHECK(hasBackend(playback.snapshot().transport, audio::kBackendAlsa));
-#endif
+    auto const state = playback.snapshot().transport;
+    CHECK(hasBackend(state, audio::kBackendPipeWire));
+    CHECK(hasBackend(state, audio::kBackendAlsa));
   }
 } // namespace ao::gtk::test

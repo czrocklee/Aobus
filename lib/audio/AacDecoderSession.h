@@ -19,7 +19,6 @@ namespace ao::audio
   class [[nodiscard]] AacDecoderSession final : public detail::DecoderSessionBase<AacDecoderSession>
   {
   public:
-    explicit AacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~AacDecoderSession() override;
 
     AacDecoderSession(AacDecoderSession const&) = delete;
@@ -27,8 +26,6 @@ namespace ao::audio
     AacDecoderSession(AacDecoderSession&&) = delete;
     AacDecoderSession& operator=(AacDecoderSession&&) = delete;
 
-    Result<> openCodec(std::filesystem::path const& filePath);
-    void close() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
     void flush() noexcept override;
 
@@ -36,6 +33,11 @@ namespace ao::audio
     DecodedStreamInfo streamInfo() const noexcept override;
 
   private:
+    friend class detail::DecoderSessionBase<AacDecoderSession>;
+
+    explicit AacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
+    Result<> initialize(std::filesystem::path const& filePath) noexcept;
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

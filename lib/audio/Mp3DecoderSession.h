@@ -19,7 +19,6 @@ namespace ao::audio
   class [[nodiscard]] Mp3DecoderSession final : public detail::DecoderSessionBase<Mp3DecoderSession>
   {
   public:
-    explicit Mp3DecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~Mp3DecoderSession() override;
 
     // Not copyable or movable
@@ -28,8 +27,6 @@ namespace ao::audio
     Mp3DecoderSession(Mp3DecoderSession&&) = delete;
     Mp3DecoderSession& operator=(Mp3DecoderSession&&) = delete;
 
-    Result<> openCodec(std::filesystem::path const& filePath);
-    void close() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
     void flush() noexcept override;
 
@@ -37,6 +34,11 @@ namespace ao::audio
     DecodedStreamInfo streamInfo() const noexcept override;
 
   private:
+    friend class detail::DecoderSessionBase<Mp3DecoderSession>;
+
+    explicit Mp3DecoderSession(std::optional<SampleEncoding> optOutputEncoding);
+    Result<> initialize(std::filesystem::path const& filePath) noexcept;
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

@@ -28,12 +28,9 @@ namespace ao::audio::test
       auto data = source;
       data.resize(16);
       auto const temp = ao::test::TempFile{data, ".flac"};
-      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-
-      auto const result = decoder.open(temp.path);
+      auto const result = FlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::DecodeFailed);
-      checkClosedSession(decoder);
     }
 
     SECTION("Truncated audio reaches a stable terminal state")
@@ -41,9 +38,8 @@ namespace ao::audio::test
       auto data = source;
       data.resize(data.size() / 2);
       auto const temp = ao::test::TempFile{data, ".flac"};
-      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       auto const terminal = readUntilTerminalState(decoder, 512);
 
       CHECK(terminal.frames > 0);
@@ -63,9 +59,8 @@ namespace ao::audio::test
                 0xA5);
 
       auto const temp = ao::test::TempFile{data, ".flac"};
-      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       auto const terminal = readUntilTerminalState(decoder, 512);
 
       CHECK(terminal.frames > 0);

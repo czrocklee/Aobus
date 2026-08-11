@@ -3,6 +3,7 @@
 
 #include <ao/audio/Player.h>
 
+#include "NullBackend.h"
 #include "detail/TrackPreparation.h"
 #include <ao/AudioCodecText.h>
 #include <ao/Contract.h>
@@ -14,7 +15,6 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>

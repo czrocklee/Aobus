@@ -135,8 +135,6 @@ namespace ao::audio::test
   public:
     StagedFailureDecoderSession(StagedFailureGate* failureGate, std::optional<SampleEncoding> optOutputEncoding);
 
-    Result<> open(std::filesystem::path const& path) noexcept override;
-    void close() noexcept override;
     void flush() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
     Result<PcmBlock> readNextBlock() noexcept override;

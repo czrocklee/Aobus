@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/detail/WasapiStrings.h>
+#include "lib/audio/backend/detail/WasapiStrings.h"
 
 #include <catch2/catch_test_macros.hpp>
 

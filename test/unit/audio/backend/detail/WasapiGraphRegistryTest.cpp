@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/detail/WasapiGraphRegistry.h>
+#include "lib/audio/backend/detail/WasapiGraphRegistry.h"
 
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>

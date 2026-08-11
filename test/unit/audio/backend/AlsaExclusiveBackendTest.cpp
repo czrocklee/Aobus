@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/audio/backend/AlsaExclusiveBackend.h>
+#include "lib/audio/backend/AlsaExclusiveBackend.h"
 
 #include "test/unit/audio/BackendTestSupport.h"
 #include <ao/Error.h>

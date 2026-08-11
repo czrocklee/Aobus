@@ -3,11 +3,11 @@
 
 #include "TrackSession.h"
 
+#include "../DecoderFactory.h"
 #include "../StreamingSource.h"
 #include "DecoderError.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/audio/DecoderFactory.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
@@ -17,7 +17,6 @@
 #include <chrono>
 #include <expected>
 #include <filesystem>
-#include <format>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -29,36 +28,24 @@ namespace ao::audio::detail
     constexpr auto kPrerollDuration = std::chrono::milliseconds{500};
     constexpr auto kDecodeHighWatermarkThreshold = std::chrono::milliseconds{1500};
 
-    // Obtains a decoder from the injected factory when present, otherwise from the
-    // production factory. The injected seam returns a plain pointer (a test that
-    // returns null is a deliberate "no decoder", with no IO to diagnose), so its
-    // null result becomes NotSupported; the production factory already carries a
-    // precise IoError/NotSupported code, which is propagated unchanged.
+    // Obtains a ready decoder from the injected factory when present, otherwise
+    // from the production factory. Both paths use the same recoverable result
+    // contract; a successful null result is still rejected as a broken factory.
     std::unique_ptr<DecoderSession> makeDecoder(TrackSession::DecoderFactoryFn const& decoderFactory,
                                                 std::filesystem::path const& path,
                                                 std::optional<SampleEncoding> optOutputEncoding)
     {
-      if (decoderFactory)
+      auto decoderRes =
+        decoderFactory ? decoderFactory(path, optOutputEncoding) : openDecoderSession(path, optOutputEncoding);
+
+      if (!decoderRes)
       {
-        auto decoderPtr = decoderFactory(path, optOutputEncoding);
-
-        if (!decoderPtr)
-        {
-          throwDecoderError(
-            Error::Code::NotSupported, std::format("No audio decoder available for '{}'", path.string()));
-        }
-
-        return decoderPtr;
+        throwDecoderError(decoderRes.error());
       }
 
-      auto resRes = createDecoderSession(path, optOutputEncoding);
+      AO_INVARIANT(*decoderRes, "Decoder factory succeeded without a session");
 
-      if (!resRes)
-      {
-        throwDecoderError(resRes.error());
-      }
-
-      return std::move(*resRes);
+      return std::move(*decoderRes);
     }
   } // namespace
 
@@ -68,11 +55,6 @@ namespace ao::audio::detail
     try
     {
       auto decoderPtr = makeDecoder(decoderFactory, input.filePath, std::nullopt);
-
-      if (auto const openRes = decoderPtr->open(input.filePath); !openRes)
-      {
-        throwDecoderError(openRes.error());
-      }
 
       auto info = decoderPtr->streamInfo();
 
@@ -99,11 +81,6 @@ namespace ao::audio::detail
     try
     {
       auto decoderPtr = makeDecoder(decoderFactory, input.filePath, backendFormat.encoding);
-
-      if (auto const openRes = decoderPtr->open(input.filePath); !openRes)
-      {
-        throwDecoderError(openRes.error());
-      }
 
       auto const info = decoderPtr->streamInfo();
 

@@ -281,6 +281,7 @@ add_executable(ao_core_test
 
     # audio unit tests
     unit/audio/DecoderFactoryTest.cpp
+    unit/audio/PlatformBackendProvidersTest.cpp
     unit/audio/DecoderOutputTest.cpp
     unit/audio/OpenedModeValidationTest.cpp
     unit/audio/detail/DecoderOutputAdapterTest.cpp

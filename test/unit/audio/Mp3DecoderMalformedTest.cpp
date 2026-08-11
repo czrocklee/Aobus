@@ -28,9 +28,8 @@ namespace ao::audio::test
       auto data = source;
       data.resize(data.size() / 2);
       auto const temp = ao::test::TempFile{data, ".mp3"};
-      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       auto const terminal = readUntilTerminalState(decoder, 512);
 
       CHECK_FALSE(terminal.optError);
@@ -63,9 +62,8 @@ namespace ao::audio::test
                 0xA5);
 
       auto const temp = ao::test::TempFile{data, ".mp3"};
-      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(temp.path));
+      auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+      auto& decoder = *decoderPtr;
       auto const terminal = readUntilTerminalState(decoder, 512);
 
       CHECK_FALSE(terminal.optError);

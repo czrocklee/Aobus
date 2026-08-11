@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/PipeWireBackend.h>
+#include "backend/PipeWireBackend.h"
 
+#include "backend/detail/AudioBackendVolumeMath.h"
+#include "backend/detail/PipeWireFormatParsing.h"
+#include "backend/detail/PipeWireRuntime.h"
 #include "detail/DecoderOutput.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
@@ -15,9 +18,6 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
-#include <ao/audio/backend/detail/PipeWireFormatParsing.h>
-#include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/Raii.h>
 
 extern "C"

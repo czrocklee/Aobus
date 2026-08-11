@@ -3,27 +3,51 @@
 
 #include "lib/audio/detail/DecoderError.h"
 
+#include "lib/audio/AacDecoderSession.h"
+#include "lib/audio/AlacDecoderSession.h"
+#include "lib/audio/FlacDecoderSession.h"
+#include "lib/audio/Mp3DecoderSession.h"
 #include "lib/audio/PcmSource.h"
+#include "lib/audio/WavDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/DecoderSession.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <filesystem>
+#include <optional>
 #include <source_location>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace ao::audio::test
 {
+  template<typename T>
+  concept OpensAudioFile = requires(T& value, std::filesystem::path const& path) { value.open(path); };
+
+  template<typename T>
+  concept ClosesAudioFile = requires(T& value) { value.close(); };
+
   // The decoder boundary promises never to throw to its caller: failures travel
   // as Result. These static assertions pin that contract at compile time, so an
   // override that silently drops noexcept fails the build rather than the boundary.
   // Arguments come from declval so the operand measures only the call's exception
   // specification, not (potentially throwing) argument construction.
-  static_assert(noexcept(std::declval<DecoderSession&>().open(std::declval<std::filesystem::path const&>())));
-  static_assert(noexcept(std::declval<DecoderSession&>().close()));
+  static_assert(!OpensAudioFile<DecoderSession>);
+  static_assert(!ClosesAudioFile<DecoderSession>);
+  static_assert(!std::is_constructible_v<AacDecoderSession, std::optional<SampleEncoding>>);
+  static_assert(!std::is_constructible_v<AlacDecoderSession, std::optional<SampleEncoding>>);
+  static_assert(!std::is_constructible_v<FlacDecoderSession, std::optional<SampleEncoding>>);
+  static_assert(!std::is_constructible_v<Mp3DecoderSession, std::optional<SampleEncoding>>);
+  static_assert(!std::is_constructible_v<WavDecoderSession, std::optional<SampleEncoding>>);
+  static_assert(!ClosesAudioFile<AacDecoderSession>);
+  static_assert(!ClosesAudioFile<AlacDecoderSession>);
+  static_assert(!ClosesAudioFile<FlacDecoderSession>);
+  static_assert(!ClosesAudioFile<Mp3DecoderSession>);
+  static_assert(!ClosesAudioFile<WavDecoderSession>);
   static_assert(noexcept(std::declval<DecoderSession&>().seek(std::declval<std::chrono::milliseconds>())));
   static_assert(noexcept(std::declval<DecoderSession&>().flush()));
   static_assert(noexcept(std::declval<DecoderSession&>().readNextBlock()));

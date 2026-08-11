@@ -22,7 +22,6 @@ namespace ao::audio::test
     std::optional<Error> optError;
   };
 
-  void checkClosedSession(DecoderSession& decoder);
   std::uint64_t readUntilStableEndOfStream(DecoderSession& decoder, std::size_t maxBlocks);
   TerminalReadResult readUntilTerminalState(DecoderSession& decoder, std::size_t maxBlocks);
 } // namespace ao::audio::test

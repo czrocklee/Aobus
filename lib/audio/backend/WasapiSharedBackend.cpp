@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/WasapiSharedBackend.h>
+#include "backend/WasapiSharedBackend.h"
 
+#include "backend/detail/AudioBackendRenderProgress.h"
+#include "backend/detail/WasapiFormat.h"
+#include "backend/detail/WasapiGraphRegistry.h"
+#include "backend/detail/WasapiRenderBuffer.h"
+#include "backend/detail/WasapiStrings.h"
 #include "detail/DecoderOutput.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
@@ -14,11 +19,6 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/backend/detail/AudioBackendRenderProgress.h>
-#include <ao/audio/backend/detail/WasapiFormat.h>
-#include <ao/audio/backend/detail/WasapiGraphRegistry.h>
-#include <ao/audio/backend/detail/WasapiRenderBuffer.h>
-#include <ao/audio/backend/detail/WasapiStrings.h>
 #include <ao/utility/ThreadName.h>
 
 #ifndef NOMINMAX

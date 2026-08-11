@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "lib/audio/NullBackend.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/audio/EngineTestSupport.h"
@@ -18,7 +19,6 @@
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/NullBackend.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/PcmFormat.h>
@@ -105,8 +105,6 @@ namespace ao::rt::test
       {
       }
 
-      Result<> open(std::filesystem::path const& /*path*/) noexcept override { return {}; }
-      void close() noexcept override {}
       void flush() noexcept override {}
       Result<> seek(std::chrono::milliseconds /*offset*/) noexcept override { return {}; }
 
@@ -352,8 +350,9 @@ namespace ao::rt::test
             "[runtime][unit][playback][token]")
   {
     auto const format = audio::test::makeEngineTestFormat();
-    auto decoderFactory = [format](
-                            std::filesystem::path const& path, std::optional<audio::SampleEncoding> optOutputEncoding)
+    auto decoderFactory =
+      [format](std::filesystem::path const& path,
+               std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
     {
       auto const sourceFormat = signalFormat(format);
       auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
@@ -367,10 +366,10 @@ namespace ao::rt::test
 
       if (path == "candidate-failure.flac" && optOutputEncoding)
       {
-        decoderPtr->setOpenResult(makeError(Error::Code::IoError, "final decoder setup failed"));
+        return makeError(Error::Code::IoError, "final decoder setup failed");
       }
 
-      return decoderPtr;
+      return std::unique_ptr<audio::DecoderSession>{std::move(decoderPtr)};
     };
     auto executor = QueuedExecutor{};
     auto libraryFixture = MusicLibraryFixture{};

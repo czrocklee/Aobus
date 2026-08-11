@@ -3,6 +3,7 @@
 
 #include "Mp3DecoderSession.h"
 
+#include "AudioTime.h"
 #include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include "detail/MappedFileCursor.h"
@@ -11,7 +12,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
@@ -320,7 +320,7 @@ namespace ao::audio
 
   Mp3DecoderSession::~Mp3DecoderSession() = default;
 
-  Result<> Mp3DecoderSession::openCodec(std::filesystem::path const& filePath)
+  Result<> Mp3DecoderSession::initialize(std::filesystem::path const& filePath) noexcept
   {
     try
     {
@@ -372,22 +372,6 @@ namespace ao::audio
     {
       return std::unexpected{ex.error()};
     }
-  }
-
-  void Mp3DecoderSession::close() noexcept
-  {
-    if (_implPtr->mh != nullptr)
-    {
-      ::mpg123_close(_implPtr->mh);
-    }
-
-    _implPtr->fileCursor.close();
-    _implPtr->decodeBuffer.clear();
-    _implPtr->outputAdapter.reset();
-    _implPtr->nextFrameIndex = 0;
-    _implPtr->optTerminalError.reset();
-    _implPtr->eof = false;
-    _implPtr->info = {};
   }
 
   Result<> Mp3DecoderSession::seek(std::chrono::milliseconds offset) noexcept

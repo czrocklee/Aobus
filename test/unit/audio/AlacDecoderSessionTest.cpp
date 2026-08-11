@@ -23,8 +23,8 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.m4a");
 
-    auto decoder = AlacDecoderSession{SampleEncoding::Signed24PackedLe};
-    REQUIRE(decoder.open(testFile));
+    auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
+    auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
     REQUIRE(info.sourceFormat.sampleRate > 0);
@@ -62,8 +62,8 @@ namespace ao::audio::test
     {
       auto const testFile = requireAudioFixture("hires.m4a");
 
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed32Le};
-      REQUIRE(decoder.open(testFile));
+      auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
+      auto& decoder = *decoderPtr;
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.precisionBits == 24);
@@ -78,8 +78,8 @@ namespace ao::audio::test
     {
       auto const testFile = requireAudioFixture("alac16.m4a");
 
-      auto sourceDecoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-      REQUIRE(sourceDecoder.open(testFile));
+      auto sourceDecoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
+      auto& sourceDecoder = *sourceDecoderPtr;
 
       auto const sourceInfo = sourceDecoder.streamInfo();
       CHECK(sourceInfo.sourceFormat.sampleRate == 44100);
@@ -90,8 +90,8 @@ namespace ao::audio::test
       REQUIRE(sourceBlockRes);
       REQUIRE(!sourceBlockRes->bytes.empty());
 
-      auto targetDecoder = AlacDecoderSession{SampleEncoding::Signed32Le};
-      REQUIRE(targetDecoder.open(testFile));
+      auto targetDecoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
+      auto& targetDecoder = *targetDecoderPtr;
 
       auto const targetInfo = targetDecoder.streamInfo();
       CHECK(encodingContainerBits(targetInfo.outputFormat.encoding) == 32);
@@ -116,79 +116,42 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - lifecycle", "[audio][unit][alac]")
+  TEST_CASE("AlacDecoderSession - reading through the final packet reaches stable end of stream", "[audio][unit][alac]")
   {
-    SECTION("Unopened session rejects seek and reports end of stream")
-    {
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-      checkClosedSession(decoder);
-    }
+    auto const testFile = requireAudioFixture("hires.m4a");
+    auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
+    auto& decoder = *decoderPtr;
 
-    SECTION("Closed session reports end of stream")
-    {
-      auto const testFile = requireAudioFixture("hires.m4a");
-
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed24PackedLe};
-      REQUIRE(decoder.open(testFile));
-
-      decoder.close();
-      decoder.close();
-      checkClosedSession(decoder);
-    }
-
-    SECTION("Reading through the final packet reaches stable end of stream")
-    {
-      auto const testFile = requireAudioFixture("hires.m4a");
-
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed24PackedLe};
-      REQUIRE(decoder.open(testFile));
-
-      CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
-    }
+    CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 
   TEST_CASE("AlacDecoderSession - rejects invalid input", "[audio][unit][alac][error]")
   {
     SECTION("Non-existent file")
     {
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-      CHECK(!decoder.open("/path/to/nowhere/nonexistent.m4a"));
+      CHECK(!AlacDecoderSession::open("/path/to/nowhere/nonexistent.m4a", SampleEncoding::Signed16Le));
     }
 
     SECTION("Non-MP4 content")
     {
       auto const garbage = std::vector<std::uint8_t>{'N', 'O', 'T', ' ', 'M', 'P', '4'};
       auto const temp = ao::test::TempFile{garbage, ".m4a"};
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      CHECK(!decoder.open(temp.path));
+      CHECK(!AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
     }
 
     SECTION("Unsupported 24-bit to 16-bit conversion")
     {
       auto const testFile = requireAudioFixture("hires.m4a");
 
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-      CHECK(!decoder.open(testFile));
-      checkClosedSession(decoder);
+      CHECK(!AlacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
     }
 
     SECTION("Lossless fixed output requests succeed during open")
     {
       auto const testFile = requireAudioFixture("alac16.m4a");
 
-      CHECK(AlacDecoderSession{SampleEncoding::Float32Le}.open(testFile));
-      CHECK(AlacDecoderSession{SampleEncoding::Signed24In32Le}.open(testFile));
-    }
-
-    SECTION("Failed reopen clears the previous stream state")
-    {
-      auto const testFile = requireAudioFixture("alac16.m4a");
-      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
-
-      REQUIRE(decoder.open(testFile));
-      CHECK(!decoder.open("/path/to/nowhere/nonexistent.m4a"));
-      checkClosedSession(decoder);
+      CHECK(AlacDecoderSession::open(testFile, SampleEncoding::Float32Le));
+      CHECK(AlacDecoderSession::open(testFile, SampleEncoding::Signed24In32Le));
     }
   }
 } // namespace ao::audio::test

@@ -26,7 +26,7 @@ namespace ao::audio
   class DecoderSession;
   struct PlaybackInput;
   using DecoderFactoryFn =
-    std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, std::optional<SampleEncoding>)>;
+    std::function<Result<std::unique_ptr<DecoderSession>>(std::filesystem::path const&, std::optional<SampleEncoding>)>;
 
   namespace detail
   {

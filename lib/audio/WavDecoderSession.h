@@ -19,7 +19,6 @@ namespace ao::audio
   class [[nodiscard]] WavDecoderSession final : public detail::DecoderSessionBase<WavDecoderSession>
   {
   public:
-    explicit WavDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~WavDecoderSession() override;
 
     WavDecoderSession(WavDecoderSession const&) = delete;
@@ -27,8 +26,6 @@ namespace ao::audio
     WavDecoderSession(WavDecoderSession&&) = delete;
     WavDecoderSession& operator=(WavDecoderSession&&) = delete;
 
-    Result<> openCodec(std::filesystem::path const& filePath);
-    void close() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
     void flush() noexcept override;
 
@@ -36,6 +33,11 @@ namespace ao::audio
     DecodedStreamInfo streamInfo() const noexcept override;
 
   private:
+    friend class detail::DecoderSessionBase<WavDecoderSession>;
+
+    explicit WavDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
+    Result<> initialize(std::filesystem::path const& filePath) noexcept;
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

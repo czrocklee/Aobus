@@ -18,7 +18,7 @@ Those behavioral and exact-surface facts remain in the linked specifications and
 ## System context
 
 Playback exists only in the interactive `AppRuntime` composition above `CoreRuntime`.
-GTK and TUI provide platform audio providers and consume playback through runtime and UIModel boundaries; the CLI `CoreRuntime` composition has no interactive playback stack.
+Interactive frontends request the platform's audio providers from core audio and consume playback through runtime and UIModel boundaries; the CLI `CoreRuntime` composition has no interactive playback stack.
 
 The ownership graph is:
 
@@ -66,7 +66,7 @@ The graph crosses the top-level layers from the [system architecture](system-ove
 | Commands and display adaptation | UIModel | `app/include/ao/uimodel/playback/` | `app/uimodel/playback/` |
 | Player, Engine, decoder-session and backend interfaces | Core libraries | `include/ao/audio/` | `lib/audio/` |
 | Concrete decoding, streaming, and routing mechanisms | Core libraries | Source-private | `lib/audio/` |
-| Provider construction and native presentation | Frontends/platform adapters | Frontend-local | `app/linux-gtk/` and `app/tui/` |
+| Platform-provider construction and preference order | Core libraries | `include/ao/audio/BackendProvider.h` | platform-selected files under `lib/audio/` |
 
 Playback is not one state machine stretched across these layers.
 It has an application semantic domain and a core audio execution domain connected by explicit start, prepared-transition, and observation protocols; `PlaybackSessionPersistence` coordinates durable state across the two application authorities.
@@ -141,7 +141,9 @@ Its presentation catalog maps known backend/profile ids to shared labels and sem
 GTK maps the semantic kind to a symbolic icon and TUI remains free to select terminal presentation.
 It consumes runtime snapshots and commands and does not construct Player, Engine, decoder, backend, or library-source state.
 
-Frontend composition creates concrete providers and transfers them to `AppRuntime`.
+Frontend composition calls `createPlatformBackendProviders()` and transfers its fresh owning provider values to `AppRuntime`.
+Core audio owns the platform-specific provider set and preference order: Linux returns PipeWire before ALSA, while Windows returns WASAPI.
+This keeps frontend composition independent of concrete provider types and gives every interactive frontend the same native fallback policy.
 Frontend widgets and platform endpoints issue runtime/UIModel commands and render observations; they do not calculate succession or call audio control-plane objects directly.
 
 ### Application access surfaces
@@ -167,7 +169,7 @@ Composite session persistence still rejects cursor/transport current-subject mis
 - `PlaybackTransport` may depend on library reads, notifications, and its exclusively owned Player, but not on UIModel or frontend types.
 - `PlaybackSessionPersistence` coordinates public runtime state and persistence; `ConfigStore` serializes its values but does not own their meaning.
 - Player and Engine depend only on core audio, media, utility, async-executor, and platform-provider abstractions; they do not depend on runtime types.
-- Concrete providers are constructed at platform composition roots and transferred through core audio interfaces.
+- Core audio constructs a fresh platform-preferred provider set for each interactive composition; frontends only transfer those owning values into the runtime.
 - A library identity is resolved into a filesystem playback input before crossing into core audio; audio callbacks return opaque item and generation identities rather than application TrackIds.
 - Dedicated event, decoder, render, and device threads never access sequence, transport-service, UIModel, frontend, notification, or storage state.
 - Public playback starts enter through `PlaybackCommands::startFromView`; direct `PlaybackTransport` starts are internal-only and cannot claim a new live-source context.
@@ -406,8 +408,8 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h) and [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) own shared output-device presentation.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
 - [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and the source-private [`StreamingSource`](../../lib/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../lib/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
-- [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary.
-- [`AudioBackendBootstrap.cpp`](../../app/linux-gtk/platform/AudioBackendBootstrap.cpp) and [`app/tui/AudioBackendBootstrap.cpp`](../../app/tui/AudioBackendBootstrap.cpp) construct concrete providers at frontend composition roots.
+- [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary; [`PlatformBackendProvidersLinux.cpp`](../../lib/audio/PlatformBackendProvidersLinux.cpp) and [`PlatformBackendProvidersWindows.cpp`](../../lib/audio/PlatformBackendProvidersWindows.cpp) own concrete construction and platform preference order.
+- [`AudioBackendBootstrap.cpp`](../../app/linux-gtk/platform/AudioBackendBootstrap.cpp), [`app/tui/AudioBackendBootstrap.cpp`](../../app/tui/AudioBackendBootstrap.cpp), and WinUI [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp) transfer the returned providers into their runtime composition.
 
 ## Test map
 
@@ -421,7 +423,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`EngineTest.cpp`](../../test/unit/audio/EngineTest.cpp) protects explicit-start optimistic preparation, exact-mode reuse, and synchronous mismatch fallback.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, status/seek serialization, event, transition, and backend boundaries.
 - [`StreamingSourceTest.cpp`](../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker ownership, bounded PCM admission, seek, constant-time reset reuse, and teardown.
-- [`AudioBackendBootstrapTest.cpp`](../../test/unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp) protects provider construction at the GTK composition boundary.
+- [`PlatformBackendProvidersTest.cpp`](../../test/unit/audio/PlatformBackendProvidersTest.cpp) protects the native provider set and preference order; [`AudioBackendBootstrapTest.cpp`](../../test/unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp) protects transfer at the GTK composition boundary.
 
 ## Related documents
 

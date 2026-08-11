@@ -112,8 +112,9 @@ namespace ao::audio::test
 
   DecoderFactoryFn makePathScriptedDecoderFactory(std::vector<ScriptedTrack> tracks)
   {
-    return
-      [tracks = std::move(tracks)](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
+    return [tracks = std::move(tracks)](
+             std::filesystem::path const& path,
+             std::optional<SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<DecoderSession>>
     {
       for (auto const& track : tracks)
       {
@@ -123,11 +124,11 @@ namespace ao::audio::test
           info.outputFormat = pcmFormat(info.sourceFormat, selectedTestEncoding(info.sourceFormat, optOutputEncoding));
           auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
           decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.endOfStream = true}});
-          return decPtr;
+          return std::unique_ptr<DecoderSession>{std::move(decPtr)};
         }
       }
 
-      return std::unique_ptr<ScriptedDecoderSession>{};
+      return makeError(Error::Code::NotSupported, "No scripted decoder is registered for the requested path");
     };
   }
 
@@ -192,7 +193,8 @@ namespace ao::audio::test
                                               std::shared_ptr<DecoderLifeCounters> countersPtr)
   {
     return [tracks = std::move(tracks), countersPtr = std::move(countersPtr)](
-             std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
+             std::filesystem::path const& path,
+             std::optional<SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<DecoderSession>>
     {
       for (auto const& track : tracks)
       {
@@ -205,11 +207,11 @@ namespace ao::audio::test
           auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
           decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.endOfStream = true}});
           decPtr->setDestroyCounter(std::move(destroyCounterPtr));
-          return decPtr;
+          return std::unique_ptr<DecoderSession>{std::move(decPtr)};
         }
       }
 
-      return std::unique_ptr<ScriptedDecoderSession>{};
+      return makeError(Error::Code::NotSupported, "No scripted decoder is registered for the requested path");
     };
   }
 
@@ -218,7 +220,8 @@ namespace ao::audio::test
     std::shared_ptr<std::map<std::filesystem::path, ScriptedDecoderSession*>> registryPtr)
   {
     return [tracks = std::move(tracks), registryPtr = std::move(registryPtr)](
-             std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
+             std::filesystem::path const& path,
+             std::optional<SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<DecoderSession>>
     {
       for (auto const& entry : tracks)
       {
@@ -235,11 +238,11 @@ namespace ao::audio::test
           }
 
           (*registryPtr)[path] = decPtr.get();
-          return decPtr;
+          return std::unique_ptr<DecoderSession>{std::move(decPtr)};
         }
       }
 
-      return std::unique_ptr<ScriptedDecoderSession>{};
+      return makeError(Error::Code::NotSupported, "No scripted decoder is registered for the requested path");
     };
   }
 
@@ -289,15 +292,6 @@ namespace ao::audio::test
   }
 
   StagedFailureDecoderSession::~StagedFailureDecoderSession() = default;
-
-  Result<> StagedFailureDecoderSession::open(std::filesystem::path const& /*path*/) noexcept
-  {
-    return {};
-  }
-
-  void StagedFailureDecoderSession::close() noexcept
-  {
-  }
 
   void StagedFailureDecoderSession::flush() noexcept
   {

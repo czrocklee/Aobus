@@ -8,13 +8,12 @@
 #include <ao/audio/PcmBlock.h>
 
 #include <chrono>
-#include <filesystem>
 
 namespace ao::audio
 {
   /**
    * @brief Interface for an audio decoding session.
-   * Handles opening a file, seeking, and reading PCM blocks.
+   * Represents an open audio stream that can be sought and decoded.
    *
    * All operations report recoverable failures through Result and never throw
    * to the caller; the methods are noexcept so that an escaping exception
@@ -30,16 +29,6 @@ namespace ao::audio
     DecoderSession& operator=(DecoderSession const&) = delete;
     DecoderSession(DecoderSession&&) = delete;
     DecoderSession& operator=(DecoderSession&&) = delete;
-
-    /**
-     * @brief Opens an audio file for decoding.
-     */
-    virtual Result<> open(std::filesystem::path const& filePath) noexcept = 0;
-
-    /**
-     * @brief Closes the current session and releases resources.
-     */
-    virtual void close() noexcept = 0;
 
     /**
      * @brief Seeks to a specific playback position.

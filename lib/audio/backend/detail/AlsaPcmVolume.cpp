@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/detail/AlsaPcmVolume.h>
+#include "backend/detail/AlsaPcmVolume.h"
 
+#include "backend/detail/AudioBackendVolumeMath.h"
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
 #include <ao/utility/ByteView.h>
 
 #include <algorithm>

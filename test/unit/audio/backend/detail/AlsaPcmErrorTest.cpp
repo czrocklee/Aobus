@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/backend/detail/AlsaPcmError.h>
+#include "lib/audio/backend/detail/AlsaPcmError.h"
 
 #include <ao/Error.h>
 

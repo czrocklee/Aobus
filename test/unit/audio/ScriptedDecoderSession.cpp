@@ -13,7 +13,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -57,18 +56,6 @@ namespace ao::audio::test
   void ScriptedDecoderSession::setDestroyCounter(std::shared_ptr<std::atomic<std::size_t>> counterPtr)
   {
     _destroyCounterPtr = std::move(counterPtr);
-  }
-
-  Result<> ScriptedDecoderSession::open(std::filesystem::path const& path) noexcept
-  {
-    _opened = true;
-    _lastOpenedPath = path;
-    return _openRes;
-  }
-
-  void ScriptedDecoderSession::close() noexcept
-  {
-    _closed = true;
   }
 
   void ScriptedDecoderSession::flush() noexcept
@@ -134,16 +121,6 @@ namespace ao::audio::test
     return _info;
   }
 
-  bool ScriptedDecoderSession::isOpened() const
-  {
-    return _opened;
-  }
-
-  bool ScriptedDecoderSession::isClosed() const
-  {
-    return _closed;
-  }
-
   bool ScriptedDecoderSession::isFlushed() const
   {
     return _flushed;
@@ -159,19 +136,9 @@ namespace ao::audio::test
     return _seekCount;
   }
 
-  std::filesystem::path const& ScriptedDecoderSession::lastOpenedPath() const
-  {
-    return _lastOpenedPath;
-  }
-
   std::size_t ScriptedDecoderSession::readCount() const
   {
     return _readCount;
-  }
-
-  void ScriptedDecoderSession::setOpenResult(Result<> resRes)
-  {
-    _openRes = std::move(resRes);
   }
 
   void ScriptedDecoderSession::setSeekResult(Result<> resRes)

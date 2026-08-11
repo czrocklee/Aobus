@@ -11,7 +11,7 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/audio/BackendConfig.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -40,10 +40,6 @@
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/LibraryStartupPlan.h>
 #include <ao/winui/app/StartupOptions.h>
-
-#if AOBUS_HAS_WASAPI
-#include <ao/audio/backend/WasapiProvider.h>
-#endif
 
 #include <exception>
 #include <expected>
@@ -319,9 +315,10 @@ namespace ao::winui
     }
 
     auto runtimePtr = std::move(*runtimeRes);
-#if AOBUS_HAS_WASAPI
-    runtimePtr->addAudioProvider(std::make_unique<audio::backend::WasapiProvider>());
-#endif
+    for (auto& providerPtr : audio::createPlatformBackendProviders())
+    {
+      runtimePtr->addAudioProvider(std::move(providerPtr));
+    }
 
     if (auto const restoredRes = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore());
         !restoredRes)

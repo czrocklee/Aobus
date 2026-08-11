@@ -30,8 +30,8 @@ namespace ao::audio::detail
   class TrackSession final
   {
   public:
-    using DecoderFactoryFn =
-      std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, std::optional<SampleEncoding>)>;
+    using DecoderFactoryFn = std::function<Result<std::unique_ptr<DecoderSession>>(std::filesystem::path const&,
+                                                                                   std::optional<SampleEncoding>)>;
     using OnSourceErrorFn = std::function<void(Error const&)>;
 
     struct Inspection

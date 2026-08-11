@@ -116,7 +116,8 @@ namespace ao::rt::test::playback_succession
             failBlockedPreparation,
             blockEveryLookahead,
             finalOpenFailureFileName = std::move(finalOpenFailureFileName)](
-             std::filesystem::path const& path, std::optional<audio::SampleEncoding> optOutputEncoding)
+             std::filesystem::path const& path,
+             std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
     {
       auto const blocks =
         blockingGatePtr &&
@@ -145,13 +146,20 @@ namespace ao::rt::test::playback_succession
       decoderPtr->setReadScript(
         {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
 
+      if (blocks)
+      {
+        blockingGatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
+        decoderPtr->setDestroyCounter(blockingGatePtr->destroyedPtr);
+      }
+
       if (blocks && failBlockedPreparation)
       {
-        decoderPtr->setOpenResult(makeError(Error::Code::IoError, "Scripted lookahead preparation failure"));
+        return makeError(Error::Code::IoError, "Scripted lookahead preparation failure");
       }
-      else if (!finalOpenFailureFileName.empty() && path.filename() == finalOpenFailureFileName && optOutputEncoding)
+
+      if (!finalOpenFailureFileName.empty() && path.filename() == finalOpenFailureFileName && optOutputEncoding)
       {
-        decoderPtr->setOpenResult(makeError(Error::Code::IoError, "Scripted final decoder setup failure"));
+        return makeError(Error::Code::IoError, "Scripted final decoder setup failure");
       }
 
       decoderPtr->setReadObserver(
@@ -163,13 +171,7 @@ namespace ao::rt::test::playback_succession
           }
         });
 
-      if (blocks)
-      {
-        blockingGatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
-        decoderPtr->setDestroyCounter(blockingGatePtr->destroyedPtr);
-      }
-
-      return decoderPtr;
+      return std::unique_ptr<audio::DecoderSession>{std::move(decoderPtr)};
     };
   }
 

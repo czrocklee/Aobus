@@ -4,16 +4,16 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnull-dereference"
 
-#include <ao/audio/backend/AlsaProvider.h>
+#include "backend/AlsaProvider.h"
 
+#include "backend/AlsaExclusiveBackend.h"
+#include "backend/detail/AlsaGraphRegistry.h"
 #include <ao/Contract.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
-#include <ao/audio/backend/AlsaExclusiveBackend.h>
-#include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/utility/Raii.h>
 #include <ao/utility/ThreadName.h>
 
@@ -24,7 +24,7 @@ extern "C"
 #include <libudev.h>
 }
 
-#include <ao/audio/backend/detail/AlsaDeviceDiscovery.h>
+#include "backend/detail/AlsaDeviceDiscovery.h"
 
 #pragma GCC diagnostic pop
 
