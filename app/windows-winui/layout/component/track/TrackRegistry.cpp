@@ -16,6 +16,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
@@ -209,19 +210,19 @@ namespace ao::winui::layout
   void registerTrackComponents(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      "track.quickFilter",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackQuickFilter),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<QuickFilterComponent>(ctx); });
 
     registry.registerComponent(
-      "track.presentationButton",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackPresentationButton),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<PresentationButtonComponent>(
           ctx, node.propertyOr<std::string>("variant", {}) == kCompactVariant);
       });
 
-    registry.registerComponent("track.table",
+    registry.registerComponent(uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackTable),
                                [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
                                { return makeTrackTable(ctx, node); });
 
@@ -229,7 +230,7 @@ namespace ao::winui::layout
                                [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
                                { return makeTrackDetail(ctx, node); });
 
-    registry.registerComponent("track.coverArt",
+    registry.registerComponent(uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackCoverArt),
                                [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
                                { return makeTrackCoverArt(ctx, node); });
   }

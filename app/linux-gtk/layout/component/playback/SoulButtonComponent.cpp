@@ -11,6 +11,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -23,12 +24,22 @@
 
 namespace ao::gtk::layout
 {
+  namespace
+  {
+    /**
+     * @brief Which static ornament this shell's soul wears.
+     *
+     * Not part of the shared vocabulary: the Windows soul draws the live
+     * transport icon and only decides whether to show it, so the same name
+     * there answers a different question. Each shell spells its own.
+     */
+    constexpr auto kSoulGlyphProp = std::string_view{"glyph"};
+  } // namespace
+
   using namespace uimodel;
   namespace
   {
     using uimodel::kAllExternalActions;
-
-    constexpr double kDefaultStrokeWidth = uimodel::kAobusSoulGeometry.baseStrokeWidth;
 
     /**
      * @brief playback.soulButton
@@ -52,17 +63,17 @@ namespace ao::gtk::layout
         _soul.set_halign(Gtk::Align::FILL);
         _soul.set_valign(Gtk::Align::FILL);
 
-        if (auto const strokeWidth = node.propertyOr<double>("strokeWidth", 0.0); strokeWidth > 0.0)
+        if (auto const strokeWidth = node.propertyOr<double>(kStrokeWidthProp, 0.0); strokeWidth > 0.0)
         {
           _soul.setBaseStrokeWidth(static_cast<float>(strokeWidth));
         }
 
-        if (auto const glyphScale = node.propertyOr<double>("glyphScale", 0.0); glyphScale > 0.0)
+        if (auto const glyphScale = node.propertyOr<double>(kGlyphScaleProp, 0.0); glyphScale > 0.0)
         {
           _soul.setInnerGlyphScale(static_cast<float>(glyphScale));
         }
 
-        auto const glyph = node.propertyOr<std::string>("glyph", "none");
+        auto const glyph = node.propertyOr<std::string>(kSoulGlyphProp, "none");
 
         if (glyph == "sigil")
         {
@@ -92,29 +103,23 @@ namespace ao::gtk::layout
 
   void registerSoulButtonComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.soulButton",
-                                .displayName = "Soul Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "strokeWidth",
-                                           .kind = LayoutPropertyKind::Double,
-                                           .label = "Stroke Width",
-                                           .defaultValue = LayoutValue{kDefaultStrokeWidth}},
-                                          {.name = "glyph",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Glyph",
-                                           .defaultValue = LayoutValue{"none"},
-                                           .enumValues = {"none", "sigil", "seal"}},
-                                          {.name = "glyphScale",
-                                           .kind = LayoutPropertyKind::Double,
-                                           .label = "Glyph Scale",
-                                           .defaultValue = LayoutValue{1.0}},
-                                          {.name = "showFullLogo",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Full Logo",
-                                           .defaultValue = LayoutValue{false}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0,
-                                .actionPolicy = kAllExternalActions},
-                               createSoulButton);
+    registry.registerComponent(
+      // GDK tells a secondary hold apart from a primary one, which Windows
+      // cannot, so the slot is this shell's own extension rather than shared.
+      withShellActionSlots(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackSoulButton),
+                                               {// Which of two static ornaments the soul wears. The
+                                                // Windows soul draws the live transport icon instead,
+                                                // so this names a concept only this shell has.
+                                                {.name = std::string{kSoulGlyphProp},
+                                                 .kind = LayoutPropertyKind::Enum,
+                                                 .label = "Glyph",
+                                                 .defaultValue = LayoutValue{"none"},
+                                                 .enumValues = {"none", "sigil", "seal"}},
+                                                {.name = "showFullLogo",
+                                                 .kind = LayoutPropertyKind::Bool,
+                                                 .label = "Show Full Logo",
+                                                 .defaultValue = LayoutValue{false}}}),
+                           kAllExternalActions),
+      createSoulButton);
   }
 } // namespace ao::gtk::layout

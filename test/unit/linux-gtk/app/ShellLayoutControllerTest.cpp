@@ -31,6 +31,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -143,9 +144,9 @@ namespace ao::gtk::test
                             GtkUiDependencies{
                               .playbackCommandSurface = &commandSurface,
                               .themeCoordinator = &themeCoordinator,
-                              .onOutputDeviceSelectionRequested =
+                              .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
                                 [&optOutputSelectionRequested](audio::OutputDeviceSelection const& selection)
-                              { optOutputSelectionRequested = selection; },
+                                { optOutputSelectionRequested = selection; }),
                             }};
 
     SECTION("attachToWindow sets child")
@@ -650,13 +651,15 @@ namespace ao::gtk::test
     auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(componentStateDir);
 
     {
-      auto controller = ShellLayoutController{
-        runtime,
-        window,
-        std::move(configStorePtr),
-        std::move(layoutStorePtr),
-        std::move(componentStateStorePtr),
-        GtkUiDependencies{.playbackCommandSurface = &commandSurface, .themeCoordinator = &themeCoordinator}};
+      auto controller =
+        ShellLayoutController{runtime,
+                              window,
+                              std::move(configStorePtr),
+                              std::move(layoutStorePtr),
+                              std::move(componentStateStorePtr),
+                              GtkUiDependencies{.playbackCommandSurface = &commandSurface,
+                                                .themeCoordinator = &themeCoordinator,
+                                                .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
       controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));

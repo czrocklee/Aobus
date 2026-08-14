@@ -5,8 +5,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/button.h>
@@ -21,16 +21,16 @@ namespace ao::gtk::layout
   namespace
   {
     /**
-     * @brief app.actionButton
+     * @brief actionButton
      */
     class ActionButtonComponent final : public LayoutComponent
     {
     public:
       ActionButtonComponent(LayoutBuildContext& /*ctx*/, LayoutNode const& node)
       {
-        if (auto const label = node.propertyOr<std::string>("label", ""); !label.empty())
+        if (auto const text = node.propertyOr<std::string>(kTextProp, ""); !text.empty())
         {
-          _button.set_label(label);
+          _button.set_label(text);
         }
 
         if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())
@@ -84,24 +84,18 @@ namespace ao::gtk::layout
   void registerActionButtonComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "app.actionButton",
-       .displayName = "Action Button",
-       .category = LayoutComponentCategory::Generic,
-       .props = {{.name = "label", .kind = LayoutPropertyKind::String, .label = "Text"},
-                 {.name = "icon", .kind = LayoutPropertyKind::String, .label = "Icon (Symbolic)"},
-                 {.name = "size",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Size",
-                  .defaultValue = LayoutValue{"normal"},
-                  .enumValues = {"small", "normal", "large"}},
-                 {.name = "style",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Style",
-                  .defaultValue = LayoutValue{"flat"},
-                  .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
-       .minChildren = 0,
-       .optMaxChildren = 0,
-       .actionPolicy = uimodel::kExternalPrimaryActions},
+      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::ActionButton),
+                          {{.name = "icon", .kind = LayoutPropertyKind::String, .label = "Icon (Symbolic)"},
+                           {.name = "size",
+                            .kind = LayoutPropertyKind::Enum,
+                            .label = "Size",
+                            .defaultValue = LayoutValue{"normal"},
+                            .enumValues = {"small", "normal", "large"}},
+                           {.name = "style",
+                            .kind = LayoutPropertyKind::Enum,
+                            .label = "Style",
+                            .defaultValue = LayoutValue{"flat"},
+                            .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}}),
       createActionButton);
   }
 } // namespace ao::gtk::layout

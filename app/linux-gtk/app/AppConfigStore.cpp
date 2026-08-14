@@ -6,6 +6,7 @@
 #include "WindowState.h"
 #include <ao/Error.h>
 #include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppStateStore.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -70,68 +71,15 @@ namespace ao::gtk
         return std::move(reader).finish(std::move(state));
       }
     };
-
-    struct AppPrefsStateYamlSchema final
-    {
-      Result<> serialize(ryml::NodeRef node, rt::AppPrefsState const& state) const
-      {
-        auto writer = yaml::MapWriter{node};
-        writer.scalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
-          .scalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
-          .scalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
-          .scalar("lastLayoutPreset", state.lastLayoutPreset)
-          .scalar("lastThemePreset", state.lastThemePreset);
-        return {};
-      }
-
-      Result<rt::AppPrefsState> deserialize(ryml::ConstNodeRef node, rt::AppPrefsState const& seed) const
-      {
-        constexpr auto kContext = std::string_view{"application preferences"};
-        constexpr auto kKeys = std::to_array<std::string_view>(
-          {"lastOutputBackendId", "lastOutputProfileId", "lastOutputDeviceId", "lastLayoutPreset", "lastThemePreset"});
-
-        auto state = seed;
-        auto reader = yaml::MapReader{node, kKeys, kContext, yaml::UnknownKeyPolicy::Allow};
-        reader.optionalScalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
-          .optionalScalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
-          .optionalScalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
-          .optionalScalar("lastLayoutPreset", state.lastLayoutPreset)
-          .optionalScalar("lastThemePreset", state.lastThemePreset);
-        return std::move(reader).finish(std::move(state));
-      }
-    };
-
-    struct AppSessionStateYamlSchema final
-    {
-      Result<> serialize(ryml::NodeRef node, rt::AppSessionState const& state) const
-      {
-        auto writer = yaml::MapWriter{node};
-        writer.scalar("lastLibraryPath", state.lastLibraryPath)
-          .scalar("lastOutputBackendId", state.lastOutputSelection.backendId)
-          .scalar("lastOutputProfileId", state.lastOutputSelection.profileId)
-          .scalar("lastOutputDeviceId", state.lastOutputSelection.deviceId);
-        return {};
-      }
-
-      Result<rt::AppSessionState> deserialize(ryml::ConstNodeRef node, rt::AppSessionState const& seed) const
-      {
-        constexpr auto kContext = std::string_view{"application session"};
-        constexpr auto kKeys = std::to_array<std::string_view>(
-          {"lastLibraryPath", "lastOutputBackendId", "lastOutputProfileId", "lastOutputDeviceId"});
-
-        auto state = seed;
-        auto reader = yaml::MapReader{node, kKeys, kContext, yaml::UnknownKeyPolicy::Allow};
-        reader.optionalScalar("lastLibraryPath", state.lastLibraryPath)
-          .optionalScalar("lastOutputBackendId", state.lastOutputSelection.backendId)
-          .optionalScalar("lastOutputProfileId", state.lastOutputSelection.profileId)
-          .optionalScalar("lastOutputDeviceId", state.lastOutputSelection.deviceId);
-        return std::move(reader).finish(std::move(state));
-      }
-    };
   } // namespace
 
   AppConfigStore::AppConfigStore(std::filesystem::path const& configPath)
     : _storePtr{std::make_unique<rt::ConfigStore>(configPath)}
+  {
+  }
+
+  AppConfigStore::AppConfigStore(rt::ConfigStore::NoLocation /*noLocation*/)
+    : _storePtr{std::make_unique<rt::ConfigStore>(rt::ConfigStore::NoLocation{})}
   {
   }
 
@@ -152,22 +100,25 @@ namespace ao::gtk
 
   void AppConfigStore::loadAppPrefs(rt::AppPrefsState& state) const
   {
-    loadState(*_storePtr, "runtime", state, AppPrefsStateYamlSchema{}, "app prefs");
+    rt::loadAppPrefs(*_storePtr, state);
   }
 
   void AppConfigStore::saveAppPrefs(rt::AppPrefsState const& state)
   {
-    saveState(*_storePtr, "runtime", state, AppPrefsStateYamlSchema{}, "app prefs");
+    if (auto const result = rt::saveAppPrefs(*_storePtr, state); !result)
+    {
+      APP_LOG_ERROR("AppConfigStore: Failed to save app prefs: {}", result.error().message);
+    }
   }
 
   void AppConfigStore::loadAppSession(rt::AppSessionState& state) const
   {
-    loadState(*_storePtr, "session", state, AppSessionStateYamlSchema{}, "app session");
+    rt::loadAppSession(*_storePtr, state);
   }
 
   Result<> AppConfigStore::saveAppSession(rt::AppSessionState const& state)
   {
-    return _storePtr->save("session", state, AppSessionStateYamlSchema{});
+    return rt::saveAppSession(*_storePtr, state);
   }
 
   rt::ConfigStore& AppConfigStore::playbackSessionStore() noexcept

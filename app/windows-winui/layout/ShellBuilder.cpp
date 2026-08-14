@@ -4,6 +4,8 @@
 #include "layout/ShellBuilder.h"
 
 #include "app/LibrarySession.h"
+#include "input/KeymapAccelerators.h"
+#include "input/SystemCharacterKey.h"
 #include "layout/ShellPresetSource.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/FocusedDetail.h"
@@ -23,7 +25,11 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
+#include <ao/winui/input/KeymapAcceleratorPlan.h>
 #include <ao/winui/layout/LayoutCatalog.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
@@ -127,6 +133,7 @@ namespace ao::winui::layout
     : _session{session}, _config{std::move(config)}, _libraryAccess{makeLibraryAccess(session)}, _host{_config.host}
   {
     registerActions();
+    installKeyboardAccelerators();
   }
 
   ShellBuilder::~ShellBuilder()
@@ -145,6 +152,17 @@ namespace ao::winui::layout
 
       _actions.registerAction(id, [command](ActionContext const&) { command(); });
     };
+
+    // The transport is the one action family a keyboard map binds by default,
+    // and the surface that runs it outlives every generation, so it is bound
+    // here rather than left to the buttons that also invoke it.
+    auto& playback = _session.playbackCommands();
+
+    for (auto const command : uimodel::playbackCommands())
+    {
+      _actions.registerAction(uimodel::playbackCommandActionId(command),
+                              [&playback, command](ActionContext const&) { playback.execute(command); });
+    }
 
     bindCommand("library.open", _config.commands.openLibrary);
     bindCommand("library.rescan", _config.commands.rescanLibrary);
@@ -310,8 +328,8 @@ namespace ao::winui::layout
         .statusMessageChanged = _statusMessageChanged,
         .gatePtr = generation.gatePtr,
         .paneSettings = paneSettings(),
-        .onOutputDeviceSelectionRequested = [this](audio::OutputDeviceSelection const& selection)
-        { _session.setPreferredOutputSelection(selection); },
+        .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
+          [this](audio::OutputDeviceSelection const& selection) { _session.setPreferredOutputSelection(selection); }),
         .menus = menus(),
         .reportStatus = [this](std::string message) { reportStatus(std::move(message)); },
         .focusedDetailPtr = generation.focusedDetailPtr,
@@ -454,6 +472,28 @@ namespace ao::winui::layout
     }
   }
 
+  void ShellBuilder::installKeyboardAccelerators()
+  {
+    // The frame's host region outlives every generation, so a shortcut keeps
+    // working across a shell switch instead of being rebuilt with the tree.
+    // Asking the system where each character sits is what makes a punctuation
+    // shortcut land on the key the user pressed rather than the one a US
+    // keyboard would have carried.
+    auto const plans = planKeymapAccelerators(
+      _session.keymap(),
+      layoutActionCatalog(),
+      [this](std::string_view const id) { return _actions.contains(id); },
+      systemCharacterKeyResolver());
+
+    // The handler outlives this builder if construction throws after the
+    // accelerators are on the host, so it proves the builder is still there
+    // before reaching into it.
+    applyKeymapAccelerators(_config.host,
+                            plans,
+                            [this, lifetimePtr = std::weak_ptr{_lifetimePtr}](std::string_view const id)
+                            { return !lifetimePtr.expired() && _actions.invoke(id, ActionContext{}); });
+  }
+
   void ShellBuilder::retire() noexcept
   {
     if (_retired)
@@ -464,6 +504,10 @@ namespace ao::winui::layout
     // Close generation admission before detaching the native root. Components
     // can therefore observe retirement even if XAML refuses the detach.
     _retired = true;
+    // The accelerators hold a callable into this builder, so they go first.
+    // Clearing cannot throw out of here; the weak lifetime token is what makes
+    // a handler that survives a failed clear inert rather than dangerous.
+    clearKeymapAccelerators(_config.host);
     _host.retire();
     _optLivePreset.reset();
     _optRejectedPreset.reset();

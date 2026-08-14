@@ -17,10 +17,10 @@ namespace ao::uimodel::test
 {
   namespace
   {
-    LayoutNode nodeWith(std::string_view const prop, std::string action = "playback.togglePlayPause")
+    LayoutNode nodeWith(std::string_view const prop, std::string action = "playback.playPause")
     {
       auto node = LayoutNode{};
-      node.type = "playback.playPauseButton";
+      node.type = "playback.transportButton";
       node.props[std::string{prop}] = LayoutValue{std::move(action)};
       return node;
     }

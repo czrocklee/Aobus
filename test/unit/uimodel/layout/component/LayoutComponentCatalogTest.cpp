@@ -38,15 +38,15 @@ namespace ao::uimodel::test
     SECTION("register and retrieve descriptor")
     {
       auto const registered = catalog.registerComponentDescriptor(LayoutComponentDescriptor{
-        .type = "playback.playPauseButton",
+        .type = "playback.transportButton",
         .displayName = "Play/Pause Button",
         .category = LayoutComponentCategory::Playback,
         .props = {{.name = "showLabel", .kind = LayoutPropertyKind::Bool, .label = "Show Label"}}});
       CHECK(registered == true);
 
-      auto const optDesc = catalog.descriptor("playback.playPauseButton");
+      auto const optDesc = catalog.descriptor("playback.transportButton");
       REQUIRE(optDesc);
-      CHECK(optDesc->type == "playback.playPauseButton");
+      CHECK(optDesc->type == "playback.transportButton");
       CHECK(optDesc->displayName == "Play/Pause Button");
       CHECK(optDesc->category == LayoutComponentCategory::Playback);
       CHECK(optDesc->props.size() == 1);

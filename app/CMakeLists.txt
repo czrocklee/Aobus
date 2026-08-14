@@ -24,6 +24,7 @@ target_link_libraries(ao_app_desktop PRIVATE Boost::process)
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
+    runtime/AppStateStore.cpp
     runtime/CoreRuntime.cpp
     runtime/library/Library.cpp
     runtime/library/LibraryPaths.cpp
@@ -117,6 +118,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/component/LayoutComponentCatalog.cpp
     uimodel/layout/component/LayoutComponentState.cpp
     uimodel/layout/component/LayoutStatePromoter.cpp
+    uimodel/layout/component/SharedLayoutComponentType.cpp
     uimodel/layout/component/StatefulComponentState.cpp
     uimodel/layout/document/LayoutDocument.cpp
     uimodel/layout/document/LayoutDocumentLoader.cpp
@@ -162,6 +164,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/property/TrackAuthoringSession.cpp
     uimodel/library/property/TrackPropertiesFormSpec.cpp
     uimodel/library/property/TrackPropertiesFormModel.cpp
+    uimodel/library/task/LibraryScanOutcome.cpp
     uimodel/library/task/LibraryScanWorkflow.cpp
     uimodel/library/track/TrackCountFormatter.cpp
     uimodel/library/track/TrackSelectionSummary.cpp
@@ -172,8 +175,10 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/track/TrackPageRoute.cpp
     uimodel/library/track/IndexedTrackRowCache.cpp
     uimodel/library/track/TrackDisplayIndex.cpp
+    uimodel/playback/command/PlaybackCommand.cpp
     uimodel/playback/command/PlaybackCommandSurface.cpp
     uimodel/playback/now-playing/NowPlayingViewModel.cpp
+    uimodel/playback/output/OutputDeviceIntent.cpp
     uimodel/playback/output/OutputDeviceSelectionPolicy.cpp
     uimodel/playback/output/OutputDeviceViewModel.cpp
     uimodel/playback/output/VolumeViewModel.cpp

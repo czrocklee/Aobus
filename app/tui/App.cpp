@@ -31,7 +31,10 @@
 #include "TuiHitRegions.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/audio/OutputDeviceSelection.h>
+#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/AppStateStore.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
@@ -43,11 +46,14 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
+#include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
+#include <ao/utility/PlatformDirectories.h>
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -73,6 +79,7 @@
 #include <print>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -580,6 +587,77 @@ namespace ao::tui
         return rootPtr;
       }
     };
+
+    /**
+     * @brief Opens the TUI's own application-preference file.
+     *
+     * The groups and schema are shared with every other frontend, but the file
+     * is not: `ConfigStore` writes a whole document from the snapshot it took at
+     * first read, so two frontends pointed at one file would drop each other's
+     * groups whenever they ran at the same time.
+     *
+     * When the platform names no location, or the directory cannot be made, the
+     * store is one that keeps nothing rather than no store at all: the session
+     * is degraded, not failed, and every caller below is spared a null check for
+     * a case none of them can do anything about.
+     */
+    std::unique_ptr<rt::ConfigStore> openAppConfigStore()
+    {
+      auto dirRes = utility::applicationConfigDirectory();
+
+      if (!dirRes)
+      {
+        APP_LOG_INFO("TUI: keeping no application preferences: {}", dirRes.error().message);
+        return std::make_unique<rt::ConfigStore>(rt::ConfigStore::NoLocation{});
+      }
+
+      auto const path = *dirRes / "tui.yaml";
+      auto ec = std::error_code{};
+      std::filesystem::create_directories(path.parent_path(), ec);
+
+      if (ec)
+      {
+        APP_LOG_WARN("TUI: keeping no application preferences: {}", ec.message());
+        return std::make_unique<rt::ConfigStore>(rt::ConfigStore::NoLocation{});
+      }
+
+      return std::make_unique<rt::ConfigStore>(path);
+    }
+
+    /// Records the exact route a user picked, so the next session can ask for it again.
+    uimodel::OutputDeviceIntent makeOutputDeviceIntent(rt::ConfigStore& store)
+    {
+      return uimodel::OutputDeviceIntent::recordedBy(
+        [configStore = &store](audio::OutputDeviceSelection const& selection)
+        {
+          auto prefs = rt::AppPrefsState{};
+          rt::loadAppPrefs(*configStore, prefs);
+          prefs.preferredOutputSelection = selection;
+
+          if (auto const result = rt::saveAppPrefs(*configStore, prefs); !result)
+          {
+            APP_LOG_WARN("TUI: failed to record the requested output route: {}", result.error().message);
+          }
+        });
+    }
+
+    /// Resubmits a persisted route once platform providers have published their catalog.
+    void restoreOutputDeviceSelection(rt::ConfigStore& store, rt::PlaybackService& playback)
+    {
+      auto prefs = rt::AppPrefsState{};
+      rt::loadAppPrefs(store, prefs);
+
+      // The last-active route is the desktop shells' fallback, saved when their
+      // window closes. This shell keeps no session document, so there is
+      // nothing to fall back to and the explicit preference decides alone.
+      auto const optSelection = uimodel::resolveOutputDeviceSelectionToRestore(
+        prefs.preferredOutputSelection, {}, playback.snapshot().transport.output);
+
+      if (optSelection)
+      {
+        playback.commands().setOutputDevice(optSelection->backendId, optSelection->deviceId, optSelection->profileId);
+      }
+    }
   } // namespace
 
   std::int32_t run(AppOptions const& options)
@@ -599,9 +677,14 @@ namespace ao::tui
     }
 
     std::filesystem::create_directories(options.configPath.parent_path());
+    // Logging comes up first: opening the preference store is the first thing
+    // that can degrade, and its one explanation of why this session keeps
+    // nothing would otherwise be written to the null sink that stands in until
+    // initialize() runs.
     rt::Log::initialize(
       options.logLevel, rt::LibraryPaths{options.libraryRoot}.logsPath(), rt::LogConsoleMode::Disabled);
     auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
+    auto const appConfigStorePtr = openAppConfigStore();
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
     screen.TrackMouse(true);
     auto executorPtr = std::make_unique<Executor>(screen);
@@ -623,6 +706,7 @@ namespace ao::tui
     auto& runtime = *runtimePtr;
 
     registerPlatformAudioBackends(runtime);
+    restoreOutputDeviceSelection(*appConfigStorePtr, runtime.playback());
 
     auto library = LibraryController{runtime};
     auto shell = ShellInteractionModel{};
@@ -675,7 +759,7 @@ namespace ao::tui
 
     auto playbackSub =
       playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) { requestRefresh(); });
-    auto outputDevices = OutputDeviceController{playback, requestRefresh};
+    auto outputDevices = OutputDeviceController{playback, makeOutputDeviceIntent(*appConfigStorePtr), requestRefresh};
     auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace()};
     auto events = EventController{screen,
                                   shell,

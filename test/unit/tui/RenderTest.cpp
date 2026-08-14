@@ -532,8 +532,14 @@ namespace ao::tui::test
 
     CHECK(rendered.text.contains("Command Palette"));
     CHECK(rendered.text.contains("/view"));
-    CHECK(rendered.text.contains("view"));
-    CHECK(rendered.text.contains('v'));
+
+    // A command reachable by key shows that key where its detail would go, so
+    // the assertion has to be that the detail is gone. Checking for a 'v'
+    // instead passes on the word "/view" itself and would survive the hint
+    // being dropped entirely.
+    CHECK_FALSE(rendered.text.contains("track view"));
+
+    // An item that is not a command keeps its detail.
     CHECK(rendered.text.contains("Aimer"));
     CHECK(rendered.text.contains("artist"));
     auto const optSelected = findTextCells(rendered.screen, "Aimer");

@@ -3,9 +3,12 @@
 
 #pragma once
 
-#include <ao/audio/OutputDeviceSelection.h>
-
 #include <optional>
+
+namespace ao::audio
+{
+  struct OutputDeviceSelection;
+}
 
 namespace ao::rt
 {

@@ -3,9 +3,12 @@
 
 #include <ao/winui/app/DesktopOutputSelection.h>
 
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
+
+#include <optional>
 
 namespace ao::winui
 {

@@ -19,8 +19,10 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
 namespace ao::winui
 {
@@ -144,6 +146,7 @@ namespace ao::winui::layout
 
     Result<> build(ShellPreset preset);
     void registerActions();
+    void installKeyboardAccelerators();
     PaneSettingsAccess paneSettings();
     MenuComposer menus();
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyout modernOverflowFlyout() const;
@@ -181,6 +184,16 @@ namespace ao::winui::layout
      * pixel the window moves. Nothing about a resize makes it buildable.
      */
     std::optional<ShellPreset> _optRejectedPreset;
+    /**
+     * @brief Proof that this builder is still alive, for handlers that outlive it.
+     *
+     * Keyboard accelerators hang on the frame's host region, which outlives
+     * every generation and this builder with it. Construction installs them, so
+     * a throw part-way through leaves installed handlers behind with no
+     * destructor to run. Holding the token by weak reference is what makes
+     * those handlers inert instead of a call into freed memory.
+     */
+    std::shared_ptr<std::monostate> _lifetimePtr = std::make_shared<std::monostate>();
     bool _retired = false;
   };
 } // namespace ao::winui::layout

@@ -6,7 +6,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/popovermenubar.h>
@@ -47,11 +47,6 @@ namespace ao::gtk::layout
 
   void registerMenuBarComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "app.menuBar",
-                                .displayName = "Menu Bar",
-                                .category = LayoutComponentCategory::Application,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createMenuBar);
+    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::MenuBar), createMenuBar);
   }
 } // namespace ao::gtk::layout

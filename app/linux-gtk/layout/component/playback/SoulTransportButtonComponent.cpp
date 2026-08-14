@@ -15,6 +15,7 @@
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
@@ -24,6 +25,7 @@
 #include <gtkmm/widget.h>
 
 #include <memory>
+#include <string>
 
 namespace ao::gtk::layout
 {
@@ -68,12 +70,12 @@ namespace ao::gtk::layout
         _soul.set_halign(Gtk::Align::FILL);
         _soul.set_valign(Gtk::Align::FILL);
 
-        if (auto const strokeWidth = node.propertyOr<double>("strokeWidth", 0.0); strokeWidth > 0.0)
+        if (auto const strokeWidth = node.propertyOr<double>(kStrokeWidthProp, 0.0); strokeWidth > 0.0)
         {
           _soul.setBaseStrokeWidth(static_cast<float>(strokeWidth));
         }
 
-        if (auto const glyphScale = node.propertyOr<double>("glyphScale", 0.0); glyphScale > 0.0)
+        if (auto const glyphScale = node.propertyOr<double>(kGlyphScaleProp, 0.0); glyphScale > 0.0)
         {
           _soul.setInnerGlyphScale(static_cast<float>(glyphScale));
         }
@@ -136,11 +138,11 @@ namespace ao::gtk::layout
       {.type = "playback.soulPlayPauseButton",
        .displayName = "Soul Play/Pause Button",
        .category = LayoutComponentCategory::Playback,
-       .props = {{.name = "strokeWidth",
+       .props = {{.name = std::string{kStrokeWidthProp},
                   .kind = LayoutPropertyKind::Double,
                   .label = "Stroke Width",
                   .defaultValue = LayoutValue{kDefaultStrokeWidth}},
-                 {.name = "glyphScale",
+                 {.name = std::string{kGlyphScaleProp},
                   .kind = LayoutPropertyKind::Double,
                   .label = "Glyph Scale",
                   .defaultValue = LayoutValue{1.0}}},

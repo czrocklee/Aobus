@@ -10,6 +10,7 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
 #include <array>
 #include <cstddef>
@@ -17,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace ao::uimodel
@@ -66,6 +68,37 @@ namespace ao::uimodel
        .text = {.label = "Technical",
                 .description = "Flat list of codec, bitrate, size, and path for file inspection."}},
     });
+
+    std::string_view plural(std::size_t const count) noexcept
+    {
+      return count == 1 ? "" : "s";
+    }
+
+    std::string unreadableFileCount(std::size_t const count)
+    {
+      return std::format("{} unreadable file{}", count, plural(count));
+    }
+
+    /// What a scan changed that a person would want to hear about, or nothing.
+    std::string scanChangeSummary(LibraryScanOutcome const& outcome)
+    {
+      auto const relinked =
+        outcome.relinkedCount > 0
+          ? std::format("Relinked {} moved file{}", outcome.relinkedCount, plural(outcome.relinkedCount))
+          : std::string{};
+      auto const missing = outcome.missingCount > 0 ? std::format("{} missing file{} need{} review",
+                                                                  outcome.missingCount,
+                                                                  plural(outcome.missingCount),
+                                                                  outcome.missingCount == 1 ? "s" : "")
+                                                    : std::string{};
+
+      if (!relinked.empty() && !missing.empty())
+      {
+        return std::format("{}; {}", relinked, missing);
+      }
+
+      return relinked.empty() ? missing : relinked;
+    }
   } // namespace
 
   std::string_view PresentationTextCatalog::trackFieldLabel(rt::TrackField const field) const noexcept
@@ -297,6 +330,33 @@ namespace ao::uimodel
     }
 
     return {};
+  }
+
+  std::string PresentationTextCatalog::libraryScanMessage(LibraryScanOutcome const& outcome) const
+  {
+    switch (outcome.verdict)
+    {
+      case LibraryScanVerdict::UpToDate: return "Library is up to date";
+      case LibraryScanVerdict::Complete:
+      case LibraryScanVerdict::NeedsReview:
+      {
+        auto changes = scanChangeSummary(outcome);
+        return changes.empty() ? std::string{"Library scan complete"} : std::move(changes);
+      }
+      case LibraryScanVerdict::CompletedWithErrors:
+      {
+        auto const changes = scanChangeSummary(outcome);
+        return changes.empty() ? std::string{"Scan completed with errors"}
+                               : std::format("Scan completed with errors; {}", changes);
+      }
+      case LibraryScanVerdict::Unreadable:
+        return std::format("Library scan found {} and no usable changes", unreadableFileCount(outcome.failureCount));
+      case LibraryScanVerdict::Failed:
+        return outcome.optError ? std::format("Scan failed: {}", outcome.optError->message)
+                                : std::string{"Scan failed"};
+    }
+
+    return "Scan failed";
   }
 
   std::string PresentationTextCatalog::trackFilterError(std::string_view const diagnostic) const

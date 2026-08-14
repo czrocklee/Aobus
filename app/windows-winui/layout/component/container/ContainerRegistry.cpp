@@ -8,6 +8,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "pch.h"
 #include <ao/Error.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -38,7 +39,7 @@ namespace ao::winui::layout
 
     bool isVertical(uimodel::LayoutNode const& node, std::string_view const fallback)
     {
-      auto const it = node.props.find("orientation");
+      auto const it = node.props.find(uimodel::kOrientationProp);
       auto const* const value = it == node.props.end() ? nullptr : it->second.getIf<std::string>();
       return (value == nullptr ? fallback : std::string_view{*value}) == "vertical";
     }
@@ -169,16 +170,19 @@ namespace ao::winui::layout
   void registerContainerComponents(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      "box",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::Box),
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<BoxComponent>(isVertical(node, "vertical"), numberProp(node, "spacing", 0.0)); });
+      {
+        return std::make_unique<BoxComponent>(
+          isVertical(node, "vertical"), numberProp(node, uimodel::kSpacingProp, 0.0));
+      });
 
     registry.registerComponent(
-      "split",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::Split),
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<SplitComponent>(
-          isVertical(node, "horizontal"), numberProp(node, "initialPositionPercent", kDefaultSplitWeight));
+          isVertical(node, "vertical"), numberProp(node, "initialPositionPercent", kDefaultSplitWeight));
       });
 
     registry.registerComponent(

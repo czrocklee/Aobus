@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
@@ -21,7 +21,7 @@ namespace ao::gtk::layout
   namespace
   {
     /**
-     * @brief status.messageLabel
+     * @brief status.message
      */
     class StatusMessageLabelComponent final : public LayoutComponent
     {
@@ -47,9 +47,7 @@ namespace ao::gtk::layout
 
   void registerStatusMessageLabelComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "status.messageLabel",
-                                .displayName = "Status Message (Basic)",
-                                .category = LayoutComponentCategory::Status},
-                               createStatusMessageLabel);
+    registry.registerComponent(
+      sharedComponentDescriptor(SharedLayoutComponentType::StatusMessage), createStatusMessageLabel);
   }
 } // namespace ao::gtk::layout

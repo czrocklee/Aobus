@@ -23,6 +23,7 @@
 #include <ao/audio/OutputDeviceSelection.h>
 // MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -159,14 +160,14 @@ namespace winrt::Aobus::implementation
     // whichever shell was on screen when it was asked for.
     auto weak = get_weak();
     _shellOutputDevicePtr = std::make_unique<ao::winui::OutputDeviceControl>(ao::winui::OutputDeviceControlConfig{
-      .onSelectionRequested =
+      .intent = ao::uimodel::OutputDeviceIntent::recordedBy(
         [weak](ao::audio::OutputDeviceSelection const& selection)
-      {
-        if (auto self = weak.get(); self && self->_session != nullptr)
         {
-          self->_session->setPreferredOutputSelection(selection);
-        }
-      },
+          if (auto self = weak.get(); self && self->_session != nullptr)
+          {
+            self->_session->setPreferredOutputSelection(selection);
+          }
+        }),
     });
 
     auto const command = [weak](void (MainWindow::*method)())

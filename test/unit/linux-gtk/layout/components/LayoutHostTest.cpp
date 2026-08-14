@@ -22,6 +22,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -62,7 +63,7 @@ namespace ao::gtk::layout::test
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{};
+    auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = *runtimePtr,
@@ -182,7 +183,7 @@ namespace ao::gtk::layout::test
       std::unique_ptr<rt::AppRuntime> runtime2Ptr = makeRuntime(tempDir2);
       auto const actionRegistry2 = ActionRegistry{};
       auto runtimeState2 = uimodel::LayoutRuntimeState{};
-      auto dependencies2 = GtkUiDependencies{};
+      auto dependencies2 = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
       auto ctx2 = LayoutBuildContext{.registry = registry2,
                                      .actionRegistry = actionRegistry2,
                                      .runtime = *runtime2Ptr,
@@ -192,7 +193,7 @@ namespace ao::gtk::layout::test
                                      .dependencies = dependencies2};
 
       auto doc = LayoutDocument{};
-      doc.root.type = "status.messageLabel";
+      doc.root.type = "status.message";
 
       auto host2 = LayoutHost{registry2};
       auto prepared = ao::test::requireValue(prepareLayout(doc));

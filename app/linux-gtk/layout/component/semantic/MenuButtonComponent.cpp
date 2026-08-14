@@ -8,6 +8,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/menubutton.h>
@@ -22,14 +23,16 @@ namespace ao::gtk::layout
   namespace
   {
     /**
-     * @brief app.menuButton
+     * @brief menuButton
      */
     class MenuButtonComponent final : public LayoutComponent
     {
     public:
       MenuButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
-        setTooltipAndAccessibleLabel(_button, "Application menu");
+        // The vocabulary lets a document name the button; without one it is
+        // still the application menu, and still has to describe itself.
+        setTooltipAndAccessibleLabel(_button, node.propertyOr<std::string>(kTextProp, "Application menu"));
 
         if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())
         {
@@ -64,17 +67,13 @@ namespace ao::gtk::layout
   void registerMenuButtonComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "app.menuButton",
-       .displayName = "Menu Button",
-       .category = LayoutComponentCategory::Application,
-       .props = {{.name = "icon", .kind = LayoutPropertyKind::String, .label = "Icon (Symbolic)"},
-                 {.name = "style",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Style",
-                  .defaultValue = LayoutValue{"flat"},
-                  .enumValues = {"flat", "raised"}}},
-       .minChildren = 0,
-       .optMaxChildren = 0},
+      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::MenuButton),
+                          {{.name = "icon", .kind = LayoutPropertyKind::String, .label = "Icon (Symbolic)"},
+                           {.name = "style",
+                            .kind = LayoutPropertyKind::Enum,
+                            .label = "Style",
+                            .defaultValue = LayoutValue{"flat"},
+                            .enumValues = {"flat", "raised"}}}),
       createMenuButton);
   }
 } // namespace ao::gtk::layout

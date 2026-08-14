@@ -22,7 +22,7 @@ The [system architecture](../../architecture/system-overview.md), [application s
 
 ## Surface
 
-`windows-settings.yaml` is a grouped configuration document. Its `desktop` map requires:
+`windows-settings.yaml` is a grouped configuration document. Its `desktop` map requires `version` and accepts the following fields, each of which keeps the caller's seeded value when absent:
 
 | Field | Type | Default |
 |---|---|---|
@@ -53,7 +53,9 @@ not theme fields.
 
 ## Validation rules
 
-All documented maps reject unknown keys and require every field.
+All documented maps reject unknown keys. The `desktop` map requires only
+`version`; every other field, including each member of `window`, is optional and
+falls back to the seed the caller supplied. The theme maps require every field.
 Window size must be at least 640 by 480.
 Navigation width must be finite and in the inclusive range 120 through 360.
 Inspector width must be finite and in the inclusive range 160 through 480.
@@ -71,9 +73,16 @@ The shared presentation groups apply their own recursive list-id, field-id, orde
 
 ## Compatibility and versioning
 
-Desktop settings accept only version 3; there is no compatibility or migration
-path. Other versions are rejected before version-3 fields are interpreted and
-leave typed defaults in effect.
+Desktop settings read version 2 or 3, which are the versions this schema has written. Because every field other than
+`version` is optional over the caller's seed, an older document is read in full
+and the fields it predates keep their seeded values; the group is stamped with
+the current version and the next checkpoint writes it back upgraded. A version
+above 3 is rejected instead of read: this build cannot preserve fields it does
+not know, so reading such a document would discard them at the next save. A
+version below 2 is rejected as well, because no document was ever written that
+way; the value marks a missing or malformed marker, and reading it under current
+field semantics would dress a corrupt document up as an old one.
+A rejected group leaves typed defaults in effect.
 Each settings group is loaded independently, so rejection of `desktop` does not reject a valid shared presentation group and vice versa.
 The theme has no compatibility envelope: adding, removing, or renaming a token requires coordinated schema, reference, and test changes.
 Reload installs only a completely valid candidate.

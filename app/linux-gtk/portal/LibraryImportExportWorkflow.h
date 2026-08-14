@@ -10,6 +10,7 @@
 #include <ao/async/Task.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 
 #include <filesystem>
@@ -60,12 +61,10 @@ namespace ao::gtk::portal
     async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode, std::stop_token stopToken);
 
     void startAudioIdentityIndexing();
-    void presentScanResult(uimodel::LibraryScanWorkflowResult result);
+    void presentScanOutcome(uimodel::LibraryScanOutcome const& outcome);
 
     // Presents a Result error: structured log of the error plus an error-severity notification.
     void presentFailure(std::string_view action, std::string const& notificationMessage, Error const& error);
-    // The shared async exception handler owns diagnostics; this helper only presents the UI notification.
-    void presentInternalFailure(std::string_view notificationMessage);
 
     rt::AppRuntime& _runtime;
     ImportExportCallbacks const& _callbacks;

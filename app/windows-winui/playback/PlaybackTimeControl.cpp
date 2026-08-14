@@ -220,7 +220,7 @@ namespace ao::winui
         }
 
         break;
-      case uimodel::PlaybackTimeMode::Default:
+      case uimodel::PlaybackTimeMode::Combined:
       default:
         if (!_dirty && coarseElapsed == _lastElapsed && coarseDuration == _lastDuration)
         {

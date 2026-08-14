@@ -11,16 +11,19 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace ao::tui::test
 {
@@ -67,7 +70,8 @@ namespace ao::tui::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto controllerPlayback = ControllerPlayback{fixture};
     std::int32_t refreshCount = 0;
-    auto controller = OutputDeviceController{controllerPlayback.playback, [&refreshCount] { ++refreshCount; }};
+    auto controller = OutputDeviceController{
+      controllerPlayback.playback, uimodel::OutputDeviceIntent::discarded(), [&refreshCount] { ++refreshCount; }};
 
     REQUIRE(refreshCount > 0);
     REQUIRE(controller.viewState().rows.size() == 3);
@@ -90,6 +94,29 @@ namespace ao::tui::test
     CHECK(controller.selectedRow() == 2);
   }
 
+  TEST_CASE("OutputDeviceController - selecting a row records the requested route", "[tui][unit][output]")
+  {
+    // TUI kept no output preference before it carried an intent, so a chosen
+    // route survived only until the process exited.
+    auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
+    fixture.status.descriptor.supportedProfiles.push_back(
+      audio::BackendProvider::ProfileDescriptor{.id = audio::kProfileExclusive});
+    fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto controllerPlayback = ControllerPlayback{fixture};
+    auto optRecorded = std::optional<audio::OutputDeviceSelection>{};
+    auto controller = OutputDeviceController{
+      controllerPlayback.playback,
+      uimodel::OutputDeviceIntent::recordedBy([&optRecorded](audio::OutputDeviceSelection const& selection)
+                                              { optRecorded = selection; })};
+
+    REQUIRE(controller.selectRow(1));
+
+    REQUIRE(optRecorded);
+    CHECK(optRecorded->backendId == audio::BackendId{"mock_backend"});
+    CHECK_FALSE(optRecorded->profileId.empty());
+  }
+
   TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][unit][output]")
   {
     auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
@@ -98,7 +125,7 @@ namespace ao::tui::test
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto controllerPlayback = ControllerPlayback{fixture};
-    auto controller = OutputDeviceController{controllerPlayback.playback};
+    auto controller = OutputDeviceController{controllerPlayback.playback, uimodel::OutputDeviceIntent::discarded()};
 
     CHECK_FALSE(controller.selectRow(-1));
     CHECK_FALSE(controller.selectRow(0));

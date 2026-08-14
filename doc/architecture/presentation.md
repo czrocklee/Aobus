@@ -72,6 +72,10 @@ Core audio descriptors retain backend/profile ids and external device facts; UIM
 `OutputDeviceSelectionPolicy` is pure: it requires non-empty backend and profile ids, rejects a profile known to be unsupported, permits an unavailable non-empty device as pending intent, and permits an empty device only when the published catalog advertises a compatible empty-id default.
 Consequently an empty device with the exclusive profile is never restorable.
 Runtime remains authoritative for the current accepted selection, while frontend lifecycle owners decide whether and where to persist requested intent.
+That decision is carried by `OutputDeviceIntent`, which every selector surface takes by value and which has no default state: a surface either names a recorder or declares `discarded()`.
+Because the type is not default-constructible, a frontend dependency bundle carrying one cannot be assembled without choosing, so a shell that fails to forward its recorder does not build.
+This replaces an optional callback whose omission silently dropped every selection the user made, and it is the shape any later cross-frontend intent should take.
+All three frontends record.
 Shared playback reports retain a closed template and typed arguments in the notification feed, and library-task progress retains a typed operation kind plus raw subject.
 
 The shared activity-status model consumes one immutable notification-feed update per mutation.
@@ -271,6 +275,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
 - [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) owns shared authored copy and open-id fallback.
+- [`OutputDeviceIntent`](../../app/include/ao/uimodel/playback/output/OutputDeviceIntent.h) owns the typed destination for a requested route and its explicit absence.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
   owns shared output-route projection, selection commands, and requested-intent reporting;
   [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
@@ -295,6 +300,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
 - [`PresentationTextCatalogTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
+- [`OutputDeviceIntentTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceIntentTest.cpp) protects the undecided-destination compile barrier and recorder dispatch.
 - [`OutputDeviceViewModelTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp)
   and [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
   protect the three-frontend selector projection, command route, and restore

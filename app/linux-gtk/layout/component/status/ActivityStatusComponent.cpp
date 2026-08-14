@@ -9,6 +9,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -91,25 +92,21 @@ namespace ao::gtk::layout
 
   void registerActivityStatusComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "status.activityStatus",
-                                .displayName = "Activity Status",
-                                .category = LayoutComponentCategory::Status,
-                                .props = {{.name = "variant",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Variant",
-                                           .defaultValue = LayoutValue{"ambient"},
-                                           .enumValues = {"ambient", "classicInline"}},
-                                          {.name = "idleBehavior",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Idle Behavior",
-                                           .defaultValue = LayoutValue{""},
-                                           .enumValues = {"", "hidden", "reserve"}},
-                                          {.name = "maxTextChars",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Max Text Chars",
-                                           .defaultValue = LayoutValue{kDefaultMaxTextChars}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
+    registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::StatusActivity),
+                                                   {{.name = "variant",
+                                                     .kind = LayoutPropertyKind::Enum,
+                                                     .label = "Variant",
+                                                     .defaultValue = LayoutValue{"ambient"},
+                                                     .enumValues = {"ambient", "classicInline"}},
+                                                    {.name = "idleBehavior",
+                                                     .kind = LayoutPropertyKind::Enum,
+                                                     .label = "Idle Behavior",
+                                                     .defaultValue = LayoutValue{""},
+                                                     .enumValues = {"", "hidden", "reserve"}},
+                                                    {.name = "maxTextChars",
+                                                     .kind = LayoutPropertyKind::Int,
+                                                     .label = "Max Text Chars",
+                                                     .defaultValue = LayoutValue{kDefaultMaxTextChars}}}),
                                createActivityStatus);
   }
 } // namespace ao::gtk::layout

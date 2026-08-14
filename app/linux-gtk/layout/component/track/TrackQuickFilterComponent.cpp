@@ -8,7 +8,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 
@@ -65,11 +65,7 @@ namespace ao::gtk::layout
 
   void registerTrackQuickFilterComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "track.quickFilter",
-                                .displayName = "Quick Filter",
-                                .category = LayoutComponentCategory::Track,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createTrackQuickFilter);
+    registry.registerComponent(
+      sharedComponentDescriptor(SharedLayoutComponentType::TrackQuickFilter), createTrackQuickFilter);
   }
 } // namespace ao::gtk::layout

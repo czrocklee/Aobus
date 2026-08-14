@@ -16,7 +16,7 @@ namespace ao::gtk::layout::test
     auto registry = ComponentRegistry{};
     registerStatusComponents(registry);
 
-    auto const optDesc = registry.descriptor("status.activityStatus");
+    auto const optDesc = registry.descriptor("status.activity");
     REQUIRE(optDesc);
     CHECK(optDesc->displayName == "Activity Status");
 

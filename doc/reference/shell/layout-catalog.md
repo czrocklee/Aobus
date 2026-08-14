@@ -13,6 +13,7 @@ This reference owns the exact stable identities and descriptor surfaces register
 The live component and action catalogs have no serialized catalog version; their string ids are compatibility surfaces for customized layouts and keymaps.
 
 Component-specific property descriptors are registered beside each factory and are the executable exact authority rendered by the layout editor.
+A type this shell shares with another takes its descriptor from the [shared component vocabulary](component-vocabulary.md) instead, and the registration adds only GTK's own properties.
 This document enumerates all registered type and action ids and the common descriptor vocabulary.
 
 ## Code boundary
@@ -38,13 +39,20 @@ Action-capable components can expose these standard props according to their pol
 
 ## Registered component types
 
+Types marked shared are registered from the [shared component vocabulary](component-vocabulary.md), which owns their display name, category, child range, action slots, and shared properties; this shell adds only what GTK alone can honor.
+
 | Family | Type ids |
 |---|---|
-| Container and decorator | `absoluteCanvas`, `box`, `centerBox`, `collapsibleSplit`, `responsiveClass`, `scroll`, `separator`, `spacer`, `split`, `tabs` |
-| Generic/application/library | `app.actionButton`, `app.menuBar`, `app.menuButton`, `label`, `library.listTree`, `library.openLibraryButton`, `workspace.withDetailPane` |
-| Track | `track.coverArt`, `track.detailScope`, `track.detailUndoBar`, `track.fieldGrid`, `track.presentationButton`, `track.quickFilter`, `track.selectionRegion`, `track.tagEditor`, `tracks.table` |
-| Playback | `playback.audioPipelinePanel`, `playback.currentArtistLabel`, `playback.currentTitleLabel`, `playback.image`, `playback.nextButton`, `playback.outputDeviceSelector`, `playback.pauseButton`, `playback.playButton`, `playback.playPauseButton`, `playback.previousButton`, `playback.qualityIndicator`, `playback.repeatButton`, `playback.seekSlider`, `playback.shuffleButton`, `playback.soulButton`, `playback.soulPlayPauseButton`, `playback.stopButton`, `playback.timeLabel`, `playback.volumeControl` |
-| Status | `status.activityStatus`, `status.messageLabel`, `status.nowPlaying`, `status.playbackDetails`, `status.selectionInfo`, `status.trackCount` |
+| Container and decorator | `absoluteCanvas`, **`box`**, `centerBox`, `collapsibleSplit`, `responsiveClass`, `scroll`, `separator`, `spacer`, **`split`**, `tabs` |
+| Generic/application/library | **`actionButton`**, **`app.menuBar`**, **`label`**, **`menuButton`**, `library.listTree`, `library.openLibraryButton`, `workspace.withDetailPane` |
+| Track | **`track.coverArt`**, `track.detailScope`, `track.detailUndoBar`, `track.fieldGrid`, **`track.presentationButton`**, **`track.quickFilter`**, `track.selectionRegion`, **`track.table`**, `track.tagEditor` |
+| Playback | `playback.audioPipelinePanel`, `playback.currentArtistLabel`, `playback.currentTitleLabel`, `playback.image`, **`playback.outputDeviceSelector`**, `playback.qualityIndicator`, **`playback.seekSlider`**, **`playback.soulButton`**, `playback.soulPlayPauseButton`, **`playback.timeLabel`**, **`playback.transportButton`**, **`playback.volumeControl`** |
+| Status | **`status.activity`**, **`status.message`**, `status.nowPlaying`, `status.playbackDetails`, **`status.selectionInfo`**, **`status.trackCount`** |
+
+Bold ids are shared.
+
+One transport button carries every command: `playback.transportButton` takes a `command` property rather than the shell offering a type per verb.
+`playback.soulPlayPauseButton` remains GTK's own, since it is the soul drawing rather than a transport button.
 
 `template` is a special document node type handled by expansion and is not a registered GTK component.
 
@@ -55,7 +63,7 @@ These properties are authored in the layout YAML and are shown by the Layout Edi
 
 | Component | Property | Default |
 | --- | --- | --- |
-| `tracks.table` | `groupCoverPlaceholderStyle` | `monogram` |
+| `track.table` | `groupCoverPlaceholderStyle` | `monogram` |
 | `track.coverArt` | `placeholderStyle` | `vinyl` |
 | `playback.image` | `placeholderStyle` | `equalizer` |
 
@@ -111,6 +119,7 @@ Adding a component or action requires registration, descriptor and behavior test
 ## Implementation authority
 
 - [`LayoutComponentCatalog.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentCatalog.h) defines component descriptors and vocabulary.
+- [`SharedLayoutComponentType.h`](../../../app/include/ao/uimodel/layout/component/SharedLayoutComponentType.h) owns the descriptors of the types shared with another shell.
 - [`LayoutActionDescriptor.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionDescriptor.h), [`LayoutActionCapabilities.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionCapabilities.h), and [`LayoutActionCatalog.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionCatalog.h) define action metadata.
 - Component registrations under [`app/linux-gtk/layout/component/`](../../../app/linux-gtk/layout/component/) own per-type metadata and factories.
 - [`LayoutDialect.cpp`](../../../app/linux-gtk/layout/document/LayoutDialect.cpp) owns GTK-specific styling and authored-tooltip validation.
@@ -128,4 +137,5 @@ Adding a component or action requires registration, descriptor and behavior test
 - [Application shell architecture](../../architecture/application-shell.md)
 - [Shell layout lifecycle](../../spec/shell/layout-lifecycle.md)
 - [Layout document reference](layout-document.md)
+- [Shared component vocabulary](component-vocabulary.md)
 - [Keyboard map reference](keymap.md)

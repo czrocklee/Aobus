@@ -11,7 +11,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -56,7 +56,6 @@ namespace ao::gtk::layout
   void registerLibraryTrackCountComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.trackCount", .displayName = "Library Track Count", .category = LayoutComponentCategory::Status},
-      createTrackCount);
+      sharedComponentDescriptor(SharedLayoutComponentType::StatusTrackCount), createTrackCount);
   }
 } // namespace ao::gtk::layout

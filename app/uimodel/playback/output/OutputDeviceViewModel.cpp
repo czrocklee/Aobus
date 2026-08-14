@@ -10,6 +10,7 @@
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <format>
@@ -76,11 +77,11 @@ namespace ao::uimodel
 
   OutputDeviceViewModel::OutputDeviceViewModel(rt::PlaybackService& playback,
                                                RenderCallback onRender,
-                                               SelectionRequestedCallback onSelectionRequested)
+                                               OutputDeviceIntent intent)
     : _playback{playback}
     , _commands{playback.commands()}
     , _onRender{std::move(onRender)}
-    , _onSelectionRequested{std::move(onSelectionRequested)}
+    , _intent{std::move(intent)}
     , _lastOutput{playback.snapshot().transport.output}
   {
     _snapshotSub =
@@ -97,11 +98,7 @@ namespace ao::uimodel
       .profileId = profileId,
     };
     _commands.setOutputDevice(selection.backendId, selection.deviceId, selection.profileId);
-
-    if (_onSelectionRequested)
-    {
-      _onSelectionRequested(selection);
-    }
+    _intent.record(selection);
   }
 
   void OutputDeviceViewModel::refresh()

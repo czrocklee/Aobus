@@ -47,8 +47,6 @@
   <data name="Ready" xml:space="preserve"><value>Ready</value></data>
   <data name="ErrorFormat" xml:space="preserve"><value>Error: {0}</value></data>
   <data name="RescanningLibrary" xml:space="preserve"><value>Rescanning library...</value></data>
-  <data name="LibraryScanUnreadableOneFormat" xml:space="preserve"><value>Library scan found {0} unreadable file and no usable changes</value></data>
-  <data name="LibraryScanUnreadableManyFormat" xml:space="preserve"><value>Library scan found {0} unreadable files and no usable changes</value></data>
   <data name="LibraryReadyFormat" xml:space="preserve"><value>Library ready: {0}</value></data>
   <data name="SaveSettingsFailedFormat" xml:space="preserve"><value>Could not save settings: {0}</value></data>
   <data name="OpenLibraryPickerButton" xml:space="preserve"><value>Open library</value></data>

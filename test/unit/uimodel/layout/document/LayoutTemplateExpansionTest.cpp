@@ -29,7 +29,7 @@ namespace ao::uimodel::test
     doc.templates["playback.transportGroup"] = LayoutNode{
       .type = "box",
       .props = {{"spacing", LayoutValue{static_cast<std::int64_t>(0)}}},
-      .children = {LayoutNode{.type = "playback.playPauseButton"}, LayoutNode{.type = "playback.stopButton"}}};
+      .children = {LayoutNode{.type = "playback.transportButton"}, LayoutNode{.type = "playback.soulButton"}}};
 
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"playback.transportGroup"}};
@@ -38,8 +38,8 @@ namespace ao::uimodel::test
 
     CHECK(expanded.type == "box");
     CHECK(expanded.children.size() == 2);
-    CHECK(expanded.children[0].type == "playback.playPauseButton");
-    CHECK(expanded.children[1].type == "playback.stopButton");
+    CHECK(expanded.children[0].type == "playback.transportButton");
+    CHECK(expanded.children[1].type == "playback.soulButton");
   }
 
   TEST_CASE("LayoutTemplateExpansion - lets use sites override node id", "[uimodel][unit][layout][document]")
@@ -77,16 +77,16 @@ namespace ao::uimodel::test
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] =
-      LayoutNode{.type = "app.actionButton", .props = {{"label", LayoutValue{std::string{"Original"}}}}};
+      LayoutNode{.type = "actionButton", .props = {{"text", LayoutValue{std::string{"Original"}}}}};
 
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
-    doc.root.props["label"] = LayoutValue{std::string{"Override"}};
+    doc.root.props["text"] = LayoutValue{std::string{"Override"}};
     doc.root.props["icon"] = LayoutValue{std::string{"emblem-system"}};
 
     auto const expanded = expandedRoot(doc);
 
-    CHECK(expanded.props.at("label").asString() == "Override");
+    CHECK(expanded.props.at("text").asString() == "Override");
     CHECK(expanded.props.at("icon").asString() == "emblem-system");
     CHECK_FALSE(expanded.props.contains("templateId"));
   }
@@ -99,13 +99,13 @@ namespace ao::uimodel::test
 
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
-    doc.root.children = {LayoutNode{.type = "playback.playPauseButton"}};
+    doc.root.children = {LayoutNode{.type = "playback.transportButton"}};
 
     auto const expanded = expandedRoot(doc);
 
     REQUIRE(expanded.children.size() == 2);
     CHECK(expanded.children[0].type == "spacer");
-    CHECK(expanded.children[1].type == "playback.playPauseButton");
+    CHECK(expanded.children[1].type == "playback.transportButton");
   }
 
   TEST_CASE("LayoutTemplateExpansion - recurses into non-template children", "[uimodel][unit][layout][document]")
@@ -128,7 +128,7 @@ namespace ao::uimodel::test
     auto doc = LayoutDocument{};
     auto templateTooltip = LayoutNode{.type = "my.templateTooltip"};
     doc.templates["my.template"] =
-      LayoutNode{.type = "app.actionButton", .optTooltip = BoxedLayoutNode{std::move(templateTooltip)}};
+      LayoutNode{.type = "actionButton", .optTooltip = BoxedLayoutNode{std::move(templateTooltip)}};
 
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
@@ -138,7 +138,7 @@ namespace ao::uimodel::test
 
     auto const expanded = expandedRoot(doc);
 
-    CHECK(expanded.type == "app.actionButton");
+    CHECK(expanded.type == "actionButton");
     REQUIRE(expanded.optTooltip);
     REQUIRE(expanded.optTooltip->nodePtr != nullptr);
     CHECK(expanded.optTooltip->nodePtr->type == "my.useSiteTooltip");

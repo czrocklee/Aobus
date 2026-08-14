@@ -77,7 +77,7 @@ namespace ao::gtk::test
 
     SECTION("TimeLabel renders the playback time template before playback starts")
     {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
 
       auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
       REQUIRE(label != nullptr);
@@ -91,7 +91,7 @@ namespace ao::gtk::test
 
     SECTION("TimeLabel tick follows mapped playing state")
     {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
       CHECK_FALSE(timeLabel.isTickActive());
 
       startPlayback(*env.runtimePtr);
@@ -145,12 +145,12 @@ namespace ao::gtk::test
 
     SECTION("TimeLabel shows live time instead of the template")
     {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
 
       auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_text() ==
-            uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Default, transport.elapsed, transport.duration));
+            uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Combined, transport.elapsed, transport.duration));
 
       auto windowFixture = GtkWindowFixture{};
       windowFixture.mount(timeLabel.widget());
@@ -185,11 +185,11 @@ namespace ao::gtk::test
 
     SECTION("TimeLabel renders the template")
     {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
 
       auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_text() == uimodel::describeTimeTemplate(uimodel::PlaybackTimeMode::Default));
+      CHECK(label->get_text() == uimodel::describeTimeTemplate(uimodel::PlaybackTimeMode::Combined));
     }
 
     SECTION("SeekControlWidget renders a disabled zeroed scale")

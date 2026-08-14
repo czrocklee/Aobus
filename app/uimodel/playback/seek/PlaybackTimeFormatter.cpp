@@ -15,7 +15,7 @@ namespace ao::uimodel
     {
       case PlaybackTimeMode::Elapsed:
       case PlaybackTimeMode::Duration: return "00:00";
-      case PlaybackTimeMode::Default:
+      case PlaybackTimeMode::Combined:
       default: return "00:00 / 00:00";
     }
   }
@@ -32,7 +32,7 @@ namespace ao::uimodel
 
       case PlaybackTimeMode::Duration: return std::format("{:d}:{:02d}", durSec / 60, durSec % 60);
 
-      case PlaybackTimeMode::Default:
+      case PlaybackTimeMode::Combined:
       default:
         return std::format("{:d}:{:02d} / {:d}:{:02d}", elapsedSec / 60, elapsedSec % 60, durSec / 60, durSec % 60);
     }

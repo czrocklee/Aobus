@@ -191,8 +191,12 @@ templates:
                 layout:
                   valign: center
                 children:
-                  - type: playback.shuffleButton
-                  - type: playback.previousButton
+                  - type: playback.transportButton
+                    props:
+                      command: toggleShuffle
+                  - type: playback.transportButton
+                    props:
+                      command: previous
                   - type: playback.soulPlayPauseButton
                     props:
                       strokeWidth: 5.0
@@ -207,8 +211,12 @@ templates:
                       type: playback.audioPipelinePanel
                       props:
                         variant: tooltip
-                  - type: playback.nextButton
-                  - type: playback.repeatButton
+                  - type: playback.transportButton
+                    props:
+                      command: next
+                  - type: playback.transportButton
+                    props:
+                      command: cycleRepeat
               - type: playback.timeLabel
                 props:
                   mode: duration
@@ -228,7 +236,7 @@ templates:
               slot: end
               valign: center
             children:
-              - type: status.activityStatus
+              - type: status.activity
                 props:
                   variant: ambient
                   idleBehavior: hidden
@@ -239,7 +247,7 @@ templates:
               - type: playback.qualityIndicator
                 layout:
                   valign: center
-              - type: app.menuButton
+              - type: menuButton
                 props:
                   icon: open-menu-symbolic
                   style: flat

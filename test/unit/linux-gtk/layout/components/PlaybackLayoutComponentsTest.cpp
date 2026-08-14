@@ -13,7 +13,9 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -36,9 +38,10 @@ namespace ao::gtk::layout::test
   {
     auto fixture = LayoutRuntimeFixture{};
 
-    SECTION("playPauseButton creates Gtk::Button")
+    SECTION("transportButton playPause creates Gtk::Button")
     {
-      auto const node = LayoutNode{.type = "playback.playPauseButton"};
+      auto const node =
+        LayoutNode{.type = "playback.transportButton", .props = {{"command", LayoutValue{"playPause"}}}};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -50,9 +53,9 @@ namespace ao::gtk::layout::test
       CHECK(btn->has_css_class("ao-playback-button"));
     }
 
-    SECTION("stopButton creates Gtk::Button, insensitive when idle")
+    SECTION("transportButton stop creates Gtk::Button, insensitive when idle")
     {
-      auto const node = LayoutNode{.type = "playback.stopButton"};
+      auto const node = LayoutNode{.type = "playback.transportButton", .props = {{"command", LayoutValue{"stop"}}}};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -64,9 +67,9 @@ namespace ao::gtk::layout::test
       CHECK(btn->has_css_class("ao-playback-button"));
     }
 
-    SECTION("playButton creates Gtk::Button, insensitive when not ready")
+    SECTION("transportButton play creates Gtk::Button, insensitive when not ready")
     {
-      auto const node = LayoutNode{.type = "playback.playButton"};
+      auto const node = LayoutNode{.type = "playback.transportButton", .props = {{"command", LayoutValue{"play"}}}};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -78,9 +81,9 @@ namespace ao::gtk::layout::test
       CHECK(btn->has_css_class("ao-playback-button"));
     }
 
-    SECTION("pauseButton creates Gtk::Button, insensitive when not playing")
+    SECTION("transportButton pause creates Gtk::Button, insensitive when not playing")
     {
-      auto const node = LayoutNode{.type = "playback.pauseButton"};
+      auto const node = LayoutNode{.type = "playback.transportButton", .props = {{"command", LayoutValue{"pause"}}}};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -242,8 +245,8 @@ namespace ao::gtk::layout::test
     {
       rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
       auto optRequested = std::optional<audio::OutputDeviceSelection>{};
-      fixture.dependencies().onOutputDeviceSelectionRequested =
-        [&optRequested](audio::OutputDeviceSelection const& selection) { optRequested = selection; };
+      fixture.dependencies().outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
+        [&optRequested](audio::OutputDeviceSelection const& selection) { optRequested = selection; });
       auto const node = LayoutNode{.type = "playback.outputDeviceSelector"};
       auto const compPtr = fixture.create(node);
       REQUIRE(compPtr != nullptr);
@@ -272,17 +275,14 @@ namespace ao::gtk::layout::test
       CHECK(optRequested->profileId == audio::kProfileExclusive);
     }
 
-    SECTION("all 13 playback types register and instantiate")
+    SECTION("all 10 playback types register and instantiate")
     {
-      auto const types = std::to_array<std::string_view>({"playback.playPauseButton",
-                                                          "playback.stopButton",
+      auto const types = std::to_array<std::string_view>({"playback.transportButton",
                                                           "playback.volumeControl",
                                                           "playback.currentTitleLabel",
                                                           "playback.currentArtistLabel",
                                                           "playback.seekSlider",
                                                           "playback.timeLabel",
-                                                          "playback.playButton",
-                                                          "playback.pauseButton",
                                                           "playback.qualityIndicator",
                                                           "playback.soulPlayPauseButton",
                                                           "playback.soulButton",
@@ -290,9 +290,13 @@ namespace ao::gtk::layout::test
 
       for (auto const type : types)
       {
+        INFO(type);
         auto const node = LayoutNode{.type = std::string{type}};
         auto const compPtr = fixture.create(node);
-        CHECK(compPtr != nullptr);
+        REQUIRE(compPtr != nullptr);
+        // A registry answers an unknown type with a placeholder rather than
+        // nullptr, so a non-null component alone does not mean it registered.
+        CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
       }
     }
   }

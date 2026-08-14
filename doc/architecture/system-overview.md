@@ -106,9 +106,11 @@ frontend implementation, and the thin `aobus-winui` executable, which owns the
 final link and deployed resources. The library includes the shell's own layout
 catalog and dialect, element lattice, style resolution, themed surfaces,
 responsive policy, desktop and theme schemas, XAML, and native adapters.
-Windows-owned rules are tested only by the native Windows suite. Cross-desktop
-rules in `ao_app_desktop` compile and run on both Linux and Windows without
-creating a second WinUI model target on Linux.
+Windows-owned rules that need a native host are tested only by the native
+Windows suite. Windows shell policy that carries no WinRT dependency is compiled
+into `ao_core_test` on every host instead, so a Linux-only change cannot break it
+unnoticed. Cross-desktop rules in `ao_app_desktop` compile and run on both Linux
+and Windows without creating a second WinUI model target on Linux.
 The CLI owns argument parsing and output encoding around `CoreRuntime` operations.
 
 ## Boundaries and dependency direction

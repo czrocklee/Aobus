@@ -16,10 +16,10 @@
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/rt/library/ScanPlan.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -48,48 +48,6 @@ namespace ao::gtk::portal
                     error.message,
                     error.location.file_name(),
                     error.location.line());
-    }
-
-    void logScanPlan(uimodel::LibraryScanPlanSummary const& summary)
-    {
-      APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors",
-                   summary.newCount,
-                   summary.changedCount,
-                   summary.movedCount,
-                   summary.missingCount,
-                   summary.errorCount);
-    }
-
-    std::string relinkedScanMessage(std::size_t relinkedCount)
-    {
-      return std::format("Relinked {} moved file{}", relinkedCount, relinkedCount == 1 ? "" : "s");
-    }
-
-    std::string missingScanMessage(std::int32_t missingCount)
-    {
-      return std::format(
-        "{} missing file{} need{} review", missingCount, missingCount == 1 ? "" : "s", missingCount == 1 ? "s" : "");
-    }
-
-    std::string scanCompletionSummary(rt::ScanApplyResult const& result)
-    {
-      if (!result.relinkedIds.empty() && result.missingCount > 0)
-      {
-        return std::format(
-          "{}; {}", relinkedScanMessage(result.relinkedIds.size()), missingScanMessage(result.missingCount));
-      }
-
-      if (!result.relinkedIds.empty())
-      {
-        return relinkedScanMessage(result.relinkedIds.size());
-      }
-
-      if (result.missingCount > 0)
-      {
-        return missingScanMessage(result.missingCount);
-      }
-
-      return "Library scan complete";
     }
   } // namespace
 
@@ -144,24 +102,7 @@ namespace ao::gtk::portal
   {
     auto presentResult = _presentationCallbacks.guard(
       [this](std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result) mutable
-      {
-        if (!result)
-        {
-          auto const& failure = result.error();
-
-          if (failure.optPlanSummary)
-          {
-            logScanPlan(*failure.optPlanSummary);
-          }
-
-          auto const* const action =
-            failure.stage == uimodel::LibraryScanWorkflowStage::Applying ? "Scan apply failed" : "Scan failed";
-          presentFailure(action, "Scan failed", failure.error);
-          return;
-        }
-
-        presentScanResult(std::move(*result));
-      });
+      { presentScanOutcome(uimodel::decideLibraryScanOutcome(result)); });
     auto* const taskService = &_runtime.library().taskService();
     auto result = co_await uimodel::runLibraryScanWorkflow(taskService, mode, stopToken);
     presentResult(std::move(result));
@@ -305,60 +246,16 @@ namespace ao::gtk::portal
     presentResult(std::move(result));
   }
 
-  void LibraryImportExportWorkflow::presentScanResult(uimodel::LibraryScanWorkflowResult result)
+  void LibraryImportExportWorkflow::presentScanOutcome(uimodel::LibraryScanOutcome const& outcome)
   {
-    if (result.disposition == uimodel::LibraryScanPlanDisposition::UpToDate)
-    {
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Info, "Library is up to date", rt::NotificationLifetime::transient());
-      return;
-    }
+    // The verdict, the sentence, and how long it stays reachable are all
+    // decided in uimodel, which is what keeps this window and the Windows one
+    // reporting the same scan the same way. Posting it is all that is left.
+    _runtime.notifications().post(uimodel::libraryScanSeverity(outcome.verdict),
+                                  uimodel::PresentationTextCatalog{}.libraryScanMessage(outcome),
+                                  uimodel::libraryScanLifetime(outcome.verdict));
 
-    if (result.disposition == uimodel::LibraryScanPlanDisposition::ErrorsOnly)
-    {
-      for (auto const& issue : result.issues)
-      {
-        APP_LOG_ERROR("Failed to scan {}: {}", issue.uri, issue.message);
-      }
-
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::history());
-      return;
-    }
-
-    logScanPlan(result.summary);
-
-    if (!result.optApplyResult)
-    {
-      presentInternalFailure("Scan failed: Internal error");
-      return;
-    }
-
-    if (auto const& applied = *result.optApplyResult; applied.failureCount > 0)
-    {
-      auto message = std::string{"Scan completed with errors"};
-
-      if (applied.missingCount > 0 || !applied.relinkedIds.empty())
-      {
-        message += std::format("; {}", scanCompletionSummary(applied));
-      }
-
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Warning, std::move(message), rt::NotificationLifetime::history());
-    }
-    else if (result.optApplyResult->missingCount > 0)
-    {
-      _runtime.notifications().post(rt::NotificationSeverity::Warning,
-                                    scanCompletionSummary(*result.optApplyResult),
-                                    rt::NotificationLifetime::history());
-    }
-    else
-    {
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Info, scanCompletionSummary(applied), rt::NotificationLifetime::transient());
-    }
-
-    if (result.shouldBackfillAudioIdentity)
+    if (outcome.shouldBackfillAudioIdentity)
     {
       startAudioIdentityIndexing();
     }
@@ -385,11 +282,5 @@ namespace ao::gtk::portal
     logStructuredError(action, error);
     _runtime.notifications().post(
       rt::NotificationSeverity::Error, notificationMessage, rt::NotificationLifetime::history());
-  }
-
-  void LibraryImportExportWorkflow::presentInternalFailure(std::string_view notificationMessage)
-  {
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Error, std::string{notificationMessage}, rt::NotificationLifetime::history());
   }
 } // namespace ao::gtk::portal

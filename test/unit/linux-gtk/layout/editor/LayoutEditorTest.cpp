@@ -80,7 +80,7 @@ namespace ao::gtk::layout::editor::test
     SECTION("invalid save does not emit save request")
     {
       auto invalidDoc = LayoutDocument{};
-      invalidDoc.root.type = "app.actionButton";
+      invalidDoc.root.type = "actionButton";
       invalidDoc.root.props["primaryAction"] = LayoutValue{std::string{"this.does.not.exist"}};
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader};

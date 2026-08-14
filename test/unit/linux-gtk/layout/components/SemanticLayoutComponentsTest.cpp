@@ -45,6 +45,7 @@
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -130,9 +131,9 @@ namespace ao::gtk::layout::test
       CHECK(label->get_label().raw().contains("listNavigationController missing"));
     }
 
-    SECTION("tracks.table shows error when trackPageGraph missing")
+    SECTION("track.table shows error when trackPageGraph missing")
     {
-      auto const node = LayoutNode{.type = "tracks.table"};
+      auto const node = LayoutNode{.type = "track.table"};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -180,7 +181,7 @@ namespace ao::gtk::layout::test
     fixture.dependencies().menuModelPtr = menuModelPtr;
 
     {
-      auto const node = LayoutNode{.type = "status.messageLabel"};
+      auto const node = LayoutNode{.type = "status.message"};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -213,9 +214,9 @@ namespace ao::gtk::layout::test
       CHECK(menuBar != nullptr);
     }
 
-    SECTION("app.menuButton creates Gtk::MenuButton and sets menu model")
+    SECTION("menuButton creates Gtk::MenuButton and sets menu model")
     {
-      auto const node = LayoutNode{.type = "app.menuButton", .props = {{"icon", LayoutValue{"test-icon"}}}};
+      auto const node = LayoutNode{.type = "menuButton", .props = {{"icon", LayoutValue{"test-icon"}}}};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -912,7 +913,7 @@ namespace ao::gtk::layout::test
 
     auto actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{};
+    auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = runtime,

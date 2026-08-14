@@ -8,11 +8,11 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/OutputDevicePopover.h"
-#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <gtkmm/button.h>
@@ -20,7 +20,6 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
-#include <functional>
 #include <memory>
 #include <utility>
 
@@ -37,13 +36,15 @@ namespace ao::gtk::layout
     public:
       OutputDeviceSelectorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _playback{ctx.runtime.playback()}
-        , _onSelectionRequested{ctx.dependencies.onOutputDeviceSelectionRequested}
+        , _intent{ctx.dependencies.outputDeviceIntent}
+        // The button only names the active route; the popover it raises is what records a request.
         , _viewModel{_playback,
                      [this](uimodel::OutputDeviceViewState const& view)
                      {
                        _label.set_text(view.outputBackendSummary);
                        _button.set_tooltip_text(view.outputDeviceStatus);
-                     }}
+                     },
+                     uimodel::OutputDeviceIntent::discarded()}
       {
         _button.set_has_frame(false);
         _button.add_css_class("ao-output-device-selector-modern");
@@ -57,8 +58,7 @@ namespace ao::gtk::layout
               return;
             }
 
-            auto popoverPtr =
-              std::make_unique<OutputDevicePopover>(_playback, Gtk::PositionType::TOP, _onSelectionRequested);
+            auto popoverPtr = std::make_unique<OutputDevicePopover>(_playback, _intent, Gtk::PositionType::TOP);
             _popoverAttachment.attach(std::move(popoverPtr), _button);
             _popoverAttachment.popup();
           });
@@ -70,7 +70,7 @@ namespace ao::gtk::layout
 
     private:
       rt::PlaybackService& _playback;
-      std::function<void(audio::OutputDeviceSelection const&)> _onSelectionRequested;
+      uimodel::OutputDeviceIntent _intent;
       Gtk::Button _button;
       Gtk::Label _label;
       uimodel::OutputDeviceViewModel _viewModel;
@@ -85,11 +85,7 @@ namespace ao::gtk::layout
 
   void registerOutputDeviceSelectorComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.outputDeviceSelector",
-                                .displayName = "Output Device Selector",
-                                .category = LayoutComponentCategory::Playback,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createOutputDeviceSelector);
+    registry.registerComponent(
+      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackOutputDeviceSelector), createOutputDeviceSelector);
   }
 } // namespace ao::gtk::layout

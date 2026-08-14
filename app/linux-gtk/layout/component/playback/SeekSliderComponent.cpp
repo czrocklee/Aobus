@@ -7,7 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/SeekControlWidget.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -44,11 +44,7 @@ namespace ao::gtk::layout
 
   void registerSeekSliderComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.seekSlider",
-                                .displayName = "Seek Slider",
-                                .category = LayoutComponentCategory::Playback,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createSeekSlider);
+    registry.registerComponent(
+      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackSeekSlider), createSeekSlider);
   }
 } // namespace ao::gtk::layout

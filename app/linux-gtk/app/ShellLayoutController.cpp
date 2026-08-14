@@ -281,82 +281,33 @@ namespace ao::gtk
       };
     };
 
-    using Command = uimodel::PlaybackCommand;
+    for (auto const command : uimodel::playbackCommands())
+    {
+      registerAction(uimodel::playbackCommandActionId(command),
+                     std::string{uimodel::playbackCommandLabel(command)},
+                     std::string{uimodel::kPlaybackActionCategory},
+                     uimodel::LayoutActionCapability::None,
+                     execute(command),
+                     isEnabled(command));
+    }
 
-    registerAction("playback.play",
-                   "Play",
+    registerAction("playback.showOutputDeviceSelector",
+                   "Output Devices",
                    "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::Play),
-                   isEnabled(Command::Play));
+                   uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
+                   [this](layout::ActionActivationContext& ctx)
+                   {
+                     if (_outputDevicePopover.hasPopover())
+                     {
+                       return;
+                     }
 
-    registerAction("playback.pause",
-                   "Pause",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::Pause),
-                   isEnabled(Command::Pause));
-
-    registerAction("playback.playPause",
-                   "Play/Pause",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::PlayPause),
-                   isEnabled(Command::PlayPause));
-
-    registerAction("playback.stop",
-                   "Stop",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::Stop),
-                   isEnabled(Command::Stop));
-
-    registerAction("playback.next",
-                   "Next",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::Next),
-                   isEnabled(Command::Next));
-
-    registerAction("playback.previous",
-                   "Previous",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::Previous),
-                   isEnabled(Command::Previous));
-
-    registerAction("playback.toggleShuffle",
-                   "Toggle Shuffle",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::ToggleShuffle),
-                   isEnabled(Command::ToggleShuffle));
-
-    registerAction("playback.cycleRepeat",
-                   "Cycle Repeat",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   execute(Command::CycleRepeat),
-                   isEnabled(Command::CycleRepeat));
-
-    registerAction(
-      "playback.showOutputDeviceSelector",
-      "Output Devices",
-      "Playback",
-      uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
-      [this](layout::ActionActivationContext& ctx)
-      {
-        if (_outputDevicePopover.hasPopover())
-        {
-          return;
-        }
-
-        auto popoverPtr = std::make_unique<OutputDevicePopover>(
-          ctx.runtime.playback(), Gtk::PositionType::BOTTOM, _dependencies.onOutputDeviceSelectionRequested);
-        _outputDevicePopover.attach(std::move(popoverPtr), ctx.anchorWidget);
-        _outputDevicePopover.popup();
-      },
-      {});
+                     auto popoverPtr = std::make_unique<OutputDevicePopover>(
+                       ctx.runtime.playback(), _dependencies.outputDeviceIntent, Gtk::PositionType::BOTTOM);
+                     _outputDevicePopover.attach(std::move(popoverPtr), ctx.anchorWidget);
+                     _outputDevicePopover.popup();
+                   },
+                   {});
   }
 
   void ShellLayoutController::registerShellActions(RegisterActionFn const& registerAction)

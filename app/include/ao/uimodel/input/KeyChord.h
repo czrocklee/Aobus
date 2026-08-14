@@ -80,6 +80,9 @@ namespace ao::uimodel
    * Frontends map the token to a native keysym in their platform translator;
    * this type never references GDK/WinUI symbols.
    */
+  /// What a media key token starts with, and what makes it one.
+  inline constexpr auto kMediaKeyPrefix = std::string_view{"Media:"};
+
   struct KeyChord final
   {
     KeyModifiers modifiers{};
@@ -88,6 +91,15 @@ namespace ao::uimodel
     bool operator==(KeyChord const&) const = default;
 
     bool isValid() const { return !key.empty(); }
+
+    /**
+     * @brief Whether this names a transport key rather than an ordinary one.
+     *
+     * A platform may deliver these to whichever application registered for
+     * media control rather than to whichever window has focus, in which case
+     * the shell has no accelerator to install for them.
+     */
+    bool isMediaKey() const { return std::string_view{key}.starts_with(kMediaKeyPrefix); }
 
     /**
      * @brief Parses a canonical chord string such as "Ctrl+Shift+Right".

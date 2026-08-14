@@ -17,6 +17,7 @@
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
@@ -119,7 +120,7 @@ namespace ao::gtk::layout::test
     ActionRegistry actions;
     Gtk::Window window;
     uimodel::LayoutRuntimeState runtimeState;
-    GtkUiDependencies dependencies;
+    GtkUiDependencies dependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     LayoutBuildContext context;
     LayoutRuntime layoutRuntime;
     std::unique_ptr<FakeTrackDetailScope> trackDetailScopePtr;
@@ -192,5 +193,23 @@ namespace ao::gtk::layout::test
                                       .dependencies = _statePtr->dependencies,
                                       .detailScope = _statePtr->trackDetailScopePtr.get()};
     return _statePtr->components.create(context, node);
+  }
+
+  bool containsLayoutErrorPlaceholder(Gtk::Widget& widget)
+  {
+    if (widget.has_css_class("ao-layout-error"))
+    {
+      return true;
+    }
+
+    for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+    {
+      if (containsLayoutErrorPlaceholder(*child))
+      {
+        return true;
+      }
+    }
+
+    return false;
   }
 } // namespace ao::gtk::layout::test

@@ -78,7 +78,7 @@ Selection persistence, when present as part of a workspace snapshot, is owned by
 
 ## Frontend observations
 
-GTK layouts place `status.selectionInfo` independently from `status.activityStatus` and `status.trackCount`.
+GTK layouts place `status.selectionInfo` independently from `status.activity` and `status.trackCount`.
 `SelectionInfoLabel` is global to the active runtime view rather than coupled to a particular GTK selection model.
 
 TUI may render the same semantic values in terminal-specific geometry.

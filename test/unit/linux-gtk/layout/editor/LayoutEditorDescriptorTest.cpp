@@ -118,9 +118,9 @@ namespace ao::gtk::layout::editor::test
       CHECK(hasProp("homogeneous"));
     }
 
-    SECTION("playPauseButton has showLabel and size props")
+    SECTION("transportButton has command, showLabel, and size props")
     {
-      auto const optDesc = registry.descriptor("playback.playPauseButton");
+      auto const optDesc = registry.descriptor("playback.transportButton");
 
       REQUIRE(optDesc);
       CHECK(optDesc->category == LayoutComponentCategory::Playback);
@@ -200,20 +200,17 @@ namespace ao::gtk::layout::editor::test
                                                           "spacer",
                                                           "separator",
                                                           "tabs",
-                                                          "playback.playPauseButton",
-                                                          "playback.stopButton",
+                                                          "playback.transportButton",
                                                           "playback.volumeControl",
                                                           "playback.currentTitleLabel",
                                                           "playback.currentArtistLabel",
                                                           "playback.seekSlider",
                                                           "playback.timeLabel",
-                                                          "playback.playButton",
-                                                          "playback.pauseButton",
                                                           "playback.qualityIndicator",
                                                           "playback.qualityIndicator",
-                                                          "status.messageLabel",
+                                                          "status.message",
                                                           "library.listTree",
-                                                          "tracks.table",
+                                                          "track.table",
                                                           "library.openLibraryButton",
                                                           "app.menuBar",
                                                           "track.detailScope",
@@ -233,7 +230,7 @@ namespace ao::gtk::layout::editor::test
     SECTION("cover-art placeholder choices are exposed as enum properties")
     {
       auto const cases = std::to_array<std::pair<std::string_view, std::string_view>>({
-        {"tracks.table", "groupCoverPlaceholderStyle"},
+        {"track.table", "groupCoverPlaceholderStyle"},
         {"track.coverArt", "placeholderStyle"},
         {"playback.image", "placeholderStyle"},
       });

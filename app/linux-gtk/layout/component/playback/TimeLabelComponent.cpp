@@ -8,7 +8,7 @@
 #include "playback/TimeLabel.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -29,7 +29,7 @@ namespace ao::gtk::layout
     public:
       TimeLabelComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _label{ctx.runtime.playback(),
-                 [mode = node.propertyOr<std::string>("mode", "default")]
+                 [mode = node.propertyOr<std::string>(kModeProp, "combined")]
                  {
                    if (mode == "elapsed")
                    {
@@ -41,7 +41,7 @@ namespace ao::gtk::layout
                      return TimeLabel::Mode::Duration;
                    }
 
-                   return TimeLabel::Mode::Default;
+                   return TimeLabel::Mode::Combined;
                  }()}
       {
       }
@@ -60,16 +60,7 @@ namespace ao::gtk::layout
 
   void registerTimeLabelComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.timeLabel",
-                                .displayName = "Time Label",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "mode",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Mode",
-                                           .defaultValue = LayoutValue{"default"},
-                                           .enumValues = {"default", "elapsed", "duration"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createTimeLabel);
+    registry.registerComponent(
+      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackTimeLabel), createTimeLabel);
   }
 } // namespace ao::gtk::layout

@@ -18,6 +18,7 @@
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,11 +41,11 @@ namespace ao::gtk::layout::test
     auto& ctx = fixture.context();
     auto& registry = fixture.components();
 
-    SECTION("app.actionButton builds from YAML and binds actions")
+    SECTION("actionButton builds from YAML and binds actions")
     {
       auto actionRegistry = ActionRegistry{};
       auto runtimeState = uimodel::LayoutRuntimeState{};
-      auto dependencies = GtkUiDependencies{};
+      auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
       auto actionCtx = LayoutBuildContext{.registry = registry,
                                           .actionRegistry = actionRegistry,
                                           .runtime = fixture.runtime(),
@@ -53,9 +54,9 @@ namespace ao::gtk::layout::test
                                           .buildState = uimodel::LayoutBuildStateView{runtimeState},
                                           .dependencies = dependencies};
       auto const* const yaml = R"(
-      type: app.actionButton
+      type: actionButton
       props:
-        label: "Settings"
+        text: "Settings"
         icon: "emblem-system-symbolic"
         style: "circular"
         primaryAction: "shell.showSystemMenu"
@@ -96,9 +97,9 @@ namespace ao::gtk::layout::test
       CHECK(longPressFired == 0);
     }
 
-    SECTION("app.actionButton exposes enum properties for editor")
+    SECTION("actionButton exposes enum properties for editor")
     {
-      auto const optDesc = registry.descriptor("app.actionButton");
+      auto const optDesc = registry.descriptor("actionButton");
       REQUIRE(optDesc);
 
       auto const it = std::find_if(
@@ -119,8 +120,12 @@ namespace ao::gtk::layout::test
         spacing: 4
       children:
         - type: playback.qualityIndicator
-        - type: playback.playPauseButton
-        - type: playback.stopButton
+        - type: playback.transportButton
+          props:
+            command: playPause
+        - type: playback.transportButton
+          props:
+            command: stop
         - type: playback.seekSlider
           layout:
             hexpand: true
@@ -141,6 +146,19 @@ namespace ao::gtk::layout::test
 
       auto* const child = box->get_first_child();
       CHECK(child != nullptr);
+      CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
+    }
+
+    SECTION("the placeholder check answers yes for a type no shell registers")
+    {
+      // Without this, every "builds without errors" section above could be
+      // passing because the check never fires, rather than because the
+      // document is sound.
+      auto const node = uimodel::LayoutNode{.type = "playback.noSuchComponent"};
+      auto const compPtr = fixture.create(node);
+
+      REQUIRE(compPtr != nullptr);
+      CHECK(containsLayoutErrorPlaceholder(compPtr->widget()));
     }
 
     SECTION("minimal listening layout YAML builds without errors")
@@ -159,8 +177,12 @@ namespace ao::gtk::layout::test
             orientation: horizontal
             spacing: 4
           children:
-            - type: playback.playPauseButton
-            - type: playback.stopButton
+            - type: playback.transportButton
+              props:
+                command: playPause
+            - type: playback.transportButton
+              props:
+                command: stop
             - type: playback.volumeControl
     )";
       auto tree = ryml::Tree{yaml::callbacks()};
@@ -174,6 +196,7 @@ namespace ao::gtk::layout::test
 
       auto* const outerBox = dynamic_cast<Gtk::Box*>(&compPtr->widget());
       CHECK(outerBox != nullptr);
+      CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
     }
 
     SECTION("full layout document round-trip then build")
@@ -185,12 +208,16 @@ namespace ao::gtk::layout::test
         props:
           orientation: vertical
         children:
-          - type: playback.playPauseButton
-          - type: playback.stopButton
+          - type: playback.transportButton
+            props:
+              command: playPause
+          - type: playback.transportButton
+            props:
+              command: stop
           - type: spacer
             layout:
               hexpand: true
-          - type: status.messageLabel
+          - type: status.message
     )";
 
       auto tree = ryml::Tree{yaml::callbacks()};
@@ -204,7 +231,8 @@ namespace ao::gtk::layout::test
 
       auto const compPtr = fixture.layoutRuntime().build(ctx, preparedLayout(doc));
 
-      CHECK(compPtr != nullptr);
+      REQUIRE(compPtr != nullptr);
+      CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
     }
 
     SECTION("track.selectionDetailPane template round-trip then build")

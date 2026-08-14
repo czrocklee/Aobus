@@ -36,4 +36,17 @@ namespace ao::uimodel
 
   inline LayoutComponentActionPolicy const kExternalPrimaryActions{
     .slotMask = slotBit(LayoutActionSlot::PrimaryClick) | slotBit(LayoutActionSlot::PrimaryLongPress)};
+
+  /**
+   * @brief Every slot but the secondary long press.
+   *
+   * Windows raises one holding sequence per press regardless of which button
+   * started it, so a secondary long press cannot be told apart from a primary
+   * one there. A shared descriptor that names all four would let a document
+   * validate against the catalog and then be rejected outright when the shell
+   * tried to bind it.
+   */
+  inline LayoutComponentActionPolicy const kExternalActionsWithoutSecondaryLongPress{
+    .slotMask = slotBit(LayoutActionSlot::PrimaryClick) | slotBit(LayoutActionSlot::PrimaryLongPress) |
+                slotBit(LayoutActionSlot::SecondaryClick)};
 } // namespace ao::uimodel

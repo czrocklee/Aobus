@@ -159,6 +159,59 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("ConfigStore - a store with nowhere to write keeps the session running", "[runtime][unit][config]")
+  {
+    // Reached when the platform names no home or profile location at all.
+    // Refusing to start would cost the whole session to save preferences that
+    // were never going to survive it anyway.
+    auto store = ConfigStore{ConfigStore::NoLocation{}};
+
+    CHECK_FALSE(store.hasLocation());
+
+    SECTION("every group reads as absent, leaving the caller its defaults")
+    {
+      auto target = State{.count = 99, .name = "unchanged", .enabled = false};
+      auto const loadedRes = store.load("absent", target, StateYamlSchema{});
+
+      REQUIRE(loadedRes);
+      CHECK_FALSE(*loadedRes);
+      CHECK(target.count == 99);
+      CHECK(target.name == "unchanged");
+    }
+
+    SECTION("a write succeeds having stored nothing on disk")
+    {
+      // Success is the honest answer: this store promised no file, so a caller
+      // reporting a failure at every checkpoint would describe a fault that
+      // does not exist.
+      auto const original = State{.count = 7, .name = "kept in memory", .enabled = true};
+
+      CHECK(store.save("owned", original, StateYamlSchema{}));
+    }
+
+    SECTION("the rest of the session reads back what it set")
+    {
+      auto const original = State{.count = 7, .name = "kept in memory", .enabled = true};
+      REQUIRE(store.save("owned", original, StateYamlSchema{}));
+
+      auto restored = State{};
+      auto const loadedRes = store.load("owned", restored, StateYamlSchema{});
+
+      REQUIRE(loadedRes);
+      REQUIRE(*loadedRes);
+      CHECK(restored.count == 7);
+      CHECK(restored.name == "kept in memory");
+    }
+
+    SECTION("nothing is written into the working directory")
+    {
+      REQUIRE(store.save("owned", State{.count = 1}, StateYamlSchema{}));
+
+      CHECK_FALSE(std::filesystem::exists("config.yaml"));
+      CHECK_FALSE(std::filesystem::exists(".yaml"));
+    }
+  }
+
   TEST_CASE("ConfigStore - enforces an optional backing-file byte limit", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};

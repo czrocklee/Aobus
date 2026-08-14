@@ -15,7 +15,7 @@ namespace ao::uimodel::test
     {
       CHECK(describeTimeTemplate(PlaybackTimeMode::Elapsed) == "00:00");
       CHECK(describeTimeTemplate(PlaybackTimeMode::Duration) == "00:00");
-      CHECK(describeTimeTemplate(PlaybackTimeMode::Default) == "00:00 / 00:00");
+      CHECK(describeTimeTemplate(PlaybackTimeMode::Combined) == "00:00 / 00:00");
     }
 
     SECTION("playback time text matches selected label mode")
@@ -25,7 +25,7 @@ namespace ao::uimodel::test
 
       CHECK(formatPlaybackTime(PlaybackTimeMode::Elapsed, elapsed, duration) == "1:05");
       CHECK(formatPlaybackTime(PlaybackTimeMode::Duration, elapsed, duration) == "61:01");
-      CHECK(formatPlaybackTime(PlaybackTimeMode::Default, elapsed, duration) == "1:05 / 61:01");
+      CHECK(formatPlaybackTime(PlaybackTimeMode::Combined, elapsed, duration) == "1:05 / 61:01");
     }
   }
 } // namespace ao::uimodel::test

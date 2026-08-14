@@ -13,6 +13,7 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
@@ -363,7 +364,9 @@ namespace ao::gtk
         _outputDeviceLabel.set_text(view.outputBackendSummary.empty() ? "Choose Output Device..."
                                                                       : view.outputBackendSummary);
         _outputDeviceButton.set_tooltip_text(view.outputDeviceStatus);
-      });
+      },
+      // The summary only reports the active route; the selector popover records requests.
+      uimodel::OutputDeviceIntent::discarded());
     _outputDeviceViewModelPtr->refresh();
   }
 
@@ -385,16 +388,17 @@ namespace ao::gtk
 
     auto* const selector =
       Gtk::make_managed<OutputDevicePopover>(*playback,
-                                             Gtk::PositionType::BOTTOM,
-                                             [this, playback](audio::OutputDeviceSelection const& selection)
-                                             {
-                                               if (_modelPtr)
+                                             uimodel::OutputDeviceIntent::recordedBy(
+                                               [this, playback](audio::OutputDeviceSelection const& selection)
                                                {
-                                                 _modelPtr->setPreferredOutputDevice(selection);
-                                               }
+                                                 if (_modelPtr)
+                                                 {
+                                                   _modelPtr->setPreferredOutputDevice(selection);
+                                                 }
 
-                                               refreshOutputSummary(*playback);
-                                             });
+                                                 refreshOutputSummary(*playback);
+                                               }),
+                                             Gtk::PositionType::BOTTOM);
     _outputDeviceButton.set_popover(*selector);
   }
 } // namespace ao::gtk

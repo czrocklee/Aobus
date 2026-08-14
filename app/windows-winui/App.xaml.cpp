@@ -10,6 +10,7 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/Log.h>
+#include <ao/utility/PlatformDirectories.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>
 
@@ -17,7 +18,6 @@
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -34,7 +34,6 @@ namespace winrt::Aobus::implementation
 {
   namespace
   {
-    constexpr std::size_t kEnvironmentBufferLength = 32'768;
     constexpr auto kErrorDialogFlags = MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST;
 
     void showStartupFailure(std::string_view detail) noexcept;
@@ -54,15 +53,7 @@ namespace winrt::Aobus::implementation
 
     ao::Result<std::filesystem::path> stateRoot()
     {
-      auto buffer = std::array<wchar_t, kEnvironmentBufferLength>{};
-      auto const length = ::GetEnvironmentVariableW(L"LOCALAPPDATA", buffer.data(), static_cast<DWORD>(buffer.size()));
-
-      if (length == 0 || length >= buffer.size())
-      {
-        return ao::makeError(ao::Error::Code::NotFound, "LOCALAPPDATA is unavailable");
-      }
-
-      return std::filesystem::path{std::wstring_view{buffer.data(), length}} / "Aobus";
+      return ao::utility::applicationConfigDirectory();
     }
 
     void showStartupFailure(std::string_view const detail) noexcept

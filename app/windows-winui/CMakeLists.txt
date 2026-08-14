@@ -43,6 +43,14 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   image/CoverArtPresenter.h
   image/CoverArtPlaceholderRenderer.cpp
   image/CoverArtPlaceholderRenderer.h
+  input/KeyChordAccelerator.cpp
+  input/KeymapAcceleratorPlan.cpp
+  input/KeymapAccelerators.cpp
+  input/KeymapAccelerators.h
+  input/SystemCharacterKey.cpp
+  input/SystemCharacterKey.h
+  include/ao/winui/input/KeyChordAccelerator.h
+  include/ao/winui/input/KeymapAcceleratorPlan.h
   layout/ElementKind.cpp
   layout/LayoutCatalog.cpp
   layout/LayoutDialect.cpp

@@ -63,6 +63,7 @@ The payload owner decides whether `deserialize()` uses the seed, requires every 
 - One save may replace several groups in one whole-document commit; untouched sibling groups remain present.
 - The API exposes no reflection-derived schema, implicit schema selection, staged mutable tree, flush, dirty bit, revision, receipt, reload, retry, or recovery operation.
 - `ReadOnly` permits inspection and loading but treats save and removal as invariant faults.
+- A store constructed with no location reads as an empty document and never touches the filesystem. Its saves report success having written nothing, and it never resolves a path relative to the working directory.
 - One instance has no internal synchronization; its owner confines access to one executor or serializes it externally.
 - Different instances targeting the same path do not coordinate and may overwrite one another from stale whole-file documents.
 
@@ -78,6 +79,20 @@ The store has only lazy-load state; every public mutation either completes its w
 A missing backing file transitions a `ReadWrite` store to Loaded with an empty mapping.
 The same condition returns `NotFound` and leaves a `ReadOnly` store Unloaded.
 
+A store with no location transitions to Loaded with an empty mapping on its first operation, without inspecting anything.
+
+### Sessions with no location
+
+A frontend reaches `ConfigStore::NoLocation` when the platform names no home or profile location at all, and it keeps only state whose loss is survivable.
+The store is otherwise ordinary: groups read as absent, so every owner keeps its seeded value, and a save that would have been written is applied to the live document and reported as successful.
+
+Reporting success is deliberate and is the one place this store departs from the file-backed save contract.
+Such a store never promised a file, so returning a failure at each checkpoint would describe a fault that does not exist and would reach the reader as an error about their configuration.
+The live document still receives the write, so nothing inside the session observes a value it just set going missing.
+The frontend that built the store is where the degraded session is reported, once, at composition.
+
+`hasLocation()` distinguishes the two, for an owner that has to describe the difference rather than behave differently.
+
 ## Commands and transitions
 
 ### Construction and open modes
@@ -85,6 +100,7 @@ The same condition returns `NotFound` and leaves a `ReadOnly` store Unloaded.
 Construction captures the backing path and an owned diagnostic filename but performs no file access.
 `ReadWrite` is the default and permits a missing file to become an empty document on first initialization.
 `ReadOnly` requires the file to exist when initialization is attempted.
+The `NoLocation` constructor takes no path at all and is `ReadWrite`.
 The mode and optional file-byte ceiling are fixed for the store lifetime.
 
 ### Lazy initialization
@@ -182,14 +198,15 @@ A runtime or frontend workflow decides how to report or recover from a store fai
 
 ## Implementation map
 
-- [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns the public modes, `ConfigSchema` concept, `ConfigWrite` descriptors, explicit load/save templates, candidate serialization, schema exception containment, and error context.
-- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp) owns lazy parsing, complete-document cloning, removal, emission, atomic replacement, and live-document installation.
+- [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns the public modes, the `NoLocation` constructor, `ConfigSchema` concept, `ConfigWrite` descriptors, explicit load/save templates, candidate serialization, schema exception containment, and error context.
+- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp) owns lazy parsing, complete-document cloning, removal, emission, atomic replacement, live-document installation, and the two no-location exits.
+- [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns when a frontend has no location to give.
 - [`RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) owns reusable parser callbacks, file reading, arena lifetime helpers, and scalar conversion; [`Serialization.h`](../../../include/ao/yaml/Serialization.h) owns explicit node validation and arena-owning map/sequence writes.
 - [`AtomicFile.h`](../../../include/ao/utility/AtomicFile.h), [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp), and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) own the lower file-replacement mechanism.
 
 ## Test map
 
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, exception translation, replacement failure, temporary-string ownership, removal, and read-only behavior.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, exception translation, replacement failure, temporary-string ownership, removal, read-only behavior, and the no-location session.
 - [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects strict scalar parsing and parser diagnostics; [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects node-kind and key validation, duplicate detection, unknown-key policy, bounded context, failure order, and arena-owned writes.
 - Payload schema tests protect field vocabulary, versions, unknown and missing fields, enum membership, semantic rejection, and representative documents at their owning layers.
 - [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) protects replacement, owner-only permissions, and lower write-failure behavior.

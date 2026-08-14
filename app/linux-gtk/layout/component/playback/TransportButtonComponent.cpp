@@ -11,11 +11,14 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 
 #include <gtkmm/widget.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace ao::gtk::layout
@@ -32,15 +35,15 @@ namespace ao::gtk::layout
     }
 
     /**
-     * @brief Generic transport button component.
+     * @brief One transport command, as a button.
      */
     class TransportButtonComponent final : public LayoutComponent
     {
     public:
-      TransportButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node, TransportButton::Action action)
+      TransportButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node, PlaybackCommand const command)
         : _button{ctx.runtime.playback(),
                   commandSurface(ctx),
-                  action,
+                  command,
                   node.propertyOr<bool>("showLabel", false),
                   node.propertyOr<std::string>("size", "normal")}
       {
@@ -52,175 +55,26 @@ namespace ao::gtk::layout
       TransportButton _button;
     };
 
-    std::unique_ptr<LayoutComponent> createPlayPauseButton(LayoutBuildContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTransportButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::PlayPause);
-    }
-
-    std::unique_ptr<LayoutComponent> createStopButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Stop);
-    }
-
-    std::unique_ptr<LayoutComponent> createNextButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Next);
-    }
-
-    std::unique_ptr<LayoutComponent> createPreviousButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Previous);
-    }
-
-    std::unique_ptr<LayoutComponent> createShuffleButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::ToggleShuffle);
-    }
-
-    std::unique_ptr<LayoutComponent> createRepeatButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::CycleRepeat);
-    }
-
-    std::unique_ptr<LayoutComponent> createPlayButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Play);
-    }
-
-    std::unique_ptr<LayoutComponent> createPauseButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Pause);
+      auto const optCommand = playbackCommandFor(node.propertyOr<std::string>(kCommandProp, ""));
+      return std::make_unique<TransportButtonComponent>(ctx, node, optCommand.value_or(PlaybackCommand::PlayPause));
     }
   } // namespace
 
   void registerTransportButtonComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.playPauseButton",
-                                .displayName = "Play/Pause Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createPlayPauseButton);
-
-    registry.registerComponent({.type = "playback.stopButton",
-                                .displayName = "Stop Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createStopButton);
-
-    registry.registerComponent({.type = "playback.nextButton",
-                                .displayName = "Next Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createNextButton);
-
-    registry.registerComponent({.type = "playback.previousButton",
-                                .displayName = "Previous Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createPreviousButton);
-
-    registry.registerComponent({.type = "playback.shuffleButton",
-                                .displayName = "Shuffle Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createShuffleButton);
-
-    registry.registerComponent({.type = "playback.repeatButton",
-                                .displayName = "Repeat Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createRepeatButton);
-
-    registry.registerComponent({.type = "playback.playButton",
-                                .displayName = "Play Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createPlayButton);
-
-    registry.registerComponent({.type = "playback.pauseButton",
-                                .displayName = "Pause Button",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "showLabel",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Label",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "size",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createPauseButton);
+    registry.registerComponent(
+      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackTransportButton),
+                          {{.name = "showLabel",
+                            .kind = LayoutPropertyKind::Bool,
+                            .label = "Show Label",
+                            .defaultValue = LayoutValue{false}},
+                           {.name = "size",
+                            .kind = LayoutPropertyKind::Enum,
+                            .label = "Size",
+                            .defaultValue = LayoutValue{"normal"},
+                            .enumValues = {"small", "normal", "large"}}}),
+      createTransportButton);
   }
 } // namespace ao::gtk::layout

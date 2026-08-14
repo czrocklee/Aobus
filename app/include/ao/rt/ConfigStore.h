@@ -62,6 +62,29 @@ namespace ao::rt
                          OpenMode mode = OpenMode::ReadWrite,
                          std::optional<std::size_t> optMaxFileBytes = std::nullopt);
 
+    /// Names the constructor below; see it for what a located-nowhere store does.
+    struct NoLocation final
+    {};
+
+    /**
+     * @brief A store for a session that has nowhere to keep anything.
+     *
+     * A frontend reaches this when the platform names no home or profile
+     * location at all. Every group reads as absent and every write succeeds
+     * having stored nothing, so the session runs on defaults and forgets them
+     * on exit rather than failing to start or writing into whatever directory
+     * it happened to be launched from.
+     *
+     * Writes report success deliberately: the session never promised to keep
+     * anything, so a caller reporting a save failure at every checkpoint would
+     * be describing a fault that is not one. Whoever builds this says so once,
+     * at the composition root where the reason is still known.
+     */
+    explicit ConfigStore(NoLocation /*noLocation*/);
+
+    /// Whether this store has somewhere to read from and write to.
+    bool hasLocation() const noexcept { return _hasLocation; }
+
     Result<bool> contains(std::string_view group);
     Result<> removeGroup(std::string_view group);
 
@@ -168,6 +191,7 @@ namespace ao::rt
     ryml::Tree _root;
     std::vector<char> _inputBuffer;
     std::optional<std::size_t> _optMaxFileBytes;
+    bool _hasLocation = true;
     bool _loaded = false;
   };
 } // namespace ao::rt

@@ -130,26 +130,30 @@ namespace ao::tui
         }
       };
 
-      appendSeparator();
-      parts.push_back(style::shortcutChip("/", "command"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("l", "lists"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("v", "view"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("n", "notif"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("d", "detail"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("a", "pipeline"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("o", "output"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("{ }", "groups"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("Ctrl-L", "current"));
-      appendSeparator();
-      parts.push_back(style::shortcutChip("q", "quit"));
+      auto appendChip = [&](std::string_view const key, std::string_view const label)
+      {
+        appendSeparator();
+        parts.push_back(style::shortcutChip(key, label));
+      };
+
+      // The key comes from the one binding declaration, so a rebound action
+      // cannot leave the bar advertising the key it used to answer to. The
+      // words are the bar's own: they name the destination, not the command.
+      auto appendCommandChip = [&](CommandAction const action, std::string_view const label)
+      { appendChip(shortcutFor(action), label); };
+
+      // Opening the command line and jumping between groups are not commands,
+      // so they are named here and nowhere else.
+      appendChip("/", "command");
+      appendCommandChip(CommandAction::OpenLists, "lists");
+      appendCommandChip(CommandAction::OpenPresentationPanel, "view");
+      appendCommandChip(CommandAction::OpenNotifications, "notif");
+      appendCommandChip(CommandAction::OpenDetail, "detail");
+      appendCommandChip(CommandAction::OpenQuality, "pipeline");
+      appendCommandChip(CommandAction::OpenOutputDevices, "output");
+      appendChip("{ }", "groups");
+      appendCommandChip(CommandAction::RevealCurrentTrack, "current");
+      appendCommandChip(CommandAction::Quit, "quit");
       return hbox(std::move(parts));
     };
 

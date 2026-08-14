@@ -12,6 +12,7 @@
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/enums.h>
@@ -53,7 +54,8 @@ namespace ao::gtk::test
 
     SECTION("constructor wires up the popover with a scrolled list box")
     {
-      auto selector = OutputDevicePopover{playback, Gtk::PositionType::BOTTOM};
+      auto selector =
+        OutputDevicePopover{playback, uimodel::OutputDeviceIntent::discarded(), Gtk::PositionType::BOTTOM};
       drainGtkEvents();
 
       CHECK(selector.get_autohide());
@@ -76,7 +78,9 @@ namespace ao::gtk::test
 
       auto optSelected = std::optional<audio::OutputDeviceSelection>{};
       auto selector = OutputDevicePopover{
-        playback, Gtk::PositionType::BOTTOM, [&optSelected](auto const& selection) { optSelected = selection; }};
+        playback,
+        uimodel::OutputDeviceIntent::recordedBy([&optSelected](auto const& selection) { optSelected = selection; }),
+        Gtk::PositionType::BOTTOM};
       auto host = GtkWindowFixture{};
       auto button = Gtk::MenuButton{};
       button.set_popover(selector);

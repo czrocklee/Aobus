@@ -7,6 +7,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/component/StatefulComponentState.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -51,7 +52,7 @@ namespace ao::gtk::layout
 
         auto orientation = Gtk::Orientation::VERTICAL;
 
-        if (node.propertyOr<std::string>("orientation", "") == "horizontal")
+        if (node.propertyOr<std::string>(kOrientationProp, "") == "horizontal")
         {
           orientation = Gtk::Orientation::HORIZONTAL;
         }
@@ -214,40 +215,33 @@ namespace ao::gtk::layout
 
   void registerSplitComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = std::string{kSplitComponentType},
-                                .displayName = "Split Pane",
-                                .category = LayoutComponentCategory::Container,
-                                .props = {{.name = "orientation",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Orientation",
-                                           .defaultValue = LayoutValue{"vertical"},
-                                           .enumValues = {"vertical", "horizontal"}},
-                                          {.name = "position",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Position",
-                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
-                                          {.name = "initialPositionPercent",
-                                           .kind = LayoutPropertyKind::Double,
-                                           .label = "Initial Position (%)",
-                                           .defaultValue = LayoutValue{0.0}},
-                                          {.name = "resizeStart",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Resize Start",
-                                           .defaultValue = LayoutValue{true}},
-                                          {.name = "shrinkStart",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Shrink Start",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "resizeEnd",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Resize End",
-                                           .defaultValue = LayoutValue{true}},
-                                          {.name = "shrinkEnd",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Shrink End",
-                                           .defaultValue = LayoutValue{false}}},
-                                .minChildren = 2,
-                                .optMaxChildren = 2},
+    // Everything past the axis is a Gtk::Paned setting: where the handle rests
+    // and how each pane answers a resize.
+    registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::Split),
+                                                   {{.name = "position",
+                                                     .kind = LayoutPropertyKind::Int,
+                                                     .label = "Position",
+                                                     .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
+                                                    {.name = "initialPositionPercent",
+                                                     .kind = LayoutPropertyKind::Double,
+                                                     .label = "Initial Position (%)",
+                                                     .defaultValue = LayoutValue{0.0}},
+                                                    {.name = "resizeStart",
+                                                     .kind = LayoutPropertyKind::Bool,
+                                                     .label = "Resize Start",
+                                                     .defaultValue = LayoutValue{true}},
+                                                    {.name = "shrinkStart",
+                                                     .kind = LayoutPropertyKind::Bool,
+                                                     .label = "Shrink Start",
+                                                     .defaultValue = LayoutValue{false}},
+                                                    {.name = "resizeEnd",
+                                                     .kind = LayoutPropertyKind::Bool,
+                                                     .label = "Resize End",
+                                                     .defaultValue = LayoutValue{true}},
+                                                    {.name = "shrinkEnd",
+                                                     .kind = LayoutPropertyKind::Bool,
+                                                     .label = "Shrink End",
+                                                     .defaultValue = LayoutValue{false}}}),
                                createSplit);
   }
 } // namespace ao::gtk::layout

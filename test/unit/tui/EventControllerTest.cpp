@@ -37,9 +37,11 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
@@ -224,6 +226,64 @@ namespace ao::tui::test
     CHECK(fixture.shell.commandDraft().empty());
   }
 
+  TEST_CASE("EventController - every declared key binding is answered", "[tui][unit][event]")
+  {
+    // The binding table is what the status bar and the command palette show the
+    // user. A key listed there that the controller does not answer is a
+    // shortcut the shell advertises and then ignores.
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    for (auto const& binding : keyBindingSpecs())
+    {
+      INFO("key " << binding.key);
+
+      // Quit ends the loop, and the overlay-closing key is only meaningful with
+      // something open, so both are covered by their own cases instead.
+      if (binding.action == CommandAction::Quit || binding.action == CommandAction::CloseOverlay)
+      {
+        continue;
+      }
+
+      auto const optEvent = [&binding] -> std::optional<ftxui::Event>
+      {
+        if (binding.key == "Enter")
+        {
+          return ftxui::Event::Return;
+        }
+
+        if (binding.key == "Space")
+        {
+          return ftxui::Event::Character(" ");
+        }
+
+        if (binding.key == "Ctrl-L")
+        {
+          return ftxui::Event::CtrlL;
+        }
+
+        return binding.key.size() == 1 ? std::optional{ftxui::Event::Character(std::string{binding.key})}
+                                       : std::nullopt;
+      }();
+
+      REQUIRE(optEvent);
+      CHECK(controller.handleEvent(*optEvent));
+
+      // A key that opened an overlay has to close it again from inside that
+      // overlay, which is a second dispatch site reading the same table. Help
+      // is deliberately modal and leaves only on Escape.
+      if (auto const opened = fixture.shell.overlay(); opened != Overlay::None && opened != Overlay::Help)
+      {
+        CHECK(controller.handleEvent(*optEvent));
+        CHECK(fixture.shell.overlay() == Overlay::None);
+      }
+
+      // Leave no overlay open for the next binding to be judged against.
+      fixture.shell.closeOverlay();
+    }
+  }
+
   TEST_CASE("EventController - detail shortcut toggles the detail overlay", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
@@ -267,7 +327,8 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
-    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback()};
+    auto outputDevices =
+      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -530,7 +591,8 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
-    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback()};
+    auto outputDevices =
+      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
     outputDevices.refresh();
     REQUIRE(outputDevices.viewState().rows.size() > 1);
     auto const outputRow = outputDevices.viewState().rows[1];
@@ -575,7 +637,8 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
-    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback()};
+    auto outputDevices =
+      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
     outputDevices.refresh();
     auto hitRegions = TuiHitRegions{};
     hitRegions.outputDeviceRows = {
@@ -605,7 +668,8 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider(rt::test::makePipeWireOutputStatus());
     auto library = fixture.makeLibrary();
-    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback()};
+    auto outputDevices =
+      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -1337,7 +1401,8 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     REQUIRE(library.setPresentation("albums") == "View: albums");
     REQUIRE(library.sections().size() >= 2);
-    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback()};
+    auto outputDevices =
+      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
     auto hitRegions = TuiHitRegions{};
     hitRegions.outputDeviceButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
     hitRegions.soulButtonBox = ftxui::Box{.x_min = 0, .x_max = 2, .y_min = 0, .y_max = 0};

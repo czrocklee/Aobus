@@ -7,7 +7,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPresentationButton.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -36,7 +36,7 @@ namespace ao::gtk::layout
                                           ctx.dependencies.themeCoordinator);
         }
 
-        if (auto const it = node.props.find("variant"); it != node.props.end())
+        if (auto const it = node.props.find(kVariantProp); it != node.props.end())
         {
           if (auto const variant = it->second.asString(); variant == "title")
           {
@@ -59,15 +59,7 @@ namespace ao::gtk::layout
 
   void registerTrackPresentationButtonComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "track.presentationButton",
-                                .displayName = "Presentation",
-                                .category = LayoutComponentCategory::Track,
-                                .props = {{.name = "variant",
-                                           .kind = LayoutPropertyKind::String,
-                                           .label = "Variant",
-                                           .defaultValue = LayoutValue{"default"}}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createTrackPresentationButton);
+    registry.registerComponent(
+      sharedComponentDescriptor(SharedLayoutComponentType::TrackPresentationButton), createTrackPresentationButton);
   }
 } // namespace ao::gtk::layout

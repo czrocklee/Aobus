@@ -51,16 +51,16 @@ namespace ao::winui
       return {};
     }
 
-    Result<WindowPlacement> readWindow(ryml::ConstNodeRef node, std::string_view context)
+    Result<WindowPlacement> readWindow(ryml::ConstNodeRef node, std::string_view context, WindowPlacement const& seed)
     {
       constexpr auto kKeys = std::to_array<std::string_view>({"x", "y", "width", "height", "maximized"});
-      auto window = WindowPlacement{};
+      auto window = seed;
       auto reader = yaml::MapReader{node, kKeys, context};
-      reader.requiredScalar("x", window.x)
-        .requiredScalar("y", window.y)
-        .requiredScalar("width", window.width)
-        .requiredScalar("height", window.height)
-        .requiredScalar("maximized", window.maximized);
+      reader.optionalScalar("x", window.x)
+        .optionalScalar("y", window.y)
+        .optionalScalar("width", window.width)
+        .optionalScalar("height", window.height)
+        .optionalScalar("maximized", window.maximized);
       auto result = std::move(reader).finish(std::move(window));
 
       if (!result)
@@ -79,6 +79,37 @@ namespace ao::winui
     Result<> requireCurrentVersion(std::uint32_t const version)
     {
       if (version != kDesktopSettingsVersion)
+      {
+        return makeError(
+          Error::Code::NotSupported, std::format("Unsupported Windows desktop settings version {}", version));
+      }
+
+      return {};
+    }
+
+    /// The oldest document this schema ever wrote; nothing below it was ever valid.
+    constexpr auto kOldestReadableDesktopSettingsVersion = std::uint32_t{2};
+
+    static_assert(kOldestReadableDesktopSettingsVersion <= kDesktopSettingsVersion);
+
+    /**
+     * @brief Accepts any document this build can read without truncating it.
+     *
+     * Every field is optional over the caller's seed, so a document from a
+     * version this schema actually wrote is read in full and upgraded on the
+     * next checkpoint.
+     *
+     * Both ends are closed. A newer document is refused because this build
+     * cannot preserve fields it does not know, and reading one would silently
+     * drop them at the next save. A version below the oldest one that ever
+     * existed is refused because no document was ever written that way: the
+     * value is a missing, zeroed, or otherwise malformed marker, and reading it
+     * under current field semantics would dress up a corrupt document as an
+     * old one.
+     */
+    Result<> requireReadableVersion(std::uint32_t const version)
+    {
+      if (version < kOldestReadableDesktopSettingsVersion || version > kDesktopSettingsVersion)
       {
         return makeError(
           Error::Code::NotSupported, std::format("Unsupported Windows desktop settings version {}", version));
@@ -127,7 +158,7 @@ namespace ao::winui
   }
 
   Result<DesktopSettings> DesktopSettingsYamlSchema::deserialize(ryml::ConstNodeRef node,
-                                                                 DesktopSettings const& /*seed*/) const
+                                                                 DesktopSettings const& seed) const
   {
     constexpr auto kContext = std::string_view{"Windows desktop settings"};
 
@@ -143,7 +174,7 @@ namespace ao::winui
       return std::unexpected{versionRes.error()};
     }
 
-    if (auto const supportedRes = requireCurrentVersion(*versionRes); !supportedRes)
+    if (auto const supportedRes = requireReadableVersion(*versionRes); !supportedRes)
     {
       return std::unexpected{supportedRes.error()};
     }
@@ -158,18 +189,21 @@ namespace ao::winui
                                                             "navigationPaneWidth",
                                                             "inspectorPaneWidth"});
 
-    auto state = DesktopSettings{};
-    state.version = *versionRes;
-    auto modeId = std::string{};
+    auto state = seed;
+    // Reading an older document upgrades it: the next checkpoint writes the current version.
+    state.version = kDesktopSettingsVersion;
+    auto modeId = std::string{shellModeId(seed.shellMode)};
+    auto const readSeededWindow = [&seed](ryml::ConstNodeRef child, std::string_view context)
+    { return readWindow(child, context, seed.window); };
     auto reader = yaml::MapReader{node, kKeys, kContext};
-    reader.requiredValue("window", state.window, readWindow)
-      .requiredScalar("shellMode", modeId)
-      .requiredScalar("lastLibraryPath", state.lastLibraryPath)
-      .requiredScalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
-      .requiredScalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
-      .requiredScalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
-      .requiredScalar("navigationPaneWidth", state.navigationPaneWidth)
-      .requiredScalar("inspectorPaneWidth", state.inspectorPaneWidth);
+    reader.optionalValue("window", state.window, readSeededWindow)
+      .optionalScalar("shellMode", modeId)
+      .optionalScalar("lastLibraryPath", state.lastLibraryPath)
+      .optionalScalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
+      .optionalScalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
+      .optionalScalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
+      .optionalScalar("navigationPaneWidth", state.navigationPaneWidth)
+      .optionalScalar("inspectorPaneWidth", state.inspectorPaneWidth);
     auto result = std::move(reader).finish(std::move(state));
 
     if (!result)

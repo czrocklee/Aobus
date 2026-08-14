@@ -13,6 +13,7 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/ViewService.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/winui/layout/LayoutCatalog.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
@@ -317,22 +318,22 @@ namespace ao::winui::layout
   void registerStatusComponents(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      "status.activity",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusActivity),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<ActivityStatusComponent>(ctx); });
 
     registry.registerComponent(
-      "status.trackCount",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusTrackCount),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<TrackCountComponent>(ctx, isSummaryVariant(node)); });
 
     registry.registerComponent(
-      "status.selectionInfo",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusSelectionInfo),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<SelectionInfoComponent>(ctx, isSummaryVariant(node)); });
 
     registry.registerComponent(
-      "status.message",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusMessage),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<StatusMessageComponent>(ctx); });
   }

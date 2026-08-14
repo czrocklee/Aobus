@@ -6,9 +6,9 @@
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
@@ -54,11 +54,9 @@ namespace ao::uimodel
   {
   public:
     using RenderCallback = std::function<void(OutputDeviceViewState const&)>;
-    using SelectionRequestedCallback = std::function<void(audio::OutputDeviceSelection const&)>;
 
-    OutputDeviceViewModel(rt::PlaybackService& playback,
-                          RenderCallback onRender,
-                          SelectionRequestedCallback onSelectionRequested = {});
+    /// @param intent Where a requested route is recorded; `OutputDeviceIntent::discarded()` keeps none.
+    OutputDeviceViewModel(rt::PlaybackService& playback, RenderCallback onRender, OutputDeviceIntent intent);
 
     OutputDeviceViewModel(OutputDeviceViewModel const&) = delete;
     OutputDeviceViewModel& operator=(OutputDeviceViewModel const&) = delete;
@@ -80,7 +78,7 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _commands;
     RenderCallback _onRender;
-    SelectionRequestedCallback _onSelectionRequested;
+    OutputDeviceIntent _intent;
     PresentationTextCatalog _textCatalog;
     rt::OutputState _lastOutput{};
 

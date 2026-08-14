@@ -23,7 +23,7 @@ namespace ao::winui
   struct PlaybackTimeControlConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::TextBlock text{nullptr};
-    uimodel::PlaybackTimeMode mode = uimodel::PlaybackTimeMode::Default;
+    uimodel::PlaybackTimeMode mode = uimodel::PlaybackTimeMode::Combined;
     bool presentationActive = true;
   };
 
@@ -54,7 +54,7 @@ namespace ao::winui
     void updateText(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration);
 
     winrt::Microsoft::UI::Xaml::Controls::TextBlock _text{nullptr};
-    uimodel::PlaybackTimeMode _mode = uimodel::PlaybackTimeMode::Default;
+    uimodel::PlaybackTimeMode _mode = uimodel::PlaybackTimeMode::Combined;
     uimodel::PlaybackPositionInterpolator _interpolator;
     uimodel::PlaybackPositionViewState _state{};
     std::unique_ptr<uimodel::PlaybackPositionViewModel> _viewModelPtr;

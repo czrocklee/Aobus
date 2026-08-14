@@ -39,6 +39,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -119,6 +120,57 @@ namespace ao::tui
     {
       return row.kind == uimodel::OutputDeviceRow::Kind::DeviceProfile && row.backendId == hitRegion.backendId &&
              row.deviceId == hitRegion.deviceId && row.profileId == hitRegion.profileId;
+    }
+
+    /**
+     * @brief The terminal event a declared key names.
+     *
+     * The one place a key's written form becomes something the terminal can
+     * report, so the binding table stays readable text rather than ftxui
+     * constants and can be shown to the user as it stands.
+     */
+    std::optional<ftxui::Event> terminalEventFor(std::string_view const key)
+    {
+      if (key == "Enter")
+      {
+        return ftxui::Event::Return;
+      }
+
+      if (key == "Space")
+      {
+        return ftxui::Event::Character(" ");
+      }
+
+      if (key == "Esc")
+      {
+        return ftxui::Event::Escape;
+      }
+
+      if (key == "Ctrl-L")
+      {
+        return ftxui::Event::CtrlL;
+      }
+
+      if (key.size() == 1)
+      {
+        return ftxui::Event::Character(std::string{key});
+      }
+
+      return std::nullopt;
+    }
+
+    /// The command @p event runs, or nothing when no binding names it.
+    std::optional<CommandAction> commandKeyAction(ftxui::Event const& event)
+    {
+      for (auto const& binding : keyBindingSpecs())
+      {
+        if (auto const optKeyEvent = terminalEventFor(binding.key); optKeyEvent && event == *optKeyEvent)
+        {
+          return binding.action;
+        }
+      }
+
+      return std::nullopt;
     }
   } // namespace
 
@@ -883,7 +935,7 @@ namespace ao::tui
     switch (_shell.overlay())
     {
       case Overlay::ListChooser:
-        if (event == ftxui::Event::Character("l"))
+        if (commandKeyAction(event) == CommandAction::OpenLists)
         {
           toggleListChooser();
           return true;
@@ -902,21 +954,21 @@ namespace ao::tui
 
         return true;
       case Overlay::DetailPanel:
-        if (event == ftxui::Event::Character("d"))
+        if (commandKeyAction(event) == CommandAction::OpenDetail)
         {
           toggleDetailPanel();
         }
 
         return true;
       case Overlay::QualityPanel:
-        if (event == ftxui::Event::Character("a"))
+        if (commandKeyAction(event) == CommandAction::OpenQuality)
         {
           toggleQualityPanel();
         }
 
         return true;
       case Overlay::OutputDevices:
-        if (event == ftxui::Event::Character("o"))
+        if (commandKeyAction(event) == CommandAction::OpenOutputDevices)
         {
           toggleOutputDevices();
           return true;
@@ -935,7 +987,7 @@ namespace ao::tui
 
         return true;
       case Overlay::PresentationPanel:
-        if (event == ftxui::Event::Character("v"))
+        if (commandKeyAction(event) == CommandAction::OpenPresentationPanel)
         {
           togglePresentationPanel();
           return true;
@@ -954,7 +1006,7 @@ namespace ao::tui
 
         return true;
       case Overlay::Notifications:
-        if (event == ftxui::Event::Character("n"))
+        if (commandKeyAction(event) == CommandAction::OpenNotifications)
         {
           toggleNotificationCenter();
           return true;
@@ -976,10 +1028,9 @@ namespace ao::tui
 
   bool EventController::handleRootEvent(ftxui::Event const& event)
   {
-    if (event == ftxui::Event::Character("q"))
+    if (auto const optAction = commandKeyAction(event); optAction)
     {
-      _playback.commands().stop();
-      _screen.ExitLoopClosure()();
+      runCommand({.action = *optAction});
       return true;
     }
 
@@ -992,86 +1043,6 @@ namespace ao::tui
     {
       _shell.beginCommand();
       refreshCommandCompletion();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("l"))
-    {
-      toggleListChooser();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("d"))
-    {
-      toggleDetailPanel();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("a"))
-    {
-      toggleQualityPanel();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("o"))
-    {
-      toggleOutputDevices();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("v"))
-    {
-      togglePresentationPanel();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("n"))
-    {
-      toggleNotificationCenter();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("?"))
-    {
-      _shell.openOverlay(Overlay::Help);
-      postActivityNotification(rt::NotificationSeverity::Info, "Help");
-      return true;
-    }
-
-    if (event == ftxui::Event::CtrlL)
-    {
-      revealCurrentTrack();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("c"))
-    {
-      _library.clearFilterDraft();
-      applyFilter();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("r"))
-    {
-      reloadActiveList();
-      return true;
-    }
-
-    if (event == ftxui::Event::Return || event == ftxui::Event::Character("p"))
-    {
-      playSelectedTrack();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character(" "))
-    {
-      executePlaybackCommand(uimodel::PlaybackCommand::PlayPause);
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("s"))
-    {
-      executePlaybackCommand(uimodel::PlaybackCommand::Stop);
       return true;
     }
 
@@ -1134,10 +1105,11 @@ namespace ao::tui
       return true;
     }
 
-    if (event == ftxui::Event::Escape)
+    // Escape is answered before any overlay sees it, so whatever is open closes
+    // rather than the overlay deciding for itself what the key means.
+    if (commandKeyAction(event) == CommandAction::CloseOverlay)
     {
-      _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Overlay closed");
+      runCommand({.action = CommandAction::CloseOverlay});
       return true;
     }
 

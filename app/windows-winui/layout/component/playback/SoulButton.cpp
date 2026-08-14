@@ -14,6 +14,7 @@
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/action/LayoutActionSlotResolution.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -59,12 +60,12 @@ namespace ao::winui::layout
 
         auto* const soul = winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(_soul);
 
-        if (auto const strokeWidth = node.propertyOr<double>("strokeWidth", 0.0); strokeWidth > 0.0)
+        if (auto const strokeWidth = node.propertyOr<double>(uimodel::kStrokeWidthProp, 0.0); strokeWidth > 0.0)
         {
           soul->setBaseStrokeWidth(strokeWidth);
         }
 
-        if (auto const glyphScale = node.propertyOr<double>("glyphScale", 0.0); glyphScale > 0.0)
+        if (auto const glyphScale = node.propertyOr<double>(uimodel::kGlyphScaleProp, 0.0); glyphScale > 0.0)
         {
           soul->setInnerGlyphScale(glyphScale);
         }
@@ -75,6 +76,8 @@ namespace ao::winui::layout
           // The pipeline explanation occupies the tooltip in every shell, so the
           // transport never writes its own.
           .hasComplexTooltip = true,
+          // Windows draws one inner mark, so it answers whether the soul wears
+          // a glyph at all rather than which of the two the vocabulary names.
           .showGlyph = node.propertyOr<bool>("showGlyph", true),
           .activatesOnClick = activatesOnClick,
         });

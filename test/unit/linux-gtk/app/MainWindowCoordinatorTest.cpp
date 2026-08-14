@@ -35,6 +35,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -118,8 +119,7 @@ namespace ao::gtk::test
       .profileId = audio::kProfileExclusive,
     };
 
-    REQUIRE(dependencies.onOutputDeviceSelectionRequested);
-    dependencies.onOutputDeviceSelectionRequested(selection);
+    dependencies.outputDeviceIntent.record(selection);
 
     auto loadedPrefs = rt::AppPrefsState{};
     configStorePtr->loadAppPrefs(loadedPrefs);

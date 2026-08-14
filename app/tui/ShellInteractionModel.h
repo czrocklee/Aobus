@@ -59,7 +59,15 @@ namespace ao::tui
     CommandAction action;
     std::string_view detail;
     std::string_view category{};
-    std::string_view shortcut{};
+    /**
+     * @brief The action whose key this entry advertises, when not its own.
+     *
+     * `/view <name>` selects a track view outright while `v` opens the panel to
+     * pick one, so they are different actions that reach the same place. Naming
+     * the action rather than the key is what keeps the hint from drifting: a
+     * rebound key moves the hint with it, and an unbound one shows nothing.
+     */
+    std::optional<CommandAction> optShortcutAction{};
   };
 
   struct CommandAliasSpec final
@@ -68,11 +76,28 @@ namespace ao::tui
     CommandAction action;
     std::string_view detail;
     std::string_view category{};
-    std::string_view shortcut{};
+  };
+
+  /**
+   * @brief A key that runs a command without the command line, and what it runs.
+   *
+   * The key is written the way a reader sees it rather than as a terminal
+   * event, so this stays the one declaration behind both what the shell listens
+   * for and what it tells the user. An action may appear more than once when
+   * more than one key runs it.
+   */
+  struct KeyBindingSpec final
+  {
+    std::string_view key;
+    CommandAction action;
   };
 
   std::span<CommandPrefixSpec const> commandPrefixSpecs();
   std::span<CommandAliasSpec const> commandAliasSpecs();
+  std::span<KeyBindingSpec const> keyBindingSpecs();
+
+  /// The first key that runs @p action, or empty when no key does.
+  std::string_view shortcutFor(CommandAction action);
   Command parseCommand(std::string_view input);
   std::string overlayLabel(Overlay overlay);
   std::string_view overlayHint(Overlay overlay);

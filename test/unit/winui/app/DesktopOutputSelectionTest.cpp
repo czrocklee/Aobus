@@ -7,6 +7,7 @@
 #include <ao/audio/Device.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
+#include <ao/winui/layout/ShellStatePolicy.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,10 +41,10 @@ namespace ao::winui::test
         },
     };
 
-    auto const selection = resolveDesktopOutputSelectionToRestore(settings, output);
+    auto const optSelection = resolveDesktopOutputSelectionToRestore(settings, output);
 
-    REQUIRE(selection);
-    CHECK(*selection == settings.preferredOutputSelection);
+    REQUIRE(optSelection);
+    CHECK(*optSelection == settings.preferredOutputSelection);
   }
 
   TEST_CASE("DesktopOutputSelection - remembers the exact request for the next settings checkpoint",

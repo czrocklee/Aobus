@@ -39,6 +39,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -366,14 +367,14 @@ namespace ao::gtk
       .createSmartListFromExpression = [navigationController = &_implPtr->listNavigationController](
                                          ao::ListId parentListId, std::string expression)
       { navigationController->createSmartListFromExpression(parentListId, std::move(expression)); },
-      .onOutputDeviceSelectionRequested =
+      .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
         [configStorePtr = _configStorePtr](audio::OutputDeviceSelection const& selection)
-      {
-        auto prefs = rt::AppPrefsState{};
-        configStorePtr->loadAppPrefs(prefs);
-        prefs.preferredOutputSelection = selection;
-        configStorePtr->saveAppPrefs(prefs);
-      },
+        {
+          auto prefs = rt::AppPrefsState{};
+          configStorePtr->loadAppPrefs(prefs);
+          prefs.preferredOutputSelection = selection;
+          configStorePtr->saveAppPrefs(prefs);
+        }),
     };
   }
 

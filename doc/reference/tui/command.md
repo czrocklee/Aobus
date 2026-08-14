@@ -15,8 +15,9 @@ The surface is unversioned; modal and rendering behavior belongs to the [TUI int
 ## Code boundary
 
 Startup option authority is `app/tui/Main.cpp`.
-Command/alias authority is `ShellInteractionModel.cpp`.
-Key/mouse dispatch authority is `EventController.cpp`.
+Command, alias, and key-binding authority is `ShellInteractionModel.cpp`: a key that runs a command is declared once there and read by the dispatcher, the overlay handler that closes on the same key, the status bar, and the command palette alike.
+Key and mouse dispatch is `EventController.cpp`, which also owns the one translation from a declared key's written form to a terminal event.
+Keys that run no command - the command line, seeking, group jumps, volume - are answered where they are pressed and are named nowhere else.
 
 ## Surface
 

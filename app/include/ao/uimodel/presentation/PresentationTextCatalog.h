@@ -8,6 +8,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
 #include <cstdint>
 #include <optional>
@@ -76,6 +77,10 @@ namespace ao::uimodel
     std::string notificationMessage(rt::NotificationMessage const& message) const;
     std::string libraryTaskProgressDetail(rt::LibraryTaskProgressKind kind, std::string_view subject) const;
     std::string libraryTaskProgressCompact(rt::LibraryTaskProgressKind kind, std::string_view subject) const;
+
+    // What a finished scan is reported as. Every shell that can scan says this
+    // sentence, so it is written once rather than once per window.
+    std::string libraryScanMessage(LibraryScanOutcome const& outcome) const;
 
     // Wraps a query-parser diagnostic in the shared label the filter entry and
     // the saved-List editor both show.

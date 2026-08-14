@@ -28,11 +28,15 @@ UIModel receives paths or stores and does not resolve storage locations.
 
 | Token | Linux meaning |
 |---|---|
-| `<config>` | `Glib::get_user_config_dir()`, normally `$XDG_CONFIG_HOME` or `~/.config` |
+| `<config>` | `utility::applicationConfigDirectory()`, which reads `$XDG_CONFIG_HOME` then `$HOME/.config` then the account entry, and accepts only absolute values |
 | `<state>` | `$XDG_STATE_HOME` when non-empty; otherwise the `state` sibling of `Glib::get_user_data_dir()`, normally `~/.local/state` |
 | `<cache>` | `Glib::get_user_cache_dir()`, normally `$XDG_CACHE_HOME` or `~/.cache` |
 | `<root>` | The selected music-library root |
 | `<preset-id>` | A validated shell-layout preset identifier |
+
+Every frontend resolves `<config>` through the same helper, so the platform rule and the directory name are decided once rather than at each composition root.
+When nothing names a home or profile location at all, GTK and the TUI open stores that keep nothing and run on defaults; the Windows shell reports a startup failure instead, because it keeps required state there and not only preferences.
+The [application config reference](application-config.md) owns what a store with no location does.
 
 ### Global GTK application locations
 
@@ -44,6 +48,14 @@ UIModel receives paths or stores and does not resolve storage locations.
 | `<state>/aobus/layout-state/<preset-id>.yaml` | Per-preset shell component runtime state | `ShellLayoutComponentStateStore` |
 | `<cache>/aobus/logs/` | GTK operational logs | Runtime logging configured by the GTK composition root |
 | `<cache>/aobus/mpris-art/` | Exported cover-art files used by MPRIS file URLs | `MprisArtUrlCache` |
+
+### Global TUI application locations
+
+The TUI keeps its own file rather than sharing GTK's. `ConfigStore` writes a whole document from the snapshot it took at first read, so two frontends pointed at one file would drop each other's groups whenever they ran at the same time.
+
+| Location | Class | Writer or reader |
+|---|---|---|
+| `<config>/aobus/tui.yaml` | Global managed state for TUI application preferences | One `ConfigStore` owned by the TUI composition root |
 
 ### Per-library locations
 

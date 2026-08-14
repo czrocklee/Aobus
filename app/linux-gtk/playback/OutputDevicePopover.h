@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/OutputDeviceSelection.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <glibmm/object.h>
@@ -12,8 +12,6 @@
 #include <gtkmm/listbox.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
-
-#include <functional>
 
 namespace Gio
 {
@@ -36,9 +34,9 @@ namespace ao::gtk
     OutputDevicePopover(OutputDevicePopover&&) = delete;
     OutputDevicePopover& operator=(OutputDevicePopover&&) = delete;
 
-    explicit OutputDevicePopover(rt::PlaybackService& playback,
-                                 Gtk::PositionType position = Gtk::PositionType::BOTTOM,
-                                 std::function<void(audio::OutputDeviceSelection const&)> onSelected = {});
+    OutputDevicePopover(rt::PlaybackService& playback,
+                        uimodel::OutputDeviceIntent intent,
+                        Gtk::PositionType position = Gtk::PositionType::BOTTOM);
     ~OutputDevicePopover() override;
 
   private:

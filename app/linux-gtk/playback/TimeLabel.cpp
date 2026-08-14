@@ -160,7 +160,7 @@ namespace ao::gtk
         }
 
         break;
-      case Mode::Default:
+      case Mode::Combined:
       default:
         if (!_dirty && coarseElapsed == _lastElapsed && coarseDuration == _lastDuration)
         {

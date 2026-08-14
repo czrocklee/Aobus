@@ -5,6 +5,8 @@
 
 #include <ao/uimodel/input/KeymapModel.h>
 
+#include <string_view>
+
 namespace ao::rt
 {
   class ConfigStore;
@@ -13,7 +15,7 @@ namespace ao::rt
 namespace ao::uimodel
 {
   /// Config group under which keyboard overrides are persisted.
-  inline constexpr char const* kKeymapConfigGroup = "shortcuts";
+  inline constexpr auto kKeymapConfigGroup = std::string_view{"shortcuts"};
 
   /**
    * @brief Loads the effective keymap by merging persisted overrides onto @p defaults.

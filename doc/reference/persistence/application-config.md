@@ -40,9 +40,10 @@ The location reference owns the exact mapping from these names to Linux defaults
 | Logical document | Composition | Container | Registered top-level surface |
 |---|---|---|---|
 | Global GTK config | One application-global GTK file. | `AppConfigStore` over one `ConfigStore`. | `window`, `runtime`, `session`, `shortcuts`, plus `playback-session` for the active library runtime. |
+| Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`. |
 | Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
-| Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop`, `trackView.columnLayouts`, and `trackView.presentations`. |
+| Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop`, `trackView.columnLayouts`, `trackView.presentations`, and `shortcuts`. |
 | Shell layout preset | One user-authored file per preset id. | `ShellLayoutStore` creates a `ConfigStore` per operation. | `layout`. |
 | Shell component state | One runtime-state file per preset id. | `ShellLayoutComponentStateStore` uses a standalone YAML document. | Document root; it has no `ConfigStore` group. |
 
@@ -54,9 +55,11 @@ It does not denote nested mappings.
 | Logical document | Literal group | Payload type | Deserialize/serialize path | Current version authority | Semantic writer |
 |---|---|---|---|---|---|
 | Global GTK config | `window` | `ao::gtk::WindowState` | Frontend-local `WindowStateYamlSchema`. | None. | `AppConfigStore::saveWindow`. |
-| Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Frontend-local `AppPrefsStateYamlSchema`. | None. | `AppConfigStore::saveAppPrefs`. |
-| Global GTK config | `session` | `ao::rt::AppSessionState` | Frontend-local `AppSessionStateYamlSchema`. | None. | `AppConfigStore::saveAppSession`. |
+| Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppStateStore`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppPrefs`. |
+| Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppStateStore`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
+| Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppStateStore`. | None. | `ao::rt::saveAppPrefs`. |
+| Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `LibrarySession`. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `3`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
 | GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
@@ -156,6 +159,7 @@ The registry fixes the group-to-type association, but these domain owners define
 ## Validation rules
 
 - Registered group names are exact and case-sensitive.
+- The directory these files live in is resolved by `utility::applicationConfigDirectory`, which accepts only absolute candidates. A relative environment value is treated as unset rather than resolved against the working directory, so no managed document is ever written beside the running process.
 - A conforming `ConfigStore` file has a top-level mapping; each registered group is one unique keyed direct child, and duplicate group keys reject initialization.
 - Unregistered top-level groups have no application consumer even though a loaded `ConfigStore` can retain them while rewriting another group.
 - Every registered payload uses an explicit owner-local schema; no field, enum, id, container, or aggregate schema is inferred from its C++ type.
@@ -172,6 +176,22 @@ The registry fixes the group-to-type association, but these domain owners define
 The domain owner decides whether a syntactically deserialized identity, enum ordinal, version marker, or nested value is usable.
 This registry does not convert schema membership into restore success.
 
+### Sessions with nowhere to keep anything
+
+`utility::applicationConfigDirectory` reports `NotFound` only when the platform names no home or profile location at all.
+What a frontend does then depends on what it keeps there.
+
+GTK and the TUI keep only preferences, layout presets, and window state, so they open a store that has no location - `rt::ConfigStore::NoLocation`, and the `AppConfigStore` and `ShellLayoutStore` constructors that take it - rather than refusing to start.
+The Windows shell does not: it keeps its settings, its playback state, and the fallback library it opens when no other root is selected under that directory, so without one it has no library to show and reports a startup failure.
+
+A store with no location behaves as follows:
+
+- Every registered group reads as absent, so each owner keeps its defaults.
+- Every write succeeds having stored nothing on disk. Success is deliberate: the session never promised to keep anything, so reporting a failure at each checkpoint would describe a fault that does not exist. Later reads in the same session see what was written, so nothing inside the session behaves inconsistently.
+- Nothing is written relative to the working directory, which is what an empty path would otherwise resolve against.
+
+The frontend says so once, at its composition root, where the reason is still known.
+
 ## Compatibility and versioning
 
 | Surface | Compatibility mechanism |
@@ -181,7 +201,7 @@ This registry does not convert schema membership into restore success.
 | `workspace` | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
 | `trackView.columnLayouts` | Independent payload version `2`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
 | `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
-| Windows `desktop` | Explicit version `3`; other versions are rejected rather than migrated. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
+| Windows `desktop` | Explicit version, currently `3`, read down to the oldest this schema ever wrote (`2`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
 | `playback-session` | Explicit schema version `3`; other versions are rejected rather than migrated. |
 | `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. |
 | Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |
@@ -221,6 +241,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 ## Implementation authority
 
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppPrefsState.h`](../../../app/include/ao/rt/AppPrefsState.h) own the global GTK groups and their frontend-local schemas.
+- [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns `NoLocation` and what a store with nowhere to keep anything does; [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns when a frontend reaches for it.
 - [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h), [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h), [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp), and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, explicit schema, payload marker, and injected-store use.
 - [`WorkspaceSessionYamlSchema.h`](../../../app/runtime/WorkspaceSessionYamlSchema.h), [`WorkspaceSessionYamlSchema.cpp`](../../../app/runtime/WorkspaceSessionYamlSchema.cpp), and [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) own the workspace group and payload conversion.
@@ -235,7 +256,8 @@ The example intentionally omits the domain-owned `playback-session` payload.
 
 ## Test authority
 
-- [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the `window`, `runtime`, and `session` group round trips and missing-file behavior.
+- [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the `window`, `runtime`, and `session` group round trips, missing-file behavior, and the no-location session.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, and store use.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip.

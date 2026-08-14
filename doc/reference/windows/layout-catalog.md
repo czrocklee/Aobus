@@ -11,7 +11,7 @@ summary: Enumerates the Windows shell layout catalog, accepted layout fields, el
 
 This reference owns the exact Windows-side surfaces of the version 1 layout language: the component and action ids the Windows catalog registers, the layout fields it accepts and rejects, the native element each component constructs, the `styleKey` and `surface` extensions, and the two built-in preset documents.
 
-It uses the same unversioned `LayoutDocument` version 1 language as the [layout document reference](../shell/layout-document.md). The Windows catalog is a separate, deliberately narrower identity set from the [GTK layout catalog](../shell/layout-catalog.md); the two share no preset, component registration, or appearance vocabulary.
+It uses the same unversioned `LayoutDocument` version 1 language as the [layout document reference](../shell/layout-document.md). The Windows catalog is a deliberately narrower identity set than the [GTK layout catalog](../shell/layout-catalog.md): the two share no preset and no component construction, but a type both shells present takes its identity and shared properties from the [shared component vocabulary](../shell/component-vocabulary.md) rather than being described twice.
 
 These surfaces are shipped contracts today. The WinUI window builds its Modern and Classic trees from these documents; [decision 0004](../../decision/0004-adopt-layout-documents-for-winui-shell-composition.md) records why it adopted the shared language while retaining Windows-owned presets and construction.
 
@@ -38,34 +38,34 @@ They ship as application content in `Assets\Layout` beside the executable, not a
 
 | Family | Type ids |
 |---|---|
-| Container | `box`, `split` |
-| Shell | `windows.inspectorPane`, `windows.libraryPath`, `windows.menuBar`, `windows.navigationPane`, `windows.statusBar`, `windows.titleBar` |
-| Track | `track.coverArt`, `track.detail`, `track.presentationButton`, `track.quickFilter`, `track.table` |
-| Playback | `playback.nowPlayingInfo`, `playback.outputDeviceButton`, `playback.seekSlider`, `playback.soulButton`, `playback.timeLabel`, `playback.transportButton`, `playback.volumeControl` |
-| Status | `status.activity`, `status.message`, `status.selectionInfo`, `status.trackCount` |
-| Generic | `actionButton`, `label`, `menuButton` |
+| Container | **`box`**, **`split`** |
+| Shell | **`app.menuBar`**, `windows.inspectorPane`, `windows.libraryPath`, `windows.navigationPane`, `windows.statusBar`, `windows.titleBar` |
+| Track | **`track.coverArt`**, `track.detail`, **`track.presentationButton`**, **`track.quickFilter`**, **`track.table`** |
+| Playback | `playback.nowPlayingInfo`, **`playback.outputDeviceSelector`**, **`playback.seekSlider`**, **`playback.soulButton`**, **`playback.timeLabel`**, **`playback.transportButton`**, **`playback.volumeControl`** |
+| Status | **`status.activity`**, **`status.message`**, **`status.selectionInfo`**, **`status.trackCount`** |
+| Generic | **`actionButton`**, **`label`**, **`menuButton`** |
+
+Bold ids come from the [shared component vocabulary](../shell/component-vocabulary.md), which owns their display name, category, child range, action slots, and shared properties. The rest are Windows' own.
 
 `template` is a document node type handled by expansion and is not a registered component. Any other type, including a `[TemplateError]` node produced by a failed expansion, is an unknown component type.
 
 ### Component properties
 
+Shared properties - `orientation`, `spacing`, `text`, `variant` on `track.presentationButton`, `placeholderStyle`, `command`, `strokeWidth`, `glyphScale`, `mode` - are defined by the [shared component vocabulary](../shell/component-vocabulary.md) and are not restated here. What follows is what Windows adds.
+
 | Type | Property | Kind | Values | Default |
 |---|---|---|---|---|
-| `box`, `split` | `orientation` | Enum | `horizontal`, `vertical` | `vertical` for `box`, `horizontal` for `split` |
-| `box` | `spacing` | Int | — | `0` |
 | `split` | `initialPositionPercent` | Double | — | `0.5` |
 | `windows.navigationPane` | `presentation` | Enum | `navigationView`, `tree` | `navigationView` |
-| `track.coverArt` | `placeholderStyle` | Enum | `monogram`, `note`, `vinyl`, `equalizer`, `soul` | `vinyl` |
-| `track.presentationButton` | `variant` | Enum | `title`, `compact` | `title` |
-| `playback.transportButton` | `command` | Enum | `playPause`, `play`, `pause`, `stop`, `next`, `previous`, `shuffle`, `repeat` | `playPause` |
-| `playback.soulButton` | `strokeWidth`, `glyphScale` | Double | — | unset |
-| `playback.soulButton` | `showGlyph` | Bool | — | `true` |
 | `playback.seekSlider` | `presentation` | Enum | `overlay`, `inline` | `inline` |
-| `playback.timeLabel` | `variant` | Enum | `elapsed`, `duration`, `combined` | `elapsed` |
 | `playback.volumeControl` | `presentation` | Enum | `flyout`, `inline` | `flyout` |
-| `label`, `actionButton`, `menuButton` | `resourceKey` | String | — | empty |
+| `status.trackCount`, `status.selectionInfo` | `variant` | Enum | `status`, `summary` | `status` |
 | `actionButton`, `menuButton` | `glyph` | String | — | empty |
+| `label`, `actionButton`, `menuButton` | `textResourceKey` | String | — | empty |
+| `playback.soulButton` | `showGlyph` | Bool | — | `true` |
 | `menuButton` | `menuId` | Enum | `modernOverflow`, `nowPlayingOverflow` | `modernOverflow` |
+
+Windows draws the live transport icon as the soul's inner mark, so the only question a document can answer here is whether to draw it: `showGlyph`, a Windows property. GTK's `glyph` chooses between two static ornaments, which is a different question, so neither name is shared.
 
 ### Child counts
 
@@ -100,7 +100,9 @@ The `navigationView` presentation is the exception. It draws its own pane inside
 
 Menus, transport commands, and column editing are native behavior of the component that owns them, so they have no action id.
 
-`actionButton` accepts all four action slots. `playback.soulButton` accepts all four and defaults `secondaryAction` to `shell.showSystemMenu` and `primaryLongPressAction` to `shell.showSoul`. Every other component accepts none.
+`actionButton` and `playback.soulButton` accept the primary click, primary long press, and secondary click; `playback.soulButton` defaults `secondaryAction` to `shell.showSystemMenu` and `primaryLongPressAction` to `shell.showSoul`. Every other component accepts none.
+
+No component here accepts `secondaryLongPressAction`. Windows raises one holding sequence per press regardless of which button started it, so the binder cannot tell a secondary hold from a primary one and refuses the slot. Offering it in the catalog would let a document validate and then be rejected in full while being built, so the catalog does not offer it; a test holds every descriptor to that. GTK's soul button does accept the slot, because GDK distinguishes the two.
 
 `playback.soulButton` has no `primaryAction` default, because that slot is the soul's own play/pause gesture: the soul runs the transport when the document leaves the slot alone, and presents playback without driving it when the document names an action there. Nothing else in the catalog puts a native gesture and an action slot on the same event, so this is the only component where authoring an action takes behavior away.
 
@@ -108,7 +110,7 @@ A bound slot becomes one native gesture: `primaryAction` is a button's `Click` a
 
 ### Text resources
 
-`resourceKey` names a string in the application's resource map. A key that no resource defines resolves to the key itself so a localization gap stays visible, and it never rejects the document: the layout is still structurally valid. On a control that shows a glyph, the resolved string becomes the tooltip and the automation name instead of the visible content.
+The shared `text` property is the words a reader sees, verbatim, so a document that sets it reads the same in every shell. Naming a localized string is the separate Windows-owned `textResourceKey` property: it wins where authored, and falls back to `text` when the resource map does not define the key, which keeps a localization gap visible rather than blank. Neither case rejects the document. On a control that shows a glyph, the resolved string becomes the tooltip and the automation name instead of the visible content.
 
 ### Accepted layout fields
 
@@ -133,9 +135,9 @@ A field the document does not author leaves the corresponding `Style` setter in 
 | `ScrollViewer` | `track.detail`, `track.table` |
 | `Border` | `track.coverArt` |
 | `NavigationView` | `windows.navigationPane` in `navigationView` presentation |
-| `MenuBar` | `windows.menuBar` |
+| `MenuBar` | `app.menuBar` |
 | `AutoSuggestBox` | `track.quickFilter` |
-| `Button` | `track.presentationButton`, `playback.transportButton`, `playback.soulButton`, `playback.outputDeviceButton`, `playback.volumeControl` in `flyout` presentation, `actionButton`, `menuButton` |
+| `Button` | `track.presentationButton`, `playback.transportButton`, `playback.soulButton`, `playback.outputDeviceSelector`, `playback.volumeControl` in `flyout` presentation, `actionButton`, `menuButton` |
 | `Slider` | `playback.seekSlider`, `playback.volumeControl` in `inline` presentation |
 | `TextBlock` | `label`, `playback.timeLabel`, `status.message`, `status.selectionInfo`, `status.trackCount`, `windows.libraryPath` |
 

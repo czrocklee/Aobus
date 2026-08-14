@@ -8,6 +8,7 @@
 #include "pch.h"
 #include "platform/StringResources.h"
 #include <ao/Error.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
@@ -31,17 +32,28 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Controls::ToolTipService;
 
     /**
-     * @brief The display string a node's `resourceKey` names.
+     * @brief The words @p node asks to show.
      *
-     * A key that no resource defines resolves to the key itself, which keeps a
-     * localization gap visible in the shell instead of silently blanking a
-     * control. The document is still structurally valid, so it must not reject
+     * The shared `text` property is those words verbatim, so a document setting
+     * it reads the same in every shell. `textResourceKey` is this shell's own
+     * way to name a localized string instead; it wins when present, and falls
+     * back to `text` when the dictionary does not define it, which keeps a
+     * localization gap visible rather than blank.
+     *
+     * The document stays structurally valid either way, so this must not reject
      * the candidate.
      */
     std::string resolvedText(uimodel::LayoutNode const& node)
     {
-      auto const key = node.propertyOr<std::string>("resourceKey", {});
-      return key.empty() ? std::string{} : resourceString(key);
+      auto const text = node.propertyOr<std::string>(uimodel::kTextProp, {});
+
+      if (auto const key = node.propertyOr<std::string>("textResourceKey", {}); !key.empty())
+      {
+        auto resolved = resourceString(key);
+        return resolved == key && !text.empty() ? text : resolved;
+      }
+
+      return text;
     }
 
     /// Give @p button a glyph, and describe it by @p text when the glyph carries no words.
@@ -115,19 +127,19 @@ namespace ao::winui::layout
   void registerGenericComponents(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      "label",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::Label),
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<LabelComponent>(resolvedText(node)); });
 
     registry.registerComponent(
-      "actionButton",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::ActionButton),
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<ActionButtonComponent>(node.propertyOr<std::string>("glyph", {}), resolvedText(node));
       });
 
     registry.registerComponent(
-      "menuButton",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::MenuButton),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         auto const menuId = node.propertyOr<std::string>("menuId", "modernOverflow");

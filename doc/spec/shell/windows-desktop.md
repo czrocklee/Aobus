@@ -254,9 +254,12 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   protect preparation failure, release-before-launch ordering, and fail-closed
   root candidate mutation.
 - [`WinUiErrorBoundaryTest.cpp`](../../../test/unit/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
-- WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui/) are
-  compiled only by the native Windows profile. The shared desktop rule tests
-  compile into `ao_core_test` on Linux and Windows.
+- WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui/) that
+  need a native host are compiled only by the native Windows profile. Windows
+  shell policy carrying no WinRT dependency - settings compatibility,
+  output-preference resolution, root-commit sequencing, the component catalog,
+  and the keyboard-accelerator plan - compiles into `ao_core_test` on every
+  host, as do the shared desktop rule tests.
 - Native Debug and Release `winui` builds protect `aobus-winui-lib`, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.
 
 ## Related documents

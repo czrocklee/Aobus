@@ -279,6 +279,7 @@ The successor restores no playback before its root commit. Commit failure
 preserves the prior in-memory settings snapshot, permanently seals playback
 writes, and leaves the target runtime usable for non-playback persistence.
 After successor activation, initial-scan or explicit-rescan planning and application failures are presented against that active session and do not resurrect the previous process.
+What a finished scan is reported as - its verdict, severity, retention, and sentence - is decided once in UIModel and enumerated by the [library scan report reference](../reference/shell/library-scan-report.md); a session posts that decision rather than reaching its own.
 An Open Library request may cancel an active scan through ordinary parent teardown; explicit Rescan still has no public cancellation or supersession command.
 The dispatcher executor is the only route by which runtime callbacks may update XAML.
 Window controllers, projections, resource loader, SMTC bridge, and artwork tasks are unbound before the session releases its unique runtime.

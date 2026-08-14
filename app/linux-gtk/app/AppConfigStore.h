@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <filesystem>
@@ -13,11 +14,6 @@ namespace ao::rt
 {
   struct AppPrefsState;
   struct AppSessionState;
-}
-
-namespace ao::rt
-{
-  class ConfigStore;
 }
 
 namespace ao::gtk
@@ -33,6 +29,15 @@ namespace ao::gtk
   {
   public:
     explicit AppConfigStore(std::filesystem::path const& configPath);
+
+    /**
+     * @brief A store for a session with no configuration directory to own.
+     *
+     * Everything reads as unset and every write keeps nothing, so the window
+     * opens on defaults and forgets them on exit. See
+     * `rt::ConfigStore::NoLocation` for why writes still report success.
+     */
+    explicit AppConfigStore(rt::ConfigStore::NoLocation /*noLocation*/);
     ~AppConfigStore();
 
     AppConfigStore(AppConfigStore const&) = delete;

@@ -14,7 +14,7 @@ root:
     vexpand: true
   children:
     - id: classic-menu-bar
-      type: windows.menuBar
+      type: app.menuBar
       layout:
         hexpand: true
         halign: start
@@ -63,7 +63,7 @@ root:
         - id: classic-time
           type: playback.timeLabel
           props:
-            variant: combined
+            mode: combined
           layout:
             widthRequest: 110
             halign: center
@@ -90,14 +90,14 @@ root:
         - id: classic-open-library
           type: actionButton
           props:
-            resourceKey: LibraryOpenLabel
+            textResourceKey: LibraryOpenLabel
             primaryAction: library.open
           layout:
             valign: center
         - id: classic-rescan
           type: actionButton
           props:
-            resourceKey: LibraryRescanLabel
+            textResourceKey: LibraryRescanLabel
             primaryAction: library.rescan
           layout:
             valign: center

@@ -23,7 +23,7 @@ root:
         - id: modern-app-title
           type: label
           props:
-            resourceKey: AppTitleValue
+            textResourceKey: AppTitleValue
           layout:
             halign: start
             valign: center
@@ -108,7 +108,7 @@ root:
                     - id: modern-inspector-toggle
                       type: actionButton
                       props:
-                        resourceKey: InspectorToggleTooltip
+                        textResourceKey: InspectorToggleTooltip
                         glyph: ""
                         primaryAction: shell.toggleInspector
                       layout:
@@ -118,7 +118,7 @@ root:
                       type: menuButton
                       props:
                         menuId: modernOverflow
-                        resourceKey: MoreMenuTooltip
+                        textResourceKey: MoreMenuTooltip
                         glyph: ""
                       layout:
                         valign: center
@@ -205,21 +205,21 @@ root:
                 valign: center
               children:
                 - id: modern-output-device
-                  type: playback.outputDeviceButton
+                  type: playback.outputDeviceSelector
                   layout:
                     valign: center
                     styleKey: ChromeLessButtonStyle
                 - id: modern-elapsed
                   type: playback.timeLabel
                   props:
-                    variant: elapsed
+                    mode: elapsed
                   layout:
                     valign: center
                     styleKey: ModernTimeLabelStyle
                 - id: modern-shuffle
                   type: playback.transportButton
                   props:
-                    command: shuffle
+                    command: toggleShuffle
                   layout:
                     valign: center
                     styleKey: ChromeLessButtonStyle
@@ -250,14 +250,14 @@ root:
                 - id: modern-repeat
                   type: playback.transportButton
                   props:
-                    command: repeat
+                    command: cycleRepeat
                   layout:
                     valign: center
                     styleKey: ChromeLessButtonStyle
                 - id: modern-duration
                   type: playback.timeLabel
                   props:
-                    variant: duration
+                    mode: duration
                   layout:
                     valign: center
                     styleKey: ModernTimeLabelStyle
@@ -286,7 +286,7 @@ root:
                   type: menuButton
                   props:
                     menuId: nowPlayingOverflow
-                    resourceKey: MoreMenuTooltip
+                    textResourceKey: MoreMenuTooltip
                     glyph: ""
                   layout:
                     valign: center

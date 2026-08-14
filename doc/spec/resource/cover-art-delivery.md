@@ -109,7 +109,7 @@ The slot defaults are:
 | Inspector or track detail | `vinyl` |
 | Now Playing | `equalizer` |
 
-GTK exposes those choices through `tracks.table.groupCoverPlaceholderStyle`, `track.coverArt.placeholderStyle`, and `playback.image.placeholderStyle`.
+GTK exposes those choices through `track.table.groupCoverPlaceholderStyle`, `track.coverArt.placeholderStyle`, and `playback.image.placeholderStyle`.
 Unknown values fall back to the slot default and produce a diagnostic.
 WinUI exposes the inspector choice through `track.coverArt.placeholderStyle` in its shell preset documents, and uses the fixed mapping wherever a slot authors nothing. Neither the group heading nor the Now Playing slot is authored, and no placeholder choice is persisted.
 

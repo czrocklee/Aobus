@@ -10,6 +10,7 @@
 #include "layout/runtime/UiSubscription.h"
 #include "pch.h"
 #include <ao/Error.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/utility/Path.h>
@@ -423,7 +424,7 @@ namespace ao::winui::layout
       });
 
     registry.registerComponent(
-      "windows.menuBar",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::MenuBar),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         if (!ctx.menus.composeMenuBar)

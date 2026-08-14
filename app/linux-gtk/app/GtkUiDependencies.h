@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
@@ -11,10 +12,6 @@
 #include <functional>
 #include <string>
 
-namespace ao::audio
-{
-  struct OutputDeviceSelection;
-}
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
@@ -60,7 +57,7 @@ namespace ao::gtk
     std::function<void(ao::ListId parentListId, std::string expression)> createSmartListFromExpression{};
 
     /// Records the exact route requested through any main-window selector.
-    std::function<void(audio::OutputDeviceSelection const&)> onOutputDeviceSelectionRequested{};
+    uimodel::OutputDeviceIntent outputDeviceIntent;
 
     /// Shell menu model, supplied post-construction by MainWindow (not part of coordinator wiring).
     Glib::RefPtr<Gio::MenuModel> menuModelPtr{};

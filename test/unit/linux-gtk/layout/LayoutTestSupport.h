@@ -14,6 +14,7 @@
 
 namespace Gtk
 {
+  class Widget;
   class Window;
 }
 
@@ -104,4 +105,16 @@ namespace ao::gtk::layout::test
     struct State;
     std::unique_ptr<State> _statePtr;
   };
+
+  /**
+   * @brief Whether @p widget or anything under it is an unknown-type placeholder.
+   *
+   * A registry answers an unknown component type with a red placeholder label
+   * rather than a failure, so a document naming a type that was renamed away
+   * still builds a widget tree of the expected shape. A test that only checks
+   * the enclosing container therefore keeps passing while it exercises nothing
+   * but error placeholders; anything asserting a document "builds" has to ask
+   * this as well.
+   */
+  bool containsLayoutErrorPlaceholder(Gtk::Widget& widget);
 } // namespace ao::gtk::layout::test

@@ -17,6 +17,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -46,7 +47,7 @@ namespace ao::gtk::layout::editor::test
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{};
+    auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = *runtimePtr,
@@ -111,7 +112,7 @@ namespace ao::gtk::layout::editor::test
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{};
+    auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = *runtimePtr,

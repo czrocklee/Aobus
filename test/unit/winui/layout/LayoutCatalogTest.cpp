@@ -6,6 +6,7 @@
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/winui/layout/ElementKind.h>
@@ -41,23 +42,111 @@ namespace ao::winui::test
     CHECK_FALSE(catalog.descriptor("tabs").has_value());
     CHECK_FALSE(catalog.descriptor("absoluteCanvas").has_value());
     CHECK_FALSE(catalog.descriptor("responsiveClass").has_value());
-    CHECK_FALSE(catalog.descriptor("app.menuBar").has_value());
+    CHECK_FALSE(catalog.descriptor("collapsibleSplit").has_value());
+  }
+
+  TEST_CASE("layoutCatalog - describes every shared component the way the vocabulary does", "[winui][unit][layout]")
+  {
+    // A Windows-only change cannot quietly give a shared type a second meaning:
+    // whatever this catalog registers under a shared name has to match the one
+    // definition both shells build from.
+    auto const departures = uimodel::sharedVocabularyDepartures(layoutCatalog());
+
+    for (auto const& departure : departures)
+    {
+      UNSCOPED_INFO(departure);
+    }
+
+    CHECK(departures.empty());
   }
 
   TEST_CASE("layoutCatalog - action slots are injected only where the policy allows them", "[winui][unit][layout]")
   {
     auto const catalog = layoutCatalog();
 
+    // Asserting the primary slot alone is how this shell quietly lost its
+    // right-click binding once: adopting a shared descriptor narrowed the
+    // policy, the binder still implemented the gesture, and nothing noticed.
+    // Every slot `ActionBinder` binds is named here - and the one it refuses is
+    // named too, because offering a slot the binder rejects fails the whole
+    // node at build time after the document already validated.
     auto const optButton = catalog.descriptor("actionButton");
     REQUIRE(optButton);
-    CHECK(optButton->actionPolicy.isSlotAllowed(uimodel::LayoutActionSlot::PrimaryClick));
+
+    for (auto const slot : {uimodel::LayoutActionSlot::PrimaryClick,
+                            uimodel::LayoutActionSlot::PrimaryLongPress,
+                            uimodel::LayoutActionSlot::SecondaryClick})
+    {
+      INFO("slot " << static_cast<int>(slot));
+      CHECK(optButton->actionPolicy.isSlotAllowed(slot));
+    }
+
+    CHECK_FALSE(optButton->actionPolicy.isSlotAllowed(uimodel::LayoutActionSlot::SecondaryLongPress));
 
     auto const optLabel = catalog.descriptor("label");
     REQUIRE(optLabel);
     CHECK_FALSE(optLabel->actionPolicy.isSlotAllowed(uimodel::LayoutActionSlot::PrimaryClick));
   }
 
-  TEST_CASE("layoutCatalog - text-bearing components name their string through a resource key", "[winui][unit][layout]")
+  TEST_CASE("layoutCatalog - no component offers a slot this shell cannot bind", "[winui][unit][layout]")
+  {
+    // The catalog decides what a document may author and `ActionBinder` decides
+    // what the shell can honor. Where they disagree, a document passes
+    // validation and is then rejected in full while being built, which reads to
+    // the author as the shell breaking on a layout it just accepted.
+    auto const catalog = layoutCatalog();
+
+    for (auto const& descriptor : catalog.descriptors())
+    {
+      INFO(descriptor.type);
+      CHECK_FALSE(descriptor.actionPolicy.isSlotAllowed(uimodel::LayoutActionSlot::SecondaryLongPress));
+    }
+  }
+
+  TEST_CASE("layoutCatalog - localization is a shell property, not a second meaning for shared text",
+            "[winui][unit][layout]")
+  {
+    // `text` is the words a reader sees, and a document that sets it must read
+    // the same in every shell. Resolving it against this shell's resource
+    // dictionary made `text: AppTitleValue` show "Aobus" here and
+    // "AppTitleValue" in GTK - one property, two meanings. Naming a resource is
+    // this shell's own property instead.
+    auto const catalog = layoutCatalog();
+
+    for (auto const* const type : {"label", "actionButton", "menuButton"})
+    {
+      INFO(type);
+      auto const optDescriptor = catalog.descriptor(type);
+      REQUIRE(optDescriptor);
+
+      auto const named = [&optDescriptor](std::string_view const name)
+      { return std::ranges::any_of(optDescriptor->props, [name](auto const& prop) { return prop.name == name; }); };
+
+      CHECK(named(uimodel::kTextProp));
+      CHECK(named("textResourceKey"));
+    }
+  }
+
+  TEST_CASE("layoutCatalog - the soul button names its own inner mark", "[winui][unit][layout]")
+  {
+    // GTK's `glyph` picks between two static ornaments; this shell draws the
+    // live transport icon and only decides whether to draw it. Sharing the name
+    // would have one property answering two questions.
+    auto const catalog = layoutCatalog();
+    auto const optSoul = catalog.descriptor("playback.soulButton");
+    REQUIRE(optSoul);
+
+    auto const named = [&optSoul](std::string_view const name)
+    { return std::ranges::any_of(optSoul->props, [name](auto const& prop) { return prop.name == name; }); };
+
+    CHECK(named("showGlyph"));
+    CHECK_FALSE(named("glyph"));
+    // The shared soul properties both shells honor identically stay shared.
+    CHECK(named(uimodel::kStrokeWidthProp));
+    CHECK(named(uimodel::kGlyphScaleProp));
+  }
+
+  TEST_CASE("layoutCatalog - text-bearing components carry the shared text property", "[winui][unit][layout]")
   {
     auto const catalog = layoutCatalog();
 
@@ -68,13 +157,13 @@ namespace ao::winui::test
       return std::ranges::any_of(optDescriptor->props, [property](auto const& prop) { return prop.name == property; });
     };
 
-    CHECK(hasProperty("label", "resourceKey"));
-    CHECK(hasProperty("actionButton", "resourceKey"));
+    CHECK(hasProperty("label", uimodel::kTextProp));
+    CHECK(hasProperty("actionButton", uimodel::kTextProp));
     // A glyph-only menu button still needs a tooltip and an automation name.
-    CHECK(hasProperty("menuButton", "resourceKey"));
+    CHECK(hasProperty("menuButton", uimodel::kTextProp));
 
-    // The library root is shell state, not authored text, so it carries no key.
-    CHECK_FALSE(hasProperty("windows.libraryPath", "resourceKey"));
+    // The library root is shell state, not authored text, so it carries none.
+    CHECK_FALSE(hasProperty("windows.libraryPath", uimodel::kTextProp));
   }
 
   TEST_CASE("layoutCatalog - the Soul button defaults resolve against the Windows action catalog",

@@ -6,6 +6,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
@@ -14,7 +15,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,13 +34,13 @@ namespace ao::gtk::layout
       {
         auto orientation = Gtk::Orientation::VERTICAL;
 
-        if (node.propertyOr<std::string>("orientation", "") == "horizontal")
+        if (node.propertyOr<std::string>(kOrientationProp, "") == "horizontal")
         {
           orientation = Gtk::Orientation::HORIZONTAL;
         }
 
         _box.set_orientation(orientation);
-        _box.set_spacing(static_cast<std::int32_t>(node.propertyOr<std::int64_t>("spacing", 0)));
+        _box.set_spacing(static_cast<std::int32_t>(node.propertyOr<std::int64_t>(kSpacingProp, 0)));
         _box.set_homogeneous(node.propertyOr<bool>("homogeneous", false));
 
         for (auto const& childNode : node.children)
@@ -66,24 +66,11 @@ namespace ao::gtk::layout
 
   void registerBoxComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "box",
-                                .displayName = "Box",
-                                .category = LayoutComponentCategory::Container,
-                                .props = {{.name = "orientation",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Orientation",
-                                           .defaultValue = LayoutValue{"vertical"},
-                                           .enumValues = {"vertical", "horizontal"}},
-                                          {.name = "spacing",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Spacing",
-                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}},
-                                          {.name = "homogeneous",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Homogeneous",
-                                           .defaultValue = LayoutValue{false}}},
-                                .minChildren = 0,
-                                .optMaxChildren = std::nullopt},
+    registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::Box),
+                                                   {{.name = "homogeneous",
+                                                     .kind = LayoutPropertyKind::Bool,
+                                                     .label = "Homogeneous",
+                                                     .defaultValue = LayoutValue{false}}}),
                                createBox);
   }
 } // namespace ao::gtk::layout

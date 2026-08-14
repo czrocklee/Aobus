@@ -34,6 +34,11 @@ namespace ao::rt
   {
   }
 
+  ConfigStore::ConfigStore(NoLocation /*noLocation*/)
+    : _yamlErrorState{"<no configuration location>"}, _hasLocation{false}
+  {
+  }
+
   Result<bool> ConfigStore::contains(std::string_view const group)
   {
     if (auto const loadedRes = ensureLoaded(); !loadedRes)
@@ -79,6 +84,15 @@ namespace ao::rt
   {
     if (_loaded)
     {
+      return {};
+    }
+
+    if (!_hasLocation)
+    {
+      // Nothing was ever written anywhere, so an empty document is the honest
+      // answer: every group reads as absent and callers take their defaults.
+      _root.to_map(0);
+      _loaded = true;
       return {};
     }
 
@@ -160,6 +174,15 @@ namespace ao::rt
   Result<> ConfigStore::commitCandidate(ryml::Tree&& candidate)
   {
     static_assert(std::is_nothrow_move_assignable_v<ryml::Tree>);
+
+    if (!_hasLocation)
+    {
+      // Keep the write in memory so the rest of the session reads back what it
+      // just set, and report success: this store promised no file, so failing
+      // every checkpoint would report a fault that does not exist.
+      _root = std::move(candidate);
+      return {};
+    }
 
     APP_LOG_INFO("Saving config to: {}", _filePath.string());
 

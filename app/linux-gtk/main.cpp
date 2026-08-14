@@ -22,12 +22,14 @@
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/AppPrefsState.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/PlatformDirectories.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gdkmm/display.h>
@@ -668,10 +670,20 @@ namespace
     auto optDiagnosticMessage = std::optional<std::string>{};
     bool startupCompleted = false;
 
-    auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-    auto appConfigStorePtr = std::make_shared<AppConfigStore>(globalConfigPath);
-    auto const layoutsDir = globalConfigPath.parent_path() / "layouts";
-    auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
+    // Nothing names a home or profile location. The window still opens: it runs
+    // on defaults, keeps nothing, and says so once here rather than at every
+    // checkpoint. Refusing to start would be a heavier answer than the loss.
+    auto const configDirRes = utility::applicationConfigDirectory();
+
+    if (!configDirRes)
+    {
+      APP_LOG_WARN("Aobus keeps no preferences this session: {}", configDirRes.error().message);
+    }
+
+    auto appConfigStorePtr = configDirRes ? std::make_shared<AppConfigStore>(*configDirRes / "config.yaml")
+                                          : std::make_shared<AppConfigStore>(rt::ConfigStore::NoLocation{});
+    auto shellLayoutStorePtr = configDirRes ? std::make_shared<ShellLayoutStore>(*configDirRes / "layouts")
+                                            : std::make_shared<ShellLayoutStore>(rt::ConfigStore::NoLocation{});
     auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());
 
     // Preserve reverse-destruction order: application signals/actions close

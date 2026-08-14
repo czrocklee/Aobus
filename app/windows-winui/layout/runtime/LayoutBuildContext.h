@@ -10,6 +10,7 @@
 #include "layout/runtime/ShellLibraryAccess.h"
 #include <ao/async/Signal.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -28,11 +29,6 @@ namespace ao::rt
   class ResourceByteLoader;
   class ViewService;
   class WorkspaceService;
-}
-
-namespace ao::audio
-{
-  struct OutputDeviceSelection;
 }
 
 namespace ao::uimodel
@@ -162,7 +158,7 @@ namespace ao::winui::layout
     PaneSettingsAccess paneSettings;
 
     /// Records the exact route requested through a generation-owned selector.
-    std::function<void(audio::OutputDeviceSelection const&)> onOutputDeviceSelectionRequested{};
+    uimodel::OutputDeviceIntent outputDeviceIntent;
 
     MenuComposer menus;
 

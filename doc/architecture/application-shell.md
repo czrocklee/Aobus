@@ -26,6 +26,7 @@ The [system architecture](system-overview.md) places reusable layout values and 
 UIModel
   LayoutDocument -> bounded preparation -> PreparedLayout
   LayoutComponentCatalog + LayoutActionCatalog
+  SharedLayoutComponentType: the descriptors more than one shell registers
   ShellLayoutSessionModel + component-state policy + keymap model
            |
            v
@@ -70,13 +71,14 @@ These values describe structure, stable command identity, validation metadata, a
 
 [Decision 0004](../decision/0004-adopt-layout-documents-for-winui-shell-composition.md) makes the version 1 layout language the Windows shell composition language while leaving construction with the frontend.
 That boundary has two halves, and the split is by who decides rather than by what compiles.
-UIModel owns what both shells decide the same way: reading the version 1 common layout fields once, walking a candidate against a catalog and a dialect, the parse-expand-validate step, and the `ShellGenerationSequence` that keeps exactly one view generation live.
-The Windows-only `aobus-winui-lib` owns what is this shell's own: its component and action catalogs, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and `ShellStatePolicy` for native-window breakpoints and pane modes.
+UIModel owns what both shells decide the same way: reading the version 1 common layout fields once, walking a candidate against a catalog and a dialect, the parse-expand-validate step, the `ShellGenerationSequence` that keeps exactly one view generation live, and the component vocabulary a type belongs to when both shells present it.
+The Windows-only `aobus-winui-lib` owns what is this shell's own: which of those types it registers and what it adds to them, the types only Windows has, its action catalog, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and `ShellStatePolicy` for native-window breakpoints and pane modes.
 The two built-in preset documents ship under `app/windows-winui/layout/`.
 The [Windows layout catalog reference](../reference/windows/layout-catalog.md) owns those exact surfaces.
 
 Both halves name XAML type and resource-scope identities as values rather than as C++/WinRT types, so the pure rules remain testable without constructing a XAML host.
-Being portable at the source level is not what makes something shared: a catalog that registers `windows.navigationPane` speaks for one shell however cleanly it compiles, so it lives in `aobus-winui-lib` and is tested only by the native Windows suite.
+Being portable at the source level is not what makes something shared: a catalog that registers `windows.navigationPane` speaks for one shell however cleanly it compiles, so it lives in `aobus-winui-lib`.
+Where it is gated is a separate question from who owns it. The catalog carries no WinRT, and what it has to get right - that a type both shells present keeps one meaning - is exactly what a change made on Linux can break unseen, so it is built and tested on every host.
 Sharing the language is not sharing a runtime: there is no cross-frontend build plan or responsive classifier, GTK uses none of these contracts, and Windows keeps native construction, parent placement, controller binding, generation-owned view adapters and the focused-selection projection its components share, `winui::ShellStatePolicy` width boundaries, and `winui::DesktopSettings` pane persistence.
 
 The WinUI window builds its shell from the selected preset. `MainWindow.xaml` keeps the window frame, the single layout host, `RootGrid.Resources`, styles, and compiled `DataTemplate` resources; it composes no shell of its own.
@@ -310,7 +312,7 @@ The selected root is persisted only after successor activation; its initial scan
 - The UIModel organization guardrail in [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) protects platform-neutral placement.
 - [`AssertWinUiStateSubscriptions.cmake`](../../cmake/AssertWinUiStateSubscriptions.cmake) prevents the removed WinUI virtual-callback and raw-observer fan-out contract from returning on platforms without a native widget-test host.
 - [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) enforces narrow WinUI generation and leaf dependencies during native builds.
-- Windows-native tests under [`test/unit/winui/`](../../test/unit/winui/) protect breakpoints, persistence, theme fallback, startup/restart policy, shell vocabulary, and command-line behavior; they are included in `ao_core_test` only on Windows. Shared UIModel tests protect Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect `aobus-winui-lib`, XAML, generated C++/WinRT, PRI resources, and final executable composition; the current repository has no WinUI widget-test host.
+- Tests under [`test/unit/winui/`](../../test/unit/winui/) protect breakpoints, persistence, theme fallback, startup/restart policy, shell vocabulary, and command-line behavior. Those needing a native host are included in `ao_core_test` only on Windows; Windows shell policy carrying no WinRT dependency - settings compatibility, output-preference resolution, root-commit sequencing, the component catalog, and the keyboard-accelerator plan - is compiled and run on every host, because those are the rules a Linux-only change is most likely to break unnoticed. Shared UIModel tests protect Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect `aobus-winui-lib`, XAML, generated C++/WinRT, PRI resources, and final executable composition; the current repository has no WinUI widget-test host.
 
 ## Related documents
 
@@ -325,6 +327,7 @@ The selected root is persisted only after successor activation; its initial scan
 - [Layout document reference](../reference/shell/layout-document.md)
 - [Layout component-state reference](../reference/shell/layout-state.md)
 - [Layout catalog and action reference](../reference/shell/layout-catalog.md)
+- [Shared component vocabulary](../reference/shell/component-vocabulary.md)
 - [Keyboard map reference](../reference/shell/keymap.md)
 - [Windows desktop shell specification](../spec/shell/windows-desktop.md)
 - [Windows desktop state reference](../reference/windows/desktop-state.md)

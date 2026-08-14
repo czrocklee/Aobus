@@ -110,7 +110,9 @@ layout:
         orientation: horizontal
         spacing: 6
       children:
-        - type: playback.playPauseButton
+        - type: playback.transportButton
+          props:
+            command: playPause
 ```
 
 ## Validation rules

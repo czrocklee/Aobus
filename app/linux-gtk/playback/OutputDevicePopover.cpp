@@ -6,8 +6,8 @@
 #include "OutputDeviceListItems.h"
 #include "layout/LayoutConstants.h"
 #include <ao/audio/Device.h>
-#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <giomm/liststore.h>
@@ -23,7 +23,6 @@
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,8 +38,8 @@ namespace ao::gtk
   } // namespace
 
   OutputDevicePopover::OutputDevicePopover(rt::PlaybackService& playback,
-                                           Gtk::PositionType position,
-                                           std::function<void(audio::OutputDeviceSelection const&)> onSelected)
+                                           uimodel::OutputDeviceIntent intent,
+                                           Gtk::PositionType position)
     : _outputDeviceViewModel{playback,
                              [this](ao::uimodel::OutputDeviceViewState const& view)
                              {
@@ -68,7 +67,7 @@ namespace ao::gtk
                                  }
                                }
                              },
-                             std::move(onSelected)}
+                             std::move(intent)}
   {
     set_autohide(true);
     set_position(position);

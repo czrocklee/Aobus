@@ -8,6 +8,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/rt/AppPrefsState.h>
+#include <ao/rt/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -16,6 +17,28 @@
 
 namespace ao::gtk::test
 {
+  TEST_CASE("AppConfigStore - a session with no configuration directory still opens", "[gtk][unit][app][config]")
+  {
+    // Reached when the platform names no home at all. The window runs on
+    // defaults and forgets them; it does not refuse to start, and it does not
+    // write into whatever directory the process was launched from.
+    auto configStore = AppConfigStore{rt::ConfigStore::NoLocation{}};
+
+    auto windowState = WindowState{};
+    windowState.width = 1200;
+    windowState.height = 800;
+    configStore.loadWindow(windowState);
+
+    CHECK(windowState.width == 1200);
+    CHECK(windowState.height == 800);
+
+    auto saved = WindowState{};
+    saved.width = 1440;
+    configStore.saveWindow(saved);
+
+    CHECK_FALSE(std::filesystem::exists("config.yaml"));
+  }
+
   TEST_CASE("AppConfigStore - persists session and application preferences", "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};

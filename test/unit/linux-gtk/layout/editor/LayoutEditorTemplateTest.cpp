@@ -98,7 +98,7 @@ namespace ao::gtk::layout::editor::test
       int const expectedChildren = 8;
       CHECK(bar.children.size() == expectedChildren);
       REQUIRE(bar.children.size() >= 8);
-      CHECK(bar.children[4].type == "status.activityStatus");
+      CHECK(bar.children[4].type == "status.activity");
       CHECK(bar.children[5].type == "status.selectionInfo");
       CHECK(bar.children[6].type == "separator");
       CHECK(bar.children[7].type == "status.trackCount");
@@ -132,7 +132,7 @@ namespace ao::gtk::layout::editor::test
       auto const& bottomEnd = bottomContent.children[2];
 
       REQUIRE(!bottomEnd.children.empty());
-      CHECK(bottomEnd.children[0].type == "status.activityStatus");
+      CHECK(bottomEnd.children[0].type == "status.activity");
       CHECK(bottomEnd.children[0].propertyOr<std::string>("variant", "") == "ambient");
       CHECK(bottomEnd.children[0].propertyOr<std::string>("idleBehavior", "") == "hidden");
     }

@@ -11,7 +11,8 @@ namespace ao::uimodel
 {
   enum class PlaybackTimeMode : std::uint8_t
   {
-    Default,
+    /// Elapsed and duration together, which is what a reading shows unless asked for less.
+    Combined,
     Elapsed,
     Duration
   };

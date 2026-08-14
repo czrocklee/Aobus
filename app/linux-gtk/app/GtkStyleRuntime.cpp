@@ -4,6 +4,7 @@
 #include "app/GtkStyleRuntime.h"
 
 #include <ao/rt/Log.h>
+#include <ao/utility/PlatformDirectories.h>
 
 #include <gdkmm/display.h>
 #include <giomm/dbusconnection.h>
@@ -201,7 +202,14 @@ namespace ao::gtk
       return;
     }
 
-    auto const userCssPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "user.css";
+    auto const configDirRes = utility::applicationConfigDirectory();
+
+    if (!configDirRes)
+    {
+      return;
+    }
+
+    auto const userCssPath = *configDirRes / "user.css";
 
     if (!std::filesystem::exists(userCssPath))
     {
@@ -235,7 +243,14 @@ namespace ao::gtk
       Gtk::StyleContext::remove_provider_for_display(displayPtr, _userProviderPtr);
     }
 
-    auto const userCssPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "user.css";
+    auto const configDirRes = utility::applicationConfigDirectory();
+
+    if (!configDirRes)
+    {
+      return;
+    }
+
+    auto const userCssPath = *configDirRes / "user.css";
 
     if (!std::filesystem::exists(userCssPath))
     {
@@ -371,8 +386,14 @@ namespace ao::gtk
 
   void GtkStyleRuntime::startAobusConfigMonitor()
   {
-    auto const aobusDir = std::filesystem::path{Glib::get_user_config_dir()} / "aobus";
+    auto const configDirRes = utility::applicationConfigDirectory();
 
+    if (!configDirRes)
+    {
+      return;
+    }
+
+    auto const& aobusDir = *configDirRes;
     std::filesystem::create_directories(aobusDir);
 
     auto const aobusFilePtr = Gio::File::create_for_path(aobusDir.string());

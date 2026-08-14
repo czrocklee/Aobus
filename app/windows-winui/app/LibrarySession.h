@@ -11,8 +11,10 @@
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
@@ -78,6 +80,8 @@ namespace ao::winui
       return _presentationPreferences;
     }
     uimodel::ListPresentationPreferenceState& presentationPreferences() noexcept { return _presentationPreferences; }
+    /// The effective keyboard map: the shipped defaults with the user's overrides merged in.
+    uimodel::KeymapModel const& keymap() const noexcept { return _keymap; }
     std::filesystem::path const& stateRoot() const noexcept { return _stateRoot; }
     rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> saveSettings();
@@ -116,7 +120,7 @@ namespace ao::winui
     void finishActiveScan(
       std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result);
     void reportStatus(std::string status);
-    void reportFailure(Error const& error);
+    void reportScanFailure(uimodel::LibraryScanOutcome const& outcome, std::string message);
     void reportBusy();
     void reportReady(std::filesystem::path const& root);
     void requestPlaySelection();
@@ -128,6 +132,7 @@ namespace ao::winui
     DesktopSettings _settings{};
     uimodel::TrackColumnLayoutState _columnLayouts{};
     uimodel::ListPresentationPreferenceState _presentationPreferences{};
+    uimodel::KeymapModel _keymap{};
     std::optional<std::filesystem::path> _optSelectedRootCommit;
     std::unique_ptr<rt::AppRuntime> _runtimePtr;
     std::unique_ptr<uimodel::TrackPresentationCatalog> _presentationCatalogPtr;

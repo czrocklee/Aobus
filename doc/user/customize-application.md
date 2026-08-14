@@ -21,7 +21,7 @@ The application uses your selected appearance, shell layout, output device, and 
    Resolve any reported conflicts before relying on the new chord.
 6. To change shell structure, choose **View → Edit Layout...** or use **Edit Layout...** on the Layout preference page.
    Apply changes to preview them, save to make the authored layout durable, or cancel to restore the pre-editor runtime state.
-7. To change a missing-cover design, select the corresponding `tracks.table`, `track.coverArt`, or `playback.image` component in the Layout Editor and choose `monogram`, `note`, `vinyl`, `equalizer`, or `soul` for its placeholder property.
+7. To change a missing-cover design, select the corresponding `track.table`, `track.coverArt`, or `playback.image` component in the Layout Editor and choose `monogram`, `note`, `vinyl`, `equalizer`, or `soul` for its placeholder property.
    Group headings, track detail, and Now Playing are independent choices; this is layout authoring and has no separate preference page.
    Every style draws only its foreground symbol or text over the surrounding surface; the placeholder has no tile background.
 8. Resize collapsible panels directly in the workspace.

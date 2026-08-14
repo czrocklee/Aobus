@@ -331,8 +331,14 @@ namespace ao::gtk::test
 
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil([&fixture]
-                               { return hasNotification(fixture, rt::NotificationSeverity::Error, "Scan failed"); }));
+    // The count is what makes this actionable: "scan failed" alone leaves the
+    // reader no way to tell one bad file from a whole unreadable library.
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture]
+      {
+        return hasNotification(
+          fixture, rt::NotificationSeverity::Error, "Library scan found 1 unreadable file and no usable changes");
+      }));
 
     std::filesystem::permissions(restrictedDir, std::filesystem::perms::owner_all);
 

@@ -190,7 +190,9 @@ invocations and Visual Studio are unnecessary.
 
 The WinUI graph has one Windows-only static frontend library, `aobus-winui-lib`, which owns all compiled C++, XAML, IDL, and generated C++/WinRT implementation.
 The thin `aobus-winui` executable owns the final link, manifest, string resources, and deployed assets.
-WinUI-owned pure-rule tests are included in `ao_core_test` only by the normal native Windows profile; Linux neither builds those tests nor exports a second cross-platform WinUI model library.
+WinUI-owned rules that need native types — XAML elements, C++/WinRT projections, resource dictionaries — are included in `ao_core_test` only by the normal native Windows profile.
+WinUI-owned rules that name no platform API are compiled into `ao_core_test` on every host instead, so the settings schema, output-preference resolution, root-commit transaction, restart sequencing, and shell-state vocabulary are gated by the Linux run as well.
+Neither case exports a second cross-platform WinUI model library: the sources stay Windows-owned in `aobus-winui-lib`, and the test executable compiles them directly.
 
 The portal uses one concurrency limit for both CMake's project scheduling and
 MSBuild's cross-project C++ compiler scheduling. By default it leaves one

@@ -8,6 +8,7 @@
 #include "playback/VolumeControlWidget.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
@@ -30,7 +31,7 @@ namespace ao::gtk::layout
       VolumeControlComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _control{ctx.runtime.playback()}
       {
-        auto const orient = node.propertyOr<std::string>("orientation", "horizontal");
+        auto const orient = node.propertyOr<std::string>(kOrientationProp, "horizontal");
 
         if (orient == "vertical")
         {
@@ -52,11 +53,15 @@ namespace ao::gtk::layout
 
   void registerVolumeControlComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.volumeControl",
-                                .displayName = "Volume Control",
-                                .category = LayoutComponentCategory::Playback,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createVolumeControl);
+    // GTK can stand the slider on end, which no other shell offers yet, and
+    // which the descriptor has to admit for a document to reach the code below.
+    registry.registerComponent(
+      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackVolumeControl),
+                          {{.name = std::string{kOrientationProp},
+                            .kind = LayoutPropertyKind::Enum,
+                            .label = "Orientation",
+                            .defaultValue = LayoutValue{"horizontal"},
+                            .enumValues = {"horizontal", "vertical"}}}),
+      createVolumeControl);
   }
 } // namespace ao::gtk::layout

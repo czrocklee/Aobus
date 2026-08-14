@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <cstdint>
@@ -18,7 +19,10 @@ namespace ao::tui
   class OutputDeviceController final
   {
   public:
-    OutputDeviceController(rt::PlaybackService& playback, std::function<void()> onChanged = {});
+    /// @param intent Where a chosen route is recorded; `OutputDeviceIntent::discarded()` keeps none.
+    OutputDeviceController(rt::PlaybackService& playback,
+                           uimodel::OutputDeviceIntent intent,
+                           std::function<void()> onChanged = {});
 
     uimodel::OutputDeviceViewState const& viewState() const noexcept { return _view; }
     std::int32_t selectedRow() const noexcept { return _selectedRow; }

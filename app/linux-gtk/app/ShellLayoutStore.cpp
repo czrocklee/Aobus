@@ -24,6 +24,11 @@ namespace ao::gtk
   {
   }
 
+  ShellLayoutStore::ShellLayoutStore(rt::ConfigStore::NoLocation /*noLocation*/, uimodel::LayoutDocumentLimits limits)
+    : _limits{std::move(limits)}, _hasLocation{false}
+  {
+  }
+
   ShellLayoutStore::~ShellLayoutStore() = default;
   ShellLayoutStore::ShellLayoutStore(ShellLayoutStore&&) noexcept = default;
   ShellLayoutStore& ShellLayoutStore::operator=(ShellLayoutStore&&) noexcept = default;
@@ -38,6 +43,11 @@ namespace ao::gtk
 
   Result<std::optional<uimodel::LayoutDocument>> ShellLayoutStore::load(std::string_view presetId) const
   {
+    if (!_hasLocation)
+    {
+      return std::nullopt;
+    }
+
     auto const path = filePath(presetId);
     auto ec = std::error_code{};
     auto const exists = std::filesystem::exists(path, ec);
@@ -81,7 +91,14 @@ namespace ao::gtk
   {
     if (auto preparedRes = uimodel::prepareLayout(doc, _limits); !preparedRes)
     {
+      // A document that cannot be prepared is rejected wherever it was going,
+      // so this check stays ahead of the no-location exit.
       return std::unexpected{preparedRes.error()};
+    }
+
+    if (!_hasLocation)
+    {
+      return {};
     }
 
     auto const path = filePath(presetId);
@@ -123,6 +140,11 @@ namespace ao::gtk
 
   Result<> ShellLayoutStore::remove(std::string_view presetId)
   {
+    if (!_hasLocation)
+    {
+      return {};
+    }
+
     auto const path = filePath(presetId);
     auto ec = std::error_code{};
 

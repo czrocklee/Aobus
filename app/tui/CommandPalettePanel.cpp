@@ -66,7 +66,10 @@ namespace ao::tui
       {
         if (item.insertText == spec.prefix && item.displayText == commandPrefixDisplayText(spec.prefix))
         {
-          return CommandPaletteEntryDescriptor{.category = spec.category, .shortcut = spec.shortcut};
+          return CommandPaletteEntryDescriptor{
+            .category = spec.category,
+            .shortcut = shortcutFor(spec.optShortcutAction.value_or(spec.action)),
+          };
         }
       }
 
@@ -74,7 +77,7 @@ namespace ao::tui
       {
         if (item.insertText == spec.alias && item.displayText == "/" + std::string{spec.alias})
         {
-          return CommandPaletteEntryDescriptor{.category = spec.category, .shortcut = spec.shortcut};
+          return CommandPaletteEntryDescriptor{.category = spec.category, .shortcut = shortcutFor(spec.action)};
         }
       }
 

@@ -30,14 +30,17 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/input/KeymapStore.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/WinUiErrorBoundary.h>
@@ -146,6 +149,10 @@ namespace ao::winui
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
     }
+
+    // Shortcuts share the settings file: one store, one process, so the whole
+    // document is still written as a unit.
+    _keymap = uimodel::loadKeymap(*_settingsStorePtr, uimodel::defaultKeymap());
 
     auto optPersistedRoot = std::optional<std::filesystem::path>{};
 
@@ -504,23 +511,47 @@ namespace ao::winui
     _operationStatusKey = {};
     _operationActive = false;
 
-    if (!result)
+    // What the scan amounts to, how loudly to say it, and the sentence itself
+    // are decided in uimodel, so this window and the GTK one report the same
+    // scan the same way. A scan that lost files says so here rather than
+    // reporting a plain ready library.
+    auto const outcome = uimodel::decideLibraryScanOutcome(result);
+    auto const severity = uimodel::libraryScanSeverity(outcome.verdict);
+    auto message = uimodel::PresentationTextCatalog{}.libraryScanMessage(outcome);
+
+    _runtimePtr->notifications().post(severity, message, uimodel::libraryScanLifetime(outcome.verdict));
+
+    if (severity == rt::NotificationSeverity::Error)
     {
-      reportFailure(result.error().error);
+      reportScanFailure(outcome, std::move(message));
+      return;
     }
-    else if (result->disposition == uimodel::LibraryScanPlanDisposition::ErrorsOnly)
+
+    if (severity == rt::NotificationSeverity::Warning)
     {
-      reportFailure(Error{
-        .code = Error::Code::FormatRejected,
-        .message = formatResource(
-          result->summary.errorCount == 1 ? "LibraryScanUnreadableOneFormat" : "LibraryScanUnreadableManyFormat",
-          result->summary.errorCount),
-      });
+      // The notification feed alone is not enough: only a shell carrying a
+      // `status.activity` component presents it, and the Classic preset does
+      // not. Saying "library ready" while files are missing would leave those
+      // users no indication at all, so the warning takes the status line, which
+      // every shipped preset shows.
+      reportStatus(std::move(message));
+      return;
     }
-    else
+
+    reportReady(_runtimePtr->musicRoot());
+  }
+
+  void LibrarySession::reportScanFailure(uimodel::LibraryScanOutcome const& outcome, std::string message)
+  {
+    if (!_callbacks.onFailure)
     {
-      reportReady(_runtimePtr->musicRoot());
+      return;
     }
+
+    _callbacks.onFailure(Error{
+      .code = outcome.optError ? outcome.optError->code : Error::Code::FormatRejected,
+      .message = std::move(message),
+    });
   }
 
   void LibrarySession::reportStatus(std::string status)
@@ -531,20 +562,6 @@ namespace ao::winui
     }
 
     _callbacks.onStatus(std::move(status));
-  }
-
-  void LibrarySession::reportFailure(Error const& error)
-  {
-    _runtimePtr->notifications().post(rt::NotificationSeverity::Error,
-                                      formatResource("ErrorFormat", error.message),
-                                      rt::NotificationLifetime::history());
-
-    if (!_callbacks.onFailure)
-    {
-      return;
-    }
-
-    _callbacks.onFailure(error);
   }
 
   void LibrarySession::reportBusy()

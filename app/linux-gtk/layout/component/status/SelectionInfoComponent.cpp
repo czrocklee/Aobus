@@ -7,7 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -43,7 +43,6 @@ namespace ao::gtk::layout
   void registerSelectionInfoComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.selectionInfo", .displayName = "Selection Info", .category = LayoutComponentCategory::Status},
-      createSelectionInfo);
+      sharedComponentDescriptor(SharedLayoutComponentType::StatusSelectionInfo), createSelectionInfo);
   }
 } // namespace ao::gtk::layout

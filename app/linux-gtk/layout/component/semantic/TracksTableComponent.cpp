@@ -9,6 +9,7 @@
 #include "track/TrackPageHost.h"
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -28,7 +29,7 @@ namespace ao::gtk::layout
   namespace
   {
     /**
-     * @brief tracks.table
+     * @brief track.table
      */
     class TracksTableComponent final : public LayoutComponent
     {
@@ -50,7 +51,7 @@ namespace ao::gtk::layout
 
         if (!optParsedStyle)
         {
-          APP_LOG_WARN("tracks.table: unknown groupCoverPlaceholderStyle '{}'; using '{}'",
+          APP_LOG_WARN("track.table: unknown groupCoverPlaceholderStyle '{}'; using '{}'",
                        styleId,
                        uimodel::coverArtPlaceholderStyleId(defaultStyle));
         }
@@ -77,20 +78,16 @@ namespace ao::gtk::layout
 
   void registerTracksTableComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "tracks.table",
-                                .displayName = "Tracks Table",
-                                .category = LayoutComponentCategory::Track,
-                                .props = {{.name = "view",
-                                           .kind = LayoutPropertyKind::String,
-                                           .label = "View Source",
-                                           .defaultValue = LayoutValue{"workspace.focused"}},
-                                          {.name = "groupCoverPlaceholderStyle",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Group Cover Placeholder",
-                                           .defaultValue = LayoutValue{"monogram"},
-                                           .enumValues = coverArtPlaceholderStyleIds()}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
+    registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::TrackTable),
+                                                   {{.name = "view",
+                                                     .kind = LayoutPropertyKind::String,
+                                                     .label = "View Source",
+                                                     .defaultValue = LayoutValue{"workspace.focused"}},
+                                                    {.name = "groupCoverPlaceholderStyle",
+                                                     .kind = LayoutPropertyKind::Enum,
+                                                     .label = "Group Cover Placeholder",
+                                                     .defaultValue = LayoutValue{"monogram"},
+                                                     .enumValues = coverArtPlaceholderStyleIds()}}),
                                createTracksTable);
   }
 } // namespace ao::gtk::layout

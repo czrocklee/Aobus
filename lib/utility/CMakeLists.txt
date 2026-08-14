@@ -18,10 +18,10 @@ add_library(ao_utility STATIC
     Xxh3.cpp
 )
 if(WIN32)
-    target_sources(ao_utility PRIVATE AtomicFileWindows.cpp)
+    target_sources(ao_utility PRIVATE AtomicFileWindows.cpp PlatformDirectoriesWindows.cpp)
     target_link_libraries(ao_utility PRIVATE Advapi32)
 else()
-    target_sources(ao_utility PRIVATE AtomicFilePosix.cpp)
+    target_sources(ao_utility PRIVATE AtomicFilePosix.cpp PlatformDirectoriesPosix.cpp)
 endif()
 target_include_directories(ao_utility PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_utility PUBLIC PkgRapidYaml Boost::headers gsl-lite::gsl-lite)

@@ -4,6 +4,7 @@
 #include "OutputDeviceController.h"
 
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <algorithm>
@@ -15,7 +16,9 @@
 
 namespace ao::tui
 {
-  OutputDeviceController::OutputDeviceController(rt::PlaybackService& playback, std::function<void()> onChanged)
+  OutputDeviceController::OutputDeviceController(rt::PlaybackService& playback,
+                                                 uimodel::OutputDeviceIntent intent,
+                                                 std::function<void()> onChanged)
     : _onChanged{std::move(onChanged)}
     , _viewModel{playback,
                  [this](uimodel::OutputDeviceViewState const& view)
@@ -27,7 +30,8 @@ namespace ao::tui
                    {
                      _onChanged();
                    }
-                 }}
+                 },
+                 std::move(intent)}
   {
     refresh();
   }

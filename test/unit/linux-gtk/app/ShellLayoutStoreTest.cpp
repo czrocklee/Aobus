@@ -18,6 +18,26 @@
 
 namespace ao::gtk::test
 {
+  TEST_CASE("ShellLayoutStore - a session with no configuration directory uses the built-in presets",
+            "[gtk][unit][app][layout]")
+  {
+    // An empty directory would resolve preset files relative to the working
+    // directory, so this answers "not customized" instead.
+    auto store = ShellLayoutStore{rt::ConfigStore::NoLocation{}};
+
+    auto const loadedRes = store.load("classic");
+
+    REQUIRE(loadedRes);
+    CHECK_FALSE(loadedRes->has_value());
+
+    auto doc = uimodel::LayoutDocument{};
+    doc.root.type = "box";
+
+    CHECK(store.save(doc, "classic"));
+    CHECK(store.remove("classic"));
+    CHECK_FALSE(std::filesystem::exists("classic.yaml"));
+  }
+
   TEST_CASE("ShellLayoutStore - persists layout documents and default selection", "[gtk][unit][app][layout]")
   {
     auto const tempDir = ao::test::TempDir{};

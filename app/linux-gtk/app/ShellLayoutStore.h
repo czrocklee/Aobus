@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <filesystem>
@@ -30,6 +31,17 @@ namespace ao::gtk
   public:
     explicit ShellLayoutStore(std::filesystem::path layoutsDir,
                               uimodel::LayoutDocumentLimits limits = uimodel::LayoutDocumentLimits{});
+
+    /**
+     * @brief A store for a session with no configuration directory to own.
+     *
+     * Every preset reads as not customized and every write keeps nothing, so
+     * the shell runs on its built-in presets. Without this the empty directory
+     * would resolve preset files relative to whatever directory the process was
+     * launched from, which is a worse answer than keeping nothing.
+     */
+    explicit ShellLayoutStore(rt::ConfigStore::NoLocation /*noLocation*/,
+                              uimodel::LayoutDocumentLimits limits = uimodel::LayoutDocumentLimits{});
     ~ShellLayoutStore();
 
     ShellLayoutStore(ShellLayoutStore const&) = delete;
@@ -48,5 +60,6 @@ namespace ao::gtk
 
     std::filesystem::path _layoutsDir;
     uimodel::LayoutDocumentLimits _limits;
+    bool _hasLocation = true;
   };
 } // namespace ao::gtk

@@ -13,7 +13,7 @@
 namespace ao::winui
 {
   OutputDeviceControl::OutputDeviceControl(OutputDeviceControlConfig config)
-    : _presenter{std::move(config.presenter)}, _onSelectionRequested{std::move(config.onSelectionRequested)}
+    : _presenter{std::move(config.presenter)}, _intent{std::move(config.intent)}
   {
     if (_presenter)
     {
@@ -34,7 +34,7 @@ namespace ao::winui
     unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(
-      playback, [this](uimodel::OutputDeviceViewState const& state) { applyState(state); }, _onSelectionRequested);
+      playback, [this](uimodel::OutputDeviceViewState const& state) { applyState(state); }, _intent);
     _viewModelPtr->refresh();
   }
 

@@ -172,6 +172,7 @@ add_executable(ao_core_test
     unit/utility/Xxh3Test.cpp
     unit/utility/MappedFileTest.cpp
     unit/utility/PathTest.cpp
+    unit/utility/PlatformDirectoriesTest.cpp
     unit/utility/ByteViewTest.cpp
     unit/utility/StringArenaTest.cpp
     unit/utility/StrongTypeTest.cpp
@@ -342,6 +343,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/component/LayoutComponentCatalogTest.cpp
     unit/uimodel/layout/component/LayoutComponentStateTest.cpp
     unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
+    unit/uimodel/layout/component/SharedLayoutComponentTypeTest.cpp
     unit/uimodel/layout/component/StatefulComponentStateTest.cpp
     unit/uimodel/layout/document/LayoutModelTest.cpp
     unit/uimodel/layout/document/LayoutPlacementTest.cpp
@@ -379,6 +381,7 @@ add_executable(ao_core_test
     unit/uimodel/library/property/TrackAuthoringTestSupport.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    unit/uimodel/library/task/LibraryScanOutcomeTest.cpp
     unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
     unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp
     unit/uimodel/library/track/TrackDisplayIndexTest.cpp
@@ -390,8 +393,10 @@ add_executable(ao_core_test
     unit/uimodel/library/track/TrackSelectionRegionPolicyTest.cpp
     unit/uimodel/library/track/TrackSelectionSummaryTest.cpp
     unit/uimodel/playback/now-playing/NowPlayingViewModelTest.cpp
+    unit/uimodel/playback/command/PlaybackCommandTest.cpp
     unit/uimodel/playback/command/PlaybackCommandSurfaceTest.cpp
     unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp
+    unit/uimodel/playback/output/OutputDeviceIntentTest.cpp
     unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
@@ -493,6 +498,7 @@ add_executable(ao_core_test
     unit/runtime/WorkspaceSessionYamlSchemaTest.cpp
     unit/runtime/WorkspaceSessionTest.cpp
     unit/runtime/AppRuntimeTest.cpp
+    unit/runtime/AppStateStoreTest.cpp
     unit/runtime/HeadlessShellTest.cpp
     unit/runtime/library/LibraryExportImportCoverArtTest.cpp
     unit/runtime/library/LibraryExportImportDeltaTest.cpp
@@ -507,7 +513,62 @@ add_executable(ao_core_test
     unit/desktop/LibraryStartupPlannerTest.cpp
     unit/desktop/LibrarySuccessorProtocolTest.cpp
     unit/desktop/LibrarySwitchTest.cpp
+
+    # Every Windows shell source that carries no WinRT dependency is gated on
+    # every host rather than only on a native Windows run: settings
+    # compatibility, output-preference resolution, the root-commit transaction,
+    # restart sequencing, the component catalog and dialect, placement and
+    # style resolution, shell-document validation, theme tokens, and the
+    # keyboard-accelerator plan are all decided in plain C++, and are the rules
+    # a Linux-only change is most likely to break unnoticed. The catalog earns
+    # its place here twice over, since it is where Windows agrees with the
+    # shared component vocabulary.
+    #
+    # The rule is "no WinRT, so every host"; anything left in the WIN32 block
+    # below is there because it needs native types, not because it is Windows
+    # policy.
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopOutputSelection.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopSettingsYamlSchema.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DestructiveLibraryRestart.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SelectedRootCommit.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutCatalog.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/PlacementPlan.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellDocument.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellStatePolicy.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/StyleLookup.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ThemeSurface.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/theme/Theme.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/input/KeyChordAccelerator.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/input/KeymapAcceleratorPlan.cpp
+    unit/winui/DesktopSettingsYamlSchemaTest.cpp
+    unit/winui/ThemeTest.cpp
+    unit/winui/app/DesktopOutputSelectionTest.cpp
+    unit/winui/app/DestructiveLibraryRestartTest.cpp
+    unit/winui/app/SelectedRootCommitTest.cpp
+    unit/winui/input/KeyChordAcceleratorTest.cpp
+    unit/winui/input/KeymapAcceleratorPlanTest.cpp
+    unit/winui/layout/ElementKindTest.cpp
+    unit/winui/layout/LayoutCatalogTest.cpp
+    unit/winui/layout/LayoutDialectTest.cpp
+    unit/winui/layout/PlacementPlanTest.cpp
+    unit/winui/layout/ShellDocumentTest.cpp
+    unit/winui/layout/ShellStatePolicyTest.cpp
+    unit/winui/layout/StyleLookupTest.cpp
+    unit/winui/layout/ThemeSurfaceTest.cpp
 )
+target_include_directories(ao_core_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/app/windows-winui/include")
+
+# The shipped Windows presets are read by the cross-host document tests, which
+# is the point of gating them everywhere: a change made on Linux to shared
+# layout validation must fail here rather than on the next Windows run.
+target_compile_definitions(ao_core_test PRIVATE
+    AOBUS_WINDOWS_LAYOUT_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui/layout"
+    AOBUS_WINDOWS_SHELL_BUILDER_SOURCE="${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellBuilder.cpp"
+    AOBUS_WINDOWS_WINUI_CMAKE="${CMAKE_SOURCE_DIR}/app/windows-winui/CMakeLists.txt"
+    AOBUS_WINDOWS_WINUI_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui")
 
 target_link_libraries(ao_core_test PRIVATE
     ao_fatal_probe_support
@@ -546,48 +607,17 @@ if(WIN32)
     unit/audio/backend/detail/WasapiStringsTest.cpp
     unit/windows/platform/MemoryRandomAccessStreamTest.cpp
 
-    # Windows-owned shell rules are tested only by the native Windows suite.
+    # Windows shell rules that need native types are tested only here.
     # Cross-desktop startup/protocol/launcher rules are supplied by
-    # ao_app_desktop above; the remaining WinUI rules stay native here.
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DestructiveLibraryRestart.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopOutputSelection.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopSettingsYamlSchema.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SelectedRootCommit.cpp
+    # ao_app_desktop above, and the WinRT-free desktop policy is gated on every
+    # host with the portable sources.
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutCatalog.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/PlacementPlan.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellDocument.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellStatePolicy.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/StyleLookup.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ThemeSurface.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/theme/Theme.cpp
-    unit/winui/app/DestructiveLibraryRestartTest.cpp
-    unit/winui/app/DesktopOutputSelectionTest.cpp
-    unit/winui/app/SelectedRootCommitTest.cpp
-    unit/winui/DesktopSettingsYamlSchemaTest.cpp
     unit/winui/FrameResourceTest.cpp
     unit/winui/StringResourceTest.cpp
-    unit/winui/ThemeTest.cpp
     unit/winui/WinUiErrorBoundaryTest.cpp
-    unit/winui/layout/ElementKindTest.cpp
-    unit/winui/layout/LayoutCatalogTest.cpp
-    unit/winui/layout/LayoutDialectTest.cpp
-    unit/winui/layout/PlacementPlanTest.cpp
-    unit/winui/layout/ShellDocumentTest.cpp
-    unit/winui/layout/ShellStatePolicyTest.cpp
-    unit/winui/layout/StyleLookupTest.cpp
-    unit/winui/layout/ThemeSurfaceTest.cpp
   )
-  target_include_directories(ao_core_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/app/windows-winui/include")
   target_compile_definitions(ao_core_test PRIVATE
-    AOBUS_WINDOWS_LAYOUT_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui/layout"
     AOBUS_WINDOWS_FRAME_XAML="${CMAKE_SOURCE_DIR}/app/windows-winui/MainWindow.xaml"
-    AOBUS_WINDOWS_WINUI_CMAKE="${CMAKE_SOURCE_DIR}/app/windows-winui/CMakeLists.txt"
-    AOBUS_WINDOWS_SHELL_BUILDER_SOURCE="${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellBuilder.cpp"
-    AOBUS_WINDOWS_WINUI_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui"
     AOBUS_WINDOWS_RESW="${CMAKE_SOURCE_DIR}/app/windows-winui/Resources/en-US/Resources.resw")
   target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()

@@ -16,6 +16,7 @@
 #include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
 #include <ao/Error.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
@@ -60,58 +61,20 @@ namespace ao::winui::layout
 
     uimodel::PlaybackCommand commandOf(uimodel::LayoutNode const& node)
     {
-      auto const command = node.propertyOr<std::string>("command", "playPause");
-
-      if (command == "play")
-      {
-        return uimodel::PlaybackCommand::Play;
-      }
-
-      if (command == "pause")
-      {
-        return uimodel::PlaybackCommand::Pause;
-      }
-
-      if (command == "stop")
-      {
-        return uimodel::PlaybackCommand::Stop;
-      }
-
-      if (command == "next")
-      {
-        return uimodel::PlaybackCommand::Next;
-      }
-
-      if (command == "previous")
-      {
-        return uimodel::PlaybackCommand::Previous;
-      }
-
-      if (command == "shuffle")
-      {
-        return uimodel::PlaybackCommand::ToggleShuffle;
-      }
-
-      if (command == "repeat")
-      {
-        return uimodel::PlaybackCommand::CycleRepeat;
-      }
-
-      return uimodel::PlaybackCommand::PlayPause;
+      auto const optCommand = uimodel::playbackCommandFor(node.propertyOr<std::string>(uimodel::kCommandProp, ""));
+      return optCommand.value_or(uimodel::PlaybackCommand::PlayPause);
     }
 
     uimodel::PlaybackTimeMode timeModeOf(uimodel::LayoutNode const& node)
     {
-      auto const variant = node.propertyOr<std::string>("variant", "elapsed");
+      auto const mode = node.propertyOr<std::string>(uimodel::kModeProp, "combined");
 
-      if (variant == "duration")
+      if (mode == "duration")
       {
         return uimodel::PlaybackTimeMode::Duration;
       }
 
-      // `combined` shows elapsed and duration together, which is what the
-      // formatter's default mode produces.
-      return variant == "combined" ? uimodel::PlaybackTimeMode::Default : uimodel::PlaybackTimeMode::Elapsed;
+      return mode == "elapsed" ? uimodel::PlaybackTimeMode::Elapsed : uimodel::PlaybackTimeMode::Combined;
     }
 
     /**
@@ -283,7 +246,7 @@ namespace ao::winui::layout
       explicit OutputDeviceButtonComponent(LayoutBuildContext& ctx)
         : _outputDevice{OutputDeviceControlConfig{
             .presenter = _button,
-            .onSelectionRequested = ctx.onOutputDeviceSelectionRequested,
+            .intent = ctx.outputDeviceIntent,
           }}
       {
         _outputDevice.bind(ctx.playback);
@@ -300,16 +263,16 @@ namespace ao::winui::layout
   void registerPlaybackComponents(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      "playback.transportButton",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackTransportButton),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<TransportButtonComponent>(ctx, node); });
 
-    registry.registerComponent("playback.soulButton",
+    registry.registerComponent(uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackSoulButton),
                                [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
                                { return makeSoulButton(ctx, node); });
 
     registry.registerComponent(
-      "playback.seekSlider",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackSeekSlider),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<SeekSliderComponent>(
@@ -317,12 +280,12 @@ namespace ao::winui::layout
       });
 
     registry.registerComponent(
-      "playback.timeLabel",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackTimeLabel),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<TimeLabelComponent>(ctx, node); });
 
     registry.registerComponent(
-      "playback.volumeControl",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackVolumeControl),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<VolumeControlComponent>(
@@ -330,7 +293,7 @@ namespace ao::winui::layout
       });
 
     registry.registerComponent(
-      "playback.outputDeviceButton",
+      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackOutputDeviceSelector),
       [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<OutputDeviceButtonComponent>(ctx); });
 

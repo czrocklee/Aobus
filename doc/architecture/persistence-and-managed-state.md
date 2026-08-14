@@ -90,11 +90,12 @@ Persistence through a shared file mechanism does not transfer that responsibilit
 |---|---|---|
 | Runtime workspace and custom track presentations | `WorkspaceService` | The `ConfigStore` owned by `AppRuntime`, at the path injected by GTK or TUI |
 | Restorable playback intent | `PlaybackSessionPersistence` behind `AppRuntime` | The injected playback-session `ConfigStore`; it may be the workspace store or a separately owned store |
-| Global GTK window, preferences, application session, and keymap state | The GTK workflow plus the runtime/UIModel value owner for each payload | `AppConfigStore` and the GTK composition root |
+| Application-global preferences and session state | `AppStateStore` owns the group names, schemas, and compatibility rule; the frontend owns only the file | Any frontend's `ConfigStore`; today GTK's `AppConfigStore` |
+| Global GTK window and keymap state | The GTK workflow plus the runtime/UIModel value owner for each payload | `AppConfigStore` and the GTK composition root |
 | Customized shell layout documents | UIModel layout document and validation code, coordinated by the GTK shell-layout workflow | `ShellLayoutStore`, one document per preset |
 | Shell layout component runtime state | UIModel component-state model, pruning, and promotion rules | `ShellLayoutComponentStateStore` |
 | Desktop column and list-presentation preferences | UIModel presentation state plus the GTK and WinUI window workflows | `GtkLayoutStateStore` per library; WinUI `LibrarySession` under the platform application-data root |
-| Preferred output selection | Core audio defines the neutral typed route, Runtime owns the engine-confirmed snapshot, UIModel owns pure restore resolution, and each frontend owns its requested/last-active lifecycle | GTK `AppConfigStore` and WinUI desktop settings; TUI currently has no output-selection checkpoint |
+| Preferred output selection | Core audio defines the neutral typed route, Runtime owns the engine-confirmed snapshot, UIModel owns pure restore resolution, and each frontend owns its requested/last-active lifecycle | GTK `AppConfigStore`, WinUI desktop settings, and the TUI application-preference file |
 | Windows desktop session and semantic theme | `aobus-winui-lib` settings/theme schemas and the WinUI process-session lifecycle | WinUI `LibrarySession`, `ConfigStore`, and theme coordinator under the platform application-data root |
 
 Global state may contain per-library track or list identities only when lifecycle ownership pairs that payload with the active library and validates those identities before restore.
@@ -146,14 +147,16 @@ desktop-settings, playback-session, and theme files across Modern/Classic shell
 switches. A destructive library restart explicitly removes the global playback
 payload before release; desktop settings and theme state survive. The selected
 music root is used only for library-bound runtime state.
-GTK and WinUI persist the exact route requested through their shared selector and retain it independently of the engine-confirmed Runtime snapshot.
+Every frontend persists the exact route requested through the shared selector and retains it independently of the engine-confirmed Runtime snapshot.
 GTK additionally captures the last active Runtime route in application-session state as a fallback when no valid explicit preference exists.
-After providers are registered, each desktop frontend asks the pure UIModel policy to resolve stored intent and then submits the resulting runtime command itself.
-TUI uses the same selector projection and command path but does not currently persist that preference.
+After providers are registered, each frontend asks the pure UIModel policy to resolve stored intent and then submits the resulting runtime command itself.
+TUI keeps its preferences in its own file under the platform user-configuration directory, using the same groups and schema as every other frontend.
+It does not share GTK's file: `ConfigStore` rewrites a whole document from the snapshot it took at first read, so two frontends running at once against one file would drop each other's groups.
+When the environment names no configuration directory, TUI runs without preferences rather than failing to start.
 `AppRuntime` owns its workspace store and borrows an explicitly supplied playback-session store; when none is supplied, playback session and workspace use the same owned instance.
 
 GTK supplies its global `AppConfigStore` as the playback-session store while supplying a per-library workspace store separately.
-TUI currently uses its selected `ConfigStore` for both roles.
+TUI uses its selected `ConfigStore` for both roles, and opens a separate application-preference store for the shared global groups.
 CLI opens the library database for the selected root but does not load interactive managed state.
 
 ## Boundaries and dependency direction
@@ -306,7 +309,8 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h) and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own workspace snapshot and restore coordination.
 - [`WorkspaceSessionYamlSchema`](../../app/runtime/WorkspaceSessionYamlSchema.h) owns the strict workspace persistence DTO and stable presentation conversion.
 - [`PlaybackSessionYamlSchema`](../../app/runtime/PlaybackSessionYamlSchema.h) owns playback-session structural and semantic candidate validation; [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) owns scheduling, restore, and store use.
-- [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary.
+- [`AppStateStore`](../../app/include/ao/rt/AppStateStore.h) owns the `runtime` and `session` group names, their schemas, and their optional-over-seed compatibility rule, for every frontend that keeps application-global state.
+- [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary and the GTK-only `window` group; it delegates the shared groups to `AppStateStore`.
 - [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation schemas own platform-neutral state and serialization helpers.
 - [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
   owns shared route-intent validation and fallback resolution without issuing a
@@ -330,7 +334,8 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects stable workspace presentation conversion and strict semantic rejection.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects exact deserialization, semantic validation, event-driven saving, discard, failure propagation, and store selection.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
-- [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect global GTK groups and delta-from-default keymaps.
+- [`AppStateStoreTest.cpp`](../../test/unit/runtime/AppStateStoreTest.cpp) protects the shared application groups, their seed-preserving reads, and per-group rejection isolation without composing a frontend.
+- [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect the GTK file boundary and delta-from-default keymaps.
 - [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
   protects the shared persisted-route admission rule.
 - [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)

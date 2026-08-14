@@ -17,6 +17,7 @@
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -137,7 +138,7 @@ namespace ao::gtk::layout
         _imageControllerPtr = std::make_unique<ResourceImageController>(_imageWidget, *ctx.dependencies.imageLoader);
         auto const defaultStyle = uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector);
         auto const styleId = node.propertyOr<std::string>(
-          "placeholderStyle", std::string{uimodel::coverArtPlaceholderStyleId(defaultStyle)});
+          uimodel::kPlaceholderStyleProp, std::string{uimodel::coverArtPlaceholderStyleId(defaultStyle)});
         auto const optParsedStyle = uimodel::parseCoverArtPlaceholderStyle(styleId);
         _placeholderStyle = optParsedStyle.value_or(defaultStyle);
 
@@ -242,27 +243,19 @@ namespace ao::gtk::layout
   void registerTrackCoverArtComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "track.coverArt",
-       .displayName = "Cover Art",
-       .category = LayoutComponentCategory::Track,
-       .props = {{.name = "targetSize",
-                  .kind = LayoutPropertyKind::Int,
-                  .label = "Target Size",
-                  .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCoverArtTargetSize)}},
-                 {.name = "forceSquare",
-                  .kind = LayoutPropertyKind::Bool,
-                  .label = "Force Square",
-                  .defaultValue = LayoutValue{true}},
-                 {.name = "placeholderStyle",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Placeholder Style",
-                  .defaultValue = LayoutValue{"vinyl"},
-                  .enumValues = coverArtPlaceholderStyleIds()}},
-       .layoutProps = {{.name = "widthRequest", .kind = LayoutPropertyKind::Int, .label = "Width Request"},
-                       {.name = "heightRequest", .kind = LayoutPropertyKind::Int, .label = "Height Request"},
-                       {.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}},
-       .minChildren = 0,
-       .optMaxChildren = 0},
+      withShellLayoutProperties(
+        withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::TrackCoverArt),
+                            {{.name = "targetSize",
+                              .kind = LayoutPropertyKind::Int,
+                              .label = "Target Size",
+                              .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCoverArtTargetSize)}},
+                             {.name = "forceSquare",
+                              .kind = LayoutPropertyKind::Bool,
+                              .label = "Force Square",
+                              .defaultValue = LayoutValue{true}}}),
+        {{.name = "widthRequest", .kind = LayoutPropertyKind::Int, .label = "Width Request"},
+         {.name = "heightRequest", .kind = LayoutPropertyKind::Int, .label = "Height Request"},
+         {.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}}),
       createTrackCoverArt);
   }
 } // namespace ao::gtk::layout

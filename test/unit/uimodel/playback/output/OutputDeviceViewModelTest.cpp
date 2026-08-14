@@ -12,6 +12,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -30,7 +31,8 @@ namespace ao::uimodel::test
     auto fixture = ApplicationPlaybackFixture{};
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
-    auto viewModel = OutputDeviceViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+    auto viewModel = OutputDeviceViewModel{
+      fixture.playback, [&log](auto const& view) { log.render(view); }, OutputDeviceIntent::discarded()};
 
     SECTION("Initial state is empty when no outputs registered")
     {
@@ -56,7 +58,8 @@ namespace ao::uimodel::test
     auto& playbackTransport = fixture.playbackTransport;
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
-    auto viewModel = OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto viewModel =
+      OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }, OutputDeviceIntent::discarded()};
 
     SECTION("refresh shows backend header and device×profile rows")
     {
@@ -207,7 +210,8 @@ namespace ao::uimodel::test
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
-    auto viewModel = OutputDeviceViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+    auto viewModel = OutputDeviceViewModel{
+      fixture.playback, [&log](auto const& view) { log.render(view); }, OutputDeviceIntent::discarded()};
     viewModel.refresh();
     REQUIRE(log.states.size() == 1);
     fixture.commands().setShuffleMode(ShuffleMode::On);
@@ -227,7 +231,8 @@ namespace ao::uimodel::test
     auto viewModel = OutputDeviceViewModel{
       fixture.playback,
       {},
-      [&](audio::OutputDeviceSelection const& selection) { optRequested = selection; },
+      OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
+                                     { optRequested = selection; }),
     };
 
     viewModel.selectOutputDevice(
@@ -255,7 +260,8 @@ namespace ao::uimodel::test
         rendered = {};
         rendered = std::move(replacement);
       },
-      [&optRequested](audio::OutputDeviceSelection const& selection) { optRequested = selection; },
+      OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
+                                     { optRequested = selection; }),
     };
     viewModel.refresh();
     REQUIRE(rendered.rows.size() == 3);

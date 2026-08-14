@@ -36,8 +36,12 @@ templates:
       orientation: horizontal
       spacing: 4
     children:
-      - type: playback.playPauseButton
-      - type: playback.stopButton
+      - type: playback.transportButton
+        props:
+          command: playPause
+      - type: playback.transportButton
+        props:
+          command: stop
       - type: playback.timeLabel
   playback.transportGroup:
     type: box
@@ -49,8 +53,12 @@ templates:
       halign: start
       valign: center
     children:
-      - type: playback.playPauseButton
-      - type: playback.stopButton
+      - type: playback.transportButton
+        props:
+          command: playPause
+      - type: playback.transportButton
+        props:
+          command: stop
   playback.defaultBar:
     type: box
     props:
@@ -181,7 +189,7 @@ templates:
       - type: spacer
         layout:
           hexpand: true
-      - type: status.activityStatus
+      - type: status.activity
         props:
           variant: classicInline
           idleBehavior: hidden
@@ -198,7 +206,7 @@ templates:
           cssClasses: ao-status-separator
       - type: status.trackCount
   tracks.defaultWorkspace:
-    type: tracks.table
+    type: track.table
     props:
       groupCoverPlaceholderStyle: monogram
       view: workspace.focused

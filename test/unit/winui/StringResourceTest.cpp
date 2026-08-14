@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -164,8 +166,13 @@ namespace ao::winui::test
 
         if (extension == ".yaml")
         {
-          collectYamlScalars(source, "resourceKey", references.ids);
-          collectYamlScalars(source, "resourceKey", references.mentions);
+          // A preset names a string through the shared `text` property, which
+          // Windows resolves against the resource map before showing it.
+          // Only `textResourceKey` names a resource. The shared `text` property
+          // is the words themselves, so scanning it would report every literal
+          // string in a preset as a missing resource id.
+          collectYamlScalars(source, "textResourceKey", references.ids);
+          collectYamlScalars(source, "textResourceKey", references.mentions);
           continue;
         }
 

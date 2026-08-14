@@ -195,7 +195,7 @@ namespace ao::gtk::layout::editor::test
       if (presetId == "modern")
       {
         auto testDoc = LayoutDocument{};
-        testDoc.root.type = "app.actionButton";
+        testDoc.root.type = "actionButton";
         testDoc.root.props["primaryAction"] = LayoutValue{"this.does.not.exist"};
         return testDoc;
       }

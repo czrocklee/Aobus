@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
@@ -26,7 +26,7 @@ namespace ao::gtk::layout
     public:
       LabelComponent(LayoutBuildContext& /*ctx*/, LayoutNode const& node)
       {
-        if (auto const it = node.props.find("label"); it != node.props.end())
+        if (auto const it = node.props.find(kTextProp); it != node.props.end())
         {
           _label.set_text(it->second.asString());
         }
@@ -46,12 +46,6 @@ namespace ao::gtk::layout
 
   void registerLabelComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "label",
-                                .displayName = "Text Label",
-                                .category = LayoutComponentCategory::Generic,
-                                .props = {{.name = "label", .kind = LayoutPropertyKind::String, .label = "Text"}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createLabel);
+    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::Label), createLabel);
   }
 } // namespace ao::gtk::layout
