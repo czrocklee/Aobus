@@ -5,6 +5,8 @@
 
 #include "app/WindowState.h"
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/rt/AppPrefsState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -58,7 +60,9 @@ namespace ao::gtk::test
       auto configStore = AppConfigStore{configPath};
 
       auto savePrefs = rt::AppPrefsState{};
-      savePrefs.lastOutputBackendId = "test-backend";
+      savePrefs.preferredOutputSelection.backendId = audio::BackendId{"test-backend"};
+      savePrefs.preferredOutputSelection.deviceId = audio::DeviceId{"test-device"};
+      savePrefs.preferredOutputSelection.profileId = audio::ProfileId{"test-profile"};
       savePrefs.lastLayoutPreset = "modern";
       savePrefs.lastThemePreset = "modern";
       configStore.saveAppPrefs(savePrefs);
@@ -67,7 +71,9 @@ namespace ao::gtk::test
       auto loadPrefs = rt::AppPrefsState{};
       restoredStore.loadAppPrefs(loadPrefs);
 
-      CHECK(loadPrefs.lastOutputBackendId == "test-backend");
+      CHECK(loadPrefs.preferredOutputSelection.backendId == "test-backend");
+      CHECK(loadPrefs.preferredOutputSelection.deviceId == "test-device");
+      CHECK(loadPrefs.preferredOutputSelection.profileId == "test-profile");
       CHECK(loadPrefs.lastLayoutPreset == "modern");
       CHECK(loadPrefs.lastThemePreset == "modern");
     }
@@ -78,9 +84,9 @@ namespace ao::gtk::test
 
       auto saveSession = rt::AppSessionState{};
       saveSession.lastLibraryPath = "/tmp/music";
-      saveSession.lastOutputBackendId = "session-backend";
-      saveSession.lastOutputDeviceId = "session-device";
-      saveSession.lastOutputProfileId = "session-profile";
+      saveSession.lastOutputSelection.backendId = audio::BackendId{"session-backend"};
+      saveSession.lastOutputSelection.deviceId = audio::DeviceId{"session-device"};
+      saveSession.lastOutputSelection.profileId = audio::ProfileId{"session-profile"};
       REQUIRE(configStore.saveAppSession(saveSession));
 
       auto const restoredStore = AppConfigStore{configPath};
@@ -88,9 +94,9 @@ namespace ao::gtk::test
       restoredStore.loadAppSession(loadSession);
 
       CHECK(loadSession.lastLibraryPath == "/tmp/music");
-      CHECK(loadSession.lastOutputBackendId == "session-backend");
-      CHECK(loadSession.lastOutputDeviceId == "session-device");
-      CHECK(loadSession.lastOutputProfileId == "session-profile");
+      CHECK(loadSession.lastOutputSelection.backendId == "session-backend");
+      CHECK(loadSession.lastOutputSelection.deviceId == "session-device");
+      CHECK(loadSession.lastOutputSelection.profileId == "session-profile");
     }
 
     SECTION("Partial window groups retain seeded fields and allow unknown keys")
@@ -126,6 +132,27 @@ namespace ao::gtk::test
       CHECK(state.width == 640);
       CHECK(state.height == 480);
       CHECK(state.maximized);
+    }
+
+    SECTION("Partial preference groups retain seeded output fields")
+    {
+      auto output = std::ofstream{configPath};
+      output << "runtime:\n"
+                "  lastOutputBackendId: replacement-backend\n";
+      output.close();
+
+      auto const configStore = AppConfigStore{configPath};
+      auto state = rt::AppPrefsState{};
+      state.preferredOutputSelection = {
+        .backendId = audio::BackendId{"seed-backend"},
+        .deviceId = audio::DeviceId{"seed-device"},
+        .profileId = audio::ProfileId{"seed-profile"},
+      };
+      configStore.loadAppPrefs(state);
+
+      CHECK(state.preferredOutputSelection.backendId == "replacement-backend");
+      CHECK(state.preferredOutputSelection.deviceId == "seed-device");
+      CHECK(state.preferredOutputSelection.profileId == "seed-profile");
     }
   }
 } // namespace ao::gtk::test

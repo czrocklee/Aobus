@@ -3,8 +3,8 @@
 
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <string_view>
@@ -21,9 +21,7 @@ namespace ao::uimodel
       case PreferencesChange::Theme: current.lastThemePreset = requested.lastThemePreset; break;
       case PreferencesChange::LayoutPreset: current.lastLayoutPreset = requested.lastLayoutPreset; break;
       case PreferencesChange::OutputDevice:
-        current.lastOutputBackendId = requested.lastOutputBackendId;
-        current.lastOutputDeviceId = requested.lastOutputDeviceId;
-        current.lastOutputProfileId = requested.lastOutputProfileId;
+        current.preferredOutputSelection = requested.preferredOutputSelection;
         break;
     }
 
@@ -66,11 +64,9 @@ namespace ao::uimodel
     }
   }
 
-  void PreferencesEditorModel::setOutputDeviceConfirmed(rt::OutputDeviceSelection const& selection)
+  void PreferencesEditorModel::setPreferredOutputDevice(audio::OutputDeviceSelection const& selection)
   {
-    _prefs.lastOutputBackendId = selection.backendId.raw();
-    _prefs.lastOutputDeviceId = selection.deviceId.raw();
-    _prefs.lastOutputProfileId = selection.profileId.raw();
+    _prefs.preferredOutputSelection = selection;
 
     if (_persist)
     {

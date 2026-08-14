@@ -12,6 +12,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/AppRuntime.h>
@@ -40,6 +41,7 @@
 #include <ao/utility/Path.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/WinUiErrorBoundary.h>
+#include <ao/winui/app/DesktopOutputSelection.h>
 #include <ao/winui/app/SelectedRootCommit.h>
 
 #include <exception>
@@ -197,6 +199,15 @@ namespace ao::winui
     }
 
     _runtimePtr = std::move(*runtimeRes);
+    auto& playback = _runtimePtr->playback();
+    auto const optOutputSelection =
+      resolveDesktopOutputSelectionToRestore(_settings, playback.snapshot().transport.output);
+
+    if (optOutputSelection)
+    {
+      playback.commands().setOutputDevice(
+        optOutputSelection->backendId, optOutputSelection->deviceId, optOutputSelection->profileId);
+    }
 
     if (_playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready)
     {
@@ -299,6 +310,11 @@ namespace ao::winui
     }
 
     return saveSettingsCandidate(_settings);
+  }
+
+  void LibrarySession::setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept
+  {
+    std::ignore = rememberDesktopOutputSelection(_settings, selection);
   }
 
   Result<> LibrarySession::saveSettingsCandidate(DesktopSettings const& settings)

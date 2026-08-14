@@ -46,6 +46,10 @@ You will open an indexed music folder in the native Windows application, browse 
    the navigation pane becomes compact or minimal automatically.
    Missing artwork uses a monogram in group headings and a transparent vinyl placeholder in the details pane; these Windows choices are fixed in this version.
 6. Use the persistent Now Playing controls for previous, play/pause, next, shuffle, repeat, seeking, volume, and output.
+   Aobus remembers the output backend, device, and profile you request and tries
+   to restore them after providers are discovered on the next launch. A named
+   device may remain preferred while disconnected; until it can be selected,
+   the runtime-selected default remains active.
    Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Classic mode, click Soul for output devices, right-click it for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline.

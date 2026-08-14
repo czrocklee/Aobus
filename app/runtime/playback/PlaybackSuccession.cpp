@@ -13,6 +13,7 @@
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/NotificationIds.h>
@@ -940,7 +941,7 @@ namespace ao::rt
           }
         });
       outputSubscription = transport.onOutputDeviceChanged(
-        [this](OutputDeviceSelection const&)
+        [this](audio::OutputDeviceSelection const&)
         {
           if (!isClosing())
           {

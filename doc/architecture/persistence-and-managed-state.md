@@ -94,6 +94,7 @@ Persistence through a shared file mechanism does not transfer that responsibilit
 | Customized shell layout documents | UIModel layout document and validation code, coordinated by the GTK shell-layout workflow | `ShellLayoutStore`, one document per preset |
 | Shell layout component runtime state | UIModel component-state model, pruning, and promotion rules | `ShellLayoutComponentStateStore` |
 | Desktop column and list-presentation preferences | UIModel presentation state plus the GTK and WinUI window workflows | `GtkLayoutStateStore` per library; WinUI `LibrarySession` under the platform application-data root |
+| Preferred output selection | Core audio defines the neutral typed route, Runtime owns the engine-confirmed snapshot, UIModel owns pure restore resolution, and each frontend owns its requested/last-active lifecycle | GTK `AppConfigStore` and WinUI desktop settings; TUI currently has no output-selection checkpoint |
 | Windows desktop session and semantic theme | `aobus-winui-lib` settings/theme schemas and the WinUI process-session lifecycle | WinUI `LibrarySession`, `ConfigStore`, and theme coordinator under the platform application-data root |
 
 Global state may contain per-library track or list identities only when lifecycle ownership pairs that payload with the active library and validates those identities before restore.
@@ -111,7 +112,12 @@ Core `ao::yaml` supplies only domain-neutral node-kind, map-key, explicitly dire
 The separate Core reflection helper is a one-way output facility and cannot define a managed-state format that Aobus reads.
 This boundary forbids implicit schema derivation from member layout; it does not preclude a future reflection-backed schema whose owner metadata explicitly fixes stable keys, representations, versions, defaults, and validation.
 
-Workspace and playback keep their schemas in runtime; presentation and shell-layout formats keep theirs in UIModel; GTK global preferences keep their small schemas in the frontend adapter.
+Workspace and playback-session payloads keep their schemas in runtime;
+presentation and shell-layout formats keep theirs in UIModel; GTK global
+preferences and Windows desktop settings keep their small schemas in their
+frontend adapters. The shared UIModel output-selection policy resolves whether
+stored route intent is meaningful for any currently published catalog, but it does not
+issue a runtime command, choose a file, or own a writer.
 GTK presentation paths remain adapters over UIModel-owned schemas rather than becoming schema owners.
 
 Authored shell-layout and component-state schemas reject unsupported versions before interpreting version-specific payload fields.
@@ -140,6 +146,10 @@ desktop-settings, playback-session, and theme files across Modern/Classic shell
 switches. A destructive library restart explicitly removes the global playback
 payload before release; desktop settings and theme state survive. The selected
 music root is used only for library-bound runtime state.
+GTK and WinUI persist the exact route requested through their shared selector and retain it independently of the engine-confirmed Runtime snapshot.
+GTK additionally captures the last active Runtime route in application-session state as a fallback when no valid explicit preference exists.
+After providers are registered, each desktop frontend asks the pure UIModel policy to resolve stored intent and then submits the resulting runtime command itself.
+TUI uses the same selector projection and command path but does not currently persist that preference.
 `AppRuntime` owns its workspace store and borrows an explicitly supplied playback-session store; when none is supplied, playback session and workspace use the same owned instance.
 
 GTK supplies its global `AppConfigStore` as the playback-session store while supplying a per-library workspace store separately.
@@ -298,6 +308,11 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`PlaybackSessionYamlSchema`](../../app/runtime/PlaybackSessionYamlSchema.h) owns playback-session structural and semantic candidate validation; [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) owns scheduling, restore, and store use.
 - [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary.
 - [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation schemas own platform-neutral state and serialization helpers.
+- [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+  owns shared route-intent validation and fallback resolution without issuing a
+  runtime command or owning a persistence location.
+- [`DesktopOutputSelection`](../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
+  adapts that policy to WinUI's in-memory desktop settings before their normal checkpoint.
 - [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h), [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h), and [`GtkLayoutStateStore`](../../app/linux-gtk/app/GtkLayoutStateStore.h) are GTK file adapters.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/Main.cpp`](../../app/tui/Main.cpp), and [`CliRuntime.cpp`](../../app/cli/CliRuntime.cpp) select roots, platform locations, and overrides before composing runtime paths and stores.
 - WinUI [`App`](../../app/windows-winui/App.xaml.cpp), [`LibraryWindowSession`](../../app/windows-winui/app/LibraryWindowSession.cpp), and [`LibrarySession`](../../app/windows-winui/app/LibrarySession.cpp) sequence parent writer release, successor startup, and post-activation selected-root commit.
@@ -316,6 +331,10 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects exact deserialization, semantic validation, event-driven saving, discard, failure propagation, and store selection.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect global GTK groups and delta-from-default keymaps.
+- [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+  protects the shared persisted-route admission rule.
+- [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
+  protects the WinUI startup and deferred-checkpoint adaptation.
 - Shared tests under [`test/unit/desktop/`](../../test/unit/desktop/) protect
   strict startup planning and durable-root admission on both hosts.
 - [`SelectedRootCommitTest.cpp`](../../test/unit/winui/app/SelectedRootCommitTest.cpp)

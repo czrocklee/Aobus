@@ -281,7 +281,10 @@ namespace ao::winui::layout
     {
     public:
       explicit OutputDeviceButtonComponent(LayoutBuildContext& ctx)
-        : _outputDevice{OutputDeviceControlConfig{.presenter = _button}}
+        : _outputDevice{OutputDeviceControlConfig{
+            .presenter = _button,
+            .onSelectionRequested = ctx.onOutputDeviceSelectionRequested,
+          }}
       {
         _outputDevice.bind(ctx.playback);
       }

@@ -10,11 +10,13 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackMode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -214,5 +216,56 @@ namespace ao::uimodel::test
     CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::All);
     CHECK(log.states.size() == 1);
+  }
+
+  TEST_CASE("OutputDeviceViewModel - reports exact requested intent when the engine cannot confirm it",
+            "[uimodel][regression][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
+    auto optRequested = std::optional<audio::OutputDeviceSelection>{};
+    auto viewModel = OutputDeviceViewModel{
+      fixture.playback,
+      {},
+      [&](audio::OutputDeviceSelection const& selection) { optRequested = selection; },
+    };
+
+    viewModel.selectOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"temporarily-unavailable"}, audio::kProfileExclusive);
+
+    REQUIRE(optRequested);
+    CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
+    CHECK(optRequested->deviceId == audio::DeviceId{"temporarily-unavailable"});
+    CHECK(optRequested->profileId == audio::kProfileExclusive);
+    CHECK(fixture.playback.snapshot().transport.output.selectedDevice != *optRequested);
+  }
+
+  TEST_CASE("OutputDeviceViewModel - copies row identity before a synchronous render replaces the rows",
+            "[uimodel][regression][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
+    auto rendered = OutputDeviceViewState{};
+    auto optRequested = std::optional<audio::OutputDeviceSelection>{};
+    auto viewModel = OutputDeviceViewModel{
+      fixture.playback,
+      [&rendered](OutputDeviceViewState const& view)
+      {
+        auto replacement = view;
+        rendered = {};
+        rendered = std::move(replacement);
+      },
+      [&optRequested](audio::OutputDeviceSelection const& selection) { optRequested = selection; },
+    };
+    viewModel.refresh();
+    REQUIRE(rendered.rows.size() == 3);
+    auto const& row = rendered.rows[2];
+
+    viewModel.selectOutputDevice(row.backendId, row.deviceId, row.profileId);
+
+    REQUIRE(optRequested);
+    CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
+    CHECK(optRequested->deviceId == audio::DeviceId{"device1"});
+    CHECK(optRequested->profileId == audio::kProfileExclusive);
   }
 } // namespace ao::uimodel::test

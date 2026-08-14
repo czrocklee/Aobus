@@ -137,6 +137,10 @@ Such a record is keyed on the complete signal and is never generalized across sa
 ### UIModel and frontend adapters
 
 UIModel owns reusable command availability, transport presentation, seek interpolation, output-device presentation, and quality formatting.
+Its output-device capsule supplies one selector projection for GTK, TUI, and WinUI.
+The view model submits the runtime command and separately reports the exact requested route to an optional frontend lifecycle callback.
+Its pure restore policy validates and resolves stored intent against any currently published backend/profile catalog without issuing a command or choosing a persistence location.
+Runtime continues to own the engine-confirmed route snapshot and command.
 Its presentation catalog maps known backend/profile ids to shared labels and semantic `AudioIconKind` values, with stable-id fallback for unknown extensions.
 GTK maps the semantic kind to a symbolic icon and TUI remains free to select terminal presentation.
 It consumes runtime snapshots and commands and does not construct Player, Engine, decoder, backend, or library-source state.
@@ -409,7 +413,11 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackBootstrap`](../../app/runtime/playback/PlaybackBootstrap.h) owns composition-only construction, provider registration, and shutdown access.
 - [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) coordinates the composite durable session lifecycle.
 - [`PlaybackCommandSurface`](../../app/include/ao/uimodel/playback/command/PlaybackCommandSurface.h) is the reusable UIModel command boundary.
-- [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h) and [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) own shared output-device presentation.
+- [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h),
+  [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h),
+  and [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h)
+  own shared output-device presentation, exact selection intent, and pure
+  persisted-intent resolution.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
 - [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and the source-private [`StreamingSource`](../../lib/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../lib/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
 - [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary; [`PlatformBackendProvidersLinux.cpp`](../../lib/audio/PlatformBackendProvidersLinux.cpp) and [`PlatformBackendProvidersWindows.cpp`](../../lib/audio/PlatformBackendProvidersWindows.cpp) own concrete construction and platform preference order.
@@ -423,6 +431,9 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackTransportControlTest.cpp`](../../test/unit/runtime/PlaybackTransportControlTest.cpp), [`PlaybackTransportOutputTest.cpp`](../../test/unit/runtime/PlaybackTransportOutputTest.cpp), and [`PlaybackTransportTokenTest.cpp`](../../test/unit/runtime/PlaybackTransportTokenTest.cpp) protect application transport and cross-domain identity.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects composite persistence and restore coordination.
 - [`PlaybackCommandSurfaceTest.cpp`](../../test/unit/uimodel/playback/command/PlaybackCommandSurfaceTest.cpp) protects the UIModel/runtime command boundary.
+- [`OutputDeviceViewModelTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp)
+  and [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+  protect shared route projection, selection commands, and restore admission.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects Player ownership, provider/Engine composition, callback marshalling, and worker-preparation cancellation.
 - [`EngineTest.cpp`](../../test/unit/audio/EngineTest.cpp) protects explicit-start optimistic preparation, exact-mode reuse, and synchronous mismatch fallback.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, status/seek serialization, event, transition, and backend boundaries.

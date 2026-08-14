@@ -8,6 +8,7 @@
 #include "tui/QualityPanel.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/SignalFormat.h>
@@ -357,8 +358,8 @@ namespace ao::tui::test
       rt::PlaybackTransportSnapshot{
         .output =
           rt::OutputState{
-            .selectedDevice = rt::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"},
-                                                        .deviceId = audio::DeviceId{"dac"}},
+            .selectedDevice = audio::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"},
+                                                           .deviceId = audio::DeviceId{"dac"}},
             .availableBackends =
               std::vector{
                 rt::OutputBackendSnapshot{

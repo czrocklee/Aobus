@@ -170,9 +170,9 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     auto oldSession = rt::AppSessionState{};
     oldSession.lastLibraryPath = "/old/durable/library";
-    oldSession.lastOutputBackendId = "old-backend";
-    oldSession.lastOutputDeviceId = "old-device";
-    oldSession.lastOutputProfileId = "old-profile";
+    oldSession.lastOutputSelection.backendId = audio::BackendId{"old-backend"};
+    oldSession.lastOutputSelection.deviceId = audio::DeviceId{"old-device"};
+    oldSession.lastOutputSelection.profileId = audio::ProfileId{"old-profile"};
     REQUIRE(configStorePtr->saveAppSession(oldSession));
     REQUIRE_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
 
@@ -239,9 +239,9 @@ namespace ao::gtk::test
         drainGtkEvents();
         configStorePtr->loadAppSession(durableSession);
         CHECK(durableSession.lastLibraryPath == oldSession.lastLibraryPath);
-        CHECK(durableSession.lastOutputBackendId == "test_backend");
-        CHECK(durableSession.lastOutputDeviceId == "test_device");
-        CHECK(durableSession.lastOutputProfileId == audio::kProfileShared.raw());
+        CHECK(durableSession.lastOutputSelection.backendId == "test_backend");
+        CHECK(durableSession.lastOutputSelection.deviceId == "test_device");
+        CHECK(durableSession.lastOutputSelection.profileId == audio::kProfileShared.raw());
         REQUIRE(*configStorePtr->playbackSessionStore().contains("window"));
         CHECK(std::filesystem::exists(workspacePath));
         CHECK(std::filesystem::exists(layoutPath));
@@ -333,9 +333,9 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     auto prefs = rt::AppPrefsState{};
-    prefs.lastOutputBackendId = "test_backend";
-    prefs.lastOutputDeviceId = "test_device";
-    prefs.lastOutputProfileId = audio::kProfileShared.raw();
+    prefs.preferredOutputSelection.backendId = audio::BackendId{"test_backend"};
+    prefs.preferredOutputSelection.deviceId = audio::DeviceId{"test_device"};
+    prefs.preferredOutputSelection.profileId = audio::kProfileShared;
     configStorePtr->saveAppPrefs(prefs);
 
     rt::test::addReadyAudioProvider(fixture.runtime());

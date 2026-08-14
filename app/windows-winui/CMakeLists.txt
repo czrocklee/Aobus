@@ -27,6 +27,7 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   App.xaml.cpp
   App.xaml.h
   app/DestructiveLibraryRestart.cpp
+  app/DesktopOutputSelection.cpp
   app/DesktopSettingsYamlSchema.cpp
   app/DispatcherQueueExecutor.cpp
   app/DispatcherQueueExecutor.h
@@ -35,6 +36,7 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   app/LibrarySession.cpp
   app/LibrarySession.h
   app/SelectedRootCommit.cpp
+  include/ao/winui/app/DesktopOutputSelection.h
   app/UiCoordinator.cpp
   app/UiCoordinator.h
   image/CoverArtPresenter.cpp

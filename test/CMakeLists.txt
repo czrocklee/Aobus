@@ -391,6 +391,7 @@ add_executable(ao_core_test
     unit/uimodel/library/track/TrackSelectionSummaryTest.cpp
     unit/uimodel/playback/now-playing/NowPlayingViewModelTest.cpp
     unit/uimodel/playback/command/PlaybackCommandSurfaceTest.cpp
+    unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp
     unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
@@ -549,6 +550,7 @@ if(WIN32)
     # Cross-desktop startup/protocol/launcher rules are supplied by
     # ao_app_desktop above; the remaining WinUI rules stay native here.
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DestructiveLibraryRestart.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopOutputSelection.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopSettingsYamlSchema.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SelectedRootCommit.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
@@ -562,6 +564,7 @@ if(WIN32)
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ThemeSurface.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/theme/Theme.cpp
     unit/winui/app/DestructiveLibraryRestartTest.cpp
+    unit/winui/app/DesktopOutputSelectionTest.cpp
     unit/winui/app/SelectedRootCommitTest.cpp
     unit/winui/DesktopSettingsYamlSchemaTest.cpp
     unit/winui/FrameResourceTest.cpp

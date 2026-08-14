@@ -14,6 +14,7 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/QualityAnalyzer.h>
@@ -130,7 +131,7 @@ namespace ao::rt
         .output =
           OutputState{
             .selectedDevice =
-              OutputDeviceSelection{
+              audio::OutputDeviceSelection{
                 .backendId = status.engine.backendId,
                 .deviceId = status.engine.currentDeviceId,
                 .profileId = status.engine.profileId,
@@ -148,17 +149,17 @@ namespace ao::rt
       };
     }
 
-    bool hasOutputDevice(OutputDeviceSelection const& outputDevice)
+    bool hasOutputDevice(audio::OutputDeviceSelection const& outputDevice)
     {
       return !outputDevice.backendId.empty();
     }
 
-    bool isSameOutputDevice(OutputDeviceSelection const& lhs, OutputDeviceSelection const& rhs)
+    bool isSameOutputDevice(audio::OutputDeviceSelection const& lhs, audio::OutputDeviceSelection const& rhs)
     {
-      return lhs.backendId == rhs.backendId && lhs.deviceId == rhs.deviceId && lhs.profileId == rhs.profileId;
+      return lhs == rhs;
     }
 
-    std::optional<OutputDeviceSelection> defaultOutputDeviceSelection(
+    std::optional<audio::OutputDeviceSelection> defaultOutputDeviceSelection(
       std::vector<OutputBackendSnapshot> const& backends)
     {
       for (auto const& backend : backends)
@@ -169,7 +170,7 @@ namespace ao::rt
           {
             if (supportsOutputProfile(device, profile.id))
             {
-              return OutputDeviceSelection{
+              return audio::OutputDeviceSelection{
                 .backendId = backend.id,
                 .deviceId = device.id,
                 .profileId = profile.id,
@@ -267,7 +268,7 @@ namespace ao::rt
       };
     }
 
-    void logOutputDeviceSelected(OutputDeviceSelection const& outputDevice)
+    void logOutputDeviceSelected(audio::OutputDeviceSelection const& outputDevice)
     {
       APP_LOG_INFO("Audio output device selected: backend={} device={} profile={}",
                    outputDevice.backendId,
@@ -275,7 +276,7 @@ namespace ao::rt
                    outputDevice.profileId);
     }
 
-    void logOutputDeviceCleared(OutputDeviceSelection const& outputDevice)
+    void logOutputDeviceCleared(audio::OutputDeviceSelection const& outputDevice)
     {
       APP_LOG_INFO("Audio output device cleared: backend={} device={} profile={}",
                    outputDevice.backendId,
@@ -283,7 +284,8 @@ namespace ao::rt
                    outputDevice.profileId);
     }
 
-    void logOutputDeviceSwitched(OutputDeviceSelection const& previous, OutputDeviceSelection const& current)
+    void logOutputDeviceSwitched(audio::OutputDeviceSelection const& previous,
+                                 audio::OutputDeviceSelection const& current)
     {
       APP_LOG_INFO(
         "Audio output device switched: previous_backend={} previous_device={} previous_profile={} backend={} "
@@ -296,7 +298,8 @@ namespace ao::rt
         current.profileId);
     }
 
-    void logOutputDeviceTransition(OutputDeviceSelection const& previous, OutputDeviceSelection const& current)
+    void logOutputDeviceTransition(audio::OutputDeviceSelection const& previous,
+                                   audio::OutputDeviceSelection const& current)
     {
       auto const previousHas = hasOutputDevice(previous);
 
@@ -440,7 +443,7 @@ namespace ao::rt
                                        StoppedEvent,
                                        OutputDevicesChangedEvent,
                                        PlaybackTransport::NowPlayingChanged,
-                                       OutputDeviceSelection,
+                                       audio::OutputDeviceSelection,
                                        PlaybackTransport::QualityChanged,
                                        VolumeChangedEvent,
                                        MutedChangedEvent,
@@ -508,7 +511,7 @@ namespace ao::rt
     async::Signal<> pausedSignal;
     async::Signal<> idleSignal;
     async::Signal<PlaybackTransport::NowPlayingChanged const&> nowPlayingChangedSignal;
-    async::Signal<OutputDeviceSelection const&> outputDeviceChangedSignal;
+    async::Signal<audio::OutputDeviceSelection const&> outputDeviceChangedSignal;
     async::Signal<> stoppedSignal;
     async::Signal<> outputDevicesChangedSignal;
     async::Signal<PlaybackTransport::QualityChanged const&> qualityChangedSignal;
@@ -580,7 +583,7 @@ namespace ao::rt
             {
               nowPlayingChangedSignal.emit(value);
             }
-            else if constexpr (std::same_as<Value, OutputDeviceSelection>)
+            else if constexpr (std::same_as<Value, audio::OutputDeviceSelection>)
             {
               outputDeviceChangedSignal.emit(value);
             }
@@ -738,7 +741,7 @@ namespace ao::rt
 
     void recordPlaybackError(audio::Transport previousTransport,
                              audio::Engine::Status const& engineStatus,
-                             OutputDeviceSelection const& currentOutputDevice)
+                             audio::OutputDeviceSelection const& currentOutputDevice)
     {
       auto const message = std::string{playbackErrorMessage(engineStatus)};
 
@@ -1380,7 +1383,7 @@ namespace ao::rt
   }
 
   async::Subscription PlaybackTransport::onOutputDeviceChanged(
-    std::move_only_function<void(OutputDeviceSelection const&)> handler)
+    std::move_only_function<void(audio::OutputDeviceSelection const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->outputDeviceChangedSignal.connect(std::move(handler));

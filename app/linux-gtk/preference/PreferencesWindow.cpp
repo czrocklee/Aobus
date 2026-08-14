@@ -7,8 +7,8 @@
 #include "layout/document/LayoutPresets.h"
 #include "playback/OutputDevicePopover.h"
 #include "preference/ShortcutEditorWidget.h"
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
@@ -263,7 +263,7 @@ namespace ao::gtk
                                              Gtk::Window* targetWindow)
   {
     // The output popover applies through Playback.
-    // This model only persists the confirmed selection.
+    // This model persists the exact requested preference independently.
     _modelPtr =
       std::make_unique<uimodel::PreferencesEditorModel>(std::move(prefs),
                                                         _callbacks.onPersistPreferences,
@@ -386,11 +386,11 @@ namespace ao::gtk
     auto* const selector =
       Gtk::make_managed<OutputDevicePopover>(*playback,
                                              Gtk::PositionType::BOTTOM,
-                                             [this, playback](rt::OutputDeviceSelection const& selection)
+                                             [this, playback](audio::OutputDeviceSelection const& selection)
                                              {
                                                if (_modelPtr)
                                                {
-                                                 _modelPtr->setOutputDeviceConfirmed(selection);
+                                                 _modelPtr->setPreferredOutputDevice(selection);
                                                }
 
                                                refreshOutputSummary(*playback);

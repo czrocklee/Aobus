@@ -10,7 +10,7 @@ summary: Enumerates the native Windows desktop settings and theme YAML surfaces.
 ## Scope and version
 
 This reference exhaustively defines the Windows-owned `desktop` group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml` and the complete `%LOCALAPPDATA%\Aobus\windows-theme.yaml` document for the unpackaged native Windows frontend.
-The `desktop` group is version 2.
+The `desktop` group is version 3.
 The same settings file also contains the shared version-2
 `trackView.columnLayouts` group and version-1 `trackView.presentations` group
 defined by the [persisted presentation-state reference](../presentation/persisted-state.md).
@@ -26,12 +26,15 @@ The [system architecture](../../architecture/system-overview.md), [application s
 
 | Field | Type | Default |
 |---|---|---|
-| `version` | unsigned integer | `2` |
+| `version` | unsigned integer | `3` |
 | `window.x`, `window.y` | signed integer | `80`, `80` |
 | `window.width`, `window.height` | signed integer | `1280`, `800` |
 | `window.maximized` | Boolean | `false` |
 | `shellMode` | `modern` or `classic` | `modern` |
 | `lastLibraryPath` | string | empty |
+| `lastOutputBackendId` | string | empty |
+| `lastOutputProfileId` | string | empty |
+| `lastOutputDeviceId` | string | empty |
 | `navigationPaneWidth` | finite number | `240` |
 | `inspectorPaneWidth` | finite number | `320` |
 
@@ -42,7 +45,6 @@ Presentation choice and column layout are deliberately not members of `desktop`.
 They use the shared per-list `trackView.presentations` and `trackView.columnLayouts` schemas so GTK and WinUI consume the same semantic state model without maintaining platform-specific field vocabularies.
 Column layout includes stable field order, canonical sizing, and visibility.
 Workspace owns the active view's current presentation and sort state.
-
 `windows-theme.yaml` requires exactly three maps. `shared` requires `fontFamily`, `accent`, `windowBackground`, `surface`, `textPrimary`, `textSecondary`, `divider`, and `selection`. `modern` requires `navigationBackground`, `inspectorBackground`, and `nowPlayingBackground`. `classic` requires `chrome`, `toolbarBackground`, `treeBackground`, and `statusBackground`. `chrome` is `system` or `retro` and defaults to `system` when the file is absent.
 
 Theme tokens control semantic font, text, accent, selection, divider, and surface
@@ -55,21 +57,37 @@ All documented maps reject unknown keys and require every field.
 Window size must be at least 640 by 480.
 Navigation width must be finite and in the inclusive range 120 through 360.
 Inspector width must be finite and in the inclusive range 160 through 480.
+The three output-selection fields accept arbitrary strings. Restore requires
+non-empty backend and profile ids and rejects a profile known to be unsupported
+by a published backend. A non-empty device id remains preferred and may be
+submitted before catalog publication or while that endpoint is temporarily
+unavailable. An empty device id is restorable only when the published selected
+backend advertises a compatible empty-id default. WASAPI advertises concrete endpoint ids
+and therefore requires a non-empty device id. Intent that cannot be submitted
+leaves the Runtime default in effect without clearing the stored preference.
 The shared presentation groups apply their own recursive list-id, field-id, ordering, dimension, and version validation.
 
 `fontFamily` must be non-empty. Every color must be `#RRGGBB` or `#AARRGGBB` with hexadecimal digits. `classic.chrome` rejects values other than `system` and `retro`.
 
 ## Compatibility and versioning
 
-Desktop settings accept only version 2; there is no migration path.
-Version-1 desktop documents are rejected and leave typed defaults in effect.
+Desktop settings accept only version 3; there is no compatibility or migration
+path. Other versions are rejected before version-3 fields are interpreted and
+leave typed defaults in effect.
 Each settings group is loaded independently, so rejection of `desktop` does not reject a valid shared presentation group and vice versa.
 The theme has no compatibility envelope: adding, removing, or renaming a token requires coordinated schema, reference, and test changes.
 Reload installs only a completely valid candidate.
 
-Saving Windows settings serializes `desktop`, `trackView.columnLayouts`, and `trackView.presentations` into one `saveTogether()` candidate and replaces the file atomically.
+Selecting an output row updates the in-memory exact requested backend, device,
+and profile tuple even when the engine cannot currently confirm that route.
+The selector performs no synchronous file write. The next ordinary Windows
+settings checkpoint retains that preferred tuple instead of replacing it from
+the coherent Runtime snapshot, then serializes `desktop`,
+`trackView.columnLayouts`, and `trackView.presentations` into one
+`saveTogether()` candidate and replaces the file atomically.
 A destructive library restart destroys the parent `LibrarySession` and its settings writer before process creation.
 The successor initially retains the loaded `lastLibraryPath`; an explicit requested root replaces that in-memory value and becomes eligible for `saveTogether()` only after successor activation.
+That candidate inherits the latest in-memory preferred output tuple, including a selection requested after startup.
 Failed successor startup therefore leaves the prior durable field unchanged.
 The settings and theme files remain separate writer domains; changing or rejecting one does not mutate the other.
 
@@ -77,10 +95,13 @@ The settings and theme files remain separate writer domains; changing or rejecti
 
 ```yaml
 desktop:
-  version: 2
+  version: 3
   window: {x: 80, y: 80, width: 1280, height: 800, maximized: false}
   shellMode: modern
   lastLibraryPath: 'D:\Music'
+  lastOutputBackendId: wasapi
+  lastOutputProfileId: shared
+  lastOutputDeviceId: '{0.0.0.00000000}.example'
   navigationPaneWidth: 240
   inspectorPaneWidth: 320
 trackView.columnLayouts:
@@ -117,6 +138,8 @@ classic:
 - [`DesktopSettingsYamlSchema`](../../../app/windows-winui/include/ao/winui/DesktopSettingsYamlSchema.h)
 - [`ThemeYamlSchema`](../../../app/windows-winui/include/ao/winui/Theme.h)
 - [`LibraryStartupPlanner`](../../../app/include/ao/desktop/LibraryStartupPlanner.h),
+  [`OutputDeviceSelectionPolicy`](../../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h),
+  [`DesktopOutputSelection`](../../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h),
   [`SelectedRootCommit`](../../../app/windows-winui/include/ao/winui/app/SelectedRootCommit.h),
   [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.cpp), and
   [`ThemeCoordinator`](../../../app/windows-winui/theme/ThemeCoordinator.cpp)
@@ -124,6 +147,8 @@ classic:
 ## Test authority
 
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp)
+- [`OutputDeviceSelectionPolicyTest.cpp`](../../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+- [`DesktopOutputSelectionTest.cpp`](../../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
 - [`LibraryStartupPlannerTest.cpp`](../../../test/unit/desktop/LibraryStartupPlannerTest.cpp)
 - [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
 - [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp)

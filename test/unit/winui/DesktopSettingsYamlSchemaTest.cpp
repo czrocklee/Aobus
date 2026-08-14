@@ -4,6 +4,8 @@
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #include <ao/Error.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -19,6 +21,11 @@ namespace ao::winui::test
     state.window = {.x = 120, .y = 140, .width = 1440, .height = 900, .maximized = true};
     state.shellMode = ShellMode::Classic;
     state.lastLibraryPath = "C:/Music";
+    state.preferredOutputSelection = {
+      .backendId = audio::kBackendWasapi,
+      .deviceId = audio::DeviceId{"studio-dac"},
+      .profileId = audio::kProfileExclusive,
+    };
     state.navigationPaneWidth = 260.0;
     state.inspectorPaneWidth = 360.0;
 
@@ -45,15 +52,59 @@ namespace ao::winui::test
     CHECK(decodedRes->inspectorPaneWidth == kMinimumInspectorPaneWidth);
   }
 
+  TEST_CASE("DesktopSettingsYamlSchema - rejects version 2 before reading version 3 fields", "[winui][unit][layout]")
+  {
+    auto const* source = R"(
+version: 2
+window: {x: 17, y: 29, width: 1500, height: 950, maximized: true}
+shellMode: classic
+lastLibraryPath: 'C:/Legacy Music'
+navigationPaneWidth: 271
+inspectorPaneWidth: 371
+)";
+    auto tree = ryml::Tree{yaml::callbacks()};
+    ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+
+    auto const result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
+    CHECK(result.error().message.contains("version 2"));
+  }
+
   TEST_CASE("DesktopSettingsYamlSchema - rejects noncanonical persisted state", "[winui][unit][layout]")
   {
+    SECTION("missing output selection field")
+    {
+      auto const* source = R"(
+version: 3
+window: {x: 0, y: 0, width: 1280, height: 800, maximized: false}
+shellMode: modern
+lastLibraryPath: ''
+lastOutputBackendId: ''
+lastOutputProfileId: ''
+navigationPaneWidth: 240
+inspectorPaneWidth: 320
+)";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message.contains("lastOutputDeviceId"));
+    }
+
     SECTION("unknown shell mode")
     {
       auto const* source = R"(
-version: 2
+version: 3
 window: {x: 0, y: 0, width: 1280, height: 800, maximized: false}
 shellMode: future
 lastLibraryPath: ''
+lastOutputBackendId: ''
+lastOutputProfileId: ''
+lastOutputDeviceId: ''
 navigationPaneWidth: 240
 inspectorPaneWidth: 320
 )";
@@ -69,10 +120,13 @@ inspectorPaneWidth: 320
     SECTION("unknown token")
     {
       auto const* source = R"(
-version: 2
+version: 3
 window: {x: 0, y: 0, width: 1280, height: 800, maximized: false}
 shellMode: modern
 lastLibraryPath: ''
+lastOutputBackendId: ''
+lastOutputProfileId: ''
+lastOutputDeviceId: ''
 navigationPaneWidth: 240
 inspectorPaneWidth: 320
 future: true
@@ -86,10 +140,10 @@ future: true
       CHECK(result.error().message.contains("future"));
     }
 
-    SECTION("legacy version")
+    SECTION("noncurrent version cannot be serialized")
     {
       auto state = DesktopSettings{};
-      state.version = 1;
+      state.version = kDesktopSettingsVersion - 1;
       auto tree = ryml::Tree{yaml::callbacks()};
 
       auto result = DesktopSettingsYamlSchema{}.serialize(tree.rootref(), state);
@@ -114,10 +168,13 @@ future: true
     SECTION("oversized inspector pane")
     {
       auto const* source = R"(
-version: 2
+version: 3
 window: {x: 0, y: 0, width: 1280, height: 800, maximized: false}
 shellMode: modern
 lastLibraryPath: ''
+lastOutputBackendId: ''
+lastOutputProfileId: ''
+lastOutputDeviceId: ''
 navigationPaneWidth: 240
 inspectorPaneWidth: 481
 )";

@@ -10,7 +10,7 @@ summary: Defines shared volume projection, scroll and mute policy, indicator and
 ## Scope
 
 This specification owns platform-neutral volume presentation and interaction policy plus the current GTK compact-control adapter.
-It does not own backend volume application or persisted output selection; those belong to runtime playback.
+It does not own backend volume application or persisted output selection; Runtime owns current playback state, while UIModel restore policy and frontend lifecycle owners govern the durable output preference.
 
 ## Code boundary
 

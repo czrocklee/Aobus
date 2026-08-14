@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/PlaybackState.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <glibmm/object.h>
@@ -38,14 +38,11 @@ namespace ao::gtk
 
     explicit OutputDevicePopover(rt::PlaybackService& playback,
                                  Gtk::PositionType position = Gtk::PositionType::BOTTOM,
-                                 std::function<void(rt::OutputDeviceSelection const&)> onSelected = {});
+                                 std::function<void(audio::OutputDeviceSelection const&)> onSelected = {});
     ~OutputDevicePopover() override;
 
   private:
     Gtk::Widget* createRow(Glib::RefPtr<Glib::Object> const& itemPtr);
-
-    rt::PlaybackService& _playback;
-    std::function<void(rt::OutputDeviceSelection const&)> _onSelected;
 
     Gtk::ListBox _listBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _storePtr{};

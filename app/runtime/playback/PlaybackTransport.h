@@ -8,6 +8,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackState.h>
@@ -141,7 +142,8 @@ namespace ao::rt
     async::Subscription onPaused(std::move_only_function<void()> handler);
     async::Subscription onIdle(std::move_only_function<void()> handler);
     async::Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
-    async::Subscription onOutputDeviceChanged(std::move_only_function<void(OutputDeviceSelection const&)> handler);
+    async::Subscription onOutputDeviceChanged(
+      std::move_only_function<void(audio::OutputDeviceSelection const&)> handler);
     async::Subscription onStopped(std::move_only_function<void()> handler);
     async::Subscription onOutputDevicesChanged(std::move_only_function<void()> handler);
     async::Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);

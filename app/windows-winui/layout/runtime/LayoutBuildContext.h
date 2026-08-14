@@ -30,6 +30,11 @@ namespace ao::rt
   class WorkspaceService;
 }
 
+namespace ao::audio
+{
+  struct OutputDeviceSelection;
+}
+
 namespace ao::uimodel
 {
   class LayoutComponentCatalog;
@@ -155,6 +160,9 @@ namespace ao::winui::layout
     std::shared_ptr<uimodel::ShellGenerationGate> gatePtr;
 
     PaneSettingsAccess paneSettings;
+
+    /// Records the exact route requested through a generation-owned selector.
+    std::function<void(audio::OutputDeviceSelection const&)> onOutputDeviceSelectionRequested{};
 
     MenuComposer menus;
 

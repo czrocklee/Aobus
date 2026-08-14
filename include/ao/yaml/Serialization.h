@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/utility/StrongType.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <ryml.hpp>
@@ -65,6 +66,17 @@ namespace ao::yaml
   {
   public:
     explicit MapWriter(ryml::NodeRef node);
+
+    template<typename T, typename Tag>
+    MapWriter& scalar(std::string_view key, utility::StrongType<T, Tag> const& value)
+    {
+      if (_result)
+      {
+        writeScalar(appendChild(_node, key), value.raw());
+      }
+
+      return *this;
+    }
 
     template<typename T>
     MapWriter& scalar(std::string_view key, T const& value)
@@ -134,6 +146,24 @@ namespace ao::yaml
               std::string_view context,
               UnknownKeyPolicy unknownKeyPolicy = UnknownKeyPolicy::Reject);
 
+    template<typename T, typename Tag>
+    MapReader& requiredScalar(std::string_view key, utility::StrongType<T, Tag>& destination)
+    {
+      return requiredValue(key,
+                           destination,
+                           [](ryml::ConstNodeRef child, std::string_view context) -> Result<utility::StrongType<T, Tag>>
+                           {
+                             auto valueRes = scalarAs<T>(child, context);
+
+                             if (!valueRes)
+                             {
+                               return std::unexpected{valueRes.error()};
+                             }
+
+                             return utility::StrongType<T, Tag>{std::move(*valueRes)};
+                           });
+    }
+
     template<typename T>
     MapReader& requiredScalar(std::string_view key, T& destination)
     {
@@ -177,6 +207,24 @@ namespace ao::yaml
                            destination,
                            [](ryml::ConstNodeRef child, std::string_view context)
                            { return readScalarSequence<T>(child, context); });
+    }
+
+    template<typename T, typename Tag>
+    MapReader& optionalScalar(std::string_view key, utility::StrongType<T, Tag>& destination)
+    {
+      return optionalValue(key,
+                           destination,
+                           [](ryml::ConstNodeRef child, std::string_view context) -> Result<utility::StrongType<T, Tag>>
+                           {
+                             auto valueRes = scalarAs<T>(child, context);
+
+                             if (!valueRes)
+                             {
+                               return std::unexpected{valueRes.error()};
+                             }
+
+                             return utility::StrongType<T, Tag>{std::move(*valueRes)};
+                           });
     }
 
     template<typename T>

@@ -9,6 +9,7 @@
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackService.h>
 
@@ -69,11 +70,11 @@ namespace ao::gtk::test
       CHECK(hasCssClass(*listBox, "ao-rich-list"));
     }
 
-    SECTION("row activation reports the engine-confirmed selection")
+    SECTION("row activation reports the requested selection")
     {
       rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
 
-      auto optSelected = std::optional<rt::OutputDeviceSelection>{};
+      auto optSelected = std::optional<audio::OutputDeviceSelection>{};
       auto selector = OutputDevicePopover{
         playback, Gtk::PositionType::BOTTOM, [&optSelected](auto const& selection) { optSelected = selection; }};
       auto host = GtkWindowFixture{};

@@ -125,7 +125,7 @@ namespace ao::gtk::test
 
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "classic";
-    prefs.lastOutputBackendId = "existing-backend";
+    prefs.preferredOutputSelection.backendId = audio::BackendId{"existing-backend"};
     window.refreshPreferences(prefs, nullptr);
     CHECK(window.selectedThemeId() == "classic");
     CHECK_FALSE(optPersisted);
@@ -134,7 +134,7 @@ namespace ao::gtk::test
 
     REQUIRE(optPersisted);
     CHECK(optPersisted->lastThemePreset == "modern");
-    CHECK(optPersisted->lastOutputBackendId == "existing-backend");
+    CHECK(optPersisted->preferredOutputSelection.backendId == "existing-backend");
     REQUIRE(optTheme);
     CHECK(*optTheme == uimodel::ThemePreset::Modern);
   }
@@ -152,7 +152,7 @@ namespace ao::gtk::test
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "classic";
     prefs.lastLayoutPreset = "classic";
-    prefs.lastOutputBackendId = "existing-backend";
+    prefs.preferredOutputSelection.backendId = audio::BackendId{"existing-backend"};
     window.refreshPreferences(prefs, nullptr);
     CHECK(window.selectedLayoutPresetId() == "classic");
     CHECK_FALSE(optPersisted);
@@ -162,10 +162,10 @@ namespace ao::gtk::test
     REQUIRE(optPersisted);
     CHECK(optPersisted->lastLayoutPreset == "modern");
     CHECK(optPersisted->lastThemePreset == "classic");
-    CHECK(optPersisted->lastOutputBackendId == "existing-backend");
+    CHECK(optPersisted->preferredOutputSelection.backendId == "existing-backend");
   }
 
-  TEST_CASE("PreferencesWindow - playback output selection persists the confirmed device", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - playback output selection persists the requested device", "[gtk][unit][preferences]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -201,9 +201,9 @@ namespace ao::gtk::test
     REQUIRE(optPersisted);
     CHECK(optPersisted->lastThemePreset == "modern");
     CHECK(optPersisted->lastLayoutPreset == "classic");
-    CHECK(optPersisted->lastOutputBackendId == "test_backend");
-    CHECK(optPersisted->lastOutputDeviceId == "test_device");
-    CHECK(optPersisted->lastOutputProfileId == audio::kProfileShared.raw());
+    CHECK(optPersisted->preferredOutputSelection.backendId == "test_backend");
+    CHECK(optPersisted->preferredOutputSelection.deviceId == "test_device");
+    CHECK(optPersisted->preferredOutputSelection.profileId == audio::kProfileShared.raw());
   }
 
   TEST_CASE("PreferencesWindow - target hide clears window-scoped output selector", "[gtk][unit][preferences]")

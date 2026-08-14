@@ -77,6 +77,8 @@ launcher.
 
 TUI constructs one `AppRuntime` for the command-line-selected root and retains it for the terminal process lifetime.
 It opens an initial All Tracks view through `LibraryController`.
+Its output overlay uses the shared UIModel output-device selector, but TUI does
+not currently persist that selection around its event loop.
 It currently does not restore and checkpoint workspace or playback sessions around its event loop, so GTK lifecycle behavior must not be described as frontend-neutral current policy.
 
 ### WinUI composition root
@@ -94,14 +96,20 @@ launcher with the paired private request, and exits.
 The successor process validates and opens that explicit root as its only graph.
 No parent and successor `LibrarySession` overlap on the supported restart path, and WinUI does not retain old-library playback across the process boundary.
 
-Ordinary startup starts playback-session observation and restores listening
-intent before UI controllers bind. An explicit successor root remains a
-pending desktop-setting value during construction and starts playback idle with
-persistence dormant. After native window and process-adapter activation, the
-successor saves a desktop-settings candidate. Success installs the candidate and
-starts playback observation; failure retains the prior live settings root and
-permanently seals playback writes. It starts an initial scan when the carried
-intent requests one or the canonical database did not already exist.
+After platform audio providers are registered, every WinUI startup asks the
+shared pure UIModel policy to resolve the persisted preferred output selection,
+then submits any result before UI controllers bind. This global route preference
+is independent of the library-bound playback-session admission gate. Ordinary startup then starts
+playback-session observation and restores listening intent. An explicit
+successor root remains a pending desktop-setting value during construction and
+starts playback idle with persistence dormant. After native window and
+process-adapter activation, the successor saves a desktop-settings candidate,
+including the already loaded preferred output selection. Success installs the candidate
+and starts playback observation; failure retains the prior live settings root
+and permanently seals playback writes. Selecting an output row immediately
+updates the in-memory exact requested preference; the next ordinary settings
+checkpoint persists it without replacing it from the runtime snapshot. It starts an initial scan when the
+carried intent requests one or the canonical database did not already exist.
 Startup failure is presented by the successor and cannot reconstruct the old process; because the parent never records the request, a later ordinary launch can still select the prior durable root.
 Initial-scan failure leaves the successor root active and retryable.
 Explicit Rescan uses the same transactional workflow and relies on `LibraryChanges` for projection updates instead of manually reloading projections.
@@ -189,6 +197,7 @@ folder-picker completion
   -> shared detached launcher(exact executable, paired private successor request)
   -> parent exits
   -> successor shared planner validates and constructs its only session with idle playback
+  -> register providers, resolve persisted output intent through UIModel, and submit any result
   -> activate native window and process adapters
   -> save a selected-root settings candidate
        success -> install candidate and start playback observation
@@ -284,6 +293,12 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`GtkStartupPlan.cpp`](../../app/linux-gtk/app/GtkStartupPlan.cpp), [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`MainWindowCoordinator.cpp`](../../app/linux-gtk/app/MainWindowCoordinator.cpp), [`SuccessorProcessLauncher.cpp`](../../app/linux-gtk/platform/SuccessorProcessLauncher.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK startup planning, prepare/activate composition, terminal retirement, complete unwind, direct process launch, diagnostics, and pair lifetime.
 - [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
+- [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
+  and [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+  own the shared GTK, TUI, and WinUI selector projection, exact requested-intent
+  callback, and pure restore policy.
+- [`DesktopOutputSelection`](../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
+  adapts that pure policy to the Windows desktop settings value without owning IO.
 - [`App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), [`LibraryWindowSession.cpp`](../../app/windows-winui/app/LibraryWindowSession.cpp), [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp), [`ProcessLauncher.cpp`](../../app/windows-winui/platform/ProcessLauncher.cpp), and [`DispatcherQueueExecutor.cpp`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) own WinUI composition, destructive restart, process launch, and callback affinity.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) owns the lower non-interactive composition and async shutdown boundary.
 
@@ -300,12 +315,17 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects the current TUI composition path.
+- [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+  protects catalog-aware admission and pure preferred/fallback resolution.
+- [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
+  protects Windows startup resolution and in-memory preference updates before the next checkpoint.
 - Tests under [`test/unit/desktop/`](../../test/unit/desktop/) run on Linux and
   Windows and protect shared startup, switch, protocol, argv, detach, and handle
   inheritance behavior.
 - WinUI app-policy tests under [`test/unit/winui/app/`](../../test/unit/winui/app/)
-  protect transactional explicit-root commit and destructive preparation/restart
-  order; bounded-cache tests and native WinUI builds protect native composition.
+  protect output-preference lifecycle, transactional explicit-root commit, and
+  destructive preparation/restart order; bounded-cache tests and native WinUI
+  builds protect native composition.
 
 ## Related documents
 

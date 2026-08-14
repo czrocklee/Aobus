@@ -53,6 +53,7 @@
 
 #include <glibmm/main.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/window.h>
 
@@ -338,22 +339,24 @@ namespace ao::gtk
                    execute(Command::CycleRepeat),
                    isEnabled(Command::CycleRepeat));
 
-    registerAction("playback.showOutputDeviceSelector",
-                   "Output Devices",
-                   "Playback",
-                   uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
-                   [this](layout::ActionActivationContext& ctx)
-                   {
-                     if (_outputDevicePopover.hasPopover())
-                     {
-                       return;
-                     }
+    registerAction(
+      "playback.showOutputDeviceSelector",
+      "Output Devices",
+      "Playback",
+      uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
+      [this](layout::ActionActivationContext& ctx)
+      {
+        if (_outputDevicePopover.hasPopover())
+        {
+          return;
+        }
 
-                     auto popoverPtr = std::make_unique<OutputDevicePopover>(ctx.runtime.playback());
-                     _outputDevicePopover.attach(std::move(popoverPtr), ctx.anchorWidget);
-                     _outputDevicePopover.popup();
-                   },
-                   {});
+        auto popoverPtr = std::make_unique<OutputDevicePopover>(
+          ctx.runtime.playback(), Gtk::PositionType::BOTTOM, _dependencies.onOutputDeviceSelectionRequested);
+        _outputDevicePopover.attach(std::move(popoverPtr), ctx.anchorWidget);
+        _outputDevicePopover.popup();
+      },
+      {});
   }
 
   void ShellLayoutController::registerShellActions(RegisterActionFn const& registerAction)

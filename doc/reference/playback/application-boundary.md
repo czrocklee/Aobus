@@ -79,6 +79,21 @@ snapshot.
 | `output` | `OutputState` | Selected device and available backends. |
 | `quality` | `QualityState` | Accepted quality graph. |
 
+#### `OutputState` and `OutputDeviceSelection`
+
+`OutputState::selectedDevice` is the Runtime-authoritative
+`audio::OutputDeviceSelection`; `availableBackends` is the current route catalog.
+
+| Selection field | Type | Meaning |
+|---|---|---|
+| `backendId` | `audio::BackendId` | Selected provider identity. |
+| `deviceId` | `audio::DeviceId` | Selected endpoint identity; empty represents a default only when the provider advertises an empty-id device. |
+| `profileId` | `audio::ProfileId` | Selected shared or exclusive profile identity. |
+
+The neutral value is defined below runtime so durable frontend payloads do not depend on a live playback snapshot type.
+The runtime surface assigns it no persistence lifecycle.
+Interactive UI restoration policy belongs to UIModel, and frontend composition owns its durable schema, command submission, and checkpoint timing.
+
 #### `PlaybackSuccessionSnapshot`
 
 | Field | Type | Meaning |

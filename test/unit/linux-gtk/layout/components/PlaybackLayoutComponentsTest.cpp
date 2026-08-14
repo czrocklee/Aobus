@@ -2,21 +2,29 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/AobusSoul.h"
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
+#include "app/linux-gtk/playback/OutputDevicePopover.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
+#include <gtkmm/listbox.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -228,6 +236,40 @@ namespace ao::gtk::layout::test
       auto* const label = dynamic_cast<Gtk::Label*>(button->get_child());
       REQUIRE(label != nullptr);
       CHECK(label->get_text() == "--"); // Default backend summary
+    }
+
+    SECTION("outputDeviceSelector reports the exact route selected from its popover")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+      auto optRequested = std::optional<audio::OutputDeviceSelection>{};
+      fixture.dependencies().onOutputDeviceSelectionRequested =
+        [&optRequested](audio::OutputDeviceSelection const& selection) { optRequested = selection; };
+      auto const node = LayoutNode{.type = "playback.outputDeviceSelector"};
+      auto const compPtr = fixture.create(node);
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto host = ao::gtk::test::GtkWindowFixture{};
+      host.mount(*button);
+      host.present();
+
+      ao::gtk::test::emitClicked(*button);
+      ao::gtk::test::drainGtkEvents();
+      auto* const popover = ao::gtk::test::findWidget<OutputDevicePopover>(*button);
+      REQUIRE(popover != nullptr);
+      ao::gtk::test::emitShow(*popover);
+      ao::gtk::test::drainGtkEvents();
+      auto* const listBox = ao::gtk::test::findWidget<Gtk::ListBox>(*popover);
+      REQUIRE(listBox != nullptr);
+      auto* const exclusiveRow = listBox->get_row_at_index(2);
+      REQUIRE(exclusiveRow != nullptr);
+
+      ao::gtk::test::emitRowActivated(*listBox, *exclusiveRow);
+
+      REQUIRE(optRequested);
+      CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
+      CHECK(optRequested->deviceId == audio::DeviceId{"device1"});
+      CHECK(optRequested->profileId == audio::kProfileExclusive);
     }
 
     SECTION("all 13 playback types register and instantiate")

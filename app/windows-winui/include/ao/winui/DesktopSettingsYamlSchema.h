@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 
 #include <ryml.hpp>
@@ -13,7 +14,7 @@
 
 namespace ao::winui
 {
-  inline constexpr std::uint32_t kDesktopSettingsVersion = 2;
+  inline constexpr std::uint32_t kDesktopSettingsVersion = 3;
   inline constexpr std::int32_t kDefaultWindowX = 80;
   inline constexpr std::int32_t kDefaultWindowY = 80;
   inline constexpr std::int32_t kDefaultWindowWidth = 1280;
@@ -44,6 +45,7 @@ namespace ao::winui
     WindowPlacement window{};
     ShellMode shellMode = ShellMode::Modern;
     std::string lastLibraryPath{};
+    audio::OutputDeviceSelection preferredOutputSelection{};
     double navigationPaneWidth = kDefaultNavigationPaneWidth;
     double inspectorPaneWidth = kDefaultInspectorPaneWidth;
 

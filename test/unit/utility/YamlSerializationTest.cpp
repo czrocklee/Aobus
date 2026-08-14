@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include <ao/Error.h>
+#include <ao/utility/StrongType.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
@@ -22,6 +23,11 @@ namespace ao::test
 {
   namespace
   {
+    struct YamlStringIdTag final
+    {};
+
+    using YamlStringId = utility::StrongType<std::string, YamlStringIdTag>;
+
     ryml::Tree parseYaml(std::string_view text)
     {
       auto state = yaml::ErrorCallbackState{};
@@ -144,6 +150,20 @@ namespace ao::test
       CHECK(readRes->first == 9);
       CHECK((readRes->second == std::vector<std::int32_t>{1, 2, 3}));
     }
+
+    SECTION("strong scalar fields reconstruct their semantic type and preserve missing seeds")
+    {
+      constexpr auto kStrongKeys = std::to_array<std::string_view>({"required", "optional"});
+      auto tree = parseYaml("required: decoded\n");
+      auto required = YamlStringId{"seed-required"};
+      auto optional = YamlStringId{"seed-optional"};
+      auto reader = yaml::MapReader{tree.rootref(), kStrongKeys, "state"};
+      reader.requiredScalar("required", required).optionalScalar("optional", optional);
+
+      REQUIRE(reader.result());
+      CHECK(required == "decoded");
+      CHECK(optional == "seed-optional");
+    }
   }
 
   TEST_CASE("YamlSerialization - sequence helpers preserve index context", "[core][unit][yaml]")
@@ -212,6 +232,21 @@ namespace ao::test
       REQUIRE(countRes);
       CHECK(*nameRes == "owned field");
       CHECK(*countRes == 7);
+    }
+
+    SECTION("MapWriter emits the underlying value of a strong scalar")
+    {
+      auto tree = ryml::Tree{yaml::callbacks()};
+      auto writer = yaml::MapWriter{tree.rootref()};
+      writer.scalar("id", YamlStringId{"strong-value"});
+      auto writeRes = std::move(writer).finish();
+      REQUIRE(writeRes);
+
+      auto parsed = parseYaml(ryml::emitrs_yaml<std::string>(tree));
+      auto idRes = yaml::scalarAs<std::string>(yaml::findChild(parsed.rootref(), "id"), "id");
+
+      REQUIRE(idRes);
+      CHECK(*idRes == "strong-value");
     }
 
     SECTION("MapWriter composes nested values and retains the first writer failure")

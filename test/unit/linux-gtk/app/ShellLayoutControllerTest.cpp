@@ -8,6 +8,7 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
+#include "playback/OutputDevicePopover.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -16,6 +17,9 @@
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/VirtualListIds.h>
@@ -32,6 +36,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/listbox.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/window.h>
 
@@ -41,6 +46,7 @@
 #include <fstream>
 #include <ios>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -127,18 +133,51 @@ namespace ao::gtk::test
     auto& playback = runtime.playback();
     auto commandSurface =
       uimodel::PlaybackCommandSurface{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
-    auto controller = ShellLayoutController{
-      runtime,
-      window,
-      configStorePtr,
-      storePtr,
-      componentStateStorePtr,
-      GtkUiDependencies{.playbackCommandSurface = &commandSurface, .themeCoordinator = &themeCoordinator}};
+    auto optOutputSelectionRequested = std::optional<audio::OutputDeviceSelection>{};
+    auto controller =
+      ShellLayoutController{runtime,
+                            window,
+                            configStorePtr,
+                            storePtr,
+                            componentStateStorePtr,
+                            GtkUiDependencies{
+                              .playbackCommandSurface = &commandSurface,
+                              .themeCoordinator = &themeCoordinator,
+                              .onOutputDeviceSelectionRequested =
+                                [&optOutputSelectionRequested](audio::OutputDeviceSelection const& selection)
+                              { optOutputSelectionRequested = selection; },
+                            }};
 
     SECTION("attachToWindow sets child")
     {
       controller.attachToWindow();
       CHECK(window.get_child() != nullptr);
+    }
+
+    SECTION("output-device action reports the exact route selected from its popover")
+    {
+      rt::test::addReadyAudioProvider(runtime, rt::test::makePipeWireOutputStatus());
+      controller.attachToWindow();
+      window.present();
+      drainGtkEvents();
+
+      controller.activateAction("playback.showOutputDeviceSelector");
+      drainGtkEvents();
+      auto* const popover = findWidget<OutputDevicePopover>(window);
+      REQUIRE(popover != nullptr);
+      emitShow(*popover);
+      drainGtkEvents();
+      auto* const listBox = findWidget<Gtk::ListBox>(*popover);
+      REQUIRE(listBox != nullptr);
+      auto* const exclusiveRow = listBox->get_row_at_index(2);
+      REQUIRE(exclusiveRow != nullptr);
+
+      emitRowActivated(*listBox, *exclusiveRow);
+
+      REQUIRE(optOutputSelectionRequested);
+      CHECK(optOutputSelectionRequested->backendId == audio::BackendId{"pipewire"});
+      CHECK(optOutputSelectionRequested->deviceId == audio::DeviceId{"device1"});
+      CHECK(optOutputSelectionRequested->profileId == audio::kProfileExclusive);
     }
 
     SECTION("layout edit action defers generation replacement until after dispatch")

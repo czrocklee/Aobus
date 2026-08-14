@@ -3,15 +3,15 @@
 
 #pragma once
 
+#include <ao/audio/OutputDeviceSelection.h>
+
 #include <string>
 
 namespace ao::rt
 {
   struct AppPrefsState final
   {
-    std::string lastOutputBackendId;
-    std::string lastOutputProfileId;
-    std::string lastOutputDeviceId;
+    audio::OutputDeviceSelection preferredOutputSelection{};
     std::string lastLayoutPreset;
     std::string lastThemePreset;
   };
@@ -19,8 +19,6 @@ namespace ao::rt
   struct AppSessionState final
   {
     std::string lastLibraryPath;
-    std::string lastOutputBackendId;
-    std::string lastOutputProfileId;
-    std::string lastOutputDeviceId;
+    audio::OutputDeviceSelection lastOutputSelection{};
   };
 } // namespace ao::rt

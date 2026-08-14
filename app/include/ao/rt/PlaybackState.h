@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
@@ -44,15 +45,6 @@ namespace ao::rt
     bool operator==(OutputBackendSnapshot const&) const = default;
   };
 
-  struct OutputDeviceSelection final
-  {
-    audio::BackendId backendId{};
-    audio::DeviceId deviceId{};
-    audio::ProfileId profileId{};
-
-    bool operator==(OutputDeviceSelection const&) const = default;
-  };
-
   inline bool supportsOutputProfile(OutputDeviceSnapshot const& device, audio::ProfileId const& profile)
   {
     return profile != audio::kProfileExclusive || !device.id.empty();
@@ -83,7 +75,7 @@ namespace ao::rt
 
   struct OutputState final
   {
-    OutputDeviceSelection selectedDevice{};
+    audio::OutputDeviceSelection selectedDevice{};
     std::vector<OutputBackendSnapshot> availableBackends{};
 
     bool operator==(OutputState const&) const = default;

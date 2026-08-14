@@ -39,6 +39,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gtkmm/stack.h>
@@ -290,10 +291,7 @@ namespace ao::gtk
       session.lastLibraryPath = _runtime.musicRoot().string();
     }
 
-    auto const& pb = _runtime.playback().snapshot().transport;
-    session.lastOutputBackendId = pb.output.selectedDevice.backendId.raw();
-    session.lastOutputDeviceId = pb.output.selectedDevice.deviceId.raw();
-    session.lastOutputProfileId = pb.output.selectedDevice.profileId.raw();
+    session.lastOutputSelection = _runtime.playback().snapshot().transport.output.selectedDevice;
 
     if (auto const savedRes = _configStorePtr->saveAppSession(session); !savedRes)
     {
@@ -338,15 +336,14 @@ namespace ao::gtk
     auto session = rt::AppSessionState{};
     _configStorePtr->loadAppSession(session);
 
-    bool const hasPreferredOutput = !prefs.lastOutputBackendId.empty() && !prefs.lastOutputProfileId.empty();
-    auto const& outputBackendId = hasPreferredOutput ? prefs.lastOutputBackendId : session.lastOutputBackendId;
-    auto const& outputDeviceId = hasPreferredOutput ? prefs.lastOutputDeviceId : session.lastOutputDeviceId;
-    auto const& outputProfileId = hasPreferredOutput ? prefs.lastOutputProfileId : session.lastOutputProfileId;
+    auto& playback = _runtime.playback();
+    auto const optOutputSelection = uimodel::resolveOutputDeviceSelectionToRestore(
+      prefs.preferredOutputSelection, session.lastOutputSelection, playback.snapshot().transport.output);
 
-    if (!outputBackendId.empty())
+    if (optOutputSelection)
     {
-      _runtime.playback().commands().setOutputDevice(
-        audio::BackendId{outputBackendId}, audio::DeviceId{outputDeviceId}, audio::ProfileId{outputProfileId});
+      playback.commands().setOutputDevice(
+        optOutputSelection->backendId, optOutputSelection->deviceId, optOutputSelection->profileId);
     }
 
     _implPtr->themeCoordinator.load(*_configStorePtr);
@@ -368,7 +365,16 @@ namespace ao::gtk
       .themeCoordinator = &_implPtr->themeCoordinator,
       .createSmartListFromExpression = [navigationController = &_implPtr->listNavigationController](
                                          ao::ListId parentListId, std::string expression)
-      { navigationController->createSmartListFromExpression(parentListId, std::move(expression)); }};
+      { navigationController->createSmartListFromExpression(parentListId, std::move(expression)); },
+      .onOutputDeviceSelectionRequested =
+        [configStorePtr = _configStorePtr](audio::OutputDeviceSelection const& selection)
+      {
+        auto prefs = rt::AppPrefsState{};
+        configStorePtr->loadAppPrefs(prefs);
+        prefs.preferredOutputSelection = selection;
+        configStorePtr->saveAppPrefs(prefs);
+      },
+    };
   }
 
   void MainWindowCoordinator::rebuildListPages()

@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -28,6 +30,7 @@ namespace ao::winui
      * is then only a way to raise the menu.
      */
     winrt::Microsoft::UI::Xaml::Controls::Button presenter{nullptr};
+    std::function<void(audio::OutputDeviceSelection const&)> onSelectionRequested{};
   };
 
   class OutputDeviceControl final
@@ -55,6 +58,7 @@ namespace ao::winui
     void closeFlyout() noexcept;
 
     winrt::Microsoft::UI::Xaml::Controls::Button _presenter{nullptr};
+    std::function<void(audio::OutputDeviceSelection const&)> _onSelectionRequested;
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyout _flyout{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _presenterClickRevoker{};
     std::vector<winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem::Click_revoker> _itemClickRevokers;

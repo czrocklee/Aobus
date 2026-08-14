@@ -76,9 +76,9 @@ namespace ao::gtk
       Result<> serialize(ryml::NodeRef node, rt::AppPrefsState const& state) const
       {
         auto writer = yaml::MapWriter{node};
-        writer.scalar("lastOutputBackendId", state.lastOutputBackendId)
-          .scalar("lastOutputProfileId", state.lastOutputProfileId)
-          .scalar("lastOutputDeviceId", state.lastOutputDeviceId)
+        writer.scalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
+          .scalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
+          .scalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
           .scalar("lastLayoutPreset", state.lastLayoutPreset)
           .scalar("lastThemePreset", state.lastThemePreset);
         return {};
@@ -92,9 +92,9 @@ namespace ao::gtk
 
         auto state = seed;
         auto reader = yaml::MapReader{node, kKeys, kContext, yaml::UnknownKeyPolicy::Allow};
-        reader.optionalScalar("lastOutputBackendId", state.lastOutputBackendId)
-          .optionalScalar("lastOutputProfileId", state.lastOutputProfileId)
-          .optionalScalar("lastOutputDeviceId", state.lastOutputDeviceId)
+        reader.optionalScalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
+          .optionalScalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
+          .optionalScalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
           .optionalScalar("lastLayoutPreset", state.lastLayoutPreset)
           .optionalScalar("lastThemePreset", state.lastThemePreset);
         return std::move(reader).finish(std::move(state));
@@ -107,9 +107,9 @@ namespace ao::gtk
       {
         auto writer = yaml::MapWriter{node};
         writer.scalar("lastLibraryPath", state.lastLibraryPath)
-          .scalar("lastOutputBackendId", state.lastOutputBackendId)
-          .scalar("lastOutputProfileId", state.lastOutputProfileId)
-          .scalar("lastOutputDeviceId", state.lastOutputDeviceId);
+          .scalar("lastOutputBackendId", state.lastOutputSelection.backendId)
+          .scalar("lastOutputProfileId", state.lastOutputSelection.profileId)
+          .scalar("lastOutputDeviceId", state.lastOutputSelection.deviceId);
         return {};
       }
 
@@ -122,9 +122,9 @@ namespace ao::gtk
         auto state = seed;
         auto reader = yaml::MapReader{node, kKeys, kContext, yaml::UnknownKeyPolicy::Allow};
         reader.optionalScalar("lastLibraryPath", state.lastLibraryPath)
-          .optionalScalar("lastOutputBackendId", state.lastOutputBackendId)
-          .optionalScalar("lastOutputProfileId", state.lastOutputProfileId)
-          .optionalScalar("lastOutputDeviceId", state.lastOutputDeviceId);
+          .optionalScalar("lastOutputBackendId", state.lastOutputSelection.backendId)
+          .optionalScalar("lastOutputProfileId", state.lastOutputSelection.profileId)
+          .optionalScalar("lastOutputDeviceId", state.lastOutputSelection.deviceId);
         return std::move(reader).finish(std::move(state));
       }
     };

@@ -7,6 +7,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/RenderTarget.h>
@@ -65,7 +66,7 @@ namespace ao::rt::test
     auto sub1 = fixture.playbackTransport.onOutputDevicesChanged([&] noexcept { devicesChangedFired = true; });
 
     bool outputChangedFired = false;
-    auto lastOutputDevice = OutputDeviceSelection{};
+    auto lastOutputDevice = audio::OutputDeviceSelection{};
     auto sub2 = fixture.playbackTransport.onOutputDeviceChanged(
       [&](auto const& ev) noexcept
       {

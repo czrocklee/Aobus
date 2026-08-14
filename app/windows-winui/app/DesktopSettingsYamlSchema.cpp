@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <expected>
 #include <format>
 #include <string>
@@ -75,14 +76,19 @@ namespace ao::winui
       return result;
     }
 
-    Result<> validateSettings(DesktopSettings const& state)
+    Result<> requireCurrentVersion(std::uint32_t const version)
     {
-      if (state.version != kDesktopSettingsVersion)
+      if (version != kDesktopSettingsVersion)
       {
         return makeError(
-          Error::Code::NotSupported, std::format("Unsupported Windows desktop settings version {}", state.version));
+          Error::Code::NotSupported, std::format("Unsupported Windows desktop settings version {}", version));
       }
 
+      return {};
+    }
+
+    Result<> validateSettingsValues(DesktopSettings const& state)
+    {
       if (!std::isfinite(state.navigationPaneWidth) || state.navigationPaneWidth < kMinimumNavigationPaneWidth ||
           state.navigationPaneWidth > kMaximumNavigationPaneWidth || !std::isfinite(state.inspectorPaneWidth) ||
           state.inspectorPaneWidth < kMinimumInspectorPaneWidth ||
@@ -97,7 +103,12 @@ namespace ao::winui
 
   Result<> DesktopSettingsYamlSchema::serialize(ryml::NodeRef node, DesktopSettings const& state) const
   {
-    if (auto const validRes = validateSettings(state); !validRes)
+    if (auto const versionRes = requireCurrentVersion(state.version); !versionRes)
+    {
+      return versionRes;
+    }
+
+    if (auto const validRes = validateSettingsValues(state); !validRes)
     {
       return validRes;
     }
@@ -107,6 +118,9 @@ namespace ao::winui
       .value("window", state.window, writeWindow)
       .scalar("shellMode", shellModeId(state.shellMode))
       .scalar("lastLibraryPath", state.lastLibraryPath)
+      .scalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
+      .scalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
+      .scalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
       .scalar("navigationPaneWidth", state.navigationPaneWidth)
       .scalar("inspectorPaneWidth", state.inspectorPaneWidth);
     return std::move(writer).finish();
@@ -115,17 +129,45 @@ namespace ao::winui
   Result<DesktopSettings> DesktopSettingsYamlSchema::deserialize(ryml::ConstNodeRef node,
                                                                  DesktopSettings const& /*seed*/) const
   {
-    constexpr auto kKeys = std::to_array<std::string_view>(
-      {"version", "window", "shellMode", "lastLibraryPath", "navigationPaneWidth", "inspectorPaneWidth"});
     constexpr auto kContext = std::string_view{"Windows desktop settings"};
 
+    if (auto const result = yaml::requireMap(node, kContext); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
+
+    if (!versionRes)
+    {
+      return std::unexpected{versionRes.error()};
+    }
+
+    if (auto const supportedRes = requireCurrentVersion(*versionRes); !supportedRes)
+    {
+      return std::unexpected{supportedRes.error()};
+    }
+
+    constexpr auto kKeys = std::to_array<std::string_view>({"version",
+                                                            "window",
+                                                            "shellMode",
+                                                            "lastLibraryPath",
+                                                            "lastOutputBackendId",
+                                                            "lastOutputProfileId",
+                                                            "lastOutputDeviceId",
+                                                            "navigationPaneWidth",
+                                                            "inspectorPaneWidth"});
+
     auto state = DesktopSettings{};
+    state.version = *versionRes;
     auto modeId = std::string{};
     auto reader = yaml::MapReader{node, kKeys, kContext};
-    reader.requiredScalar("version", state.version)
-      .requiredValue("window", state.window, readWindow)
+    reader.requiredValue("window", state.window, readWindow)
       .requiredScalar("shellMode", modeId)
       .requiredScalar("lastLibraryPath", state.lastLibraryPath)
+      .requiredScalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
+      .requiredScalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
+      .requiredScalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
       .requiredScalar("navigationPaneWidth", state.navigationPaneWidth)
       .requiredScalar("inspectorPaneWidth", state.inspectorPaneWidth);
     auto result = std::move(reader).finish(std::move(state));
@@ -144,7 +186,7 @@ namespace ao::winui
 
     result->shellMode = *modeRes;
 
-    if (auto const validRes = validateSettings(*result); !validRes)
+    if (auto const validRes = validateSettingsValues(*result); !validRes)
     {
       return std::unexpected{validRes.error()};
     }

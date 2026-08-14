@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <cstdint>
@@ -29,7 +29,7 @@ namespace ao::uimodel
   public:
     using PersistCallback = std::function<void(rt::AppPrefsState const&, PreferencesChange)>;
     using ThemeApplyCallback = std::function<void(ThemePreset)>;
-    using OutputApplyCallback = std::function<void(rt::OutputDeviceSelection const&)>;
+    using OutputApplyCallback = std::function<void(audio::OutputDeviceSelection const&)>;
 
     explicit PreferencesEditorModel(rt::AppPrefsState prefs,
                                     PersistCallback persist,
@@ -40,7 +40,7 @@ namespace ao::uimodel
 
     void setTheme(ThemePreset theme);
     void setLayoutPreset(std::string_view presetId);
-    void setOutputDeviceConfirmed(rt::OutputDeviceSelection const& selection);
+    void setPreferredOutputDevice(audio::OutputDeviceSelection const& selection);
 
   private:
     rt::AppPrefsState _prefs;

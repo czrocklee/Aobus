@@ -61,7 +61,7 @@ It does not denote nested mappings.
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
 | GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
 | GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentationPreferenceState`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
-| Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
+| Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `3`. | WinUI `LibrarySession`. |
 | Windows desktop settings | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
 | Windows desktop settings | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentationPreferenceState`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
 | Shell layout preset | `layout` | `ao::uimodel::LayoutDocument` | UIModel `LayoutDocumentYamlSchema`. | Required `version`; accepted value `1`. | Shell-layout workflow through `ShellLayoutStore`. |
@@ -71,7 +71,7 @@ The injected playback-session document is the global GTK config in GTK compositi
 It is the runtime workspace config in the current TUI composition because TUI does not inject a separate playback store.
 
 The `session` and `playback-session` groups are unrelated payloads.
-`session` records application reopen/output selection, while `playback-session` records restorable listening intent paired with one library.
+`session` records application reopen state and the last engine-confirmed output route, while `playback-session` records restorable listening intent paired with one library.
 
 ### Global GTK window group
 
@@ -93,15 +93,17 @@ The `runtime` group is a mapping whose fields are all strings with an empty C++ 
 
 | Field | Stored identity |
 |---|---|
-| `lastOutputBackendId` | Last selected audio backend id. |
-| `lastOutputProfileId` | Last selected backend profile id. |
-| `lastOutputDeviceId` | Last selected output device id. |
+| `lastOutputBackendId` | Preferred audio backend id requested through the selector. |
+| `lastOutputProfileId` | Preferred backend profile id requested through the selector. |
+| `lastOutputDeviceId` | Preferred output device id requested through the selector. |
 | `lastLayoutPreset` | Last selected shell-layout preset id. |
 | `lastThemePreset` | Last selected theme preset id. |
 
 The schema accepts arbitrary strings.
 Current layout and theme workflows interpret unknown or empty preset ids through their own fallback behavior; this group does not validate those catalogs.
 Missing known fields retain the deserialize seed, unknown fields are tolerated, duplicate fields are rejected, and a malformed present known field rejects the complete candidate.
+Output restore requires non-empty backend and profile ids and rejects a profile known to be unsupported by a published backend.
+A non-empty device id may remain preferred while temporarily unavailable; an empty device id is valid only when the selected backend advertises a compatible empty-id default.
 
 ### Global GTK application-session group
 
@@ -116,6 +118,8 @@ The `session` group is a mapping whose fields are all strings with an empty C++ 
 
 The schema stores `lastLibraryPath` as text and applies no normalization, existence check, or platform-path validation.
 It uses the same seeded-missing, unknown-field, duplicate-field, and malformed-known-field policy as the `runtime` group.
+When the preferred runtime-group tuple is not restorable, the session tuple is the GTK fallback.
+An incomplete session tuple is ignored; restore never synthesizes missing identity fields.
 
 ### Global GTK shortcut group
 
@@ -177,7 +181,7 @@ This registry does not convert schema membership into restore success.
 | `workspace` | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
 | `trackView.columnLayouts` | Independent payload version `2`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
 | `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
-| Windows `desktop` | Explicit version `2`; other versions are rejected rather than migrated. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
+| Windows `desktop` | Explicit version `3`; other versions are rejected rather than migrated. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
 | `playback-session` | Explicit schema version `3`; other versions are rejected rather than migrated. |
 | `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. |
 | Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |
@@ -225,6 +229,9 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) owns the layout-preset group and file boundary.
 - [`LayoutComponentState.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentState.h), [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own the standalone component-state envelope and markers.
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp), [`AppRuntime.cpp`](../../../app/runtime/AppRuntime.cpp), and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own store selection and sharing.
+- [`DesktopSettingsYamlSchema`](../../../app/windows-winui/include/ao/winui/DesktopSettingsYamlSchema.h)
+  owns the Windows `desktop` payload, while WinUI `LibrarySession` owns its
+  checkpoint and restore lifecycle.
 
 ## Test authority
 
@@ -235,6 +242,9 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp), [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect both per-library GTK presentation groups, version gates, and seeded-state fallback.
 - [`LayoutModelTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutModelTest.cpp) protects the layout payload's YAML fields and round trip; [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects its `layout` group and per-preset file boundary.
 - [`LayoutComponentStateTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutComponentStateTest.cpp) protects the standalone component-state envelope, versions, and schema; [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects preset matching, pruning, and the file boundary.
+- [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp)
+  protects the Windows `desktop` field set, version gate, and output-selection
+  round trip.
 
 No single test currently enumerates every registered group across all logical documents; this reference is checked against the individual authorities above.
 

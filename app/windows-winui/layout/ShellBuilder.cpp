@@ -310,6 +310,8 @@ namespace ao::winui::layout
         .statusMessageChanged = _statusMessageChanged,
         .gatePtr = generation.gatePtr,
         .paneSettings = paneSettings(),
+        .onOutputDeviceSelectionRequested = [this](audio::OutputDeviceSelection const& selection)
+        { _session.setPreferredOutputSelection(selection); },
         .menus = menus(),
         .reportStatus = [this](std::string message) { reportStatus(std::move(message)); },
         .focusedDetailPtr = generation.focusedDetailPtr,

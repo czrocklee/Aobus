@@ -5,6 +5,7 @@
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -74,10 +75,12 @@ namespace ao::uimodel
   } // namespace
 
   OutputDeviceViewModel::OutputDeviceViewModel(rt::PlaybackService& playback,
-                                               std::function<void(OutputDeviceViewState const&)> onRender)
+                                               RenderCallback onRender,
+                                               SelectionRequestedCallback onSelectionRequested)
     : _playback{playback}
     , _commands{playback.commands()}
     , _onRender{std::move(onRender)}
+    , _onSelectionRequested{std::move(onSelectionRequested)}
     , _lastOutput{playback.snapshot().transport.output}
   {
     _snapshotSub =
@@ -88,7 +91,17 @@ namespace ao::uimodel
                                                  audio::DeviceId const& deviceId,
                                                  audio::ProfileId const& profileId)
   {
-    _commands.setOutputDevice(backendId, deviceId, profileId);
+    auto const selection = audio::OutputDeviceSelection{
+      .backendId = backendId,
+      .deviceId = deviceId,
+      .profileId = profileId,
+    };
+    _commands.setOutputDevice(selection.backendId, selection.deviceId, selection.profileId);
+
+    if (_onSelectionRequested)
+    {
+      _onSelectionRequested(selection);
+    }
   }
 
   void OutputDeviceViewModel::refresh()

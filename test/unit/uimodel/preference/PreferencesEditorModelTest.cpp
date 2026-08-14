@@ -5,8 +5,8 @@
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -22,7 +22,7 @@ namespace ao::uimodel::test
     auto applied = std::vector<ThemePreset>{};
     auto initial = rt::AppPrefsState{};
     initial.lastThemePreset = "classic";
-    initial.lastOutputBackendId = "existing-backend";
+    initial.preferredOutputSelection.backendId = audio::BackendId{"existing-backend"};
 
     auto model = PreferencesEditorModel{initial,
                                         [&](rt::AppPrefsState const& prefs, PreferencesChange const change)
@@ -37,17 +37,16 @@ namespace ao::uimodel::test
 
     REQUIRE(persisted.size() == 1U);
     CHECK(persisted.front().lastThemePreset == "modern");
-    CHECK(persisted.front().lastOutputBackendId == "existing-backend");
+    CHECK(persisted.front().preferredOutputSelection.backendId == "existing-backend");
     REQUIRE(applied.size() == 1U);
     CHECK(applied.front() == ThemePreset::Modern);
     CHECK(model.preferences().lastThemePreset == "modern");
   }
 
-  TEST_CASE("PreferencesEditorModel - output changes persist engine-confirmed selection",
-            "[uimodel][unit][preferences]")
+  TEST_CASE("PreferencesEditorModel - output changes persist the requested preference", "[uimodel][unit][preferences]")
   {
     auto optPersisted = std::optional<rt::AppPrefsState>{};
-    auto optApplied = std::optional<rt::OutputDeviceSelection>{};
+    auto optApplied = std::optional<audio::OutputDeviceSelection>{};
     auto initial = rt::AppPrefsState{};
     initial.lastThemePreset = "modern";
 
@@ -58,22 +57,22 @@ namespace ao::uimodel::test
                                           optPersisted = prefs;
                                         },
                                         {},
-                                        [&](rt::OutputDeviceSelection const& selection) { optApplied = selection; }};
+                                        [&](audio::OutputDeviceSelection const& selection) { optApplied = selection; }};
 
-    auto const confirmed = rt::OutputDeviceSelection{
+    auto const requested = audio::OutputDeviceSelection{
       .backendId = audio::BackendId{"pipewire"},
       .deviceId = audio::DeviceId{"system-default"},
       .profileId = audio::kProfileShared,
     };
-    model.setOutputDeviceConfirmed(confirmed);
+    model.setPreferredOutputDevice(requested);
 
     REQUIRE(optPersisted);
     CHECK(optPersisted->lastThemePreset == "modern");
-    CHECK(optPersisted->lastOutputBackendId == "pipewire");
-    CHECK(optPersisted->lastOutputDeviceId == "system-default");
-    CHECK(optPersisted->lastOutputProfileId == audio::kProfileShared.raw());
+    CHECK(optPersisted->preferredOutputSelection.backendId == "pipewire");
+    CHECK(optPersisted->preferredOutputSelection.deviceId == "system-default");
+    CHECK(optPersisted->preferredOutputSelection.profileId == audio::kProfileShared.raw());
     REQUIRE(optApplied);
-    CHECK(*optApplied == confirmed);
+    CHECK(*optApplied == requested);
   }
 
   TEST_CASE("PreferencesEditorModel - layout preset changes persist for the next layout load",
@@ -82,7 +81,7 @@ namespace ao::uimodel::test
     auto optPersisted = std::optional<rt::AppPrefsState>{};
     auto initial = rt::AppPrefsState{};
     initial.lastThemePreset = "modern";
-    initial.lastOutputBackendId = "existing-backend";
+    initial.preferredOutputSelection.backendId = audio::BackendId{"existing-backend"};
     initial.lastLayoutPreset = "classic";
 
     auto model = PreferencesEditorModel{initial,
@@ -92,7 +91,7 @@ namespace ao::uimodel::test
                                           optPersisted = prefs;
                                         },
                                         [](ThemePreset) { FAIL("Layout preset changes must not apply theme changes"); },
-                                        [](rt::OutputDeviceSelection const&)
+                                        [](audio::OutputDeviceSelection const&)
                                         { FAIL("Layout preset changes must not apply output changes"); }};
 
     model.setLayoutPreset("modern");
@@ -100,7 +99,7 @@ namespace ao::uimodel::test
     REQUIRE(optPersisted);
     CHECK(optPersisted->lastLayoutPreset == "modern");
     CHECK(optPersisted->lastThemePreset == "modern");
-    CHECK(optPersisted->lastOutputBackendId == "existing-backend");
+    CHECK(optPersisted->preferredOutputSelection.backendId == "existing-backend");
     CHECK(model.preferences().lastLayoutPreset == "modern");
   }
 
@@ -109,16 +108,16 @@ namespace ao::uimodel::test
     auto current = rt::AppPrefsState{};
     current.lastThemePreset = "classic";
     current.lastLayoutPreset = "modern";
-    current.lastOutputBackendId = "pipewire";
-    current.lastOutputDeviceId = "current-device";
-    current.lastOutputProfileId = audio::kProfileShared.raw();
+    current.preferredOutputSelection.backendId = audio::BackendId{"pipewire"};
+    current.preferredOutputSelection.deviceId = audio::DeviceId{"current-device"};
+    current.preferredOutputSelection.profileId = audio::kProfileShared;
 
     auto requested = rt::AppPrefsState{};
     requested.lastThemePreset = "modern";
     requested.lastLayoutPreset = "classic";
-    requested.lastOutputBackendId = "alsa";
-    requested.lastOutputDeviceId = "requested-device";
-    requested.lastOutputProfileId = audio::kProfileExclusive.raw();
+    requested.preferredOutputSelection.backendId = audio::BackendId{"alsa"};
+    requested.preferredOutputSelection.deviceId = audio::DeviceId{"requested-device"};
+    requested.preferredOutputSelection.profileId = audio::kProfileExclusive;
 
     SECTION("theme updates only the theme")
     {
@@ -126,9 +125,9 @@ namespace ao::uimodel::test
 
       CHECK(merged.lastThemePreset == "modern");
       CHECK(merged.lastLayoutPreset == "modern");
-      CHECK(merged.lastOutputBackendId == "pipewire");
-      CHECK(merged.lastOutputDeviceId == "current-device");
-      CHECK(merged.lastOutputProfileId == audio::kProfileShared.raw());
+      CHECK(merged.preferredOutputSelection.backendId == "pipewire");
+      CHECK(merged.preferredOutputSelection.deviceId == "current-device");
+      CHECK(merged.preferredOutputSelection.profileId == audio::kProfileShared.raw());
     }
 
     SECTION("layout preset updates only the layout preset")
@@ -137,9 +136,9 @@ namespace ao::uimodel::test
 
       CHECK(merged.lastThemePreset == "classic");
       CHECK(merged.lastLayoutPreset == "classic");
-      CHECK(merged.lastOutputBackendId == "pipewire");
-      CHECK(merged.lastOutputDeviceId == "current-device");
-      CHECK(merged.lastOutputProfileId == audio::kProfileShared.raw());
+      CHECK(merged.preferredOutputSelection.backendId == "pipewire");
+      CHECK(merged.preferredOutputSelection.deviceId == "current-device");
+      CHECK(merged.preferredOutputSelection.profileId == audio::kProfileShared.raw());
     }
 
     SECTION("output updates only the output tuple")
@@ -148,9 +147,9 @@ namespace ao::uimodel::test
 
       CHECK(merged.lastThemePreset == "classic");
       CHECK(merged.lastLayoutPreset == "modern");
-      CHECK(merged.lastOutputBackendId == "alsa");
-      CHECK(merged.lastOutputDeviceId == "requested-device");
-      CHECK(merged.lastOutputProfileId == audio::kProfileExclusive.raw());
+      CHECK(merged.preferredOutputSelection.backendId == "alsa");
+      CHECK(merged.preferredOutputSelection.deviceId == "requested-device");
+      CHECK(merged.preferredOutputSelection.profileId == audio::kProfileExclusive.raw());
     }
   }
 } // namespace ao::uimodel::test

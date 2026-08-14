@@ -2,11 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "common/PopoverAttachment.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/OutputDevicePopover.h"
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -18,6 +20,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
+#include <functional>
 #include <memory>
 #include <utility>
 
@@ -34,6 +37,7 @@ namespace ao::gtk::layout
     public:
       OutputDeviceSelectorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _playback{ctx.runtime.playback()}
+        , _onSelectionRequested{ctx.dependencies.onOutputDeviceSelectionRequested}
         , _viewModel{_playback,
                      [this](uimodel::OutputDeviceViewState const& view)
                      {
@@ -53,7 +57,8 @@ namespace ao::gtk::layout
               return;
             }
 
-            auto popoverPtr = std::make_unique<OutputDevicePopover>(_playback, Gtk::PositionType::TOP);
+            auto popoverPtr =
+              std::make_unique<OutputDevicePopover>(_playback, Gtk::PositionType::TOP, _onSelectionRequested);
             _popoverAttachment.attach(std::move(popoverPtr), _button);
             _popoverAttachment.popup();
           });
@@ -65,6 +70,7 @@ namespace ao::gtk::layout
 
     private:
       rt::PlaybackService& _playback;
+      std::function<void(audio::OutputDeviceSelection const&)> _onSelectionRequested;
       Gtk::Button _button;
       Gtk::Label _label;
       uimodel::OutputDeviceViewModel _viewModel;

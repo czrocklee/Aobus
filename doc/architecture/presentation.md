@@ -68,6 +68,10 @@ Catalog output is never persisted or parsed for recovery, ordering, grouping, ag
 Runtime track-group snapshots retain raw text, numeric years, empty slots, and typed missing-value kinds until UIModel resolves the three heading slots.
 Runtime completion items retain query syntax, rank, and typed detail roles or frequency counts.
 Core audio descriptors retain backend/profile ids and external device facts; UIModel supplies built-in backend/profile copy and semantic audio icon kinds.
+`OutputDeviceViewModel` projects the same route rows and selection command for GTK, TUI, and WinUI, and exposes the exact requested route independently of engine confirmation.
+`OutputDeviceSelectionPolicy` is pure: it requires non-empty backend and profile ids, rejects a profile known to be unsupported, permits an unavailable non-empty device as pending intent, and permits an empty device only when the published catalog advertises a compatible empty-id default.
+Consequently an empty device with the exclusive profile is never restorable.
+Runtime remains authoritative for the current accepted selection, while frontend lifecycle owners decide whether and where to persist requested intent.
 Shared playback reports retain a closed template and typed arguments in the notification feed, and library-task progress retains a typed operation kind plus raw subject.
 
 The shared activity-status model consumes one immutable notification-feed update per mutation.
@@ -128,7 +132,11 @@ TUI owns FTXUI components, terminal geometry, key/mouse routing, overlays, refre
 It constructs the same `AppRuntime`, uses shared runtime services and selected UIModel view models/policies, and builds terminal elements from their state.
 
 TUI-local interaction models may own transient shell/overlay state but cannot become authorities for runtime playback, source order, or persisted library data.
-Its list chooser consumes the shared UIModel list-tree projection, and its command palette consumes the same UIModel track-filter completer as GTK's Quick-filter entry, while retaining terminal-only rendering, command, and presentation routing.
+Its output overlay consumes the same UIModel output-device view model as GTK
+and WinUI. Its list chooser consumes the shared UIModel list-tree projection,
+and its command palette consumes the same UIModel track-filter completer as
+GTK's Quick-filter entry, while retaining terminal-only rendering, command,
+and presentation routing.
 
 ### WinUI
 
@@ -181,13 +189,13 @@ Presentation state flows outward:
 ```text
 runtime semantic snapshot/event + raw arguments
   -> UIModel projection + PresentationTextCatalog when shared copy is needed
-  -> GTK widget binding or TUI render function
+  -> GTK widget binding, WinUI control, or TUI render function
 ```
 
 User input flows inward:
 
 ```text
-GTK/TUI input event
+GTK/WinUI/TUI input event
   -> platform event translation
   -> UIModel interaction/editor policy when needed
   -> runtime command or typed mutation request
@@ -263,6 +271,10 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
 - [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) owns shared authored copy and open-id fallback.
+- [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
+  owns shared output-route projection, selection commands, and requested-intent reporting;
+  [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+  owns pure persisted-selection admission and fallback resolution.
 - [`TrackGroupHeadingPresentation`](../../app/include/ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h) resolves structured runtime group headings.
 - [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns revision-bound metadata/tag interaction lifetime.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) owns stable field, sort, and group token conversion.
@@ -283,6 +295,10 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
 - [`PresentationTextCatalogTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
+- [`OutputDeviceViewModelTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp)
+  and [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+  protect the three-frontend selector projection, command route, and restore
+  admission policy.
 - [`ListTreeProjectionTest.cpp`](../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects shared list hierarchy, recovery, and ordering.
 - [`ThemePresetTest.cpp`](../../test/unit/uimodel/preference/ThemePresetTest.cpp) protects theme-id resolution and fallback.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.

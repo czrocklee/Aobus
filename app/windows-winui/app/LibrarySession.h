@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/ViewIds.h>
@@ -80,6 +81,7 @@ namespace ao::winui
     std::filesystem::path const& stateRoot() const noexcept { return _stateRoot; }
     rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> saveSettings();
+    void setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept;
     /// Apply and save an explicit startup root only after native activation.
     Result<> commitSelectedRoot();
     /// Remove playback intent and seal persistence before a destructive restart.

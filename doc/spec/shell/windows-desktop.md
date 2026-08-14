@@ -29,6 +29,8 @@ The [system architecture](../../architecture/system-overview.md) defines the run
 - A different-root restart prepares the still-live graph by checkpointing state and terminally retiring playback persistence. Retirement failure leaves that graph usable and launches no successor.
 - The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot and permanently seals playback writes.
 - Switching shells changes presentation only; it neither scans the library nor interrupts playback.
+- The current output route remains Runtime state. Both shells select it through
+  the same UIModel output-device model used by GTK and TUI.
 - All runtime and UIModel callbacks that touch XAML state execute through the window dispatcher.
 - The window detaches its observers and controllers before its session destroys the unique runtime.
 - Modern is the first-run shell. Both shells follow the effective Windows light or dark theme unless semantic theme tokens override their surfaces.
@@ -49,6 +51,15 @@ narrow tier the Now Playing artwork and text yield their space to transport,
 time, volume, and overflow commands.
 
 Library reads, playback, runtime resources, commands, and activity status always derive from the same active runtime.
+After audio providers are registered, startup resolves and resubmits the stored
+desktop output preference before controllers bind. The shared pure UIModel policy
+requires non-empty backend and profile ids and rejects a profile known to be
+unsupported by a published backend. A non-empty device may be submitted before
+catalog publication or while temporarily unavailable so Runtime can retain
+pending intent; an empty device is valid only when the published catalog
+advertises a compatible empty-id default. WASAPI therefore requires a concrete device id. Intent that cannot be
+submitted leaves the stored preference intact and the runtime-selected default
+in effect; either outcome is non-fatal.
 An ordinary startup starts playback-session observation and restores listening
 intent after workspace and providers are ready but before controllers bind. A
 successor startup instead begins in `AwaitingRootCommit`; commit success moves
@@ -135,6 +146,13 @@ The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume
 
 Modern Soul answers the same right-click, hold, and hover, and its click plays or pauses because Modern offers no separate Play/Pause button. Hovering either Soul describes the audio pipeline.
 
+Selecting an output row in either shell submits its backend, device, and profile
+ids through the shared UIModel selector and updates that exact requested tuple
+in memory. The selector performs no synchronous settings write; the next
+ordinary settings checkpoint persists the preference without replacing it with
+the engine-confirmed Runtime snapshot. Presentation rows and operating-system
+device names are not persisted.
+
 SMTC commands route through the shared playback command surface. Playback observations update transport state and asynchronously replace system title, artist, album, and artwork metadata.
 
 ## Failure and cancellation
@@ -206,6 +224,13 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), and [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h) own the grouped lazy table.
 - [`CoverArtPlaceholder`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h), [`ResourceByteLoader`](../../../app/include/ao/rt/resource/ResourceByteLoader.h), and [`CoverArtPresenter`](../../../app/windows-winui/image/CoverArtPresenter.h) own shared placeholder policy, runtime byte delivery, and WinUI presentation respectively.
 - [`AobusSoulControl`](../../../app/windows-winui/playback/AobusSoulControl.h) adapts the shared [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h).
+- [`OutputDeviceControl`](../../../app/windows-winui/playback/OutputDeviceControl.h)
+  adapts shared [`OutputDeviceViewModel`](../../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
+  rows; [`OutputDeviceSelectionPolicy`](../../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+  owns pure restore admission and fallback resolution;
+  [`DesktopOutputSelection`](../../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
+  adapts that rule to Windows settings, while `LibrarySession` submits the
+  resolved runtime command and checkpoints requested intent.
 - [`SmtcBridge`](../../../app/windows-winui/platform/SmtcBridge.h) and [`ThemeCoordinator`](../../../app/windows-winui/theme/ThemeCoordinator.h) own Windows media and theme adapters.
 - [`StringResources`](../../../app/windows-winui/platform/StringResources.h) resolves dynamic authored copy from the same PRI resource system used by XAML `x:Uid`.
 - [`WinUiErrorBoundary`](../../../app/windows-winui/include/ao/winui/WinUiErrorBoundary.h) owns optional-WinRT degradation and terminal diagnostic fallbacks; ordinary UI teardown does not use it.
@@ -216,6 +241,10 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`TrackDisplayIndexTest.cpp`](../../../test/unit/uimodel/library/track/TrackDisplayIndexTest.cpp) and [`IndexedTrackRowCacheTest.cpp`](../../../test/unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp) protect grouping and lazy row caching; runtime resource-byte tests protect shared cover delivery and stale-flight fencing.
 - [`LibraryScanWorkflowTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) protects the scan decision shared by GTK and WinUI.
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
+- [`OutputDeviceSelectionPolicyTest.cpp`](../../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+  protects catalog-aware persisted-route admission and fallback resolution.
+- [`DesktopOutputSelectionTest.cpp`](../../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
+  protects Windows startup resolution and the deferred-checkpoint preference update.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
 - Tests under [`test/unit/desktop/`](../../../test/unit/desktop/) protect shared
   successor arguments, strict root planning, same-root identity, detached

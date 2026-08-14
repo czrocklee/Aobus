@@ -17,6 +17,7 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppPrefsState.h>
@@ -72,9 +73,9 @@ namespace ao::gtk::test
 
     auto initialPrefs = rt::AppPrefsState{};
     initialPrefs.lastThemePreset = "modern";
-    initialPrefs.lastOutputBackendId = "preference-backend";
-    initialPrefs.lastOutputDeviceId = "preference-device";
-    initialPrefs.lastOutputProfileId = "preference-profile";
+    initialPrefs.preferredOutputSelection.backendId = audio::BackendId{"preference-backend"};
+    initialPrefs.preferredOutputSelection.deviceId = audio::DeviceId{"preference-device"};
+    initialPrefs.preferredOutputSelection.profileId = audio::ProfileId{"preference-profile"};
     configStorePtr->saveAppPrefs(initialPrefs);
 
     auto window = Gtk::Window{};
@@ -87,13 +88,44 @@ namespace ao::gtk::test
     auto loadedPrefs = rt::AppPrefsState{};
     configStorePtr->loadAppPrefs(loadedPrefs);
     CHECK(loadedPrefs.lastThemePreset == "modern");
-    CHECK(loadedPrefs.lastOutputBackendId == "preference-backend");
-    CHECK(loadedPrefs.lastOutputDeviceId == "preference-device");
-    CHECK(loadedPrefs.lastOutputProfileId == "preference-profile");
+    CHECK(loadedPrefs.preferredOutputSelection.backendId == "preference-backend");
+    CHECK(loadedPrefs.preferredOutputSelection.deviceId == "preference-device");
+    CHECK(loadedPrefs.preferredOutputSelection.profileId == "preference-profile");
 
     auto loadedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(loadedSession);
     CHECK(loadedSession.lastLibraryPath == runtime.musicLibrary().rootPath().string());
+  }
+
+  TEST_CASE("MainWindowCoordinator - main-window output requests update only the preferred route",
+            "[gtk][regression][main-window][audio]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto initialPrefs = rt::AppPrefsState{
+      .lastLayoutPreset = "classic",
+      .lastThemePreset = "modern",
+    };
+    configStorePtr->saveAppPrefs(initialPrefs);
+    auto window = Gtk::Window{};
+    auto coordinator = MainWindowCoordinator{window, fixture.runtime(), configStorePtr};
+    auto const dependencies = coordinator.uiDependencies();
+    auto const selection = audio::OutputDeviceSelection{
+      .backendId = audio::BackendId{"pipewire"},
+      .deviceId = audio::DeviceId{"headphones"},
+      .profileId = audio::kProfileExclusive,
+    };
+
+    REQUIRE(dependencies.onOutputDeviceSelectionRequested);
+    dependencies.onOutputDeviceSelectionRequested(selection);
+
+    auto loadedPrefs = rt::AppPrefsState{};
+    configStorePtr->loadAppPrefs(loadedPrefs);
+    CHECK(loadedPrefs.preferredOutputSelection == selection);
+    CHECK(loadedPrefs.lastLayoutPreset == "classic");
+    CHECK(loadedPrefs.lastThemePreset == "modern");
   }
 
   TEST_CASE("MainWindowCoordinator - rejected workspace state is not overwritten during initialization",
@@ -191,19 +223,20 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
     auto prefs = rt::AppPrefsState{};
-    prefs.lastOutputBackendId = "incomplete-preference-backend";
-    prefs.lastOutputProfileId = {};
+    prefs.preferredOutputSelection.backendId = audio::BackendId{"incomplete-preference-backend"};
+    prefs.preferredOutputSelection.profileId = {};
     configStorePtr->saveAppPrefs(prefs);
 
     auto session = rt::AppSessionState{};
-    session.lastOutputBackendId = "test_backend";
-    session.lastOutputDeviceId = "test_device";
-    session.lastOutputProfileId = audio::kProfileShared.raw();
+    session.lastOutputSelection.backendId = audio::BackendId{"test_backend"};
+    session.lastOutputSelection.deviceId = audio::DeviceId{"test_device"};
+    session.lastOutputSelection.profileId = audio::kProfileShared;
     REQUIRE(configStorePtr->saveAppSession(session));
 
     auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
+    drainGtkEvents();
 
     auto const selected = runtime.playback().snapshot().transport.output.selectedDevice;
     CHECK(selected.backendId == audio::BackendId{"test_backend"});
