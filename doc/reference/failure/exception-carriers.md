@@ -114,6 +114,7 @@ transfer an `exception_ptr` to an owning boundary, or enter AO fatal handling.
 | `TrackAuthoringSession::Impl::finishExceptionalSubmission()` | `PreservePrimaryException` | A primary submission exception is already active. The secondary invalidation changes state before notifying; a notification failure must not replace the primary exception. |
 | `ScopedTimer::~ScopedTimer()` | `DiagnosticFallback` | Timing output is diagnostic-only after the measured scope has completed; logger failure cannot affect the completed operation. |
 | `PlaybackTransport::Impl::~Impl()` | `DiagnosticFallback` | Playback shutdown has completed before release logging. Failure to format or submit that informational record cannot alter resource release. |
+| `clearKeymapAccelerators()` in `KeymapAccelerators.cpp` | `SafeCleanup` | This entry point exists to abandon accelerators, not to replace them: its callers are an owner releasing the invoker they hold, and an install unwinding with an exception already in flight. No live operation depends on the result, and the handlers check their owner before running. An install that needs the clear to have succeeded uses the throwing form instead. |
 
 No active-operation settings save, callback, observer, executor, thread root, or
 platform ABI callback is a suppression exemption. Expected failures at those

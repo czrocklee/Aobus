@@ -40,9 +40,14 @@ namespace ao::winui
   /**
    * @brief Drops every accelerator @p scope carries, before the invoker they hold goes away.
    *
-   * Reports a failure rather than throwing: every caller is a teardown path and
-   * one of them is `noexcept`, so throwing here would end the process over a
-   * shell that was already going away.
+   * For abandoning the accelerators, not for replacing them. Reports a failure
+   * rather than throwing, because a caller here is either releasing the invoker
+   * or unwinding with an exception already in flight, and throwing would end the
+   * process over a shell that was already going away.
+   *
+   * `applyKeymapAccelerators` therefore does not use this to make room for a new
+   * set: a swallowed failure there would leave the old accelerators installed
+   * under the new ones.
    */
   void clearKeymapAccelerators(winrt::Microsoft::UI::Xaml::UIElement const& scope) noexcept;
 } // namespace ao::winui

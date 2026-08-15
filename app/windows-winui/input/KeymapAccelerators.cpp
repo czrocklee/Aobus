@@ -4,6 +4,7 @@
 #include "input/KeymapAccelerators.h"
 
 #include "pch.h"
+#include <ao/Contract.h>
 #include <ao/rt/Log.h>
 #include <ao/winui/input/KeyChordAccelerator.h>
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
@@ -14,7 +15,6 @@
 
 #include <span>
 #include <string>
-#include <utility>
 
 namespace ao::winui
 {
@@ -40,13 +40,29 @@ namespace ao::winui
         { args.Handled(invoke(actionId)); });
       return accelerator;
     }
+
+    /// Drops every accelerator @p scope carries, letting a failure reach the caller.
+    void clearAccelerators(UIElement const& scope)
+    {
+      if (!scope)
+      {
+        return;
+      }
+
+      scope.KeyboardAccelerators().Clear();
+    }
   } // namespace
 
   void applyKeymapAccelerators(UIElement const& scope,
                                std::span<KeymapAcceleratorPlan const> const plans,
                                KeymapActionInvoker invoke)
   {
-    clearKeymapAccelerators(scope);
+    // Throwing form, not the noexcept one below: a clear that failed here left
+    // the previous accelerators installed, and appending on top of them would
+    // leave one key answered by two handlers. That is the opposite of the
+    // replacement this function promises, so the caller has to hear about it.
+    // Nothing has been appended yet, so failing now leaves the scope as it was.
+    clearAccelerators(scope);
 
     if (!scope || !invoke)
     {
@@ -66,7 +82,8 @@ namespace ao::winui
     {
       // The scope outlives this call and usually outlives the caller too, so a
       // half-installed set would keep answering keys with handlers nobody owns.
-      // Leave nothing behind, then let the caller fail.
+      // Leave nothing behind, then let the caller fail. The noexcept form here,
+      // because an exception is already in flight.
       clearKeymapAccelerators(scope);
       throw;
     }
@@ -74,18 +91,15 @@ namespace ao::winui
 
   void clearKeymapAccelerators(UIElement const& scope) noexcept
   {
-    if (!scope)
-    {
-      return;
-    }
-
-    // Every caller is a teardown path, one of them `noexcept`. A shell that
-    // cannot clear its accelerators is already being torn down, and the
-    // handlers check their owner is alive before running, so the honest answer
-    // is to record it and continue rather than end the process.
+    // Reaching here means the accelerators are being abandoned rather than
+    // replaced: an owner is releasing the invoker they hold, or an install is
+    // unwinding with an exception already in flight. Either way no live operation
+    // depends on the outcome, and the handlers check their owner is alive before
+    // running, so recording the failure beats ending the process. An install that
+    // needs the clear to have worked calls `clearAccelerators` instead.
     try
     {
-      scope.KeyboardAccelerators().Clear();
+      clearAccelerators(scope);
     }
     catch (winrt::hresult_error const& error)
     {
@@ -93,6 +107,7 @@ namespace ao::winui
     }
     catch (...)
     {
+      AO_AUDITED_CATCH(SafeCleanup);
       APP_LOG_WARN("KeymapAccelerators: failed to clear the accelerators");
     }
   }
