@@ -50,7 +50,7 @@ namespace ao::rt::test
           ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
                                                      _tempDir.path(),
                                                      LibraryPaths{_tempDir.path()}.databasePath(),
-                                                     library::test::kTestMusicLibraryMapSize))};
+                                                     library::test::kTestMusicLibraryMapBytes))};
       }
 
       ~RuntimeOwner()
@@ -192,7 +192,7 @@ namespace ao::rt::test
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
     auto runtimePtr = std::shared_ptr<CoreRuntime>{ao::test::requireValue(CoreRuntime::create(
-      std::move(executorPtr), tempDir.path(), paths.databasePath(), library::test::kTestMusicLibraryMapSize))};
+      std::move(executorPtr), tempDir.path(), paths.databasePath(), library::test::kTestMusicLibraryMapBytes))};
     auto loader = ResourceByteLoader{};
     loader.bind(runtimePtr);
     auto received = std::vector<std::byte>{};

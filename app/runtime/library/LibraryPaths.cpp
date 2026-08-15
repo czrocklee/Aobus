@@ -4,6 +4,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 
 #include <filesystem>
+#include <system_error>
 #include <utility>
 
 namespace ao::rt
@@ -39,6 +40,13 @@ namespace ao::rt
 
   bool LibraryPaths::hasExistingDatabase() const
   {
-    return std::filesystem::exists(databasePath() / kLmdbDataFileName);
+    // Nonempty rather than merely present. The Windows data-file preparation
+    // creates the file before LMDB initializes it, so a preparation or open that
+    // fails afterwards leaves an empty one behind. Reading that as an existing
+    // library would skip the first scan and leave the library permanently empty.
+    // Anything with content is left to open to validate or reject.
+    auto error = std::error_code{};
+    auto const size = std::filesystem::file_size(databasePath() / kLmdbDataFileName, error);
+    return !error && size > 0;
   }
 } // namespace ao::rt

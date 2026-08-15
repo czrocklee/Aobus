@@ -10,6 +10,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <fstream>
+#include <ios>
 
 namespace ao::rt::test
 {
@@ -40,5 +42,24 @@ namespace ao::rt::test
     }
 
     CHECK(paths.hasExistingDatabase());
+  }
+
+  TEST_CASE("LibraryPaths - an empty data file is not an existing database", "[runtime][unit][library]")
+  {
+    // The Windows data-file preparation creates the file before LMDB initializes
+    // it, so a preparation or open that fails afterwards leaves an empty one. Read
+    // as an existing library it would skip the first scan and leave the library
+    // permanently empty, so only a file with content counts.
+    auto const tempDir = ao::test::TempDir{};
+    auto const paths = LibraryPaths{tempDir.path()};
+    std::filesystem::create_directories(paths.databasePath());
+
+    auto const dataPath = paths.databasePath() / "data.mdb";
+    {
+      std::ofstream{dataPath, std::ios::binary};
+    }
+
+    REQUIRE(std::filesystem::exists(dataPath));
+    CHECK_FALSE(paths.hasExistingDatabase());
   }
 } // namespace ao::rt::test

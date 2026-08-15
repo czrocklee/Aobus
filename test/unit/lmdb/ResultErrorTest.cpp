@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <cerrno>
 #include <source_location>
 #include <string_view>
 
@@ -44,6 +45,20 @@ namespace ao::lmdb::test
       CHECK(errorRes.error().code == Error::Code::Conflict);
       CHECK(errorRes.error().location.line() == expectedLine);
       CHECK(std::string_view{errorRes.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
+    }
+
+    SECTION("An exhausted map is its own code, separate from other storage failures")
+    {
+      // A caller may answer this one by reopening with a larger map, so it must
+      // not arrive wearing the code of a failure that repeating would not fix.
+      CHECK(resultFromCode("mdb_put", MDB_MAP_FULL).error().code == Error::Code::StorageFull);
+      CHECK(resultFromCode("mdb_put", ENOSPC).error().code == Error::Code::IoError);
+      CHECK(resultFromCode("mdb_cursor_put", MDB_TXN_FULL).error().code == Error::Code::IoError);
+    }
+
+    SECTION("A map another process outgrew reports stale state")
+    {
+      CHECK(resultFromCode("mdb_txn_begin", MDB_MAP_RESIZED).error().code == Error::Code::InvalidState);
     }
 
     SECTION("Unmapped failures collapse to IoError")

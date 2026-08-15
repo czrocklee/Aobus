@@ -115,7 +115,7 @@ namespace ao::rt
     auto initializeRes = runtimePtr->initialize(std::move(dependencies.executorPtr),
                                                 std::move(dependencies.musicRoot),
                                                 std::move(dependencies.databasePath),
-                                                dependencies.musicLibraryMapSize,
+                                                dependencies.musicLibraryPinnedMapBytes,
                                                 dependencies.sleeper);
 
     if (!initializeRes)

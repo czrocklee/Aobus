@@ -183,7 +183,7 @@ namespace ao::rt::test
     constexpr std::size_t kMapSize = std::size_t{256} * 1024;
     auto const temp = ao::test::TempDir{};
     auto musicLibrary = ao::test::requireValue(library::MusicLibrary::open(
-      temp.path(), temp.path() / "db", library::MusicLibrary::Options{.mapSize = kMapSize}));
+      temp.path(), temp.path() / "db", library::MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
     auto executor = InlineExecutor{};
     auto readTransaction = musicLibrary.readTransaction();
     auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
@@ -196,7 +196,7 @@ namespace ao::rt::test
                      { return library::test::physicalWriter(musicLibrary.resources(), write).create(oversizedValue); });
 
     REQUIRE_FALSE(failureRes);
-    CHECK(failureRes.error().code == Error::Code::IoError);
+    CHECK(failureRes.error().code == Error::Code::StorageFull);
 
     // A failed mutation must release admission before its wrapper is destroyed.
     REQUIRE(mutationService.beginInteractiveMutation());

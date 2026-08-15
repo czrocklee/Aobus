@@ -31,6 +31,7 @@ namespace ao
       ResourceBusy,
       ValueTooLarge,
       ResourceExhausted,
+      StorageFull,
     };
 
     Code code = Code::Generic;

@@ -8,7 +8,6 @@
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -39,7 +38,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader::Iterator - reaches end as normal state", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -66,7 +65,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader - iterates no records for empty databases", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -80,7 +79,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader - get returns records by integer key", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -109,7 +108,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database-reader][entry-count]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -160,7 +159,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader::Iterator - compares equal to itself", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -179,7 +178,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader::Iterator - move constructor", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -199,7 +198,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader::Iterator - dereference", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");

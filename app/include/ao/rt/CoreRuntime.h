@@ -5,7 +5,7 @@
 
 #include <ao/Error.h>
 
-#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 
@@ -38,7 +38,7 @@ namespace ao::rt
     static Result<std::unique_ptr<CoreRuntime>> create(std::unique_ptr<async::Executor> executorPtr,
                                                        std::filesystem::path musicRoot,
                                                        std::filesystem::path databasePath,
-                                                       std::size_t musicLibraryMapSize = 0,
+                                                       std::uint64_t musicLibraryPinnedMapBytes = 0,
                                                        async::Sleeper* sleeper = nullptr);
     virtual ~CoreRuntime();
 
@@ -70,7 +70,7 @@ namespace ao::rt
     Result<> initialize(std::unique_ptr<async::Executor> executorPtr,
                         std::filesystem::path musicRoot,
                         std::filesystem::path databasePath,
-                        std::size_t musicLibraryMapSize,
+                        std::uint64_t musicLibraryPinnedMapBytes,
                         async::Sleeper* sleeper);
 
   private:

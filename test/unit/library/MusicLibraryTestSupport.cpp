@@ -14,13 +14,16 @@ namespace ao::library::test
 {
   MusicLibrary makeTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
   {
-    return ao::test::requireValue(MusicLibrary::open(
-      std::move(musicRoot), std::move(databasePath), MusicLibrary::Options{.mapSize = kTestMusicLibraryMapSize}));
+    return ao::test::requireValue(
+      MusicLibrary::open(std::move(musicRoot),
+                         std::move(databasePath),
+                         MusicLibrary::Options{.pinnedMapBytes = kTestMusicLibraryMapBytes}));
   }
 
   Result<MusicLibrary> openTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
   {
-    return MusicLibrary::open(
-      std::move(musicRoot), std::move(databasePath), MusicLibrary::Options{.mapSize = kTestMusicLibraryMapSize});
+    return MusicLibrary::open(std::move(musicRoot),
+                              std::move(databasePath),
+                              MusicLibrary::Options{.pinnedMapBytes = kTestMusicLibraryMapBytes});
   }
 } // namespace ao::library::test

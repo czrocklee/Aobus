@@ -7,7 +7,7 @@
 #include <ao/Contract.h>
 #include <ao/async/Task.h>
 
-#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <iosfwd>
 #include <memory>
@@ -48,7 +48,7 @@ namespace ao::cli
   class CliRuntime final
   {
   public:
-    explicit CliRuntime(std::ostream& out, std::ostream& err, std::size_t musicLibraryMapSize = 0);
+    explicit CliRuntime(std::ostream& out, std::ostream& err, std::uint64_t musicLibraryPinnedMapBytes = 0);
     ~CliRuntime();
 
     CliRuntime(CliRuntime const&) = delete;
@@ -89,7 +89,7 @@ namespace ao::cli
 
     CliOptions _options;
     CliIo _io;
-    std::size_t _musicLibraryMapSize = 0;
+    std::uint64_t _musicLibraryPinnedMapBytes = 0;
     // Observes the executor owned through _runtimePtr.
     async::LoopExecutor* _loopExecutor = nullptr;
     std::unique_ptr<rt::CoreRuntime> _runtimePtr;

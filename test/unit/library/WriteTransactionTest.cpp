@@ -121,7 +121,7 @@ namespace ao::library::test
     constexpr std::size_t kMapSize = std::size_t{256} * 1024;
     auto const temp = ao::test::TempDir{};
     auto library = ao::test::requireValue(
-      MusicLibrary::open(temp.path(), temp.path() / "db", MusicLibrary::Options{.mapSize = kMapSize}));
+      MusicLibrary::open(temp.path(), temp.path() / "db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
     auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
     auto transaction = writable.writeTransaction();
     auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
@@ -130,7 +130,7 @@ namespace ao::library::test
                                         { return physicalWriter(library.resources(), write).create(oversizedValue); });
 
     REQUIRE_FALSE(failureRes);
-    CHECK(failureRes.error().code == Error::Code::IoError);
+    CHECK(failureRes.error().code == Error::Code::StorageFull);
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();
   }

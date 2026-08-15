@@ -11,7 +11,6 @@
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -171,7 +170,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - create with id and data", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -191,7 +190,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -225,7 +224,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - append with data", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -256,7 +255,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -309,7 +308,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(transaction, "test");
     auto writer = db.writer(transaction);
@@ -333,7 +332,7 @@ namespace ao::lmdb::test
             "[lmdb][regression][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(transaction, "test");
     auto writer = db.writer(transaction);
@@ -361,7 +360,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -396,7 +395,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - update existing record", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -425,7 +424,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto setupTransaction = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(setupTransaction, "test");
@@ -459,7 +458,7 @@ namespace ao::lmdb::test
   TEST_CASE("ByteKeyDatabase::Writer - copied create and update persist bytes", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto writeTransaction = beginWriteTransaction(env);
     auto db = openByteKeyDatabase(writeTransaction, "test");
@@ -491,7 +490,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - delete record", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -527,7 +526,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - delete missing record returns false", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -546,7 +545,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - get within write transaction", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -562,7 +561,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - move constructor", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -581,7 +580,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -608,7 +607,7 @@ namespace ao::lmdb::test
   TEST_CASE("ReservationWriterAccess - duplicate create does not invoke encoder", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -648,7 +647,7 @@ namespace ao::lmdb::test
     constexpr std::size_t kMapSize = std::size_t{64} * 1024;
     constexpr std::size_t kOversizedValue = kMapSize * 4;
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20, .mapSize = kMapSize});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20, .pinnedMapBytes = kMapSize});
 
     auto setupTransaction = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(setupTransaction, "test");
@@ -670,7 +669,9 @@ namespace ao::lmdb::test
         }
         catch (detail::TransactionFailure const& failure)
         {
-          CHECK(failure.error().code == Error::Code::IoError);
+          // A value larger than the whole map exhausts it, which is capacity
+          // rather than plain IO.
+          CHECK(failure.error().code == Error::Code::StorageFull);
         }
       }
 
@@ -686,7 +687,9 @@ namespace ao::lmdb::test
         }
         catch (detail::TransactionFailure const& failure)
         {
-          CHECK(failure.error().code == Error::Code::IoError);
+          // A value larger than the whole map exhausts it, which is capacity
+          // rather than plain IO.
+          CHECK(failure.error().code == Error::Code::StorageFull);
         }
 
         CHECK(encoderCalls == 0);
@@ -701,7 +704,9 @@ namespace ao::lmdb::test
         }
         catch (detail::TransactionFailure const& failure)
         {
-          CHECK(failure.error().code == Error::Code::IoError);
+          // A value larger than the whole map exhausts it, which is capacity
+          // rather than plain IO.
+          CHECK(failure.error().code == Error::Code::StorageFull);
         }
       }
 
@@ -717,7 +722,9 @@ namespace ao::lmdb::test
         }
         catch (detail::TransactionFailure const& failure)
         {
-          CHECK(failure.error().code == Error::Code::IoError);
+          // A value larger than the whole map exhausts it, which is capacity
+          // rather than plain IO.
+          CHECK(failure.error().code == Error::Code::StorageFull);
         }
 
         CHECK(encoderCalls == 0);
@@ -737,7 +744,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto firstTransaction = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(firstTransaction, "test");

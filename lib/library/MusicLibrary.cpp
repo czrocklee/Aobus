@@ -58,10 +58,44 @@ namespace ao::library
   namespace
   {
     // LMDB configuration constants
-    constexpr std::size_t kLmdbMapSize = std::size_t{1} * 1024 * 1024 * 1024; // 1 GB
-    constexpr std::uint32_t kLmdbMaxDatabases = 8;                            // Seven named stores plus one spare.
+    // Capacity a fresh database starts with where the map's unused remainder is
+    // a hole. LMDB would otherwise start at its own 1 MiB default, which a first
+    // scan passes immediately. Generous because it costs no disk until used.
+    constexpr std::uint64_t kLmdbMapFloor = std::uint64_t{2} * 1024 * 1024 * 1024; // 2 GiB
+    // Capacity a fresh database starts with where the whole map is allocated, so
+    // an empty library occupies this immediately. Held at what the fixed map
+    // before managed capacity already claimed on such a volume: growth is added
+    // on top rather than the resting footprint being raised.
+    constexpr std::uint64_t kLmdbDenseMapFloor = std::uint64_t{1} * 1024 * 1024 * 1024; // 1 GiB
+    // Where growth stops. Reaching it would take a library far larger than any
+    // real collection; the ceiling is here to bound how many times a failed
+    // mutation can ask for a larger map, not because the figure is expected.
+    constexpr std::uint64_t kLmdbMapCeiling = std::uint64_t{64} * 1024 * 1024 * 1024; // 64 GiB
+    // Growth step where the data file cannot hold a hole, so the whole map is
+    // allocated. Large enough that steps stay rare, small enough that one step
+    // does not claim a surprising amount of the volume.
+    constexpr std::uint64_t kLmdbDenseMapStep = std::uint64_t{256} * 1024 * 1024; // 256 MiB
+    constexpr std::uint32_t kLmdbMaxDatabases = 8;                                // Seven named stores plus one spare.
     constexpr std::uint32_t kLmdbFileMode = 0664;
     constexpr std::size_t kLibraryIdBytes = 16;
+
+    /// Capacity management for one open, or none when the caller pinned the map.
+    lmdb::CapacityPolicy capacityPolicyFor(MusicLibrary::Options const& options)
+    {
+      if (options.pinnedMapBytes > 0)
+      {
+        // A pinned capacity is one the caller has to be able to rely on, so no
+        // growth rule may raise it.
+        return lmdb::CapacityPolicy{};
+      }
+
+      return lmdb::CapacityPolicy{
+        .minimumMapBytes = kLmdbMapFloor,
+        .denseMinimumMapBytes = kLmdbDenseMapFloor,
+        .maximumMapBytes = kLmdbMapCeiling,
+        .denseStepBytes = kLmdbDenseMapStep,
+      };
+    }
 
     std::chrono::sys_time<std::chrono::milliseconds> currentTimestamp()
     {
@@ -780,19 +814,16 @@ namespace ao::library
 
     static Result<std::unique_ptr<Impl>> create(std::filesystem::path musicRoot,
                                                 std::filesystem::path databasePath,
-                                                std::size_t mapSize)
+                                                Options const& options)
     {
       detail::resetOpenValidationMetrics();
 
-      if (mapSize == 0)
-      {
-        mapSize = kLmdbMapSize;
-      }
-
-      auto envRes = lmdb::Environment::open(
-        databasePath.string(),
-        lmdb::Environment::Options{
-          .flags = lmdb::kEnvNoTls, .mode = kLmdbFileMode, .maxDatabases = kLmdbMaxDatabases, .mapSize = mapSize});
+      auto envRes = lmdb::Environment::open(databasePath,
+                                            lmdb::Environment::Options{.flags = lmdb::kEnvNoTls,
+                                                                       .mode = kLmdbFileMode,
+                                                                       .maxDatabases = kLmdbMaxDatabases,
+                                                                       .pinnedMapBytes = options.pinnedMapBytes,
+                                                                       .capacity = capacityPolicyFor(options)});
 
       if (!envRes)
       {
@@ -902,7 +933,7 @@ namespace ao::library
     try
     {
       std::filesystem::create_directories(databasePath);
-      auto implRes = Impl::create(std::move(musicRoot), std::move(databasePath), options.mapSize);
+      auto implRes = Impl::create(std::move(musicRoot), std::move(databasePath), options);
 
       if (!implRes)
       {
@@ -1046,5 +1077,11 @@ namespace ao::library
   std::filesystem::path const& MusicLibrary::databasePath() const
   {
     return _implPtr->databasePath;
+  }
+
+  MusicLibrary::StorageCapacity MusicLibrary::storageCapacity() const
+  {
+    auto const capacity = _implPtr->env.capacity();
+    return StorageCapacity{.mapBytes = capacity.mapBytes, .highWaterBytes = capacity.highWaterBytes};
   }
 } // namespace ao::library

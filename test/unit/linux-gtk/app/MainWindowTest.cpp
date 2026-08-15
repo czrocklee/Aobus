@@ -180,7 +180,7 @@ namespace ao::gtk::test
       .executorPtr = std::make_unique<GtkMainContextExecutor>(),
       .musicRoot = musicRoot,
       .databasePath = databasePath,
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspacePath),
       .playbackSessionConfigStore = &configStorePtr->playbackSessionStore(),
     }));
@@ -280,7 +280,7 @@ namespace ao::gtk::test
       .executorPtr = std::make_unique<GtkMainContextExecutor>(),
       .musicRoot = musicRoot,
       .databasePath = databasePath,
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "workspace.yaml"),
       .playbackSessionConfigStore = &invalidPlaybackStore,
     }));

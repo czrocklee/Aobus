@@ -7,7 +7,6 @@
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -32,8 +31,30 @@ namespace ao::library
   public:
     struct Options final
     {
-      // Zero selects the production default map size.
-      std::size_t mapSize = 0;
+      /**
+       * Pins the database's capacity at exactly this many bytes, with no growth.
+       *
+       * Zero instead selects managed capacity: an existing database keeps the
+       * capacity it recorded, a fresh one starts at the library floor, and each
+       * open raises the map when the recorded peak has come too close to it. A
+       * nonzero value is for callers that need one known capacity, including
+       * tests that have to reach it.
+       */
+      std::uint64_t pinnedMapBytes = 0;
+    };
+
+    /**
+     * @brief How much this database may hold, and how far it has already grown.
+     *
+     * `highWaterBytes` is the peak the environment has needed, not a measure of
+     * live data: deleted rows return their pages to the free list for reuse
+     * without lowering it. It is the figure a capacity decision reads, because
+     * the map has to cover the peak rather than the survivors.
+     */
+    struct StorageCapacity final
+    {
+      std::uint64_t mapBytes = 0;
+      std::uint64_t highWaterBytes = 0;
     };
 
     ~MusicLibrary();
@@ -69,6 +90,8 @@ namespace ao::library
 
     std::filesystem::path const& rootPath() const;
     std::filesystem::path const& databasePath() const;
+
+    StorageCapacity storageCapacity() const;
 
   private:
     MusicLibrary() = default;

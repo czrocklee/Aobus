@@ -499,7 +499,7 @@ library:
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path() / "music",
       .databasePath = tempDir.path() / "db",
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }));
     auto confirmation = std::function<void(bool)>{};
@@ -593,7 +593,7 @@ library:
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path() / "music",
       .databasePath = tempDir.path() / "db",
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }));
 

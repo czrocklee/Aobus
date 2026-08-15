@@ -4,9 +4,15 @@ add_library(ao_lmdb STATIC
     Transaction.cpp
     TransactionFailure.cpp
     Database.cpp
+    detail/MapCapacityPolicy.cpp
     detail/ResultError.cpp
     detail/ThrowError.cpp
 )
+if(WIN32)
+    target_sources(ao_lmdb PRIVATE detail/EnvironmentDataFileWindows.cpp)
+else()
+    target_sources(ao_lmdb PRIVATE detail/EnvironmentDataFilePosix.cpp)
+endif()
 target_include_directories(ao_lmdb PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_lmdb PUBLIC ao_utility PkgLMDB)
 

@@ -8,14 +8,13 @@
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 namespace ao::lmdb::test
 {
   TEST_CASE("ByteKeyDatabase - supports reader and writer operations", "[lmdb][unit][database][byte-key]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openByteKeyDatabase(wtxn, "byte_database");

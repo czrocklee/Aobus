@@ -121,7 +121,7 @@ Mutation/administrative shapes:
 | `tag show` | `trackId?` or `trackIds?`, plus `tags` |
 | `tag add/remove` | `action, tag, dryRun, updated, trackIds, changes` |
 | `lib show` | `libraryId, libraryVersion, flags, createdTime` |
-| `lib stats` | `tracks, lists, resources, resourceBytes, manifest, dictionary, tags, diskBytes` |
+| `lib stats` | `tracks, lists, resources, resourceBytes, manifest, dictionary, tags, diskBytes, highWaterBytes, mapBytes` |
 | `lib verify` | `ok, issues[{type,uri,message?}]` |
 | `lib relink` list | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength}]` |
 | `lib relink` apply | `dryRun, oldUri, newUri, trackId` |
@@ -134,6 +134,11 @@ Mutation/administrative shapes:
 
 Change-record nested fields are defined by the runtime mutation reply types and are emitted without CLI reinterpretation.
 For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `listOnly`, and `targetScope` uses exact lowercase `library` or `lists`.
+
+`lib stats` reports three separate byte figures for the database and they answer different questions.
+`diskBytes` is what the database directory allocates, counting allocation rather than file length so a sparse data file is not reported as the whole map.
+`mapBytes` is the capacity the environment may grow into before a mutation runs out of room.
+`highWaterBytes` is how much of that capacity the environment has ever needed; deleting rows returns their pages for reuse without lowering it, so it is a peak rather than a measure of live data.
 
 ### Plain scan/status text
 

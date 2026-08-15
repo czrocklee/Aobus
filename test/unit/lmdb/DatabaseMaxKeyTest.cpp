@@ -3,9 +3,9 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
+#include <ao/lmdb/Environment.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 namespace ao::lmdb::test
 {
@@ -13,7 +13,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -27,7 +27,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader - maxKey after append", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -47,7 +47,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -66,7 +66,7 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Reader - maxKey after delete", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");
@@ -93,7 +93,7 @@ namespace ao::lmdb::test
             "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "test");

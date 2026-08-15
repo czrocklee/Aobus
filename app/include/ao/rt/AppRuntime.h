@@ -7,7 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 
-#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 
@@ -34,7 +34,7 @@ namespace ao::rt
     std::unique_ptr<async::Executor> executorPtr{};
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
-    std::size_t musicLibraryMapSize = 0;
+    std::uint64_t musicLibraryPinnedMapBytes = 0;
     /// Required owning store for workspace persistence and the default playback-session store.
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
     ConfigStore* playbackSessionConfigStore = nullptr;

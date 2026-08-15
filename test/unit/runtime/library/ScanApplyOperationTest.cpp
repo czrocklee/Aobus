@@ -198,7 +198,7 @@ namespace ao::rt::test
     {
       auto environment = lmdb::test::openEnvironment(
         databasePath,
-        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
+        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .pinnedMapBytes = library::test::kTestMusicLibraryMapBytes});
       auto transaction = lmdb::test::beginWriteTransaction(environment);
       auto hotDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_hot");
       auto coldDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_cold");

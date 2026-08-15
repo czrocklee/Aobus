@@ -45,7 +45,7 @@ namespace ao::cli::test
     auto out = std::ostringstream{};
     auto err = std::ostringstream{};
     auto const status =
-      run(args, out, err, CliRunOptions{.musicLibraryMapSize = library::test::kTestMusicLibraryMapSize});
+      run(args, out, err, CliRunOptions{.musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes});
     return {.status = status, .out = out.str(), .err = err.str()};
   }
 

@@ -75,7 +75,7 @@ namespace ao::rt::test
       return ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
                                                         tempDir.path(),
                                                         LibraryPaths{tempDir.path()}.databasePath(),
-                                                        library::test::kTestMusicLibraryMapSize));
+                                                        library::test::kTestMusicLibraryMapBytes));
     }
 
     SeededReadModelLibrary seedLibrary(ao::test::TempDir const& tempDir)

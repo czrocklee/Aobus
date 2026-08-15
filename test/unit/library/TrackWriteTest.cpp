@@ -196,8 +196,8 @@ namespace ao::library::test
   {
     constexpr std::size_t kMapSize = std::size_t{64} * 1024;
     auto const temp = ao::test::TempDir{};
-    auto library =
-      ao::test::requireValue(MusicLibrary::open(temp.path(), temp.path(), MusicLibrary::Options{.mapSize = kMapSize}));
+    auto library = ao::test::requireValue(
+      MusicLibrary::open(temp.path(), temp.path(), MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
     auto originalTransaction = writeTransaction(library);
     auto originalBuilder = TrackBuilder::makeEmpty();
     originalBuilder.metadata().title("Original");
@@ -235,7 +235,7 @@ namespace ao::library::test
     }
 
     REQUIRE(optFailure);
-    CHECK(optFailure->code == Error::Code::IoError);
+    CHECK(optFailure->code == Error::Code::StorageFull);
 
     auto readTransaction = library.readTransaction();
     auto const optView = library.tracks().reader(readTransaction).get(trackId);

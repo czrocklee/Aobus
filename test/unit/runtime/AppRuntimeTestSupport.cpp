@@ -166,7 +166,7 @@ namespace ao::rt::test
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
       .playbackSessionConfigStore = playbackSessionConfigStore,

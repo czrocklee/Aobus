@@ -135,7 +135,7 @@ namespace ao::rt::test
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
     });
 
     REQUIRE_FALSE(runtimeRes);
@@ -150,8 +150,10 @@ namespace ao::rt::test
 
     SECTION("CoreRuntime")
     {
-      auto const result = CoreRuntime::create(
-        std::make_unique<InlineExecutor>(), tempDir.path(), databaseFile.path, library::test::kTestMusicLibraryMapSize);
+      auto const result = CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                              tempDir.path(),
+                                              databaseFile.path,
+                                              library::test::kTestMusicLibraryMapBytes);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::IoError);
     }
@@ -162,7 +164,7 @@ namespace ao::rt::test
         .executorPtr = std::make_unique<InlineExecutor>(),
         .musicRoot = tempDir.path(),
         .databasePath = databaseFile.path,
-        .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
       });
       REQUIRE_FALSE(result);
@@ -184,7 +186,7 @@ namespace ao::rt::test
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
     }));
     auto allTracks = ao::test::requireValue(runtimePtr->sources().acquire(kAllTracksListId));
@@ -220,7 +222,7 @@ namespace ao::rt::test
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
     }));
@@ -255,6 +257,17 @@ namespace ao::rt::test
     auto const corePtr = std::unique_ptr<CoreRuntime>{std::move(appPtr)};
   }
 
+  TEST_CASE("CoreRuntime - a pinned map size is what the storage opens with", "[runtime][unit][core-runtime][capacity]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto runtimePtr = ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                                                 tempDir.path(),
+                                                                 LibraryPaths{tempDir.path()}.databasePath(),
+                                                                 library::test::kTestMusicLibraryMapBytes));
+
+    CHECK(runtimePtr->library().storageCapacity().mapBytes == library::test::kTestMusicLibraryMapBytes);
+  }
+
   TEST_CASE("CoreRuntime - shutdown wakes a writer behind queued publication",
             "[runtime][regression][core-runtime][concurrency]")
   {
@@ -264,7 +277,7 @@ namespace ao::rt::test
     auto runtimePtr = ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
                                                                  tempDir.path(),
                                                                  LibraryPaths{tempDir.path()}.databasePath(),
-                                                                 library::test::kTestMusicLibraryMapSize));
+                                                                 library::test::kTestMusicLibraryMapBytes));
 
     REQUIRE(runtimePtr->library().createList(LibraryWriter::ListDraft{.name = "Committed before close"}));
     REQUIRE(executor->queuedCount() == 1);
@@ -294,7 +307,7 @@ namespace ao::rt::test
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
     }));

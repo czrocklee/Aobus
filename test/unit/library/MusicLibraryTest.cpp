@@ -255,6 +255,53 @@ namespace ao::library::test
     CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
   }
 
+  TEST_CASE("MusicLibrary - storageCapacity reports the map it was opened with",
+            "[library][unit][music-library][capacity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto libraryRes = openTestMusicLibrary(temp.path(), temp.path());
+    REQUIRE(libraryRes);
+
+    auto const capacity = libraryRes->storageCapacity();
+    CHECK(capacity.mapBytes == kTestMusicLibraryMapBytes);
+    // A freshly admitted library holds its metadata, so it is past zero pages and
+    // nowhere near the map it may grow into.
+    CHECK(capacity.highWaterBytes > 0);
+    CHECK(capacity.highWaterBytes < capacity.mapBytes);
+  }
+
+  TEST_CASE("MusicLibrary - managed capacity opens a fresh library well past the LMDB default",
+            "[library][unit][music-library][capacity]")
+  {
+    constexpr auto kLmdbDefaultMapBytes = std::uint64_t{1} * 1024 * 1024;
+    auto const temp = ao::test::TempDir{};
+
+    // No pinned map size, so the library's own floor decides. LMDB would
+    // otherwise hand a new database 1 MiB, which one scan passes.
+    auto libraryRes = MusicLibrary::open(temp.path(), temp.path() / "managed-db");
+    REQUIRE(libraryRes);
+    CHECK(libraryRes->storageCapacity().mapBytes > kLmdbDefaultMapBytes * 512);
+  }
+
+  TEST_CASE("MusicLibrary - a pinned map size stays pinned across reopening",
+            "[library][unit][music-library][capacity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "pinned-db";
+
+    {
+      auto libraryRes = openTestMusicLibrary(temp.path(), databasePath);
+      REQUIRE(libraryRes);
+      REQUIRE(libraryRes->storageCapacity().mapBytes == kTestMusicLibraryMapBytes);
+    }
+
+    // Reopening pinned must not inherit-and-grow, or a test could never hold a
+    // library at a capacity it means to reach.
+    auto libraryRes = openTestMusicLibrary(temp.path(), databasePath);
+    REQUIRE(libraryRes);
+    CHECK(libraryRes->storageCapacity().mapBytes == kTestMusicLibraryMapBytes);
+  }
+
   TEST_CASE("MusicLibrary - opens each named database once per library admission", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
@@ -565,11 +612,11 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     constexpr std::size_t kUnusableMapSize = std::size_t{8} * 1024;
 
-    auto const result =
-      MusicLibrary::open(temp.path(), temp.path() / "tiny-db", MusicLibrary::Options{.mapSize = kUnusableMapSize});
+    auto const result = MusicLibrary::open(
+      temp.path(), temp.path() / "tiny-db", MusicLibrary::Options{.pinnedMapBytes = kUnusableMapSize});
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::IoError);
+    CHECK(result.error().code == Error::Code::StorageFull);
   }
 
   TEST_CASE("MusicLibrary - injected validation read fault remains a recoverable open result",
@@ -1012,7 +1059,7 @@ namespace ao::library::test
     {
       constexpr std::size_t kMapSize = std::size_t{256} * 1024;
       auto smallLibrary = ao::test::requireValue(
-        MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
+        MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
       {
         auto writerRes = WritableMusicLibrary::acquire(smallLibrary);
         REQUIRE(writerRes);
@@ -1022,7 +1069,9 @@ namespace ao::library::test
           transaction.apply([&smallLibrary, &oversizedValue](LibraryWrite& write)
                             { return physicalWriter(smallLibrary.resources(), write).create(oversizedValue); });
         REQUIRE_FALSE(failureRes);
-        CHECK(failureRes.error().code == Error::Code::IoError);
+        // A pinned map admits no growth, so a value larger than the whole map
+        // exhausts it, and that arrives as capacity rather than as plain IO.
+        CHECK(failureRes.error().code == Error::Code::StorageFull);
       }
 
       REQUIRE(WritableMusicLibrary::acquire(smallLibrary));

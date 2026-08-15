@@ -9,6 +9,7 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <span>
@@ -31,6 +32,22 @@ namespace ao::rt
   class LibraryTaskService;
   class LibraryWriter;
 
+  /**
+   * @brief How much the open library may hold, and how far it has grown.
+   *
+   * `highWaterBytes` is the peak the storage has needed, not a measure of live
+   * data: deleting records returns their pages for reuse without lowering it.
+   * A decision about capacity reads the peak, because that is what a mutation
+   * runs out of.
+   */
+  struct LibraryStorageCapacity final
+  {
+    std::uint64_t mapBytes = 0;
+    std::uint64_t highWaterBytes = 0;
+
+    friend bool operator==(LibraryStorageCapacity const&, LibraryStorageCapacity const&) = default;
+  };
+
   // CQRS façade over the music library, exposing four cooperating roles:
   // reader (consistent point-in-time reads), writer (synchronous mutations),
   // task service (long-running async operations) and changes (the mutation event bus).
@@ -51,6 +68,8 @@ namespace ao::rt
     Library& operator=(Library&&) = delete;
 
     LibraryReader reader() const;
+    /// What the open storage may hold, for a caller deciding whether it is enough.
+    LibraryStorageCapacity storageCapacity() const;
     LibraryChanges const& changes() const noexcept;
     LibraryWriter& writer() noexcept;
     LibraryTaskService& taskService() noexcept;

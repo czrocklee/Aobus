@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <ios>
 #include <iterator>
@@ -320,8 +321,8 @@ namespace ao::cli::test
 
     {
       auto environmentRes = lmdb::Environment::open(
-        databasePath.string(),
-        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
+        databasePath,
+        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .pinnedMapBytes = library::test::kTestMusicLibraryMapBytes});
       REQUIRE(environmentRes);
       auto environment = std::move(*environmentRes);
       auto transactionRes = lmdb::WriteTransaction::begin(environment);
@@ -443,6 +444,8 @@ namespace ao::cli::test
     CHECK(contains(result.out, "dictionary: "));
     CHECK(contains(result.out, "tags: 1"));
     CHECK(contains(result.out, "diskBytes: "));
+    CHECK(contains(result.out, "highWaterBytes: "));
+    CHECK(contains(result.out, std::format("mapBytes: {}", library::test::kTestMusicLibraryMapBytes)));
 
     result = fixture.run({"-O", "json", "lib", "stats"});
     REQUIRE(result.status == 0);
@@ -452,6 +455,8 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["resources"]) == "1");
     CHECK(tree.rootref()["dictionary"].readable());
     CHECK(tree.rootref()["diskBytes"].readable());
+    CHECK(tree.rootref()["highWaterBytes"].readable());
+    CHECK(tree.rootref()["mapBytes"].readable());
   }
 
   TEST_CASE("CLI - lib verify reports missing files with failing exit", "[cli][workflow][lib][verify]")

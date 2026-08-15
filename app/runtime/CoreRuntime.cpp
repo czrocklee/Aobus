@@ -14,7 +14,6 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/utility/Path.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -97,12 +96,12 @@ namespace ao::rt
   Result<std::unique_ptr<CoreRuntime>> CoreRuntime::create(std::unique_ptr<async::Executor> executorPtr,
                                                            std::filesystem::path musicRoot,
                                                            std::filesystem::path databasePath,
-                                                           std::size_t const musicLibraryMapSize,
+                                                           std::uint64_t const musicLibraryPinnedMapBytes,
                                                            async::Sleeper* const sleeper)
   {
     auto runtimePtr = std::unique_ptr<CoreRuntime>{new CoreRuntime{}};
     auto result = runtimePtr->initialize(
-      std::move(executorPtr), std::move(musicRoot), std::move(databasePath), musicLibraryMapSize, sleeper);
+      std::move(executorPtr), std::move(musicRoot), std::move(databasePath), musicLibraryPinnedMapBytes, sleeper);
 
     if (!result)
     {
@@ -115,7 +114,7 @@ namespace ao::rt
   Result<> CoreRuntime::initialize(std::unique_ptr<async::Executor> executorPtr,
                                    std::filesystem::path musicRoot,
                                    std::filesystem::path databasePath,
-                                   std::size_t const musicLibraryMapSize,
+                                   std::uint64_t const musicLibraryPinnedMapBytes,
                                    async::Sleeper* const sleeper)
   {
     if (executorPtr == nullptr)
@@ -124,7 +123,7 @@ namespace ao::rt
     }
 
     auto storageRes = library::MusicLibrary::open(
-      musicRoot, databasePath, library::MusicLibrary::Options{.mapSize = musicLibraryMapSize});
+      musicRoot, databasePath, library::MusicLibrary::Options{.pinnedMapBytes = musicLibraryPinnedMapBytes});
 
     if (!storageRes)
     {

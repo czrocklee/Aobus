@@ -11,7 +11,6 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <array>
 #include <chrono>
@@ -33,7 +32,7 @@ namespace ao::lmdb::test
   TEST_CASE("ReadTransaction - helper starts transaction", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     // First create database with write transaction
     auto wtxn = beginWriteTransaction(env);
@@ -49,7 +48,7 @@ namespace ao::lmdb::test
   TEST_CASE("ReadTransaction - begin returns transaction", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto txnRes = ReadTransaction::begin(env);
 
@@ -59,7 +58,7 @@ namespace ao::lmdb::test
   TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     // Create database with write transaction
     auto wtxn = beginWriteTransaction(env);
@@ -81,7 +80,7 @@ namespace ao::lmdb::test
   TEST_CASE("ReadTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     // Create database first with write transaction
     auto wtxn = beginWriteTransaction(env);
@@ -101,7 +100,7 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - helper starts transaction", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto txn = beginWriteTransaction(env);
     // Verify transaction is valid by using it to create a database
@@ -112,7 +111,7 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - begin returns transaction", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto txnRes = WriteTransaction::begin(env);
 
@@ -122,7 +121,7 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - commit persists written data", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     // Create database, write data, commit
     auto wtxn = beginWriteTransaction(env);
@@ -146,7 +145,7 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     // Create database
     auto dbTxn = beginWriteTransaction(env);
@@ -170,7 +169,7 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - explicit abort is terminal and idempotent", "[lmdb][unit][transaction]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(transaction, "test");
     auto writer = db.writer(transaction);
@@ -185,7 +184,7 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     // First create the database
     auto wtxn = beginWriteTransaction(env);

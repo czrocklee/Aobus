@@ -167,6 +167,7 @@ add_executable(ao_core_test
 
     # utility tests
     unit/utility/AtomicFileTest.cpp
+    unit/utility/FileAllocationTest.cpp
     unit/utility/RaiiTest.cpp
     unit/utility/Base64Test.cpp
     unit/utility/Xxh3Test.cpp
@@ -277,6 +278,8 @@ add_executable(ao_core_test
     # lmdb tests
     unit/lmdb/LmdbTestSupport.cpp
     unit/lmdb/EnvironmentTest.cpp
+    unit/lmdb/EnvironmentDataFileTest.cpp
+    unit/lmdb/MapCapacityPolicyTest.cpp
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp
     unit/lmdb/DatabaseReaderTest.cpp

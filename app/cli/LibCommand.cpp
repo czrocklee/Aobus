@@ -31,6 +31,7 @@
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/FileAllocation.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/Reflect.h>
@@ -101,6 +102,8 @@ namespace ao::cli
     std::size_t dictionary = 0;
     std::size_t tags = 0;
     std::uint64_t diskBytes = 0;
+    std::uint64_t highWaterBytes = 0;
+    std::uint64_t mapBytes = 0;
   };
 
   namespace
@@ -316,7 +319,10 @@ namespace ao::cli
       }
     }
 
-    std::uint64_t directorySize(std::filesystem::path const& path)
+    // Allocation rather than length, because a sparse Windows LMDB data file
+    // reports the environment's whole map size as its length while only its
+    // committed pages occupy disk. The two agree on POSIX.
+    std::uint64_t directoryAllocatedBytes(std::filesystem::path const& path)
     {
       auto ec = std::error_code{};
       std::uint64_t total = 0;
@@ -342,12 +348,9 @@ namespace ao::cli
           continue;
         }
 
-        if (auto const size = it->file_size(ec); !ec)
-        {
-          total += size;
-        }
-
-        ec.clear();
+        // The query reports zero for an entry it cannot inspect, which is the
+        // same tolerance the surrounding walk already applies.
+        total += utility::allocatedFileBytes(it->path());
       }
 
       return total;
@@ -399,7 +402,11 @@ namespace ao::cli
         stats.tags = tagIds.size();
       }
 
-      stats.diskBytes = directorySize(databasePath);
+      stats.diskBytes = directoryAllocatedBytes(databasePath);
+
+      auto const capacity = ml.storageCapacity();
+      stats.highWaterBytes = capacity.highWaterBytes;
+      stats.mapBytes = capacity.mapBytes;
       return stats;
     }
 
@@ -424,6 +431,8 @@ namespace ao::cli
       std::println(os, "dictionary: {}", stats.dictionary);
       std::println(os, "tags: {}", stats.tags);
       std::println(os, "diskBytes: {}", stats.diskBytes);
+      std::println(os, "highWaterBytes: {}", stats.highWaterBytes);
+      std::println(os, "mapBytes: {}", stats.mapBytes);
     }
 
     bool isVerifyIssue(rt::ScanClassification classification)

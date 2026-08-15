@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <string>
@@ -13,7 +12,7 @@ namespace ao::cli
 {
   struct CliRunOptions final
   {
-    std::size_t musicLibraryMapSize = 0;
+    std::uint64_t musicLibraryPinnedMapBytes = 0;
   };
 
   std::int32_t run(std::int32_t argc,

@@ -14,7 +14,7 @@
 
 #include <gsl-lite/gsl-lite.hpp>
 
-#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <ostream>
 #include <utility>
@@ -39,8 +39,8 @@ namespace ao::cli
     }
   } // namespace
 
-  CliRuntime::CliRuntime(std::ostream& out, std::ostream& err, std::size_t const musicLibraryMapSize)
-    : _io{.out = out, .err = err}, _musicLibraryMapSize{musicLibraryMapSize}
+  CliRuntime::CliRuntime(std::ostream& out, std::ostream& err, std::uint64_t const musicLibraryPinnedMapBytes)
+    : _io{.out = out, .err = err}, _musicLibraryPinnedMapBytes{musicLibraryPinnedMapBytes}
   {
   }
 
@@ -69,8 +69,10 @@ namespace ao::cli
       // loop executor to the thread that enters the first command callback.
       auto executorPtr = std::make_unique<async::LoopExecutor>();
       auto* const loopExecutor = executorPtr.get();
-      auto runtimeRes = rt::CoreRuntime::create(
-        std::move(executorPtr), _options.root, rt::LibraryPaths{_options.root}.databasePath(), _musicLibraryMapSize);
+      auto runtimeRes = rt::CoreRuntime::create(std::move(executorPtr),
+                                                _options.root,
+                                                rt::LibraryPaths{_options.root}.databasePath(),
+                                                _musicLibraryPinnedMapBytes);
 
       if (!runtimeRes)
       {

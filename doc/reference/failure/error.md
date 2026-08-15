@@ -51,6 +51,11 @@ The public authority is `include/ao/Error.h`; runtime, UIModel, and frontends ma
 | `ResourceBusy` | A requested native resource is temporarily owned or busy; callers may surface contention but do not infer retry or preemption policy. |
 | `ValueTooLarge` | External data is valid in shape but exceeds a serialized or configured size limit. |
 | `ResourceExhausted` | A finite identifier, storage, or runtime resource pool is exhausted. |
+| `StorageFull` | A database's mapped capacity is exhausted; the same work may succeed where more capacity is available. |
+
+`StorageFull` is deliberately narrower than `ResourceExhausted`.
+It marks the one exhaustion a caller can answer by arranging more capacity and repeating the work, so a caller may branch on it to do exactly that.
+A full volume is `IoError` and an exhausted identifier space stays `ResourceExhausted`, because repeating either with more capacity would fail again.
 
 Subsystem specifications narrow which codes a particular operation can produce.
 This table does not make every code valid for every `Result` API.

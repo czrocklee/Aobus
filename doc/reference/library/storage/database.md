@@ -25,7 +25,22 @@ This surface belongs to the **core libraries** layer in the [system architecture
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
 Application composition keeps only one live environment for a database path in each process, as required by LMDB; `MusicLibrary` has no canonical-path registry or duplicate-open admission mechanism.
 Independent processes may open the same environment under LMDB's normal locking rules.
-`MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and defaults to a 1 GiB map unless `MusicLibrary::Options::mapSize` overrides it.
+`MusicLibrary::open` uses `MDB_NOTLS` and allows eight named databases.
+That map is the capacity this environment may grow into, not disk it occupies: the [LMDB adapter](../../../spec/storage/lmdb-operation.md) prepares the data file so allocation follows committed use, and a full map remains the point at which mutation fails with `StorageFull`.
+`MusicLibrary::storageCapacity()` reports that capacity as `mapBytes` together with the `highWaterBytes` the database has needed; the high water is the peak page extent rather than live data, so deleting rows does not lower it.
+
+Capacity is either managed or pinned, and `MusicLibrary::Options` chooses which.
+
+Managed capacity is the default and is what the application uses.
+A fresh database opens at a floor, an existing one keeps the capacity it recorded, and each open raises the map when the recorded peak has come within a doubling of filling it, up to a 64 GiB ceiling.
+The floor depends on what the map costs on the volume holding it: 2 GiB where the data file can hold a hole, so the capacity is reserved without occupying disk, and 1 GiB where it cannot, because there an empty library would occupy the whole floor immediately.
+The dense figure is what the fixed map before managed capacity already claimed on such a volume, so growth is added on top rather than the resting footprint being raised.
+Where the data file cannot hold a hole the map then grows by 256 MiB steps instead of doubling, because there a larger map is larger disk usage.
+Capacity only ever grows: no open lowers a map a database already recorded, and no live environment is resized.
+A mutation that exhausts the map rolls back and leaves the recorded peak untouched, so nothing asks the next open for more room; repeating that work needs the database to have grown for another reason.
+
+`Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
+It is for callers that need one known capacity, including tests that mean to reach the end of a map.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
 It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-5 schema only when that catalog is empty.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.

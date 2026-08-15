@@ -39,7 +39,7 @@ namespace ao::lmdb::test
 
   Environment openEnvironment(std::filesystem::path const& path, Environment::Options const& options)
   {
-    auto result = Environment::open(path.string(), options);
+    auto result = Environment::open(path, options);
     REQUIRE(result);
     return std::move(*result);
   }

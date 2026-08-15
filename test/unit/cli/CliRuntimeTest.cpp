@@ -47,7 +47,7 @@ namespace ao::cli::test
     auto temp = ao::test::TempDir{};
     auto out = std::ostringstream{};
     auto err = std::ostringstream{};
-    auto cli = CliRuntime{out, err, library::test::kTestMusicLibraryMapSize};
+    auto cli = CliRuntime{out, err, library::test::kTestMusicLibraryMapBytes};
     cli.options().root = temp.path();
     auto const ownerThread = std::this_thread::get_id();
     auto& asyncRuntime = cli.core().async();
@@ -63,7 +63,7 @@ namespace ao::cli::test
     auto temp = ao::test::TempDir{};
     auto out = std::ostringstream{};
     auto err = std::ostringstream{};
-    auto cli = CliRuntime{out, err, library::test::kTestMusicLibraryMapSize};
+    auto cli = CliRuntime{out, err, library::test::kTestMusicLibraryMapBytes};
     cli.options().root = temp.path();
     auto& asyncRuntime = cli.core().async();
 
@@ -78,7 +78,7 @@ namespace ao::cli::test
     bool callbackRan = false;
 
     {
-      auto cli = CliRuntime{out, err, library::test::kTestMusicLibraryMapSize};
+      auto cli = CliRuntime{out, err, library::test::kTestMusicLibraryMapBytes};
       cli.options().root = temp.path();
       auto& callbackExecutor = cli.core().async().callbackExecutor();
       auto producer = std::jthread{[&] { callbackExecutor.dispatch([&] { callbackRan = true; }); }};

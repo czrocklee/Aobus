@@ -352,7 +352,7 @@ namespace ao::rt::test
         .executorPtr = std::move(executorPtr),
         .musicRoot = scratchPath,
         .databasePath = scratchPath / "db",
-        .musicLibraryMapSize = std::size_t{16} * 1024U * 1024U,
+        .musicLibraryPinnedMapBytes = std::size_t{16} * 1024U * 1024U,
         .workspaceConfigStorePtr = std::make_unique<ConfigStore>(scratchPath / "workspace.yaml"),
       });
     }
@@ -365,8 +365,10 @@ namespace ao::rt::test
       }
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
-      auto libraryRes = library::MusicLibrary::open(
-        scratchPath, scratchPath / "db", library::MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+      auto libraryRes =
+        library::MusicLibrary::open(scratchPath,
+                                    scratchPath / "db",
+                                    library::MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -427,7 +429,7 @@ namespace ao::rt::test
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto const databasePath = scratchPath / "slice-h-publication-library";
       auto libraryRes = library::MusicLibrary::open(
-        scratchPath, databasePath, library::MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, databasePath, library::MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -494,8 +496,10 @@ namespace ao::rt::test
       }
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
-      auto libraryRes = library::MusicLibrary::open(
-        scratchPath, scratchPath / "db", library::MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+      auto libraryRes =
+        library::MusicLibrary::open(scratchPath,
+                                    scratchPath / "db",
+                                    library::MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {

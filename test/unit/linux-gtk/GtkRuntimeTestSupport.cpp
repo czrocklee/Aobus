@@ -60,7 +60,7 @@ namespace ao::gtk::test
         .executorPtr = std::move(executorPtr),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
-        .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::move(configStorePtr),
       }));
     }
@@ -102,7 +102,7 @@ namespace ao::gtk::test
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
-      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }));
   }

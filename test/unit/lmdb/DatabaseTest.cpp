@@ -43,7 +43,7 @@ namespace ao::lmdb::test
   TEST_CASE("Database - helper opens database", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(wtxn, "newdb");
@@ -57,7 +57,7 @@ namespace ao::lmdb::test
   TEST_CASE("Typed databases - open returns the declared key type", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
 
     auto integerRes = IntegerKeyDatabase::open(wtxn, "integer");
@@ -79,7 +79,7 @@ namespace ao::lmdb::test
   TEST_CASE("Typed databases - openExisting never creates a missing named database", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
 
     auto missingRes = IntegerKeyDatabase::openExisting(transaction, "missing");
@@ -95,7 +95,7 @@ namespace ao::lmdb::test
   TEST_CASE("Typed databases - openExisting validates exact native key flags", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
     REQUIRE(IntegerKeyDatabase::open(transaction, "integer"));
     REQUIRE(ByteKeyDatabase::open(transaction, "byte"));
@@ -134,7 +134,7 @@ namespace ao::lmdb::test
             "[lmdb][regression][database]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
     {
       auto setup = beginWriteTransaction(env);
@@ -157,7 +157,7 @@ namespace ao::lmdb::test
   TEST_CASE("Typed databases - openExisting rejects an ordinary main-database row", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
     auto mainRes = ByteKeyDatabase::main(transaction);
     REQUIRE(mainRes);
@@ -174,7 +174,7 @@ namespace ao::lmdb::test
             "[lmdb][regression][database]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 1});
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 1});
     auto optFailure = std::optional<Error>{};
 
     try

@@ -2156,8 +2156,8 @@ namespace ao::rt::test
     auto const databasePath = temp.path() / "db";
 
     {
-      auto libraryRes =
-        library::MusicLibrary::open(temp.path(), databasePath, library::MusicLibrary::Options{.mapSize = kMapSize});
+      auto libraryRes = library::MusicLibrary::open(
+        temp.path(), databasePath, library::MusicLibrary::Options{.pinnedMapBytes = kMapSize});
       REQUIRE(libraryRes);
       auto library = std::move(*libraryRes);
       auto transaction = library::test::writeTransaction(library);
@@ -2203,8 +2203,8 @@ namespace ao::rt::test
       }};
 
     auto const start = std::chrono::steady_clock::now();
-    auto reopenedRes =
-      library::MusicLibrary::open(temp.path(), databasePath, library::MusicLibrary::Options{.mapSize = kMapSize});
+    auto reopenedRes = library::MusicLibrary::open(
+      temp.path(), databasePath, library::MusicLibrary::Options{.pinnedMapBytes = kMapSize});
     auto const endTime = std::chrono::steady_clock::now();
     sampler.request_stop();
     sampler.join();

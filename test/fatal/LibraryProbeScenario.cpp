@@ -127,7 +127,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{64} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{64} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -156,7 +156,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{64} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{64} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -192,10 +192,12 @@ namespace ao::library::test
       }
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
-      auto firstRes = MusicLibrary::open(
-        scratchPath, scratchPath / "first-db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
-      auto secondRes = MusicLibrary::open(
-        scratchPath, scratchPath / "second-db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+      auto firstRes = MusicLibrary::open(scratchPath,
+                                         scratchPath / "first-db",
+                                         MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
+      auto secondRes = MusicLibrary::open(scratchPath,
+                                          scratchPath / "second-db",
+                                          MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!firstRes || !secondRes)
       {
@@ -242,7 +244,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -282,7 +284,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -329,7 +331,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -366,7 +368,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -427,7 +429,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -482,7 +484,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -529,7 +531,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -598,7 +600,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -652,7 +654,7 @@ namespace ao::library::test
 
       {
         auto libraryRes = MusicLibrary::open(
-          scratchPath, databasePath, MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+          scratchPath, databasePath, MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
         if (!libraryRes)
         {
@@ -662,9 +664,9 @@ namespace ao::library::test
 
       {
         auto environmentRes = lmdb::Environment::open(
-          databasePath.string(),
+          databasePath,
           lmdb::Environment::Options{
-            .flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = std::size_t{16} * 1024U * 1024U});
+            .flags = lmdb::kEnvNoTls, .maxDatabases = 8, .pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
         if (!environmentRes)
         {
@@ -691,7 +693,7 @@ namespace ao::library::test
       }
 
       auto libraryRes = MusicLibrary::open(
-        scratchPath, databasePath, MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, databasePath, MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
@@ -724,8 +726,8 @@ namespace ao::library::test
         return 3;
       }
 
-      auto environmentRes = lmdb::Environment::open(
-        scratchPath.string(), lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
+      auto environmentRes =
+        lmdb::Environment::open(scratchPath, lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
 
       if (!environmentRes)
       {
@@ -852,10 +854,10 @@ namespace ao::library::test
         return 3;
       }
 
-      auto firstEnvironmentRes = lmdb::Environment::open(
-        firstPath.string(), lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
-      auto secondEnvironmentRes = lmdb::Environment::open(
-        secondPath.string(), lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
+      auto firstEnvironmentRes =
+        lmdb::Environment::open(firstPath, lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
+      auto secondEnvironmentRes =
+        lmdb::Environment::open(secondPath, lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
 
       if (!firstEnvironmentRes || !secondEnvironmentRes)
       {
@@ -932,7 +934,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto libraryRes = MusicLibrary::open(
-        scratchPath, scratchPath / "db", MusicLibrary::Options{.mapSize = std::size_t{16} * 1024U * 1024U});
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
 
       if (!libraryRes)
       {
