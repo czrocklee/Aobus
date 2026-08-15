@@ -35,7 +35,6 @@ namespace ao::utility::test
      */
     constexpr auto kPrimaryRoot = "C:\\aobus-config-primary";
     constexpr auto kFallbackRoot = "C:\\aobus-config-fallback";
-    constexpr auto kHomeRoot = "C:\\aobus-home";
 #else
     constexpr auto kExpectedDirectoryName = "aobus";
     constexpr auto kPrimaryRoot = "/tmp/aobus-config-primary";

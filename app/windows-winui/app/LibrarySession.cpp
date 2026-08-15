@@ -30,6 +30,7 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>

@@ -4,6 +4,7 @@
 #include "input/SystemCharacterKey.h"
 
 #include "pch.h"
+#include <ao/winui/input/KeyChordAccelerator.h>
 
 #include <cstdint>
 #include <optional>
@@ -12,6 +13,8 @@ namespace ao::winui
 {
   namespace
   {
+    /// Takes one byte out of the word `VkKeyScanExW` packs its answer into.
+    constexpr auto kScanByteMask = std::uint32_t{0xFF};
     /// The shift-state bits `VkKeyScanExW` reports in its high byte.
     constexpr auto kScanShift = std::uint32_t{1};
     constexpr auto kScanControl = std::uint32_t{2};
@@ -30,7 +33,7 @@ namespace ao::winui
         return std::nullopt;
       }
 
-      auto const state = static_cast<std::uint32_t>((static_cast<std::uint32_t>(scan) >> 8U) & 0xFFU);
+      auto const state = static_cast<std::uint32_t>((static_cast<std::uint32_t>(scan) >> 8U) & kScanByteMask);
 
       if ((state & (kScanControl | kScanAlt)) != 0)
       {
@@ -42,7 +45,7 @@ namespace ao::winui
       }
 
       return CharacterKey{
-        .virtualKey = static_cast<std::uint32_t>(scan) & 0xFFU,
+        .virtualKey = static_cast<std::uint32_t>(scan) & kScanByteMask,
         .needsShift = (state & kScanShift) != 0,
       };
     };

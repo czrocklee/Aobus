@@ -18,7 +18,6 @@
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>

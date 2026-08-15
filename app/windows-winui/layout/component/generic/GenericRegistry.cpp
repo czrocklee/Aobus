@@ -45,7 +45,8 @@ namespace ao::winui::layout
      */
     std::string resolvedText(uimodel::LayoutNode const& node)
     {
-      auto const text = node.propertyOr<std::string>(uimodel::kTextProp, {});
+      // Not const: the trailing return moves out of it.
+      auto text = node.propertyOr<std::string>(uimodel::kTextProp, {});
 
       if (auto const key = node.propertyOr<std::string>("textResourceKey", {}); !key.empty())
       {
