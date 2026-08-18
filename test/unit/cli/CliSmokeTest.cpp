@@ -17,8 +17,10 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/Sha256.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -33,6 +35,7 @@
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -420,6 +423,7 @@ namespace ao::cli::test
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
     fixture.copyAudio("hires.flac", "hires.flac");
+    fixture.copyAudio("with_cover.flac", "cover.flac");
 
     auto result = fixture.run({"init"});
     REQUIRE(result.status == 0);
@@ -430,17 +434,22 @@ namespace ao::cli::test
     result = fixture.run({"list", "create", "--name", "Pinned"});
     REQUIRE(result.status == 0);
 
-    auto const resourceBytes = std::array{std::byte{0x01}, std::byte{0x23}, std::byte{0x45}};
-    std::ignore = fixture.addResource(resourceBytes);
+    // The scanned cover is the only resource, and its described length is what
+    // the resource listing reports for it.
+    result = fixture.run({"-O", "yaml", "lib", "resource", "list"});
+    REQUIRE(result.status == 0);
+    auto const listing = parseYaml(result.out);
+    REQUIRE(listing.rootref()["resources"].num_children() == 1);
+    auto const coverBytes = std::string{yaml::scalarView(listing.rootref()["resources"][0]["size"])};
 
     result = fixture.run({"lib", "stats"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "tracks: 2"));
+    CHECK(contains(result.out, "tracks: 3"));
     CHECK(contains(result.out, "lists: 1"));
     CHECK(contains(result.out, "resources: 1"));
-    CHECK(contains(result.out, "resourceBytes: 3"));
-    CHECK(contains(result.out, "manifest: 2"));
+    CHECK(contains(result.out, std::format("resourceBytes: {}", coverBytes)));
+    CHECK(contains(result.out, "manifest: 3"));
     CHECK(contains(result.out, "dictionary: "));
     CHECK(contains(result.out, "tags: 1"));
     CHECK(contains(result.out, "diskBytes: "));
@@ -451,12 +460,24 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
     auto tree = parseYaml(result.out);
-    CHECK(yaml::scalarView(tree.rootref()["tracks"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["tracks"]) == "3");
     CHECK(yaml::scalarView(tree.rootref()["resources"]) == "1");
     CHECK(tree.rootref()["dictionary"].readable());
     CHECK(tree.rootref()["diskBytes"].readable());
     CHECK(tree.rootref()["highWaterBytes"].readable());
     CHECK(tree.rootref()["mapBytes"].readable());
+
+    // Retagging the carrier to hold no art and rescanning drops the reference.
+    // The described bytes fall with it, while the row stays: a descriptor is
+    // append-only, and another library may still name the same content.
+    fixture.copyAudio("basic_metadata.flac", "cover.flac");
+    result = fixture.run({"scan"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"lib", "stats"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "resources: 1"));
+    CHECK(contains(result.out, "resourceBytes: 0"));
   }
 
   TEST_CASE("CLI - lib verify reports missing files with failing exit", "[cli][workflow][lib][verify]")
@@ -587,21 +608,31 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - lib resource list and export preserve raw bytes", "[cli][workflow][lib][resource]")
+  TEST_CASE("CLI - lib resource list and export materialize a cover by digest", "[cli][workflow][lib][resource]")
   {
     auto fixture = CliFixture{};
-    auto const resourceBytes = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}, std::byte{0x40}};
-    auto const resourceId = fixture.addResource(resourceBytes);
+    fixture.copyAudio("with_cover.flac", "cover.flac");
 
-    auto result = fixture.run({"lib", "resource", "list"});
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "yaml", "lib", "resource", "list"});
+    REQUIRE(result.status == 0);
+    auto const listing = parseYaml(result.out);
+    REQUIRE(listing.rootref()["resources"].num_children() == 1);
+    auto const idText = std::string{yaml::scalarView(listing.rootref()["resources"][0]["id"])};
+    auto const sizeText = std::string{yaml::scalarView(listing.rootref()["resources"][0]["size"])};
+
+    result = fixture.run({"lib", "resource", "list"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, std::to_string(resourceId.raw())));
-    CHECK(contains(result.out, "4"));
+    CHECK(contains(result.out, idText));
+    CHECK(contains(result.out, sizeText));
 
+    // The row holds no bytes, so the export materializes them from the file that
+    // references the resource.
     auto const outputPath = fixture.root() / "cover.bin";
-    result =
-      fixture.run({"lib", "resource", "export", std::to_string(resourceId.raw()), "--output", outputPath.string()});
+    result = fixture.run({"lib", "resource", "export", idText, "--output", outputPath.string()});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     CHECK(contains(result.out, "exported resource:"));
@@ -609,16 +640,61 @@ namespace ao::cli::test
     auto in = std::ifstream{outputPath, std::ios::binary};
     REQUIRE(in);
     auto const exported = std::vector<char>{std::istreambuf_iterator{in}, std::istreambuf_iterator<char>{}};
-    REQUIRE(exported.size() == resourceBytes.size());
+    CHECK(std::to_string(exported.size()) == sizeText);
 
-    for (std::size_t index = 0; index < resourceBytes.size(); ++index)
-    {
-      CHECK(std::byte{static_cast<unsigned char>(exported[index])} == resourceBytes[index]);
-    }
+    // Those bytes are the resource because they hash to the digest the row
+    // names, which the dump prints.
+    auto const digest = utility::computeSha256(std::as_bytes(std::span{exported}));
+    result = fixture.run({"lib", "dump", "--resources"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, utility::sha256Hex(digest)));
+
+    // What the walk materialized it also installed, under the cache root this
+    // invocation was given. Reading it back through the cache is how the test
+    // states which directory that is: an entry in the machine's own cache would
+    // both survive the fixture and evict a user's covers to hold its budget.
+    auto const cache = rt::ResourceDiskCache{rt::ResourceDiskCache::Config{
+      .directory = rt::coverCacheDirectory(fixture.cacheDirectory()),
+      .maximumEntryBytes = exported.size(),
+    }};
+    auto const optCached = cache.read(digest);
+    REQUIRE(optCached);
+    CHECK(optCached->size() == exported.size());
 
     checkDomainFailure(
       fixture.run({"lib", "resource", "export", "999999", "--output", (fixture.root() / "missing.bin").string()}),
       "resource not found: 999999");
+
+    // The bytes are installed through the same replacement the library export
+    // uses, so a destination directory the user did not create stays an error
+    // rather than becoming a tree the command invented.
+    auto const missingDirectory = fixture.root() / "missing";
+    checkDomainFailure(
+      fixture.run({"lib", "resource", "export", idText, "--output", (missingDirectory / "cover.bin").string()}),
+      "failed to open resource output:");
+    CHECK_FALSE(fs::exists(missingDirectory));
+  }
+
+  TEST_CASE("CLI - lib resource export reports absence when no source holds the content",
+            "[cli][workflow][lib][resource]")
+  {
+    auto fixture = CliFixture{};
+    auto const orphanBytes = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}, std::byte{0x40}};
+    auto const resourceId = fixture.addResource(orphanBytes);
+
+    // The row exists and describes four bytes, but nothing references it, so no
+    // file can reproduce them. The fixture's own cache root is what makes that
+    // absence this test's to arrange: against the machine's cache, an entry left
+    // by anything else would answer for these bytes.
+    auto result = fixture.run({"lib", "resource", "list"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, std::to_string(resourceId.raw())));
+
+    auto const outputPath = fixture.root() / "orphan.bin";
+    checkDomainFailure(
+      fixture.run({"lib", "resource", "export", std::to_string(resourceId.raw()), "--output", outputPath.string()}),
+      std::format("resource not available: {}", resourceId.raw()));
+    CHECK_FALSE(fs::exists(outputPath));
   }
 
   TEST_CASE("CLI - lib export and import round-trip library data", "[cli][workflow][lib][import-export]")
@@ -642,14 +718,14 @@ namespace ao::cli::test
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "3");
+    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "4");
     CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
     CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
 
     result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Payload: YAML v3, mode 'full', target scope 'library'."));
+    CHECK(contains(result.out, "Payload: YAML v4, mode 'full', target scope 'library'."));
     CHECK(contains(result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0."));
 
     result = target.run({"track", "show"});
@@ -1803,7 +1879,7 @@ namespace ao::cli::test
     auto other = ao::test::TempDir{};
     auto currentPath = CurrentPathGuard{other.path()};
 
-    result = runArgs({"aobus", "track", "show", "--root", fixture.root().string()});
+    result = runArgs({"aobus", "track", "show", "--root", fixture.root().string()}, fixture.cacheDirectory());
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     CHECK(contains(result.out, "Test Title"));
@@ -1823,12 +1899,12 @@ namespace ao::cli::test
 
     auto env = EnvVarGuard{"AOBUS_ROOT", envFixture.root()};
 
-    result = runArgs({"aobus", "track", "show"});
+    result = runArgs({"aobus", "track", "show"}, envFixture.cacheDirectory());
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Test Title"));
     CHECK_FALSE(contains(result.out, "HiRes Title"));
 
-    result = runArgs({"aobus", "track", "show", "--root", flagFixture.root().string()});
+    result = runArgs({"aobus", "track", "show", "--root", flagFixture.root().string()}, flagFixture.cacheDirectory());
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "HiRes Title"));
     CHECK_FALSE(contains(result.out, "Test Title"));

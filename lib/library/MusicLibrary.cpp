@@ -22,6 +22,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -30,6 +31,7 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Sha256.h>
 
 #include <algorithm>
 #include <array>
@@ -50,6 +52,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -536,10 +539,116 @@ namespace ao::library
       return revision;
     }
 
+    /// Enough of a digest to spread rows across buckets; the set compares the
+    /// whole value, so a truncated hash costs a collision and never a wrong
+    /// answer.
+    struct ResourceDigestHash final
+    {
+      std::size_t operator()(utility::Sha256Digest const& digest) const noexcept
+      {
+        std::size_t value = 0;
+
+        for (std::size_t byteIndex = 0; byteIndex < sizeof(std::size_t); ++byteIndex)
+        {
+          value = (value << 8U) | static_cast<std::size_t>(digest.bytes[byteIndex]);
+        }
+
+        return value;
+      }
+    };
+
+    /// One row as the resource gate needs it: where it sits, and where its
+    /// digest says a probe for it begins.
+    struct ResourceRowPlacement final
+    {
+      std::uint32_t key = 0;
+      std::uint32_t homeKey = 0;
+    };
+
+    /// A maximal span of occupied keys. `ResourceStore::Writer::create` stops at
+    /// the first empty slot, so a row is findable only when its home key and its
+    /// stored key fall in one of these, with the stored key at or after the home
+    /// key.
+    struct OccupiedKeyRun final
+    {
+      std::uint32_t first = 0;
+      std::uint32_t last = 0;
+    };
+
+    /**
+     * @brief Turns ascending occupied keys into maximal runs.
+     *
+     * @p placements arrives in key order because the resource database is
+     * integer-keyed, so one pass is enough.
+     */
+    std::vector<OccupiedKeyRun> collectOccupiedKeyRuns(std::vector<ResourceRowPlacement> const& placements)
+    {
+      auto runs = std::vector<OccupiedKeyRun>{};
+
+      for (auto const& placement : placements)
+      {
+        if (!runs.empty() && runs.back().last + 1U == placement.key)
+        {
+          runs.back().last = placement.key;
+          continue;
+        }
+
+        runs.push_back(OccupiedKeyRun{.first = placement.key, .last = placement.key});
+      }
+
+      return runs;
+    }
+
+    /**
+     * @brief Whether a probe from @p homeKey reaches @p key.
+     *
+     * A probe walks upward from the home key and stops at the first empty slot,
+     * so reachability is exactly "no gap in between". @p runs is ascending, and
+     * @p runCursor advances with the ascending rows, which keeps the whole check
+     * one pass plus a constant per row rather than a walk up each chain — a walk
+     * would make one long collision cluster quadratic and break the admission
+     * cost the open gate is measured against.
+     *
+     * The key space wraps from the maximum key to `1`, so a run ending at the
+     * maximum and a run starting at `1` are one chain.
+     */
+    bool isReachableFromHomeKey(ResourceRowPlacement const& placement,
+                                std::vector<OccupiedKeyRun> const& runs,
+                                std::size_t& runCursor)
+    {
+      while (runCursor < runs.size() && runs[runCursor].last < placement.key)
+      {
+        ++runCursor;
+      }
+
+      AO_INVARIANT(runCursor < runs.size() && runs[runCursor].first <= placement.key,
+                   "Resource {} is missing from the occupied-key runs built from the same rows",
+                   placement.key);
+      auto const& run = runs[runCursor];
+
+      if (placement.homeKey >= run.first && placement.homeKey <= placement.key)
+      {
+        return true;
+      }
+
+      // The chain may enter this run by wrapping, which is only possible when
+      // this run starts at the first valid key and another run ends at the last.
+      auto const wraps =
+        run.first == 1U && runs.back().last == std::numeric_limits<std::uint32_t>::max() && runs.size() > 1U;
+
+      return wraps && placement.homeKey >= runs.back().first;
+    }
+
     Result<> validateResourceDatabase(lmdb::IntegerKeyDatabase const& database,
                                       lmdb::ReadTransaction const& transaction)
     {
-      for (auto const& [key, payload] : database.reader(transaction))
+      auto const reader = database.reader(transaction);
+      auto placements = std::vector<ResourceRowPlacement>{};
+      placements.reserve(reader.entryCount());
+      auto digests = std::unordered_set<utility::Sha256Digest, ResourceDigestHash>{};
+      digests.reserve(reader.entryCount());
+
+      for (auto const& [key, payload] : reader)
       {
         auto idRes = decodePersistedId(key, "Resource database");
 
@@ -553,9 +662,40 @@ namespace ao::library
           return makeError(Error::Code::CorruptData, "Resource database contains the reserved id zero");
         }
 
-        if (payload.empty())
+        auto const optDescriptor = parseResourceDescriptor(payload);
+
+        if (!optDescriptor)
         {
-          return makeError(Error::Code::CorruptData, std::format("Resource {} contains an empty value", *idRes));
+          return makeError(Error::Code::CorruptData,
+                           std::format("Resource {} holds {} bytes rather than a {}-byte descriptor",
+                                       *idRes,
+                                       payload.size(),
+                                       kResourceDescriptorSize));
+        }
+
+        if (!digests.insert(optDescriptor->digest).second)
+        {
+          return makeError(
+            Error::Code::CorruptData,
+            std::format("Resource {} repeats the digest {}", *idRes, utility::sha256Hex(optDescriptor->digest)));
+        }
+
+        placements.push_back(
+          ResourceRowPlacement{.key = *idRes, .homeKey = deriveResourceId(optDescriptor->digest).raw()});
+      }
+
+      auto const runs = collectOccupiedKeyRuns(placements);
+      std::size_t runCursor = 0;
+
+      for (auto const& placement : placements)
+      {
+        if (!isReachableFromHomeKey(placement, runs, runCursor))
+        {
+          return makeError(Error::Code::CorruptData,
+                           std::format("Resource {} is unreachable from its digest's initial key {}, so a later write "
+                                       "would store the same content twice",
+                                       placement.key,
+                                       placement.homeKey));
         }
       }
 

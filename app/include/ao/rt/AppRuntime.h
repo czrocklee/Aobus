@@ -34,6 +34,11 @@ namespace ao::rt
     std::unique_ptr<async::Executor> executorPtr{};
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
+    /// Where derived caches live, resolved by the composition root because the
+    /// runtime does not discover platform application directories. Empty is
+    /// supported: the cover-read walk then has one tier instead of two, because a
+    /// cache is an optimization and losing it is not a startup failure.
+    std::filesystem::path cacheDirectory{};
     std::uint64_t musicLibraryPinnedMapBytes = 0;
     /// Required owning store for workspace persistence and the default playback-session store.
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};

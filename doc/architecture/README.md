@@ -78,7 +78,7 @@ It refines its broader domain and application owners instead of becoming a peer 
 | Document | Broader owners | Owns |
 |---|---|---|
 | [Audio quality architecture](audio-quality.md) | [Playback](playback.md) and [presentation](presentation.md) | Quality evidence, graph composition, runtime publication, shared UIModel interpretation, and frontend adaptation. |
-| [Resource delivery architecture](resource-delivery.md) | [Encoded media](encoded-media.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) | Immutable resource identity, runtime materialization, projections, frontend transforms, caches, stale-result suppression, and external artifacts. |
+| [Resource delivery architecture](resource-delivery.md) | [Encoded media](encoded-media.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) | Content-addressed resource identity, runtime materialization from a derived cache or a carrier file, projections, frontend transforms, caches, stale-result suppression, and external artifacts. |
 
 ## Architecture relationships
 
@@ -100,7 +100,7 @@ This table records primary structural relationships rather than every document l
 | [Application shell](application-shell.md) | Presentation boundaries, UIModel layout values and policy, runtime services, managed state, and desktop lifecycle | GTK widget tree and editor; WinUI Modern/Classic native shells |
 | [Presentation](presentation.md) | Runtime snapshots and commands from domain and application systems | GTK, WinUI, TUI, and non-interactive CLI adaptation |
 | [Audio quality](audio-quality.md) | Playback route evidence and execution generations | Runtime quality state, shared presentation policy, GTK, TUI, and WinUI |
-| [Resource delivery](resource-delivery.md) | Media cover evidence, library blobs and references, playback/projection identities | GTK and WinUI images, TUI artwork, MPRIS art URLs, and CLI export |
+| [Resource delivery](resource-delivery.md) | Media cover evidence, library descriptors and references, carrier media files, playback/projection identities | GTK and WinUI images, TUI artwork, MPRIS art URLs, and CLI export |
 
 ## Capability coverage
 
@@ -119,7 +119,7 @@ The table tracks capability families with architecture-bearing boundaries, not e
 | Saved Lists, filtering, completion, and scalar formatting | [Track expression](track-expression.md) | Current | Saved rank remains owned by Library sources; presentation remains a separate owner for track-list shape and rendering. |
 | Interactive playback and platform audio output | [Playback](playback.md) | Current | Session persistence and audio-execution behavior remains delegated to the playback specification and reference owners. |
 | Audio-quality evidence and presentation | [Audio quality](audio-quality.md) | Current | The slice remains subordinate to playback and presentation ownership. |
-| Resource and cover-art delivery | [Resource delivery](resource-delivery.md) | Current | Interactive reads are bounded and asynchronous; runtime owns shared encoded-byte delivery while GTK, WinUI, TUI, and MPRIS own their frontend transforms and stale-result suppression. |
+| Resource and cover-art delivery | [Resource delivery](resource-delivery.md) | Current | The library stores descriptors and no cover bytes; runtime materializes content from a verified cache entry or a referencing audio file, while GTK, WinUI, TUI, and MPRIS own their frontend transforms and stale-result suppression. |
 | Workspace views, navigation, and semantic sessions | [Workspace](workspace.md) | Current | Exact navigation and restore behavior remains delegated to workspace specifications. |
 | Interactive startup, checkpointing, switching, and shutdown | [Interactive session lifecycle](interactive-session-lifecycle.md) | Current | GTK and WinUI share pure root/startup/protocol/launcher infrastructure while retaining frontend-owned admission, checkpoint, teardown, and exit; TUI retains a single-runtime lifecycle without switching. |
 | Application shell, layout document, actions, component state, and widget construction | [Application shell](application-shell.md) | Current | GTK and WinUI share the layout language while retaining frontend-owned catalogs, presets, construction, and runtime policy; TUI retains an independent terminal shell. |

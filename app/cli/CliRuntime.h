@@ -48,7 +48,15 @@ namespace ao::cli
   class CliRuntime final
   {
   public:
-    explicit CliRuntime(std::ostream& out, std::ostream& err, std::uint64_t musicLibraryPinnedMapBytes = 0);
+    /**
+     * @param optCacheDirectory Where derived caches live, or nothing to resolve
+     * the platform location. A supplied one is how a test keeps the machine's
+     * real cover cache out of its results, and out of its reach.
+     */
+    explicit CliRuntime(std::ostream& out,
+                        std::ostream& err,
+                        std::uint64_t musicLibraryPinnedMapBytes = 0,
+                        std::optional<std::filesystem::path> optCacheDirectory = std::nullopt);
     ~CliRuntime();
 
     CliRuntime(CliRuntime const&) = delete;
@@ -90,6 +98,7 @@ namespace ao::cli
     CliOptions _options;
     CliIo _io;
     std::uint64_t _musicLibraryPinnedMapBytes = 0;
+    std::optional<std::filesystem::path> _optCacheDirectory;
     // Observes the executor owned through _runtimePtr.
     async::LoopExecutor* _loopExecutor = nullptr;
     std::unique_ptr<rt::CoreRuntime> _runtimePtr;

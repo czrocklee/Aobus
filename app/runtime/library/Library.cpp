@@ -18,6 +18,7 @@
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <expected>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <span>
@@ -37,19 +38,21 @@ namespace ao::rt
     Impl(async::Runtime& asyncRuntime,
          library::MusicLibrary& libraryStorage,
          library::WritableMusicLibrary writableStorage,
-         LibraryChanges& changes)
+         LibraryChanges& changes,
+         std::filesystem::path cacheDirectory)
       : storage{libraryStorage}
       , changeBus{changes}
       , mutationService{asyncRuntime.callbackExecutor(), std::move(writableStorage), changes}
       , writer{libraryStorage, mutationService}
-      , taskService{asyncRuntime, libraryStorage, mutationService}
+      , taskService{asyncRuntime, libraryStorage, mutationService, std::move(cacheDirectory)}
     {
     }
   };
 
   Result<std::unique_ptr<Library>> Library::create(async::Runtime& asyncRuntime,
                                                    library::MusicLibrary& storage,
-                                                   LibraryChanges& changes)
+                                                   LibraryChanges& changes,
+                                                   std::filesystem::path cacheDirectory)
   {
     auto writableStorageRes = library::WritableMusicLibrary::acquire(storage);
 
@@ -58,7 +61,8 @@ namespace ao::rt
       return std::unexpected{writableStorageRes.error()};
     }
 
-    auto implPtr = std::make_unique<Impl>(asyncRuntime, storage, std::move(*writableStorageRes), changes);
+    auto implPtr =
+      std::make_unique<Impl>(asyncRuntime, storage, std::move(*writableStorageRes), changes, std::move(cacheDirectory));
     return std::unique_ptr<Library>{new Library{std::move(implPtr)}};
   }
 

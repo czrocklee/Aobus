@@ -19,6 +19,8 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ReadTransaction.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/media/file/File.h>
@@ -30,21 +32,21 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/AtomicFile.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/FileAllocation.h>
 #include <ao/utility/Hash128.h>
+#include <ao/utility/Sha256.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
 
-#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
-#include <fstream>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -356,6 +358,42 @@ namespace ao::cli
       return total;
     }
 
+    /**
+     * @brief What the covers tracks currently reference would occupy.
+     *
+     * The store holds no bytes any more, so this is the summed length of the
+     * descriptors the live tracks reach, counting each reachable descriptor once
+     * however many tracks name it. Summing every row instead would inflate the
+     * figure with covers the library no longer has: descriptors are append-only,
+     * so a rescanned library keeps rows for content no track names. The row count
+     * is the separate figure, and the two disagreeing is the normal state of a
+     * library that has been rescanned.
+     */
+    std::uint64_t reachableResourceBytes(library::MusicLibrary const& ml, library::ReadTransaction const& transaction)
+    {
+      auto const resourceReader = ml.resources().reader(transaction);
+      auto counted = std::unordered_set<std::uint32_t>{};
+      std::uint64_t total = 0;
+
+      for (auto const& [_, view] : ml.tracks().reader(transaction).cold())
+      {
+        for (auto const cover : view.coverArt())
+        {
+          if (!counted.insert(cover.resourceId.raw()).second)
+          {
+            continue;
+          }
+
+          if (auto const optDescriptor = resourceReader.get(cover.resourceId); optDescriptor)
+          {
+            total += optDescriptor->byteLength;
+          }
+        }
+      }
+
+      return total;
+    }
+
     LibraryStats collectStats(library::MusicLibrary const& ml, std::filesystem::path const& databasePath)
     {
       auto stats = LibraryStats{};
@@ -368,16 +406,17 @@ namespace ao::cli
           ++stats.lists;
         }
 
-        for (auto const& [_, bytes] : ml.resources().reader(transaction))
+        for ([[maybe_unused]] auto const& entry : ml.resources().reader(transaction))
         {
           ++stats.resources;
-          stats.resourceBytes += bytes.size();
         }
 
         for ([[maybe_unused]] auto const& entry : ml.manifest().reader(transaction))
         {
           ++stats.manifest;
         }
+
+        stats.resourceBytes = reachableResourceBytes(ml, transaction);
 
         auto tagIds = std::unordered_set<std::uint32_t>{};
         auto const trackReader = ml.tracks().reader(transaction);
@@ -1016,9 +1055,9 @@ namespace ao::cli
       auto const reader = ml.resources().reader(transaction);
       auto records = std::vector<ResourceRecordDto>{};
 
-      for (auto const& [id, bytes] : reader)
+      for (auto const& [id, descriptor] : reader)
       {
-        records.push_back(ResourceRecordDto{.id = id, .size = static_cast<std::uint64_t>(bytes.size())});
+        records.push_back(ResourceRecordDto{.id = id, .size = descriptor.byteLength});
       }
 
       return records;
@@ -1035,9 +1074,9 @@ namespace ao::cli
       auto const transaction = ml.readTransaction();
       auto const reader = ml.resources().reader(transaction);
 
-      for (auto const& [id, bytes] : reader)
+      for (auto const& [id, descriptor] : reader)
       {
-        std::println(os, "{}  {}", id.raw(), bytes.size());
+        std::println(os, "{}  {}", id.raw(), descriptor.byteLength);
       }
     }
 
@@ -1057,41 +1096,68 @@ namespace ao::cli
       std::println(os, "exported resource: {} {}", id, path.string());
     }
 
-    void exportResource(library::MusicLibrary const& ml,
+    /**
+     * @brief Writes one resource's bytes to a file.
+     *
+     * The row holds no bytes, so this materializes through the same source walk
+     * interactive delivery uses: the derived cache first, then any file that
+     * references the resource, accepting only content that hashes to the
+     * descriptor's digest.
+     *
+     * It passes no size ceiling, which keeps the administrative exemption the
+     * cover-art delivery specification grants raw export. Absence is reported and
+     * nothing is written, because a command asked for a specific file and no
+     * source could reproduce it. The bytes are complete before the destination is
+     * touched at all, so no failure here can leave a partial image or destroy a
+     * file that was already there. The walk cannot say which absence it met, so an
+     * empty result is separated afterwards into a row that does not exist and a
+     * row no source could reproduce; the row lookup takes its own transaction,
+     * after the walk, and only on this path.
+     */
+    void exportResource(CliRuntime& cli,
                         ResourceId id,
                         std::filesystem::path const& path,
                         OutputFormat format,
                         std::ostream& os)
     {
-      auto bytes = std::vector<std::byte>{};
-      {
-        auto const transaction = ml.readTransaction();
-        auto const reader = ml.resources().reader(transaction);
-        auto const optBytes = reader.get(id);
+      auto result =
+        cli.runTask(cli.library().taskService().loadResourceAsync(id, rt::ResourceSizeLimit::Administrative));
 
-        if (!optBytes)
+      if (!result)
+      {
+        auto const& error = result.error();
+        throwCommandError(error, "failed to read resource {}: {}", id, error.message);
+      }
+
+      if (!*result)
+      {
+        auto const& ml = cli.musicLibrary();
+        auto const transaction = ml.readTransaction();
+
+        if (!ml.resources().reader(transaction).get(id))
         {
           throwCommandError(Error::Code::NotFound, "resource not found: {}", id);
         }
 
-        bytes.assign(optBytes->begin(), optBytes->end());
+        throwCommandError(Error::Code::NotFound, "resource not available: {}", id);
       }
 
-      auto out = std::ofstream{path, std::ios::binary};
+      auto const bytes = *std::move(*result);
+      auto directoryError = std::error_code{};
 
-      if (!out)
+      // The destination directory is the user's to name: the atomic write below
+      // would create one, and a mistyped path should stay an error here as it is
+      // for a library export.
+      if (auto const parent = path.parent_path();
+          !parent.empty() && !std::filesystem::is_directory(parent, directoryError))
       {
         throwCommandError(Error::Code::IoError, "failed to open resource output: {}", path.string());
       }
 
-      auto const data = utility::bytes::stringView(bytes);
-      out.write(data.data(), static_cast<std::streamsize>(data.size()));
-
-      if (!out)
+      // Installed whole or not at all, so a failed export neither leaves a
+      // truncated image nor spends a file the user already had at that path.
+      if (auto const writtenRes = utility::writeAtomically(path, utility::bytes::stringView(bytes)); !writtenRes)
       {
-        out.close();
-        auto ec = std::error_code{};
-        std::filesystem::remove(path, ec);
         throwCommandError(Error::Code::IoError, "failed to write resource output: {}", path.string());
       }
 
@@ -1256,6 +1322,8 @@ namespace ao::cli
       }
     }
 
+    /// A row is a descriptor now, so there is nothing to preview: the dump shows
+    /// the identity and the length, and `--raw` shows the stored 36 bytes.
     void dumpResources(library::MusicLibrary const& ml, bool raw, std::ostream& os)
     {
       auto const transaction = ml.readTransaction();
@@ -1264,33 +1332,30 @@ namespace ao::cli
 
       if (raw)
       {
-        for (auto const& [resId, val] : reader)
+        for (auto const& [resId, descriptor] : reader)
         {
-          std::println(os, "Resource ID: {} (Size: {})", resId, val.size());
-          hexDump(val, os);
+          std::println(os, "Resource ID: {} (Length: {})", resId, descriptor.byteLength);
+          hexDump(utility::bytes::view(descriptor), os);
         }
 
         return;
       }
 
       std::size_t count = 0;
-      std::size_t totalBytes = 0;
+      std::uint64_t totalBytes = 0;
 
       for (auto const& entry : reader)
       {
-        totalBytes += entry.second.size();
+        totalBytes += entry.second.byteLength;
         count++;
       }
 
-      std::println(os, "Total: {} resources, {} bytes", count, totalBytes);
+      std::println(os, "Total: {} descriptors, {} described bytes", count, totalBytes);
 
-      constexpr std::size_t kPreviewByteLimit = 64;
-
-      for (auto const& [resId, val] : reader)
+      for (auto const& [resId, descriptor] : reader)
       {
-        std::println(os, "  Resource ID: {} (Size: {})", resId, val.size());
-        std::println(os, "  Preview:");
-        hexDump(val.subspan(0, std::min<std::size_t>(kPreviewByteLimit, val.size())), os);
+        std::println(os, "  Resource ID: {} (Length: {})", resId, descriptor.byteLength);
+        std::println(os, "  Digest: {}", utility::sha256Hex(descriptor.digest));
       }
     }
 
@@ -1467,7 +1532,7 @@ namespace ao::cli
     resourceExport->callback(
       [&cli, resourceExportId, resourceExportPath]
       {
-        exportResource(cli.musicLibrary(),
+        exportResource(cli,
                        ResourceId{resourceExportId->as<std::uint32_t>()},
                        resourceExportPath->as<std::filesystem::path>(),
                        cli.options().format,

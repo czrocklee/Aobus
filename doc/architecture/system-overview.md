@@ -59,6 +59,7 @@ Core libraries do not own application workspace state, frontend lifecycle, user 
 `ao_app_runtime` owns application-level state and coordinates core mechanisms.
 Its public surface under `app/include/ao/rt/` includes the library facade, sources and projections, workspace and view services, playback services, completion, configuration, notifications, and frontend-neutral value types.
 It also owns canonical cross-frontend paths derived from a supplied music-library root, without discovering platform application directories.
+The derived cover cache follows that rule: each composition root resolves the application cache directory and passes it in, and the runtime consumes the path it is given.
 Frontend-scoped runtime components may own reusable application delivery behavior, such as coalesced and cached immutable resource-byte requests, without becoming process-wide `CoreRuntime` services.
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
@@ -162,8 +163,8 @@ These routes expose where a change crosses architecture owners without duplicati
 | Flow | Top-level route | Focused architecture owners |
 |---|---|---|
 | Library maintenance | Frontend or CLI intent -> runtime library role -> core storage or external-data mechanism -> revisioned changes -> sources and projections | [Library](library.md), [runtime execution](runtime-execution.md), and [failure and reporting](failure-and-reporting.md) |
-| Media ingestion and identity | Encoded path -> `ao_media` file reader -> visitor-to-library runtime adapter and payload evidence -> stored records and resources | [Encoded media](encoded-media.md), [library](library.md), and [failure and reporting](failure-and-reporting.md) |
-| Cover-art delivery | Stored resource -> runtime id and owned bytes -> projection/playback state -> GTK, WinUI, TUI, MPRIS, or CLI transform | [Resource delivery](resource-delivery.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) |
+| Media ingestion and identity | Encoded path -> `ao_media` file reader -> visitor-to-library runtime adapter and payload evidence -> stored records and resource descriptors | [Encoded media](encoded-media.md), [library](library.md), and [failure and reporting](failure-and-reporting.md) |
+| Cover-art delivery | Stored descriptor -> runtime id -> derived cache or carrier media file -> owned bytes -> projection/playback state -> GTK, WinUI, TUI, MPRIS, or CLI transform | [Resource delivery](resource-delivery.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) |
 | Track discovery and organization | UI authoring or CLI expression -> query compilation/evaluation -> live source membership -> projection shape -> frontend adaptation | [Track expression](track-expression.md), [library](library.md), and [presentation](presentation.md) |
 | Interactive playback | Frontend command -> UIModel/runtime command -> workspace or live-source context -> succession and transport -> Player/Engine -> platform output | [Workspace](workspace.md), [playback](playback.md), and [runtime execution](runtime-execution.md) |
 | Session restore and library transition | Frontend composition root -> managed state -> library-bound runtime graph -> workspace and playback restoration -> observers | [Persistence and managed state](persistence-and-managed-state.md), [interactive session lifecycle](interactive-session-lifecycle.md), [workspace](workspace.md), and [playback](playback.md) |

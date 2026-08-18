@@ -93,6 +93,10 @@ namespace ao::rt
 
     bool skipNonActionableItem(ScanItem const& item);
 
+    /// Embedded covers are a scan fact: a refreshed item takes the cover set its
+    /// file now carries, in place of the references it held.
+    static void applyFileCoverArt(library::TrackBuilder& merged, library::TrackBuilder const& parsed);
+
     void reportProgress(ScanItem const& item, std::size_t itemIndex, ScanApplyProgressStage stage, double itemFraction);
 
     void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);

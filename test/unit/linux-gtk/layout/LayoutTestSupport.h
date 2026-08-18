@@ -8,6 +8,7 @@
 
 #include <sigc++/signal.h>
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string_view>
@@ -88,6 +89,11 @@ namespace ao::gtk::layout::test
     LayoutRuntimeFixture& operator=(LayoutRuntimeFixture&&) = delete;
 
     rt::AppRuntime& runtime();
+
+    /// Where this fixture's runtime keeps its derived caches, including the
+    /// cover cache a resource request materializes content through.
+    std::filesystem::path cacheDirectory() const;
+
     Gtk::Window& window();
     ComponentRegistry& components();
     ActionRegistry const& actions() const;

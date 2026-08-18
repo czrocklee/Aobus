@@ -35,6 +35,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 ## Invariants
 
 - Edited library metadata is authoritative after initial import; a changed-file scan refreshes technical properties without replacing curated metadata.
+- An embedded cover is a scan fact rather than curated metadata: the file is the authority on which covers a track has, and a scan is the only writer of that reference set.
 - A scan never admits an unsupported file into its plan.
 - Only the runtime planner can construct an applicable plan; consumers may inspect its immutable items but cannot insert or rewrite them.
 - Plan application accepts only the library id and revision captured by the planner, so a foreign, superseded, or already-consumed snapshot cannot mutate storage.
@@ -98,8 +99,8 @@ The transaction currently covers the complete prepared plan and has no item or b
 This preserves whole-plan all-or-nothing behavior; writer hold time and rollback cost scale with the prepared plan.
 
 - `New` parses metadata and technical properties, then asks the logical Track writer to create the track and available manifest row together.
-- `Changed` preserves curated metadata, then replaces Track data and file/identity facts through one logical operation.
-- `Moved` first requires the stored Track URI to equal the plan's old URI, then rebuilds the existing track with the new URI and refreshed technical properties and uses the logical relink operation to replace the manifest key while preserving the Track id; a mismatch reports the item failure and aborts the complete scan transaction.
+- `Changed` preserves curated metadata, replaces the track's cover references with the set the new file carries, then replaces Track data and file/identity facts through one logical operation.
+- `Moved` first requires the stored Track URI to equal the plan's old URI, then rebuilds the existing track with the new URI, refreshed technical properties, and the destination file's cover references, and uses the logical relink operation to replace the manifest key while preserving the Track id; a mismatch reports the item failure and aborts the complete scan transaction.
 - `Missing` preserves the previous identity and uses the manifest-only logical update to mark the row missing.
 - `Unchanged` performs no write.
 - Item-level parse/open failures are counted and reported without claiming that item succeeded.
@@ -110,6 +111,12 @@ New and changed files do not receive an equivalent final stat check, and missing
 
 Successful explicit relink derivation consumes an unresolved plan and produces one `Moved` item only when the selected `Missing` and `New` items carry the same non-pending planned identity.
 The derived plan preserves the source library and revision binding, and live destination fingerprinting remains mandatory during apply.
+
+A scan writes descriptors and never cover content: each embedded picture is hashed and its digest recorded, and a picture longer than `UINT32_MAX` is never truncated to fit a descriptor: the resource write fails, which fails the scan transaction rather than that one item.
+No container this project reads can carry one, because FLAC and ID3 picture lengths are themselves 32-bit.
+A file whose art was removed leaves the track with no cover reference, and the descriptors that reference set named stay in the store, because rows are never deleted.
+Retagging a file back to its earlier art reuses the existing row, since equal content has one digest.
+The scan report gains no cover-specific field: a track whose file is gone is counted `missing`, and a track whose art changed is counted `changed`, which replaces the stale reference rather than leaving something to report.
 
 The result carries the committed revision, inserted/mutated/relinked ids, missing count, and item-failure count; the relink count is `relinkedIds.size()` rather than independent state.
 Coordinated and offline application report cancellation through `OperationCancelled`, so a successful result never also claims cancellation.
@@ -176,13 +183,15 @@ through `LibraryChanges`; workflow completion performs no independent refresh.
 ## Test map
 
 - [`ScanPlanTest.cpp`](../../../../test/unit/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors.
-- [`ScanApplyOperationTest.cpp`](../../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves binding rejection, replay protection, prepared-file revalidation, atomic application, curated-metadata preservation, relinking, failures, progress, and cancellation.
+- [`ScanApplyOperationTest.cpp`](../../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves binding rejection, replay protection, prepared-file revalidation, atomic application, curated-metadata preservation, cover replacement on `Changed` and `Moved` items, descriptor retention, relinking, failures, progress, and cancellation.
 - [`LibraryScanWorkflowTest.cpp`](../../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) proves frontend-shared plan disposition and mutation reporting.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
 - [`AudioIdentityTest.cpp`](../../../../test/unit/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.
 
 ## Related documents
 
+- [Cover-art delivery](../../resource/cover-art-delivery.md)
+- [Decision 0010: never write to an audio file](../../../decision/0010-never-write-to-audio-files.md)
 - [Library architecture](../../../architecture/library.md)
 - [Library change publication](change-publication.md)
 - [Supported audio files](../../../reference/media/audio-file.md)

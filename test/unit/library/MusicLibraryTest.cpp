@@ -22,6 +22,7 @@
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
@@ -31,6 +32,7 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -38,6 +40,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -220,6 +223,26 @@ namespace ao::library::test
       createRawIntegerRow(path, "tracks_hot", trackId.raw(), makeHotData());
       auto cold = optCover ? makeColdDataWithCover(uri, *optCover) : makeColdData({}, uri);
       createRawIntegerRow(path, "tracks_cold", trackId.raw(), cold);
+    }
+
+    /**
+     * @brief A persisted descriptor row whose digest derives @p homeKey.
+     *
+     * The gate checks placement and uniqueness, never that a digest hashes any
+     * real content, so a crafted digest is exactly what these sections need.
+     * @p discriminator keeps two rows in one cluster distinct.
+     */
+    std::array<std::byte, kResourceDescriptorSize> resourceDescriptorRow(std::uint32_t const homeKey,
+                                                                         std::uint8_t const discriminator)
+    {
+      auto digest = utility::Sha256Digest{};
+      digest.bytes[0] = static_cast<std::byte>((homeKey >> 24U) & 0xFFU);
+      digest.bytes[1] = static_cast<std::byte>((homeKey >> 16U) & 0xFFU);
+      digest.bytes[2] = static_cast<std::byte>((homeKey >> 8U) & 0xFFU);
+      digest.bytes[3] = static_cast<std::byte>(homeKey & 0xFFU);
+      digest.bytes[utility::Sha256Digest::kByteCount - 1] = std::byte{discriminator};
+      return std::bit_cast<std::array<std::byte, kResourceDescriptorSize>>(
+        ResourceDescriptor{.digest = digest, .byteLength = 1024});
     }
 
     void requireCorruptLibrary(std::filesystem::path const& path)
@@ -869,24 +892,88 @@ namespace ao::library::test
       requireCorruptLibrary(temp.path());
     }
 
-    SECTION("Resource value must be nonempty")
+    SECTION("Resource value must be exactly a descriptor")
     {
       createRawIntegerRow(temp.path(), "resources", 1, std::span<std::byte const>{});
       requireCorruptLibrary(temp.path());
     }
 
-    SECTION("orphan Dictionary and opaque Resource rows are accepted")
+    SECTION("Resource value shorter than a descriptor is rejected")
     {
-      auto const opaqueBytes = std::array{std::byte{0xff}, std::byte{0x00}, std::byte{0x81}};
+      auto const row = resourceDescriptorRow(1, 0);
+      createRawIntegerRow(temp.path(), "resources", 1, std::span<std::byte const>{row}.first(row.size() - 1));
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("Resource value longer than a descriptor is rejected")
+    {
+      auto wide = std::array<std::byte, kResourceDescriptorSize + 1>{};
+      auto const row = resourceDescriptorRow(1, 0);
+      std::ranges::copy(row, wide.begin());
+      createRawIntegerRow(temp.path(), "resources", 1, wide);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("two rows carrying one digest are rejected")
+    {
+      auto const row = resourceDescriptorRow(7, 0);
+      createRawIntegerRow(temp.path(), "resources", 7, row);
+      createRawIntegerRow(temp.path(), "resources", 8, row);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("a row unreachable from its digest's initial key is rejected")
+    {
+      // A probe from 42 stops at the empty 43, so the row at 44 is invisible to
+      // it and the next create for that digest would write a second row.
+      createRawIntegerRow(temp.path(), "resources", 44, resourceDescriptorRow(42, 0));
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("a long collision cluster is accepted")
+    {
+      constexpr std::uint32_t kHomeKey = 100;
+      constexpr std::uint32_t kClusterLength = 16;
+
+      for (std::uint32_t offset = 0; offset < kClusterLength; ++offset)
+      {
+        createRawIntegerRow(temp.path(),
+                            "resources",
+                            kHomeKey + offset,
+                            resourceDescriptorRow(kHomeKey, static_cast<std::uint8_t>(offset)));
+      }
+
+      auto library = makeTestMusicLibrary(temp.path(), temp.path());
+      auto read = library.readTransaction();
+      CHECK(library.resources().reader(read).get(ResourceId{kHomeKey + kClusterLength - 1}));
+    }
+
+    SECTION("a cluster spanning the wrap to the first key is accepted")
+    {
+      constexpr auto kLastKey = std::numeric_limits<std::uint32_t>::max();
+      createRawIntegerRow(temp.path(), "resources", kLastKey, resourceDescriptorRow(kLastKey, 0));
+      createRawIntegerRow(temp.path(), "resources", 1, resourceDescriptorRow(kLastKey, 1));
+      createRawIntegerRow(temp.path(), "resources", 2, resourceDescriptorRow(kLastKey, 2));
+
+      auto library = makeTestMusicLibrary(temp.path(), temp.path());
+      auto read = library.readTransaction();
+      CHECK(library.resources().reader(read).get(ResourceId{2}));
+    }
+
+    SECTION("orphan Dictionary and unreferenced Resource rows are accepted")
+    {
+      // An unreferenced descriptor is the expected steady state of a rescanned
+      // library, not a fault: rows are append-only and nothing sweeps them.
+      auto const row = resourceDescriptorRow(1, 0);
       createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("unused"));
-      createRawIntegerRow(temp.path(), "resources", 1, opaqueBytes);
+      createRawIntegerRow(temp.path(), "resources", 1, row);
 
       auto library = makeTestMusicLibrary(temp.path(), temp.path());
       CHECK(library.dictionary().getOrDefault(DictionaryId{1}) == "unused");
       auto read = library.readTransaction();
       auto const optResource = library.resources().reader(read).get(ResourceId{1});
       REQUIRE(optResource);
-      CHECK(std::ranges::equal(*optResource, opaqueBytes));
+      CHECK(deriveResourceId(optResource->digest) == ResourceId{1});
     }
   }
 
@@ -1064,10 +1151,21 @@ namespace ao::library::test
         auto writerRes = WritableMusicLibrary::acquire(smallLibrary);
         REQUIRE(writerRes);
         auto transaction = writerRes->writeTransaction();
-        auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
-        auto failureRes =
-          transaction.apply([&smallLibrary, &oversizedValue](LibraryWrite& write)
-                            { return physicalWriter(smallLibrary.resources(), write).create(oversizedValue); });
+        // A resource row is a fixed 36 bytes now, so a dictionary entry is what
+        // still carries enough content to exhaust the whole map in one write.
+        auto const oversizedText = std::string(kMapSize * 4, 'x');
+        auto failureRes = transaction.apply(
+          [&transaction, &oversizedText](LibraryWrite& /*write*/) -> Result<>
+          {
+            auto idRes = physicalDictionary(transaction).intern(oversizedText);
+
+            if (!idRes)
+            {
+              return std::unexpected{idRes.error()};
+            }
+
+            return {};
+          });
         REQUIRE_FALSE(failureRes);
         // A pinned map admits no growth, so a value larger than the whole map
         // exhausts it, and that arrives as capacity rather than as plain IO.

@@ -10,6 +10,8 @@
 #include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
 
+#include <catch2/catch_test_macros.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +20,7 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace ao::media::file::test
 {
@@ -139,5 +142,15 @@ namespace ao::media::file::test
     }
 
     return _implPtr->fileRes->audioPayload();
+  }
+
+  std::vector<std::byte> requireSoleEmbeddedPicture(std::filesystem::path const& path)
+  {
+    auto const file = TestFile{path};
+    auto const contentRes = file.readContent();
+    REQUIRE(contentRes);
+    REQUIRE(contentRes->pictures().size() == 1);
+    auto const bytes = contentRes->pictures().front().bytes;
+    return std::vector<std::byte>{bytes.begin(), bytes.end()};
   }
 } // namespace ao::media::file::test

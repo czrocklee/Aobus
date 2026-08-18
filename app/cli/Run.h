@@ -4,7 +4,9 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <iosfwd>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -13,6 +15,11 @@ namespace ao::cli
   struct CliRunOptions final
   {
     std::uint64_t musicLibraryPinnedMapBytes = 0;
+
+    /// Where derived caches live, or nothing to resolve the platform location.
+    /// An in-process caller supplies one to keep the machine's own cover cache
+    /// out of what it observes and out of what it evicts.
+    std::optional<std::filesystem::path> optCacheDirectory{};
   };
 
   std::int32_t run(std::int32_t argc,

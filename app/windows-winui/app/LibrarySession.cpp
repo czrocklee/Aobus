@@ -43,6 +43,7 @@
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/PlatformDirectories.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DesktopOutputSelection.h>
@@ -402,12 +403,18 @@ namespace ao::winui
     auto const paths = rt::LibraryPaths{root};
     auto workspaceStorePtr = std::make_unique<rt::ConfigStore>(paths.databasePath() / "workspace.yaml");
     auto executorPtr = std::make_unique<DispatcherQueueExecutor>(_dispatcher);
-    auto runtimeRes =
-      rt::AppRuntime::create(rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
-                                                        .musicRoot = root,
-                                                        .databasePath = paths.databasePath(),
-                                                        .workspaceConfigStorePtr = std::move(workspaceStorePtr),
-                                                        .playbackSessionConfigStore = _playbackStorePtr.get()});
+
+    // A missing cache location is not a startup failure the way a missing state
+    // root is: what lives there is derived, so the session opens without it and
+    // cover reads re-extract from the media files instead.
+    auto const cacheDirRes = utility::applicationCacheDirectory();
+    auto runtimeRes = rt::AppRuntime::create(
+      rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
+                                 .musicRoot = root,
+                                 .databasePath = paths.databasePath(),
+                                 .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
+                                 .workspaceConfigStorePtr = std::move(workspaceStorePtr),
+                                 .playbackSessionConfigStore = _playbackStorePtr.get()});
 
     if (!runtimeRes)
     {

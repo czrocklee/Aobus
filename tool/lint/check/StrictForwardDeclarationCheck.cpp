@@ -32,6 +32,45 @@ namespace clang::tidy::aobus
   {
     CXXRecordDecl const* getRecordDeclFromType(QualType qt);
 
+    TemplateDecl const* getTemplateDeclFromType(QualType qt)
+    {
+      if (qt.isNull())
+      {
+        return nullptr;
+      }
+
+      auto const type = qt.getNonReferenceType();
+
+      if (auto const* specialization = type->getAs<TemplateSpecializationType>(); specialization != nullptr)
+      {
+        return specialization->getTemplateName().getAsTemplateDecl();
+      }
+
+      if (auto const* record = type->getAs<RecordType>(); record != nullptr)
+      {
+        if (auto const* specialization = dyn_cast<ClassTemplateSpecializationDecl>(record->getDecl());
+            specialization != nullptr)
+        {
+          return specialization->getSpecializedTemplate();
+        }
+      }
+
+      return nullptr;
+    }
+
+    bool storesTemplateArgumentsByValue(QualType qt)
+    {
+      auto const* templateDecl = getTemplateDeclFromType(qt);
+
+      if (templateDecl == nullptr)
+      {
+        return false;
+      }
+
+      auto const name = templateDecl->getQualifiedNameAsString();
+      return name == "std::optional" || name == "std::pair" || name == "std::variant";
+    }
+
     CXXRecordDecl const* handleSmartPtrType(QualType const& pointee)
     {
       if (auto const* tst = pointee->getAs<TemplateSpecializationType>(); tst != nullptr)
@@ -153,9 +192,56 @@ namespace clang::tidy::aobus
       // types (via strongRefs) and enum types (via strongFileIDs).
       void recordStrongType(QualType qt)
       {
-        if (auto const* crd = getRecordDeclFromType(qt); crd != nullptr)
+        auto const* crd = getRecordDeclFromType(qt);
+
+        if (crd != nullptr)
         {
           strongRefs.insert(crd);
+        }
+
+        // These wrappers embed their type arguments in their value
+        // representation, so a by-value wrapper use also requires those
+        // argument definitions.
+        if (storesTemplateArgumentsByValue(qt))
+        {
+          auto const recordArgument = [this](TemplateArgument const& argument)
+          {
+            if (argument.getKind() != TemplateArgument::Type)
+            {
+              return;
+            }
+
+            if (auto const argumentType = argument.getAsType();
+                !argumentType->isPointerType() && !argumentType->isReferenceType())
+            {
+              recordStrongType(argumentType);
+            }
+          };
+
+          auto const type = qt.getNonReferenceType();
+
+          if (auto const* typeSpecialization = type->getAs<TemplateSpecializationType>(); typeSpecialization != nullptr)
+          {
+            for (auto const& argument : typeSpecialization->template_arguments())
+            {
+              recordArgument(argument);
+            }
+          }
+          else if (auto const* record = type->getAs<RecordType>(); record != nullptr)
+          {
+            if (auto const* recordSpecialization = dyn_cast<ClassTemplateSpecializationDecl>(record->getDecl());
+                recordSpecialization != nullptr)
+            {
+              for (auto const& argument : recordSpecialization->getTemplateArgs().asArray())
+              {
+                recordArgument(argument);
+              }
+            }
+          }
+        }
+
+        if (crd != nullptr)
+        {
           return;
         }
 

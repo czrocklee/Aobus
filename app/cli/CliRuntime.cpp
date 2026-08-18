@@ -11,11 +11,14 @@
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/utility/PlatformDirectories.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <utility>
 
@@ -39,8 +42,13 @@ namespace ao::cli
     }
   } // namespace
 
-  CliRuntime::CliRuntime(std::ostream& out, std::ostream& err, std::uint64_t const musicLibraryPinnedMapBytes)
-    : _io{.out = out, .err = err}, _musicLibraryPinnedMapBytes{musicLibraryPinnedMapBytes}
+  CliRuntime::CliRuntime(std::ostream& out,
+                         std::ostream& err,
+                         std::uint64_t const musicLibraryPinnedMapBytes,
+                         std::optional<std::filesystem::path> optCacheDirectory)
+    : _io{.out = out, .err = err}
+    , _musicLibraryPinnedMapBytes{musicLibraryPinnedMapBytes}
+    , _optCacheDirectory{std::move(optCacheDirectory)}
   {
   }
 
@@ -69,9 +77,24 @@ namespace ao::cli
       // loop executor to the thread that enters the first command callback.
       auto executorPtr = std::make_unique<async::LoopExecutor>();
       auto* const loopExecutor = executorPtr.get();
+
+      // This is the only platform location the CLI resolves; it resolves its
+      // music root and nothing else. An absent one costs nothing: cover reads
+      // then re-extract from the media files on every request.
+      auto const cacheDirectory = [this]
+      {
+        if (_optCacheDirectory)
+        {
+          return *_optCacheDirectory;
+        }
+
+        auto const cacheDirRes = utility::applicationCacheDirectory();
+        return cacheDirRes ? *cacheDirRes : std::filesystem::path{};
+      }();
       auto runtimeRes = rt::CoreRuntime::create(std::move(executorPtr),
                                                 _options.root,
                                                 rt::LibraryPaths{_options.root}.databasePath(),
+                                                cacheDirectory,
                                                 _musicLibraryPinnedMapBytes);
 
       if (!runtimeRes)

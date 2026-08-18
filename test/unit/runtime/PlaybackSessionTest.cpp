@@ -1832,7 +1832,7 @@ namespace ao::rt::test
     auto const scheduledSaveIndex = sleeper.callCount();
     runtimePtr->playback().commands().setVolume(0.4F);
     REQUIRE(sleeper.waitForCallCount(scheduledSaveIndex + 1));
-    REQUIRE(sleeper.fire(scheduledSaveIndex));
+    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
     REQUIRE(executor->waitUntilQueued());
 
     REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());

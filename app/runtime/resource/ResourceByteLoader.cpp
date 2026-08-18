@@ -46,14 +46,20 @@ namespace ao::rt
     auto& asyncRuntime = runtimePtr->async();
     bind(asyncRuntime,
          [runtimePtr = std::move(runtimePtr)](ResourceId const resourceId, std::stop_token const stopToken)
-         { return runtimePtr->library().taskService().loadResourceAsync(resourceId, stopToken); });
+         {
+           return runtimePtr->library().taskService().loadResourceAsync(
+             resourceId, ResourceSizeLimit::Interactive, stopToken);
+         });
   }
 
   void ResourceByteLoader::bind(CoreRuntime& runtime)
   {
     bind(runtime.async(),
          [&runtime](ResourceId const resourceId, std::stop_token const stopToken)
-         { return runtime.library().taskService().loadResourceAsync(resourceId, stopToken); });
+         {
+           return runtime.library().taskService().loadResourceAsync(
+             resourceId, ResourceSizeLimit::Interactive, stopToken);
+         });
   }
 
   void ResourceByteLoader::bind(async::Runtime& runtime, ReadBytes readBytes)

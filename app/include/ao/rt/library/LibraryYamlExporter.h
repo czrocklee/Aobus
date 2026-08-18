@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <stop_token>
 #include <string_view>
 
 namespace ao::library
@@ -17,6 +18,15 @@ namespace ao::library
 
 namespace ao::rt
 {
+  /**
+   * The interchange format version this build writes, and the only one it reads.
+   *
+   * Version 4 carries no cover byte in any mode. A `full` document instead names
+   * each distinct cover once in a normalized `library.resources` table and has
+   * each track's cover reference name a digest from it.
+   */
+  constexpr std::uint32_t kYamlFormatVersion = 4;
+
   /**
    * ExportMode - Controls which data is included in the YAML export.
    */
@@ -57,11 +67,21 @@ namespace ao::rt
 
     /**
      * Export the library to a YAML file.
+     *
+     * The document is written whole or not at all: an export that fails or is
+     * cancelled leaves whatever the path already held, because the file a user
+     * exports over is usually the backup they are replacing.
+     *
      * @param path Destination file path.
      * @param mode Export mode. Defaults to Full.
+     * @param stopToken Cancellation for the walk. A stop request between records
+     *        throws `async::OperationCancelled` and installs no file. The default
+     *        token never stops, which is how a synchronous caller opts out.
      * @return Result of the operation.
      */
-    Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode = ExportMode::Full);
+    Result<> exportToYaml(std::filesystem::path const& path,
+                          ExportMode mode = ExportMode::Full,
+                          std::stop_token stopToken = {});
 
   private:
     struct Impl;

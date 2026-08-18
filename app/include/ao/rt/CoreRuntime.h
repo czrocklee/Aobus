@@ -35,9 +35,16 @@ namespace ao::rt
   class CoreRuntime
   {
   public:
+    /// @param cacheDirectory Where derived caches live, resolved by the
+    ///        composition root: the runtime owns paths derived from a supplied
+    ///        root and does not discover platform application directories. Empty
+    ///        is supported: a cover read then re-extracts from a carrier file
+    ///        every time, which costs latency, and costs the image itself for
+    ///        content whose carrier files are all gone.
     static Result<std::unique_ptr<CoreRuntime>> create(std::unique_ptr<async::Executor> executorPtr,
                                                        std::filesystem::path musicRoot,
                                                        std::filesystem::path databasePath,
+                                                       std::filesystem::path cacheDirectory = {},
                                                        std::uint64_t musicLibraryPinnedMapBytes = 0,
                                                        async::Sleeper* sleeper = nullptr);
     virtual ~CoreRuntime();
@@ -70,6 +77,7 @@ namespace ao::rt
     Result<> initialize(std::unique_ptr<async::Executor> executorPtr,
                         std::filesystem::path musicRoot,
                         std::filesystem::path databasePath,
+                        std::filesystem::path cacheDirectory,
                         std::uint64_t musicLibraryPinnedMapBytes,
                         async::Sleeper* sleeper);
 

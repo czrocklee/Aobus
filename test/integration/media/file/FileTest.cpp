@@ -9,9 +9,11 @@
 #include <ao/PictureType.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -276,11 +278,20 @@ namespace ao::media::file::test
     CHECK(optPrimary->type == cover.type);
     CHECK(optPrimary->resourceId == cover.resourceId);
 
-    auto const optStoredBytes =
+    // The row describes the picture instead of holding it, so the check is that
+    // its identity is the digest of the payload the reader handed out: one
+    // encoded image stored in two container formats must yield one digest.
+    auto const& pending = builder.coverArt().entries();
+    REQUIRE(pending.size() == 1);
+    auto const pictureBytes = std::get<std::span<std::byte const>>(pending.front().source);
+    checkOnePixelPng(pictureBytes);
+
+    auto const optDescriptor =
       library::test::physicalWriter(musicLibrary.resources(), transaction).get(cover.resourceId);
-    REQUIRE(optStoredBytes);
-    CHECK_FALSE(optStoredBytes->empty());
-    checkOnePixelPng(*optStoredBytes);
+    REQUIRE(optDescriptor);
+    CHECK(optDescriptor->digest == utility::computeSha256(pictureBytes));
+    CHECK(optDescriptor->byteLength == pictureBytes.size());
+    CHECK(library::deriveResourceId(optDescriptor->digest) == cover.resourceId);
   }
 
   // ============================================================================

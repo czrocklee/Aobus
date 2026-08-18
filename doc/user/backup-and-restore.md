@@ -13,15 +13,15 @@ You have a portable YAML backup of the selected library data and can preview and
 
 ## Understand the boundary
 
-A library YAML export contains Aobus metadata, lists, resources, and mode-dependent technical or manifest facts.
-It does not copy the audio files themselves.
-Back up the music files separately and preserve their paths relative to the music root.
+A library YAML export contains Aobus metadata, lists, cover references, and mode-dependent technical or manifest facts.
+It does not copy the audio files themselves, and it never contains a cover image: a **Full** export records each cover's identity, and Aobus reads the picture back out of your music files.
+Back up the music files separately and preserve their paths relative to the music root; without them, a restored library keeps its cover references but may have no picture to show.
 
 `restore` replaces the payload-selected target scope; `merge` preserves target entities absent from the payload and adds imported lists as new lists.
 GTK prepares a restore preview and requires confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
-Only version 3 YAML is accepted.
+Only version 4 YAML is accepted.
 Earlier interchange files have no compatibility or conversion path and must be recreated from their source library with a current exporter.
 
 Track paths belong to the selected music root.
@@ -33,7 +33,7 @@ Symlinks whose existing targets remain inside that root are supported, while dan
 
 1. In GTK, choose **File → Export Library Data...**.
 2. Choose the payload you need:
-   **Full** includes curated metadata, technical and manifest facts, covers, and lists; **Metadata** omits technical statistics; **Delta** records edits relative to readable files; **List Only** contains lists without track records.
+   **Full** includes curated metadata, technical and manifest facts, cover references, and lists; **Metadata** omits technical statistics and cover references; **Delta** records edits relative to readable files; **List Only** contains lists without track records.
 3. Choose a `.yaml` file and wait for **Library exported successfully**.
 
 The CLI equivalent for a complete library-data backup is:
@@ -76,6 +76,10 @@ Canceling the dialog leaves the target unchanged.
 - `aobus -C /target lib verify` reports no missing or error-class issues.
 - Representative tracks retain the expected curated metadata, tags, covers, List membership, and saved List order.
 - The separately restored audio files exist at the paths expected beneath the target music root.
+
+Covers appear without a rescan. A restored cover is shown as soon as some restored audio file still carries it, or when the machine's cover cache still holds it, which is the usual case when you restore onto the machine that produced the backup.
+A **Metadata** or **Delta** restore instead takes each track's covers from the audio file itself, so a file you retagged since the backup shows its current art.
+A cover with neither a cached copy nor a music file that carries it shows no image; the track keeps its other data, and the picture returns when the file does.
 
 ## Related documents
 

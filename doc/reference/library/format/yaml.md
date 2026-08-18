@@ -3,13 +3,13 @@ id: library.yaml-format
 type: reference
 status: current
 domain: library
-summary: Defines version 3 of the portable, fail-closed YAML library interchange format.
+summary: Defines version 4 of the portable, fail-closed YAML library interchange format.
 ---
 # Library YAML format
 
 ## Scope and version
 
-This reference defines the exact version 3 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
+This reference defines the exact version 4 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
 Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../spec/library/runtime/yaml-transfer.md).
@@ -25,27 +25,31 @@ Producer and consumer code lives under `app/runtime/library/`; the format transl
 The root is a closed map with this shape:
 
 ```yaml
-version: 3
+version: 4
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
+  resources: []
   tracks: []
   lists: []
 ```
 
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
-| `version` | Yes. | Always `3`. | Unsigned 32-bit integer; only `3` is accepted. |
+| `version` | Yes. | Always `4`. | Unsigned 32-bit integer; only `4` is accepted. |
 | `libraryId` | No. | Always emitted. | UUID text with hexadecimal digits and hyphens in `8-4-4-4-12` grouping; letter case is ignored. |
 | `export_mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `listOnly`. |
-| `library` | Yes. | Always emitted. | Closed map containing only `tracks` and `lists`. |
+| `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
 
 Collection presence declares payload scope:
 
-| `export_mode` | `library.tracks` | `library.lists` |
-|---|---|---|
-| `delta`, `metadata`, `full` | Required sequence, including when empty. | Required sequence, including when empty. |
-| `listOnly` | Forbidden. | Required sequence, including when empty. |
+| `export_mode` | `library.resources` | `library.tracks` | `library.lists` |
+|---|---|---|---|
+| `full` | Required sequence, including when empty. | Required sequence, including when empty. | Required sequence, including when empty. |
+| `delta`, `metadata` | Forbidden. | Required sequence, including when empty. | Required sequence, including when empty. |
+| `listOnly` | Forbidden. | Forbidden. | Required sequence, including when empty. |
+
+No document of any mode carries a cover byte.
 
 Unknown root or `library` fields reject the complete document.
 An absent required collection is not interpreted as an empty collection.
@@ -122,24 +126,44 @@ These names come from `rt::trackFieldId()` and use hyphens rather than underscor
 
 Any other codec token rejects the complete document.
 
+### Resource records
+
+`library.resources` is the document's table of cover content, emitted in `full` only.
+Each row is a closed map, and rows appear in ascending digest order, so two exports of one unchanged library are byte-identical:
+
+```yaml
+resources:
+  - digest: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
+    length: 174829
+```
+
+| Field | Required | Type |
+|---|---|---|
+| `digest` | Yes. | Exactly 64 lowercase hexadecimal characters: the SHA-256 digest of the cover content. |
+| `length` | Yes. | Unsigned 32-bit integer: the length of that content. |
+
+A `full` export emits exactly the descriptors its exported tracks reference, not every row the database holds.
+
 ### Cover records
 
-`covers` is an ordered sequence of closed maps:
+`covers` is an ordered sequence of closed maps, emitted in `full` only:
 
 ```yaml
 covers:
   - type: 3
-    data: iVBORw0KGgo=
+    resource: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
 ```
 
 | Field | Required | Type |
 |---|---|---|
 | `type` | Yes. | Unsigned 32-bit integer from `0` through `20`, matching the APIC/FLAC picture-type vocabulary. |
-| `data` | Yes. | Non-empty base64 scalar. |
+| `resource` | Yes. | A digest present in `library.resources`; never a `ResourceId`, which is local to the library that minted it. |
 
-Unknown fields, out-of-range types, malformed base64, and empty decoded data reject the complete document.
-The producer may attach YAML anchors to first occurrences of shared image data and aliases to later occurrences; the importer resolves those aliases before validation.
-If a stored cover references a missing or empty core resource, export fails with `CorruptData` instead of emitting a cover map that the importer would reject.
+The reference graph must close in both directions: a cover naming no row, a row no track references, and two rows carrying one digest each reject the complete document.
+Unknown fields inside a resource or cover map, out-of-range picture types, an uppercase digest spelling, a digest that is not exactly 64 lowercase hexadecimal characters, and a `length` that is negative, non-integral, or above `UINT32_MAX` also reject it.
+A `covers` key outside `full` rejects the document, because a mode that carries no table cannot express a reference.
+
+If a stored cover references a missing core descriptor, export fails rather than emitting a document the importer would reject.
 
 ## List records
 
@@ -185,28 +209,27 @@ Exceeding any bound rejects the payload rather than narrowing or truncating it.
 
 The importer reports `FormatRejected` for malformed YAML and any violation of this reference, including:
 
-- a non-map root, `library`, track, cover, list, or map-form list reference;
-- a missing required field or collection, or a forbidden `tracks` collection in `listOnly`;
+- a non-map root, `library`, resource, track, cover, list, or map-form list reference;
+- a missing required field or collection, a forbidden `tracks` collection in `listOnly`, or a `resources` table or `covers` key outside `full`;
 - an unsupported version, mode, codec, or cover type;
 - an unknown or duplicate field in any closed map;
 - a malformed UUID, Library URI, scalar, sequence, or numeric width;
 - duplicate nonzero track IDs, duplicate canonical track URIs, duplicate custom keys, or missing, zero, or duplicate list IDs;
 - an invalid non-empty filter, a known parent cycle, or an ambiguous list-order reference map;
 - a URI or list representation exceeding its core storage limit;
-- malformed or empty cover data.
+- a malformed digest, an out-of-range `length`, a cover naming no row, a row no track references, or two rows carrying one digest.
 
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 3 does not otherwise cap total document bytes, aggregate decoded cover bytes, or one decoded cover blob.
-No broader transfer budget is currently defined.
+Version 4 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
 The observable failure and rollback contract is defined by the [transfer specification](../../../spec/library/runtime/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
-The importer accepts version 3 only.
-It has no version-1/version-2 reader, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
-There is no migration contract for earlier interchange files.
+The importer accepts version 4 only.
+It has no reader for versions 1 through 3, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
+There is no migration contract for earlier interchange files, and a version-3 document's embedded cover bytes cannot be read by this version.
 
-Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-3 surface.
+Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-4 surface.
 Payload versioning is independent of the host-local database's `kLibraryVersion`.
 
 ## Examples
@@ -214,10 +237,13 @@ Payload versioning is independent of the host-local database's `kLibraryVersion`
 Full payload:
 
 ```yaml
-version: 3
+version: 4
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
+  resources:
+    - digest: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
+      length: 174829
   tracks:
     - id: 42
       uri: music/example.flac
@@ -227,7 +253,9 @@ library:
       tags: [favorite]
       custom:
         mood: focused
-      covers: []
+      covers:
+        - type: 3
+          resource: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
       duration: 180000
       bitrate: 900000
       sample-rate: 96000
@@ -247,7 +275,7 @@ library:
 List-only payload:
 
 ```yaml
-version: 3
+version: 4
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: listOnly
 library:
@@ -272,7 +300,7 @@ library:
 
 - [`LibraryExportImportTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportTest.cpp) covers modes, fields, URI normalization, overlays, reports, and previews.
 - [`LibraryExportImportListTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) covers list-only shape, references, parents, dangling references, and ordering.
-- [`LibraryExportImportCoverArtTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) covers ordered covers, aliases, replacement, and removal.
+- [`LibraryExportImportCoverArtTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) covers the resource table's shape, ordering, determinism, closure rules, digest and length rejection, and each mode's cover terminal state.
 - [`LibraryYamlSchemaTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) covers closed-schema, scope, enum, and URI rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) covers scalar validation and transactional rollback.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) covers canonicalization, literal percent text, control-character rejection, absent roots, in-root resolution, and escaping or dangling symlinks.

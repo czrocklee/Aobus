@@ -82,7 +82,7 @@ Every logical write body runs through `WriteTransaction::apply()`; an error resu
 Only that context exposes logical Track and List mutation ports plus the narrow library-identity restore operation; it exposes neither commit nor abort and exists only for the callback invocation.
 Logical writers returned by the context borrow the transaction owner, are valid only while that callback is active, and must not outlive the transaction object; retaining the context itself beyond the callback is an ordinary dangling-reference error rather than a wider lifetime guarantee.
 A successful body leaves the root active for a later explicit commit by its transaction owner.
-Track preparation owns dictionary interning and resource creation: interning first consults committed mappings and then the transaction overlay, and new id/text or resource rows are written into the same native transaction as the Track record that references them.
+Track preparation owns dictionary interning and descriptor creation: interning first consults committed mappings and then the transaction overlay, and new id/text or resource descriptor rows are written into the same native transaction as the Track record that references them.
 Dropping or failing the wrapper aborts both authorities.
 Commit or abort consumes the native handle but retains the native transaction object and dictionary writer until the outer wrapper is destroyed.
 Store writers that remain in ordinary scope across `commit()` therefore observe a terminal transaction and can be destroyed safely; any post-terminal operation fails before touching an LMDB cursor.

@@ -624,6 +624,27 @@ namespace ao::tui
       return std::make_unique<rt::ConfigStore>(path);
     }
 
+    /**
+     * @brief Where derived caches go, or nothing.
+     *
+     * The runtime does not discover platform application directories, so this
+     * shell resolves the location and hands it over. Nothing here is
+     * authoritative: when the platform names no location the session runs without
+     * a cache, and cover reads re-extract from the media files instead.
+     */
+    std::filesystem::path resolveCacheDirectory()
+    {
+      auto dirRes = utility::applicationCacheDirectory();
+
+      if (!dirRes)
+      {
+        APP_LOG_INFO("TUI: caching no cover art: {}", dirRes.error().message);
+        return {};
+      }
+
+      return *std::move(dirRes);
+    }
+
     /// Records the exact route a user picked, so the next session can ask for it again.
     uimodel::OutputDeviceIntent makeOutputDeviceIntent(rt::ConfigStore& store)
     {
@@ -693,6 +714,7 @@ namespace ao::tui
       .executorPtr = std::move(executorPtr),
       .musicRoot = options.libraryRoot,
       .databasePath = options.databasePath,
+      .cacheDirectory = resolveCacheDirectory(),
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
     });
 

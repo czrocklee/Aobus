@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -190,10 +191,21 @@ namespace ao::rt::test
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
-    auto failureRes =
-      mutation.apply([&musicLibrary, &oversizedValue](library::LibraryWrite& write)
-                     { return library::test::physicalWriter(musicLibrary.resources(), write).create(oversizedValue); });
+    // A resource row is a fixed 36 bytes, so exhausting a pinned map takes a store
+    // that still holds variable-length content; a dictionary entry is one.
+    auto const oversizedText = std::string(kMapSize * 4, 'x');
+    auto failureRes = mutation.apply(
+      [&oversizedText](library::LibraryWrite& write) -> Result<>
+      {
+        auto idRes = library::test::physicalDictionary(write).intern(oversizedText);
+
+        if (!idRes)
+        {
+          return std::unexpected{idRes.error()};
+        }
+
+        return {};
+      });
 
     REQUIRE_FALSE(failureRes);
     CHECK(failureRes.error().code == Error::Code::StorageFull);

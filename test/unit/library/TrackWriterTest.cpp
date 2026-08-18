@@ -21,10 +21,10 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -120,7 +120,8 @@ namespace ao::library::test
     auto const resourceId = optTrack->coverArt().primary()->resourceId;
     auto const optResource = library.resources().reader(readTransaction).get(resourceId);
     REQUIRE(optResource);
-    CHECK(std::ranges::equal(*optResource, coverBytes));
+    CHECK(optResource->digest == utility::computeSha256(coverBytes));
+    CHECK(optResource->byteLength == coverBytes.size());
 
     auto const optManifest = library.manifest().reader(readTransaction).get("logical.flac");
     REQUIRE(optManifest);

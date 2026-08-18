@@ -99,6 +99,14 @@ namespace ao::media::file::test
     RecordedContent& _content;
   };
 
+  /**
+   * @brief Copies out the one picture carried by the media file at @p path.
+   *
+   * A test that names a cover by digest needs the exact payload the reader hands
+   * out; container framing makes that impossible to guess from the fixture file.
+   */
+  std::vector<std::byte> requireSoleEmbeddedPicture(std::filesystem::path const& path);
+
   /** Test facade preserving the old parser-test shape while exercising only the public API. */
   class TestFile final
   {

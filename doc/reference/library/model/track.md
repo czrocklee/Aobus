@@ -10,7 +10,7 @@ summary: Enumerates persisted track metadata, technical properties, codec values
 ## Scope and version
 
 This reference enumerates the current logical track values owned by library storage and core read models.
-Physical byte placement belongs to [library database version 5](../storage/database.md), and portable names belong to [library YAML version 3](../format/yaml.md).
+Physical byte placement belongs to [library database version 6](../storage/database.md), and portable names belong to [library YAML version 4](../format/yaml.md).
 Application-facing ids, presentation capabilities, sort/group mappings, completion flags, and query bridges belong to the [runtime track field catalog](track-field.md).
 
 Zero numeric values and invalid ids represent unknown or absent values unless a narrower contract states otherwise.
@@ -91,10 +91,11 @@ Tag additions/removals use the separate tag command contract in [library access 
 ## Cover art
 
 A track has an ordered sequence of `CoverArt` values.
-Each value contains a nonzero `ResourceId` and a `PictureType`; image bytes live in `ResourceStore` and identical bytes deduplicate by content.
+Each value contains a nonzero `ResourceId` and a `PictureType`; `ResourceStore` holds a descriptor naming the image by digest, and identical content deduplicates to one id.
 
 `CoverArtProxy::primary()` returns the first `FrontCover`, otherwise the first entry, otherwise no value.
-The builder preserves insertion order and supports adding by bytes or existing resource id, indexed erase, and complete clearing.
+The builder preserves insertion order and supports adding by bytes, by existing resource id, or by a declared descriptor, indexed erase, and complete clearing.
+A scan replaces the whole sequence from the file it read, and a full import restores one from a transfer document; nothing else writes it.
 
 `PictureType` uses the APIC/FLAC numeric vocabulary from `0` (`Other`) through `20` (`PublisherLogo`).
 Unknown imported numeric roles normalize to `Other`.
@@ -123,7 +124,7 @@ Portable YAML names and runtime field ids are separate compatibility surfaces ow
 
 ## Related documents
 
-- [Resource blob](../../resource/blob.md)
+- [Resource descriptors](../../resource/blob.md)
 - [Supported audio files](../../media/audio-file.md)
 - [Library YAML format](../format/yaml.md)
 - [Runtime track field catalog](track-field.md)

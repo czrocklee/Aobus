@@ -128,12 +128,16 @@ Mutation/administrative shapes:
 | `lib fingerprint` | `completed, skipped, failures` |
 | `lib import` | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored` |
 | `lib export` | `action, path, mode` |
-| `lib resource list` | `resources[{id,size}]` |
+| `lib resource list` | `resources[{id,size}]`, where `size` is the descriptor's described length |
 | `lib resource export` | `id, output, size` |
 | `lib dump` | selected optional `meta`, `dictionary`, `manifest`, `resources` sections |
 
 Change-record nested fields are defined by the runtime mutation reply types and are emitted without CLI reinterpretation.
 For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `listOnly`, and `targetScope` uses exact lowercase `library` or `lists`.
+
+`lib stats` reports `resources` as the number of descriptor rows and `resourceBytes` as the summed described length of the descriptors tracks currently reference, counting each reachable descriptor once however many tracks name it.
+The two figures disagreeing is the normal state of a rescanned library: descriptor rows are never deleted, so a cover a file no longer carries keeps its row while leaving `resourceBytes`.
+Neither figure counts stored bytes, because the library stores no cover content.
 
 `lib stats` reports three separate byte figures for the database and they answer different questions.
 `diskBytes` is what the database directory allocates, counting allocation rather than file length so a sparse data file is not reported as the whole map.
@@ -179,7 +183,9 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
   CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
 - Ordinary List deletion rejects a List with descendants; `--descendants` explicitly selects complete-subtree deletion, and `--dry-run` reports the same subtree without committing.
 - `lib verify` fails only for Missing or Error, while still reporting Changed/Moved.
-- `lib resource export` fails for missing id or file IO.
+- `lib resource list` reports each descriptor without materializing content; `lib dump --resources` additionally prints each digest.
+- `lib resource export` materializes content through the same source walk interactive delivery uses, with no size ceiling, so it can write a cover that exceeds the interactive limit.
+- `lib resource export` fails with `resource not found` for an id with no descriptor row, `resource not available` when no cache entry or referencing file could reproduce the content, and for file IO, which includes an output below a directory that does not exist; it writes nothing in every failure case, replaces an existing output only once the complete content is on hand, and creates no directory.
 - Create dry-runs omit transaction-allocated ids.
 - `lib import --mode restore --dry-run` validates and previews without requiring confirmation.
 - A committing restore requires `--confirm-destructive-restore`; merge requires neither that flag nor an interactive prompt.

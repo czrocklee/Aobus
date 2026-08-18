@@ -4,18 +4,15 @@
 #include "tui/CoverArtLoader.h"
 
 #include "CoverArtTestSupport.h"
-#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
-#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/rt/library/Library.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -25,27 +22,29 @@
 #include <optional>
 #include <span>
 #include <stop_token>
+#include <unordered_map>
 #include <vector>
 
 namespace ao::tui::test
 {
   namespace
   {
-    async::Task<Result<std::optional<std::vector<std::byte>>>> loadStoredResource(
-      rt::test::MusicLibraryFixture* const storage,
-      ResourceId const resourceId,
-      std::stop_token const stopToken)
+    /// The bytes a cover request resolves to, standing in for the runtime walk.
+    using ResourceByteMap = std::unordered_map<ResourceId, std::vector<std::byte>>;
+
+    async::Task<Result<std::optional<std::vector<std::byte>>>> loadStoredResource(ResourceByteMap const* const source,
+                                                                                  ResourceId const resourceId,
+                                                                                  std::stop_token const stopToken)
     {
       async::throwIfStopRequested(stopToken);
-      auto const transaction = storage->library().readTransaction();
-      auto const optBytes = storage->library().resources().reader(transaction).get(resourceId);
+      auto const found = source->find(resourceId);
 
-      if (!optBytes)
+      if (found == source->end())
       {
         co_return std::optional<std::vector<std::byte>>{};
       }
 
-      co_return std::optional{std::vector<std::byte>{optBytes->begin(), optBytes->end()}};
+      co_return std::optional{found->second};
     }
 
     struct CoverArtLoaderFixture final
@@ -53,7 +52,7 @@ namespace ao::tui::test
       CoverArtLoaderFixture()
       {
         _byteLoaderPtr =
-          std::make_unique<rt::ResourceByteLoader>(_runtime, std::bind_front(loadStoredResource, &_storage));
+          std::make_unique<rt::ResourceByteLoader>(_runtime, std::bind_front(loadStoredResource, &_bytesById));
       }
 
       ~CoverArtLoaderFixture()
@@ -68,13 +67,14 @@ namespace ao::tui::test
       CoverArtLoaderFixture(CoverArtLoaderFixture&&) = delete;
       CoverArtLoaderFixture& operator=(CoverArtLoaderFixture&&) = delete;
 
+      /// The handle a real library would mint for this content, bound to bytes the
+      /// fake delivers: cover delivery is what this suite tests, not the walk that
+      /// produces the bytes.
       ResourceId addResource(std::span<std::byte const> bytes)
       {
-        auto transaction = library::test::writeTransaction(_storage.library());
-        auto result = library::test::physicalWriter(_storage.library().resources(), transaction).create(bytes);
-        REQUIRE(result);
-        REQUIRE(transaction.commit());
-        return *result;
+        auto const resourceId = library::deriveResourceId(utility::computeSha256(bytes));
+        _bytesById.insert_or_assign(resourceId, std::vector<std::byte>{bytes.begin(), bytes.end()});
+        return resourceId;
       }
 
       rt::test::QueuedExecutor& executor() noexcept { return _executor; }
@@ -82,7 +82,7 @@ namespace ao::tui::test
       rt::ResourceByteLoader& byteLoader() const noexcept { return *_byteLoaderPtr; }
 
     private:
-      rt::test::MusicLibraryFixture _storage{};
+      ResourceByteMap _bytesById{};
       rt::test::QueuedExecutor _executor{};
       async::Runtime _runtime{_executor, 1};
       std::unique_ptr<rt::ResourceByteLoader> _byteLoaderPtr;

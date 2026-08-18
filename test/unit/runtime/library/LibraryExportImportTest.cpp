@@ -439,7 +439,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "merge.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: delta
 library:
   tracks:
@@ -495,9 +495,10 @@ library:
     SECTION("omitted collections preserve the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - uri: track.flac
       title: Updated
@@ -517,9 +518,10 @@ library:
     SECTION("present empty collections clear the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - uri: track.flac
       tags: []
@@ -582,7 +584,7 @@ library:
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
       {
         auto yaml = std::ofstream{yamlPath};
-        yaml << R"(version: 3
+        yaml << R"(version: 4
 export_mode: delta
 library:
   tracks:
@@ -639,9 +641,10 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - id: 1
       uri: ./song.flac
@@ -711,7 +714,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 3\n";
+      yaml << "version: 4\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
@@ -745,7 +748,7 @@ library:
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
     {
       auto yaml = std::ofstream{yamlPathDelta};
-      yaml << "version: 3\n";
+      yaml << "version: 4\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: delta\n";
       yaml << "library:\n";
@@ -776,7 +779,7 @@ library:
     SECTION("legacy mode alias")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: minimum
 library:
   tracks: []
@@ -792,10 +795,11 @@ library:
     SECTION("unknown root field")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: full
 extension_root: future
 library:
+  resources: []
   tracks: []
   lists: []
 )";
@@ -819,7 +823,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 3\n";
+      yaml << "version: 4\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";

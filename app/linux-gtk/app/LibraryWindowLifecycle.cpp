@@ -12,10 +12,13 @@
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/Log.h>
+#include <ao/utility/PlatformDirectories.h>
 
 #include <gtkmm/application.h>
 
 #include <expected>
+#include <filesystem>
 #include <memory>
 #include <utility>
 
@@ -32,10 +35,21 @@ namespace ao::gtk
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
     auto workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspaceConfigPath);
 
+    // Nothing names a home or profile location. What lives there is derived, so
+    // the session opens without a cache rather than refusing to start: cover
+    // reads then re-extract from the media files, which costs latency only.
+    auto const cacheDirRes = utility::applicationCacheDirectory();
+
+    if (!cacheDirRes)
+    {
+      APP_LOG_WARN("Aobus caches no cover art this session: {}", cacheDirRes.error().message);
+    }
+
     auto runtimeRes = rt::AppRuntime::create(
       rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
                                  .musicRoot = std::move(paths.musicRoot),
                                  .databasePath = std::move(paths.databasePath),
+                                 .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr),
                                  .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore()});
 

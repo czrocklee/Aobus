@@ -3,13 +3,13 @@ id: library.database
 type: reference
 status: current
 domain: library
-summary: Defines the version 5 host-local LMDB environment, named databases, keys, records, and validation gates.
+summary: Defines the version 6 host-local LMDB environment, named databases, keys, records, and validation gates.
 ---
 # Library database
 
 ## Scope and version
 
-This reference defines physical library format version `5`, gated by `ao::library::kLibraryVersion`.
+This reference defines physical library format version `6`, gated by `ao::library::kLibraryVersion`.
 It owns the LMDB environment, named databases, key encodings, record composition, size and alignment requirements, and version policy.
 
 Entity meaning belongs to the [track](../model/track.md) and [list](../model/list.md) references.
@@ -42,12 +42,12 @@ A mutation that exhausts the map rolls back and leaves the recorded peak untouch
 `Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
 It is for callers that need one known capacity, including tests that mean to reach the end of a map.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-5 schema only when that catalog is empty.
+It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-6 schema only when that catalog is empty.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
 Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
 The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.
 A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
-After the version gate accepts version 5, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
+After the version gate accepts version 6, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
 
 The database is host-local rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
@@ -96,7 +96,7 @@ Filter bytes remain opaque throughout these storage operations.
 
 Writable-capability acquisition non-blockingly locks `<database-path>/.aobus-writer.lock` for the capability lifetime.
 An active write transaction retains the lock after its originating capability is destroyed and releases it on commit, failure, abort-by-destruction, or transaction destruction.
-The lock file has no governed payload and is not part of format version `5`, but it must not be removed while a writable process is active.
+The lock file has no governed payload and is not part of format version `6`, but it must not be removed while a writable process is active.
 
 ## Named databases
 
@@ -106,7 +106,7 @@ The lock file has no governed payload and is not part of format version `5`, but
 | `tracks_hot` | `TrackId` integer | `TrackHotHeader`, tag-id array, title bytes. |
 | `tracks_cold` | `TrackId` integer | `TrackColdHeader`, optional block payloads, URI bytes. |
 | `lists` | `ListId` integer | `ListHeader`, order-track-id array, name/description/filter bytes, zero padding. |
-| `resources` | Content-derived `ResourceId` integer | Raw blob bytes. |
+| `resources` | Digest-derived `ResourceId` integer | 36-byte `ResourceDescriptor`. |
 | `dictionary` | `DictionaryId` integer | Raw UTF-8 bytes without a terminator. |
 | `file_manifest` | Root-relative URI padded to a four-byte multiple | `FileManifestHeader`. |
 
@@ -118,7 +118,7 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 
 - Track and list writers allocate `maxKey + 1`; the first id is `1`, and exhaustion returns `ResourceExhausted`.
 - A track is appended to `tracks_hot` first and written to `tracks_cold` under the same id.
-- A resource key starts from the low 32 bits of XXH3-64, remaps zero to one, and linearly probes with full-content comparison; identical bytes reuse the existing id.
+- A resource key starts from the first four bytes of the content's SHA-256 digest read big-endian, remaps zero to one, and linearly probes with digest comparison, stopping at the first empty slot; identical content reuses the existing id.
 - Dictionary ids produced by current writers are the dense committed range `1..entryCount`; new text receives the next id, repeated text reuses its existing id, and committed ids are never deleted or rebound.
 - Persisted dictionary, Track, and List integer keys are exactly four native bytes before conversion; dictionary keys are the dense range `1..N`, Track keys are nonzero matching hot/cold pairs, and List keys are nonzero.
 - An aborted transaction-local dictionary tail has no durable identity and its ids may be reused by a later transaction.
@@ -164,7 +164,7 @@ The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI
 
 Production callers pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
 The writer performs preparation itself and keeps the resulting immutable `TrackBuilder::PreparedHot` and `PreparedCold` values inside `ao_library`.
-This binds resolved dictionary ids and byte-backed Resource creation to the same library and transaction that performs the physical write; caller-supplied existing Resource ids must already exist in that write snapshot.
+This binds resolved dictionary ids and Resource descriptor creation, from hashed bytes or from a declared descriptor, to the same library and transaction that performs the physical write; caller-supplied existing Resource ids must already exist in that write snapshot.
 The physical `TrackStore::Writer` accepts no caller-supplied record bytes and exposes no mutable LMDB span, and it is unavailable to production callers, so there is one record-writing path rather than a prepared path beside a raw one.
 Public LMDB create, update, and append operations accept only copied input bytes.
 The Track writer is the only production consumer that reaches the integer writer's private reservation primitives through source-private `lmdb::detail::ReservationWriterAccess`; its synchronous no-throw encoder receives the four-byte-aligned reservation only for that invocation, and the span is never returned to the Store.
@@ -268,7 +268,12 @@ Parent existence and parent-cycle checks are cross-row logical-writer rules and 
 
 ## Resource and dictionary records
 
-Resource values are raw blob bytes with no header.
+A resource value is exactly 36 bytes: a 32-byte SHA-256 digest followed by a 32-bit content length in the machine's own byte order.
+Like every other record here, the row is the struct's object representation written whole rather than a chosen encoding; a database file is bound to the architecture that created it either way.
+The row describes content and holds none of it; the content lives in the media files the library indexes, and the [cover-art delivery specification](../../../spec/resource/cover-art-delivery.md) owns how it is materialized.
+The `resources` database is append-only in practice: no production path deletes a row, because `create` stops probing at the first empty slot and a hole in a collision chain would let a later create mint a second row for one digest.
+Rows a track no longer references are retained and remain valid.
+
 Dictionary values are raw UTF-8 bytes with no header or terminator.
 Dictionary rows created for a referencing record are written in the same LMDB transaction.
 
@@ -302,18 +307,20 @@ Production callers cannot submit serialized Track, List, or manifest byte spans 
 The logical Track port accepts `TrackBuilder` and `FileManifestBuilder`, the logical List port accepts `ListBuilder`, and both own their private preparation.
 Manifest-only Track updates likewise accept the owning `TrackId` plus `FileManifestBuilder`; the port derives and preserves the live URI-to-Track binding itself.
 Track preflight, List preparation, and manifest preparation return recoverable validation errors before their first related mutation, while passing an invalid prepared value is impossible through the public construction surface.
-Once Track preparation starts interning dictionary text or creating byte-backed Resources, any later failure reaches the root operation boundary and aborts the complete transaction.
+Once Track preparation starts interning dictionary text or creating Resource descriptors, any later failure reaches the root operation boundary and aborts the complete transaction.
 Track encoders validate the bytes they fill with the same canonical local validators used by open and treat a mismatch as an `AO_ENSURES` failure.
 Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
 After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-5 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
+A valid non-current version returns `NotSupported` before version-6 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
 The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
-For version 5, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
+For version 6, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
 Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
 The typed `meta` token contains only header record `1` plus optional revision record `2`.
 
-The current-schema gate then validates Resource keys as nonzero four-byte ids and Resource values as nonempty opaque bytes; orphan Resources and orphan dictionary rows are accepted.
+The current-schema gate then validates Resource keys as nonzero four-byte ids and Resource values as exactly 36 parseable descriptor bytes, requires every stored digest to be distinct, and requires every row to be reachable from its digest's initial key along an unbroken run of occupied slots; orphan Resources and orphan dictionary rows are accepted.
+A row whose key is not the first free slot at or above its digest's initial key is `CorruptData`, with the empty slot before it as the cause; a long collision cluster and a cluster spanning the wrap from the maximum key to `1` are both valid.
+Reachability is checked over the occupied key runs the same traversal already collects, so it stays linear in the number of rows.
 It validates dictionary key width, dense ids, and unique text while building the in-memory index.
 It merge-checks the hot/cold Track key sets, validates canonical records plus every dictionary and Resource reference, and proves a strict Track-to-manifest bijection.
 The bijection first compares row counts, then performs one canonical manifest point read for each Track URI and requires the manifest's Track id to equal that Track id.
@@ -369,14 +376,15 @@ Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, 
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
-Version `5` gates the `orderTrackIds` representation and List record layout, while stored `filter` bytes remain opaque to database admission.
+Version `6` gates the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` bytes remain opaque to database admission.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../spec/query/predicate-evaluation.md).
 A grammar or predicate-semantic change does not by itself increment `kLibraryVersion`; stored text that no longer parses or compiles is an application expression error rather than corrupt storage.
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
 An explicitly tested future migration may replace reset-and-rescan recovery for an old physical version only when it converts or validates every affected record atomically and updates the metadata version after the converted data is valid; no such migration exists today.
-There is no version-4 reader or in-place migration.
-Opening a version-4 environment returns `NotSupported`; preserving its user-authored data requires an explicit portable export performed by a compatible build before opening the library with version 5.
+There is no reader for an older physical version and no in-place migration.
+Opening a version-4 or version-5 environment returns `NotSupported`; recreating the library by rescanning the music root is the supported answer.
+Preserving user-authored curation instead requires a portable export made by a compatible build before the upgrade, and a version-5 build writes version-3 YAML, which this build does not read.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created host-local index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority
@@ -415,7 +423,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 ## Related documents
 
-- [Resource blob](../../resource/blob.md)
+- [Resource descriptors](../../resource/blob.md)
 
 - [Library architecture](../../../architecture/library.md)
 - [LMDB operation specification](../../../spec/storage/lmdb-operation.md)

@@ -153,6 +153,7 @@ namespace ao::rt::test
       auto const result = CoreRuntime::create(std::make_unique<InlineExecutor>(),
                                               tempDir.path(),
                                               databaseFile.path,
+                                              tempDir.path() / "cache",
                                               library::test::kTestMusicLibraryMapBytes);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::IoError);
@@ -263,6 +264,7 @@ namespace ao::rt::test
     auto runtimePtr = ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
                                                                  tempDir.path(),
                                                                  LibraryPaths{tempDir.path()}.databasePath(),
+                                                                 tempDir.path() / "cache",
                                                                  library::test::kTestMusicLibraryMapBytes));
 
     CHECK(runtimePtr->library().storageCapacity().mapBytes == library::test::kTestMusicLibraryMapBytes);
@@ -277,6 +279,7 @@ namespace ao::rt::test
     auto runtimePtr = ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
                                                                  tempDir.path(),
                                                                  LibraryPaths{tempDir.path()}.databasePath(),
+                                                                 tempDir.path() / "cache",
                                                                  library::test::kTestMusicLibraryMapBytes));
 
     REQUIRE(runtimePtr->library().createList(LibraryWriter::ListDraft{.name = "Committed before close"}));

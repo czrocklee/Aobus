@@ -96,12 +96,17 @@ namespace ao::rt
   Result<std::unique_ptr<CoreRuntime>> CoreRuntime::create(std::unique_ptr<async::Executor> executorPtr,
                                                            std::filesystem::path musicRoot,
                                                            std::filesystem::path databasePath,
+                                                           std::filesystem::path cacheDirectory,
                                                            std::uint64_t const musicLibraryPinnedMapBytes,
                                                            async::Sleeper* const sleeper)
   {
     auto runtimePtr = std::unique_ptr<CoreRuntime>{new CoreRuntime{}};
-    auto result = runtimePtr->initialize(
-      std::move(executorPtr), std::move(musicRoot), std::move(databasePath), musicLibraryPinnedMapBytes, sleeper);
+    auto result = runtimePtr->initialize(std::move(executorPtr),
+                                         std::move(musicRoot),
+                                         std::move(databasePath),
+                                         std::move(cacheDirectory),
+                                         musicLibraryPinnedMapBytes,
+                                         sleeper);
 
     if (!result)
     {
@@ -114,6 +119,7 @@ namespace ao::rt
   Result<> CoreRuntime::initialize(std::unique_ptr<async::Executor> executorPtr,
                                    std::filesystem::path musicRoot,
                                    std::filesystem::path databasePath,
+                                   std::filesystem::path cacheDirectory,
                                    std::uint64_t const musicLibraryPinnedMapBytes,
                                    async::Sleeper* const sleeper)
   {
@@ -133,7 +139,8 @@ namespace ao::rt
     auto storagePtr = std::make_unique<library::MusicLibrary>(std::move(*storageRes));
     auto implPtr = std::make_unique<Impl>(
       std::move(executorPtr), std::move(musicRoot), std::move(databasePath), std::move(storagePtr), sleeper);
-    auto libraryRes = Library::create(implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges);
+    auto libraryRes = Library::create(
+      implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges, std::move(cacheDirectory));
 
     if (!libraryRes)
     {

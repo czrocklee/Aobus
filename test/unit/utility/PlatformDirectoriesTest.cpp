@@ -35,10 +35,16 @@ namespace ao::utility::test
      */
     constexpr auto kPrimaryRoot = "C:\\aobus-config-primary";
     constexpr auto kFallbackRoot = "C:\\aobus-config-fallback";
+    constexpr auto kCacheRoot = "C:\\aobus-cache-primary";
+
+    /// The cache is a subdirectory of the application directory on Windows,
+    /// which has no per-user cache root of its own.
+    constexpr auto kExpectedCacheDirectoryName = "Cache";
 #else
     constexpr auto kExpectedDirectoryName = "aobus";
     constexpr auto kPrimaryRoot = "/tmp/aobus-config-primary";
     constexpr auto kHomeRoot = "/tmp/aobus-home";
+    constexpr auto kCacheRoot = "/tmp/aobus-cache-primary";
 #endif
     /// @}
 
@@ -224,6 +230,111 @@ namespace ao::utility::test
     REQUIRE(result);
     CHECK(result->filename() == kExpectedDirectoryName);
     CHECK(result->parent_path().filename() == ".config");
+  }
+#endif
+
+  TEST_CASE("applicationCacheDirectory - prefers the primary variable", "[utility][unit][paths]")
+  {
+#ifdef _WIN32
+    auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
+    primary.set(kCacheRoot);
+
+    auto const result = applicationCacheDirectory();
+
+    REQUIRE(result);
+    CHECK(*result == std::filesystem::path{kCacheRoot} / kExpectedDirectoryName / kExpectedCacheDirectoryName);
+#else
+    auto const primary = ScopedEnvironment{"XDG_CACHE_HOME"};
+    primary.set(kCacheRoot);
+
+    auto const result = applicationCacheDirectory();
+
+    REQUIRE(result);
+    CHECK(*result == std::filesystem::path{kCacheRoot} / kExpectedDirectoryName);
+#endif
+  }
+
+#ifdef _WIN32
+
+  TEST_CASE("applicationCacheDirectory - a roaming profile is not a candidate", "[utility][unit][paths]")
+  {
+    // A cache under APPDATA would be synchronized between machines, which is
+    // work for bytes any machine can rebuild for itself. With no local profile
+    // there is no cache location, and a frontend then runs with one tier.
+    auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
+    auto const roaming = ScopedEnvironment{"APPDATA"};
+    primary.clear();
+    roaming.set(kFallbackRoot);
+
+    auto const result = applicationCacheDirectory();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset", "[utility][unit][paths]")
+  {
+    auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
+    auto const roaming = ScopedEnvironment{"APPDATA"};
+    roaming.clear();
+
+    for (auto const* const rejected : {"", "cache", "..\\cache", "C:cache", "/tmp/aobus"})
+    {
+      INFO(rejected);
+      primary.set(rejected);
+
+      CHECK_FALSE(applicationCacheDirectory());
+    }
+  }
+#else
+
+  TEST_CASE("applicationCacheDirectory - falls back to the home cache directory", "[utility][unit][paths]")
+  {
+    // The fallback is `.cache`, not the `.config` the sibling resolver uses: a
+    // derived cache in the configuration directory would be backed up and synced
+    // with the settings a user means to keep.
+    auto const primary = ScopedEnvironment{"XDG_CACHE_HOME"};
+    auto const home = ScopedEnvironment{"HOME"};
+    primary.clear();
+    home.set(kHomeRoot);
+
+    auto const result = applicationCacheDirectory();
+
+    REQUIRE(result);
+    CHECK(*result == std::filesystem::path{kHomeRoot} / ".cache" / kExpectedDirectoryName);
+  }
+
+  TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset", "[utility][unit][paths]")
+  {
+    auto const primary = ScopedEnvironment{"XDG_CACHE_HOME"};
+    auto const home = ScopedEnvironment{"HOME"};
+    home.set(kHomeRoot);
+    auto const expected = std::filesystem::path{kHomeRoot} / ".cache" / kExpectedDirectoryName;
+
+    for (auto const* const rejected : {"", "cache", "../cache", "./"})
+    {
+      INFO(rejected);
+      primary.set(rejected);
+
+      auto const result = applicationCacheDirectory();
+
+      REQUIRE(result);
+      CHECK(*result == expected);
+    }
+  }
+
+  TEST_CASE("applicationCacheDirectory - falls back to the account entry without HOME", "[utility][unit][paths]")
+  {
+    auto const primary = ScopedEnvironment{"XDG_CACHE_HOME"};
+    auto const home = ScopedEnvironment{"HOME"};
+    primary.clear();
+    home.clear();
+
+    auto const result = applicationCacheDirectory();
+
+    REQUIRE(result);
+    CHECK(result->filename() == kExpectedDirectoryName);
+    CHECK(result->parent_path().filename() == ".cache");
   }
 #endif
 } // namespace ao::utility::test

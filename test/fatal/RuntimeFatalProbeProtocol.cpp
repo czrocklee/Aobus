@@ -14,10 +14,10 @@ namespace ao::rt::test
     static constexpr auto kExpectations = std::array{
       RuntimeFatalProbeExpectation{"yaml-export-missing-cover-resource",
                                    "invariant",
-                                   "optDbData",
-                                   "Track cover references missing Resource",
+                                   "optDescriptor",
+                                   "cover references missing Resource",
                                    "LibraryYamlExporter.cpp:",
-                                   "emitSingleCover",
+                                   "collectReachableResources",
                                    {},
                                    {}},
       RuntimeFatalProbeExpectation{"library-publication-admission-exception",

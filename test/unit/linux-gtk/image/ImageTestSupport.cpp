@@ -7,12 +7,16 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/resource/ResourceDiskCache.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/pixbuf.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <vector>
@@ -59,5 +63,15 @@ namespace ao::gtk::test
   ResourceId writeCoverResource(library::MusicLibrary& library, std::int32_t const side)
   {
     return writeCoverResource(library, makePixbuf(side));
+  }
+
+  void installCoverCacheEntry(std::filesystem::path const& cacheDirectory, std::span<std::byte const> const bytes)
+  {
+    auto const cache = rt::ResourceDiskCache{rt::ResourceDiskCache::Config{
+      .directory = rt::coverCacheDirectory(cacheDirectory),
+      .maximumEntryBytes = rt::LibraryTaskService::kMaximumInteractiveResourceBytes,
+    }};
+    cache.store(utility::computeSha256(bytes), bytes);
+    REQUIRE(cache.read(utility::computeSha256(bytes)));
   }
 } // namespace ao::gtk::test

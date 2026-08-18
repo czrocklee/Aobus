@@ -3,35 +3,42 @@ id: resource.cover-art-delivery
 type: spec
 status: current
 domain: resource
-summary: Defines resource creation, primary cover selection, bounded async materialization, graphical placeholders, frontend transforms, and MPRIS export behavior.
+summary: Defines descriptor creation, primary cover selection, content-addressed materialization, graphical placeholders, frontend transforms, and MPRIS export behavior.
 ---
 # Cover-art resource delivery
 
 ## Scope
 
-This specification defines current behavior for storing immutable resource bytes, attaching ordered cover references, selecting a primary cover, materializing bytes through runtime, and delivering cover art through GTK, WinUI, TUI, MPRIS, and CLI.
-The [resource blob reference](../../reference/resource/blob.md) owns exact ids and store operations, while the [track model](../../reference/library/model/track.md) owns the exact cover and picture-type surface.
+This specification defines current behavior for describing cover content by digest, attaching ordered cover references, selecting a primary cover, materializing bytes through runtime from a derived cache or a carrier media file, and delivering cover art through GTK, WinUI, TUI, MPRIS, and CLI.
+The [resource descriptor reference](../../reference/resource/blob.md) owns exact ids, descriptor fields, and store operations, while the [track model](../../reference/library/model/track.md) owns the exact cover and picture-type surface.
 
 ## Code boundary
 
 This contract spans the **Core libraries**, **application runtime**, **UIModel**, and **frontend** layers from the [system architecture](../../architecture/system-overview.md), under the [resource delivery architecture](../../architecture/resource-delivery.md).
-Core owns raw blobs and track references, runtime owns scoped reads, encoded-byte delivery, and identity propagation, UIModel owns placeholder and stale-selection policy, and each frontend owns its transform and presentation resources.
+Core owns descriptors and track references, runtime owns the source walk, encoded-byte delivery, and identity propagation, UIModel owns placeholder and stale-selection policy, and each frontend owns its transform and presentation resources.
 
 ## Terminology
 
-- **Resource**: immutable raw bytes addressed by a nonzero `ResourceId` inside one library.
+- **Resource**: cover content identified by its SHA-256 digest, named inside one library by a nonzero `ResourceId` derived from that digest.
+- **Descriptor**: the persisted row for a resource: its 32-byte digest and the 32-bit byte length of the content it names. The library stores no cover bytes.
+- **Carrier**: an audio file a track references, whose embedded pictures may hold a resource's content.
+- **Derived cover cache**: a digest-keyed directory of materialized cover files outside the library, shared by every library on the machine.
 - **Cover entry**: one ordered `(ResourceId, PictureType)` track value.
 - **Primary cover**: the first front cover, otherwise the first entry.
 - **Full-size GTK image**: a pixbuf decoded without thumbnail-size downscaling before `ImageWidget` rendering.
 - **Thumbnail key**: a resource id plus requested physical pixel size.
 - **No-cover placeholder**: a frontend-rendered presentation shown by a visible graphical cover slot whose resource id is invalid.
-- **Derived external artifact**: a cache file or transformed PNG that is not library truth.
+- **Derived external artifact**: a cover cache entry, a pixbuf, or a transformed PNG that is not library truth.
 
 ## Invariants
 
-- Equal resource bytes created in one library return the same existing id.
-- An id's stored bytes never change in place.
+- Content is accepted as a resource if and only if it hashes to that resource's digest, whatever source produced it.
+- Equal content described in one library returns the same existing id, because the id is derived from the digest.
+- A descriptor's digest never changes once written, and no single descriptor row is ever deleted.
+- A stored `byteLength` is a fact about content, never an admission rule: it never decides whether content is read.
 - Cover entries preserve insertion order and contain no invalid id.
+- A track's cover references are a scan fact: the file the track names is the authority on which covers it has.
+- No read transaction is held across a cover-cache lookup or a carrier-file open.
 - Runtime byte results own their storage after the scoped read transaction ends.
 - A projection or playback update changes the exposed resource id before its observers render the new image.
 - A delivery cache result is valid only for the resource id and transform dimensions represented by its key.
@@ -41,9 +48,14 @@ Core owns raw blobs and track references, runtime owns scoped reads, encoded-byt
 
 ## State model
 
-The Core store maps nonzero resource ids to raw blobs.
+The Core store maps nonzero resource ids to 36-byte descriptors.
 A track stores zero or more ordered references.
 Runtime rows, detail snapshots, and now-playing state hold one primary id or the invalid sentinel.
+
+Runtime holds one immutable `ResourceId`-to-carrier-URI snapshot per library revision, built lazily on the first cover request and republished when the revision moves.
+A materialization already holding a snapshot finishes against it.
+The derived cover cache lives under the composition root's application cache directory, in a `cover` subdirectory whose entries are named by digest; it is shared across libraries, converged toward a 256 MiB budget, and evicted least-recently-used.
+A composition root that supplies no cache directory leaves the cache inert, and every cover is then re-extracted on each in-process byte-cache miss; content whose carrier files have all gone is then not deliverable at all, because the cache is the only tier that could still hold it.
 
 GTK maintains an LRU pixbuf cache with distinct full-size and physical-thumbnail keys plus one coalesced flight per key.
 A `ResourceImageController` maintains one optional active image interest, while `CoverArtView` distinguishes empty, no-cover placeholder, and decoded-image presentation and delegates decoded-image rendering to `ImageWidget`.
@@ -60,17 +72,25 @@ MPRIS retains process-local id-to-file/URL/byte-size entries and one delayed cur
 
 ### Create and select
 
-Resource creation hashes bytes, normalizes an initial zero key to `1`, and probes the complete nonzero 32-bit key space.
-An empty slot creates the row; equal bytes reuse the row; unequal bytes advance the key with wrap from maximum to `1`.
+Resource creation hashes content with SHA-256, derives the initial key from the first four digest bytes read big-endian, normalizes an initial zero key to `1`, and probes the complete nonzero 32-bit key space.
+An empty slot creates the row; an equal digest reuses the row; a different digest advances the key with wrap from maximum to `1`.
+A writer that hashed the content corrects a stored `byteLength` that disagrees with what it counted; a length merely declared by a document only fills a row that does not exist yet.
 
-Track preparation creates or reuses every byte-backed cover resource in the same library mutation that writes the track reference.
+Track preparation creates or reuses every cover resource in the same library mutation that writes the track reference, from bytes it hashes or from a descriptor a document declared.
 `primary()` returns the first entry whose type is `FrontCover`, otherwise the first entry, otherwise absence.
 
 ### Runtime read and propagation
 
-`LibraryTaskService::loadResourceAsync(id, stopToken)` is the only interactive runtime read: it copies under a worker-side read transaction, returns owned bytes on the callback executor, and publishes no library task progress or maintenance state.
-Administrative export reads `ResourceStore` directly under its own scoped transaction and is not part of this route.
-An invalid or absent id returns an engaged result containing `nullopt`; an encoded resource above 32 MiB returns `ValueTooLarge`; cancellation throws `OperationCancelled`.
+`LibraryTaskService::loadResourceAsync(id, sizeLimit, stopToken)` is the only runtime read, interactive and administrative alike.
+It resolves the descriptor and the carrier snapshot under a short worker-side read transaction, closes that transaction, and then walks two tiers: the derived cover cache first, then each carrier URI the snapshot names, in a stable order.
+A cache entry is served only when its content hashes to the digest; an entry that fails verification is discarded rather than served.
+A carrier is opened, its embedded pictures are hashed, and the first picture matching the digest answers; a carrier that cannot be read or carries no match advances to the next candidate.
+Content materialized from a carrier is installed in the cover cache when the cache is enabled and the content is within the cache's per-entry maximum.
+The result is returned as owned bytes on the callback executor, and the read publishes no library task progress or maintenance state.
+
+`sizeLimit` selects the ceiling applied to materialized bytes: `Interactive` applies the 32 MiB encoded-byte limit below, and `Administrative` applies none, which is the exemption CLI raw export keeps.
+An invalid id, an absent descriptor, or a walk that no source could satisfy returns an engaged result containing `nullopt`; materialized bytes above the caller's ceiling return `ValueTooLarge`; cancellation throws `OperationCancelled` and stops the walk between candidates.
+A stale reference that no source can satisfy is never rewritten by a read.
 
 `ResourceByteLoader` binds one asynchronous byte source to one callback runtime.
 Its default shared and borrowed `CoreRuntime` bindings adapt `LibraryTaskService::loadResourceAsync()` to that source contract; an explicit source adapter follows the same delivery, cancellation, and caching behavior.
@@ -172,12 +192,16 @@ The cache validates a memoized file on a worker, or asynchronously reads the res
 It sniffs PNG, JPEG, GIF, and WebP signatures, otherwise uses `.img`; it writes `<resource-id><extension>`, removes stale known sibling extensions, and returns a file URI on the GTK callback executor.
 Metadata for a new now-playing resource is first published without `mpris:artUrl`; the URL completion causes replacement metadata only if that resource is still current.
 
-CLI list reports ids, and export writes the exact raw bytes of the selected resource or reports absence.
+CLI list reports each descriptor's id and described length, and export materializes through the same walk with no ceiling, writing the content or reporting absence and exiting nonzero.
+Absence is reported as a row that does not exist or as a row no source could reproduce; the distinction is read after the walk, in its own transaction.
 
 ## Failure and cancellation
 
-Resource create returns storage errors or `ResourceExhausted` after a complete probe without a free/equal slot.
+Resource create returns storage errors or `ResourceExhausted` after a complete probe without a free slot or an equal digest, and `ValueTooLarge` for content longer than `UINT32_MAX`.
 Core read absence is not an error; operational storage faults follow the LMDB contract.
+
+A cover cache that cannot be created, written, enumerated, or pruned fails no request: the caller already holds verified content, so the only consequence is a later cold miss and a budget that may stay exceeded until a pass succeeds.
+Deleting the cache directory changes no library fact, and can change only what is displayed when every carrier for a digest is already gone.
 
 GTK decode catches `Glib::Error` and publishes an empty result.
 WinUI native decode catches `hresult_error`, logs the adapter diagnostic, and retains the empty valid-resource state.
@@ -198,22 +222,25 @@ Decode or file-export failure degrades to no image/URL and logs where the adapte
 
 | Boundary | Limit | Result when exceeded |
 | --- | ---: | --- |
-| Encoded resource bytes for GTK, WinUI, TUI, or MPRIS | 32 MiB | `ValueTooLarge`, adapted to no decoded image/URL |
+| Materialized resource bytes for GTK, WinUI, TUI, or MPRIS | 32 MiB | `ValueTooLarge`, adapted to no decoded image/URL |
 | GTK or TUI source width or height | 8192 pixels | no image |
 | GTK or TUI decoded source pixels | 32,000,000 | no image |
 | TUI generated Kitty PNG retained bytes | 8 MiB | no image |
 
-Limits are inclusive.
+Limits are inclusive, and a ceiling applies to materialized bytes rather than to a descriptor's declared length.
 CLI raw resource export is administrative and is not constrained by these interactive limits.
+Content above the interactive ceiling is never installed in the cover cache, whichever caller materialized it.
 
 ## Persistence and versioning
 
-Resource blobs are durable library records with no header or MIME field.
+Resource descriptors are durable library records with no header, MIME field, or payload.
 Track cover entries persist the id and numeric picture type.
-GTK pixbufs, runtime encoded-byte entries, TUI transforms, and MPRIS files are derived process/cache artifacts and can be discarded.
+Cover cache entries, GTK pixbufs, runtime encoded-byte entries, TUI transforms, and MPRIS files are derived process/cache artifacts and can be discarded.
 Placeholder SVGs and generated presentations are application UI and are never persisted in a music library.
 
-Changing `ResourceId` width, invalid sentinel, hash/probe meaning, track reference layout, or picture-type values requires a library format compatibility change.
+Aobus never writes to an audio file, which is what makes a carrier a stable source; see [decision 0010](../../decision/0010-never-write-to-audio-files.md).
+
+Changing `ResourceId` width, invalid sentinel, digest algorithm, id derivation, probe meaning, track reference layout, or picture-type values requires a library format compatibility change.
 Frontend cache-key and transform changes require no library migration because derived artifacts are regenerable.
 
 ## Frontend observations
@@ -230,8 +257,10 @@ These degradation states do not remove or rewrite a track's cover reference.
 
 ## Implementation map
 
+- [`Sha256.cpp`](../../../lib/utility/Sha256.cpp) and [`ResourceLayout.cpp`](../../../lib/library/ResourceLayout.cpp) own the digest facility, the descriptor bytes, and id derivation.
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp), [`TrackBuilder.cpp`](../../../lib/library/TrackBuilder.cpp), and [`TrackView.cpp`](../../../lib/library/TrackView.cpp) own creation and primary selection.
-- [`LibraryReader.cpp`](../../../app/runtime/library/LibraryReader.cpp) owns synchronous cover identity reads; [`LibraryTaskService.cpp`](../../../app/runtime/library/LibraryTaskService.cpp) owns interactive byte reads.
+- [`LibraryReader.cpp`](../../../app/runtime/library/LibraryReader.cpp) owns synchronous cover identity reads; [`LibraryTaskService.cpp`](../../../app/runtime/library/LibraryTaskService.cpp) owns the read entry point and the carrier-index slot.
+- [`ResourceMaterialization.cpp`](../../../app/runtime/library/ResourceMaterialization.cpp) owns the two-tier walk, [`ResourceCarrierIndex.cpp`](../../../app/runtime/library/ResourceCarrierIndex.cpp) owns the reverse index, and [`ResourceDiskCache.cpp`](../../../app/runtime/resource/ResourceDiskCache.cpp) owns the derived cover cache.
 - [`ResourceByteLoader`](../../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../../app/include/ao/rt/resource/ResourceByteCache.h) own frontend-scoped encoded-byte delivery and retention.
 - [`RequestCoalescer`](../../../include/ao/async/RequestCoalescer.h) owns equal-key flight sharing, independently cancellable interests, retained upstream dependencies, and exact-flight completion fencing.
 - [`CoverArtPlaceholder.h`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h) owns platform-neutral placeholder policy.
@@ -244,7 +273,10 @@ These degradation states do not remove or rewrite a track's cover reference.
 
 ## Test map
 
-- [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protect Core behavior.
+- [`Sha256Test.cpp`](../../../test/unit/utility/Sha256Test.cpp) and [`ResourceLayoutTest.cpp`](../../../test/unit/library/ResourceLayoutTest.cpp) protect published digest vectors, descriptor bytes, and id derivation.
+- [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protect Core behavior, including a searched id collision resolved by the probe.
+- [`ResourceMaterializationTest.cpp`](../../../test/unit/runtime/library/ResourceMaterializationTest.cpp) protects the walk, its ceilings, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
+- [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects lazy index construction, one rebuild per stale revision, that one stale stamp still costs one build with several workers, and the exact interactive limit.
 - [`RequestCoalescerTest.cpp`](../../../test/unit/async/RequestCoalescerTest.cpp) protects shared flight, cancellation, fanout, retry, and clear-generation behavior across frontend adapters.
 - [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded retention, real and adapter-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, idempotent unbinding, and rebinding.
 - [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
@@ -254,15 +286,18 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`MemoryRandomAccessStreamTest.cpp`](../../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact prepared-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, supported decode, limits, block preview, PNG, and Kitty escapes.
 - [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects file extensions, rewriting, stale siblings, missing ids, and URL metadata.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects raw list/export.
+- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, export by materialization, and both absence reports.
 
 ## Related documents
 
 - [Resource delivery architecture](../../architecture/resource-delivery.md)
-- [Resource blob reference](../../reference/resource/blob.md)
+- [Resource descriptor reference](../../reference/resource/blob.md)
 - [Track model](../../reference/library/model/track.md)
 - [Library database](../../reference/library/storage/database.md)
 - [Media file reading](../media/file-reading.md)
+- [Scan and identity](../library/runtime/scan-and-identity.md)
 - [Library mutation](../library/runtime/mutation.md)
+- [Decision 0010: never write to an audio file](../../decision/0010-never-write-to-audio-files.md)
+- [Managed state location](../../reference/persistence/location.md)
 - [GTK MPRIS specification](../linux-gtk/mpris.md) and [surface reference](../../reference/linux-gtk/mpris.md)
 - [Shell layout lifecycle](../shell/layout-lifecycle.md)

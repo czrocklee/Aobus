@@ -34,7 +34,7 @@ Use the [specification template](../template/spec.md).
 
 ## Resource
 
-- [Cover-art resource delivery](resource/cover-art-delivery.md) defines immutable blob creation, primary cover selection, runtime materialization, graphical placeholders, frontend transforms, MPRIS export, caching, and stale-result behavior.
+- [Cover-art resource delivery](resource/cover-art-delivery.md) defines descriptor creation, primary cover selection, content-addressed materialization, graphical placeholders, frontend transforms, MPRIS export, caching, and stale-result behavior.
 
 ## Persistence
 

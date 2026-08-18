@@ -78,8 +78,12 @@ They are not managed application state and retain separate format and transfer o
 Managed state records typed application preferences, workspace/session intent, or UI state that Aobus restores and saves through an assigned owner.
 Authored layout documents remain separate from layout component runtime state so user intent can be reset, pruned, or promoted deliberately.
 
-Logs, exported MPRIS artwork, and similar cache artifacts are operational output rather than authoritative product state.
+Logs, exported MPRIS artwork, the derived cover-art cache, and similar cache artifacts are operational output rather than authoritative product state.
 Their owners may recreate or discard them without changing library, workspace, playback-session, or presentation semantics.
+
+Discarding the cover cache preserves every library fact, and a cover reappears the next time any file that carries it is read.
+It can still change what is displayed: a cover whose audio files are all gone was only reachable through that cache, so deleting it turns such a cover into no image.
+The reference itself is untouched, and the cover returns if a carrying file does.
 
 ### Managed-state owners
 

@@ -6,6 +6,8 @@
 #include "AudioIdentityBatchWriter.h"
 #include "LibraryMutationService.h"
 #include "LibraryYamlImportOperation.h"
+#include "ResourceCarrierIndex.h"
+#include "ResourceMaterialization.h"
 #include "ScanApplyOperation.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -19,6 +21,8 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ReadTransaction.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
@@ -31,11 +35,13 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/ThreadName.h>
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -43,6 +49,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -358,9 +365,92 @@ namespace ao::rt
       async::Signal<LibraryTaskProgressUpdated const&> progress;
     };
 
-    Impl(async::Runtime& runtimeRef, library::MusicLibrary& libraryRef, LibraryMutationService& mutationServiceRef)
-      : asyncRuntime{runtimeRef}, library{libraryRef}, mutationService{mutationServiceRef}
+    Impl(async::Runtime& runtimeRef,
+         library::MusicLibrary& libraryRef,
+         LibraryMutationService& mutationServiceRef,
+         std::filesystem::path cacheDirectory)
+      : asyncRuntime{runtimeRef}
+      , library{libraryRef}
+      , mutationService{mutationServiceRef}
+      , diskCache{ResourceDiskCache::Config{.directory = coverCacheDirectory(cacheDirectory),
+                                            .maximumEntryBytes = kMaximumInteractiveResourceBytes}}
     {
+    }
+
+    /**
+     * @brief The carrier index, rebuilt when the one on hand is behind.
+     *
+     * The whole sequence — re-check the slot, open a read transaction, build,
+     * publish — happens under one mutex, and that is what makes the published
+     * stamp monotonic without comparing anything. A read transaction pins the
+     * revision it begins at, so a builder that opened its transaction before
+     * taking the lock could finish a revision-N snapshot after another builder
+     * published N+1; opening it inside the critical section removes that
+     * interleaving rather than detecting it.
+     *
+     * A snapshot at least as new as @p requestRevision needs no rebuild, which is
+     * why a burst arriving on one stale stamp costs one build: the first builder
+     * publishes and the rest re-check and find it.
+     */
+    std::shared_ptr<ResourceCarrierIndex const> rebuildCarrierIndex(std::uint64_t const requestRevision)
+    {
+      auto const lock = std::scoped_lock{carrierIndexMutex};
+
+      if (auto const currentPtr = carrierIndexSlot.load(); currentPtr && currentPtr->answersRevision(requestRevision))
+      {
+        return currentPtr;
+      }
+
+      auto const transaction = library.readTransaction();
+      auto snapshotPtr = std::make_shared<ResourceCarrierIndex const>(buildResourceCarrierIndex(library, transaction));
+      carrierIndexBuildCount.fetch_add(1);
+      carrierIndexSlot.store(snapshotPtr);
+      return snapshotPtr;
+    }
+
+    /**
+     * @brief Resolves @p resourceId to bytes, on a worker.
+     *
+     * The read transaction covers the descriptor, the revision, and a load of the
+     * snapshot slot, and closes before any cache or file I/O: a long-lived read
+     * snapshot holds back page reuse for every concurrent writer.
+     */
+    Result<std::optional<std::vector<std::byte>>> loadResource(ResourceId const resourceId,
+                                                               ResourceSizeLimit const limit,
+                                                               std::stop_token const& stopToken)
+    {
+      auto optDescriptor = std::optional<library::ResourceDescriptor>{};
+      std::uint64_t revision = 0;
+      auto indexPtr = std::shared_ptr<ResourceCarrierIndex const>{};
+
+      {
+        auto const transaction = library.readTransaction();
+        optDescriptor = library.resources().reader(transaction).get(resourceId);
+        revision = library.libraryRevision(transaction);
+        indexPtr = carrierIndexSlot.load();
+      }
+
+      if (!optDescriptor)
+      {
+        return std::optional<std::vector<std::byte>>{};
+      }
+
+      if (!indexPtr || !indexPtr->answersRevision(revision))
+      {
+        // A request holding a usable snapshot never reaches the mutex; this one
+        // does, and may find that another worker has already published.
+        indexPtr = rebuildCarrierIndex(revision);
+      }
+
+      auto const context = ResourceMaterializationContext{
+        .descriptor = *optDescriptor,
+        .candidateUris = indexPtr->carrierUris(resourceId),
+        .musicRoot = library.rootPath(),
+        .cache = diskCache,
+        .optMaximumBytes =
+          limit == ResourceSizeLimit::Interactive ? std::optional{kMaximumInteractiveResourceBytes} : std::nullopt,
+      };
+      return materializeResource(context, stopToken);
     }
 
     LibraryTaskProgressPublisher makeProgressPublisher()
@@ -391,13 +481,23 @@ namespace ao::rt
     async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
     LibraryMutationService& mutationService;
+    ResourceDiskCache diskCache;
     std::shared_ptr<Signals> signalsPtr = std::make_shared<Signals>();
+
+    /// An immutable snapshot makes its contents safe to share; the slot holding
+    /// it is a separate object and needs its own rule, so it is atomic. A request
+    /// loads it once and then needs no synchronization at all, because the graph
+    /// behind its own copy cannot change.
+    std::atomic<std::shared_ptr<ResourceCarrierIndex const>> carrierIndexSlot{};
+    std::mutex carrierIndexMutex;
+    std::atomic<std::uint64_t> carrierIndexBuildCount{0};
   };
 
   LibraryTaskService::LibraryTaskService(async::Runtime& asyncRuntime,
                                          library::MusicLibrary& library,
-                                         LibraryMutationService& mutationService)
-    : _implPtr{std::make_unique<Impl>(asyncRuntime, library, mutationService)}
+                                         LibraryMutationService& mutationService,
+                                         std::filesystem::path cacheDirectory)
+    : _implPtr{std::make_unique<Impl>(asyncRuntime, library, mutationService, std::move(cacheDirectory))}
   {
   }
 
@@ -414,8 +514,14 @@ namespace ao::rt
     return _implPtr->signalsPtr->progress.connect(std::move(handler));
   }
 
+  std::uint64_t LibraryTaskService::resourceCarrierIndexBuildCount() const noexcept
+  {
+    return _implPtr->carrierIndexBuildCount.load();
+  }
+
   async::Task<Result<std::optional<std::vector<std::byte>>>> LibraryTaskService::loadResourceAsync(
     ResourceId const resourceId,
+    ResourceSizeLimit const limit,
     std::stop_token const stopToken)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
@@ -426,26 +532,7 @@ namespace ao::rt
     }
 
     co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    auto result = Result<std::optional<std::vector<std::byte>>>{};
-
-    {
-      auto transaction = _implPtr->library.readTransaction();
-      auto const optBytes = _implPtr->library.resources().reader(transaction).get(resourceId);
-
-      if (!optBytes)
-      {
-        result = std::optional<std::vector<std::byte>>{};
-      }
-      else if (optBytes->size() > kMaximumInteractiveResourceBytes)
-      {
-        result = makeError(Error::Code::ValueTooLarge, "Interactive resource exceeds the encoded-byte limit");
-      }
-      else
-      {
-        result = std::optional{std::vector<std::byte>{optBytes->begin(), optBytes->end()}};
-      }
-    }
-
+    auto result = _implPtr->loadResource(resourceId, limit, stopToken);
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
     co_return result;
   }
@@ -704,15 +791,53 @@ namespace ao::rt
     co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
     setCurrentThreadName("LibraryExport");
     auto result = Result<>{};
+    auto exceptionPtr = std::exception_ptr{};
+    bool cancelledByException = false;
 
+    try
     {
       // Export only opens a read transaction; the LMDB snapshot is consistent
       // on its own, so it does not serialize against in-flight mutations.
       auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
-      result = exporter.exportToYaml(path, mode);
+      result = exporter.exportToYaml(path, mode, stopToken);
+    }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
+      {
+        cancelledByException = true;
+      }
+      else
+      {
+        exceptionPtr = std::current_exception();
+      }
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      exceptionPtr = std::current_exception();
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    // Resumed without the token so that a cancelled export still hands its
+    // continuation back on the callback executor rather than throwing here, on a
+    // worker.
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+
+    if (cancelledByException)
+    {
+      async::throwOperationCancelled();
+    }
+
+    if (exceptionPtr)
+    {
+      std::rethrow_exception(exceptionPtr);
+    }
+
+    if (stopToken.stop_requested())
+    {
+      async::throwOperationCancelled();
+    }
+
     co_return result;
   }
 

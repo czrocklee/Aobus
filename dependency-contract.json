@@ -22,6 +22,7 @@
           "boost-container",
           "boost-endian",
           "boost-filesystem",
+          "boost-hash2",
           "boost-headers",
           "boost-interprocess",
           "boost-lockfree",

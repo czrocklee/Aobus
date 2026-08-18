@@ -38,6 +38,9 @@ Read the human docs for project policy instead of duplicating them here:
    work normally uses one full `./ao check`.
 10. **Concurrency:** Follow `doc/development/test/concurrency-and-sanitizer.md` for
     concurrency-sensitive changes.
+11. **Proportionality:** Aobus is a music application, not a flight-control or
+    life-support system. Match engineering rigor to actual product risk and do
+    not over-design for speculative hazards.
 
 > [!TIP]
 > Heavy development, no compatibility/migration constraints. Propose the best approach without historical baggage.

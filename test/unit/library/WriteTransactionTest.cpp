@@ -16,20 +16,19 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <lmdb.h>
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <expected>
 #include <stdexcept>
 #include <string_view>
 #include <tuple>
-#include <vector>
 
 namespace ao::library::test
 {
@@ -77,7 +76,8 @@ namespace ao::library::test
     auto readTransaction = library.readTransaction();
     auto const optStored = library.resources().reader(readTransaction).get(resourceId);
     REQUIRE(optStored);
-    CHECK(std::ranges::equal(*optStored, bytes));
+    CHECK(optStored->digest == utility::computeSha256(bytes));
+    CHECK(optStored->byteLength == bytes.size());
   }
 
   TEST_CASE("WriteTransaction - operation error aborts staged writes and releases the writer gate",
@@ -124,10 +124,22 @@ namespace ao::library::test
       MusicLibrary::open(temp.path(), temp.path() / "db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
     auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
     auto transaction = writable.writeTransaction();
-    auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
 
-    auto failureRes = transaction.apply([&library, &oversizedValue](LibraryWrite& write)
-                                        { return physicalWriter(library.resources(), write).create(oversizedValue); });
+    // A resource row is a fixed 36 bytes, so exhausting a pinned map takes a store
+    // that still holds variable-length content; a dictionary entry is one.
+    auto const oversizedText = std::string(kMapSize * 4, 'x');
+    auto failureRes = transaction.apply(
+      [&transaction, &oversizedText](LibraryWrite& /*write*/) -> Result<>
+      {
+        auto idRes = physicalDictionary(transaction).intern(oversizedText);
+
+        if (!idRes)
+        {
+          return std::unexpected{idRes.error()};
+        }
+
+        return {};
+      });
 
     REQUIRE_FALSE(failureRes);
     CHECK(failureRes.error().code == Error::Code::StorageFull);

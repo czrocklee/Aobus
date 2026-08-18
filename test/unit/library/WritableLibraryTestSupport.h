@@ -42,6 +42,11 @@ namespace ao::library::test
     return detail::PhysicalStoreAccess::dictionary(transaction);
   }
 
+  inline DictionaryStore::Writer& physicalDictionary(LibraryWrite& write)
+  {
+    return detail::PhysicalStoreAccess::dictionary(write);
+  }
+
   inline Result<> overwriteListRecordForTest(ListStore const& store,
                                              LibraryWrite& write,
                                              ListId const id,

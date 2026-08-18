@@ -88,17 +88,27 @@ namespace ao::gtk::test
             "[gtk][unit][resource-image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto const validBytes = encodePng(makePixbuf(256));
+    constexpr auto kBadBytes = std::array{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
+    auto const oversizedDimensionBytes = encodePng(makePixbuf(8193, 1));
     auto validResourceId = kInvalidResourceId;
     auto malformedResourceId = kInvalidResourceId;
     auto oversizedDimensionResourceId = kInvalidResourceId;
-    auto fixture = GtkRuntimeFixture{
-      [&](library::MusicLibrary& musicLibrary)
-      {
-        validResourceId = writeCoverResource(musicLibrary, 256);
-        auto const badBytes = std::array{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
-        malformedResourceId = writeRawResource(musicLibrary, std::span<std::byte const>{badBytes});
-        oversizedDimensionResourceId = writeCoverResource(musicLibrary, makePixbuf(8193, 1));
-      }};
+    auto fixture =
+      GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                        {
+                          validResourceId = writeRawResource(musicLibrary, validBytes);
+                          malformedResourceId = writeRawResource(musicLibrary, std::span<std::byte const>{kBadBytes});
+                          oversizedDimensionResourceId = writeRawResource(musicLibrary, oversizedDimensionBytes);
+                        }};
+
+    for (auto const& bytes : {std::span<std::byte const>{validBytes},
+                              std::span<std::byte const>{kBadBytes},
+                              std::span<std::byte const>{oversizedDimensionBytes}})
+    {
+      installCoverCacheEntry(fixture.cacheDirectory(), bytes);
+    }
+
     auto& runtime = fixture.runtime();
     auto cache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};

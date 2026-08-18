@@ -69,7 +69,7 @@ MP4 integer movement payloads accept widths 1, 2, 3, 4, or 8, data type `0` or `
 
 `PictureType` uses the ID3v2/FLAC numeric range `0x00` through `0x14` (`Other` through `PublisherLogo`). FLAC picture blocks and ID3v2 APIC frames preserve their source role and order; out-of-range roles normalize to `Other`. MP4 `covr` images preserve source order and emit `FrontCover` because that container entry has no APIC-style role. WAVE `INFO` and embedded ID3 currently contribute no cover callback.
 
-Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to the track cover builder, and `ResourceStore` later owns and deduplicates the persisted bytes.
+Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to the track cover builder, and `ResourceStore` later records a descriptor naming that content by digest; the bytes themselves stay in the file, and identical content deduplicates to one row.
 
 ## Technical properties
 

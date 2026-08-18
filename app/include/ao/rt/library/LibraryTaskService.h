@@ -37,6 +37,22 @@ namespace ao::rt
   class LibraryMutationService;
   enum class ExportMode : std::uint8_t;
 
+  /**
+   * @brief Which delivery contract a resource request is subject to.
+   *
+   * One walk resolves a handle, consults the cache, and tries carriers; the
+   * ceiling is a property of the request rather than of the walk, so every caller
+   * states which contract it is under and neither contract is quietly widened.
+   */
+  enum class ResourceSizeLimit : std::uint8_t
+  {
+    /// Capped at kMaximumInteractiveResourceBytes, as every frontend is.
+    Interactive,
+    /// Uncapped, which the cover-art delivery specification grants raw CLI
+    /// resource export alone.
+    Administrative,
+  };
+
   class LibraryTaskService final
   {
   public:
@@ -70,9 +86,34 @@ namespace ao::rt
       std::stop_token stopToken = {},
       AudioIdentityIndexProgressCallback progressCallback = {},
       AudioIdentityIndexFailureCallback failureCallback = {});
-    // Read-only interactive delivery: no maintenance admission or task-progress publication.
-    async::Task<Result<std::optional<std::vector<std::byte>>>> loadResourceAsync(ResourceId resourceId,
-                                                                                 std::stop_token stopToken = {});
+    /**
+     * @brief Produces the encoded bytes a resource names.
+     *
+     * Read-only: no maintenance admission and no task-progress publication. The
+     * row holds no bytes, so this resolves the descriptor and the candidate
+     * snapshot inside a short read transaction, closes it, and then walks the
+     * derived cache and any referencing media file. Nothing is served that does
+     * not hash to the descriptor's digest.
+     *
+     * No bytes means nothing can currently reproduce the content: a frontend
+     * turns that into its placeholder, and the reference is never rewritten.
+     * Cancellation propagates `async::OperationCancelled`.
+     */
+    async::Task<Result<std::optional<std::vector<std::byte>>>> loadResourceAsync(
+      ResourceId resourceId,
+      ResourceSizeLimit limit = ResourceSizeLimit::Interactive,
+      std::stop_token stopToken = {});
+
+    /**
+     * @brief How many times the carrier index has been built.
+     *
+     * The index is built lazily, on the first materialization that finds no
+     * usable snapshot, and rebuilding is serialized, so this counter is what
+     * proves both: that no construction path builds it eagerly, and that a burst
+     * of requests arriving on one stale stamp rebuilds once rather than once
+     * each.
+     */
+    std::uint64_t resourceCarrierIndexBuildCount() const noexcept;
 
     // A progress conversation begins only after successful cancellable
     // callback-executor admission. Once admitted, this status-free
@@ -88,9 +129,15 @@ namespace ao::rt
     LibraryTaskService& operator=(LibraryTaskService&&) = delete;
 
   private:
+    /// @param cacheDirectory Where the derived cover cache lives, resolved by a
+    ///        composition root because the runtime does not discover platform
+    ///        application directories. Empty leaves the read walk one tier: every
+    ///        miss re-extracts from a carrier, and content whose carriers are all
+    ///        gone has nothing left to read.
     LibraryTaskService(async::Runtime& asyncRuntime,
                        library::MusicLibrary& library,
-                       LibraryMutationService& mutationService);
+                       LibraryMutationService& mutationService,
+                       std::filesystem::path cacheDirectory);
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

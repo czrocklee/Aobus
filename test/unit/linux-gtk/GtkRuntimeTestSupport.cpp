@@ -37,6 +37,11 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
+  std::filesystem::path runtimeCacheDirectory(std::filesystem::path const& tempPath)
+  {
+    return tempPath / "cache";
+  }
+
   struct GtkRuntimeFixture::State final
   {
     explicit State(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
@@ -60,6 +65,7 @@ namespace ao::gtk::test
         .executorPtr = std::move(executorPtr),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
+        .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
         .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::move(configStorePtr),
       }));
@@ -86,6 +92,11 @@ namespace ao::gtk::test
     return _statePtr->tempDir;
   }
 
+  std::filesystem::path GtkRuntimeFixture::cacheDirectory() const
+  {
+    return runtimeCacheDirectory(_statePtr->tempDir.path());
+  }
+
   std::unique_ptr<rt::AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
                                               std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
   {
@@ -102,6 +113,7 @@ namespace ao::gtk::test
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
+      .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }));

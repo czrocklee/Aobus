@@ -6,10 +6,12 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -20,13 +22,83 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
+#include <stop_token>
 #include <string>
 #include <string_view>
 
 namespace ao::rt::test
 {
   using namespace ao::library;
+
+  namespace
+  {
+    std::string readAll(std::filesystem::path const& path)
+    {
+      auto ifs = std::ifstream{path};
+      auto const begin = std::istreambuf_iterator{ifs};
+      return std::string{begin, decltype(begin){}};
+    }
+  } // namespace
+
+  TEST_CASE("LibraryYaml - a cancelled export leaves the file it was asked to replace",
+            "[runtime][workflow][import-export][error]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeTrackSpec("Exported"));
+
+    auto const yamlPath = std::filesystem::path{temp.path()} / "backup.yaml";
+    auto const previous = std::string{"# the backup the user already has\n"};
+    {
+      auto ofs = std::ofstream{yamlPath};
+      ofs << previous;
+    }
+
+    auto stopSource = std::stop_source{};
+    stopSource.request_stop();
+
+    // The export path a user reaches is usually a file they are replacing, so a
+    // cancelled run must cost them nothing. Cancellation is the deterministic
+    // stand-in for the whole class: a full disk or a crash mid-write leaves the
+    // same thing behind, which is the file that was already there.
+    auto exporter = LibraryYamlExporter{ml};
+    CHECK_THROWS_AS(
+      exporter.exportToYaml(yamlPath, ExportMode::Full, stopSource.get_token()), async::OperationCancelled);
+
+    CHECK(readAll(yamlPath) == previous);
+  }
+
+  TEST_CASE("LibraryYaml - an export replaces its target whole and creates no directory",
+            "[runtime][workflow][import-export][error]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeTrackSpec("Exported"));
+
+    auto const yamlPath = std::filesystem::path{temp.path()} / "backup.yaml";
+    auto exporter = LibraryYamlExporter{ml};
+    REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::Full));
+    CHECK_THAT(readAll(yamlPath), Catch::Matchers::ContainsSubstring("Exported"));
+
+    // Replacement is by rename, so an export over an existing document must
+    // leave exactly the bytes it would have written to a path that held nothing.
+    library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeTrackSpec("Second"));
+    auto const freshPath = std::filesystem::path{temp.path()} / "fresh.yaml";
+    REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::Full));
+    REQUIRE(exporter.exportToYaml(freshPath, ExportMode::Full));
+    CHECK(readAll(yamlPath) == readAll(freshPath));
+
+    // Writing through a temporary file must not turn a mistyped destination into
+    // a directory tree the user never asked for.
+    auto const missingDirectory = std::filesystem::path{temp.path()} / "missing";
+    auto const belowMissing = missingDirectory / "backup.yaml";
+    auto const result = exporter.exportToYaml(belowMissing, ExportMode::Full);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::IoError);
+    CHECK_FALSE(std::filesystem::exists(missingDirectory));
+  }
 
   TEST_CASE("LibraryYaml - import reports invalid input errors", "[runtime][workflow][import-export][error]")
   {
@@ -72,6 +144,7 @@ library:
 version: 1
 export_mode: full
 library:
+  resources: []
   tracks: []
 )",
                 Error::Code::FormatRejected,
@@ -81,7 +154,7 @@ library:
     SECTION("Missing library section")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 )",
                 Error::Code::FormatRejected,
@@ -91,9 +164,10 @@ export_mode: full
     SECTION("Track missing URI")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - id: 1
       title: "No URI"
@@ -106,9 +180,10 @@ library:
     SECTION("Track empty URI")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - id: 1
       uri: ""
@@ -121,9 +196,10 @@ library:
     SECTION("Duplicate track ID")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - id: 1
       uri: "song1.flac"
@@ -138,9 +214,10 @@ library:
     SECTION("List missing ID")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks: []
   lists:
     - name: "No ID"
@@ -152,9 +229,10 @@ library:
     SECTION("List ID 0 (Reserved)")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks: []
   lists:
     - id: 0
@@ -167,9 +245,10 @@ library:
     SECTION("Duplicate list ID")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks: []
   lists:
     - id: 1
@@ -184,9 +263,10 @@ library:
     SECTION("List missing name")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks: []
   lists:
     - id: 1
@@ -195,27 +275,45 @@ library:
                 "missing required 'name'");
     }
 
-    SECTION("Malformed Base64 cover art rejects the import")
+    SECTION("A cover reference the table does not declare rejects the import")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - uri: "song1.flac"
       covers:
         - type: 3
-          data: "Not!Valid@Base#64$"
+          resource: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
   lists: []
 )",
                 Error::Code::FormatRejected,
-                "cover data");
+                "library.resources does not declare");
+    }
+
+    SECTION("A resource row no track references rejects the import")
+    {
+      testError(R"(
+version: 4
+export_mode: full
+library:
+  resources:
+    - digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+      length: 3
+  tracks:
+    - uri: "song1.flac"
+  lists: []
+)",
+                Error::Code::FormatRejected,
+                "which no track references");
     }
 
     SECTION("Unknown export mode is rejected")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: mystery
 library:
   tracks: []
@@ -228,7 +326,7 @@ library:
     SECTION("Malformed numeric version is rejected")
     {
       testError(R"(
-version: 3x
+version: 4x
 library:
   tracks: []
   lists: []
@@ -240,9 +338,10 @@ library:
     SECTION("Malformed track ID is rejected")
     {
       testError(R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - id: 1x
       uri: "song1.flac"
@@ -265,9 +364,10 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks: "not-a-sequence"
   lists: []
 )";
@@ -283,9 +383,10 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks: []
   lists:
     - name: "No ID"
@@ -302,9 +403,10 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 3
+version: 4
 export_mode: full
 library:
+  resources: []
   tracks: []
   lists:
     - id: 1
@@ -346,9 +448,10 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - id: 1
       uri: "transient.flac"

@@ -479,9 +479,11 @@ namespace ao::gtk::test
   TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto const fullCoverBytes = encodePng(makePixbuf(128));
     auto fullResourceId = kInvalidResourceId;
     auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
-                                     { fullResourceId = writeCoverResource(musicLibrary, 128); }};
+                                     { fullResourceId = writeRawResource(musicLibrary, fullCoverBytes); }};
+    installCoverCacheEntry(fixture.cacheDirectory(), fullCoverBytes);
     auto& runtime = fixture.runtime();
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
@@ -589,9 +591,12 @@ namespace ao::gtk::test
             "[gtk][unit][image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    // A large square source so we can prove the cached result is downscaled.
+    auto const thumbnailCoverBytes = encodePng(makePixbuf(256, 256));
     auto thumbnailResourceId = kInvalidResourceId;
     auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
-                                     { thumbnailResourceId = writeCoverResource(musicLibrary, makePixbuf(256, 256)); }};
+                                     { thumbnailResourceId = writeRawResource(musicLibrary, thumbnailCoverBytes); }};
+    installCoverCacheEntry(fixture.cacheDirectory(), thumbnailCoverBytes);
     auto& runtime = fixture.runtime();
     auto thumbnailCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
@@ -601,7 +606,6 @@ namespace ao::gtk::test
 
     SECTION("cache miss decodes off-thread at scale and populates the cache")
     {
-      // A large square source so we can prove the cached result is downscaled.
       auto const resourceId = thumbnailResourceId;
 
       auto widget = CoverArtView{};

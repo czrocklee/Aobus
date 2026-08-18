@@ -36,6 +36,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -513,6 +514,31 @@ namespace ao::rt
     return applyNewItem(item, trackWriter, builder, optIdentity);
   }
 
+  /**
+   * @brief Replaces @p merged's cover references with the ones @p parsed found.
+   *
+   * An embedded cover is a scan fact in version 6, not curated metadata. A
+   * reference names content by digest, so leaving the previous set in place after
+   * a file's art changed would leave the library naming content that file no
+   * longer holds, and every read for it would fall through to another carrier or
+   * to no image. Curated metadata around it is still preserved: this replaces the
+   * cover set and nothing else.
+   *
+   * `Moved` needs this as much as `Changed` and is easier to overlook, because a
+   * move is matched by audio payload while tags and pictures are free to differ.
+   * It is also self-concealing: once the move commits, the manifest matches the
+   * file, so the next scan classifies it `Unchanged` and never looks again.
+   */
+  void ScanApplyOperation::applyFileCoverArt(library::TrackBuilder& merged, library::TrackBuilder const& parsed)
+  {
+    merged.coverArt().clear();
+
+    for (auto const& pending : parsed.coverArt().entries())
+    {
+      std::visit([&merged, &pending](auto source) { merged.coverArt().add(pending.type, source); }, pending.source);
+    }
+  }
+
   bool ScanApplyOperation::skipNonActionableItem(ScanItem const& item)
   {
     if (item.classification == ScanClassification::Unchanged)
@@ -677,6 +703,7 @@ namespace ao::rt
       .channels(builder.property().channels())
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
+    applyFileCoverArt(merged, builder);
 
     if (!validateTrack(merged, trackWriter, item.uri))
     {
@@ -741,6 +768,7 @@ namespace ao::rt
       .channels(builder.property().channels())
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
+    applyFileCoverArt(merged, builder);
 
     if (!validateTrack(merged, trackWriter, item.uri))
     {

@@ -10,6 +10,7 @@ add_library(ao_library STATIC
     LibraryWrite.cpp
     TrackWriter.cpp
     ListWriter.cpp
+    ResourceLayout.cpp
     ResourceStore.cpp
     DictionaryStore.cpp
     detail/LibraryError.cpp

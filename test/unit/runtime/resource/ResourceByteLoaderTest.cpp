@@ -18,7 +18,10 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/resource/ResourceBytes.h>
+#include <ao/rt/resource/ResourceDiskCache.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -50,6 +53,7 @@ namespace ao::rt::test
           ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
                                                      _tempDir.path(),
                                                      LibraryPaths{_tempDir.path()}.databasePath(),
+                                                     _tempDir.path() / "cache",
                                                      library::test::kTestMusicLibraryMapBytes))};
       }
 
@@ -83,6 +87,17 @@ namespace ao::rt::test
       REQUIRE(result);
       REQUIRE(transaction.commit());
       return *result;
+    }
+
+    /// The row names content and holds none, so a read has to find it somewhere.
+    /// The derived cache is the tier that needs no media file.
+    void installCacheEntry(std::filesystem::path const& cacheRoot, std::span<std::byte const> bytes)
+    {
+      auto const cache = ResourceDiskCache{ResourceDiskCache::Config{
+        .directory = coverCacheDirectory(cacheRoot),
+        .maximumEntryBytes = LibraryTaskService::kMaximumInteractiveResourceBytes,
+      }};
+      cache.store(utility::computeSha256(bytes), bytes);
     }
 
     async::Task<Result<std::optional<std::vector<std::byte>>>> waitForRelease(AsyncTestState<std::size_t> readCount,
@@ -189,10 +204,15 @@ namespace ao::rt::test
     auto const paths = LibraryPaths{tempDir.path()};
     auto const expected = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
     auto const resourceId = writeResource(tempDir.path(), paths.databasePath(), expected);
+    installCacheEntry(tempDir.path() / "cache", expected);
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = std::shared_ptr<CoreRuntime>{ao::test::requireValue(CoreRuntime::create(
-      std::move(executorPtr), tempDir.path(), paths.databasePath(), library::test::kTestMusicLibraryMapBytes))};
+    auto runtimePtr = std::shared_ptr<CoreRuntime>{
+      ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
+                                                 tempDir.path(),
+                                                 paths.databasePath(),
+                                                 tempDir.path() / "cache",
+                                                 library::test::kTestMusicLibraryMapBytes))};
     auto loader = ResourceByteLoader{};
     loader.bind(runtimePtr);
     auto received = std::vector<std::byte>{};

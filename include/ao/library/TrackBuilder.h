@@ -9,6 +9,7 @@
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackLayout.h>
 
 #include <array>
@@ -196,14 +197,25 @@ namespace ao::library
     class CoverArtBuilder
     {
     public:
+      /**
+       * One cover this builder will serialize, and what the writer knows about it.
+       *
+       * The three sources differ in evidence, not in kind. A `ResourceId` names a
+       * row this library already holds. Bytes are content the caller read, so the
+       * writer hashes them and stores the length it counted. A descriptor is a
+       * digest and length a document declared with no bytes to check them
+       * against, so it can only ever fill a gap: it creates a missing row and
+       * never overwrites the length of one that exists.
+       */
       struct PendingCoverArt
       {
         PictureType type = PictureType::FrontCover;
-        std::variant<ResourceId, std::span<std::byte const>> source;
+        std::variant<ResourceId, std::span<std::byte const>, ResourceDescriptor> source;
       };
 
       CoverArtBuilder& add(PictureType type, ResourceId resourceId);
       CoverArtBuilder& add(PictureType type, std::span<std::byte const> data);
+      CoverArtBuilder& add(PictureType type, ResourceDescriptor const& descriptor);
       CoverArtBuilder& erase(std::size_t index);
       CoverArtBuilder& clear();
 
@@ -370,9 +382,16 @@ namespace ao::library
     static std::uint32_t computeBloomFilter(std::span<DictionaryId const> tagIds);
     static DictionaryId internDictionaryId(std::string_view value, WriteTransaction& transaction);
     static DictionaryId resolveDictionaryId(std::string_view value, WriteTransaction& transaction);
+    /// Stores content the caller holds: the length written is one the writer
+    /// counted, so it corrects whatever a row held.
     static Result<ResourceId> createResource(std::span<std::byte const> data,
                                              WriteTransaction& transaction,
                                              ResourceStore const& resources);
+    /// Records a descriptor a document declared: creates a missing row and leaves
+    /// an existing length alone, because nothing verified this one.
+    static Result<ResourceId> declareResource(ResourceDescriptor const& descriptor,
+                                              WriteTransaction& transaction,
+                                              ResourceStore const& resources);
     Result<> validateHotSerializable() const;
     Result<> validateColdSerializable() const;
 

@@ -29,12 +29,11 @@
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/utility/Base64.h>
 #include <ao/utility/ScopedRegistration.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <gdkmm/pixbuf.h>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -82,33 +81,42 @@ namespace ao::gtk::layout::test
       Gtk::Widget& _widget;
     };
 
-    std::string encodedPng(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
-    {
-      gchar* rawBuffer = nullptr;
-      gsize bufferSize = 0;
-      pixbufPtr->save_to_buffer(rawBuffer, bufferSize, "png");
-      auto bufferPtr = std::unique_ptr<gchar, decltype(&::g_free)>{rawBuffer, &::g_free};
-      auto const bytes = std::span<std::byte const>{
-        reinterpret_cast<std::byte const*>(bufferPtr.get()), static_cast<std::size_t>(bufferSize)};
-      return utility::base64Encode(bytes);
-    }
-
-    void writeCoverImport(std::filesystem::path const& path, std::optional<std::string_view> optEncodedCover)
+    /**
+     * @brief Writes a `full` document naming @p optCover by digest.
+     *
+     * A document carries no cover bytes, so the import writes a reference and the
+     * cover is materialized from a source afterwards; the caller installs those
+     * bytes in the cover cache for synthetic imagery that no audio file carries.
+     */
+    void writeCoverImport(std::filesystem::path const& path, std::optional<std::span<std::byte const>> optCover)
     {
       auto output = std::ofstream{path};
       REQUIRE(output);
-      output << "version: 3\n"
+      output << "version: 4\n"
                 "export_mode: full\n"
-                "library:\n"
-                "  tracks:\n"
+                "library:\n";
+
+      if (optCover)
+      {
+        output << "  resources:\n"
+                  "    - digest: "
+               << utility::sha256Hex(utility::computeSha256(*optCover)) << "\n"
+               << "      length: " << optCover->size() << '\n';
+      }
+      else
+      {
+        output << "  resources: []\n";
+      }
+
+      output << "  tracks:\n"
                 "    - uri: mutable-cover.flac\n";
 
-      if (optEncodedCover)
+      if (optCover)
       {
         output << "      covers:\n"
                   "        - type: 3\n"
-                  "          data: "
-               << *optEncodedCover << '\n';
+                  "          resource: "
+               << utility::sha256Hex(utility::computeSha256(*optCover)) << '\n';
       }
 
       output << "  lists: []\n";
@@ -133,6 +141,8 @@ namespace ao::gtk::layout::test
     auto corruptCoverTrackId = kInvalidTrackId;
     auto coverResourceId = kInvalidResourceId;
     auto corruptCoverResourceId = kInvalidResourceId;
+    auto const coverBytes = ao::gtk::test::encodePng(ao::gtk::test::makePixbuf(80));
+    constexpr auto kCorruptCoverBytes = std::array{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}, std::byte{0x04}};
     auto fixture = LayoutRuntimeFixture{
       "io.github.aobus.playback_image_test",
       [&](library::MusicLibrary& musicLibrary)
@@ -145,7 +155,7 @@ namespace ao::gtk::layout::test
           audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "no-cover-track.flac");
         auto const corruptCoverUri =
           audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "corrupt-cover-track.flac");
-        coverResourceId = ao::gtk::test::writeCoverResource(musicLibrary, 80);
+        coverResourceId = ao::gtk::test::writeRawResource(musicLibrary, coverBytes);
         mutableCoverTrackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary,
                                                                           library::test::TrackSpec{
                                                                             .title = "Mutable Cover Track",
@@ -166,8 +176,7 @@ namespace ao::gtk::layout::test
                                                                        .uri = noCoverUri,
                                                                        .duration = std::chrono::seconds{1},
                                                                      });
-        auto const corruptBytes = std::array{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}, std::byte{0x04}};
-        corruptCoverResourceId = ao::gtk::test::writeRawResource(musicLibrary, corruptBytes);
+        corruptCoverResourceId = ao::gtk::test::writeRawResource(musicLibrary, kCorruptCoverBytes);
         corruptCoverTrackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary,
                                                                           library::test::TrackSpec{
                                                                             .title = "Corrupt Cover Track",
@@ -176,6 +185,9 @@ namespace ao::gtk::layout::test
                                                                             .duration = std::chrono::seconds{1},
                                                                           });
       }};
+    ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), coverBytes);
+    ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), kCorruptCoverBytes);
+
     auto imageCachePtr = std::make_unique<ImageCache>(10);
     auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
     auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
@@ -608,8 +620,9 @@ namespace ao::gtk::layout::test
       };
       auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
       auto const importPath = fixture.runtime().musicRoot() / "cover-import.yaml";
-      auto const secondCover = encodedPng(ao::gtk::test::makePixbuf(96, 96));
-      writeCoverImport(importPath, secondCover);
+      auto const secondCover = ao::gtk::test::encodePng(ao::gtk::test::makePixbuf(96, 96));
+      ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), secondCover);
+      writeCoverImport(importPath, std::span<std::byte const>{secondCover});
       workflow.importFrom(importPath);
       REQUIRE(ao::gtk::test::pumpGtkEventsUntil(
         [&]

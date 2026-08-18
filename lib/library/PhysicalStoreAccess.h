@@ -113,6 +113,8 @@ namespace ao::library::detail
 
     static DictionaryStore::Writer& dictionary(WriteTransaction& transaction) { return transaction.dictionary(); }
 
+    static DictionaryStore::Writer& dictionary(LibraryWrite& write) { return write.transaction().dictionary(); }
+
     static Result<> overwriteListRecordForTest(ListStore const& store,
                                                LibraryWrite& write,
                                                ListId const id,

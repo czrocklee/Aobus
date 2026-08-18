@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <memory>
 
@@ -50,10 +51,18 @@ namespace ao::gtk::test
     rt::AppRuntime& runtime();
     ao::test::TempDir& tempDir();
 
+    /// Where this fixture's runtime keeps its derived caches, including the
+    /// cover cache a resource request materializes content through.
+    std::filesystem::path cacheDirectory() const;
+
   private:
     struct State;
     std::unique_ptr<State> _statePtr;
   };
+
+  /// The cache directory a fixture or `makeRuntime` composition supplies for a
+  /// runtime rooted at @p tempPath.
+  std::filesystem::path runtimeCacheDirectory(std::filesystem::path const& tempPath);
 
   std::unique_ptr<rt::AppRuntime> makeRuntime(
     ao::test::TempDir const& tempDir,

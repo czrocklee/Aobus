@@ -75,6 +75,7 @@ namespace ao::rt::test
       return ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
                                                         tempDir.path(),
                                                         LibraryPaths{tempDir.path()}.databasePath(),
+                                                        tempDir.path() / "cache",
                                                         library::test::kTestMusicLibraryMapBytes));
     }
 

@@ -24,6 +24,10 @@ namespace ao::utility
     /// Windows application-data directories are conventionally capitalized.
     constexpr auto kApplicationDirectoryName = std::wstring_view{L"Aobus"};
 
+    /// Windows has no separate per-user cache root, so derived caches take a
+    /// subdirectory of the application's local data instead.
+    constexpr auto kCacheDirectoryName = std::wstring_view{L"Cache"};
+
     /**
      * @brief Reads @p name from the wide environment.
      *
@@ -79,5 +83,18 @@ namespace ao::utility
     }
 
     return makeError(Error::Code::NotFound, "Neither LOCALAPPDATA nor APPDATA names a configuration directory");
+  }
+
+  Result<std::filesystem::path> applicationCacheDirectory()
+  {
+    // Only the local-machine location is a candidate: a roaming profile would
+    // synchronize a derived cache between machines, which is work for bytes that
+    // any machine can rebuild for itself.
+    if (auto optPath = environmentPath(L"LOCALAPPDATA"); optPath)
+    {
+      return *optPath / kApplicationDirectoryName / kCacheDirectoryName;
+    }
+
+    return makeError(Error::Code::NotFound, "LOCALAPPDATA names no cache directory");
   }
 } // namespace ao::utility

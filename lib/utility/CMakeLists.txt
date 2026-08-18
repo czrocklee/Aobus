@@ -11,6 +11,7 @@ add_library(ao_utility STATIC
     RymlAdapter.cpp
     ScopedRegistration.cpp
     Serialization.cpp
+    Sha256.cpp
     String.cpp
     StringArena.cpp
     ThreadName.cpp

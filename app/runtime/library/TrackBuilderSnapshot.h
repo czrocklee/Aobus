@@ -7,6 +7,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
 
 #include <chrono>
@@ -29,10 +30,13 @@ namespace ao::rt
     library::TrackBuilder makeBuilder() const;
 
   private:
+    /// The three cover sources a builder can carry, in owning form: a handle this
+    /// library already minted, content the caller read, or a descriptor a document
+    /// declared. All three are values here, which is the point of a snapshot.
     struct Cover final
     {
       PictureType type = PictureType::FrontCover;
-      std::variant<ResourceId, std::vector<std::byte>> source;
+      std::variant<ResourceId, std::vector<std::byte>, library::ResourceDescriptor> source;
     };
 
     std::string _title;

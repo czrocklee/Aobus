@@ -9,6 +9,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
@@ -22,28 +23,25 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
-#include <ao/utility/Base64.h>
+#include <ao/utility/AtomicFile.h>
+#include <ao/utility/Sha256.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
-#include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <format>
-#include <fstream>
-#include <ios>
+#include <map>
 #include <memory>
 #include <optional>
-#include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
-#include <variant>
 
 namespace ao::rt
 {
@@ -296,104 +294,102 @@ namespace ao::rt
       return {};
     }
 
-    bool matchesCoverBaseline(library::CoverArt const& cover,
-                              library::TrackBuilder::CoverArtBuilder::PendingCoverArt const& baseline,
-                              library::ResourceStore::Reader const& resReader)
+    /**
+     * Which covers a document records, and what it names them by.
+     *
+     * A cover reference belongs to the library rather than to the file, so a
+     * `full` document records the whole graph: which digest each track names, in
+     * what order, with what picture type. `metadata` and `delta` record none.
+     *
+     * `metadata` omits them because it holds what a scan cannot rebuild, and an
+     * embedded cover is not that: both its bytes and its identity come from the
+     * file. `delta` omits them because the library holds what the last scan saw,
+     * so a file retagged since then makes the two differ and the sequence delta
+     * would carry is the stale one — applying it would overwrite the covers the
+     * baseline just read from the file with references to content that may exist
+     * nowhere.
+     */
+    bool recordsCovers(ExportMode const mode)
     {
-      auto const optDbData = resReader.get(cover.resourceId);
-
-      auto const* baselineResourceId = std::get_if<ResourceId>(&baseline.source);
-      auto const* baselineData = std::get_if<std::span<std::byte const>>(&baseline.source);
-
-      return baseline.type == cover.type &&
-             (baselineResourceId == nullptr || *baselineResourceId == cover.resourceId) &&
-             (baselineData == nullptr || (optDbData && std::ranges::equal(*optDbData, *baselineData)));
+      return mode == ExportMode::Full;
     }
 
-    bool shouldExportCovers(library::TrackView const& view,
-                            std::optional<library::TrackBuilder> const& optBaseline,
-                            ExportMode mode,
-                            library::ResourceStore::Reader const& resReader)
+    /// One row of `library.resources`, keyed so iteration is ascending by digest.
+    using ReachableDescriptorMap = std::map<utility::Sha256Digest, std::uint32_t>;
+
+    /// The digest text each referenced handle resolves to, so a cover reference
+    /// costs a lookup rather than a read and a format per cover.
+    using CoverDigestTextMap = std::unordered_map<ResourceId, std::string>;
+
+    struct ReachableResources final
     {
-      if (mode == ExportMode::Metadata || mode == ExportMode::Full)
+      ReachableDescriptorMap descriptors{};
+      CoverDigestTextMap digestText{};
+    };
+
+    /**
+     * @brief The descriptors the exported tracks reach, and nothing else.
+     *
+     * Descriptors are append-only, so a scanned library accumulates rows no track
+     * references any more. A document is a record of a library's live state, not
+     * of everything it has ever seen, and a restore that recreated the dead rows
+     * would be reconstructing history rather than content.
+     */
+    ReachableResources collectReachableResources(library::TrackStore::Reader const& trackReader,
+                                                 library::ResourceStore::Reader const& resourceReader,
+                                                 std::stop_token const& stopToken)
+    {
+      auto reachable = ReachableResources{};
+
+      for (auto const& [trackId, view] : trackReader.cold())
       {
-        return true;
-      }
+        async::throwIfStopRequested(stopToken);
 
-      if (mode != ExportMode::Delta)
-      {
-        return false;
-      }
-
-      if (!optBaseline)
-      {
-        return true;
-      }
-
-      auto const covers = view.coverArt();
-      auto const coverCount = covers.count();
-      auto const& baseCovers = optBaseline->coverArt().entries();
-
-      if (coverCount != baseCovers.size())
-      {
-        return true;
-      }
-
-      for (std::uint16_t i = 0; i < coverCount; ++i)
-      {
-        auto const cover = covers.at(i);
-
-        if (auto const& baseline = baseCovers[i]; !matchesCoverBaseline(cover, baseline, resReader))
+        for (auto const cover : view.coverArt())
         {
-          return true;
+          if (reachable.digestText.contains(cover.resourceId))
+          {
+            continue;
+          }
+
+          auto const optDescriptor = resourceReader.get(cover.resourceId);
+          AO_INVARIANT(optDescriptor,
+                       "Track {} cover references missing Resource {} after library validation",
+                       trackId.raw(),
+                       cover.resourceId.raw());
+          reachable.descriptors.insert_or_assign(optDescriptor->digest, optDescriptor->byteLength);
+          reachable.digestText.emplace(cover.resourceId, utility::sha256Hex(optDescriptor->digest));
         }
       }
 
-      return false;
+      return reachable;
     }
 
-    Result<> emitSingleCover(ryml::NodeRef& coverNode,
-                             ResourceId resId,
-                             std::uint8_t typeValue,
-                             std::unordered_map<ResourceId, std::string>& exportedCovers,
-                             library::ResourceStore::Reader const& resReader)
+    /// Emits `library.resources`, in ascending digest order so two exports of one
+    /// unchanged library are byte-identical.
+    void emitResourceTable(ryml::NodeRef& node, ReachableDescriptorMap const& descriptors)
     {
-      coverNode.append_child() << ryml::key("type") << static_cast<std::uint32_t>(typeValue);
+      auto resourcesNode = node.append_child();
+      yaml::setKey(resourcesNode, "resources");
+      resourcesNode |= ryml::SEQ;
 
-      if (auto const it = exportedCovers.find(resId); it != exportedCovers.end())
+      for (auto const& [digest, byteLength] : descriptors)
       {
-        auto dataNode = coverNode.append_child();
-        dataNode << ryml::key("data");
-        dataNode.set_val_ref(yaml::copyToArena(dataNode, it->second));
-        return {};
+        auto rowNode = resourcesNode.append_child();
+        rowNode |= ryml::MAP;
+        appendString(rowNode, "digest", utility::sha256Hex(digest));
+        rowNode.append_child() << ryml::key("length") << byteLength;
       }
-
-      auto const optDbData = resReader.get(resId);
-      AO_INVARIANT(optDbData, "Track cover references missing Resource {} after library validation", resId.raw());
-
-      auto const b64 = utility::base64Encode(*optDbData);
-      auto const anchorName = "cover_" + std::to_string(resId.raw());
-
-      auto dataNode = coverNode.append_child();
-      dataNode << ryml::key("data") << b64;
-      dataNode.set_val_anchor(yaml::copyToArena(dataNode, anchorName));
-      exportedCovers[resId] = anchorName;
-      return {};
     }
 
-    Result<> emitTrackCover(ryml::NodeRef& node,
-                            library::ReadTransaction const& transaction,
-                            library::TrackView const& view,
-                            std::optional<library::TrackBuilder> const& optBaseline,
-                            ExportMode mode,
-                            std::unordered_map<ResourceId, std::string>& exportedCovers,
-                            library::ResourceStore const& resources)
+    void emitTrackCover(ryml::NodeRef& node,
+                        library::TrackView const& view,
+                        ExportMode const mode,
+                        CoverDigestTextMap const& digestText)
     {
-      auto const resReader = resources.reader(transaction);
-
-      if (!shouldExportCovers(view, optBaseline, mode, resReader))
+      if (!recordsCovers(mode))
       {
-        return {};
+        return;
       }
 
       auto coversNode = node.append_child();
@@ -407,16 +403,16 @@ namespace ao::rt
         auto const cover = covers.at(i);
         auto coverNode = coversNode.append_child();
         coverNode |= ryml::MAP;
+        coverNode.append_child() << ryml::key("type") << static_cast<std::uint32_t>(cover.type);
 
-        if (auto result = emitSingleCover(
-              coverNode, cover.resourceId, static_cast<std::uint8_t>(cover.type), exportedCovers, resReader);
-            !result)
-        {
-          return result;
-        }
+        // The reference is the digest itself and never a ResourceId: a handle is
+        // local to the library that minted it and means nothing in a document.
+        auto const found = digestText.find(cover.resourceId);
+        AO_INVARIANT(found != digestText.end(),
+                     "Cover Resource {} is missing from the collected reachable set",
+                     cover.resourceId.raw());
+        appendString(coverNode, "resource", found->second);
       }
-
-      return {};
     }
 
     void emitTrackCommon(ryml::NodeRef& node,
@@ -506,18 +502,22 @@ namespace ao::rt
     {
     }
 
-    Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode) const;
-    Result<> exportTracks(ryml::NodeRef& node, library::ReadTransaction const& transaction, ExportMode mode) const;
+    Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode, std::stop_token const& stopToken) const;
+    Result<> exportTracks(ryml::NodeRef& node,
+                          library::ReadTransaction const& transaction,
+                          ExportMode mode,
+                          std::stop_token const& stopToken) const;
     Result<> exportTrack(ryml::NodeRef& node,
-                         library::ReadTransaction const& transaction,
                          TrackId id,
                          library::TrackView const& view,
                          ExportMode mode,
-                         std::unordered_map<ResourceId, std::string>& exportedCovers,
-                         library::ResourceStore const& resources,
+                         CoverDigestTextMap const& digestText,
                          library::DictionaryStore const& dictionary,
                          library::FileManifestStore::Reader const& manifestReader) const;
-    Result<> exportLists(ryml::NodeRef& node, library::ReadTransaction const& transaction, ExportMode mode) const;
+    Result<> exportLists(ryml::NodeRef& node,
+                         library::ReadTransaction const& transaction,
+                         ExportMode mode,
+                         std::stop_token const& stopToken) const;
 
     library::MusicLibrary const& ml;
   };
@@ -529,12 +529,16 @@ namespace ao::rt
 
   LibraryYamlExporter::~LibraryYamlExporter() = default;
 
-  Result<> LibraryYamlExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
+  Result<> LibraryYamlExporter::exportToYaml(std::filesystem::path const& path,
+                                             ExportMode mode,
+                                             std::stop_token stopToken)
   {
-    return _implPtr->exportToYaml(path, mode);
+    return _implPtr->exportToYaml(path, mode, stopToken);
   }
 
-  Result<> LibraryYamlExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode) const
+  Result<> LibraryYamlExporter::Impl::exportToYaml(std::filesystem::path const& path,
+                                                   ExportMode mode,
+                                                   std::stop_token const& stopToken) const
   {
     auto tree = ryml::Tree{};
     auto root = tree.rootref();
@@ -543,7 +547,7 @@ namespace ao::rt
     auto const transaction = ml.readTransaction();
     auto const header = ml.metadataHeader(transaction);
 
-    root.append_child() << ryml::key("version") << 3;
+    root.append_child() << ryml::key("version") << kYamlFormatVersion;
     appendString(root, "libraryId", utility::formatUuid(header.libraryId));
     appendString(root, "export_mode", exportModeName(mode));
 
@@ -553,44 +557,57 @@ namespace ao::rt
 
     if (mode != ExportMode::ListOnly)
     {
-      if (auto result = exportTracks(library, transaction, mode); !result)
+      if (auto result = exportTracks(library, transaction, mode, stopToken); !result)
       {
         return result;
       }
     }
 
-    if (auto result = exportLists(library, transaction, mode); !result)
+    if (auto result = exportLists(library, transaction, mode, stopToken); !result)
     {
       return result;
     }
 
-    auto ofs = std::ofstream{path};
+    // The destination directory is the user's to name, not this exporter's to
+    // create: a path below a directory that does not exist is a mistyped
+    // destination far more often than a request to build a tree, and the atomic
+    // write below would build it.
+    auto directoryError = std::error_code{};
 
-    if (!ofs)
+    if (auto const parent = path.parent_path();
+        !parent.empty() && !std::filesystem::is_directory(parent, directoryError))
     {
-      return makeError(Error::Code::IoError, std::format("Failed to open '{}' for writing", path.string()));
+      return makeError(Error::Code::IoError, std::format("Export directory does not exist: '{}'", parent.string()));
     }
 
     std::string const yaml = ryml::emitrs_yaml<std::string>(tree);
-    ofs.write(yaml.data(), static_cast<std::streamsize>(yaml.size()));
 
-    if (!ofs.good())
-    {
-      return makeError(Error::Code::IoError, std::format("File write error while writing '{}'", path.string()));
-    }
-
-    return {};
+    // Written whole or not at all. A user exports over the backup they already
+    // have, so a truncating stream would spend the old document before knowing
+    // it could produce the new one, and a cancellation, a full disk, or a crash
+    // would leave neither.
+    return utility::writeAtomically(path, yaml);
   }
 
   Result<> LibraryYamlExporter::Impl::exportTracks(ryml::NodeRef& node,
                                                    library::ReadTransaction const& transaction,
-                                                   ExportMode mode) const
+                                                   ExportMode mode,
+                                                   std::stop_token const& stopToken) const
   {
     auto const trackReader = ml.tracks().reader(transaction);
     auto const manifestReader = ml.manifest().reader(transaction);
-    auto const& resources = ml.resources();
     auto const& dictionary = ml.dictionary();
-    auto exportedCovers = std::unordered_map<ResourceId, std::string>{};
+
+    // The table is collected before the tracks that name it so it can be emitted
+    // first, and because a cover reference is emitted as its digest rather than
+    // as the handle the track record stores.
+    auto reachable = ReachableResources{};
+
+    if (recordsCovers(mode))
+    {
+      reachable = collectReachableResources(trackReader, ml.resources().reader(transaction), stopToken);
+      emitResourceTable(node, reachable.descriptors);
+    }
 
     auto tracksNode = node.append_child();
     yaml::setKey(tracksNode, "tracks");
@@ -598,8 +615,11 @@ namespace ao::rt
 
     for (auto const& [trackId, view] : trackReader)
     {
-      if (auto result = exportTrack(
-            tracksNode, transaction, trackId, view, mode, exportedCovers, resources, dictionary, manifestReader);
+      // A record at a time is the natural granularity: the walk holds a read
+      // transaction and an emitted tree, and both are dropped whole.
+      async::throwIfStopRequested(stopToken);
+
+      if (auto result = exportTrack(tracksNode, trackId, view, mode, reachable.digestText, dictionary, manifestReader);
           !result)
       {
         return result;
@@ -610,12 +630,10 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlExporter::Impl::exportTrack(ryml::NodeRef& node,
-                                                  library::ReadTransaction const& transaction,
                                                   TrackId id,
                                                   library::TrackView const& view,
                                                   ExportMode mode,
-                                                  std::unordered_map<ResourceId, std::string>& exportedCovers,
-                                                  library::ResourceStore const& resources,
+                                                  CoverDigestTextMap const& digestText,
                                                   library::DictionaryStore const& dictionary,
                                                   library::FileManifestStore::Reader const& manifestReader) const
   {
@@ -674,19 +692,15 @@ namespace ao::rt
       }
     }
 
-    if (auto result = emitTrackCover(trackNode, transaction, view, optBaseline, mode, exportedCovers, resources);
-        !result)
-    {
-      return result;
-    }
-
+    emitTrackCover(trackNode, view, mode, digestText);
     emitTrackCommon(trackNode, view.tags(), dictionary);
     return {};
   }
 
   Result<> LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
                                                   library::ReadTransaction const& transaction,
-                                                  ExportMode mode) const
+                                                  ExportMode mode,
+                                                  std::stop_token const& stopToken) const
   {
     auto listsNode = node.append_child();
     yaml::setKey(listsNode, "lists");
@@ -697,6 +711,8 @@ namespace ao::rt
 
     for (auto const& [listId, listView] : listReader)
     {
+      async::throwIfStopRequested(stopToken);
+
       if (auto result = emitList(listsNode, listId, listView, mode, trackReader); !result)
       {
         return result;

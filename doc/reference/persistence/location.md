@@ -3,13 +3,14 @@ id: persistence.location
 type: reference
 status: current
 domain: persistence
-summary: Enumerates default Linux locations for Aobus managed state, durable data, user configuration, logs, and caches.
+summary: Enumerates default Linux and Windows locations for Aobus managed state, durable data, user configuration, logs, and caches.
 ---
 # Managed file locations
 
 ## Scope and version
 
-This reference enumerates the current default Linux paths derived by runtime and selected or adapted by the GTK, TUI, and CLI composition roots.
+This reference enumerates the current default paths derived by runtime and selected or adapted by the GTK, TUI, WinUI, and CLI composition roots.
+Linux is the primary platform and Windows appears wherever a location differs; the [Windows desktop state reference](../windows/desktop-state.md) keeps the Windows-owned settings and theme surfaces.
 It owns locations and path overrides, not the schemas or behavior of the files stored there.
 
 The path surface is not independently versioned.
@@ -19,20 +20,25 @@ Serialized compatibility belongs to each payload's format owner, while ownership
 
 The [system architecture](../../architecture/system-overview.md) places platform selection and runtime construction in frontend composition roots.
 Runtime `LibraryPaths` derives the canonical per-library managed-data base, database path, log path, and existing-database probe from a supplied music root without discovering platform application directories.
-GTK resolves GLib/XDG locations, its selected music root, and frontend-specific files; TUI resolves its selected root and command-line overrides; and CLI resolves only its selected music root.
+GTK resolves GLib/XDG locations, its selected music root, and frontend-specific files; TUI resolves its selected root and command-line overrides; WinUI resolves its Windows locations; and CLI resolves its selected music root.
+Every composition root, the CLI included, also resolves the application cache directory and passes it to the runtime, because the runtime discovers no platform directory itself.
 UIModel receives paths or stores and does not resolve storage locations.
 
 ## Surface
 
 ### Path notation
 
-| Token | Linux meaning |
-|---|---|
-| `<config>` | `utility::applicationConfigDirectory()`, which reads `$XDG_CONFIG_HOME` then `$HOME/.config` then the account entry, and accepts only absolute values |
-| `<state>` | `$XDG_STATE_HOME` when non-empty; otherwise the `state` sibling of `Glib::get_user_data_dir()`, normally `~/.local/state` |
-| `<cache>` | `Glib::get_user_cache_dir()`, normally `$XDG_CACHE_HOME` or `~/.cache` |
-| `<root>` | The selected music-library root |
-| `<preset-id>` | A validated shell-layout preset identifier |
+| Token | Linux meaning | Windows meaning |
+|---|---|---|
+| `<config>` | `utility::applicationConfigDirectory()`, which reads `$XDG_CONFIG_HOME/aobus`, then `$HOME/.config/aobus`, then the account entry's `.config/aobus`, and accepts only absolute values | `utility::applicationConfigDirectory()`, which reads `%LOCALAPPDATA%\Aobus` then `%APPDATA%\Aobus`, accepting only absolute values |
+| `<state>` | `$XDG_STATE_HOME` when non-empty; otherwise the `state` sibling of `Glib::get_user_data_dir()`, normally `~/.local/state` | Not used |
+| `<cache>` | `Glib::get_user_cache_dir()`, normally `$XDG_CACHE_HOME` or `~/.cache` | Not used |
+| `<app-cache>` | `utility::applicationCacheDirectory()`, which reads `$XDG_CACHE_HOME/aobus`, then `$HOME/.cache/aobus`, then the account entry's `.cache/aobus` | `utility::applicationCacheDirectory()`, which reads `%LOCALAPPDATA%\Aobus\Cache` |
+| `<root>` | The selected music-library root | The selected music-library root |
+| `<preset-id>` | A validated shell-layout preset identifier | A validated shell-layout preset identifier |
+
+`<app-cache>` is deliberately local-machine on Windows: a roaming profile would synchronize derived files between machines that can each rebuild them.
+A root that cannot resolve it composes a runtime with no cache directory rather than failing to start.
 
 Every frontend resolves `<config>` through the same helper, so the platform rule and the directory name are decided once rather than at each composition root.
 When nothing names a home or profile location at all, GTK and the TUI open stores that keep nothing and run on defaults; the Windows shell reports a startup failure instead, because it keeps required state there and not only preferences.
@@ -42,12 +48,22 @@ The [application config reference](application-config.md) owns what a store with
 
 | Location | Class | Writer or reader |
 |---|---|---|
-| `<config>/aobus/config.yaml` | Global managed state for GTK application preferences, window/session state, keymap overrides, and the active library's playback session | `AppConfigStore` and the runtime playback-session owner through its borrowed store |
-| `<config>/aobus/layouts/<preset-id>.yaml` | One user-customized shell layout document | `ShellLayoutStore` |
-| `<config>/aobus/user.css` | Optional user-authored GTK style override | `GtkStyleRuntime` reads and monitors it; Aobus does not generate it |
+| `<config>/config.yaml` | Global managed state for GTK application preferences, window/session state, keymap overrides, and the active library's playback session | `AppConfigStore` and the runtime playback-session owner through its borrowed store |
+| `<config>/layouts/<preset-id>.yaml` | One user-customized shell layout document | `ShellLayoutStore` |
+| `<config>/user.css` | Optional user-authored GTK style override | `GtkStyleRuntime` reads and monitors it; Aobus does not generate it |
 | `<state>/aobus/layout-state/<preset-id>.yaml` | Per-preset shell component runtime state | `ShellLayoutComponentStateStore` |
 | `<cache>/aobus/logs/` | GTK operational logs | Runtime logging configured by the GTK composition root |
 | `<cache>/aobus/mpris-art/` | Exported cover-art files used by MPRIS file URLs | `MprisArtUrlCache` |
+
+### Cross-frontend derived cache
+
+| Location | Class | Writer or reader |
+|---|---|---|
+| `<app-cache>/cover/` | Derived cover-art cache, shared by every library opened on the machine | `ResourceDiskCache`, constructed by the runtime from the directory its composition root supplied |
+
+Entries are named by content digest, so two libraries holding one cover share one entry and neither can serve the other a wrong image.
+The directory is discardable: deleting it changes no library fact and can change only what is displayed when every audio file carrying a cover is already gone.
+The [cover-art delivery specification](../../spec/resource/cover-art-delivery.md) owns its budget, eviction, and verification behavior.
 
 ### Global TUI application locations
 
@@ -55,7 +71,7 @@ The TUI keeps its own file rather than sharing GTK's. `ConfigStore` writes a who
 
 | Location | Class | Writer or reader |
 |---|---|---|
-| `<config>/aobus/tui.yaml` | Global managed state for TUI application preferences | One `ConfigStore` owned by the TUI composition root |
+| `<config>/tui.yaml` | Global managed state for TUI application preferences | One `ConfigStore` owned by the TUI composition root |
 
 ### Per-library locations
 
@@ -93,6 +109,7 @@ Linux defaults and `AOBUS_BUILD_ROOT` are described in the repository [README](.
 - TUI normalizes its selected root and override paths to absolute lexical paths before runtime composition.
 - CLI passes its selected root to `LibraryPaths` and opens the derived database without a separate interactive configuration store.
 - `LibraryPaths::hasExistingDatabase()` detects a database created at the canonical location without exposing the LMDB marker filename to a frontend.
+- `applicationCacheDirectory()` has no caller under `app/runtime/`; a runtime constructed with no cache directory consults none and still delivers covers.
 - A library YAML export path never becomes an application-managed path merely because its encoding is YAML.
 
 Observable missing-file, parse, fallback, and save behavior belongs to the relevant specifications and semantic owners rather than this location inventory.
@@ -114,7 +131,9 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
 - [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration override selection and appends its frontend-specific configuration filename.
 - [`app/tui/App.cpp`](../../../app/tui/App.cpp) uses the canonical per-library log path and constructs its runtime store.
-- [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) opens the canonical database for its selected root.
+- [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) opens the canonical database for its selected root and resolves the cache directory it passes to the runtime.
+- [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h), [`PlatformDirectoriesPosix.cpp`](../../../lib/utility/PlatformDirectoriesPosix.cpp), and [`PlatformDirectoriesWindows.cpp`](../../../lib/utility/PlatformDirectoriesWindows.cpp) own the config and cache resolvers.
+- [`LibraryWindowLifecycle.cpp`](../../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`app/tui/App.cpp`](../../../app/tui/App.cpp), and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) resolve the same cache directory for their frontends.
 - [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) rejects canonical `.aobus` and LMDB marker literals in frontend C++ source.
 
 ## Test authority

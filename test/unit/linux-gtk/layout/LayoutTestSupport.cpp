@@ -24,6 +24,7 @@
 #include <gtkmm/window.h>
 #include <sigc++/signal.h>
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -137,6 +138,11 @@ namespace ao::gtk::layout::test
   rt::AppRuntime& LayoutRuntimeFixture::runtime()
   {
     return *_statePtr->runtimePtr;
+  }
+
+  std::filesystem::path LayoutRuntimeFixture::cacheDirectory() const
+  {
+    return gtk::test::runtimeCacheDirectory(_statePtr->tempDir.path());
   }
 
   Gtk::Window& LayoutRuntimeFixture::window()

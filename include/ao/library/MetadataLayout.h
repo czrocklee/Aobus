@@ -12,7 +12,7 @@
 namespace ao::library
 {
   constexpr std::uint32_t kMetadataMagic = 0x42534C52U;
-  constexpr std::uint32_t kLibraryVersion = 5;
+  constexpr std::uint32_t kLibraryVersion = 6;
   constexpr std::size_t kMetadataHeaderSize = 40;
   constexpr std::uint32_t kMetadataHeaderRecordId = 1;
   constexpr std::uint32_t kLibraryRevisionRecordId = 2;

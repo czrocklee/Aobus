@@ -165,10 +165,15 @@ namespace ao::rt::test
       CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
-      CHECK(tracks[2].has_child("covers"));
-      REQUIRE(tracks[3].has_child("covers"));
-      CHECK(tracks[3]["covers"].is_seq());
-      CHECK(tracks[3]["covers"].num_children() == 0);
+
+      // A delta document carries no embedded cover in version 4. The library holds
+      // what the last scan saw, so a file retagged since then makes the two
+      // differ, and the sequence delta would carry is the stale one: applying it
+      // would overwrite the covers the baseline just read from the file with
+      // references to content that may exist nowhere.
+      CHECK_FALSE(tracks[2].has_child("covers"));
+      CHECK_FALSE(tracks[3].has_child("covers"));
+      CHECK_FALSE(root["library"].has_child("resources"));
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
     }
   }
@@ -227,7 +232,7 @@ namespace ao::rt::test
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 3\n"
+      yaml << "version: 4\n"
            << "export_mode: delta\n"
            << "library:\n"
            << "  tracks:\n"
@@ -260,7 +265,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: delta
 library:
   tracks:
@@ -295,7 +300,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 3\nexport_mode: full\nlibrary:\n  tracks: []\n  lists: []\n";
+      yaml << "version: 4\nexport_mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
     }
 
     auto executor = QueuedExecutor{};
@@ -319,10 +324,11 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 3\n"
+      yaml << "version: 4\n"
            << "libraryId: 123E4567-E89B-12D3-A456-426614174000\n"
            << "export_mode: full\n"
            << "library:\n"
+           << "  resources: []\n"
            << "  tracks: []\n"
            << "  lists: []\n";
     }
@@ -350,10 +356,11 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "preview-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 3\n"
+      yaml << "version: 4\n"
            << "libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
            << "export_mode: full\n"
            << "library:\n"
+           << "  resources: []\n"
            << "  tracks: []\n"
            << "  lists: []\n";
     }

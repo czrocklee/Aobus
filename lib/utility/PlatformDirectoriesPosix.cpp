@@ -93,4 +93,24 @@ namespace ao::utility
 
     return makeError(Error::Code::NotFound, "No environment or account entry names a home directory");
   }
+
+  Result<std::filesystem::path> applicationCacheDirectory()
+  {
+    if (auto optCacheHome = environmentPath("XDG_CACHE_HOME"); optCacheHome)
+    {
+      return *optCacheHome / kApplicationDirectoryName;
+    }
+
+    if (auto optHome = environmentPath("HOME"); optHome)
+    {
+      return *optHome / ".cache" / kApplicationDirectoryName;
+    }
+
+    if (auto optHome = passwdHomeDirectory(); optHome)
+    {
+      return *optHome / ".cache" / kApplicationDirectoryName;
+    }
+
+    return makeError(Error::Code::NotFound, "No environment or account entry names a home directory");
+  }
 } // namespace ao::utility

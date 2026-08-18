@@ -47,7 +47,7 @@ Behavioral transitions belong to [library specifications](../../spec/library/REA
 
 ### Format
 
-- [Library YAML format](format/yaml.md) defines the portable, fail-closed version 3 interchange shape.
+- [Library YAML format](format/yaml.md) defines the portable, fail-closed version 4 interchange shape.
 - [Supported audio files](../media/audio-file.md) defines recognized extensions, imported tag mappings, and encoded payload ranges under the media owner.
 
 ## Recommended reading paths

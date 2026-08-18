@@ -14,8 +14,11 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -112,55 +115,85 @@ namespace ao::gtk::test
 
       std::filesystem::path const& fifoPath() const { return _fifoPath; }
 
-      std::string read()
+      /**
+       * @brief The child's output, once @p expectedLines lines have arrived.
+       *
+       * A line count rather than a read to end of stream, because this holds the
+       * FIFO open for writing to keep the path valid before the child starts:
+       * there is always a writer, so the reader is never handed the end and has
+       * to be told how much to wait for.
+       *
+       * Waiting matters. The probe is a shell `printf` with one conversion per
+       * line, which reaches the FIFO as one write per line, so a single read
+       * returns whichever lines had landed by then — usually all of them, and
+       * under load the first one alone. That made a correct child look like a
+       * child that dropped its environment.
+       */
+      std::string read(std::size_t const expectedLines)
       {
-        auto descriptor = ::pollfd{.fd = _descriptor, .events = POLLIN, .revents = 0};
-        std::int32_t pollStatus = 0;
+        auto output = std::string{};
+        auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
 
-        for (;;)
+        while (std::cmp_less(std::ranges::count(output, '\n'), expectedLines))
         {
-          pollStatus = ::poll(&descriptor, 1, 5'000);
+          auto const remaining =
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
 
-          if (pollStatus >= 0 || errno != EINTR)
+          if (remaining.count() <= 0)
           {
-            break;
+            throw std::runtime_error{"child environment probe timed out"};
           }
-        }
 
-        if (pollStatus == 0)
-        {
-          throw std::runtime_error{"child environment probe timed out"};
-        }
+          auto descriptor = ::pollfd{.fd = _descriptor, .events = POLLIN, .revents = 0};
+          std::int32_t pollStatus = 0;
 
-        if (pollStatus < 0)
-        {
-          throw std::system_error{errno, std::system_category(), "failed to poll child environment probe"};
-        }
-
-        if ((descriptor.revents & POLLIN) == 0)
-        {
-          throw std::runtime_error{"child environment probe produced no readable output"};
-        }
-
-        auto buffer = std::array<char, 256>{};
-        ssize_t readSize = 0;
-
-        for (;;)
-        {
-          readSize = ::read(_descriptor, buffer.data(), buffer.size());
-
-          if (readSize >= 0 || errno != EINTR)
+          for (;;)
           {
-            break;
+            pollStatus = ::poll(&descriptor, 1, static_cast<std::int32_t>(remaining.count()));
+
+            if (pollStatus >= 0 || errno != EINTR)
+            {
+              break;
+            }
           }
+
+          if (pollStatus == 0)
+          {
+            throw std::runtime_error{"child environment probe timed out"};
+          }
+
+          if (pollStatus < 0)
+          {
+            throw std::system_error{errno, std::system_category(), "failed to poll child environment probe"};
+          }
+
+          if ((descriptor.revents & POLLIN) == 0)
+          {
+            throw std::runtime_error{"child environment probe produced no readable output"};
+          }
+
+          auto buffer = std::array<char, 256>{};
+          ssize_t readSize = 0;
+
+          for (;;)
+          {
+            readSize = ::read(_descriptor, buffer.data(), buffer.size());
+
+            if (readSize >= 0 || errno != EINTR)
+            {
+              break;
+            }
+          }
+
+          if (readSize < 0)
+          {
+            throw std::system_error{errno, std::system_category(), "failed to read child environment probe"};
+          }
+
+          output.append(buffer.data(), static_cast<std::size_t>(readSize));
         }
 
-        if (readSize < 0)
-        {
-          throw std::system_error{errno, std::system_category(), "failed to read child environment probe"};
-        }
-
-        return {buffer.data(), static_cast<std::size_t>(readSize)};
+        return output;
       }
 
     private:
@@ -303,7 +336,7 @@ namespace ao::gtk::test
 
       REQUIRE(launchDetachedSuccessor(plan));
 
-      CHECK(output.read() == "set:replacement-token\npreserved-value\n");
+      CHECK(output.read(2) == "set:replacement-token\npreserved-value\n");
     }
 
     SECTION("missing activation token removes inherited value")
@@ -313,7 +346,7 @@ namespace ao::gtk::test
 
       REQUIRE(launchDetachedSuccessor(plan));
 
-      CHECK(output.read() == "unset\npreserved-value\n");
+      CHECK(output.read(2) == "unset\npreserved-value\n");
     }
   }
 } // namespace ao::gtk::test

@@ -170,6 +170,7 @@ add_executable(ao_core_test
     unit/utility/FileAllocationTest.cpp
     unit/utility/RaiiTest.cpp
     unit/utility/Base64Test.cpp
+    unit/utility/Sha256Test.cpp
     unit/utility/Xxh3Test.cpp
     unit/utility/MappedFileTest.cpp
     unit/utility/PathTest.cpp
@@ -263,6 +264,7 @@ add_executable(ao_core_test
     unit/library/DictionaryStoreTest.cpp
     unit/library/AudioIdentityTest.cpp
     unit/library/ListStoreTest.cpp
+    unit/library/ResourceLayoutTest.cpp
     unit/library/ResourceStoreTest.cpp
     unit/library/WriteTransactionTest.cpp
     unit/library/TrackWriterTest.cpp
@@ -479,6 +481,7 @@ add_executable(ao_core_test
     unit/runtime/library/ScanPlanTest.cpp
     unit/runtime/library/ScanApplyOperationTest.cpp
     unit/runtime/library/LibraryTaskServiceTest.cpp
+    unit/runtime/library/ResourceMaterializationTest.cpp
     unit/runtime/library/RuntimeFatalProbeTest.cpp
     unit/runtime/library/LibraryWriterTest.cpp
     unit/runtime/library/LibraryAuthoringTest.cpp
@@ -510,6 +513,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryYamlSchemaTest.cpp
     unit/runtime/library/LibraryExportImportTest.cpp
     unit/runtime/resource/ResourceByteCacheTest.cpp
+    unit/runtime/resource/ResourceDiskCacheTest.cpp
     unit/runtime/resource/ResourceByteLoaderTest.cpp
     unit/desktop/DetachedProcessLauncherTest.cpp
     unit/desktop/DetachedProcessLauncherWindowsTest.cpp

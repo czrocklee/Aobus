@@ -429,9 +429,10 @@ namespace ao::gtk::test
     auto const importPath = fixture.tempDir().path() / "restore.yaml";
     {
       auto yaml = std::ofstream{importPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - uri: restored.flac
       title: Restored
@@ -466,9 +467,10 @@ library:
     auto const importPath = fixture.tempDir().path() / "restore.yaml";
     {
       auto yaml = std::ofstream{importPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - uri: restored.flac
       title: Restored
@@ -511,9 +513,10 @@ library:
     auto const importPath = tempDir.path() / "restore.yaml";
     {
       auto yaml = std::ofstream{importPath};
-      yaml << R"(version: 3
+      yaml << R"(version: 4
 export_mode: full
 library:
+  resources: []
   tracks:
     - uri: restored.flac
       title: Restored

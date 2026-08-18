@@ -61,9 +61,12 @@ add_library(ao_app_runtime STATIC
     runtime/library/LibraryScan.cpp
     runtime/library/ScanPlan.cpp
     runtime/library/ScanApplyOperation.cpp
+    runtime/library/ResourceCarrierIndex.cpp
+    runtime/library/ResourceMaterialization.cpp
     runtime/library/LibraryTaskService.cpp
     runtime/resource/ResourceByteCache.cpp
     runtime/resource/ResourceByteLoader.cpp
+    runtime/resource/ResourceDiskCache.cpp
     runtime/source/TrackSourceCache.cpp
     runtime/source/ListOrderSource.cpp
     runtime/NavigationHistory.cpp

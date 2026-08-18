@@ -45,7 +45,7 @@ The consumer edges have separate authorities:
 | `ao_media` | Encoded-byte ownership, recognition, validated container views, and file evidence. | This document. |
 | Runtime library adapters | Combine media evidence with library commands, hashing, cancellation, and publication. | [Library](library.md), constrained by this document's view lifetimes. |
 | `ao_audio` decoders | Turn encoded input into decoder-session and PCM behavior. | [Playback](playback.md), consuming media primitives without transferring decoder ownership. |
-| Stored covers and external artifacts | Materialize already-imported resource identities and bytes. | [Resource delivery](resource-delivery.md). |
+| Stored covers and external artifacts | Materialize an imported resource identity, re-reading a carrier file through this boundary when needed. | [Resource delivery](resource-delivery.md). |
 
 ## Responsibilities
 
@@ -106,7 +106,7 @@ path
   -> MediaTrack lifetime owner
   -> TrackBuilder views backed by the retained File
   -> library workflow preparation and mutation
-  -> stored track and cover resources
+  -> stored track and cover descriptors
 ```
 
 The media boundary performs synchronous reading inside the calling library workflow and never begins a library transaction or emits runtime change events itself.

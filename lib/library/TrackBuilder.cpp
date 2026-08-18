@@ -13,6 +13,7 @@
 #include <ao/PictureType.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
@@ -451,6 +452,13 @@ namespace ao::library
     return *this;
   }
 
+  TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::add(PictureType const type,
+                                                                    ResourceDescriptor const& descriptor)
+  {
+    _entries.push_back({.type = type, .source = descriptor});
+    return *this;
+  }
+
   TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::erase(std::size_t index)
   {
     AO_EXPECTS(index < _entries.size());
@@ -530,6 +538,13 @@ namespace ao::library
                                                   ResourceStore const& resources)
   {
     return transaction.resourceStoreWriter(resources).create(data);
+  }
+
+  Result<ResourceId> TrackBuilder::declareResource(ResourceDescriptor const& descriptor,
+                                                   WriteTransaction& transaction,
+                                                   ResourceStore const& resources)
+  {
+    return transaction.resourceStoreWriter(resources).getOrCreate(descriptor);
   }
 
   Result<> TrackBuilder::validateHotSerializable() const
@@ -873,8 +888,12 @@ namespace ao::library
         continue;
       }
 
-      auto const data = std::get<std::span<std::byte const>>(pending.source);
-      auto resourceRes = TrackBuilder::createResource(data, transaction, resources);
+      // Which store call runs is what carries the evidence: content the caller
+      // holds is hashed and counted, while a declared descriptor only fills a gap.
+      auto resourceRes =
+        std::holds_alternative<ResourceDescriptor>(pending.source)
+          ? TrackBuilder::declareResource(std::get<ResourceDescriptor>(pending.source), transaction, resources)
+          : TrackBuilder::createResource(std::get<std::span<std::byte const>>(pending.source), transaction, resources);
 
       if (!resourceRes)
       {

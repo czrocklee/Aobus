@@ -8,6 +8,7 @@
 #include "TrackBuilderSnapshot.h"
 #include <ao/AudioCodecText.h>
 #include <ao/AudioScalars.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
@@ -19,6 +20,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListWriter.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWriter.h>
@@ -28,7 +30,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/utility/Base64.h>
+#include <ao/utility/Sha256.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
@@ -94,11 +96,26 @@ namespace ao::rt
       std::vector<ValidatedListOrderReference> orderReferences;
     };
 
+    /**
+     * The descriptors a document declares, by the exact digest text it spells.
+     *
+     * A document carries no bytes, so nothing here can be checked against
+     * content: an unverifiable digest can only ever name content, never introduce
+     * it, which is precisely the case a collision-resistant digest exists for.
+     * The declared length is a hint that fills a gap and never overwrites a
+     * counted one.
+     *
+     * The format pins one spelling per digest, which is what lets a cover
+     * reference be resolved as text rather than normalized first.
+     */
+    using ValidatedResourceMap = std::unordered_map<std::string_view, library::ResourceDescriptor>;
+
     struct ValidatedImport final
     {
       std::uint32_t version = 0;
       ExportMode payloadMode = ExportMode::Full;
       std::optional<std::string_view> optLibraryId;
+      ValidatedResourceMap resources;
       std::vector<ValidatedTrack> tracks;
       std::vector<ValidatedList> lists;
     };
@@ -258,7 +275,8 @@ namespace ao::rt
     }
 
     constexpr auto kRootFields = std::to_array<std::string_view>({"version", "libraryId", "export_mode", "library"});
-    constexpr auto kLibraryFields = std::to_array<std::string_view>({"tracks", "lists"});
+    constexpr auto kLibraryFields = std::to_array<std::string_view>({"resources", "tracks", "lists"});
+    constexpr auto kResourceFields = std::to_array<std::string_view>({"digest", "length"});
     constexpr auto kTrackFields = std::to_array<std::string_view>({
       "id",           "uri",         "title",       "artist",     "album",           "album-artist",   "genre",
       "composer",     "conductor",   "ensemble",    "work",       "movement",        "soloist",        "year",
@@ -266,7 +284,7 @@ namespace ao::rt
       "tags",         "covers",      "duration",    "bitrate",    "sample-rate",     "codec",          "channels",
       "bit-depth",    "fileSize",    "mtime",
     });
-    constexpr auto kCoverFields = std::to_array<std::string_view>({"type", "data"});
+    constexpr auto kCoverFields = std::to_array<std::string_view>({"type", "resource"});
     constexpr auto kListFields =
       std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "order"});
     constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri"});
@@ -703,6 +721,8 @@ namespace ao::rt
     Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
     Result<> validateHeader(ryml::ConstNodeRef const& root, ValidatedImport& validated) const;
     Result<> validateLibrary(ryml::ConstNodeRef const& root, ValidatedImport& validated) const;
+    Result<> validateResources(ryml::ConstNodeRef const& library, ValidatedImport& validated) const;
+    Result<> validateCoverReferences(ValidatedImport const& validated) const;
     Result<> validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
     Result<> validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
@@ -730,8 +750,9 @@ namespace ao::rt
                          ImportMode strategy,
                          ImportReport& report) const;
 
-    Result<std::vector<std::vector<std::byte>>> importCovers(ryml::ConstNodeRef const& trackNode,
-                                                             library::TrackBuilder& builder) const;
+    Result<> importCovers(ryml::ConstNodeRef const& trackNode,
+                          ValidatedResourceMap const& resources,
+                          library::TrackBuilder& builder) const;
     Result<> applyFileMetadata(ryml::ConstNodeRef const& trackNode,
                                std::string_view uriStr,
                                library::FileManifestStore::Reader const& manifestReader,
@@ -1138,8 +1159,6 @@ namespace ao::rt
       return std::unexpected{versionRes.error()};
     }
 
-    constexpr std::uint32_t kYamlFormatVersion = 3;
-
     if (*versionRes != kYamlFormatVersion)
     {
       return makeError(Error::Code::FormatRejected, std::format("Unsupported YAML version {}", *versionRes));
@@ -1216,6 +1235,12 @@ namespace ao::rt
       {
         return makeError(Error::Code::FormatRejected, "library.tracks is forbidden for a listOnly payload");
       }
+
+      // A listOnly payload carries no track, so it can carry no table either.
+      if (auto result = validateResources(library, validated); !result)
+      {
+        return result;
+      }
     }
     else
     {
@@ -1233,6 +1258,19 @@ namespace ao::rt
       {
         return std::unexpected{result.error()};
       }
+
+      // The table is validated after the tracks, and before the closure that
+      // joins the two: a document's tracks are its content, so a fault in one of
+      // them is the more useful thing to report first.
+      if (auto result = validateResources(library, validated); !result)
+      {
+        return result;
+      }
+
+      if (auto result = validateCoverReferences(validated); !result)
+      {
+        return result;
+      }
     }
 
     if (!lists.readable())
@@ -1248,6 +1286,162 @@ namespace ao::rt
     if (auto result = validateLists(lists, validated); !result)
     {
       return std::unexpected{result.error()};
+    }
+
+    return {};
+  }
+
+  /**
+   * @brief Validates `library.resources`, the normalized descriptor table.
+   *
+   * Presence follows the mode that carries cover references: a `full` document
+   * always has the table, including when it is empty, and every other mode is
+   * forbidden one. A mode that carries no cover reference has nothing to name, so
+   * a table in it is a document asserting content no track uses — rejected rather
+   * than ignored, which is how this format treats every other unexpected field.
+   */
+  Result<> LibraryYamlImporter::Impl::validateResources(ryml::ConstNodeRef const& library,
+                                                        ValidatedImport& validated) const
+  {
+    auto const resources = yaml::findChild(library, "resources");
+
+    if (validated.payloadMode != ExportMode::Full)
+    {
+      if (resources.readable())
+      {
+        return makeError(
+          Error::Code::FormatRejected,
+          std::format("library.resources is forbidden for a {} payload", exportModeName(validated.payloadMode)));
+      }
+
+      return {};
+    }
+
+    if (!resources.readable())
+    {
+      return makeError(Error::Code::FormatRejected, "library missing required 'resources' field");
+    }
+
+    if (auto result = requireSequence(resources, "library.resources"); !result)
+    {
+      return result;
+    }
+
+    for (auto const& rowNode : resources.children())
+    {
+      if (auto result = requireMap(rowNode, "Resource record"); !result)
+      {
+        return result;
+      }
+
+      if (auto result = rejectUnknownFields(rowNode, kResourceFields, "Resource record"); !result)
+      {
+        return result;
+      }
+
+      auto digestTextRes = requireScalarField(rowNode, "digest", "Resource record");
+
+      if (!digestTextRes)
+      {
+        return std::unexpected{digestTextRes.error()};
+      }
+
+      auto const optDigest = utility::parseSha256Hex(*digestTextRes);
+
+      if (!optDigest)
+      {
+        return makeError(
+          Error::Code::FormatRejected,
+          std::format("Resource digest '{}' is not 64 lowercase hexadecimal characters", *digestTextRes));
+      }
+
+      auto lengthRes = requireScalarFieldAs<std::uint32_t>(rowNode, "length", "Resource record");
+
+      if (!lengthRes)
+      {
+        return std::unexpected{lengthRes.error()};
+      }
+
+      // Two rows carrying one digest have no defined meaning at all: they would
+      // leave the importer choosing between their lengths, which is what makes
+      // this a table rather than a list.
+      if (!validated.resources
+             .emplace(*digestTextRes, library::ResourceDescriptor{.digest = *optDigest, .byteLength = *lengthRes})
+             .second)
+      {
+        return makeError(
+          Error::Code::FormatRejected, std::format("library.resources repeats the digest '{}'", *digestTextRes));
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * @brief Checks that cover references belong to this mode and close exactly.
+   *
+   * Only a `full` document carries a cover reference, so one in any other mode is
+   * a document asserting content that mode does not carry — rejected rather than
+   * ignored, on the same grounds as the resource table itself.
+   *
+   * Within `full`, the closure is exact in both directions: every reference
+   * resolves to exactly one row, and every row is named by at least one track.
+   * Rejecting the unreferenced row is the half that needs justifying, because
+   * ignoring it looks harmless: importing it would put a descriptor in the
+   * database that nothing references and that no scan will ever produce, which is
+   * the append-only store's one genuinely useless entry — garbage arriving from
+   * outside rather than accumulating from real content the library saw.
+   */
+  Result<> LibraryYamlImporter::Impl::validateCoverReferences(ValidatedImport const& validated) const
+  {
+    auto referenced = std::unordered_set<std::string_view>{};
+
+    for (auto const& validatedTrack : validated.tracks)
+    {
+      auto const covers = yaml::findChild(validatedTrack.node, "covers");
+
+      if (!covers.readable())
+      {
+        continue;
+      }
+
+      if (validated.payloadMode != ExportMode::Full)
+      {
+        return makeError(
+          Error::Code::FormatRejected,
+          std::format("Track covers are forbidden for a {} payload", exportModeName(validated.payloadMode)));
+      }
+
+      for (auto const& coverNode : covers.children())
+      {
+        auto resourceTextRes = requireScalarField(coverNode, "resource", "Track cover");
+
+        if (!resourceTextRes)
+        {
+          return std::unexpected{resourceTextRes.error()};
+        }
+
+        if (!validated.resources.contains(*resourceTextRes))
+        {
+          return makeError(
+            Error::Code::FormatRejected,
+            std::format("Track cover names resource '{}', which library.resources does not declare", *resourceTextRes));
+        }
+
+        referenced.insert(*resourceTextRes);
+      }
+    }
+
+    if (referenced.size() != validated.resources.size())
+    {
+      for (auto const& [digestText, descriptor] : validated.resources)
+      {
+        if (!referenced.contains(digestText))
+        {
+          return makeError(Error::Code::FormatRejected,
+                           std::format("library.resources declares '{}', which no track references", digestText));
+        }
+      }
     }
 
     return {};
@@ -1445,14 +1639,11 @@ namespace ao::rt
         return std::unexpected{overlayRes.error()};
       }
 
-      auto decodedCoverBlobsRes = importCovers(validatedTrack.node, builder);
-
-      if (!decodedCoverBlobsRes)
+      if (auto coversRes = importCovers(validatedTrack.node, validated.resources, builder); !coversRes)
       {
-        return std::unexpected{decodedCoverBlobsRes.error()};
+        return std::unexpected{coversRes.error()};
       }
 
-      auto decodedCoverBlobs = std::move(*decodedCoverBlobsRes);
       auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
 
       if (auto metadataRes =
@@ -1563,64 +1754,69 @@ namespace ao::rt
     return {};
   }
 
-  Result<std::vector<std::vector<std::byte>>> LibraryYamlImporter::Impl::importCovers(
-    ryml::ConstNodeRef const& trackNode,
-    library::TrackBuilder& builder) const
+  /**
+   * @brief Applies the cover references a document declares.
+   *
+   * A present `covers` collection replaces the baseline's covers, and an absent
+   * one preserves them: that overlay rule is what makes a `metadata` or `delta`
+   * restore keep whatever its file baseline read, now that neither mode carries a
+   * cover.
+   *
+   * `ResourceId` is derived from the digest rather than read from the document,
+   * because a handle is local to the library that minted it.
+   */
+  Result<> LibraryYamlImporter::Impl::importCovers(ryml::ConstNodeRef const& trackNode,
+                                                   ValidatedResourceMap const& resources,
+                                                   library::TrackBuilder& builder) const
   {
-    auto decodedCoverBlobs = std::vector<std::vector<std::byte>>{};
+    auto const coversNode = yaml::findChild(trackNode, "covers");
 
-    if (auto const coversNode = yaml::findChild(trackNode, "covers"); coversNode.readable())
+    if (!coversNode.readable())
     {
-      if (!coversNode.is_seq())
-      {
-        return makeError(Error::Code::FormatRejected, "Track covers must be a sequence");
-      }
-
-      builder.coverArt().clear();
-      decodedCoverBlobs.reserve(coversNode.num_children());
-
-      for (auto const coverNode : coversNode)
-      {
-        if (auto result = requireMap(coverNode, "Track cover"); !result)
-        {
-          return std::unexpected{result.error()};
-        }
-
-        auto rawTypeRes = requireScalarFieldAs<std::uint32_t>(coverNode, "type", "Track cover");
-
-        if (!rawTypeRes)
-        {
-          return std::unexpected{rawTypeRes.error()};
-        }
-
-        auto dataRes = requireScalarField(coverNode, "data", "Track cover");
-
-        if (!dataRes)
-        {
-          return std::unexpected{dataRes.error()};
-        }
-
-        if (*rawTypeRes > static_cast<std::uint32_t>(PictureType::PublisherLogo))
-        {
-          return makeError(Error::Code::FormatRejected, std::format("Unknown cover type {}", *rawTypeRes));
-        }
-
-        auto const picType = static_cast<PictureType>(*rawTypeRes);
-
-        // Keep the borrowed blob alive in decodedCoverBlobs until the builder serializes below.
-        if (auto optDecoded = utility::base64Decode(*dataRes); optDecoded && !optDecoded->empty())
-        {
-          decodedCoverBlobs.push_back(*std::move(optDecoded));
-          builder.coverArt().add(picType, decodedCoverBlobs.back());
-        }
-        else
-        {
-          return makeError(Error::Code::FormatRejected, "Track cover data must be non-empty base64");
-        }
-      }
+      return {};
     }
 
-    return decodedCoverBlobs;
+    if (!coversNode.is_seq())
+    {
+      return makeError(Error::Code::FormatRejected, "Track covers must be a sequence");
+    }
+
+    builder.coverArt().clear();
+
+    for (auto const coverNode : coversNode)
+    {
+      if (auto result = requireMap(coverNode, "Track cover"); !result)
+      {
+        return result;
+      }
+
+      auto rawTypeRes = requireScalarFieldAs<std::uint32_t>(coverNode, "type", "Track cover");
+
+      if (!rawTypeRes)
+      {
+        return std::unexpected{rawTypeRes.error()};
+      }
+
+      if (*rawTypeRes > static_cast<std::uint32_t>(PictureType::PublisherLogo))
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Unknown cover type {}", *rawTypeRes));
+      }
+
+      auto resourceTextRes = requireScalarField(coverNode, "resource", "Track cover");
+
+      if (!resourceTextRes)
+      {
+        return std::unexpected{resourceTextRes.error()};
+      }
+
+      auto const found = resources.find(*resourceTextRes);
+      AO_INVARIANT(found != resources.end(),
+                   "Track cover names resource '{}' after the closure check accepted the document",
+                   *resourceTextRes);
+      builder.coverArt().add(static_cast<PictureType>(*rawTypeRes), found->second);
+    }
+
+    return {};
   }
 
   Result<> LibraryYamlImporter::Impl::applyFileMetadata(ryml::ConstNodeRef const& trackNode,

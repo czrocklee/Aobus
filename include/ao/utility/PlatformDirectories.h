@@ -41,4 +41,27 @@ namespace ao::utility
    *   library to show and reports a startup failure instead.
    */
   Result<std::filesystem::path> applicationConfigDirectory();
+
+  /**
+   * @brief The directory holding this application's per-user derived caches.
+   *
+   * Resolves the operating system's per-user cache location the same way as
+   * applicationConfigDirectory() resolves configuration: `aobus` under
+   * `XDG_CACHE_HOME`, `$HOME/.cache`, or the account's home directory on POSIX;
+   * `Aobus\Cache` under `LOCALAPPDATA` on Windows, which has no separate cache
+   * convention of its own. The same absolute-path requirement applies, for the
+   * same reason.
+   *
+   * This is a shared facility rather than a private helper because it has a
+   * caller in every composition root from the day it lands. The runtime owns
+   * paths derived from a supplied root and does not discover platform
+   * application directories, so each frontend resolves this and passes it down
+   * the channel that already carries the music root and the database path.
+   *
+   * Returns `NotFound` only when nothing names a home or profile location. No
+   * frontend fails to start over that: what lives here is derived, so a
+   * composition root that cannot resolve it supplies nothing and the cover-read
+   * walk has one tier instead of two.
+   */
+  Result<std::filesystem::path> applicationCacheDirectory();
 } // namespace ao::utility

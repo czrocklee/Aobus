@@ -4,6 +4,7 @@
 #include "TrackBuilderSnapshot.h"
 
 #include <ao/CoreIds.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
 
 #include <cstddef>
@@ -54,6 +55,11 @@ namespace ao::rt
       if (auto const* const resourceId = std::get_if<ResourceId>(&entry.source); resourceId != nullptr)
       {
         _covers.push_back(Cover{.type = entry.type, .source = *resourceId});
+      }
+      else if (auto const* const descriptor = std::get_if<library::ResourceDescriptor>(&entry.source);
+               descriptor != nullptr)
+      {
+        _covers.push_back(Cover{.type = entry.type, .source = *descriptor});
       }
       else
       {
@@ -111,6 +117,11 @@ namespace ao::rt
       if (auto const* const resourceId = std::get_if<ResourceId>(&cover.source); resourceId != nullptr)
       {
         result.coverArt().add(cover.type, *resourceId);
+      }
+      else if (auto const* const descriptor = std::get_if<library::ResourceDescriptor>(&cover.source);
+               descriptor != nullptr)
+      {
+        result.coverArt().add(cover.type, *descriptor);
       }
       else
       {

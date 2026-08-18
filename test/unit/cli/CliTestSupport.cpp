@@ -19,10 +19,12 @@
 #include <cstddef>
 #include <filesystem>
 #include <initializer_list>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::cli::test
@@ -40,12 +42,15 @@ namespace ao::cli::test
     return text.contains(expected);
   }
 
-  CliResult runArgs(std::vector<std::string> args)
+  CliResult runArgs(std::vector<std::string> args, std::optional<std::filesystem::path> optCacheDirectory)
   {
     auto out = std::ostringstream{};
     auto err = std::ostringstream{};
-    auto const status =
-      run(args, out, err, CliRunOptions{.musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes});
+    auto const status = run(args,
+                            out,
+                            err,
+                            CliRunOptions{.musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+                                          .optCacheDirectory = std::move(optCacheDirectory)});
     return {.status = status, .out = out.str(), .err = err.str()};
   }
 
@@ -73,6 +78,11 @@ namespace ao::cli::test
   std::filesystem::path const& CliFixture::root() const
   {
     return _temp.path();
+  }
+
+  std::filesystem::path CliFixture::cacheDirectory() const
+  {
+    return root() / "cache";
   }
 
   void CliFixture::copyAudio(std::string_view sourceName, std::string_view targetName) const
@@ -108,7 +118,7 @@ namespace ao::cli::test
       argv.emplace_back(argument);
     }
 
-    auto result = runArgs(argv);
+    auto result = runArgs(argv, cacheDirectory());
 
     if (result.status != 0)
     {

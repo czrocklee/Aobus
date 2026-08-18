@@ -11,6 +11,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
+#include "test/unit/media/file/TestFile.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
@@ -21,6 +22,8 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceLayout.h>
+#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WritableMusicLibrary.h>
@@ -28,6 +31,7 @@
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -40,6 +44,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <stop_token>
 #include <string_view>
@@ -98,6 +103,101 @@ namespace ao::rt::test
       trackIds.append_range(result.mutatedIds);
       trackIds.append_range(result.relinkedIds);
       return trackIds;
+    }
+
+    /// What a scan left behind for one track's cover art: how many references the
+    /// record holds, and the descriptor row the first one names.
+    struct CoverFacts final
+    {
+      std::uint16_t count = 0;
+      ResourceId primaryId = kInvalidResourceId;
+      std::optional<library::ResourceDescriptor> optDescriptor{};
+    };
+
+    CoverFacts readCoverFacts(library::MusicLibrary& ml, TrackId const trackId)
+    {
+      auto transaction = ml.readTransaction();
+      auto const optView = ml.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+
+      auto facts = CoverFacts{.count = optView->coverArt().count()};
+
+      if (auto const optCover = optView->coverArt().primary(); optCover)
+      {
+        facts.primaryId = optCover->resourceId;
+        facts.optDescriptor = ml.resources().reader(transaction).get(optCover->resourceId);
+      }
+
+      return facts;
+    }
+
+    std::size_t resourceRowCount(library::MusicLibrary& ml)
+    {
+      auto transaction = ml.readTransaction();
+      auto reader = ml.resources().reader(transaction);
+      std::size_t count = 0;
+
+      for ([[maybe_unused]] auto const& row : reader)
+      {
+        ++count;
+      }
+
+      return count;
+    }
+
+    std::uint64_t readLibraryRevision(library::MusicLibrary& ml)
+    {
+      auto transaction = ml.readTransaction();
+      return ml.libraryRevision(transaction);
+    }
+
+    ScanApplyResult requireScanApplied(library::MusicLibrary& ml)
+    {
+      auto plan = LibraryScan{ml}.buildPlan().value();
+      auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
+      auto runRes = operation.run();
+      REQUIRE(runRes);
+      return *runRes;
+    }
+
+    TrackId requireOneInsertedTrack(library::MusicLibrary& ml)
+    {
+      auto const result = requireScanApplied(ml);
+      REQUIRE(result.insertedIds.size() == 1);
+      return result.insertedIds.front();
+    }
+
+    /// Swaps a scanned file's content for another fixture's and advances its
+    /// mtime, which is what makes the next scan classify it `Changed`.
+    void replaceScannedFile(std::filesystem::path const& target, std::filesystem::path const& source)
+    {
+      auto const previousTime = std::filesystem::last_write_time(target);
+      std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing);
+      std::filesystem::last_write_time(target, previousTime + std::chrono::seconds{10});
+    }
+
+    void curateTrack(library::MusicLibrary& ml, TrackId const trackId)
+    {
+      updateTrackSpec(ml,
+                      trackId,
+                      [](TrackSpec& spec)
+                      {
+                        spec.title = "Curated Title";
+                        spec.tags = {"favorite"};
+                        spec.customMetadata = {{"catalog", "AOB-42"}};
+                      });
+    }
+
+    void checkCurationSurvived(library::MusicLibrary& ml, TrackId const trackId)
+    {
+      auto transaction = ml.readTransaction();
+      auto const optView = ml.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+
+      auto const spec = trackSpecFromView(ml, *optView);
+      CHECK(spec.title == "Curated Title");
+      CHECK(hasTag(spec, "favorite"));
+      CHECK(hasCustomMetadata(spec, "catalog", "AOB-42"));
     }
   } // namespace
 
@@ -1083,6 +1183,217 @@ namespace ao::rt::test
 
     REQUIRE_THROWS_AS(std::ignore = executor.run(), std::runtime_error);
     CHECK(counts.failed == 0);
+  }
+
+  TEST_CASE("ScanApplyOperation - a new file's embedded cover becomes a digest descriptor",
+            "[runtime][unit][scan][cover]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto const targetFile = musicRoot / "song.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("with_cover.flac"), targetFile);
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto const trackId = requireOneInsertedTrack(ml);
+
+    auto const pictureBytes = media::file::test::requireSoleEmbeddedPicture(targetFile);
+    auto const facts = readCoverFacts(ml, trackId);
+    CHECK(facts.count == 1);
+    REQUIRE(facts.optDescriptor);
+    CHECK(facts.optDescriptor->digest == utility::computeSha256(pictureBytes));
+    CHECK(facts.optDescriptor->byteLength == static_cast<std::uint32_t>(pictureBytes.size()));
+    CHECK(facts.primaryId == library::deriveResourceId(facts.optDescriptor->digest));
+  }
+
+  TEST_CASE("ScanApplyOperation - a changed file's art replaces the cover set", "[runtime][unit][scan][cover]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto const targetFile = musicRoot / "song.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), targetFile);
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto const trackId = requireOneInsertedTrack(ml);
+    REQUIRE(readCoverFacts(ml, trackId).count == 0);
+    curateTrack(ml, trackId);
+
+    replaceScannedFile(targetFile, audio::test::requireAudioFixture("with_cover.flac"));
+
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(plan.size() == 1);
+    REQUIRE(plan.items().front().classification == ScanClassification::Changed);
+
+    auto counts = FailureCounts{};
+    auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
+    auto runRes = executor.run();
+    REQUIRE(runRes);
+    CHECK(runRes->mutatedIds == std::vector{trackId});
+    CHECK(counts.failed == 0);
+
+    // The file is the authority on its own art, so the reference set the scan
+    // writes is the one the new bytes carry.
+    auto const pictureBytes = media::file::test::requireSoleEmbeddedPicture(targetFile);
+    auto const facts = readCoverFacts(ml, trackId);
+    CHECK(facts.count == 1);
+    REQUIRE(facts.optDescriptor);
+    CHECK(facts.optDescriptor->digest == utility::computeSha256(pictureBytes));
+    CHECK(facts.optDescriptor->byteLength == static_cast<std::uint32_t>(pictureBytes.size()));
+    checkCurationSurvived(ml, trackId);
+  }
+
+  TEST_CASE("ScanApplyOperation - a changed file that lost its art leaves no cover reference",
+            "[runtime][unit][scan][cover]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto const targetFile = musicRoot / "song.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("with_cover.flac"), targetFile);
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto const trackId = requireOneInsertedTrack(ml);
+    auto const before = readCoverFacts(ml, trackId);
+    REQUIRE(before.count == 1);
+    curateTrack(ml, trackId);
+
+    replaceScannedFile(targetFile, audio::test::requireAudioFixture("basic_metadata.flac"));
+
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(plan.items().front().classification == ScanClassification::Changed);
+    auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
+    auto runRes = executor.run();
+    REQUIRE(runRes);
+    CHECK(runRes->mutatedIds == std::vector{trackId});
+
+    // Leaving the old reference in place would leave the library naming content
+    // no file holds, so the reference goes even though the descriptor row stays:
+    // a Resource row is append-only, and another carrier may still hold it.
+    CHECK(readCoverFacts(ml, trackId).count == 0);
+    CHECK(resourceRowCount(ml) == 1);
+    auto transaction = ml.readTransaction();
+    CHECK(ml.resources().reader(transaction).get(before.primaryId));
+    checkCurationSurvived(ml, trackId);
+  }
+
+  TEST_CASE("ScanApplyOperation - retagging a file back to its earlier art reuses the existing row",
+            "[runtime][unit][scan][cover]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto const targetFile = musicRoot / "song.flac";
+    auto const coverFixture = audio::test::requireAudioFixture("with_cover.flac");
+    std::filesystem::copy_file(coverFixture, targetFile);
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto const trackId = requireOneInsertedTrack(ml);
+    auto const first = readCoverFacts(ml, trackId);
+    REQUIRE(first.count == 1);
+
+    replaceScannedFile(targetFile, audio::test::requireAudioFixture("basic_metadata.flac"));
+    REQUIRE(requireScanApplied(ml).mutatedIds == std::vector{trackId});
+    REQUIRE(readCoverFacts(ml, trackId).count == 0);
+
+    replaceScannedFile(targetFile, coverFixture);
+    REQUIRE(requireScanApplied(ml).mutatedIds == std::vector{trackId});
+
+    // The digest is the identity, so the returning art resolves to the row that
+    // was already there instead of adding a second one for the same content.
+    auto const restored = readCoverFacts(ml, trackId);
+    CHECK(restored.count == 1);
+    CHECK(restored.primaryId == first.primaryId);
+    CHECK(resourceRowCount(ml) == 1);
+  }
+
+  TEST_CASE("ScanApplyOperation - a moved file's cover set follows the destination file",
+            "[runtime][unit][scan][cover]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto const originalFile = musicRoot / "a.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("with_cover.flac"), originalFile);
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto const trackId = requireOneInsertedTrack(ml);
+    REQUIRE(readCoverFacts(ml, trackId).count == 1);
+    curateTrack(ml, trackId);
+
+    // A move is matched by audio payload alone, and these two fixtures are
+    // encoded from one source signal, so the destination carries the same audio
+    // with different pictures.
+    auto const movedFile = musicRoot / "b.flac";
+    std::filesystem::remove(originalFile);
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), movedFile);
+
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(plan.size() == 1);
+    REQUIRE(plan.items().front().classification == ScanClassification::Moved);
+    REQUIRE(plan.items().front().oldUri == "a.flac");
+
+    auto counts = FailureCounts{};
+    auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
+    auto runRes = executor.run();
+    REQUIRE(runRes);
+    CHECK(runRes->relinkedIds == std::vector{trackId});
+    CHECK(counts.failed == 0);
+
+    // A relink that kept the old reference would conceal itself: the manifest now
+    // matches the file, so no later scan looks at this track's art again.
+    CHECK(readCoverFacts(ml, trackId).count == 0);
+    checkCurationSurvived(ml, trackId);
+    {
+      auto transaction = ml.readTransaction();
+      auto const optView = ml.tracks().reader(transaction).get(trackId);
+      REQUIRE(optView);
+      CHECK(optView->property().uri() == "b.flac");
+    }
+
+    auto const nextPlan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(nextPlan.size() == 1);
+    CHECK(nextPlan.items().front().classification == ScanClassification::Unchanged);
+  }
+
+  TEST_CASE("ScanApplyOperation - an unchanged file rewrites nothing about its cover", "[runtime][unit][scan][cover]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    std::filesystem::copy_file(audio::test::requireAudioFixture("with_cover.flac"), musicRoot / "song.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto const trackId = requireOneInsertedTrack(ml);
+    auto const before = readCoverFacts(ml, trackId);
+    REQUIRE(before.count == 1);
+    REQUIRE(before.optDescriptor);
+    auto const revisionBefore = readLibraryRevision(ml);
+
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(plan.items().front().classification == ScanClassification::Unchanged);
+    auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
+    auto runRes = executor.run();
+    REQUIRE(runRes);
+    CHECK(changedTrackIds(*runRes).empty());
+
+    // Re-extracting identical art would produce the same digest, so an unchanged
+    // item has nothing to write and must not open a revision for it.
+    CHECK(readLibraryRevision(ml) == revisionBefore);
+    CHECK(resourceRowCount(ml) == 1);
+
+    auto const after = readCoverFacts(ml, trackId);
+    CHECK(after.count == before.count);
+    CHECK(after.primaryId == before.primaryId);
+    REQUIRE(after.optDescriptor);
+    CHECK(after.optDescriptor->digest == before.optDescriptor->digest);
+    CHECK(after.optDescriptor->byteLength == before.optDescriptor->byteLength);
   }
 
   TEST_CASE("ScanApplyOperation - ignores non-decodable files omitted from the plan", "[runtime][unit][library][scan]")

@@ -12,6 +12,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
@@ -350,6 +351,7 @@ namespace ao::gtk::platform::test
         trackId = library::test::addTrackWithUniqueFixtureUri(
           musicLibrary, library::test::TrackSpec{.title = "Cover Track", .uri = fixtureUri, .coverArtId = resourceId});
       }};
+    ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), kPngBytes);
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime);
     auto& playback = runtime.playback();
