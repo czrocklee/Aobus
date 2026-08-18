@@ -1055,6 +1055,24 @@ namespace ao::library::test
       std::ignore = FileManifestBuilder::fromView(FileManifestView{std::span<std::byte const>{}});
     }
 
+    if (name == "manifest-bind-zero-track")
+    {
+      if (auto unboundRes = FileManifestBuilder::makeEmpty().validate("probe.flac"); unboundRes)
+      {
+        std::ignore = std::move(*unboundRes).bind(kInvalidTrackId);
+      }
+    }
+
+    if (name == "manifest-bind-consumed")
+    {
+      if (auto unboundRes = FileManifestBuilder::makeEmpty().validate("probe.flac"); unboundRes)
+      {
+        std::ignore = std::move(*unboundRes).bind(TrackId{1});
+        // NOLINTNEXTLINE(bugprone-use-after-move): the probe deliberately rebinds a consumed manifest.
+        std::ignore = std::move(*unboundRes).bind(TrackId{2});
+      }
+    }
+
     if (name == "list-store-zero-update")
     {
       return runZeroListUpdate(scratchName);

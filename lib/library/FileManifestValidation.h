@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/library/FileManifestLayout.h>
 #include <ao/library/LibraryUri.h>
 
 #include <array>
@@ -36,6 +37,10 @@ namespace ao::library
     std::string_view uri;
   };
 
+  /** Record facts that do not depend on the owning Track binding. */
+  Result<> validateManifestFacts(FileManifestHeader const& header);
+
+  Result<std::string_view> validateFileManifestKey(std::span<std::byte const> rawKey);
   Result<> validateFileManifestPayload(std::span<std::byte const> payload);
   Result<ValidatedFileManifestEntry> validateFileManifestEntry(std::span<std::byte const> rawKey,
                                                                std::span<std::byte const> payload);

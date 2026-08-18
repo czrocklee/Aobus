@@ -131,7 +131,9 @@ The corresponding item is neutral relative to its entry transaction state when p
 Prepared Track sides retain typed snapshots rather than a second encoded copy, so the canonical byte validators run after the zero-copy encoder fills storage and again during open admission.
 
 `FileManifestStore` applies one exact validator at its point-read, iterator, prepared-write, and open-validation boundaries.
-`FileManifestBuilder::prepare()` parses the manifest URI, applies the complete key/value validator, and snapshots a locally valid record before mutation; the Store writer accepts only that prepared value.
+`FileManifestBuilder::validate()` parses the manifest URI and applies every key and record fact that does not depend on the owning Track id, which a creating write only allocates once its Track record exists.
+Its unbound result always carries a zero Track id, so no caller-supplied or stale builder binding can reach storage.
+`FileManifestBuilder::Unbound::bind()` then supplies the real nonzero id, cannot fail, and reapplies the complete record validator as its postcondition; the Store writer accepts only that bound value.
 The writer passes the prepared owning bytes through the ordinary copied-data path; the same validator already established their canonical representation before mutation.
 Only `NotFound` denotes absence at a point read.
 A malformed manifest point-read or iterator row violates the already-established open invariant and fails fast instead of becoming a skippable item or partial output.
@@ -409,7 +411,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`TrackStoreTest.cpp`](../../test/unit/library/TrackStoreTest.cpp) and [`TrackStoreRawLayoutTest.cpp`](../../test/unit/library/TrackStoreRawLayoutTest.cpp) protect batch order, missing-row behavior, the complete Reader range, physical-side projections, coordinated hot/cold traversal, and prepared record writes.
 - [`TrackStoreIntegrityTest.cpp`](../../test/unit/library/TrackStoreIntegrityTest.cpp) protects reserved-id rejection and fail-closed rejection of non-canonical persisted records.
 - [`DatabaseWriterTest.cpp`](../../test/unit/lmdb/DatabaseWriterTest.cpp) protects the copied-data-only public LMDB writer boundary and the source-private reservation encoder contract.
-- [`ListBuilderTest.cpp`](../../test/unit/library/ListBuilderTest.cpp), [`ListStoreTest.cpp`](../../test/unit/library/ListStoreTest.cpp), [`FileManifestBuilderTest.cpp`](../../test/unit/library/FileManifestBuilderTest.cpp), and [`FileManifestStoreTest.cpp`](../../test/unit/library/FileManifestStoreTest.cpp) protect prepared snapshots, prepared-only writer surfaces, local record validation, and post-open iterator fail-fast behavior.
+- [`ListBuilderTest.cpp`](../../test/unit/library/ListBuilderTest.cpp), [`ListStoreTest.cpp`](../../test/unit/library/ListStoreTest.cpp), [`FileManifestBuilderTest.cpp`](../../test/unit/library/FileManifestBuilderTest.cpp), and [`FileManifestStoreTest.cpp`](../../test/unit/library/FileManifestStoreTest.cpp) protect prepared snapshots, binding-independent manifest validation, prepared-only writer surfaces, local record validation, and post-open iterator fail-fast behavior.
 - [`LibraryProbeTest.cpp`](../../test/unit/library/LibraryProbeTest.cpp) protects prepared-write preconditions, post-open Store and cross-Store trust, revision exhaustion, LMDB lifetime contracts, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) protects runtime consumers that enforce admitted cross-Store references before producing external output.
 - [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.

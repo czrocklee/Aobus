@@ -28,32 +28,6 @@ namespace ao::library
     {
       return (size + 3U) & ~std::size_t{3U};
     }
-
-    Result<std::string_view> validateManifestKey(std::span<std::byte const> const rawKey)
-    {
-      if (rawKey.empty() || rawKey.size() % 4U != 0 || rawKey.size() > paddedUriSize(LibraryUri::kMaxLength))
-      {
-        return makeError(Error::Code::CorruptData, "File manifest key has an invalid size");
-      }
-
-      auto const key = utility::bytes::stringView(rawKey);
-      auto const terminator = key.find('\0');
-      auto const uri = terminator == std::string_view::npos ? key : key.substr(0, terminator);
-
-      if (uri.empty() || paddedUriSize(uri.size()) != rawKey.size() ||
-          (terminator != std::string_view::npos &&
-           !std::ranges::all_of(key.substr(terminator), [](char const value) { return value == '\0'; })))
-      {
-        return makeError(Error::Code::CorruptData, "File manifest key is not minimally zero padded");
-      }
-
-      if (!detail::isCanonicalLibraryUri(uri))
-      {
-        return makeError(Error::Code::CorruptData, std::format("File manifest key '{}' is not canonical", uri));
-      }
-
-      return uri;
-    }
   } // namespace
 
   detail::PaddedFileManifestKey::PaddedFileManifestKey(std::string_view const uri)
@@ -68,21 +42,34 @@ namespace ao::library
     }
   }
 
-  Result<> validateFileManifestPayload(std::span<std::byte const> const payload)
+  Result<std::string_view> validateFileManifestKey(std::span<std::byte const> const rawKey)
   {
-    if (payload.size() != sizeof(FileManifestHeader))
+    if (rawKey.empty() || rawKey.size() % 4U != 0 || rawKey.size() > paddedUriSize(LibraryUri::kMaxLength))
     {
-      return makeError(Error::Code::CorruptData, "File manifest payload has an invalid size");
+      return makeError(Error::Code::CorruptData, "File manifest key has an invalid size");
     }
 
-    auto header = FileManifestHeader{};
-    std::memcpy(&header, payload.data(), sizeof(header));
+    auto const key = utility::bytes::stringView(rawKey);
+    auto const terminator = key.find('\0');
+    auto const uri = terminator == std::string_view::npos ? key : key.substr(0, terminator);
 
-    if (header.trackId == kInvalidTrackId)
+    if (uri.empty() || paddedUriSize(uri.size()) != rawKey.size() ||
+        (terminator != std::string_view::npos &&
+         !std::ranges::all_of(key.substr(terminator), [](char const value) { return value == '\0'; })))
     {
-      return makeError(Error::Code::CorruptData, "File manifest payload contains track id zero");
+      return makeError(Error::Code::CorruptData, "File manifest key is not minimally zero padded");
     }
 
+    if (!detail::isCanonicalLibraryUri(uri))
+    {
+      return makeError(Error::Code::CorruptData, std::format("File manifest key '{}' is not canonical", uri));
+    }
+
+    return uri;
+  }
+
+  Result<> validateManifestFacts(FileManifestHeader const& header)
+  {
     if (header.status != FileStatus::Available && header.status != FileStatus::Missing &&
         header.status != FileStatus::Error)
     {
@@ -105,10 +92,28 @@ namespace ao::library
     return {};
   }
 
+  Result<> validateFileManifestPayload(std::span<std::byte const> const payload)
+  {
+    if (payload.size() != sizeof(FileManifestHeader))
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload has an invalid size");
+    }
+
+    auto header = FileManifestHeader{};
+    std::memcpy(&header, payload.data(), sizeof(header));
+
+    if (header.trackId == kInvalidTrackId)
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload contains track id zero");
+    }
+
+    return validateManifestFacts(header);
+  }
+
   Result<ValidatedFileManifestEntry> validateFileManifestEntry(std::span<std::byte const> const rawKey,
                                                                std::span<std::byte const> const payload)
   {
-    auto uriRes = validateManifestKey(rawKey);
+    auto uriRes = validateFileManifestKey(rawKey);
 
     if (!uriRes)
     {

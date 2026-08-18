@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
+#include <utility>
 
 namespace ao::library::test
 {
@@ -67,32 +68,70 @@ namespace ao::library::test
     CHECK(view2.status() == FileStatus::Missing);
   }
 
-  TEST_CASE("FileManifestBuilder - prepared value owns canonical URI and payload snapshots",
-            "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - unbound value owns canonical URI and payload snapshots", "[library][unit][manifest]")
   {
     auto uri = std::string{"snapshot.flac"};
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{7}).fileSize(11).mtime(13).status(FileStatus::Missing);
-    auto const prepared = ao::test::requireValue(builder.prepare(uri));
+    auto unbound = ao::test::requireValue(builder.validate(uri));
 
     uri = "mutated.flac";
     builder.trackId(TrackId{9}).fileSize(17);
+    auto const prepared = std::move(unbound).bind(TrackId{21});
     auto const bytes = prepared.bytes();
     auto const view = FileManifestView{bytes};
 
     CHECK(prepared.uri() == "snapshot.flac");
     REQUIRE(validateFileManifestPayload(bytes));
-    CHECK(view.trackId() == TrackId{7});
+    // Neither builder id survives validation; only the bound id reaches storage.
+    CHECK(view.trackId() == TrackId{21});
     CHECK(view.fileSize() == 11);
     CHECK(view.mtime() == 13);
     CHECK(view.status() == FileStatus::Missing);
   }
 
-  TEST_CASE("FileManifestBuilder - preparation rejects a non-canonical URI", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - validation is independent of the Track binding", "[library][unit][manifest]")
   {
-    auto const preparedRes = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).prepare("../outside.flac");
+    auto const builder = FileManifestBuilder::makeEmpty();
+    auto unbound = ao::test::requireValue(builder.validate("unbound.flac"));
 
-    REQUIRE_FALSE(preparedRes);
-    CHECK(preparedRes.error().code == Error::Code::InvalidInput);
+    CHECK(unbound.uri() == "unbound.flac");
+
+    auto const prepared = std::move(unbound).bind(TrackId{5});
+
+    REQUIRE(validateFileManifestPayload(prepared.bytes()));
+    CHECK(FileManifestView{prepared.bytes()}.trackId() == TrackId{5});
+  }
+
+  TEST_CASE("FileManifestBuilder - validation rejects broken record facts", "[library][unit][manifest]")
+  {
+    auto const invalidStatusRes =
+      FileManifestBuilder::makeEmpty().status(static_cast<FileStatus>(0xff)).validate("status.flac");
+
+    REQUIRE_FALSE(invalidStatusRes);
+    CHECK(invalidStatusRes.error().code == Error::Code::CorruptData);
+
+    auto const pendingSignatureRes = FileManifestBuilder::makeEmpty().audioPayloadLength(1).validate("identity.flac");
+
+    REQUIRE_FALSE(pendingSignatureRes);
+    CHECK(pendingSignatureRes.error().code == Error::Code::CorruptData);
+  }
+
+  TEST_CASE("FileManifestBuilder - validation rejects a non-canonical URI", "[library][unit][manifest]")
+  {
+    auto const unboundRes = FileManifestBuilder::makeEmpty().validate("../outside.flac");
+
+    REQUIRE_FALSE(unboundRes);
+    CHECK(unboundRes.error().code == Error::Code::InvalidInput);
+  }
+
+  TEST_CASE("FileManifestBuilder - the complete payload validator still rejects Track zero",
+            "[library][unit][manifest]")
+  {
+    auto const payload = FileManifestBuilder::makeEmpty().serialize();
+    auto const validationRes = validateFileManifestPayload(payload);
+
+    REQUIRE_FALSE(validationRes);
+    CHECK(validationRes.error().code == Error::Code::CorruptData);
   }
 } // namespace ao::library::test

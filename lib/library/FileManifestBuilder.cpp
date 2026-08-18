@@ -82,7 +82,25 @@ namespace ao::library
   {
   }
 
-  Result<FileManifestBuilder::Prepared> FileManifestBuilder::prepare(std::string_view uri) const
+  FileManifestBuilder::Unbound::Unbound(LibraryUri uri, FileManifestHeader header)
+    : _uri{std::move(uri)}, _header{header}
+  {
+  }
+
+  FileManifestBuilder::Prepared FileManifestBuilder::Unbound::bind(TrackId const id) && noexcept
+  {
+    AO_EXPECTS(_header.trackId == kInvalidTrackId, "Cannot bind a file manifest that was already bound");
+    AO_EXPECTS(id != kInvalidTrackId, "Cannot bind a file manifest to Track zero");
+
+    _header.trackId = id;
+    auto prepared = Prepared{std::move(_uri), _header};
+
+    AO_ENSURES(validateFileManifestPayload(prepared.bytes()),
+               "Bound file manifest payload failed the complete record validator");
+    return prepared;
+  }
+
+  Result<FileManifestBuilder::Unbound> FileManifestBuilder::validate(std::string_view const uri) const
   {
     auto uriRes = LibraryUri::parse(uri);
 
@@ -91,20 +109,26 @@ namespace ao::library
       return std::unexpected{uriRes.error()};
     }
 
-    return prepare(std::move(*uriRes));
+    return validate(std::move(*uriRes));
   }
 
-  Result<FileManifestBuilder::Prepared> FileManifestBuilder::prepare(LibraryUri uri) const
+  Result<FileManifestBuilder::Unbound> FileManifestBuilder::validate(LibraryUri uri) const
   {
     auto const key = detail::PaddedFileManifestKey{uri.value()};
-    auto const payload = std::as_bytes(std::span{&_header, std::size_t{1}});
 
-    if (auto validationRes = validateFileManifestEntry(key.bytes(), payload); !validationRes)
+    if (auto const keyRes = validateFileManifestKey(key.bytes()); !keyRes)
     {
-      return std::unexpected{validationRes.error()};
+      return std::unexpected{keyRes.error()};
     }
 
-    return Prepared{std::move(uri), _header};
+    if (auto const factsRes = validateManifestFacts(_header); !factsRes)
+    {
+      return std::unexpected{factsRes.error()};
+    }
+
+    auto unboundHeader = _header;
+    unboundHeader.trackId = kInvalidTrackId;
+    return Unbound{std::move(uri), unboundHeader};
   }
 
   std::vector<std::byte> FileManifestBuilder::serialize() const

@@ -296,8 +296,11 @@ Zero payload length together with an all-zero signature means pending audio iden
 Manifest point reads, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
 Values must be exactly 48 bytes, carry a nonzero Track id, a declared status, three zero reserved bytes, and either both parts of an audio identity or neither.
-`FileManifestBuilder::prepare()` parses the URI, applies the complete canonical key/value validator without allocating a serialized payload, and snapshots the header before mutation.
-`FileManifestStore::Writer::put()` accepts only the prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
+Preparation is split because a creating write only allocates the owning Track id once its Track record exists.
+`FileManifestBuilder::validate()` parses the URI, applies the canonical key validator and every record fact that does not depend on that binding, and snapshots a zero-id header without allocating a serialized payload.
+`FileManifestBuilder::Unbound::bind()` supplies the nonzero owning Track id, cannot fail, and reapplies the complete payload validator as its postcondition, so every stored value still passes one exact validator.
+It consumes its unbound value exactly once; rebinding a consumed value surrenders the validated key and is a caller call-order violation that fails through `AO_EXPECTS`.
+`FileManifestStore::Writer::put()` accepts only the bound prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
 Only a point-read `NotFound` may be interpreted as absence.
 Point reads and iterator dereference after a successful open assume the validated Store invariant; a malformed row fails through `AO_INVARIANT` rather than being skipped, returned as partial output, or exposed through a private library error carrier.
 
@@ -410,7 +413,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
 - [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
 - [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks the prepared-only writer surface, pre-mutation validation, and post-open fail-fast point-read, writer-read, and iteration behavior.
-- [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock prepared snapshots, the prepared-only writer surface, manifest validation, point-read outcomes, and post-open iterator fail-fast behavior.
+- [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock unbound and bound snapshots, binding-independent validation, the prepared-only writer surface, manifest validation, point-read outcomes, and post-open iterator fail-fast behavior.
 - [`LibraryProbeTest.cpp`](../../../../test/unit/library/LibraryProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, LMDB lifetime misuse, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) locks a runtime YAML consumer's post-open Resource-reference invariant to the same fatal diagnostics.
 - [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, named-DBI-open, cursor-row, and manifest-point-read evidence.

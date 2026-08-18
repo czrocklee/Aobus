@@ -26,8 +26,6 @@ namespace ao::library
 {
   namespace
   {
-    constexpr auto kManifestPreflightTrackId = TrackId{1};
-
     Result<std::string> requireTrackUri(TrackStore::Writer const& writer, TrackId const id)
     {
       auto const optView = writer.get(id, TrackStore::Reader::LoadMode::Both);
@@ -124,18 +122,19 @@ namespace ao::library
     }
 
     auto& manifestWriter = _transaction->manifestStoreWriter();
-    // Creation allocates a nonzero Track id. Use one only to validate the
-    // caller-owned manifest facts before Track preparation can stage effects.
-    auto const preflightRes = manifestBuilder.trackId(kManifestPreflightTrackId).prepare(track.property().uri());
+    // Manifest validation does not depend on the Track id that creation
+    // allocates, so it completes before Track preparation can stage effects and
+    // binds the real id only once the Track record exists.
+    auto unboundManifestRes = manifestBuilder.validate(track.property().uri());
 
-    if (!preflightRes)
+    if (!unboundManifestRes)
     {
-      return std::unexpected{preflightRes.error()};
+      return std::unexpected{unboundManifestRes.error()};
     }
 
-    if (manifestWriter.get(preflightRes->uri()))
+    if (manifestWriter.get(unboundManifestRes->uri()))
     {
-      return makeError(Error::Code::Conflict, std::format("Manifest '{}' already exists", preflightRes->uri()));
+      return makeError(Error::Code::Conflict, std::format("Manifest '{}' already exists", unboundManifestRes->uri()));
     }
 
     auto preparedTrackRes = track.prepare(*_transaction, _transaction->resourceStore());
@@ -146,7 +145,7 @@ namespace ao::library
     }
 
     auto const& [hot, cold] = *preparedTrackRes;
-    AO_INVARIANT(cold.uri() == preflightRes->uri(), "Track and manifest URI validation disagreed");
+    AO_INVARIANT(cold.uri() == unboundManifestRes->uri(), "Track and manifest URI validation disagreed");
     auto& trackWriter = _transaction->trackStoreWriter();
     auto idRes = createPreparedTrackRecord(trackWriter, hot, cold);
 
@@ -155,12 +154,7 @@ namespace ao::library
       return std::unexpected{idRes.error()};
     }
 
-    auto preparedManifestRes = manifestBuilder.trackId(*idRes).prepare(cold.uri());
-    AO_INVARIANT(preparedManifestRes,
-                 "Validated manifest failed preparation after Track id assignment: {}",
-                 preparedManifestRes.error().message);
-
-    if (auto putRes = manifestWriter.put(*preparedManifestRes); !putRes)
+    if (auto putRes = manifestWriter.put(std::move(*unboundManifestRes).bind(*idRes)); !putRes)
     {
       throwAfterMutation(std::move(putRes.error()));
     }
@@ -295,11 +289,11 @@ namespace ao::library
       return resourceRes;
     }
 
-    auto preparedManifestRes = manifestBuilder.trackId(id).prepare(*currentUriRes);
+    auto unboundManifestRes = manifestBuilder.validate(*currentUriRes);
 
-    if (!preparedManifestRes)
+    if (!unboundManifestRes)
     {
-      return std::unexpected{preparedManifestRes.error()};
+      return std::unexpected{unboundManifestRes.error()};
     }
 
     auto preparedTrackRes = track.prepare(*_transaction, _transaction->resourceStore());
@@ -317,7 +311,7 @@ namespace ao::library
       return updateRes;
     }
 
-    if (auto putRes = manifestWriter.put(*preparedManifestRes); !putRes)
+    if (auto putRes = manifestWriter.put(std::move(*unboundManifestRes).bind(id)); !putRes)
     {
       throwAfterMutation(std::move(putRes.error()));
     }
@@ -341,14 +335,14 @@ namespace ao::library
 
     requireManifestBinding(manifestWriter, *currentUriRes, id);
 
-    auto preparedRes = manifestBuilder.trackId(id).prepare(*currentUriRes);
+    auto unboundRes = manifestBuilder.validate(*currentUriRes);
 
-    if (!preparedRes)
+    if (!unboundRes)
     {
-      return std::unexpected{preparedRes.error()};
+      return std::unexpected{unboundRes.error()};
     }
 
-    return manifestWriter.put(*preparedRes);
+    return manifestWriter.put(std::move(*unboundRes).bind(id));
   }
 
   Result<> TrackWriter::relink(TrackId const id, TrackBuilder const& track, FileManifestBuilder manifestBuilder)
@@ -372,16 +366,16 @@ namespace ao::library
 
     requireManifestBinding(manifestWriter, *oldUriRes, id);
 
-    auto preparedManifestRes = manifestBuilder.trackId(id).prepare(track.property().uri());
+    auto unboundManifestRes = manifestBuilder.validate(track.property().uri());
 
-    if (!preparedManifestRes)
+    if (!unboundManifestRes)
     {
-      return std::unexpected{preparedManifestRes.error()};
+      return std::unexpected{unboundManifestRes.error()};
     }
 
-    if (manifestWriter.get(preparedManifestRes->uri()))
+    if (manifestWriter.get(unboundManifestRes->uri()))
     {
-      return makeError(Error::Code::Conflict, std::format("Manifest '{}' already exists", preparedManifestRes->uri()));
+      return makeError(Error::Code::Conflict, std::format("Manifest '{}' already exists", unboundManifestRes->uri()));
     }
 
     if (auto resourceRes = validateResourceReferences(track); !resourceRes)
@@ -397,7 +391,7 @@ namespace ao::library
     }
 
     auto const& [hot, cold] = *preparedTrackRes;
-    AO_INVARIANT(cold.uri() == preparedManifestRes->uri(), "Track and manifest URI validation disagreed");
+    AO_INVARIANT(cold.uri() == unboundManifestRes->uri(), "Track and manifest URI validation disagreed");
 
     if (auto updateRes = updatePreparedTrackRecord(writer, id, hot, cold); !updateRes)
     {
@@ -407,7 +401,7 @@ namespace ao::library
     auto const removedOldManifest = manifestWriter.remove(*oldUriRes);
     AO_INVARIANT(removedOldManifest, "Validated old manifest binding disappeared during relink");
 
-    if (auto putRes = manifestWriter.put(*preparedManifestRes); !putRes)
+    if (auto putRes = manifestWriter.put(std::move(*unboundManifestRes).bind(id)); !putRes)
     {
       throwAfterMutation(std::move(putRes.error()));
     }
