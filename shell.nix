@@ -90,6 +90,7 @@ pkgs.mkShell {
       bubblewrap
       rsync
       cmake
+      git
       gperf
       ripgrep
       pkg-config
