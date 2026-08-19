@@ -67,7 +67,8 @@ namespace ao::media::ogg::test
     {
       auto const pages = std::array{Page{
         .headerType = kBeginOfStreamFlag, .version = 1, .lacingValues = lacingFor({4}), .payload = payloadFor({4})}};
-      auto const result = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const result = Demuxer::parse(stream);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -75,7 +76,8 @@ namespace ao::media::ogg::test
     SECTION("A first page that does not begin a bitstream is corrupt")
     {
       auto const pages = std::array{Page{.lacingValues = lacingFor({4}), .payload = payloadFor({4})}};
-      auto const result = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const result = Demuxer::parse(stream);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -116,7 +118,8 @@ namespace ao::media::ogg::test
                         .pageSequence = 1,
                         .lacingValues = lacingFor({4}),
                         .payload = payloadFor({4})}};
-      auto const result = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const result = Demuxer::parse(stream);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -126,7 +129,8 @@ namespace ao::media::ogg::test
       auto const pages = std::array{
         Page{.headerType = kBeginOfStreamFlag, .lacingValues = {255}, .payload = std::vector<std::uint8_t>(255, 1)},
         Page{.pageSequence = 1, .lacingValues = lacingFor({4}), .payload = payloadFor({4})}};
-      auto const result = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const result = Demuxer::parse(stream);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -142,7 +146,8 @@ namespace ao::media::ogg::test
                       .lacingValues = lacingFor({5}),
                       .payload = payloadFor({5})}};
 
-    auto const result = Demuxer::parse(makeStream(pages));
+    auto const stream = makeStream(pages);
+    auto const result = Demuxer::parse(stream);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::CorruptData);
@@ -154,7 +159,8 @@ namespace ao::media::ogg::test
                                        .granulePosition = 960,
                                        .lacingValues = lacingFor({4, 8, 2}),
                                        .payload = payloadFor({4, 8, 2})}};
-    auto const demuxerRes = Demuxer::parse(makeStream(pages));
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
     REQUIRE(demuxerRes);
 
     auto const& demuxer = *demuxerRes;
@@ -181,7 +187,8 @@ namespace ao::media::ogg::test
                                        .granulePosition = 480,
                                        .lacingValues = lacingFor({4, 0, 4}),
                                        .payload = payloadFor({4, 0, 4})}};
-    auto const demuxerRes = Demuxer::parse(makeStream(pages));
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
     REQUIRE(demuxerRes);
 
     REQUIRE(demuxerRes->packetCount() == 3);
@@ -195,7 +202,8 @@ namespace ao::media::ogg::test
                                        .granulePosition = 480,
                                        .lacingValues = lacingFor({255}),
                                        .payload = payloadFor({255})}};
-    auto const demuxerRes = Demuxer::parse(makeStream(pages));
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
     REQUIRE(demuxerRes);
 
     REQUIRE(demuxerRes->packetCount() == 1);
@@ -214,7 +222,8 @@ namespace ao::media::ogg::test
              .pageSequence = 1,
              .lacingValues = lacingFor({10}),
              .payload = std::vector<std::uint8_t>(10, 7)}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
 
       REQUIRE(demuxerRes->packetCount() == 1);
@@ -234,7 +243,8 @@ namespace ao::media::ogg::test
              .pageSequence = 2,
              .lacingValues = lacingFor({5}),
              .payload = std::vector<std::uint8_t>(5, 7)}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
 
       REQUIRE(demuxerRes->packetCount() == 1);
@@ -256,7 +266,8 @@ namespace ao::media::ogg::test
                         .pageSequence = 1,
                         .lacingValues = lacingFor({6, 3}),
                         .payload = payloadFor({6, 3}, 9)}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
 
       REQUIRE(demuxerRes->packetCount() == 3);
@@ -283,7 +294,8 @@ namespace ao::media::ogg::test
                                          .pageSequence = 2,
                                          .lacingValues = lacingFor({5}),
                                          .payload = payloadFor({5})}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE_FALSE(demuxerRes);
       CHECK(demuxerRes.error().code == Error::Code::CorruptData);
     }
@@ -297,7 +309,8 @@ namespace ao::media::ogg::test
                         .pageSequence = 3,
                         .lacingValues = lacingFor({6}),
                         .payload = payloadFor({6})}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE_FALSE(demuxerRes);
       CHECK(demuxerRes.error().code == Error::Code::CorruptData);
     }
@@ -314,7 +327,8 @@ namespace ao::media::ogg::test
                                          .pageSequence = 0,
                                          .lacingValues = lacingFor({5}),
                                          .payload = payloadFor({5})}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
       CHECK(demuxerRes->packetCount() == 2);
     }
@@ -335,7 +349,8 @@ namespace ao::media::ogg::test
                                          .pageSequence = 1,
                                          .lacingValues = lacingFor({5}),
                                          .payload = payloadFor({5})}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
       CHECK(demuxerRes->packetCount() == 2);
     }
@@ -352,7 +367,8 @@ namespace ao::media::ogg::test
                                        .pageSequence = 1,
                                        .lacingValues = lacingFor({6}),
                                        .payload = payloadFor({6})}};
-    auto const demuxerRes = Demuxer::parse(makeStream(pages));
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
     REQUIRE(demuxerRes);
 
     REQUIRE(demuxerRes->pageGroupCount() == 2);
@@ -385,7 +401,8 @@ namespace ao::media::ogg::test
                         .pageSequence = 1,
                         .lacingValues = lacingFor({5}),
                         .payload = payloadFor({5})}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
 
       CHECK(demuxerRes->serialNumber() == 1);
@@ -405,7 +422,8 @@ namespace ao::media::ogg::test
                                          .serialNumber = 2,
                                          .lacingValues = lacingFor({6}),
                                          .payload = payloadFor({6})}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
 
       REQUIRE(demuxerRes->packetCount() == 1);
@@ -422,7 +440,8 @@ namespace ao::media::ogg::test
                                          .granulePosition = 480,
                                          .lacingValues = lacingFor({4}),
                                          .payload = payloadFor({4})}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
 
       CHECK(demuxerRes->packetCount() == 1);
@@ -440,7 +459,8 @@ namespace ao::media::ogg::test
                                          .granulePosition = 480,
                                          .lacingValues = trailingLacing,
                                          .payload = trailingPayload}};
-      auto const demuxerRes = Demuxer::parse(makeStream(pages));
+      auto const stream = makeStream(pages);
+      auto const demuxerRes = Demuxer::parse(stream);
       REQUIRE(demuxerRes);
 
       REQUIRE(demuxerRes->packetCount() == 1);
@@ -479,7 +499,8 @@ namespace ao::media::ogg::test
                                        .pageSequence = 2,
                                        .lacingValues = lacingFor({4}),
                                        .payload = payloadFor({4})}};
-    auto const demuxerRes = Demuxer::parse(makeStream(pages));
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
     REQUIRE(demuxerRes);
 
     REQUIRE(demuxerRes->packetCount() == 4);
@@ -504,7 +525,8 @@ namespace ao::media::ogg::test
            .pageSequence = 2,
            .lacingValues = lacingFor({4}),
            .payload = payloadFor({4})}};
-    auto const demuxerRes = Demuxer::parse(makeStream(pages));
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
     REQUIRE(demuxerRes);
 
     auto const& demuxer = *demuxerRes;
