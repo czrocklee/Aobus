@@ -26,4 +26,11 @@ namespace ao::utility
     auto const utf8 = std::u8string{value.begin(), value.end()};
     return std::filesystem::path{utf8};
   }
+
+  std::filesystem::path pathFromNative(std::basic_string_view<std::filesystem::path::value_type> value)
+  {
+    auto path = std::filesystem::path{};
+    path.assign(value);
+    return path;
+  }
 } // namespace ao::utility

@@ -4,6 +4,7 @@
 #include "TrackRecordValidation.h"
 
 #include "LibraryUriValidation.h"
+#include "TextAdmission.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/TrackLayout.h>
@@ -14,9 +15,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <span>
 #include <string_view>
 #include <tuple>
+#include <unordered_set>
 
 namespace ao::library
 {
@@ -39,9 +42,9 @@ namespace ao::library
 
   Result<> validateSerializedHotTrack(std::span<std::byte const> bytes)
   {
-    if (auto const view = TrackView{bytes, {}}; bytes.empty() || bytes.size() % kSerializedAlignmentBytes != 0 ||
-                                                !utility::bytes::isAligned(bytes.data(), kSerializedAlignmentBytes) ||
-                                                !view.isHotValid())
+    auto const view = TrackView{bytes, {}};
+    if (bytes.empty() || bytes.size() % kSerializedAlignmentBytes != 0 ||
+        !utility::bytes::isAligned(bytes.data(), kSerializedAlignmentBytes) || !view.isHotValid())
     {
       return makeError(Error::Code::CorruptData, "Hot Track record has an invalid structural layout");
     }
@@ -57,12 +60,18 @@ namespace ao::library
     auto const tagBytes = bytes.subspan(sizeof(TrackHotHeader), header->tagLength);
     auto const tags = utility::layout::viewArray<DictionaryId>(tagBytes);
     std::uint32_t expectedBloom = 0;
+    auto seenTags = std::unordered_set<DictionaryId>{};
+    seenTags.reserve(tags.size());
 
     for (auto const id : tags)
     {
       if (id == kInvalidDictionaryId)
       {
         return makeError(Error::Code::CorruptData, "Hot Track record contains an invalid tag ID");
+      }
+      if (!seenTags.insert(id).second)
+      {
+        return makeError(Error::Code::CorruptData, "Hot Track record contains a duplicate tag ID");
       }
 
       expectedBloom |= std::uint32_t{1} << (id.raw() & kBloomBitMask);
@@ -71,6 +80,12 @@ namespace ao::library
     if (header->tagBloom != expectedBloom)
     {
       return makeError(Error::Code::CorruptData, "Hot Track record tag bloom does not match its tag IDs");
+    }
+
+    auto const title = view.metadata().title();
+    if (auto titleRes = detail::validatePersistedLibraryText(title, "Track title"); !titleRes)
+    {
+      return std::unexpected{titleRes.error()};
     }
 
     return {};
@@ -88,6 +103,15 @@ namespace ao::library
     if (auto const uri = reader.uri(); !detail::isCanonicalLibraryUri(uri))
     {
       return makeError(Error::Code::CorruptData, "Cold Track record contains a non-canonical library URI");
+    }
+
+    for (auto const& [keyId, value] : reader.custom())
+    {
+      std::ignore = keyId;
+      if (auto valueRes = detail::validatePersistedLibraryText(value, "Custom metadata value"); !valueRes)
+      {
+        return std::unexpected{valueRes.error()};
+      }
     }
 
     return {};

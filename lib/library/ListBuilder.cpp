@@ -4,6 +4,7 @@
 #include <ao/library/ListBuilder.h>
 
 #include "ListRecordValidation.h"
+#include "TextAdmission.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -148,8 +149,25 @@ namespace ao::library
 
   Result<std::vector<std::byte>> ListBuilder::serializeCandidate() const
   {
-    auto const& name = _name;
-    auto const& description = _description;
+    auto nameRes = detail::normalizeLibraryText(_name, "List name");
+    if (!nameRes)
+    {
+      return std::unexpected{nameRes.error()};
+    }
+
+    auto descriptionRes = detail::normalizeLibraryText(_description, "List description");
+    if (!descriptionRes)
+    {
+      return std::unexpected{descriptionRes.error()};
+    }
+
+    if (auto expressionRes = detail::validateLibraryText(_filter, "List filter"); !expressionRes)
+    {
+      return std::unexpected{expressionRes.error()};
+    }
+
+    auto const& name = *nameRes;
+    auto const& description = *descriptionRes;
     auto const& expression = _filter;
     auto const& orderTrackIds = _orderTrackIdsBuilder._trackIds;
 

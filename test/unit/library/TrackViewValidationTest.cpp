@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/library/TrackRecordValidation.h"
 #include "test/unit/library/TrackViewTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
@@ -80,6 +81,26 @@ namespace ao::library::test
       return data;
     }
 
+    std::vector<std::byte> makeHotRecord(std::span<DictionaryId const> const tags)
+    {
+      std::uint32_t bloom = 0;
+      for (auto const id : tags)
+      {
+        bloom |= std::uint32_t{1} << (id.raw() & 31U);
+      }
+
+      auto const tagBytes = tags.size_bytes();
+      auto data = std::vector<std::byte>(alignToWord(sizeof(TrackHotHeader) + tagBytes), std::byte{0});
+      writePod(data,
+               0,
+               TrackHotHeader{
+                 .tagBloom = bloom,
+                 .tagLength = static_cast<std::uint16_t>(tagBytes),
+               });
+      std::memcpy(data.data() + sizeof(TrackHotHeader), tags.data(), tagBytes);
+      return data;
+    }
+
     std::vector<std::byte> makeClassicalPayload()
     {
       auto payload = std::vector<std::byte>(sizeof(TrackClassicalBlock), std::byte{0});
@@ -121,6 +142,20 @@ namespace ao::library::test
       return payload;
     }
 
+    std::vector<std::byte> makeDuplicateCustomKeyPayload()
+    {
+      auto payload = makeUnsortedCustomPayload();
+      auto const entryOffset = sizeof(CustomMetadataBlockHeader);
+      auto* first = utility::layout::viewMutable<CustomMetadataEntry>(std::span{payload}.subspan(entryOffset));
+      auto* second = utility::layout::viewMutable<CustomMetadataEntry>(
+        std::span{payload}.subspan(entryOffset + sizeof(CustomMetadataEntry)));
+      REQUIRE(first != nullptr);
+      REQUIRE(second != nullptr);
+      first->keyId = DictionaryId{1};
+      second->keyId = DictionaryId{1};
+      return payload;
+    }
+
     /** The deep verifier must reject the record. */
     void checkVerifierRejects(std::vector<std::byte> const& data)
     {
@@ -153,6 +188,19 @@ namespace ao::library::test
     auto const data = makeMinimalHotTrackViewData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == true);
+  }
+
+  TEST_CASE("Track validation rejects duplicate persisted tag IDs", "[library][unit][track][validation][unicode]")
+  {
+    auto const tagIds = std::array{DictionaryId{7}, DictionaryId{7}};
+    auto const data = makeHotRecord(tagIds);
+    auto const view = TrackView{data, std::span<std::byte const>{}};
+    auto const result = validateSerializedHotTrack(data);
+
+    REQUIRE(view.isHotValid());
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
+    CHECK(result.error().message.contains("duplicate tag ID"));
   }
 
   TEST_CASE("TrackView - rejects null hot data", "[library][unit][track][validation]")
@@ -699,6 +747,13 @@ namespace ao::library::test
     {
       auto const data = makeColdRecord(
         {RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = makeUnsortedCustomPayload()}});
+      checkVerifierRejects(data);
+    }
+
+    SECTION("custom entries repeat a dictionary key")
+    {
+      auto const data = makeColdRecord(
+        {RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = makeDuplicateCustomKeyPayload()}});
       checkVerifierRejects(data);
     }
 

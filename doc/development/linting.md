@@ -212,6 +212,22 @@ offline machine. A pre-extracted root must contain the LLVM and Clang CMake
 packages, static libraries, tools, and resource headers; configuration fails
 closed when any required SDK file is missing.
 
+## Filesystem path text boundaries
+
+`aobus-portability-explicit-path-conversion` rejects
+ambient narrow conversions in both directions: `path::string()` /
+`path::generic_string()` and construction of a path from narrow text. Text and
+durable interchange use `pathToUtf8()`, `pathToGenericUtf8()`, or
+`pathFromUtf8()`. POSIX APIs that supply native filename bytes enter through
+`pathFromNative()`, while calls back into a native filesystem API use
+`path::native()`. A narrow-only process API receives explicit UTF-8 under the
+Windows executable manifest contract. These boundaries use the facade rather
+than site-local `NOLINT` approvals.
+
+Ordinary tests remain outside this policy. Shared, POSIX, and Windows-only
+production translation units are all covered; host-specific tidy runs provide
+the compile commands for their respective sources.
+
 ## Header function definitions
 
 `aobus-readability-header-function-definition` keeps concrete implementation out of headers so ordinary builds, tests, and lint runs do not repeatedly parse and instantiate the same implementation.

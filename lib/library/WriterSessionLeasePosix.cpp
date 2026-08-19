@@ -3,6 +3,7 @@
 
 #include "WriterSessionLease.h"
 #include <ao/Error.h>
+#include <ao/utility/Path.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -78,7 +79,7 @@ namespace ao::library::detail
 
   Result<WriterSessionLease> WriterSessionLease::acquire(std::filesystem::path const& databasePath)
   {
-    auto const leasePath = databasePath / kWriterLeaseFileName;
+    auto const leasePath = databasePath / utility::pathFromUtf8(kWriterLeaseFileName);
     auto const descriptor = openLeaseFile(leasePath);
 
     if (descriptor < 0)

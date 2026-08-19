@@ -4,6 +4,7 @@
 #include "app/GtkAccelTranslator.h"
 
 #include <ao/uimodel/input/KeyChord.h>
+#include <ao/utility/String.h>
 
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
@@ -11,7 +12,6 @@
 #include <gtkmm/accelerator.h>
 
 #include <array>
-#include <cctype>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -131,7 +131,7 @@ namespace ao::gtk
 
       if (token.size() == 1)
       {
-        auto const lowered = static_cast<gunichar>(std::tolower(static_cast<unsigned char>(token.front())));
+        auto const lowered = static_cast<gunichar>(static_cast<unsigned char>(utility::toAsciiLower(token.front())));
 
         if (auto const keyval = ::gdk_unicode_to_keyval(lowered); keyval != 0)
         {
@@ -190,9 +190,9 @@ namespace ao::gtk
       {
         auto ch = static_cast<char>(codepoint);
 
-        if (std::isalpha(static_cast<unsigned char>(ch)) != 0)
+        if (utility::isAsciiAlpha(ch))
         {
-          ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+          ch = utility::toAsciiUpper(ch);
         }
 
         return std::string{ch};

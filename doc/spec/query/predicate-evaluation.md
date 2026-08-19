@@ -28,6 +28,7 @@ Its public compiler and evaluator interfaces live under `include/ao/query/` and 
 - **Dictionary read context** is the synchronous committed lookup/text port borrowed by a binding and evaluator.
 - **Access profile** is the minimum `TrackView` storage tier required by a plan.
 - **Dictionary field** stores an interned id whose text is resolved through `DictionaryStore` where an operation requires text.
+- **Caseless key** is the NFC result of Unicode default full case folding and is derived for user-visible text substring matching.
 - **Existence** is the field-specific presence rule below, not merely successful field lookup.
 
 ## Invariants
@@ -36,7 +37,8 @@ Its public compiler and evaluator interfaces live under `include/ao/query/` and 
 - A successfully compiled plan has boolean result semantics.
 - A bare non-tag variable cannot compile as a predicate.
 - A bare tag variable and its explicit postfix-existence form both test tag membership.
-- Equality, inequality, ordering, substring, list membership, and range membership are case-sensitive for string values.
+- Equality, inequality, ordering, list membership, and range membership are case-sensitive for string values; `~` is Unicode-caseless for user-visible text and byte-exact for filesystem URI values.
+- Compilation validates and normalizes user-visible string constants, tag names, and custom-metadata keys to NFC before placing them in a plan; filesystem URI identity remains byte-exact and is never Unicode-normalized.
 - `in [a, b]` is equivalent to equality against one listed constant.
 - `in lower..upper` is an inclusive closed range.
 - Predicate evaluation never changes the track, dictionary, source, or presentation state.
@@ -67,6 +69,7 @@ The canonical missing-value form is a negated existence predicate such as `!$yea
 Plain text and custom metadata comparisons use the stored string.
 Equality and `in` lists over dictionary metadata resolve the expression constant to its dictionary id and compare ids.
 Substring and ordered comparisons over dictionary metadata resolve the track id back to text.
+Library text and its compiled constants are both NFC, so canonically equivalent source spellings compare identically without making any comparison case-insensitive.
 Only a direct string-constant operand contributes a dictionary symbol to its comparison; a nested comparison contributes its scalar boolean result and cannot leak an inner literal into the parent instruction.
 
 An unresolved tag never matches membership or existence.
@@ -74,10 +77,23 @@ When a current binding cannot resolve a custom key or dictionary equality consta
 An unresolved custom key also makes existence, ordered, and substring comparisons non-matching rather than treating the missing key as an empty stored value.
 A later binding may resolve the same plan-owned symbol after a committed dictionary generation advance.
 
-`~` performs case-sensitive substring containment.
+`~` requires a direct text or URI field and a direct string constant.
+For title, custom metadata, and dictionary-backed metadata it performs locale-independent Unicode-caseless substring containment.
+Compilation validates the literal, normalizes it to NFC, applies Unicode default full case folding, normalizes the result to NFC, and stores that key once in the plan.
+Evaluation derives the field key through the same operation and performs substring containment over the two keys.
+Full folding permits length-changing equivalence such as `Straße` matching `STRASSE` and maps Greek final sigma consistently; it does not remove accents or apply Turkish or other locale tailoring.
+For filesystem URI values, `~` preserves the existing byte-exact substring behavior and performs neither normalization nor case folding.
 Ordered text comparison is case-sensitive lexicographic order.
 Numeric fields compare their scaled integer values.
 Codec constants compile to their stored codec values.
+
+### Caseless-key lifetime
+
+`PlanBinding` owns only batch-local derived caseless-key caches.
+Dictionary-backed keys are indexed by dictionary id, while title and custom-text keys are indexed by exact admitted text.
+Both tables are bounded and collision-replacing; eviction may recompute a key but cannot change predicate results.
+Keys are never written to the dictionary, Track records, List records, or expression text, and no ICU-version-dependent derived bytes become durable library truth.
+The evaluator and its caches are synchronous and never run on an audio realtime path.
 
 ### Lists and ranges
 
@@ -108,7 +124,7 @@ The [track-source specification](../library/source/track-source.md) owns how Sav
 The public stages are:
 
 1. `parse(text)` produces an AST or `FormatRejected`.
-2. `compileQuery(ast)` produces a dictionary-independent `ExecutionPlan` or `FormatRejected`.
+2. `compileQuery(ast)` validates and NFC-normalizes text literals and dictionary symbols, derives text-substring keys, then produces a dictionary-independent `ExecutionPlan` or `FormatRejected`.
 3. For a dictionary-using plan, `PlanBinding(plan, context)` resolves its symbols under one committed dictionary lock and records that generation.
 4. `PlanEvaluator::matches(binding, track)` returns one membership decision.
 
@@ -122,8 +138,9 @@ Supplying an explicit `DictionaryReadContext` or bound plan is a precondition fo
 ## Failure and cancellation
 
 Syntax and semantic failures use `Error::Code::FormatRejected` with a human-readable message.
+Malformed UTF-8 or a text literal beyond the Unicode operation limit is also `FormatRejected`; compilation retains no partial constant or symbol.
 The parser reports the expression as a whole rather than a stable source offset.
-Semantic compilation provides narrower diagnostics for unknown fields, invalid units, unsupported operand types, bare fields, and non-predicate AST shapes.
+Semantic compilation provides narrower diagnostics for unknown fields, invalid units, unsupported substring operands, bare fields, and non-predicate AST shapes.
 
 The recursive compiler may use private exceptions internally, but the public compile boundary translates them to `Result`.
 Presence-only field probes used by completion return absence rather than a user-facing error.
@@ -138,7 +155,7 @@ Ordinary missing values inside a present tier remain non-matching according to t
 ## Persistence and versioning
 
 Execution plans and internal field opcodes are not persisted.
-Saved List records store local expression text, while runtime view filters retain expression text in view/session state according to their owning contracts.
+Saved List records store scalar-valid UTF-8 local expression text byte-exactly, while runtime view filters retain expression text in view/session state according to their owning contracts.
 
 A predicate change must consider retained expressions even when no record byte changes.
 Saved-List text is interpreted by the current application query implementation rather than admitted by the physical library database version.
@@ -172,7 +189,7 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 ## Test map
 
 - Execution-plan tests under [`test/unit/query/`](../../../test/unit/query/) prove semantic compilation, field resolution, lists, ranges, units, access profiles, and failures.
-- Plan-evaluator tests under the same directory prove field truth, existence, comparison, nested-comparison symbol isolation, tag, custom metadata, and dictionary behavior.
+- Plan-evaluator tests under the same directory prove field truth, existence, case-sensitive equality and ordering, Unicode-caseless text substring matching, nested-comparison symbol isolation, tag, custom metadata, and dictionary behavior.
 - Smart-list evaluator tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source/) prove profile-aware batch consumption, membership publication, and rebinding of plan symbols introduced by a later dictionary commit.
 
 ## Related documents

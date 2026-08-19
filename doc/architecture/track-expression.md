@@ -48,6 +48,7 @@ A `FormatPlan` produces one string from one track.
 Neither plan owns source membership, presentation shape, or frontend state.
 Compilation is observationally pure: both plan types own their dictionary symbol text and retain no library or dictionary pointer.
 Evaluation that needs dictionary data receives an explicit bounded read context and a plan-specific binding.
+A Unicode-caseless text-substring predicate stores its folded literal in the plan and derives field keys through binding-local bounded caches; neither the plan nor the library persists derived Unicode keys.
 
 ### Library and runtime consumers
 
@@ -55,7 +56,7 @@ Evaluation that needs dictionary data receives an explicit bounded read context 
 `TrackSourceCache`, `SmartListSource`, and `SmartListEvaluator` compile that text and maintain the resulting ordered membership over an upstream source.
 `ListOrderSource` then applies the List's independent saved-rank overlay; expression evaluation neither reads nor mutates that rank.
 The same source machinery materializes transient `ViewService` filters without persisting a new list.
-During one membership rebuild, `SmartListEvaluator` creates one dictionary read cache/context, binds each plan once, and reuses those bindings across track evaluations; cache presence and eviction do not change predicate results.
+During one membership rebuild, `SmartListEvaluator` creates one dictionary read cache/context, binds each plan once, and reuses those bindings and any caseless-key caches across track evaluations; cache presence and eviction do not change predicate results.
 
 The runtime `TrackFieldDefinition` catalog bridges application fields to those core descriptors with typed `query::Field` identities and carries no authored field labels.
 `CompletionService` derives its value-completable fields and dictionary extraction from that bridge, and `QueryExpressionCompleter` combines the live vocabularies with core completion analysis through the reverse mapping.
@@ -68,7 +69,7 @@ The runtime does not redefine expression grammar or field aliases.
 UIModel owns platform-neutral interpretation of quick-filter input, filter view state, List draft and preview policy, and track-presentation recommendation.
 It may parse or serialize a core expression, but it cannot implement a second grammar or evaluator.
 
-Quick-search policy retains a typed runtime-field list, obtains canonical expression variables through the bridge, and delegates system-variable source text to the core variable formatter and constants and dynamic variables to the core serializer.
+Quick-search policy retains a typed runtime-field list, obtains canonical expression variables through the bridge, emits the core language's ordinary substring operator, and delegates system-variable source text to the core variable formatter and constants and dynamic variables to the core serializer.
 `TrackFilterCompleter` reuses that field list and the resolver's explicit-expression boundary, ranks matching aggregate values, and otherwise delegates structured input to the runtime query completer.
 Completion items retain typed field/alias/operator/logical-operator roles or frequency arguments until UIModel's presentation catalog resolves their secondary text.
 Presentation recommendation resolves parsed names and aliases to typed query fields before applying its UIModel-local signal priority.
@@ -188,6 +189,7 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 - Application layers generate variable source text through the core query formatter and constants through the core serializer rather than duplicating prefix or quoting rules.
 - Smart and transient filters use the same predicate compiler and source evaluation path after authoring policy resolves their input.
 - Quick search expansion is UIModel policy, not grammar; direct query entry points receive expression text.
+- Quick search emits ordinary `~` expressions and relies on the core language's Unicode-caseless text semantic rather than passing an out-of-band evaluator option.
 - Runtime aggregate vocabulary requests carry typed fields selected by UIModel; no Quick-search or frontend role is added to runtime field metadata.
 - The runtime field catalog may advertise a query-variable bridge only when that typed field resolves in the core query descriptor catalog.
 - Query-to-runtime reverse lookup, value-completion eligibility, quick-search construction, and presentation recommendation consume that typed identity instead of maintaining raw variable-name mappings.
@@ -206,7 +208,7 @@ Completion is synchronous and tolerant of incomplete text.
 
 Execution and format plans own no dictionary state.
 `PlanBinding` and `FormatBinding` borrow their plan and a synchronous `DictionaryReadContext`; those bindings and the context cannot outlive the backing `MusicLibrary`.
-The optional dictionary read cache is batch-local acceleration over stable borrowed values, not plan state or a transaction snapshot.
+The optional dictionary read cache and predicate caseless-key caches are batch-local acceleration over stable borrowed values, not durable plan state or a transaction snapshot.
 Callers choose load mode from the compiled access profile, provide every required track tier, and keep the borrowed dictionary context valid for synchronous evaluation.
 The evaluator enforces the tier requirement as a caller precondition before predicate shortcuts or format-output mutation; ordinary missing fields within a present tier retain their false or empty-value semantics.
 Source leases and projections retain their ordinary lifetime rules from the [library architecture](library.md).

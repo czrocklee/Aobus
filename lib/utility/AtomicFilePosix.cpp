@@ -4,6 +4,7 @@
 #include "AtomicFileTransaction.h"
 #include <ao/Error.h>
 #include <ao/utility/AtomicFile.h>
+#include <ao/utility/Path.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -117,7 +118,7 @@ namespace ao::utility
         {
           return makeError(
             Error::Code::IoError,
-            std::format("Failed to rename temp file to {}: {}", targetPath.string(), std::strerror(errno)));
+            std::format("Failed to rename temp file to {}: {}", pathToUtf8(targetPath), std::strerror(errno)));
         }
 
         _path.clear();
@@ -144,8 +145,8 @@ namespace ao::utility
 
         if (ec)
         {
-          return makeError(
-            Error::Code::IoError, std::format("Failed to create directory {}: {}", parentPath.string(), ec.message()));
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to create directory {}: {}", pathToUtf8(parentPath), ec.message()));
         }
 
         return {};
@@ -153,7 +154,7 @@ namespace ao::utility
 
       Result<PosixTemporaryFile> createPrivateTemporaryFile(std::filesystem::path const& parentPath) const
       {
-        auto const tempTemplate = (parentPath / ".temp.XXXXXX").string();
+        auto const tempTemplate = (parentPath / ".temp.XXXXXX").native();
         auto tempPath = std::vector<char>(tempTemplate.begin(), tempTemplate.end());
         tempPath.push_back('\0');
 

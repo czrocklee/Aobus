@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -49,6 +50,19 @@ namespace ao::library::test
       result.insert_range(result.end(), utility::bytes::view(trackIds));
       return result;
     }
+
+    std::vector<std::byte> rawNamePayload(std::string_view const name)
+    {
+      auto const header = ListHeader{.nameLength = static_cast<std::uint32_t>(name.size())};
+      auto result = std::vector<std::byte>{};
+      result.insert_range(result.end(), utility::bytes::view(header));
+      result.insert_range(result.end(), utility::bytes::view(name));
+      while (result.size() % kListHeaderAlignment != 0)
+      {
+        result.push_back(std::byte{0});
+      }
+      return result;
+    }
   } // namespace
 
   TEST_CASE("ListBuilder - expression and order coexist in one record", "[library][unit][list]")
@@ -68,6 +82,43 @@ namespace ao::library::test
     REQUIRE(view.orderTrackIds().size() == 2);
     CHECK(view.orderTrackIds()[0] == TrackId{31});
     CHECK(view.orderTrackIds()[1] == TrackId{12});
+  }
+
+  TEST_CASE("ListBuilder - normalizes display text and preserves opaque filter bytes", "[library][unit][list][unicode]")
+  {
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty()
+                                                  .name("Cafe\u0301")
+                                                  .description("Cre\u0300me bru\u0302le\u0301e")
+                                                  .filter("$title = 'Re\u0301sume\u0301'")
+                                                  .serialize());
+    auto const view = ListView{payload};
+
+    CHECK(view.name() == "Café");
+    CHECK(view.description() == "Crème brûlée");
+    CHECK(view.filter() == "$title = 'Re\u0301sume\u0301'");
+    CHECK(validateSerializedList(payload));
+  }
+
+  TEST_CASE("ListBuilder - rejects malformed UTF-8 text", "[library][unit][list][unicode]")
+  {
+    auto const malformed = std::string{"\xC0\xAF", 2};
+    auto const result = ListBuilder::makeEmpty().name(malformed).serialize();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(result.error().message.find("List name") != std::string::npos);
+  }
+
+  TEST_CASE("List validation rejects persisted non-NFC text", "[library][unit][list][unicode]")
+  {
+    auto const payload = rawNamePayload("Cafe\u0301");
+    auto const view = ListView{payload};
+    auto const result = validateSerializedList(payload);
+
+    REQUIRE(view.isValid());
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
+    CHECK(result.error().message.find("List name") != std::string::npos);
   }
 
   TEST_CASE("ListBuilder - zeroes every alignment padding byte", "[library][regression][list]")

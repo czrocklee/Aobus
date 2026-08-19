@@ -94,11 +94,11 @@ namespace ao::uimodel::test
     fixture.trackSourceCache.reloadAllTracks();
     auto const viewId = fixture.focusAllTracksView();
 
-    fixture.viewModel.updateFilter("Aimer");
+    fixture.viewModel.updateFilter("aimer");
 
-    CHECK(fixture.renderLog.last().entryText == "Aimer");
-    CHECK(fixture.renderLog.last().resolvedExpression.contains("$title ~ \"Aimer\""));
-    CHECK(fixture.renderLog.last().resolvedExpression.contains("$artist ~ \"Aimer\""));
+    CHECK(fixture.renderLog.last().entryText == "aimer");
+    CHECK(fixture.renderLog.last().resolvedExpression.contains("$title ~ \"aimer\""));
+    CHECK(fixture.renderLog.last().resolvedExpression.contains("$artist ~ \"aimer\""));
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
     auto const projectionPtr = ao::test::requireValue(fixture.viewService.findTrackListProjection(viewId));
     REQUIRE(projectionPtr != nullptr);
@@ -123,6 +123,25 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().entryText == "Beatles help");
     CHECK(fixture.renderLog.last().resolvedExpression.contains(") and ("));
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
+  }
+
+  TEST_CASE("TrackFilterViewModel - Quick filter uses full Unicode case folding",
+            "[uimodel][unit][track-filter][unicode]")
+  {
+    auto fixture = TrackFilterFixture{};
+    auto const matchingTrackId =
+      fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "Die Straße", .artist = "Die Ärzte"});
+    fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "Autobahn", .artist = "Kraftwerk"});
+    fixture.trackSourceCache.reloadAllTracks();
+    auto const viewId = fixture.focusAllTracksView();
+
+    fixture.viewModel.updateFilter("STRASSE");
+
+    auto const projectionPtr = ao::test::requireValue(fixture.viewService.findTrackListProjection(viewId));
+    REQUIRE(projectionPtr != nullptr);
+    REQUIRE(projectionPtr->size() == 1);
+    CHECK(projectionPtr->trackIdAt(0) == matchingTrackId);
+    CHECK_FALSE(fixture.viewService.trackListState(viewId).optFilterError);
   }
 
   TEST_CASE("TrackFilterViewModel - focused track view enables filtering", "[uimodel][unit][track-filter]")

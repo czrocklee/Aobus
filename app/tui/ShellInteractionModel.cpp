@@ -4,10 +4,11 @@
 #include "ShellInteractionModel.h"
 
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/utility/String.h>
+#include <ao/utility/UnicodeText.h>
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -94,12 +95,12 @@ namespace ao::tui
       // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
       auto end = value.end();
 
-      while (begin != end && std::isspace(static_cast<unsigned char>(*begin)) != 0)
+      while (begin != end && utility::isAsciiWhitespace(*begin))
       {
         ++begin;
       }
 
-      while (begin != end && std::isspace(static_cast<unsigned char>(*(end - 1))) != 0)
+      while (begin != end && utility::isAsciiWhitespace(*(end - 1)))
       {
         --end;
       }
@@ -109,8 +110,7 @@ namespace ao::tui
 
     std::string lower(std::string value)
     {
-      std::ranges::transform(
-        value, value.begin(), [](char ch) { return static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); });
+      std::ranges::transform(value, value.begin(), utility::toAsciiLower);
       return value;
     }
 
@@ -273,6 +273,16 @@ namespace ao::tui
 
   void ShellInteractionModel::backspaceCommand()
   {
+    auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_commandDraft);
+    if (boundaryRes)
+    {
+      _commandDraft.resize(*boundaryRes);
+      return;
+    }
+
+    // Terminal input is expected to be valid UTF-8. Preserve the former
+    // code-point fallback if an invalid byte sequence or ICU failure reaches
+    // this UI-only boundary so Backspace still makes progress.
     constexpr unsigned int kUtf8ContinuationMask = 0xC0U;
     constexpr unsigned int kUtf8ContinuationTag = 0x80U;
 

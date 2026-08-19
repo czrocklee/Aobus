@@ -21,7 +21,7 @@ Back up the music files separately and preserve their paths relative to the musi
 GTK prepares a restore preview and requires confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
-Only version 4 YAML is accepted.
+Only version 5 YAML is accepted.
 Earlier interchange files have no compatibility or conversion path and must be recreated from their source library with a current exporter.
 
 Track paths belong to the selected music root.

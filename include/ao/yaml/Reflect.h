@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/utility/EnumName.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/StrongType.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -266,7 +267,7 @@ namespace ao::yaml
   {
     static void write(ryml::NodeRef node, std::filesystem::path const& value)
     {
-      detail::writeQuotedString(node, value.string());
+      detail::writeQuotedString(node, utility::pathToGenericUtf8(value));
     }
   };
 

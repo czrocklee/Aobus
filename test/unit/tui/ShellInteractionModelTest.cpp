@@ -87,12 +87,18 @@ namespace ao::tui::test
     CHECK(model.commandDraft().empty());
   }
 
-  TEST_CASE("ShellInteractionModel - backspace removes one UTF-8 codepoint", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - backspace removes one extended grapheme cluster", "[tui][unit][shell]")
   {
     auto model = ShellInteractionModel{};
 
     model.beginCommand();
-    model.appendCommandText("a翼");
+    model.appendCommandText("a翼e\u0301👨‍👩‍👧‍👦");
+    model.backspaceCommand();
+
+    CHECK(model.commandDraft() == "a翼e\u0301");
+    model.backspaceCommand();
+
+    CHECK(model.commandDraft() == "a翼");
     model.backspaceCommand();
 
     CHECK(model.commandDraft() == "a");

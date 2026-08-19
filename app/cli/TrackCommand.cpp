@@ -28,6 +28,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/utility/Path.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
@@ -983,10 +984,11 @@ namespace ao::cli
         [&cli, path, dryRun]
         {
           auto const pathValue = path->as<std::string>();
+          auto const trackPath = utility::pathFromUtf8(pathValue);
 
           if (isDryRun(dryRun))
           {
-            auto const trackRes = cli.library().writer().previewCreateTrackFromFile(pathValue);
+            auto const trackRes = cli.library().writer().previewCreateTrackFromFile(trackPath);
 
             if (!trackRes)
             {
@@ -999,7 +1001,7 @@ namespace ao::cli
             return;
           }
 
-          auto const trackRes = cli.library().writer().createTrackFromFile(pathValue);
+          auto const trackRes = cli.library().writer().createTrackFromFile(trackPath);
 
           if (trackRes)
           {

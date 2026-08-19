@@ -7,6 +7,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+#include <string_view>
+
 namespace ao::query::test
 {
   TEST_CASE("PlanEvaluator - matches unquoted title LIKE substrings", "[query][unit][plan-evaluator]")
@@ -22,6 +25,45 @@ namespace ao::query::test
     auto track2 = TestTrack{"Another Title"};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
+  }
+
+  TEST_CASE("PlanEvaluator - matches Unicode caseless title substrings", "[query][unit][plan-evaluator][unicode]")
+  {
+    auto const plan = compileOk(parseOk(R"($title ~ "DVOŘÁK STRASSE")"));
+    auto evaluator = PlanEvaluator{};
+    auto track = TestTrack{"Dvořák Straße"};
+
+    CHECK(evaluator.evaluateFull(plan, track.view()));
+  }
+
+  TEST_CASE("PlanEvaluator - applies full Unicode case folding", "[query][unit][plan-evaluator][unicode]")
+  {
+    auto evaluator = PlanEvaluator{};
+    auto germanTrack = TestTrack{"Die Straße"};
+    auto greekTrack = TestTrack{"Οδυσσεύς"};
+
+    CHECK(evaluator.evaluateFull(compileOk(parseOk(R"($title ~ "STRASSE")")), germanTrack.view()));
+    CHECK(evaluator.evaluateFull(compileOk(parseOk(R"($title ~ "ΟΔΥΣΣΕΎΣ")")), greekTrack.view()));
+  }
+
+  TEST_CASE("PlanEvaluator - keeps URI substring matching byte-exact", "[query][unit][plan-evaluator][unicode]")
+  {
+    auto evaluator = PlanEvaluator{};
+    auto track = TestTrack{TrackSpec{.uri = "Music/Cafe\u0301.flac"}};
+    auto const matches = [&](std::string_view const text)
+    {
+      auto plan = ExecutionPlan{};
+      plan.stringConstants.emplace_back(text);
+      plan.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
+      plan.instructions.push_back({.op = OpCode::Like, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 1});
+      return evaluator.evaluateFull(plan, track.view());
+    };
+
+    CHECK(matches("Cafe\u0301"));
+    CHECK_FALSE(matches("Café"));
+    CHECK_FALSE(matches("music/"));
   }
 
   TEST_CASE("PlanEvaluator - matches title equality case-sensitively", "[query][unit][plan-evaluator]")

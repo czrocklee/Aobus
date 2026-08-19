@@ -3,7 +3,8 @@
 
 #include "TrackFilterPolicy.h"
 
-#include <cctype>
+#include <ao/utility/String.h>
+
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -23,7 +24,7 @@ namespace ao::uimodel::detail
 
     bool isSpace(char ch)
     {
-      return std::isspace(static_cast<unsigned char>(ch)) != 0;
+      return utility::isAsciiWhitespace(ch);
     }
 
     void skipSpaces(std::string_view text, std::size_t& position)
@@ -36,10 +37,9 @@ namespace ao::uimodel::detail
 
     bool startsNotOperator(std::string_view text, std::size_t position)
     {
-      auto const isNot = text.size() - position >= 3 &&
-                         std::tolower(static_cast<unsigned char>(text[position])) == 'n' &&
-                         std::tolower(static_cast<unsigned char>(text[position + 1])) == 'o' &&
-                         std::tolower(static_cast<unsigned char>(text[position + 2])) == 't';
+      auto const isNot = text.size() - position >= 3 && utility::toAsciiLower(text[position]) == 'n' &&
+                         utility::toAsciiLower(text[position + 1]) == 'o' &&
+                         utility::toAsciiLower(text[position + 2]) == 't';
 
       if (!isNot)
       {

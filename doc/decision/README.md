@@ -27,6 +27,7 @@ Use the [decision template](../template/decision.md).
 - [Decision 0008: close library admission and trust live storage](0008-close-library-admission-and-trust-live-storage.md)
 - [Decision 0009: use process restart for GTK library switching](0009-use-process-restart-for-gtk-library-switching.md)
 - [Decision 0010: never write to an audio file](0010-never-write-to-audio-files.md)
+- [Decision 0011: adopt ICU for Unicode text](0011-adopt-icu-for-unicode-text.md)
 
 ## Superseded decisions
 

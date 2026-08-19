@@ -9,6 +9,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/utility/AtomicFile.h>
+#include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <filesystem>
@@ -39,7 +40,7 @@ namespace ao::gtk
   std::filesystem::path ShellLayoutComponentStateStore::filePath(std::string_view presetId) const
   {
     validatePresetId(presetId);
-    return _stateDir / std::format("{}.yaml", presetId);
+    return _stateDir / utility::pathFromUtf8(std::format("{}.yaml", presetId));
   }
 
   std::optional<uimodel::LayoutComponentStateDocument> ShellLayoutComponentStateStore::load(
@@ -54,7 +55,7 @@ namespace ao::gtk
   {
     auto const path = filePath(presetId);
 
-    auto const fileName = path.string();
+    auto const fileName = utility::pathToUtf8(path);
     auto bufferRes = yaml::readFileResult(path);
 
     if (!bufferRes)
@@ -65,7 +66,7 @@ namespace ao::gtk
           bufferRes.error().code != Error::Code::IoError || existsEc || exists)
       {
         APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to load state file ({}): {}",
-                     path.string(),
+                     utility::pathToUtf8(path),
                      bufferRes.error().message);
       }
 
@@ -79,7 +80,7 @@ namespace ao::gtk
     if (auto const parsedRes = yaml::parseInPlace(tree, buffer, yamlErrorState); !parsedRes)
     {
       APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to parse state file ({}): {}",
-                   path.string(),
+                   utility::pathToUtf8(path),
                    parsedRes.error().message);
       return std::nullopt;
     }
@@ -90,7 +91,7 @@ namespace ao::gtk
     if (!docRes)
     {
       APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to deserialize state file ({}): {}",
-                   path.string(),
+                   utility::pathToUtf8(path),
                    docRes.error().message);
       return std::nullopt;
     }
@@ -98,7 +99,7 @@ namespace ao::gtk
     if (docRes->preset != presetId)
     {
       APP_LOG_WARN("ShellLayoutComponentStateStore: Ignoring state file ({}) with mismatched preset '{}'",
-                   path.string(),
+                   utility::pathToUtf8(path),
                    docRes->preset);
       return std::nullopt;
     }
@@ -125,7 +126,7 @@ namespace ao::gtk
         !serializedRes)
     {
       APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to serialize state file ({}): {}",
-                    path.string(),
+                    utility::pathToUtf8(path),
                     serializedRes.error().message);
       return false;
     }
@@ -134,8 +135,9 @@ namespace ao::gtk
 
     if (auto const result = utility::writeAtomically(path, text); !result)
     {
-      APP_LOG_ERROR(
-        "ShellLayoutComponentStateStore: Failed to save state file ({}): {}", path.string(), result.error().message);
+      APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to save state file ({}): {}",
+                    utility::pathToUtf8(path),
+                    result.error().message);
       return false;
     }
 
@@ -182,7 +184,9 @@ namespace ao::gtk
 
     if (ec && existed)
     {
-      APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to remove state file ({}): {}", path.string(), ec.message());
+      APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to remove state file ({}): {}",
+                   utility::pathToUtf8(path),
+                   ec.message());
       return false;
     }
 

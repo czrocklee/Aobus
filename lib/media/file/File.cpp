@@ -14,10 +14,10 @@
 #include <ao/media/file/Visitor.h>
 #include <ao/utility/MappedFile.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
@@ -45,10 +45,8 @@ namespace ao::media::file
 
     std::string normalizedExtension(std::filesystem::path const& path)
     {
-      auto extension = path.extension().string();
-      std::ranges::transform(extension,
-                             extension.begin(),
-                             [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+      auto extension = utility::pathToUtf8(path.extension());
+      std::ranges::transform(extension, extension.begin(), utility::toAsciiLower);
       return extension;
     }
 

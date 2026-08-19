@@ -3,13 +3,13 @@ id: library.yaml-format
 type: reference
 status: current
 domain: library
-summary: Defines version 4 of the portable, fail-closed YAML library interchange format.
+summary: Defines version 5 of the portable, fail-closed YAML library interchange format.
 ---
 # Library YAML format
 
 ## Scope and version
 
-This reference defines the exact version 4 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
+This reference defines the exact version 5 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
 Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../spec/library/runtime/yaml-transfer.md).
@@ -25,7 +25,7 @@ Producer and consumer code lives under `app/runtime/library/`; the format transl
 The root is a closed map with this shape:
 
 ```yaml
-version: 4
+version: 5
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -36,7 +36,7 @@ library:
 
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
-| `version` | Yes. | Always `4`. | Unsigned 32-bit integer; only `4` is accepted. |
+| `version` | Yes. | Always `5`. | Unsigned 32-bit integer; only `5` is accepted. |
 | `libraryId` | No. | Always emitted. | UUID text with hexadecimal digits and hyphens in `8-4-4-4-12` grouping; letter case is ignored. |
 | `export_mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `listOnly`. |
 | `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
@@ -63,11 +63,25 @@ POSIX absolute paths, Windows drive paths, UNC paths, and parent traversal are r
 Percent signs have no escape semantics: text such as `%2e%2e` names a literal path component and is never decoded into traversal.
 
 The canonical stored and emitted representation uses forward slashes and has no trailing separator.
+Unicode text normalization is not part of URI canonicalization: path bytes retain filesystem identity across transfer.
 Manifest operations require callers to supply that canonical representation exactly; they do not silently create a second key for an equivalent spelling.
 Every supported file-access boundary resolves the URI against the weakly canonical music root and rejects it if a symlink component resolves outside that root or cannot be resolved because its target is missing.
 The music root and an ordinary non-symlink destination suffix may be absent, so a first-run metadata restore can preserve tracks before their audio directory exists.
 An existing in-root symlink uses its canonical target identity; a symlink into a different tree is outside the library namespace even when that target contains playable audio.
 This is a containment contract, not a hostile-filesystem sandbox: the library tree must not be adversarially replaced between resolution and the operating-system open.
+
+## Library text scalars
+
+Track metadata, tag names, custom-metadata keys and values, and List name, description, and filter values must be scalar-valid UTF-8.
+The importer normalizes Track text and List name and description to NFC at the core library admission boundary; the exporter emits those fields in NFC from a current physical library.
+List filter source remains byte-exact after UTF-8 validation because its URI literals carry filesystem identity.
+Malformed sequences reject the document and are never repaired with U+FFFD.
+Size limits apply to the normalized NFC bytes of admitted display text and to the original bytes of a List filter.
+
+Custom-metadata keys must remain unique after NFC normalization.
+For example, precomposed `é` and an `e` followed by a combining acute accent are the same key for this rule.
+Tags are set members, so canonically equivalent tag spellings collapse to one member through dictionary identity.
+These rules do not case-fold display text and do not apply Unicode normalization to Library URIs or opaque List filter source.
 
 ## Track records
 
@@ -88,7 +102,7 @@ Each track is a closed map.
 Track `id` values need not match target-library IDs.
 Duplicate nonzero IDs reject the document; `0` and omitted IDs create no ID mapping for list references.
 Duplicate canonical track URIs also reject the document, including records whose input spellings normalize to the same URI.
-Keys in one `custom` map must be unique.
+Keys in one `custom` map must be unique both as YAML keys and after NFC normalization.
 
 ### Text metadata
 
@@ -214,22 +228,24 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - an unsupported version, mode, codec, or cover type;
 - an unknown or duplicate field in any closed map;
 - a malformed UUID, Library URI, scalar, sequence, or numeric width;
-- duplicate nonzero track IDs, duplicate canonical track URIs, duplicate custom keys, or missing, zero, or duplicate list IDs;
+- malformed UTF-8 in library text or a normalized text value beyond its core storage limit;
+- duplicate nonzero track IDs, duplicate canonical track URIs, raw or canonically equivalent duplicate custom keys, or missing, zero, or duplicate list IDs;
 - an invalid non-empty filter, a known parent cycle, or an ambiguous list-order reference map;
 - a URI or list representation exceeding its core storage limit;
 - a malformed digest, an out-of-range `length`, a cover naming no row, a row no track references, or two rows carrying one digest.
 
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 4 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
+Version 5 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
 The observable failure and rollback contract is defined by the [transfer specification](../../../spec/library/runtime/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
-The importer accepts version 4 only.
-It has no reader for versions 1 through 3, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
+The importer accepts version 5 only.
+It has no reader for versions 1 through 4, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
 There is no migration contract for earlier interchange files, and a version-3 document's embedded cover bytes cannot be read by this version.
 
-Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-4 surface.
+Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-5 surface.
+Version 5 records the Unicode-caseless meaning of `~`; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 7.
 Payload versioning is independent of the host-local database's `kLibraryVersion`.
 
 ## Examples
@@ -237,7 +253,7 @@ Payload versioning is independent of the host-local database's `kLibraryVersion`
 Full payload:
 
 ```yaml
-version: 4
+version: 5
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -275,7 +291,7 @@ library:
 List-only payload:
 
 ```yaml
-version: 4
+version: 5
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: listOnly
 library:

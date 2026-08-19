@@ -4,6 +4,7 @@
 #include "EnvironmentDataFile.h"
 #include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
+#include <ao/utility/Path.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -88,8 +89,8 @@ namespace ao::lmdb::detail
       // LMDB could not open the same file for writing either, so failing here
       // only replaces its diagnostic with one that names the real step.
       auto const errorCode = ::GetLastError();
-      return makeError(
-        Error::Code::IoError, std::format("Failed to open {}: {}", dataPath.string(), systemMessage(errorCode)));
+      return makeError(Error::Code::IoError,
+                       std::format("Failed to open {}: {}", utility::pathToUtf8(dataPath), systemMessage(errorCode)));
     }
 
     // Marking an already sparse file is accepted, so repeat opens need no check
@@ -113,6 +114,7 @@ namespace ao::lmdb::detail
     }
 
     return makeError(
-      Error::Code::IoError, std::format("Failed to make {} sparse: {}", dataPath.string(), systemMessage(markError)));
+      Error::Code::IoError,
+      std::format("Failed to make {} sparse: {}", utility::pathToUtf8(dataPath), systemMessage(markError)));
   }
 } // namespace ao::lmdb::detail

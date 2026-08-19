@@ -488,10 +488,10 @@ namespace
 
     if (xdgStateHome != nullptr && xdgStateHome[0] != '\0')
     {
-      return std::filesystem::path{xdgStateHome} / "aobus" / "layout-state";
+      return utility::pathFromNative(xdgStateHome) / "aobus" / "layout-state";
     }
 
-    return std::filesystem::path{Glib::get_user_data_dir()}.parent_path() / "state" / "aobus" / "layout-state";
+    return utility::pathFromNative(Glib::get_user_data_dir()).parent_path() / "state" / "aobus" / "layout-state";
   }
 
   void failStartup(Glib::RefPtr<Gtk::Application> const& appPtr,
@@ -642,7 +642,7 @@ namespace
         .exitCode = startupPlan.exitCode, .optRestartRequest = std::nullopt, .optDiagnosticMessage = std::nullopt};
     }
 
-    auto const logDir = std::filesystem::path{Glib::get_user_cache_dir()} / "aobus" / "logs";
+    auto const logDir = utility::pathFromNative(Glib::get_user_cache_dir()) / "aobus" / "logs";
     rt::Log::initialize(startupPlan.logLevel, logDir);
 
     APP_LOG_INFO("Aobus {} starting...", kAppVersion);

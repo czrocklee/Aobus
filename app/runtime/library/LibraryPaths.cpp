@@ -3,6 +3,8 @@
 
 #include <ao/rt/library/LibraryPaths.h>
 
+#include <ao/utility/Path.h>
+
 #include <filesystem>
 #include <system_error>
 #include <utility>
@@ -20,7 +22,7 @@ namespace ao::rt
   LibraryPaths::LibraryPaths(std::filesystem::path musicRoot)
     : _managedDataPath{std::move(musicRoot)}
   {
-    _managedDataPath /= kManagedDataDirectoryName;
+    _managedDataPath /= utility::pathFromUtf8(kManagedDataDirectoryName);
   }
 
   std::filesystem::path LibraryPaths::managedDataPath() const
@@ -30,12 +32,12 @@ namespace ao::rt
 
   std::filesystem::path LibraryPaths::databasePath() const
   {
-    return _managedDataPath / kDatabaseDirectoryName;
+    return _managedDataPath / utility::pathFromUtf8(kDatabaseDirectoryName);
   }
 
   std::filesystem::path LibraryPaths::logsPath() const
   {
-    return _managedDataPath / kLogsDirectoryName;
+    return _managedDataPath / utility::pathFromUtf8(kLogsDirectoryName);
   }
 
   bool LibraryPaths::hasExistingDatabase() const
@@ -46,7 +48,7 @@ namespace ao::rt
     // library would skip the first scan and leave the library permanently empty.
     // Anything with content is left to open to validate or reject.
     auto error = std::error_code{};
-    auto const size = std::filesystem::file_size(databasePath() / kLmdbDataFileName, error);
+    auto const size = std::filesystem::file_size(databasePath() / utility::pathFromUtf8(kLmdbDataFileName), error);
     return !error && size > 0;
   }
 } // namespace ao::rt

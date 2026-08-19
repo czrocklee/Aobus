@@ -147,8 +147,9 @@ class DependencyPolicyTest(unittest.TestCase):
     def test_initial_contract_is_valid(self):
         self.assertEqual(
             set(self.contract["dependencies"]),
-            {"boost", "ftxui", "spdlog", "windows-app-sdk", "cppwinrt"},
+            {"boost", "ftxui", "icu", "spdlog", "windows-app-sdk", "cppwinrt"},
         )
+        self.assertEqual(self.contract["dependencies"]["icu"]["policy"]["version"], "78.3")
         self.assertEqual(self.contract["dependencies"]["windows-app-sdk"]["policy"]["version"], "2.3.1")
         self.assertEqual(self.contract["dependencies"]["cppwinrt"]["policy"]["version"], "3.0.260715.1")
 

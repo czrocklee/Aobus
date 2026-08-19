@@ -6,9 +6,9 @@
 #include "LibraryUriValidation.h"
 #include <ao/Error.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
@@ -27,7 +27,7 @@ namespace ao::library
 
     bool hasWindowsRootName(std::string_view text) noexcept
     {
-      return text.size() >= 2U && std::isalpha(static_cast<unsigned char>(text[0])) != 0 && text[1] == ':';
+      return text.size() >= 2U && utility::isAsciiAlpha(text[0]) && text[1] == ':';
     }
 
     bool isNonCanonicalComponent(std::string_view const component) noexcept

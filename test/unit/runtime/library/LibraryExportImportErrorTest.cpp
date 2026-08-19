@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
@@ -154,7 +154,7 @@ library:
     SECTION("Missing library section")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 )",
                 Error::Code::FormatRejected,
@@ -164,7 +164,7 @@ export_mode: full
     SECTION("Track missing URI")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -180,7 +180,7 @@ library:
     SECTION("Track empty URI")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -196,7 +196,7 @@ library:
     SECTION("Duplicate track ID")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -211,10 +211,50 @@ library:
                 "Duplicate track YAML id");
     }
 
+    SECTION("Malformed UTF-8 track metadata")
+    {
+      auto yaml = std::string{R"(
+version: 5
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - id: 1
+      uri: "song.flac"
+      title: ")"};
+      yaml.append("\xC0\xAF", 2);
+      yaml.append(R"("
+  lists: []
+)");
+
+      testError(yaml, Error::Code::FormatRejected, "Track title");
+    }
+
+    SECTION("Canonically duplicate custom metadata keys")
+    {
+      auto yaml = std::string{R"(
+version: 5
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - id: 1
+      uri: "song.flac"
+      custom:
+        résumé: first
+        )"};
+      yaml.append("re\u0301sume\u0301");
+      yaml.append(R"(: second
+  lists: []
+)");
+
+      testError(yaml, Error::Code::FormatRejected, "unique after NFC normalization");
+    }
+
     SECTION("List missing ID")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -229,7 +269,7 @@ library:
     SECTION("List ID 0 (Reserved)")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -245,7 +285,7 @@ library:
     SECTION("Duplicate list ID")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -263,7 +303,7 @@ library:
     SECTION("List missing name")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -278,7 +318,7 @@ library:
     SECTION("A cover reference the table does not declare rejects the import")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -296,7 +336,7 @@ library:
     SECTION("A resource row no track references rejects the import")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources:
@@ -313,7 +353,7 @@ library:
     SECTION("Unknown export mode is rejected")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: mystery
 library:
   tracks: []
@@ -326,7 +366,7 @@ library:
     SECTION("Malformed numeric version is rejected")
     {
       testError(R"(
-version: 4x
+version: 5x
 library:
   tracks: []
   lists: []
@@ -338,7 +378,7 @@ library:
     SECTION("Malformed track ID is rejected")
     {
       testError(R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -364,7 +404,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -383,7 +423,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -403,7 +443,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 4
+version: 5
 export_mode: full
 library:
   resources: []
@@ -448,7 +488,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 4
+      yaml << R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -469,7 +509,8 @@ library:
     auto const result = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::ValueTooLarge);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(result.error().message.contains("cannot be represented in the library"));
     CHECK(library.dictionary().generation() == originalDictionaryGeneration);
     CHECK_FALSE(library.dictionary().findId("Transient Artist"));
 

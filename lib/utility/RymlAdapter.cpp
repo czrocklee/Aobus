@@ -5,6 +5,7 @@
 
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/utility/Path.h>
 
 #include <c4/substr.hpp>
 #include <ryml.hpp>
@@ -247,21 +248,21 @@ namespace ao::yaml
 
     if (!ifs)
     {
-      return makeError(Error::Code::IoError, "Failed to open file: " + path.string());
+      return makeError(Error::Code::IoError, "Failed to open file: " + utility::pathToUtf8(path));
     }
 
     auto const endOffset = static_cast<std::streamoff>(ifs.tellg());
 
     if (endOffset < 0)
     {
-      return makeError(Error::Code::IoError, "Failed to inspect file size: " + path.string());
+      return makeError(Error::Code::IoError, "Failed to inspect file size: " + utility::pathToUtf8(path));
     }
 
     auto const unsignedSize = static_cast<std::uintmax_t>(endOffset);
 
     if (!std::in_range<std::size_t>(unsignedSize) || !std::in_range<std::streamsize>(unsignedSize))
     {
-      return makeError(Error::Code::ValueTooLarge, "File is too large to read: " + path.string());
+      return makeError(Error::Code::ValueTooLarge, "File is too large to read: " + utility::pathToUtf8(path));
     }
 
     auto const size = static_cast<std::size_t>(unsignedSize);
@@ -269,21 +270,21 @@ namespace ao::yaml
 
     if (!ifs)
     {
-      return makeError(Error::Code::IoError, "Failed to seek file: " + path.string());
+      return makeError(Error::Code::IoError, "Failed to seek file: " + utility::pathToUtf8(path));
     }
 
     if (optMaxBytes && size > *optMaxBytes)
     {
       return makeError(Error::Code::ValueTooLarge,
-                       "File '" + path.string() + "' is " + std::to_string(size) + " bytes; maximum allowed is " +
-                         std::to_string(*optMaxBytes));
+                       "File '" + utility::pathToUtf8(path) + "' is " + std::to_string(size) +
+                         " bytes; maximum allowed is " + std::to_string(*optMaxBytes));
     }
 
     auto buffer = std::vector<char>(size);
 
     if (!ifs.read(buffer.data(), static_cast<std::streamsize>(size)))
     {
-      return makeError(Error::Code::IoError, "Failed to read file: " + path.string());
+      return makeError(Error::Code::IoError, "Failed to read file: " + utility::pathToUtf8(path));
     }
 
     return buffer;

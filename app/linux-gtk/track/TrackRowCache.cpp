@@ -8,6 +8,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/utility/Path.h>
 
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
@@ -46,7 +47,7 @@ namespace ao::gtk
                      toUString(std::move(row.movement)),
                      toUString(std::move(row.soloist)),
                      toUString(std::move(row.tags)),
-                     toUString(row.optUriPath ? row.optUriPath->string() : std::string{}),
+                     toUString(row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{}),
                      row.duration,
                      row.year,
                      row.discNumber,

@@ -15,6 +15,10 @@ Keep exact field, grammar, command, and binary-layout inventories in reference e
 
 Use the [specification template](../template/spec.md).
 
+## Text
+
+- [Unicode text operations](text/unicode-text.md) define strict UTF-8 validation, NFC normalization, locale-independent caseless keys, and extended grapheme boundaries.
+
 ## Async
 
 - [Signal delivery](async/signal.md) defines owner-affine connection, synchronous and deferred delivery, reentrant mutation, owning fatal containment, and destruction behavior.

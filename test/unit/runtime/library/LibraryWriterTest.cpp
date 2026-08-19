@@ -104,6 +104,23 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
+  TEST_CASE("LibraryWriter - updateMetadata compares canonical Unicode identity",
+            "[runtime][unit][library][mutation][unicode]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Café");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto mutated = std::vector<TrackId>{};
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
+
+    auto const result = writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Cafe\u0301"});
+
+    REQUIRE(result);
+    CHECK(result->changes.empty());
+    CHECK(mutated.empty());
+  }
+
   TEST_CASE("LibraryWriter - updateMetadata accepts complete metadata patches", "[runtime][unit][library][mutation]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -194,6 +211,36 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("LibraryWriter - custom metadata uses canonical key and value identity",
+            "[runtime][unit][library][mutation][unicode]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Track");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto const targetIds = std::array{trackId};
+
+    auto add = MetadataPatch{};
+    add.customUpdates["Résumé"] = "Café";
+    REQUIRE(writerFixture.updateMetadata(targetIds, add));
+
+    auto equivalent = MetadataPatch{};
+    equivalent.customUpdates["Re\u0301sume\u0301"] = "Cafe\u0301";
+    auto const equivalentRes = writerFixture.updateMetadata(targetIds, equivalent);
+    REQUIRE(equivalentRes);
+    CHECK(equivalentRes->changes.empty());
+
+    auto remove = MetadataPatch{};
+    remove.customUpdates["Re\u0301sume\u0301"] = std::nullopt;
+    REQUIRE(writerFixture.updateMetadata(targetIds, remove));
+
+    auto const transaction = libraryFixture.library().readTransaction();
+    auto const optView =
+      libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optView);
+    CHECK(std::ranges::distance(optView->customMetadata()) == 0);
+  }
+
   TEST_CASE("LibraryWriter - updateMetadata returns storage errors without committing",
             "[runtime][unit][library][mutation]")
   {
@@ -278,6 +325,35 @@ namespace ao::rt::test
     REQUIRE(optNode);
     CHECK(optNode->name == "Updated");
     CHECK(optNode->expression == R"(#favorite or #recent)");
+  }
+
+  TEST_CASE("LibraryWriter - List display identity is NFC while filter bytes remain opaque",
+            "[runtime][unit][library][list][unicode]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
+    auto const expression = std::string{"$title = 'Cafe\u0301'"};
+    auto listIdRes =
+      writer.createList(LibraryWriter::ListDraft{.name = "Café", .description = "Crème", .expression = expression});
+    REQUIRE(listIdRes);
+    auto const listId = *listIdRes;
+
+    auto updateRes = writer.updateList(LibraryWriter::ListDraft{
+      .listId = listId,
+      .name = "Cafe\u0301",
+      .description = "Cre\u0300me",
+      .expression = expression,
+    });
+
+    REQUIRE(updateRes);
+    CHECK_FALSE(updateRes->changed);
+    auto const optNode = writerFixture.library().reader().listNode(listId);
+    REQUIRE(optNode);
+    CHECK(optNode->name == "Café");
+    CHECK(optNode->description == "Crème");
+    CHECK(optNode->expression == expression);
   }
 
   TEST_CASE("LibraryWriter - updateList publishes ListsMutated", "[runtime][unit][library][mutation]")

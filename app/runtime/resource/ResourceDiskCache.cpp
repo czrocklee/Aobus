@@ -6,6 +6,7 @@
 #include <ao/Contract.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 
 #include <algorithm>
@@ -113,7 +114,7 @@ namespace ao::rt
 
   std::filesystem::path coverCacheDirectory(std::filesystem::path const& cacheDirectory)
   {
-    return cacheDirectory.empty() ? cacheDirectory : cacheDirectory / kCoverDirectoryName;
+    return cacheDirectory.empty() ? cacheDirectory : cacheDirectory / utility::pathFromUtf8(kCoverDirectoryName);
   }
 
   ResourceDiskCache::ResourceDiskCache(Config config)
@@ -127,7 +128,7 @@ namespace ao::rt
   {
     AO_EXPECTS(isEnabled(), "A disabled cache has no entry paths");
     auto const hex = utility::sha256Hex(digest);
-    return _config.directory / hex.substr(0, kShardNameLength) / hex;
+    return _config.directory / utility::pathFromUtf8(hex.substr(0, kShardNameLength)) / utility::pathFromUtf8(hex);
   }
 
   std::optional<std::vector<std::byte>> ResourceDiskCache::read(utility::Sha256Digest const& digest) const

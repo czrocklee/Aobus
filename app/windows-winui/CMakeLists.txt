@@ -195,6 +195,7 @@ add_executable(aobus-winui WIN32
   Resources/en-US/Resources.resw
   app.manifest
 )
+aobus_verify_windows_utf8_manifest(aobus-winui)
 target_include_directories(aobus-winui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-winui PRIVATE
   aobus-winui-lib

@@ -3,6 +3,7 @@
 
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
@@ -163,6 +164,37 @@ namespace ao::rt::test
     CHECK(after.incrementalProjectionUpdates - before.incrementalProjectionUpdates == kIterations);
     CHECK(after.arenaRebases == before.arenaRebases);
     CHECK(after.rowIndexRebuilds - before.rowIndexRebuilds == kIterations);
+  }
+
+  TEST_CASE("TrackListProjection - incremental article rename matches a full rebuild",
+            "[runtime][regression][projection][incremental]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const doorsA = libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Doors"});
+    auto const doorsB = libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .artist = "Doors"});
+    auto const theDoorsC = libraryFixture.addTrack(library::test::TrackSpec{.title = "C", .artist = "The Doors"});
+    auto const theDoorsD = libraryFixture.addTrack(library::test::TrackSpec{.title = "D", .artist = "The Doors"});
+    auto sourcePtr = makeMutableTrackSource({doorsA, doorsB, theDoorsC, theDoorsD});
+    auto const presentation = TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                                                    .sortBy = {
+                                                      TrackSortTerm{.field = TrackSortField::Artist},
+                                                      TrackSortTerm{.field = TrackSortField::Title},
+                                                    }};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    projection.setPresentation(presentation);
+
+    libraryFixture.updateTrack(doorsB, [](library::test::TrackSpec& spec) { spec.artist = "The Doors"; });
+    sourcePtr->update(doorsB);
+
+    auto oracle = TrackListProjection{ViewId{2}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    oracle.setPresentation(presentation);
+    checkProjectionMatches(projection, oracle);
+
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(trackGroupHeadingText(projection.groupAt(0).heading.primary) == "Doors");
+    CHECK(projection.groupAt(0).rows.count == 1);
+    CHECK(trackGroupHeadingText(projection.groupAt(1).heading.primary) == "The Doors");
+    CHECK(projection.groupAt(1).rows.count == 3);
   }
 
   TEST_CASE("TrackListProjection - sustained metadata churn periodically rebases arena storage",

@@ -50,12 +50,22 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - version 4 rejects ambiguous or forward-unknown records",
+  TEST_CASE("LibraryYaml - version 4 is rejected before interpreting its payload",
+            "[runtime][workflow][import-export][schema]")
+  {
+    checkRejectedPayload({
+      .label = "previous version",
+      .yaml = "version: 4\nlibrary: malformed\n",
+      .error = "Unsupported YAML version 4",
+    });
+  }
+
+  TEST_CASE("LibraryYaml - version 5 rejects ambiguous or forward-unknown records",
             "[runtime][workflow][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "library field",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -65,7 +75,7 @@ library:
 )",
        .error = "library contains unknown field 'future'"},
       {.label = "track field",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -76,7 +86,7 @@ library:
 )",
        .error = "Track record contains unknown field 'future'"},
       {.label = "duplicate track field",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -87,7 +97,7 @@ library:
 )",
        .error = "Track record contains duplicate field 'uri'"},
       {.label = "cover field",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -101,7 +111,7 @@ library:
 )",
        .error = "Track cover contains unknown field 'future'"},
       {.label = "cover payload",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -114,7 +124,7 @@ library:
 )",
        .error = "Track cover contains unknown field 'data'"},
       {.label = "list field",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -126,7 +136,7 @@ library:
 )",
        .error = "List record contains unknown field 'type'"},
       {.label = "list-reference field",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -142,7 +152,7 @@ library:
 )",
        .error = "List order reference contains unknown field 'future'"},
       {.label = "ambiguous list reference",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -158,7 +168,7 @@ library:
 )",
        .error = "exactly one of 'id' or 'uri'"},
       {.label = "unknown codec",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -169,7 +179,7 @@ library:
 )",
        .error = "Unknown codec 'VORBIS'"},
       {.label = "unknown cover type",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources:
@@ -191,12 +201,12 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 4 requires explicit scope and root-contained URIs",
+  TEST_CASE("LibraryYaml - version 5 requires explicit scope and root-contained URIs",
             "[runtime][workflow][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "missing export mode",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 library:
   resources: []
   tracks: []
@@ -204,7 +214,7 @@ library:
 )",
        .error = "missing required 'export_mode'"},
       {.label = "missing tracks",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -212,7 +222,7 @@ library:
 )",
        .error = "missing required 'tracks'"},
       {.label = "missing lists",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -220,7 +230,7 @@ library:
 )",
        .error = "missing required 'lists'"},
       {.label = "tracks in list-only payload",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: listOnly
 library:
   tracks: []
@@ -228,13 +238,13 @@ library:
 )",
        .error = "library.tracks is forbidden"},
       {.label = "missing list-only lists",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: listOnly
 library: {}
 )",
        .error = "missing required 'lists'"},
       {.label = "absolute track URI",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -244,7 +254,7 @@ library:
 )",
        .error = "must be root-relative"},
       {.label = "parent traversal",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -254,7 +264,7 @@ library:
 )",
        .error = "escapes the library root"},
       {.label = "absolute list URI",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: listOnly
 library:
   lists:
@@ -285,7 +295,7 @@ library:
     auto const yamlPath = temp.path() / "outside.yaml";
     {
       auto output = std::ofstream{yamlPath};
-      output << R"(version: 4
+      output << R"(version: 5
 export_mode: metadata
 library:
   tracks:
@@ -300,11 +310,11 @@ library:
     CHECK(result.error().message.contains("resolves outside the library root"));
   }
 
-  TEST_CASE("LibraryYaml - version 4 rejects duplicate semantic keys", "[runtime][workflow][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 5 rejects duplicate semantic keys", "[runtime][workflow][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "canonical track URI",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -315,7 +325,7 @@ library:
 )",
        .error = "Duplicate canonical track URI 'albums/song.flac'"},
       {.label = "custom metadata key",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources: []
@@ -335,11 +345,11 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 4 rejects invalid list semantics", "[runtime][workflow][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 5 rejects invalid list semantics", "[runtime][workflow][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "invalid List filter",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: listOnly
 library:
   lists:
@@ -349,7 +359,7 @@ library:
 )",
        .error = "filter is invalid"},
       {.label = "parent cycle",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: listOnly
 library:
   lists:
@@ -369,13 +379,13 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 4 rejects values beyond supported limits",
+  TEST_CASE("LibraryYaml - version 5 rejects values beyond supported limits",
             "[runtime][workflow][import-export][schema]")
   {
     auto overlongUri = std::string(LibraryUri::kMaxLength + 1U, 'a');
     checkRejectedPayload(RejectedPayload{
       .label = "overlong URI",
-      .yaml = std::string{"version: 4\nexport_mode: full\nlibrary:\n  tracks:\n    - uri: "} + overlongUri +
+      .yaml = std::string{"version: 5\nexport_mode: full\nlibrary:\n  tracks:\n    - uri: "} + overlongUri +
               "\n  lists: []\n",
       .error = "exceeds the maximum",
     });
@@ -383,14 +393,14 @@ library:
     auto const overlongListName = std::string(65536, 'n');
     checkRejectedPayload(RejectedPayload{
       .label = "overlong List name",
-      .yaml = std::string{"version: 4\nexport_mode: listOnly\nlibrary:\n  lists:\n    - id: 1\n      name: "} +
+      .yaml = std::string{"version: 5\nexport_mode: listOnly\nlibrary:\n  lists:\n    - id: 1\n      name: "} +
               overlongListName + "\n",
       .error = "exceeds the 65535-byte product limit",
     });
 
     constexpr auto kRejectedResourceRows = std::to_array<RejectedPayload>({
       {.label = "resource row without a length",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources:
@@ -400,7 +410,7 @@ library:
 )",
        .error = "Resource record missing required 'length' field"},
       {.label = "resource row without a digest",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources:
@@ -410,7 +420,7 @@ library:
 )",
        .error = "Resource record missing required 'digest' field"},
       {.label = "non-numeric length",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources:
@@ -421,7 +431,7 @@ library:
 )",
        .error = "Resource record.length must be a valid scalar"},
       {.label = "negative length",
-       .yaml = R"(version: 4
+       .yaml = R"(version: 5
 export_mode: full
 library:
   resources:
@@ -440,7 +450,7 @@ library:
 
     checkRejectedPayload(RejectedPayload{
       .label = "digest spelling",
-      .yaml = R"(version: 4
+      .yaml = R"(version: 5
 export_mode: full
 library:
   resources:

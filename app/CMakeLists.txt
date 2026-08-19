@@ -94,7 +94,7 @@ add_library(ao_app_runtime STATIC
 target_include_directories(ao_app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml spdlog::spdlog)
-target_link_libraries(ao_app_runtime PRIVATE ao_prepared_next_contract Boost::headers)
+target_link_libraries(ao_app_runtime PRIVATE ao_prepared_next_contract ao_unicode_text Boost::headers)
 
 if(WIN32)
   add_library(ao_windows_platform STATIC

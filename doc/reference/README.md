@@ -50,7 +50,7 @@ Use the [reference template](../template/reference.md).
 - [PCM format surface](playback/pcm-format.md) enumerates logical signal fields, concrete encodings, byte layout, and lossless output candidates.
 - [Audio quality surface](playback/quality-surface.md) enumerates quality levels, findings, fields, labels, verdict categories, and style tokens.
 - [Decoder errors](playback/decoder-error.md) enumerate factory routing, operation code families, end-of-stream, and private translation behavior.
-- [Playback session state](playback/session-state.md) enumerates the exact version 3 restorable listening-intent payload and compatibility gate.
+- [Playback session state](playback/session-state.md) enumerates the exact version 4 restorable listening-intent payload and compatibility gate.
 
 ## Presentation
 

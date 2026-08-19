@@ -15,6 +15,7 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/utility/Path.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/liststore.h>
@@ -71,7 +72,7 @@ namespace ao::gtk::portal
                                  {
                                    if (auto const folderPtr = dialogPtr->select_folder_finish(resultPtr); folderPtr)
                                    {
-                                     auto const path = std::filesystem::path{folderPtr->get_path()};
+                                     auto const path = utility::pathFromNative(folderPtr->get_path());
                                      auto const libraryPaths = rt::LibraryPaths{path};
 
                                      openMusicLibrary(path, !libraryPaths.hasExistingDatabase());
@@ -189,7 +190,7 @@ namespace ao::gtk::portal
     {
       if (auto const filePtr = fileDialogPtr->save_finish(resultPtr); filePtr)
       {
-        exportLibraryTo(filePtr->get_path(), mode);
+        exportLibraryTo(utility::pathFromNative(filePtr->get_path()), mode);
       }
     }
     catch (Gtk::DialogError const& e)
@@ -279,7 +280,7 @@ namespace ao::gtk::portal
     {
       if (auto const filePtr = dialogPtr->open_finish(resultPtr); filePtr)
       {
-        importLibraryFrom(filePtr->get_path());
+        importLibraryFrom(utility::pathFromNative(filePtr->get_path()));
       }
     }
     catch (Gtk::DialogError const& e)

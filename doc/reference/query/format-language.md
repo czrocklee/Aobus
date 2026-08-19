@@ -40,6 +40,7 @@ The shared parser first accepts its expression superset.
 
 Constants use predicate-language tokenization.
 Booleans format canonically as `true` or `false`; integers format in decimal; unit constants preserve their original lexeme.
+String constants are validated as scalar UTF-8 and retained byte-exactly during compilation.
 Keyword strings such as `and` or `in` must be quoted.
 
 ### Supported metadata variables
@@ -84,6 +85,7 @@ Property aliases from the predicate language are accepted.
 ### Custom variables
 
 `%name`, `%"quoted name"`, and `%["quoted name"]` resolve a custom metadata key and append its stored value.
+The key is validated and normalized to NFC before plan binding, matching physical library dictionary identity.
 An absent key appends an empty string.
 
 Tag variables are rejected because tag membership is not one scalar field value.
@@ -95,6 +97,7 @@ Tag variables are rejected because tag membership is not one scalar field value.
 - `$coverArt` and every `#tag` variable are rejected as non-scalar fields.
 - Unknown system fields are rejected through the shared query field catalog.
 - Compilation is dictionary-independent; custom names are stored as plan-owned symbols.
+- Malformed UTF-8 in a string literal or custom key is rejected; string literals retain their source bytes while custom keys are normalized to NFC for dictionary identity.
 - Dictionary-backed and custom fields require an explicit dictionary context/binding at evaluation time.
 - Literal-only plans require neither a dictionary context nor track data.
 - The language has no functions, fallback operator, padding helper, path joiner, or path sanitization primitive.

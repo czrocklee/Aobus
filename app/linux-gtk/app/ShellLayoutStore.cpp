@@ -8,6 +8,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/utility/Path.h>
 
 #include <expected>
 #include <filesystem>
@@ -38,7 +39,7 @@ namespace ao::gtk
     AO_EXPECTS(!(presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains("..")),
                "Invalid preset ID: path traversal attempt or empty ID");
 
-    return _layoutsDir / std::format("{}.yaml", presetId);
+    return _layoutsDir / utility::pathFromUtf8(std::format("{}.yaml", presetId));
   }
 
   Result<std::optional<uimodel::LayoutDocument>> ShellLayoutStore::load(std::string_view presetId) const
@@ -55,7 +56,8 @@ namespace ao::gtk
     if (ec)
     {
       return makeError(
-        Error::Code::IoError, std::format("Failed to inspect shell layout file '{}': {}", path.string(), ec.message()));
+        Error::Code::IoError,
+        std::format("Failed to inspect shell layout file '{}': {}", utility::pathToUtf8(path), ec.message()));
     }
 
     if (!exists)
@@ -75,8 +77,8 @@ namespace ao::gtk
 
     if (!*loadedRes)
     {
-      return makeError(
-        Error::Code::FormatRejected, std::format("Shell layout file '{}' has no 'layout' group", path.string()));
+      return makeError(Error::Code::FormatRejected,
+                       std::format("Shell layout file '{}' has no 'layout' group", utility::pathToUtf8(path)));
     }
 
     if (auto preparedRes = uimodel::prepareLayout(doc, _limits); !preparedRes)
@@ -108,7 +110,8 @@ namespace ao::gtk
     if (ec)
     {
       return makeError(
-        Error::Code::IoError, std::format("Failed to inspect shell layout file '{}': {}", path.string(), ec.message()));
+        Error::Code::IoError,
+        std::format("Failed to inspect shell layout file '{}': {}", utility::pathToUtf8(path), ec.message()));
     }
 
     auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadWrite, _limits.maxFileBytes};
@@ -125,8 +128,8 @@ namespace ao::gtk
 
       if (!*loadedRes)
       {
-        return makeError(
-          Error::Code::FormatRejected, std::format("Shell layout file '{}' has no 'layout' group", path.string()));
+        return makeError(Error::Code::FormatRejected,
+                         std::format("Shell layout file '{}' has no 'layout' group", utility::pathToUtf8(path)));
       }
 
       if (auto preparedRes = uimodel::prepareLayout(previous, _limits); !preparedRes)
@@ -153,7 +156,8 @@ namespace ao::gtk
     if (ec)
     {
       return makeError(
-        Error::Code::IoError, std::format("Failed to remove shell layout file '{}': {}", path.string(), ec.message()));
+        Error::Code::IoError,
+        std::format("Failed to remove shell layout file '{}': {}", utility::pathToUtf8(path), ec.message()));
     }
 
     return {};

@@ -123,6 +123,8 @@ namespace ao::query::test
   TEST_CASE("Completion - filters operator catalog by field kind", "[query][unit][completion]")
   {
     CHECK(completeQueryOperator(Field::ArtistId, "") == std::vector<std::string_view>{"=", "!=", "~", "in", "?"});
+    CHECK(completeQueryOperator(Field::ArtistId, "~") == std::vector<std::string_view>{"~"});
+    CHECK(completeQueryOperator(Field::Uri, "") == std::vector<std::string_view>{"=", "!=", "~", "in", "?"});
     CHECK(completeQueryOperator(Field::Year, "") ==
           std::vector<std::string_view>{"=", "!=", "<", "<=", ">", ">=", "in", "?"});
     CHECK(completeQueryOperator(Field::Tag, "") == std::vector<std::string_view>{"?"});

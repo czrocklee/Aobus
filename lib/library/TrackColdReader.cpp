@@ -121,7 +121,7 @@ namespace ao::library::detail
 
         expectedValueEnd = valueOffset + valueLength;
 
-        if (i > 0 && entries[i - 1].keyId > entry.keyId)
+        if (i > 0 && entries[i - 1].keyId >= entry.keyId)
         {
           return false;
         }

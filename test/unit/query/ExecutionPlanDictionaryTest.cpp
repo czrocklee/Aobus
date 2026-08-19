@@ -9,7 +9,9 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::query::test
@@ -37,11 +39,23 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - dictionary-backed LIKE keeps plan-owned text", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - dictionary-backed LIKE keeps a folded plan-owned key",
+            "[query][unit][execution-plan][unicode]")
   {
     auto const plan = compileOk(parseOk(R"($artist ~ "Bach")"));
 
-    REQUIRE(plan.stringConstants == std::vector<std::string>{"Bach"});
+    REQUIRE(plan.stringConstants == std::vector<std::string>{"bach"});
+    CHECK(plan.dictionarySymbols.empty());
+    CHECK(findInstruction(plan, OpCode::Like).field == static_cast<std::uint8_t>(Field::ArtistId));
+    CHECK(plan.requiresDictionary);
+  }
+
+  TEST_CASE("ExecutionPlan - dictionary-backed caseless LIKE keeps a folded plan-owned key",
+            "[query][unit][execution-plan][unicode]")
+  {
+    auto const plan = compileOk(parseOk(R"($artist ~ "DVOŘÁK")"));
+
+    REQUIRE(plan.stringConstants == std::vector<std::string>{"dvořák"});
     CHECK(plan.dictionarySymbols.empty());
     CHECK(findInstruction(plan, OpCode::Like).field == static_cast<std::uint8_t>(Field::ArtistId));
     CHECK(plan.requiresDictionary);
@@ -77,5 +91,36 @@ namespace ao::query::test
     CHECK(plan.stringConstants.empty());
     CHECK(findInstruction(plan, OpCode::Eq).dictionarySymbol == 0);
     CHECK(plan.requiresDictionary);
+  }
+
+  TEST_CASE("ExecutionPlan - canonicalizes Unicode lookup literals", "[query][unit][execution-plan][unicode]")
+  {
+    auto const dictionaryPlan = compileOk(parseOk("$artist = 'Dvor\u030Ca\u0301k'"));
+    auto const stringPlan = compileOk(parseOk("$title ~ 'Cafe\u0301'"));
+
+    REQUIRE(dictionaryPlan.dictionarySymbols == std::vector<std::string>{"Dvořák"});
+    REQUIRE(stringPlan.stringConstants == std::vector<std::string>{"café"});
+  }
+
+  TEST_CASE("ExecutionPlan - rejects malformed UTF-8 text literals", "[query][unit][execution-plan][unicode]")
+  {
+    auto compileMalformed = [](Operator op)
+    {
+      auto binary = std::make_unique<BinaryExpression>();
+      binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
+      binary->optOperation = BinaryExpression::Operation{
+        .op = op,
+        .operand = ConstantExpression{std::string{"\xC0\xAF", 2}},
+      };
+      return compileError(Expression{std::move(binary)});
+    };
+
+    auto const equalityError = compileMalformed(Operator::Equal);
+    CHECK(equalityError.code == Error::Code::FormatRejected);
+    CHECK(equalityError.message.contains("Query string literal"));
+
+    auto const caselessError = compileMalformed(Operator::Like);
+    CHECK(caselessError.code == Error::Code::FormatRejected);
+    CHECK(caselessError.message.contains("Unicode caseless query literal"));
   }
 } // namespace ao::query::test

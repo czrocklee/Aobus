@@ -61,7 +61,7 @@ Presentation contexts add built-in and custom preset ids.
 ### Command mode
 
 `/` or `:` opens command mode.
-Text appends as UTF-8, backspace removes one complete code point, arrows move completion selection, Tab applies the selected completion, Return submits, and Escape cancels.
+Text appends as UTF-8, backspace removes one complete extended grapheme cluster, arrows move completion selection, Tab applies the selected completion, Return submits, and Escape cancels.
 Known prefixes/aliases produce typed actions; otherwise the submitted text becomes a quick filter.
 The palette completes command names and aliases, presentation ids, structured expression tokens, and live Quick-filter values from titles, the common search fields, and tags.
 Applying a live value replaces the active filter term with one safely quoted term.

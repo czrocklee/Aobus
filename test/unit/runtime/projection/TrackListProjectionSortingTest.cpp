@@ -396,6 +396,10 @@ namespace ao::rt::test
     checkMonotonic(true);
 
     proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
+    checkMonotonic(true);
+
+    proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = false}}});
     checkMonotonic(false);
 

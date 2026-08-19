@@ -3,8 +3,9 @@
 
 #include <ao/utility/Base64.h>
 
+#include <ao/utility/String.h>
+
 #include <array>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -87,7 +88,7 @@ namespace ao::utility
 
     for (auto const charVal : base64)
     {
-      if (std::isspace(static_cast<unsigned char>(charVal)) != 0)
+      if (isAsciiWhitespace(charVal))
       {
         continue;
       }

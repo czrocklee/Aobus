@@ -35,3 +35,10 @@ target_link_libraries(ao_utility PUBLIC PkgRapidYaml Boost::headers gsl-lite::gs
 # xxhash is an implementation detail of Xxh3.cpp; keep it out of the public
 # link interface so ao/utility/Xxh3.h consumers never see <xxhash.h>.
 target_link_libraries(ao_utility PRIVATE PkgXXHash)
+
+# Keep ICU behind the Unicode-text facade so its API and dependency contract do
+# not leak into the general utility library. Current applications consume the
+# facade through library/query/runtime text semantics.
+add_library(ao_unicode_text STATIC UnicodeText.cpp)
+target_include_directories(ao_unicode_text PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
+target_link_libraries(ao_unicode_text PRIVATE ICU::uc ICU::data)

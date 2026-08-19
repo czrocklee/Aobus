@@ -25,6 +25,10 @@
     "foonathan-lexy",
     "gsl-lite",
     {
+      "name": "icu",
+      "default-features": false
+    },
+    {
       "name": "gperf",
       "host": true
     },

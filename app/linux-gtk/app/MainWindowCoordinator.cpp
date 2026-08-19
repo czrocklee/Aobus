@@ -41,6 +41,7 @@
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gtkmm/stack.h>
@@ -289,7 +290,7 @@ namespace ao::gtk
 
     if (fullSave)
     {
-      session.lastLibraryPath = _runtime.musicRoot().string();
+      session.lastLibraryPath = utility::pathToUtf8(_runtime.musicRoot());
     }
 
     session.lastOutputSelection = _runtime.playback().snapshot().transport.output.selectedDevice;

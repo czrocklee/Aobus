@@ -31,6 +31,7 @@ add_executable(ao_fatal_probe
     fatal/FatalProbeMain.cpp
     fatal/FatalProbeScenario.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_fatal_probe)
 target_include_directories(ao_fatal_probe PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_fatal_probe PRIVATE ao_fatal_probe_support ao_prepared_next_contract ao_utility)
 add_test(NAME ao_fatal_probe COMMAND ao_fatal_probe)
@@ -39,6 +40,7 @@ add_executable(ao_audio_fatal_probe
     fatal/AudioFatalProbeMain.cpp
     fatal/AudioFatalProbeScenario.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_audio_fatal_probe)
 target_link_libraries(ao_audio_fatal_probe PRIVATE ao_fatal_probe_support ao_test_support_audio)
 add_test(NAME ao_audio_fatal_probe COMMAND ao_audio_fatal_probe)
 
@@ -53,6 +55,7 @@ add_executable(ao_library_probe
     fatal/LibraryProbeMain.cpp
     fatal/LibraryProbeScenario.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_library_probe)
 target_link_libraries(ao_library_probe PRIVATE ao_fatal_probe_support ao_test_support_common ao_library)
 add_test(NAME ao_library_probe COMMAND ao_library_probe)
 
@@ -176,7 +179,9 @@ add_executable(ao_core_test
     unit/utility/PathTest.cpp
     unit/utility/PlatformDirectoriesTest.cpp
     unit/utility/ByteViewTest.cpp
+    unit/utility/StringTest.cpp
     unit/utility/StringArenaTest.cpp
+    unit/utility/UnicodeTextTest.cpp
     unit/utility/StrongTypeTest.cpp
     unit/utility/UuidTest.cpp
     unit/utility/YamlReflectTest.cpp
@@ -572,6 +577,7 @@ add_executable(ao_core_test
     unit/winui/layout/StyleLookupTest.cpp
     unit/winui/layout/ThemeSurfaceTest.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_core_test)
 target_include_directories(ao_core_test PRIVATE
     "${CMAKE_SOURCE_DIR}/app/windows-winui/include")
 
@@ -588,10 +594,12 @@ target_link_libraries(ao_core_test PRIVATE
     ao_fatal_probe_support
     ao_app_desktop
     ao_app_uimodel
+    ao_unicode_text
     ao_test_support_runtime
     ao_test_options
     Catch2::Catch2
     FakeIt::FakeIt-catch
+    ICU::uc
 )
 if(LINUX)
   target_sources(ao_core_test PRIVATE
@@ -610,6 +618,7 @@ if(WIN32)
   add_executable(ao_detached_process_probe
     helper/DetachedProcessProbeWindows.cpp
   )
+  aobus_enable_windows_utf8_manifest(ao_detached_process_probe)
   target_link_libraries(ao_detached_process_probe PRIVATE shell32)
   add_dependencies(ao_core_test ao_detached_process_probe)
 
@@ -672,6 +681,7 @@ add_executable(ao_tui_test
     unit/tui/TrackTableTest.cpp
     unit/tui/TuiHitRegionsTest.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_tui_test)
 
 target_link_libraries(ao_tui_test PRIVATE
     aobus-tui-lib
@@ -692,6 +702,7 @@ add_test(NAME ao_tui_test COMMAND ao_tui_test)
 add_executable(ao_tui_bench EXCLUDE_FROM_ALL
     unit/tui/TrackTableBenchmark.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_tui_bench)
 target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain mimalloc)
 endif()
 
@@ -704,6 +715,7 @@ add_executable(ao_cli_test
     unit/cli/CliSmokeTest.cpp
     unit/cli/OutputTest.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_cli_test)
 
 target_link_libraries(ao_cli_test PRIVATE
     aobus-cli-lib
@@ -721,6 +733,7 @@ add_executable(ao_integration_test
     integration/audio/GraphIntegrityTest.cpp
     integration/media/file/FileTest.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_integration_test)
 
 target_link_libraries(ao_integration_test PRIVATE
     ao_app_uimodel
@@ -869,6 +882,7 @@ add_executable(ao_perf_baseline
     perf/CompletionVocabularyBaselineTest.cpp
     perf/PerformanceBaselineTest.cpp
 )
+aobus_enable_windows_utf8_manifest(ao_perf_baseline)
 
 target_link_libraries(ao_perf_baseline PRIVATE
     ao_app_uimodel

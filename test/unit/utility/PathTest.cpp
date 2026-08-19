@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <string>
 
 namespace ao::utility::test
@@ -18,5 +19,19 @@ namespace ao::utility::test
 
     CHECK(pathToGenericUtf8(path) == expected);
     CHECK(pathToUtf8(path.filename()) == "Dvo\xC5\x99\xC3\xA1k.flac");
+  }
+
+  TEST_CASE("Path - native filename code units round trip without text conversion", "[utility][regression][path]")
+  {
+    auto native = std::filesystem::path::string_type{};
+    native.push_back(static_cast<std::filesystem::path::value_type>('a'));
+    native.push_back(static_cast<std::filesystem::path::value_type>('o'));
+#if defined(_WIN32)
+    native.push_back(L'\u00DC');
+#else
+    native.push_back(static_cast<char>(0xFF));
+#endif
+
+    CHECK(pathFromNative(native).native() == native);
   }
 } // namespace ao::utility::test

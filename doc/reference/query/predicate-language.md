@@ -159,6 +159,14 @@ Unit suffixes are case-insensitive.
 Duration may concatenate unit segments, as in `2m30s`.
 A fractional literal is accepted only when scaling produces an integer, so `44.1k` is valid for sample rate while `1.5ms` is invalid for duration.
 
+### Substring operator
+
+`~` performs locale-independent Unicode-caseless substring containment over user-visible text.
+It uses Unicode default full case folding, so expansions such as `Straße` matching `STRASSE` are supported, while accents remain significant.
+Its left operand must be a direct text or URI field and its right operand must be a direct string constant.
+Title, custom metadata, and dictionary-backed metadata use the Unicode-caseless semantic; filesystem URI values retain byte-exact containment without Unicode normalization.
+The [predicate evaluation specification](../../spec/query/predicate-evaluation.md) owns normalization, caching, and truth behavior.
+
 ## Validation rules
 
 - Postfix `?` applies only to a variable.
@@ -168,6 +176,7 @@ A fractional literal is accepted only when scaling produces an integer, so `44.1
 - Ranges contain two required constant bounds and are executable only as the right operand of `in`.
 - Predicate compilation rejects the shared parser's `+` and adjacency concatenation nodes.
 - Ordered comparisons over dictionary-backed metadata require string operands.
+- Substring `~` requires a direct text or URI field and a direct string constant.
 - Unit kinds must match the left field; compound unit segments are supported only for duration.
 - Quoted strings and quoted user-variable names support `\"`, `\\`, `\'`, `\n`, `\t`, and `\r`; other escapes are rejected.
 - Unknown `$` and `@` names are rejected by the shared field catalog.
@@ -188,6 +197,7 @@ An expression carries no nested dialect id or version; the containing surface ow
 The public typed core variable descriptor catalog is also used by runtime field bridges, completion, generated CLI help, canonical diagnostic field names, and unknown-field diagnostics.
 Those consumers must change with this surface rather than maintaining parallel inventories.
 Application-generated variable source text uses the core variable formatter, while constants use the core serializer; application layers do not reconstruct prefixes or quoting rules.
+Quick Filter and saved Lists use the same ordinary `~` text semantic; no hidden search-policy flag is stored.
 
 ## Examples
 
@@ -197,6 +207,7 @@ $genre in [Classical, Jazz]
 $year in 1990..1999
 @duration >= 2m30s and @duration < 5m
 $work ~ "Cello Suite" and $composer = Bach
+$artist ~ "DVOŘÁK"
 $conductor? and !#skip
 #"90s Rock"
 %"Replay Gain" = "-7.4 dB"
@@ -215,6 +226,7 @@ Representative invalid forms are:
 | `$year` | A non-tag variable is not a predicate. |
 | `!$year` | Missing-field syntax requires `!$year?`. |
 | `$title + $artist = x` | Predicate compilation rejects concatenation. |
+| `@duration ~ "three"` | Substring applies only to text and URI fields. |
 | `@duration >= 10k` | `k` is not a duration unit. |
 | `@codec = VORBIS` | `VORBIS` is not a supported codec constant. |
 

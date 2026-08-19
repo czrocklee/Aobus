@@ -15,6 +15,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/detail/FieldResolver.h>
+#include <ao/utility/UnicodeText.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <algorithm>
@@ -27,6 +28,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -34,6 +36,37 @@ namespace ao::query
 {
   namespace
   {
+    void validateFormatText(std::string_view const text, std::string_view const context)
+    {
+      auto validationRes = utility::validateUtf8(text);
+      if (!validationRes)
+      {
+        auto error = std::move(validationRes.error());
+        if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
+        {
+          error.code = Error::Code::FormatRejected;
+        }
+        error.message = std::format("{}: {}", context, error.message);
+        detail::throwQueryError(std::move(error));
+      }
+    }
+
+    std::string normalizeFormatText(std::string_view const text, std::string_view const context)
+    {
+      auto normalizedRes = utility::normalizeUtf8Nfc(text);
+      if (!normalizedRes)
+      {
+        auto error = std::move(normalizedRes.error());
+        if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
+        {
+          error.code = Error::Code::FormatRejected;
+        }
+        error.message = std::format("{}: {}", context, error.message);
+        detail::throwQueryError(std::move(error));
+      }
+      return std::move(*normalizedRes);
+    }
+
     class FormatCompiler final
     {
     public:
@@ -148,6 +181,8 @@ namespace ao::query
 
   std::uint32_t FormatCompiler::addLiteral(std::string_view value)
   {
+    validateFormatText(value, "Format string literal");
+
     if (auto const it = std::ranges::find(_plan.literals, value); it != _plan.literals.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.literals.begin(), it));
@@ -159,12 +194,14 @@ namespace ao::query
 
   std::uint32_t FormatCompiler::addDictionarySymbol(std::string_view text)
   {
-    if (auto const it = std::ranges::find(_plan.dictionarySymbols, text); it != _plan.dictionarySymbols.end())
+    auto normalized = normalizeFormatText(text, "Format dictionary literal");
+
+    if (auto const it = std::ranges::find(_plan.dictionarySymbols, normalized); it != _plan.dictionarySymbols.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.dictionarySymbols.begin(), it));
     }
 
-    _plan.dictionarySymbols.emplace_back(text);
+    _plan.dictionarySymbols.emplace_back(std::move(normalized));
     return static_cast<std::uint32_t>(_plan.dictionarySymbols.size() - 1);
   }
 

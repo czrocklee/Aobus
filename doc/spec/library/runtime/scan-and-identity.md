@@ -42,6 +42,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - One applied plan commits all successful content changes and the revision atomically.
 - Runtime scan apply closes interactive admission before slow preparation and keeps it closed through publication and callback-owner finalization.
 - Filesystem reads, media parsing, and fingerprinting hold no coordinator writer ownership or LMDB write transaction.
+- Media decoders may translate their declared legacy encodings, but library admission never repairs malformed declared UTF-8: a new file with invalid metadata becomes a per-item failure and no Track, manifest, dictionary row, or replacement character is committed.
 - Cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
 - Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
@@ -98,12 +99,13 @@ plan's Tracks without advancing the revision. Missing evidence therefore fails a
 The transaction currently covers the complete prepared plan and has no item or byte bound.
 This preserves whole-plan all-or-nothing behavior; writer hold time and rollback cost scale with the prepared plan.
 
-- `New` parses metadata and technical properties, then asks the logical Track writer to create the track and available manifest row together.
+- `New` parses metadata and technical properties, validates and NFC-normalizes admitted text, then asks the logical Track writer to create the track and available manifest row together.
 - `Changed` preserves curated metadata, replaces the track's cover references with the set the new file carries, then replaces Track data and file/identity facts through one logical operation.
 - `Moved` first requires the stored Track URI to equal the plan's old URI, then rebuilds the existing track with the new URI, refreshed technical properties, and the destination file's cover references, and uses the logical relink operation to replace the manifest key while preserving the Track id; a mismatch reports the item failure and aborts the complete scan transaction.
 - `Missing` preserves the previous identity and uses the manifest-only logical update to mark the row missing.
 - `Unchanged` performs no write.
 - Item-level parse/open failures are counted and reported without claiming that item succeeded.
+- Item-level Track validation failures, including malformed UTF-8 or post-NFC size overflow, are reported at the `serialize` stage and leave that new item absent.
 
 After preparation and immediately before opening the coordinator mutation, application fingerprints every moved destination again and compares it with both the prepared and planned identities.
 A mismatch or a failure after relink processing begins aborts the complete transaction.
@@ -157,6 +159,7 @@ Pairing the 128-bit signature with payload length is the complete equality key.
 ## Failure and cancellation
 
 Filesystem, mapping, tag parsing, media corruption, database, and resource-limit failures use `Result` or the per-item failure channel according to whether useful plan/application work can continue.
+Malformed declared UTF-8 from a media tag uses that per-item channel; the library boundary neither guesses another encoding nor inserts U+FFFD.
 Malformed persisted manifest or Track evidence discovered during admission returns
 open-level `CorruptData`, not an external-item failure that permits continuation.
 After admission, a Store or cross-Store integrity breach is an `AO_INVARIANT` fault; a

@@ -3,6 +3,7 @@
 
 #include <ao/library/TrackBuilder.h>
 
+#include "TextAdmission.h"
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/AudioCodec.h>
@@ -29,8 +30,10 @@
 #include <format>
 #include <limits>
 #include <span>
+#include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -551,8 +554,39 @@ namespace ao::library
   {
     try
     {
-      checkedUint16(_metadataBuilder._title.size(), "Hot title length");
-      checkedPayloadBytes(_tagsBuilder._tagNames.size(), sizeof(DictionaryId), "Hot tag payload length");
+      auto const titleLengthRes = detail::normalizedLibraryTextSize(_metadataBuilder._title, "Track title");
+      if (!titleLengthRes)
+      {
+        return std::unexpected{titleLengthRes.error()};
+      }
+      checkedUint16(*titleLengthRes, "Hot title length");
+
+      for (auto const& [value, context] : {
+             std::pair{_metadataBuilder._artist, std::string_view{"Track artist"}},
+             std::pair{_metadataBuilder._album, std::string_view{"Track album"}},
+             std::pair{_metadataBuilder._albumArtist, std::string_view{"Track album artist"}},
+             std::pair{_metadataBuilder._composer, std::string_view{"Track composer"}},
+             std::pair{_metadataBuilder._genre, std::string_view{"Track genre"}},
+           })
+      {
+        if (auto textRes = detail::validateLibraryText(value, context); !textRes)
+        {
+          return textRes;
+        }
+      }
+
+      auto normalizedTags = std::unordered_set<std::string>{};
+      normalizedTags.reserve(_tagsBuilder._tagNames.size());
+      for (auto const tag : _tagsBuilder._tagNames)
+      {
+        auto normalizedRes = detail::normalizeLibraryText(tag, "Track tag");
+        if (!normalizedRes)
+        {
+          return std::unexpected{normalizedRes.error()};
+        }
+        normalizedTags.insert(std::move(*normalizedRes));
+      }
+      checkedPayloadBytes(normalizedTags.size(), sizeof(DictionaryId), "Hot tag payload length");
       return {};
     }
     catch (detail::LibraryException const& error)
@@ -610,6 +644,20 @@ namespace ao::library
         addBlock(sizeof(TrackClassicalBlock));
       }
 
+      for (auto const& [value, context] : {
+             std::pair{metadata._work, std::string_view{"Track work"}},
+             std::pair{metadata._movement, std::string_view{"Track movement"}},
+             std::pair{metadata._conductor, std::string_view{"Track conductor"}},
+             std::pair{metadata._ensemble, std::string_view{"Track ensemble"}},
+             std::pair{metadata._soloist, std::string_view{"Track soloist"}},
+           })
+      {
+        if (auto textRes = detail::validateLibraryText(value, context); !textRes)
+        {
+          return textRes;
+        }
+      }
+
       if (!_customMetadataBuilder._customPairs.empty())
       {
         auto const entryCount = _customMetadataBuilder._customPairs.size();
@@ -620,17 +668,34 @@ namespace ao::library
         checkedUint16(valueOffset, "Custom metadata value offset");
 
         std::size_t totalValueSize = 0;
+        auto normalizedKeys = std::unordered_set<std::string>{};
+        normalizedKeys.reserve(entryCount);
 
-        for (auto const& pair : _customMetadataBuilder._customPairs)
+        for (auto const& [key, value] : _customMetadataBuilder._customPairs)
         {
-          checkedUint16(pair.second.size(), "Custom metadata value length");
+          auto normalizedKeyRes = detail::normalizeLibraryText(key, "Custom metadata key");
+          if (!normalizedKeyRes)
+          {
+            return std::unexpected{normalizedKeyRes.error()};
+          }
+          if (!normalizedKeys.insert(std::move(*normalizedKeyRes)).second)
+          {
+            return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
+          }
+          auto const valueLengthRes = detail::normalizedLibraryTextSize(value, "Custom metadata value");
+          if (!valueLengthRes)
+          {
+            return std::unexpected{valueLengthRes.error()};
+          }
 
-          if (pair.second.size() > kU16Max - totalValueSize)
+          checkedUint16(*valueLengthRes, "Custom metadata value length");
+
+          if (*valueLengthRes > kU16Max - totalValueSize)
           {
             detail::throwLibraryError(Error::Code::ValueTooLarge, "Custom metadata payload length exceeds uint16_t");
           }
 
-          totalValueSize += pair.second.size();
+          totalValueSize += *valueLengthRes;
         }
 
         auto const payloadSize = valueOffset + totalValueSize;
@@ -744,12 +809,27 @@ namespace ao::library
   {
     auto prepared = PreparedHot{};
 
+    auto titleRes = detail::normalizeLibraryText(builder->_metadataBuilder._title, "Track title");
+    if (!titleRes)
+    {
+      detail::throwLibraryError(std::move(titleRes.error()));
+    }
+
+    prepared._title = std::move(*titleRes);
+    prepared._titleLength = checkedUint16(prepared._title.size(), "Hot title length");
+
     // Resolve tag names to DictionaryIds
     prepared._tagIds.reserve(builder->_tagsBuilder._tagNames.size());
+    auto seenTagIds = std::unordered_set<DictionaryId>{};
+    seenTagIds.reserve(builder->_tagsBuilder._tagNames.size());
 
     for (auto const& name : builder->_tagsBuilder._tagNames)
     {
-      prepared._tagIds.push_back(TrackBuilder::internDictionaryId(name, transaction));
+      auto const tagId = TrackBuilder::internDictionaryId(name, transaction);
+      if (seenTagIds.insert(tagId).second)
+      {
+        prepared._tagIds.push_back(tagId);
+      }
     }
 
     // Resolve metadata strings to DictionaryIds for header
@@ -765,13 +845,11 @@ namespace ao::library
     // Hot header lengths are uint16_t. Reject anything the header cannot
     // represent so writeTo's narrowing casts stay lossless and the write
     // side remains the single validation boundary for readers.
-    auto const titleLength = builder->_metadataBuilder._title.size();
+    auto const titleLength = prepared._title.size();
     auto const tagLength = prepared._tagIds.size() * sizeof(DictionaryId);
 
     // Snapshot everything writeTo emits so the prepared value stays valid
     // and self-consistent even if the builder is mutated or destroyed later.
-    prepared._title = std::string{builder->_metadataBuilder._title};
-    prepared._titleLength = checkedUint16(titleLength, "Hot title length");
     prepared._tagLength = checkedUint16(tagLength, "Hot tag payload length");
     prepared._sampleRate = builder->_propertyBuilder._sampleRate;
     prepared._year = builder->_metadataBuilder._year;
@@ -858,19 +936,24 @@ namespace ao::library
     _soloistId = TrackBuilder::resolveDictionaryId(metadata._soloist, transaction);
   }
 
-  std::vector<std::pair<DictionaryId, std::string_view>> TrackBuilder::PreparedCold::resolveCustomMetadata(
+  std::vector<std::pair<DictionaryId, std::string>> TrackBuilder::PreparedCold::resolveCustomMetadata(
     TrackBuilder const* builder,
     WriteTransaction& transaction)
   {
-    auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string_view>>{};
+    auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string>>{};
     resolvedPairs.reserve(builder->_customMetadataBuilder._customPairs.size());
 
     for (auto const& [key, value] : builder->_customMetadataBuilder._customPairs)
     {
-      resolvedPairs.emplace_back(TrackBuilder::internDictionaryId(key, transaction), value);
+      auto normalizedValueRes = detail::normalizeLibraryText(value, "Custom metadata value");
+      if (!normalizedValueRes)
+      {
+        detail::throwLibraryError(std::move(normalizedValueRes.error()));
+      }
+      resolvedPairs.emplace_back(TrackBuilder::internDictionaryId(key, transaction), std::move(*normalizedValueRes));
     }
 
-    std::ranges::sort(resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
+    std::ranges::sort(resolvedPairs, {}, &std::pair<DictionaryId, std::string>::first);
     return resolvedPairs;
   }
 
@@ -960,7 +1043,7 @@ namespace ao::library
   }
 
   void TrackBuilder::PreparedCold::appendCustomMetadataBlock(
-    std::vector<std::pair<DictionaryId, std::string_view>> const& resolvedPairs)
+    std::vector<std::pair<DictionaryId, std::string>> const& resolvedPairs)
   {
     if (resolvedPairs.empty())
     {

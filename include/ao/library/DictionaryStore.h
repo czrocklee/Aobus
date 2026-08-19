@@ -69,7 +69,8 @@ namespace ao::library
     std::string_view getOrDefault(DictionaryId id, std::string_view defaultValue = {}) const;
 
     /**
-     * Look up a committed ID by text.
+     * Look up a committed ID by its canonical stored text.
+     * Callers admitting external text must normalize it to NFC first.
      * @return The committed ID, or std::nullopt when the text is absent.
      */
     std::optional<DictionaryId> findId(std::string_view str) const;

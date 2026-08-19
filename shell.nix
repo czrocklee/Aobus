@@ -55,12 +55,14 @@ let
       "-DSPDLOG_FMT_EXTERNAL=OFF"
     ];
   });
+  aobus-icu = pkgs.icu78;
   dependencyReport = pkgs.writeText "aobus-nix-dependencies.json" (builtins.toJSON {
     schemaVersion = 1;
     nixpkgsRevision = pin.rev;
     dependencies = {
       boost = { version = pkgs.boost.version; storePath = toString pkgs.boost; };
       ftxui = { version = pkgs.ftxui.version; storePath = toString pkgs.ftxui; };
+      icu = { version = aobus-icu.version; storePath = toString aobus-icu; };
       spdlog = { version = aobus-spdlog.version; storePath = toString aobus-spdlog; };
       catch2 = { version = pkgs.catch2_3.version; storePath = toString pkgs.catch2_3; };
       cli11 = { version = pkgs.cli11.version; storePath = toString pkgs.cli11; };
@@ -107,6 +109,8 @@ pkgs.mkShell {
       llvmPackages_22.llvm.dev
       llvmPackages_22.clang-unwrapped.dev
       boost.dev
+      aobus-icu
+      aobus-icu.dev
       lmdb
       lmdb.dev
       xxhash

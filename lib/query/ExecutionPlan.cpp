@@ -15,17 +15,18 @@
 #include <ao/query/detail/FieldResolver.h>
 #include <ao/query/detail/Predicate.h>
 #include <ao/utility/String.h>
+#include <ao/utility/UnicodeText.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -62,6 +63,31 @@ namespace ao::query
     // than repeated field-load/equality expansion even for a one-item list.
     constexpr std::size_t kInSetCompilationThreshold = 1;
 
+    std::string queryTextOrThrow(Result<std::string> textRes, std::string_view const context)
+    {
+      if (!textRes)
+      {
+        auto error = std::move(textRes.error());
+        if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
+        {
+          error.code = Error::Code::FormatRejected;
+        }
+        error.message = std::format("{}: {}", context, error.message);
+        detail::throwQueryError(std::move(error));
+      }
+      return std::move(*textRes);
+    }
+
+    std::string normalizeQueryText(std::string_view const text, std::string_view const context)
+    {
+      return queryTextOrThrow(utility::normalizeUtf8Nfc(text), context);
+    }
+
+    std::string makeQueryCaselessKey(std::string_view const text, std::string_view const context)
+    {
+      return queryTextOrThrow(utility::makeUtf8CaselessKey(text), context);
+    }
+
     class QueryCompiler final
     {
     public:
@@ -91,7 +117,7 @@ namespace ao::query
       // _nextReg left incremented by exactly one net), so callers thread registers
       // explicitly rather than re-deriving them from _nextReg. compileInSetList returns
       // nullopt when the list is not eligible for set compilation.
-      std::uint32_t addStringConstant(std::string_view str);
+      std::uint32_t addStringConstant(std::string_view str, Field field);
       std::uint32_t addDictionarySymbol(std::string_view text);
       std::uint32_t addInSet(InSet set);
       std::uint32_t compileExpression(Expression const& expr);
@@ -119,6 +145,7 @@ namespace ao::query
       bool _hasColdAccess = false;
       bool _hasDictionaryAccess = false;
       bool _resolveStringConstantsToIds = true;
+      bool _makeStringConstantsCaseless = false;
     };
 
     OpCode toOpCode(Operator op)
@@ -143,9 +170,9 @@ namespace ao::query
       }
     }
 
-    bool isUnsupportedLikeField(Field field)
+    bool supportsUnicodeCaselessSubstring(Field field)
     {
-      return field == Field::CoverArtId || field == Field::Tag;
+      return (isStringField(field) && field != Field::Uri) || isDictionaryField(field);
     }
 
     using RequiredTagNames = boost::unordered_flat_set<std::string>;
@@ -551,7 +578,7 @@ namespace ao::query
       while (!lexeme.empty())
       {
         // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
-        auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
+        auto const suffixStart = std::ranges::find_if(lexeme, utility::isAsciiAlpha);
 
         if (suffixStart == lexeme.end())
         {
@@ -562,8 +589,7 @@ namespace ao::query
         auto const numberPart = lexeme.substr(0, suffixOffset);
         auto const suffixAndRest = lexeme.substr(suffixOffset);
         // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
-        auto const nextNumber =
-          std::ranges::find_if(suffixAndRest, [](unsigned char ch) { return std::isdigit(ch) != 0; });
+        auto const nextNumber = std::ranges::find_if(suffixAndRest, utility::isAsciiDigit);
         auto const suffixSize = static_cast<std::size_t>(std::distance(suffixAndRest.begin(), nextNumber));
         auto const suffixPart = suffixAndRest.substr(0, suffixSize);
         auto const segmentValue = scaleUnitSegment(numberPart, suffixPart, field, constant);
@@ -610,26 +636,41 @@ namespace ao::query
     }
   } // namespace
 
-  std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
+  std::uint32_t QueryCompiler::addStringConstant(std::string_view str, Field field)
   {
-    if (auto const it = std::ranges::find(_plan.stringConstants, str); it != _plan.stringConstants.end())
+    auto prepared = std::string{};
+
+    if (_makeStringConstantsCaseless)
+    {
+      prepared = makeQueryCaselessKey(str, "Unicode caseless query literal");
+    }
+    else
+    {
+      // URI values preserve the byte identity of the filesystem namespace. They
+      // must never pass through user-visible text normalization.
+      prepared = field == Field::Uri ? std::string{str} : normalizeQueryText(str, "Query string literal");
+    }
+
+    if (auto const it = std::ranges::find(_plan.stringConstants, prepared); it != _plan.stringConstants.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.stringConstants.begin(), it));
     }
 
-    _plan.stringConstants.emplace_back(str);
+    _plan.stringConstants.emplace_back(std::move(prepared));
 
     return static_cast<std::uint32_t>(_plan.stringConstants.size() - 1);
   }
 
   std::uint32_t QueryCompiler::addDictionarySymbol(std::string_view text)
   {
-    if (auto const it = std::ranges::find(_plan.dictionarySymbols, text); it != _plan.dictionarySymbols.end())
+    auto normalized = normalizeQueryText(text, "Query dictionary literal");
+
+    if (auto const it = std::ranges::find(_plan.dictionarySymbols, normalized); it != _plan.dictionarySymbols.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.dictionarySymbols.begin(), it));
     }
 
-    _plan.dictionarySymbols.emplace_back(text);
+    _plan.dictionarySymbols.emplace_back(std::move(normalized));
     return static_cast<std::uint32_t>(_plan.dictionarySymbols.size() - 1);
   }
 
@@ -734,7 +775,7 @@ namespace ao::query
       return leftReg;
     }
 
-    // Comparison (Eq/Ne/Lt/Le/Gt/Ge/Like). Compile the left operand first.
+    // Compile the left operand before selecting the field-specific comparison operation.
     auto const leftReg = compileExpression(binary.operand);
 
     // Save the left field (and its Custom symbol) before compiling the right operand,
@@ -743,9 +784,18 @@ namespace ao::query
     auto const leftCustomSymbol = _lastFieldCustomSymbol;
     auto const opcode = toOpCode(binary.optOperation->op);
 
-    if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
+    if (opcode == OpCode::Like)
     {
-      detail::throwQueryError("LIKE operator not supported for coverArt or tags");
+      if (std::get_if<VariableExpression>(&binary.operand) == nullptr ||
+          (!supportsUnicodeCaselessSubstring(leftField) && leftField != Field::Uri))
+      {
+        detail::throwQueryError("operator '~' requires a text or URI field");
+      }
+
+      if (!isStringConstantOperand(binary.optOperation->operand))
+      {
+        detail::throwQueryError("operator '~' requires a string operand");
+      }
     }
 
     // Dictionary fields store interned IDs, so an ordered comparison (<, <=, >, >=)
@@ -760,14 +810,20 @@ namespace ao::query
     }
 
     auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
-    auto restoreResolveMode =
-      gsl_lite::finally([this, previousResolveStringConstantsToIds]
-                        { _resolveStringConstantsToIds = previousResolveStringConstantsToIds; });
+    auto const previousMakeStringConstantsCaseless = _makeStringConstantsCaseless;
+    auto restoreConstantModes = gsl_lite::finally(
+      [this, previousResolveStringConstantsToIds, previousMakeStringConstantsCaseless]
+      {
+        _resolveStringConstantsToIds = previousResolveStringConstantsToIds;
+        _makeStringConstantsCaseless = previousMakeStringConstantsCaseless;
+      });
 
     if (isDictionaryField(leftField) && (opcode == OpCode::Like || isOrderedComparison(opcode)))
     {
       _resolveStringConstantsToIds = false;
     }
+
+    _makeStringConstantsCaseless = opcode == OpCode::Like && leftField != Field::Uri;
 
     std::uint32_t rightReg = 0;
     auto valueDictionarySymbol = kNoDictionarySymbol;
@@ -984,89 +1040,89 @@ namespace ao::query
   {
     auto dictionarySymbol = kNoDictionarySymbol;
 
-    auto const reg = std::visit(utility::makeVisitor(
-                                  [this](bool val) -> std::uint32_t
-                                  {
-                                    auto const reg = pushReg();
-                                    _plan.instructions.push_back(Instruction{
-                                      .op = OpCode::LoadConstant,
-                                      .field = 0,
-                                      .operand = static_cast<std::int32_t>(reg),
-                                      .constValue = val ? 1 : 0,
-                                      .size = 0,
-                                      .data = nullptr,
-                                    });
-                                    return reg;
-                                  },
-                                  [this](std::int64_t val) -> std::uint32_t
-                                  {
-                                    auto const reg = pushReg();
-                                    _plan.instructions.push_back(Instruction{
-                                      .op = OpCode::LoadConstant,
-                                      .field = 0,
-                                      .operand = static_cast<std::int32_t>(reg),
-                                      .constValue = val,
-                                      .size = 0,
-                                      .data = nullptr,
-                                    });
-                                    return reg;
-                                  },
-                                  [this](UnitConstantExpression const& val) -> std::uint32_t
-                                  {
-                                    auto const reg = pushReg();
-                                    _plan.instructions.push_back(Instruction{
-                                      .op = OpCode::LoadConstant,
-                                      .field = 0,
-                                      .operand = static_cast<std::int32_t>(reg),
-                                      .constValue = scaleUnitConstant(val, _lastField),
-                                      .size = 0,
-                                      .data = nullptr,
-                                    });
-                                    return reg;
-                                  },
-                                  [this, &dictionarySymbol](std::string const& val) -> std::uint32_t
-                                  {
-                                    if (_lastField == Field::Codec)
-                                    {
-                                      if (auto const optCodec = parseAudioCodecName(val); optCodec)
-                                      {
-                                        auto const reg = pushReg();
-                                        _plan.instructions.push_back(Instruction{
-                                          .op = OpCode::LoadConstant,
-                                          .field = 0,
-                                          .operand = static_cast<std::int32_t>(reg),
-                                          .constValue = audioCodecStorageValue(*optCodec),
-                                          .size = 0,
-                                          .data = nullptr,
-                                        });
-                                        return reg;
-                                      }
+    auto const reg = std::visit(
+      utility::makeVisitor(
+        [this](bool val) -> std::uint32_t
+        {
+          auto const reg = pushReg();
+          _plan.instructions.push_back(Instruction{
+            .op = OpCode::LoadConstant,
+            .field = 0,
+            .operand = static_cast<std::int32_t>(reg),
+            .constValue = val ? 1 : 0,
+            .size = 0,
+            .data = nullptr,
+          });
+          return reg;
+        },
+        [this](std::int64_t val) -> std::uint32_t
+        {
+          auto const reg = pushReg();
+          _plan.instructions.push_back(Instruction{
+            .op = OpCode::LoadConstant,
+            .field = 0,
+            .operand = static_cast<std::int32_t>(reg),
+            .constValue = val,
+            .size = 0,
+            .data = nullptr,
+          });
+          return reg;
+        },
+        [this](UnitConstantExpression const& val) -> std::uint32_t
+        {
+          auto const reg = pushReg();
+          _plan.instructions.push_back(Instruction{
+            .op = OpCode::LoadConstant,
+            .field = 0,
+            .operand = static_cast<std::int32_t>(reg),
+            .constValue = scaleUnitConstant(val, _lastField),
+            .size = 0,
+            .data = nullptr,
+          });
+          return reg;
+        },
+        [this, &dictionarySymbol](std::string const& val) -> std::uint32_t
+        {
+          if (_lastField == Field::Codec)
+          {
+            if (auto const optCodec = parseAudioCodecName(val); optCodec)
+            {
+              auto const reg = pushReg();
+              _plan.instructions.push_back(Instruction{
+                .op = OpCode::LoadConstant,
+                .field = 0,
+                .operand = static_cast<std::int32_t>(reg),
+                .constValue = audioCodecStorageValue(*optCodec),
+                .size = 0,
+                .data = nullptr,
+              });
+              return reg;
+            }
 
-                                      detail::throwQueryError("unknown audio codec '{}'", val);
-                                    }
+            detail::throwQueryError("unknown audio codec '{}'", val);
+          }
 
-                                    auto const optDictionarySymbol = dictionarySymbolForStringConstant(val, _lastField);
-                                    auto const constValue = optDictionarySymbol
-                                                              ? std::int64_t{0}
-                                                              : static_cast<std::int64_t>(addStringConstant(val));
+          auto const optDictionarySymbol = dictionarySymbolForStringConstant(val, _lastField);
+          auto const constValue =
+            optDictionarySymbol ? std::int64_t{0} : static_cast<std::int64_t>(addStringConstant(val, _lastField));
 
-                                    if (optDictionarySymbol)
-                                    {
-                                      dictionarySymbol = *optDictionarySymbol;
-                                    }
+          if (optDictionarySymbol)
+          {
+            dictionarySymbol = *optDictionarySymbol;
+          }
 
-                                    auto const reg = pushReg();
-                                    _plan.instructions.push_back(Instruction{
-                                      .op = OpCode::LoadConstant,
-                                      .field = 0,
-                                      .operand = static_cast<std::int32_t>(reg),
-                                      .constValue = constValue,
-                                      .size = 0,
-                                      .data = nullptr,
-                                    });
-                                    return reg;
-                                  }),
-                                constant);
+          auto const reg = pushReg();
+          _plan.instructions.push_back(Instruction{
+            .op = OpCode::LoadConstant,
+            .field = 0,
+            .operand = static_cast<std::int32_t>(reg),
+            .constValue = constValue,
+            .size = 0,
+            .data = nullptr,
+          });
+          return reg;
+        }),
+      constant);
 
     return CompiledConstant{.reg = reg, .dictionarySymbol = dictionarySymbol};
   }
@@ -1318,66 +1374,67 @@ namespace ao::query
                                                                   ConstantExpression const& constant,
                                                                   Field field)
   {
-    return std::visit(utility::makeVisitor(
-                        [&set](bool value) -> InSetValueStatus
-                        {
-                          if (set.valueKind != InSetValueKind::Numeric)
-                          {
-                            return InSetValueStatus::NotCompatible;
-                          }
+    return std::visit(
+      utility::makeVisitor(
+        [&set](bool value) -> InSetValueStatus
+        {
+          if (set.valueKind != InSetValueKind::Numeric)
+          {
+            return InSetValueStatus::NotCompatible;
+          }
 
-                          set.numericValues.insert(value ? 1 : 0);
-                          return InSetValueStatus::Appended;
-                        },
-                        [&set](std::int64_t value) -> InSetValueStatus
-                        {
-                          if (set.valueKind != InSetValueKind::Numeric)
-                          {
-                            return InSetValueStatus::NotCompatible;
-                          }
+          set.numericValues.insert(value ? 1 : 0);
+          return InSetValueStatus::Appended;
+        },
+        [&set](std::int64_t value) -> InSetValueStatus
+        {
+          if (set.valueKind != InSetValueKind::Numeric)
+          {
+            return InSetValueStatus::NotCompatible;
+          }
 
-                          set.numericValues.insert(value);
-                          return InSetValueStatus::Appended;
-                        },
-                        [&set, field](UnitConstantExpression const& value) -> InSetValueStatus
-                        {
-                          if (set.valueKind != InSetValueKind::Numeric)
-                          {
-                            return InSetValueStatus::NotCompatible;
-                          }
+          set.numericValues.insert(value);
+          return InSetValueStatus::Appended;
+        },
+        [&set, field](UnitConstantExpression const& value) -> InSetValueStatus
+        {
+          if (set.valueKind != InSetValueKind::Numeric)
+          {
+            return InSetValueStatus::NotCompatible;
+          }
 
-                          set.numericValues.insert(scaleUnitConstant(value, field));
-                          return InSetValueStatus::Appended;
-                        },
-                        [this, &set, field](std::string const& value) -> InSetValueStatus
-                        {
-                          if (set.valueKind == InSetValueKind::String)
-                          {
-                            set.strings.push_back(value);
-                            return InSetValueStatus::Appended;
-                          }
+          set.numericValues.insert(scaleUnitConstant(value, field));
+          return InSetValueStatus::Appended;
+        },
+        [this, &set, field](std::string const& value) -> InSetValueStatus
+        {
+          if (set.valueKind == InSetValueKind::String)
+          {
+            set.strings.push_back(field == Field::Uri ? value : normalizeQueryText(value, "Query string literal"));
+            return InSetValueStatus::Appended;
+          }
 
-                          if (field == Field::Codec)
-                          {
-                            if (auto const optCodec = parseAudioCodecName(value); optCodec)
-                            {
-                              set.numericValues.insert(audioCodecStorageValue(*optCodec));
-                              return InSetValueStatus::Appended;
-                            }
+          if (field == Field::Codec)
+          {
+            if (auto const optCodec = parseAudioCodecName(value); optCodec)
+            {
+              set.numericValues.insert(audioCodecStorageValue(*optCodec));
+              return InSetValueStatus::Appended;
+            }
 
-                            detail::throwQueryError("unknown audio codec '{}'", value);
-                          }
+            detail::throwQueryError("unknown audio codec '{}'", value);
+          }
 
-                          if (!isDictionaryField(field) || set.valueKind != InSetValueKind::Dictionary)
-                          {
-                            return InSetValueStatus::NotCompatible;
-                          }
+          if (!isDictionaryField(field) || set.valueKind != InSetValueKind::Dictionary)
+          {
+            return InSetValueStatus::NotCompatible;
+          }
 
-                          set.dictionarySymbols.push_back(addDictionarySymbol(value));
-                          _hasDictionaryAccess = true;
-                          return InSetValueStatus::Appended;
-                        }),
-                      constant);
+          set.dictionarySymbols.push_back(addDictionarySymbol(value));
+          _hasDictionaryAccess = true;
+          return InSetValueStatus::Appended;
+        }),
+      constant);
   }
 
   Result<ExecutionPlan> QueryCompiler::compile(Expression const& expr)

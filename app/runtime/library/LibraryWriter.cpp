@@ -33,6 +33,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/StrongTypeFormatter.h>
+#include <ao/utility/UnicodeText.h>
 
 #include <algorithm>
 #include <array>
@@ -65,6 +66,127 @@ namespace ao::rt
       bool changedHot = false;
       bool changedCold = false;
     };
+
+    Result<std::string> normalizeRuntimeText(std::string_view const value, std::string_view const context)
+    {
+      auto normalizedRes = utility::normalizeUtf8Nfc(value);
+      if (!normalizedRes)
+      {
+        auto error = std::move(normalizedRes.error());
+        error.message = std::format("{}: {}", context, error.message);
+        return std::unexpected{std::move(error)};
+      }
+      return std::move(*normalizedRes);
+    }
+
+    Result<MetadataPatch> normalizeMetadataPatch(MetadataPatch const& patch)
+    {
+      auto normalized = patch;
+      constexpr auto kTextMembers = std::to_array<std::optional<std::string> MetadataPatch::*>({
+        &MetadataPatch::optTitle,
+        &MetadataPatch::optArtist,
+        &MetadataPatch::optAlbum,
+        &MetadataPatch::optAlbumArtist,
+        &MetadataPatch::optGenre,
+        &MetadataPatch::optComposer,
+        &MetadataPatch::optConductor,
+        &MetadataPatch::optEnsemble,
+        &MetadataPatch::optWork,
+        &MetadataPatch::optMovement,
+        &MetadataPatch::optSoloist,
+      });
+
+      for (auto const member : kTextMembers)
+      {
+        auto& optValue = normalized.*member;
+        if (!optValue)
+        {
+          continue;
+        }
+
+        auto valueRes = normalizeRuntimeText(*optValue, "Track metadata");
+        if (!valueRes)
+        {
+          return std::unexpected{valueRes.error()};
+        }
+        optValue = std::move(*valueRes);
+      }
+
+      auto customUpdates = std::move(normalized.customUpdates);
+      normalized.customUpdates.clear();
+      for (auto const& [key, optValue] : customUpdates)
+      {
+        if (key.empty())
+        {
+          continue;
+        }
+
+        auto keyRes = normalizeRuntimeText(key, "Custom metadata key");
+        if (!keyRes)
+        {
+          return std::unexpected{keyRes.error()};
+        }
+
+        auto normalizedValue = std::optional<std::string>{};
+        if (optValue)
+        {
+          auto valueRes = normalizeRuntimeText(*optValue, "Custom metadata value");
+          if (!valueRes)
+          {
+            return std::unexpected{valueRes.error()};
+          }
+          normalizedValue = std::move(*valueRes);
+        }
+
+        if (!normalized.customUpdates.emplace(std::move(*keyRes), std::move(normalizedValue)).second)
+        {
+          return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
+        }
+      }
+
+      return normalized;
+    }
+
+    Result<std::vector<std::string>> normalizeTags(std::span<std::string const> const tags)
+    {
+      auto normalized = std::vector<std::string>{};
+      normalized.reserve(tags.size());
+      auto seen = std::unordered_set<std::string>{};
+      seen.reserve(tags.size());
+
+      for (auto const& tag : tags)
+      {
+        auto tagRes = normalizeRuntimeText(tag, "Track tag");
+        if (!tagRes)
+        {
+          return std::unexpected{tagRes.error()};
+        }
+        if (seen.insert(*tagRes).second)
+        {
+          normalized.push_back(std::move(*tagRes));
+        }
+      }
+      return normalized;
+    }
+
+    Result<LibraryWriter::ListDraft> normalizeListDraft(LibraryWriter::ListDraft const& draft)
+    {
+      auto normalized = draft;
+      auto nameRes = normalizeRuntimeText(draft.name, "List name");
+      if (!nameRes)
+      {
+        return std::unexpected{nameRes.error()};
+      }
+      auto descriptionRes = normalizeRuntimeText(draft.description, "List description");
+      if (!descriptionRes)
+      {
+        return std::unexpected{descriptionRes.error()};
+      }
+
+      normalized.name = std::move(*nameRes);
+      normalized.description = std::move(*descriptionRes);
+      return normalized;
+    }
 
     template<typename Setter>
     void applyStringPatch(std::optional<std::string> const& optValue,
@@ -629,10 +751,16 @@ namespace ao::rt
 
     Result<ListId> createListInTransaction(library::LibraryWrite& transaction, LibraryWriter::ListDraft const& draft)
     {
+      auto normalizedDraftRes = normalizeListDraft(draft);
+      if (!normalizedDraftRes)
+      {
+        return std::unexpected{normalizedDraftRes.error()};
+      }
+      auto const& normalizedDraft = *normalizedDraftRes;
       auto listWriter = transaction.lists();
-      auto list = listForDraft(draft);
+      auto list = listForDraft(normalizedDraft);
 
-      if (auto result = validateListDraft(draft); !result)
+      if (auto result = validateListDraft(normalizedDraft); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -650,22 +778,28 @@ namespace ao::rt
     Result<UpdateListReply> updateListInTransaction(library::LibraryWrite& transaction,
                                                     LibraryWriter::ListDraft const& draft)
     {
+      auto normalizedDraftRes = normalizeListDraft(draft);
+      if (!normalizedDraftRes)
+      {
+        return std::unexpected{normalizedDraftRes.error()};
+      }
+      auto const& normalizedDraft = *normalizedDraftRes;
       auto listWriter = transaction.lists();
-      auto optExisting = listWriter.get(draft.listId);
+      auto optExisting = listWriter.get(normalizedDraft.listId);
 
       if (!optExisting)
       {
-        return makeError(Error::Code::NotFound, std::format("list not found: {}", draft.listId));
+        return makeError(Error::Code::NotFound, std::format("list not found: {}", normalizedDraft.listId));
       }
 
-      auto list = listForDraft(draft, optExisting);
+      auto list = listForDraft(normalizedDraft, optExisting);
 
-      if (auto result = validateListDraft(draft); !result)
+      if (auto result = validateListDraft(normalizedDraft); !result)
       {
         return std::unexpected{result.error()};
       }
 
-      auto reply = diffListUpdate(*optExisting, draft);
+      auto reply = diffListUpdate(*optExisting, normalizedDraft);
 
       if (reply.fieldChanges.empty())
       {
@@ -674,7 +808,7 @@ namespace ao::rt
 
       reply.changed = true;
 
-      if (auto result = listWriter.update(draft.listId, list); !result)
+      if (auto result = listWriter.update(normalizedDraft.listId, list); !result)
       {
         return storageError("Failed to update list", result.error());
       }
@@ -687,6 +821,12 @@ namespace ao::rt
                                                                      std::span<TrackId const> trackIds,
                                                                      MetadataPatch const& patch)
     {
+      auto normalizedPatchRes = normalizeMetadataPatch(patch);
+      if (!normalizedPatchRes)
+      {
+        return std::unexpected{normalizedPatchRes.error()};
+      }
+      auto const& normalizedPatch = *normalizedPatchRes;
       auto writer = transaction.tracks();
       auto changes = std::vector<TrackChangeRecord>{};
 
@@ -701,7 +841,7 @@ namespace ao::rt
 
         auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
         auto fieldChanges = std::vector<TrackFieldChange>{};
-        auto const patchRes = applyMetadataPatch(builder, patch, fieldChanges);
+        auto const patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
 
         if (!patchRes.changedHot && !patchRes.changedCold)
         {
@@ -740,6 +880,17 @@ namespace ao::rt
                                                           std::span<std::string const> tagsToAdd,
                                                           std::span<std::string const> tagsToRemove)
     {
+      auto normalizedAddRes = normalizeTags(tagsToAdd);
+      if (!normalizedAddRes)
+      {
+        return std::unexpected{normalizedAddRes.error()};
+      }
+      auto normalizedRemoveRes = normalizeTags(tagsToRemove);
+      if (!normalizedRemoveRes)
+      {
+        return std::unexpected{normalizedRemoveRes.error()};
+      }
+
       auto writer = transaction.tracks();
       auto changes = std::vector<TrackTagsChange>{};
 
@@ -758,7 +909,7 @@ namespace ao::rt
         auto addedTags = std::vector<std::string>{};
         auto removedTags = std::vector<std::string>{};
 
-        for (auto const& tag : tagsToAdd)
+        for (auto const& tag : *normalizedAddRes)
         {
           if (!std::ranges::contains(tags.names(), tag))
           {
@@ -768,7 +919,7 @@ namespace ao::rt
           }
         }
 
-        for (auto const& tag : tagsToRemove)
+        for (auto const& tag : *normalizedRemoveRes)
         {
           if (std::ranges::contains(tags.names(), tag))
           {

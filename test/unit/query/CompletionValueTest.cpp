@@ -47,6 +47,17 @@ namespace ao::query::test
       CHECK(context.replacement.prefix.empty());
     }
 
+    SECTION("Detects a value after the substring operator")
+    {
+      auto const text = std::string{"$artist ~"};
+      auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
+
+      CHECK(context.field == Field::ArtistId);
+      CHECK(context.replacement.replaceBegin == text.size());
+      CHECK(context.replacement.replaceEnd == text.size());
+      CHECK(context.replacement.prefix.empty());
+    }
+
     SECTION("Keeps in-list values bound to the left field")
     {
       auto const text = std::string{"$artist in [Ma"};

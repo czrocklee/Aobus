@@ -68,6 +68,35 @@
         ]
       }
     },
+    "icu": {
+      "platforms": [
+        "linux",
+        "windows"
+      ],
+      "policy": {
+        "kind": "exact",
+        "version": "78.3"
+      },
+      "nix": {
+        "attribute": "icu78"
+      },
+      "vcpkg": {
+        "strategy": "baseline",
+        "ports": [
+          "icu"
+        ]
+      },
+      "cmake": {
+        "package": "ICU",
+        "targets": [
+          "ICU::uc",
+          "ICU::data"
+        ]
+      },
+      "capabilities": [
+        "unicode-17.0"
+      ]
+    },
     "spdlog": {
       "platforms": [
         "linux",

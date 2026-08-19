@@ -329,16 +329,15 @@ namespace ao::library
       static PreparedCold make(TrackBuilder const* builder,
                                WriteTransaction& transaction,
                                ResourceStore const& resources);
-      static std::vector<std::pair<DictionaryId, std::string_view>> resolveCustomMetadata(
-        TrackBuilder const* builder,
-        WriteTransaction& transaction);
+      static std::vector<std::pair<DictionaryId, std::string>> resolveCustomMetadata(TrackBuilder const* builder,
+                                                                                     WriteTransaction& transaction);
 
       void resolveClassicalIds(TrackBuilder const* builder, WriteTransaction& transaction);
       void resolveCoverArt(TrackBuilder const* builder, WriteTransaction& transaction, ResourceStore const& resources);
       void appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload);
       void appendCoverArtBlock();
       void appendClassicalBlock(MetadataBuilder const& metadata);
-      void appendCustomMetadataBlock(std::vector<std::pair<DictionaryId, std::string_view>> const& resolvedPairs);
+      void appendCustomMetadataBlock(std::vector<std::pair<DictionaryId, std::string>> const& resolvedPairs);
       void assignLayout(std::string_view uri);
       void snapshot(TrackBuilder const* builder);
 

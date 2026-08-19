@@ -119,6 +119,32 @@ namespace ao::query::test
     }
   }
 
+  TEST_CASE("PlanEvaluator - matches dictionary text with Unicode caseless substring keys",
+            "[query][unit][plan-evaluator][unicode]")
+  {
+    auto spec = TrackSpec{};
+    spec.artist = "Die Ärzte";
+    auto track = TestTrack{spec};
+    auto evaluator = PlanEvaluator{};
+
+    auto const matchingPlan = compileOk(parseOk(R"($artist ~ "DIE ÄRZTE")"));
+    auto const accentDistinctPlan = compileOk(parseOk(R"($artist ~ "ARZTE")"));
+
+    CHECK(evaluateWithDictionary(evaluator, matchingPlan, track.view(), track.dictionary()));
+    CHECK_FALSE(evaluateWithDictionary(evaluator, accentDistinctPlan, track.view(), track.dictionary()));
+  }
+
+  TEST_CASE("PlanEvaluator - matches custom text with Unicode caseless substring keys",
+            "[query][unit][plan-evaluator][unicode]")
+  {
+    auto spec = TrackSpec{};
+    spec.customPairs.emplace_back("Location", "Große Straße");
+    auto track = TestTrack{spec};
+    auto const plan = compileOk(parseOk(R"(%Location ~ "GROSSE STRASSE")"));
+
+    CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
+  }
+
   TEST_CASE("PlanEvaluator - dictionary cache preserves string predicate results", "[query][unit][plan-evaluator]")
   {
     auto dictionaryFixture = DictionaryFixture{};

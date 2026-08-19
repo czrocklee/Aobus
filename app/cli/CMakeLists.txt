@@ -36,4 +36,5 @@ add_dependencies(aobus-cli-lib ao_frontend_library_path_boundary_check)
 add_executable(aobus
     main.cpp
 )
+aobus_enable_windows_utf8_manifest(aobus)
 target_link_libraries(aobus PRIVATE aobus-cli-lib mimalloc)

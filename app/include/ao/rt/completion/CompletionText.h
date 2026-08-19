@@ -3,14 +3,15 @@
 
 #pragma once
 
-#include <cctype>
+#include <ao/utility/String.h>
+
 #include <string_view>
 
 namespace ao::rt
 {
   inline char completionLowerAscii(char ch)
   {
-    return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    return utility::toAsciiLower(ch);
   }
 
   bool startsWithCompletionPrefixInsensitive(std::string_view candidate, std::string_view prefix);

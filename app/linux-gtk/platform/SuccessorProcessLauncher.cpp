@@ -95,7 +95,7 @@ namespace ao::gtk
     auto plan = SuccessorLaunchPlan{
       .executable = optAppImageExecutable && isUsableAppImage(*optAppImageExecutable)
                       ? *optAppImageExecutable
-                      : std::filesystem::path{kProcSelfExecutable},
+                      : utility::pathFromUtf8(kProcSelfExecutable),
       .arguments = std::move(*argumentsRes),
       .optActivationToken = std::nullopt,
     };

@@ -30,6 +30,7 @@ option(AOBUS_BUILD_TUI "Build the terminal frontend" ON)
 option(AOBUS_BUILD_WINUI "Build the Windows WinUI 3 frontend" OFF)
 
 include(cmake/CompilerOptions.cmake)
+include(cmake/WindowsUtf8Manifest.cmake)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR "Release" IN_LIST CMAKE_CONFIGURATION_TYPES)
   if(AOBUS_ENABLE_ASAN OR AOBUS_ENABLE_TSAN)
@@ -254,6 +255,7 @@ endif()
 if(AOBUS_BUILD_TESTS)
   add_subdirectory(test)
 endif()
+aobus_verify_windows_utf8_manifest_coverage("${CMAKE_SOURCE_DIR}")
 
 get_property(AOBUS_GENERATED_HEADERS GLOBAL PROPERTY AOBUS_GENERATED_HEADERS)
 if(AOBUS_GENERATED_HEADERS)

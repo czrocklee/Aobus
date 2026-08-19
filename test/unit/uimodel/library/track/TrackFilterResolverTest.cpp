@@ -29,8 +29,9 @@ namespace ao::uimodel::test
       auto const resolved = resolveTrackFilterExpression("beatles");
       CHECK(resolved.mode == TrackFilterMode::Quick);
       CHECK(resolved.expression ==
-            "($title ~ \"beatles\" or $artist ~ \"beatles\" or $album ~ \"beatles\" or $albumArtist ~ \"beatles\" "
-            "or $genre ~ \"beatles\" or $composer ~ \"beatles\" or $work ~ \"beatles\" or #beatles)");
+            "($title ~ \"beatles\" or $artist ~ \"beatles\" or $album ~ \"beatles\" or $albumArtist ~ "
+            "\"beatles\" or $genre ~ \"beatles\" or $composer ~ \"beatles\" or $work ~ \"beatles\" or "
+            "#beatles)");
     }
 
     SECTION("Multiple terms")

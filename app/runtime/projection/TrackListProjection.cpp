@@ -21,6 +21,7 @@
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
+#include <ao/utility/String.h>
 #include <ao/utility/StringArena.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -28,7 +29,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <chrono>
 #include <concepts>
 #include <cstddef>
@@ -76,10 +76,18 @@ namespace ao::rt
       std::string_view soloistKey{};
     };
 
+    struct GroupIdentityKey final
+    {
+      std::string_view first{};
+      std::string_view second{};
+
+      bool operator==(GroupIdentityKey const&) const = default;
+    };
+
     struct GroupSection final
     {
       TrackRowRange rows{};
-      std::string_view groupKey{};
+      GroupIdentityKey identity{};
       using HeadingValue = std::variant<std::monostate, std::string_view, std::uint16_t, MissingTrackValueKind>;
       HeadingValue primary{};
       HeadingValue secondary{};
@@ -108,7 +116,7 @@ namespace ao::rt
     {
       TrackId trackId{};
       SortKeys keys{};
-      std::string_view groupKey{};
+      GroupIdentityKey groupIdentity{};
       GroupSection::HeadingValue primary{};
       GroupSection::HeadingValue secondary{};
       GroupSection::HeadingValue tertiary{};
@@ -128,7 +136,7 @@ namespace ao::rt
 
       for (std::size_t i = 0; i < prefix.size(); ++i)
       {
-        if (std::tolower(static_cast<unsigned char>(str[i])) != std::tolower(static_cast<unsigned char>(prefix[i])))
+        if (utility::toAsciiLower(str[i]) != utility::toAsciiLower(prefix[i]))
         {
           return false;
         }
@@ -137,34 +145,42 @@ namespace ao::rt
       return true;
     }
 
-    // Normalize a title into a caller-owned scratch buffer: strip a leading article and
-    // lower-case the rest. Writing into a reused buffer avoids a per-call string allocation;
-    // the result is meant to be interned immediately, not retained.
-    void normalizeInto(std::string& out, std::string_view title)
+    std::string_view stripLeadingArticle(std::string_view text)
     {
-      std::size_t offset = 0;
-
-      if (startsWithCaseInsensitive(title, "the "))
+      if (startsWithCaseInsensitive(text, "the "))
       {
-        offset = 4;
+        text.remove_prefix(4);
       }
-      else if (startsWithCaseInsensitive(title, "a "))
+      else if (startsWithCaseInsensitive(text, "a "))
       {
-        offset = 2;
+        text.remove_prefix(2);
       }
-      else if (startsWithCaseInsensitive(title, "an "))
+      else if (startsWithCaseInsensitive(text, "an "))
       {
-        offset = kArticleAnLength;
+        text.remove_prefix(kArticleAnLength);
       }
 
-      auto const body = title.substr(offset);
+      return text;
+    }
+
+    // Fold ASCII into caller-owned scratch storage. UTF-8 bytes remain unchanged;
+    // full Unicode case folding belongs to the later Unicode text facade.
+    void foldAsciiInto(std::string& out, std::string_view text)
+    {
       out.clear();
-      out.reserve(body.size());
+      out.reserve(text.size());
 
-      for (auto const ch : body)
+      for (auto const ch : text)
       {
-        out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+        out.push_back(utility::toAsciiLower(ch));
       }
+    }
+
+    // Article removal is ordering policy only. Group identity is built from the
+    // unstripped text so values such as "The Doors" and "Doors" remain distinct.
+    void makeSortKeyInto(std::string& out, std::string_view text)
+    {
+      foldAsciiInto(out, stripLeadingArticle(text));
     }
 
     bool isColdDataRequiredForSortField(TrackSortField field)
@@ -276,15 +292,132 @@ namespace ao::rt
       return 0;
     }
 
-    Comparator buildComparator(std::vector<TrackSortTerm> sortBy)
+    std::span<TrackSortField const> groupSortFields(TrackGroupKey const groupBy)
     {
-      if (sortBy.empty())
+      static constexpr auto kArtist = std::to_array({TrackSortField::Artist});
+      static constexpr auto kAlbum = std::to_array({TrackSortField::AlbumArtist, TrackSortField::Album});
+      static constexpr auto kAlbumArtist = std::to_array({TrackSortField::AlbumArtist});
+      static constexpr auto kGenre = std::to_array({TrackSortField::Genre});
+      static constexpr auto kComposer = std::to_array({TrackSortField::Composer});
+      static constexpr auto kConductor = std::to_array({TrackSortField::Conductor});
+      static constexpr auto kEnsemble = std::to_array({TrackSortField::Ensemble});
+      static constexpr auto kWork = std::to_array({TrackSortField::Composer, TrackSortField::Work});
+      static constexpr auto kYear = std::to_array({TrackSortField::Year});
+
+      switch (groupBy)
+      {
+        case TrackGroupKey::Artist: return kArtist;
+        case TrackGroupKey::Album: return kAlbum;
+        case TrackGroupKey::AlbumArtist: return kAlbumArtist;
+        case TrackGroupKey::Genre: return kGenre;
+        case TrackGroupKey::Composer: return kComposer;
+        case TrackGroupKey::Conductor: return kConductor;
+        case TrackGroupKey::Ensemble: return kEnsemble;
+        case TrackGroupKey::Work: return kWork;
+        case TrackGroupKey::Year: return kYear;
+        case TrackGroupKey::None: return {};
+      }
+
+      return {};
+    }
+
+    std::vector<TrackSortTerm> buildGroupOrder(TrackGroupKey const groupBy, std::vector<TrackSortTerm> const& sortBy)
+    {
+      auto groupOrder = std::vector<TrackSortTerm>{};
+      groupOrder.reserve(2);
+      auto const groupFields = groupSortFields(groupBy);
+
+      for (auto const& term : sortBy)
+      {
+        if (std::ranges::contains(groupFields, term.field) &&
+            !std::ranges::contains(groupOrder, term.field, &TrackSortTerm::field))
+        {
+          groupOrder.push_back(term);
+        }
+      }
+
+      auto const fallbackAscending = groupOrder.empty() || groupOrder.front().ascending;
+      auto const appendMissing = [&](TrackSortField const field)
+      {
+        if (!std::ranges::contains(groupOrder, field, &TrackSortTerm::field))
+        {
+          groupOrder.push_back(TrackSortTerm{.field = field, .ascending = fallbackAscending});
+        }
+      };
+
+      for (auto const field : groupFields)
+      {
+        appendMissing(field);
+      }
+
+      return groupOrder;
+    }
+
+    std::string_view groupIdentityComponent(TrackGroupKey const groupBy,
+                                            TrackSortField const field,
+                                            GroupIdentityKey const& identity)
+    {
+      if (groupBy == TrackGroupKey::Album && field == TrackSortField::Album)
+      {
+        return identity.second;
+      }
+
+      if (groupBy == TrackGroupKey::Work && field == TrackSortField::Work)
+      {
+        return identity.second;
+      }
+
+      return identity.first;
+    }
+
+    std::int32_t compareGroupIdentity(TrackGroupKey const groupBy,
+                                      std::span<TrackSortTerm const> const groupOrder,
+                                      GroupIdentityKey const& lhs,
+                                      GroupIdentityKey const& rhs)
+    {
+      for (auto const& term : groupOrder)
+      {
+        auto const lhsComponent = groupIdentityComponent(groupBy, term.field, lhs);
+        auto const rhsComponent = groupIdentityComponent(groupBy, term.field, rhs);
+
+        if (auto const cmp = lhsComponent.compare(rhsComponent); cmp != 0)
+        {
+          auto const normalized = cmp < 0 ? -1 : 1;
+          return term.ascending ? normalized : -normalized;
+        }
+      }
+
+      return 0;
+    }
+
+    Comparator buildComparator(std::vector<TrackSortTerm> sortBy, TrackGroupKey const groupBy)
+    {
+      auto groupOrder = buildGroupOrder(groupBy, sortBy);
+      std::erase_if(sortBy,
+                    [&groupOrder](TrackSortTerm const& term)
+                    { return std::ranges::contains(groupOrder, term.field, &TrackSortTerm::field); });
+
+      if (sortBy.empty() && groupOrder.empty())
       {
         return {};
       }
 
-      return [sortBy = std::move(sortBy)](OrderEntry const& lhs, OrderEntry const& rhs) -> bool
+      return [sortBy = std::move(sortBy), groupOrder = std::move(groupOrder), groupBy](
+               OrderEntry const& lhs, OrderEntry const& rhs) -> bool
       {
+        for (auto const& term : groupOrder)
+        {
+          if (auto const cmp = compareSingleField(term, lhs.keys, rhs.keys); cmp != 0)
+          {
+            return term.ascending ? (cmp < 0) : (cmp > 0);
+          }
+        }
+
+        if (auto const cmp = compareGroupIdentity(groupBy, groupOrder, lhs.groupIdentity, rhs.groupIdentity); cmp != 0)
+        {
+          return cmp < 0;
+        }
+
         for (auto const& term : sortBy)
         {
           if (auto const cmp = compareSingleField(term, lhs.keys, rhs.keys); cmp != 0)
@@ -300,11 +433,12 @@ namespace ao::rt
     struct CachedDictionaryText final
     {
       std::string_view raw;
-      std::string_view normalized;
+      std::string_view identityKey;
+      std::string_view sortKey;
     };
 
-    // Resolve a dictionary id once for both presentation text and normalized sort/group keys.
-    // Raw text borrows DictionaryStore's stable storage; normalized text is interned in the
+    // Resolve a dictionary id once for display, group identity, and ordering.
+    // Raw text borrows DictionaryStore's stable storage; derived keys are interned in the
     // projection arena. Empty nonzero slots are not cached because they can later be recycled.
     using DictionaryTextCache = boost::unordered_flat_map<DictionaryId, CachedDictionaryText, std::hash<DictionaryId>>;
 
@@ -320,8 +454,18 @@ namespace ao::rt
       }
 
       auto const raw = dictionary.getOrDefault(id);
-      normalizeInto(scratch, raw);
-      auto const text = CachedDictionaryText{.raw = raw, .normalized = arena.intern(scratch)};
+      foldAsciiInto(scratch, raw);
+      auto const identityKey = arena.intern(scratch);
+      auto const sortText = stripLeadingArticle(raw);
+      auto sortKey = identityKey;
+
+      if (sortText.size() != raw.size())
+      {
+        foldAsciiInto(scratch, sortText);
+        sortKey = arena.intern(scratch);
+      }
+
+      auto const text = CachedDictionaryText{.raw = raw, .identityKey = identityKey, .sortKey = sortKey};
 
       if (id == kInvalidDictionaryId || !raw.empty())
       {
@@ -331,139 +475,61 @@ namespace ao::rt
       return text;
     }
 
+    void fillSortKey(SortKeys& keys,
+                     library::TrackView const& view,
+                     library::DictionaryStore const& dictionary,
+                     TrackSortField const field,
+                     DictionaryTextCache& textCache,
+                     utility::StringArena& arena,
+                     std::string& scratch)
+    {
+      auto const sortText = [&](DictionaryId id) -> std::string_view
+      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id).sortKey; };
+
+      switch (field)
+      {
+        case TrackSortField::Year: keys.year = view.metadata().year(); break;
+        case TrackSortField::DiscNumber: keys.discNumber = view.metadata().discNumber(); break;
+        case TrackSortField::TrackNumber: keys.trackNumber = view.metadata().trackNumber(); break;
+        case TrackSortField::Movement: keys.movementNumber = view.classical().movementNumber(); break;
+        case TrackSortField::Duration: keys.duration = view.property().duration(); break;
+        case TrackSortField::Title:
+          makeSortKeyInto(scratch, view.metadata().title());
+          keys.titleKey = arena.intern(scratch);
+          break;
+        case TrackSortField::Artist: keys.artistKey = sortText(view.metadata().artistId()); break;
+        case TrackSortField::Album: keys.albumKey = sortText(view.metadata().albumId()); break;
+        case TrackSortField::AlbumArtist: keys.albumArtistKey = sortText(view.metadata().albumArtistId()); break;
+        case TrackSortField::Genre: keys.genreKey = sortText(view.metadata().genreId()); break;
+        case TrackSortField::Composer: keys.composerKey = sortText(view.metadata().composerId()); break;
+        case TrackSortField::Conductor: keys.conductorKey = sortText(view.classical().conductorId()); break;
+        case TrackSortField::Ensemble: keys.ensembleKey = sortText(view.classical().ensembleId()); break;
+        case TrackSortField::Work: keys.workKey = sortText(view.classical().workId()); break;
+        case TrackSortField::Soloist: keys.soloistKey = sortText(view.classical().soloistId()); break;
+      }
+    }
+
     void fillSortKeys(SortKeys& keys,
                       library::TrackView const& view,
                       library::DictionaryStore const& dictionary,
-                      std::vector<TrackSortTerm> const& sortBy,
+                      std::span<TrackSortTerm const> const sortBy,
+                      TrackGroupKey const groupBy,
                       DictionaryTextCache& textCache,
                       utility::StringArena& arena,
                       std::string& scratch)
     {
-      auto const normalizedText = [&](DictionaryId id) -> std::string_view
-      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id).normalized; };
-
       for (auto const& term : sortBy)
       {
-        switch (term.field)
+        fillSortKey(keys, view, dictionary, term.field, textCache, arena, scratch);
+      }
+
+      for (auto const field : groupSortFields(groupBy))
+      {
+        if (!std::ranges::contains(sortBy, field, &TrackSortTerm::field))
         {
-          case TrackSortField::Year: keys.year = view.metadata().year(); break;
-          case TrackSortField::DiscNumber: keys.discNumber = view.metadata().discNumber(); break;
-          case TrackSortField::TrackNumber: keys.trackNumber = view.metadata().trackNumber(); break;
-          case TrackSortField::Movement: keys.movementNumber = view.classical().movementNumber(); break;
-          case TrackSortField::Duration: keys.duration = view.property().duration(); break;
-          case TrackSortField::Title:
-            normalizeInto(scratch, view.metadata().title());
-            keys.titleKey = arena.intern(scratch);
-            break;
-          case TrackSortField::Artist: keys.artistKey = normalizedText(view.metadata().artistId()); break;
-          case TrackSortField::Album: keys.albumKey = normalizedText(view.metadata().albumId()); break;
-          case TrackSortField::AlbumArtist:
-            keys.albumArtistKey = normalizedText(view.metadata().albumArtistId());
-            break;
-          case TrackSortField::Genre: keys.genreKey = normalizedText(view.metadata().genreId()); break;
-          case TrackSortField::Composer: keys.composerKey = normalizedText(view.metadata().composerId()); break;
-          case TrackSortField::Conductor: keys.conductorKey = normalizedText(view.classical().conductorId()); break;
-          case TrackSortField::Ensemble: keys.ensembleKey = normalizedText(view.classical().ensembleId()); break;
-          case TrackSortField::Work: keys.workKey = normalizedText(view.classical().workId()); break;
-          case TrackSortField::Soloist: keys.soloistKey = normalizedText(view.classical().soloistId()); break;
+          fillSortKey(keys, view, dictionary, field, textCache, arena, scratch);
         }
       }
-    }
-
-    void ensureGroupSortKeys(SortKeys& keys,
-                             library::TrackView const& view,
-                             library::DictionaryStore const& dictionary,
-                             TrackGroupKey groupBy,
-                             DictionaryTextCache& textCache,
-                             utility::StringArena& arena,
-                             std::string& scratch)
-    {
-      auto const normalizedText = [&](DictionaryId id) -> std::string_view
-      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id).normalized; };
-
-      switch (groupBy)
-      {
-        case TrackGroupKey::Artist:
-          if (keys.artistKey.empty())
-          {
-            keys.artistKey = normalizedText(view.metadata().artistId());
-          }
-
-          break;
-        case TrackGroupKey::Album:
-          if (keys.albumKey.empty())
-          {
-            keys.albumKey = normalizedText(view.metadata().albumId());
-          }
-
-          if (keys.albumArtistKey.empty())
-          {
-            keys.albumArtistKey = normalizedText(view.metadata().albumArtistId());
-          }
-
-          break;
-        case TrackGroupKey::AlbumArtist:
-          if (keys.albumArtistKey.empty())
-          {
-            keys.albumArtistKey = normalizedText(view.metadata().albumArtistId());
-          }
-
-          break;
-        case TrackGroupKey::Genre:
-          if (keys.genreKey.empty())
-          {
-            keys.genreKey = normalizedText(view.metadata().genreId());
-          }
-
-          break;
-        case TrackGroupKey::Composer:
-          if (keys.composerKey.empty())
-          {
-            keys.composerKey = normalizedText(view.metadata().composerId());
-          }
-
-          break;
-        case TrackGroupKey::Conductor:
-          if (keys.conductorKey.empty())
-          {
-            keys.conductorKey = normalizedText(view.classical().conductorId());
-          }
-
-          break;
-        case TrackGroupKey::Ensemble:
-          if (keys.ensembleKey.empty())
-          {
-            keys.ensembleKey = normalizedText(view.classical().ensembleId());
-          }
-
-          break;
-        case TrackGroupKey::Work:
-          if (keys.workKey.empty())
-          {
-            keys.workKey = normalizedText(view.classical().workId());
-          }
-
-          if (keys.composerKey.empty())
-          {
-            keys.composerKey = normalizedText(view.metadata().composerId());
-          }
-
-          break;
-        default: break;
-      }
-    }
-
-    std::string_view internCompoundKey(utility::StringArena& arena,
-                                       std::string& scratch,
-                                       std::string_view lhs,
-                                       std::string_view rhs)
-    {
-      scratch.clear();
-      scratch.reserve(lhs.size() + 1 + rhs.size());
-      scratch.append(lhs);
-      scratch.push_back('\x1F');
-      scratch.append(rhs);
-      return arena.intern(scratch);
     }
 
     std::string_view internPaddedYearKey(utility::StringArena& arena, std::uint16_t year)
@@ -490,14 +556,12 @@ namespace ao::rt
         case TrackGroupKey::Artist:
         {
           auto const text = dictionaryText(view.metadata().artistId());
-          entry.groupKey = entry.keys.artistKey;
+          entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Artist}
                                            : GroupSection::HeadingValue{text.raw};
         }
         break;
         case TrackGroupKey::Album:
-          entry.groupKey = internCompoundKey(arena, scratch, entry.keys.albumArtistKey, entry.keys.albumKey);
-
           if (auto const optPrimary = view.coverArt().primary(); optPrimary)
           {
             entry.imageId = optPrimary->resourceId;
@@ -506,8 +570,9 @@ namespace ao::rt
           {
             auto const album = dictionaryText(view.metadata().albumId());
             auto const albumArtist = dictionaryText(view.metadata().albumArtistId());
+            entry.groupIdentity = {.first = albumArtist.identityKey, .second = album.identityKey};
 
-            if (entry.keys.albumKey.empty())
+            if (album.raw.empty())
             {
               entry.primary = MissingTrackValueKind::Album;
             }
@@ -516,7 +581,7 @@ namespace ao::rt
               entry.primary = album.raw;
             }
 
-            if (entry.keys.albumArtistKey.empty())
+            if (albumArtist.raw.empty())
             {
               entry.secondary = MissingTrackValueKind::Artist;
             }
@@ -539,7 +604,7 @@ namespace ao::rt
         case TrackGroupKey::AlbumArtist:
         {
           auto const text = dictionaryText(view.metadata().albumArtistId());
-          entry.groupKey = entry.keys.albumArtistKey;
+          entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Artist}
                                            : GroupSection::HeadingValue{text.raw};
         }
@@ -547,7 +612,7 @@ namespace ao::rt
         case TrackGroupKey::Genre:
         {
           auto const text = dictionaryText(view.metadata().genreId());
-          entry.groupKey = entry.keys.genreKey;
+          entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Genre}
                                            : GroupSection::HeadingValue{text.raw};
         }
@@ -555,7 +620,7 @@ namespace ao::rt
         case TrackGroupKey::Composer:
         {
           auto const text = dictionaryText(view.metadata().composerId());
-          entry.groupKey = entry.keys.composerKey;
+          entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Composer}
                                            : GroupSection::HeadingValue{text.raw};
         }
@@ -563,7 +628,7 @@ namespace ao::rt
         case TrackGroupKey::Conductor:
         {
           auto const text = dictionaryText(view.classical().conductorId());
-          entry.groupKey = entry.keys.conductorKey;
+          entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Conductor}
                                            : GroupSection::HeadingValue{text.raw};
         }
@@ -571,7 +636,7 @@ namespace ao::rt
         case TrackGroupKey::Ensemble:
         {
           auto const text = dictionaryText(view.classical().ensembleId());
-          entry.groupKey = entry.keys.ensembleKey;
+          entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Ensemble}
                                            : GroupSection::HeadingValue{text.raw};
         }
@@ -580,7 +645,7 @@ namespace ao::rt
         {
           auto const work = dictionaryText(view.classical().workId());
           auto const composer = dictionaryText(view.metadata().composerId());
-          entry.groupKey = internCompoundKey(arena, scratch, entry.keys.composerKey, entry.keys.workKey);
+          entry.groupIdentity = {.first = composer.identityKey, .second = work.identityKey};
           entry.primary = work.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Work}
                                            : GroupSection::HeadingValue{work.raw};
           entry.secondary = composer.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Composer}
@@ -590,7 +655,7 @@ namespace ao::rt
         case TrackGroupKey::Year:
         {
           std::uint16_t const year = entry.keys.year;
-          entry.groupKey = internPaddedYearKey(arena, year);
+          entry.groupIdentity.first = internPaddedYearKey(arena, year);
           entry.primary =
             (year == 0) ? GroupSection::HeadingValue{MissingTrackValueKind::Year} : GroupSection::HeadingValue{year};
         }
@@ -600,7 +665,7 @@ namespace ao::rt
       }
     }
 
-    bool hasSameSortDirection(std::vector<TrackSortTerm> const& old, std::vector<TrackSortTerm> const& updated)
+    bool hasSameSortFields(std::vector<TrackSortTerm> const& old, std::vector<TrackSortTerm> const& updated)
     {
       if (old.size() != updated.size())
       {
@@ -631,7 +696,7 @@ namespace ao::rt
     std::vector<TrackField> redundantFields;
     Comparator comparator;
     library::TrackStore::Reader::LoadMode loadMode = library::TrackStore::Reader::LoadMode::Hot;
-    // Normalized sort/group key views in orderIndex/sections/dictionaryTextCache point into
+    // Derived sort/group key views in orderIndex/sections/dictionaryTextCache point into
     // the arena (bump-allocated and content-deduplicated), so it is declared first to outlive
     // them. Raw cache views borrow the library dictionary, which outlives this projection.
     // normScratch is a reused buffer that keeps the per-track normalization path allocation-free.
@@ -657,11 +722,10 @@ namespace ao::rt
     OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore const& dictionary)
     {
       auto entry = OrderEntry{.trackId = id};
-      fillSortKeys(entry.keys, view, dictionary, sortBy, dictionaryTextCache, stringArena, normScratch);
+      fillSortKeys(entry.keys, view, dictionary, sortBy, groupBy, dictionaryTextCache, stringArena, normScratch);
 
       if (groupBy != TrackGroupKey::None)
       {
-        ensureGroupSortKeys(entry.keys, view, dictionary, groupBy, dictionaryTextCache, stringArena, normScratch);
         fillGroupMetadata(entry, view, dictionary, groupBy, dictionaryTextCache, stringArena, normScratch);
       }
 
@@ -676,7 +740,7 @@ namespace ao::rt
       , sourceLease{std::move(trackSourceLease)}
       , library{lib}
       , sortBy{std::move(initialSort)}
-      , comparator{buildComparator(sortBy)}
+      , comparator{buildComparator(sortBy, groupBy)}
       , loadMode{computeLoadMode(sortBy, groupBy)}
     {
       if (sourceLease->state() == TrackSourceState::Live)
@@ -704,7 +768,7 @@ namespace ao::rt
 
       sections.push_back(GroupSection{
         .rows = {.start = 0, .count = 1},
-        .groupKey = orderIndex[0].groupKey,
+        .identity = orderIndex[0].groupIdentity,
         .primary = orderIndex[0].primary,
         .secondary = orderIndex[0].secondary,
         .tertiary = orderIndex[0].tertiary,
@@ -713,11 +777,11 @@ namespace ao::rt
 
       for (std::size_t index = 1; index < orderIndex.size(); ++index)
       {
-        if (orderIndex[index].groupKey != orderIndex[index - 1].groupKey)
+        if (orderIndex[index].groupIdentity != orderIndex[index - 1].groupIdentity)
         {
           sections.push_back(GroupSection{
             .rows = {.start = index, .count = 1},
-            .groupKey = orderIndex[index].groupKey,
+            .identity = orderIndex[index].groupIdentity,
             .primary = orderIndex[index].primary,
             .secondary = orderIndex[index].secondary,
             .tertiary = orderIndex[index].tertiary,
@@ -742,7 +806,7 @@ namespace ao::rt
 
       // A full rebuild discards every container that holds an arena-backed view, so this is
       // the one safe point to reclaim the arena: clear the view holders first, then the text
-      // cache (whose normalized values are arena views too), then the arena itself. Without
+      // cache (whose derived values are arena views too), then the arena itself. Without
       // this the arena would only grow across presentation switches / resets, trading the
       // allocation wins for unbounded memory. Incremental insert/update/remove must NOT clear:
       // they keep existing entries whose views still point into the arena.
@@ -1127,7 +1191,8 @@ namespace ao::rt
 
     struct SectionDescriptor final
     {
-      std::string groupKey;
+      std::string groupIdentityFirst;
+      std::string groupIdentitySecond;
       TrackGroupHeading heading;
       ResourceId imageId{kInvalidResourceId};
 
@@ -1157,7 +1222,8 @@ namespace ao::rt
       for (auto const& section : sections)
       {
         descriptors.push_back(SectionDescriptor{
-          .groupKey = std::string{section.groupKey},
+          .groupIdentityFirst = std::string{section.identity.first},
+          .groupIdentitySecond = std::string{section.identity.second},
           .heading =
             TrackGroupHeading{
               .primary = ownHeadingValue(section.primary),
@@ -1431,14 +1497,15 @@ namespace ao::rt
       }
     }
 
-    // Same-group / reverse-sort fast path.
-    if (_implPtr->groupBy == spec.groupBy && hasSameSortDirection(_implPtr->sortBy, spec.sortBy) &&
-        _implPtr->comparator)
+    // Reuse already-materialized keys when only directions changed (or the same
+    // presentation is applied again); sorting them performs no library reads.
+    if (_implPtr->groupBy == spec.groupBy && hasSameSortFields(_implPtr->sortBy, spec.sortBy) && _implPtr->comparator)
     {
       _implPtr->sortBy = std::move(spec.sortBy);
-      _implPtr->comparator = buildComparator(_implPtr->sortBy);
-      std::ranges::reverse(_implPtr->orderIndex);
+      _implPtr->comparator = buildComparator(_implPtr->sortBy, _implPtr->groupBy);
+      std::ranges::sort(_implPtr->orderIndex, std::ref(_implPtr->comparator));
       _implPtr->rebuildRowIndex();
+      _implPtr->buildGroupSections();
 
       _implPtr->publishReset(previousSize);
       return;
@@ -1446,7 +1513,7 @@ namespace ao::rt
 
     _implPtr->groupBy = spec.groupBy;
     _implPtr->sortBy = std::move(spec.sortBy);
-    _implPtr->comparator = buildComparator(_implPtr->sortBy);
+    _implPtr->comparator = buildComparator(_implPtr->sortBy, _implPtr->groupBy);
     _implPtr->loadMode = computeLoadMode(_implPtr->sortBy, _implPtr->groupBy);
 
     _implPtr->rebuildOrderIndex();

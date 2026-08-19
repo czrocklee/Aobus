@@ -3,6 +3,7 @@
 
 #include <ao/library/DictionaryStore.h>
 
+#include "TextAdmission.h"
 #include "detail/LibraryError.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -60,7 +61,15 @@ namespace ao::library
           std::format("Dictionary ids are not the dense range 1..N: expected {}, found {}", expectedId, rawId));
       }
 
-      _idToStringStorage.emplace_back(utility::bytes::stringView(buf));
+      auto const text = utility::bytes::stringView(buf);
+      if (auto validationRes = detail::validatePersistedLibraryText(text, "Dictionary entry"); !validationRes)
+      {
+        auto error = std::move(validationRes.error());
+        error.message = std::format("Dictionary entry {} failed text validation: {}", rawId, error.message);
+        detail::throwLibraryError(std::move(error));
+      }
+
+      _idToStringStorage.emplace_back(text);
 
       if (!_stringToId.insert(DictionaryId{rawId}).second)
       {
@@ -167,6 +176,9 @@ namespace ao::library
     {
       AO_EXPECTS(transaction->isActive(), "Dictionary writer transaction is no longer active");
 
+      // The exact fast path avoids Unicode work for repeated values already
+      // admitted by this store. A match is necessarily valid NFC because the
+      // persisted and publication boundaries enforce that invariant.
       if (auto const optId = dictionary->findId(value); optId)
       {
         return *optId;
@@ -175,6 +187,27 @@ namespace ao::library
       if (auto const it = overlay.find(value); it != overlay.end())
       {
         return it->second;
+      }
+
+      auto normalizedRes = detail::normalizeLibraryText(value, "Dictionary text");
+      if (!normalizedRes)
+      {
+        return std::unexpected{normalizedRes.error()};
+      }
+
+      auto normalized = std::move(*normalizedRes);
+
+      if (normalized != value)
+      {
+        if (auto const optId = dictionary->findId(normalized); optId)
+        {
+          return *optId;
+        }
+
+        if (auto const it = overlay.find(normalized); it != overlay.end())
+        {
+          return it->second;
+        }
       }
 
       if (nextId == 0)
@@ -188,7 +221,7 @@ namespace ao::library
       }
 
       auto const id = DictionaryId{nextId};
-      auto const [overlayIt, inserted] = overlay.emplace(std::string{value}, id);
+      auto const [overlayIt, inserted] = overlay.emplace(std::move(normalized), id);
       AO_INVARIANT(inserted);
 
       try

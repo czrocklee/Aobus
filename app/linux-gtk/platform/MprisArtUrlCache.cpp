@@ -10,6 +10,7 @@
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Path.h>
 
 #include <giomm/file.h>
 #include <glibmm/miscutils.h>
@@ -92,7 +93,7 @@ namespace ao::gtk::platform
 
   std::filesystem::path MprisArtUrlCache::defaultCacheDirectory()
   {
-    return std::filesystem::path{Glib::get_user_cache_dir()} / "aobus" / "mpris-art";
+    return utility::pathFromNative(Glib::get_user_cache_dir()) / "aobus" / "mpris-art";
   }
 
   std::string_view MprisArtUrlCache::extensionForBytes(std::span<std::byte const> bytes) noexcept
@@ -254,7 +255,8 @@ namespace ao::gtk::platform
       return std::nullopt;
     }
 
-    auto const path = cacheDir / (std::to_string(resourceId.raw()) + std::string{extensionForBytes(bytes)});
+    auto const path =
+      cacheDir / utility::pathFromUtf8(std::to_string(resourceId.raw()) + std::string{extensionForBytes(bytes)});
     removeStaleResourceFiles(cacheDir, resourceId, path);
 
     auto output = std::ofstream{path, std::ios::binary | std::ios::trunc};
@@ -313,7 +315,8 @@ namespace ao::gtk::platform
   {
     for (auto const extension : kKnownExtensions)
     {
-      auto const candidate = cacheDir / (std::to_string(resourceId.raw()) + std::string{extension});
+      auto const candidate =
+        cacheDir / utility::pathFromUtf8(std::to_string(resourceId.raw()) + std::string{extension});
 
       if (candidate == keepPath)
       {
@@ -329,7 +332,7 @@ namespace ao::gtk::platform
   {
     try
     {
-      auto const filePtr = Gio::File::create_for_path(path.string());
+      auto const filePtr = Gio::File::create_for_path(path.native());
       return filePtr ? filePtr->get_uri() : std::string{};
     }
     catch (Glib::Error const&)

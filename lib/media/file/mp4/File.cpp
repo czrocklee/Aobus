@@ -13,11 +13,11 @@
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/TrackSelection.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/String.h>
 
 #include <boost/endian/buffers.hpp>
 
 #include <array>
-#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -157,8 +157,7 @@ namespace ao::media::file::mp4
 
       for (std::size_t index = 0; index < lhs.size(); ++index)
       {
-        if (std::tolower(static_cast<unsigned char>(lhs[index])) !=
-            std::tolower(static_cast<unsigned char>(rhs[index])))
+        if (utility::toAsciiLower(lhs[index]) != utility::toAsciiLower(rhs[index]))
         {
           return false;
         }

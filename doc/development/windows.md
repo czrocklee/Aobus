@@ -163,6 +163,17 @@ command is selected; each command declares that need in its module under
 development tool needs to run inside that environment; it honors a preset
 `VCPKG_ROOT` and otherwise defaults to the Visual Studio bundled vcpkg.
 
+Every native Aobus console, test, probe, benchmark, and developer-tool
+executable embeds `app/windows/utf8-process.manifest`. Its UTF-8 active code
+page makes narrow CRT `argv` and audited narrow library boundaries UTF-8, while
+filesystem paths still use explicit native or UTF-8 conversion at each API
+boundary. Each target's post-link step extracts PE manifest resource `#1` with
+the Windows SDK manifest tool and fails the build unless the UTF-8 declaration
+is present; listing a manifest source without verifying the produced executable
+is not sufficient. Configure also rejects any first-party executable that does
+not register this verification. WinUI owns and verifies its separate application
+manifest through the same post-link check.
+
 ## Windows App SDK and WinUI
 
 The Windows App SDK is a repository dependency, not a machine-wide development

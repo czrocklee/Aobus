@@ -9,9 +9,9 @@
 #include "Layout.h"
 #include <ao/PictureType.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -216,8 +216,7 @@ namespace ao::media::file::mpeg::id3v2
 
       for (std::size_t index = 0; index < lhs.size(); ++index)
       {
-        if (std::tolower(static_cast<unsigned char>(lhs[index])) !=
-            std::tolower(static_cast<unsigned char>(rhs[index])))
+        if (utility::toAsciiLower(lhs[index]) != utility::toAsciiLower(rhs[index]))
         {
           return false;
         }

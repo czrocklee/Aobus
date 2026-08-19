@@ -10,7 +10,7 @@ summary: Enumerates persisted track metadata, technical properties, codec values
 ## Scope and version
 
 This reference enumerates the current logical track values owned by library storage and core read models.
-Physical byte placement belongs to [library database version 6](../storage/database.md), and portable names belong to [library YAML version 4](../format/yaml.md).
+Physical byte placement belongs to [library database version 7](../storage/database.md), and portable names belong to [library YAML version 5](../format/yaml.md).
 Application-facing ids, presentation capabilities, sort/group mappings, completion flags, and query bridges belong to the [runtime track field catalog](track-field.md).
 
 Zero numeric values and invalid ids represent unknown or absent values unless a narrower contract states otherwise.
@@ -45,6 +45,7 @@ Runtime and presentation consumers adapt these values without changing their sto
 
 The classical block is absent when all five ids and both movement numbers are zero.
 Movement is a leaf value inside the classical block; application grouping and sorting rules belong to the runtime field and presentation contracts.
+All curated text is scalar-valid UTF-8 in NFC: title is normalized before inline persistence, and dictionary-backed values are normalized before interning.
 
 ## Tags and custom metadata
 
@@ -53,8 +54,11 @@ The builder suppresses duplicate names, while serialization records resolved ids
 The serialized tag-id array contains complete membership, and the bloom filter is only an acceleration aid.
 
 Custom metadata is an ordered key/value collection in the cold custom block.
-Keys are `DictionaryId` values and values are inline UTF-8 byte ranges.
+Keys are `DictionaryId` values and values are inline scalar-valid UTF-8 NFC byte ranges.
 An absent block and an empty collection both expose no entries.
+
+Tag names and custom-metadata keys are normalized to NFC before dictionary identity lookup.
+Canonically equivalent spellings therefore share one dictionary id while the persisted NFC spelling remains suitable for display.
 
 `MetadataPatch` may set or clear curated metadata and custom metadata.
 Tag additions/removals use the separate tag command contract in [library access and mutation](../../../spec/library/runtime/mutation.md).
@@ -104,12 +108,15 @@ Unknown imported numeric roles normalize to `Other`.
 ## Validation rules
 
 Builder serialization rejects values or aggregate records that exceed their encoded widths.
+It rejects malformed UTF-8 text and applies size limits to the normalized NFC representation before any dictionary or Track mutation.
 Every dictionary and resource reference uses its strongly typed id; zero is the only invalid id sentinel.
 URI and collection layout bounds are enforced before store writes.
+The music-root-relative URI is filesystem identity: it is neither Unicode-normalized nor case-folded by the text admission path.
 
 ## Compatibility and versioning
 
 Changing a persisted type, codec value, block meaning, or field width requires a library format version increment.
+Database version 7 also makes scalar-valid UTF-8 NFC a semantic admission invariant for persisted Track text and its dictionary references; version 6 is rejected rather than normalized implicitly on open.
 Portable YAML names and runtime field ids are separate compatibility surfaces owned by their respective references.
 
 ## Implementation authority

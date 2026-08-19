@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -156,6 +157,71 @@ namespace ao::library::test
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->titleLength == std::strlen(title));
+  }
+
+  TEST_CASE("TrackBuilder - admits metadata as valid UTF-8 NFC", "[library][unit][track-builder][unicode]")
+  {
+    auto context = TrackSerializationFixture{};
+    auto builder = TrackBuilder::makeEmpty();
+    builder.metadata().title("Cafe\u0301").artist("Dvor\u030Ca\u0301k");
+    builder.customMetadata().add("re\u0301sume\u0301", "Cre\u0300me bru\u0302le\u0301e");
+    builder.property().uri("track.flac");
+
+    auto const [hotData, coldData] = context.serialize(builder);
+    auto const view = TrackView{hotData, coldData};
+    auto const artistId = requireDictionaryId(context.dictionary(), "Dvořák");
+    auto const customKeyId = requireDictionaryId(context.dictionary(), "résumé");
+
+    CHECK(view.metadata().title() == "Café");
+    CHECK(view.metadata().artistId() == artistId);
+    REQUIRE(view.customMetadata().get(customKeyId));
+    CHECK(*view.customMetadata().get(customKeyId) == "Crème brûlée");
+    CHECK_FALSE(context.dictionary().findId("Dvor\u030Ca\u0301k"));
+  }
+
+  TEST_CASE("TrackBuilder - rejects malformed UTF-8 text", "[library][unit][track-builder][unicode]")
+  {
+    auto context = TrackSerializationFixture{};
+    auto const malformed = std::string{"\xC0\xAF", 2};
+
+    SECTION("title")
+    {
+      auto builder = TrackBuilder::makeEmpty();
+      builder.metadata().title(malformed);
+      auto const result = context.trySerializeHot(builder);
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidInput);
+      CHECK(result.error().message.find("Track title") != std::string::npos);
+    }
+
+    SECTION("custom metadata value")
+    {
+      auto builder = TrackBuilder::makeEmpty();
+      builder.customMetadata().add("key", malformed);
+      builder.property().uri("track.flac");
+      auto const result = context.trySerializeCold(builder);
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidInput);
+      CHECK(result.error().message.find("Custom metadata value") != std::string::npos);
+    }
+  }
+
+  TEST_CASE("TrackBuilder - rejects canonically duplicate custom metadata keys",
+            "[library][unit][track-builder][unicode]")
+  {
+    auto context = TrackSerializationFixture{};
+    auto builder = TrackBuilder::makeEmpty();
+    builder.customMetadata().add("résumé", "first").add("re\u0301sume\u0301", "second");
+    builder.property().uri("track.flac");
+
+    auto const result = context.trySerializeCold(builder);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(result.error().message.find("unique after NFC normalization") != std::string::npos);
+    CHECK(context.dictionary().size() == 0);
   }
 
   TEST_CASE("TrackBuilder - serialization is stable across repeated calls",
@@ -403,5 +469,20 @@ namespace ao::library::test
     CHECK(view.classical().conductorId() == requireDictionaryId(context.dictionary(), "Conductor"));
     CHECK(view.classical().ensembleId() == requireDictionaryId(context.dictionary(), "Ensemble"));
     CHECK(view.classical().soloistId() == requireDictionaryId(context.dictionary(), "Soloist"));
+  }
+
+  TEST_CASE("TrackBuilder - canonical tag identity is serialized as a set",
+            "[library][unit][track-builder][serialization][unicode]")
+  {
+    auto context = TrackSerializationFixture{};
+    auto builder = TrackBuilder::makeEmpty();
+    builder.tags().add("résumé").add("re\u0301sume\u0301").add("résumé");
+    builder.property().uri("track.flac");
+
+    auto const [hotData, coldData] = context.serialize(builder);
+    auto const view = TrackView{hotData, coldData};
+
+    REQUIRE(view.tags().count() == 1);
+    CHECK(context.dictionary().get(view.tags().id(0)) == "résumé");
   }
 } // namespace ao::library::test

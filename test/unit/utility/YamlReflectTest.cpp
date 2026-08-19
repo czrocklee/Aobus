@@ -3,6 +3,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/utility/EnumName.h>
+#include <ao/utility/Path.h>
 #include <ao/yaml/Reflect.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -119,7 +120,7 @@ namespace ao::yaml::test
       .labels = {{"alpha", "one"}, {"empty", ""}},
       .trackId = TrackId{42},
       .listId = ListId{11},
-      .path = std::filesystem::path{"folder/file.flac"},
+      .path = utility::pathFromUtf8("folder/Dvo\xC5\x99\xC3\xA1k.flac"),
       .state = FixtureState::Done,
       .newCount = 5,
     };
@@ -139,7 +140,7 @@ namespace ao::yaml::test
     CHECK(scalarView(findChild(findChild(root, "labels"), "alpha")) == "one");
     CHECK(scalarView(findChild(root, "trackId")) == "42");
     CHECK(scalarView(findChild(root, "listId")) == "11");
-    CHECK(scalarView(findChild(root, "path")) == "folder/file.flac");
+    CHECK(scalarView(findChild(root, "path")) == "folder/Dvo\xC5\x99\xC3\xA1k.flac");
     CHECK(scalarView(findChild(root, "state")) == "done");
     CHECK(scalarView(findChild(root, "new")) == "5");
 

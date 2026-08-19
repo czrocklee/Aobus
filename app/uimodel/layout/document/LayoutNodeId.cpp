@@ -7,13 +7,13 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/utility/String.h>
 #include <ao/utility/TransparentStringHash.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -66,9 +66,9 @@ namespace ao::uimodel
 
         for (char const ch : text)
         {
-          if (auto const uch = static_cast<unsigned char>(ch); std::isalnum(uch) != 0)
+          if (utility::isAsciiAlphaNumeric(ch))
           {
-            result.push_back(static_cast<char>(std::tolower(uch)));
+            result.push_back(utility::toAsciiLower(ch));
             previousWasSeparator = false;
           }
           else if (!previousWasSeparator && !result.empty())

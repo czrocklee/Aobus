@@ -13,6 +13,7 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
+#include <ao/utility/UnicodeText.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -31,6 +32,72 @@ namespace ao::query
   {
     constexpr std::size_t kReservedRegisters = 16;
     constexpr std::uint32_t kBloomBitMask = 31;
+    constexpr std::size_t kCaselessDictionaryCacheSlots = 256;
+
+    class CaselessTextCache final
+    {
+    public:
+      std::string_view keyFor(std::string_view text)
+      {
+        if (_entry.occupied && _entry.source == text)
+        {
+          return _entry.key;
+        }
+
+        auto key = makeKey(text);
+        _entry.source.assign(text);
+        _entry.key = std::move(key);
+        _entry.occupied = true;
+        return _entry.key;
+      }
+
+      std::string_view keyFor(DictionaryId id, std::string_view text)
+      {
+        AO_EXPECTS(id != kInvalidDictionaryId);
+
+        if (_dictionaryEntries.empty())
+        {
+          _dictionaryEntries.resize(kCaselessDictionaryCacheSlots);
+        }
+
+        auto& entry = _dictionaryEntries[id.raw() % _dictionaryEntries.size()];
+
+        if (entry.id == id)
+        {
+          return entry.key;
+        }
+
+        entry = DictionaryEntry{.id = id, .key = makeKey(text)};
+        return entry.key;
+      }
+
+    private:
+      static std::string makeKey(std::string_view text)
+      {
+        auto keyRes = utility::makeUtf8CaselessKey(text);
+        // Evaluation receives admitted NFC library text and has no recoverable
+        // error channel; an ICU failure here is a process-level invariant.
+        AO_INVARIANT(
+          keyRes.has_value(), "Admitted library text failed Unicode case folding: {}", keyRes.error().message);
+        return std::move(*keyRes);
+      }
+
+      struct Entry final
+      {
+        std::string source;
+        std::string key;
+        bool occupied = false;
+      };
+
+      struct DictionaryEntry final
+      {
+        DictionaryId id{kInvalidDictionaryId};
+        std::string key;
+      };
+
+      Entry _entry;
+      std::vector<DictionaryEntry> _dictionaryEntries;
+    };
 
     DictionaryId boundDictionaryId(std::span<DictionaryId const> ids, std::uint32_t symbol)
     {
@@ -231,10 +298,19 @@ namespace ao::query
                      ExecutionPlan const& plan,
                      library::DictionaryReadContext* dictionary,
                      std::span<DictionaryId const> dictionaryIds,
+                     CaselessTextCache& cache,
                      Instruction const& instr)
     {
       auto const field = static_cast<Field>(instr.field);
+      auto const constantText = stringConstant(plan, reg(registers, instr.operand));
       auto fieldText = std::string_view{};
+
+      if (field == Field::Uri)
+      {
+        fieldText = readStringFieldValue(track, field, kInvalidDictionaryId);
+        reg(registers, instr.operand - 1) = fieldText.contains(constantText) ? 1 : 0;
+        return;
+      }
 
       if (isStringField(field))
       {
@@ -250,11 +326,21 @@ namespace ao::query
       }
       else if (isDictionaryField(field))
       {
-        fieldText = readDictionaryFieldValue(track, field, dictionary);
+        auto const dictionaryId = dictionaryFieldId(track, field);
+
+        if (dictionaryId == kInvalidDictionaryId || dictionary == nullptr)
+        {
+          reg(registers, instr.operand - 1) = std::string_view{}.contains(constantText) ? 1 : 0;
+          return;
+        }
+
+        auto const fieldKey = cache.keyFor(dictionaryId, dictionary->get(dictionaryId));
+        reg(registers, instr.operand - 1) = fieldKey.contains(constantText) ? 1 : 0;
+        return;
       }
 
-      auto const constantText = stringConstant(plan, reg(registers, instr.operand));
-      reg(registers, instr.operand - 1) = fieldText.contains(constantText) ? 1 : 0;
+      auto const fieldKey = cache.keyFor(fieldText);
+      reg(registers, instr.operand - 1) = fieldKey.contains(constantText) ? 1 : 0;
     }
 
     bool executeExists(library::TrackView const& track,
@@ -433,6 +519,7 @@ namespace ao::query
     library::DictionaryReadContext* dictionary;
     std::vector<DictionaryId> dictionaryIds;
     std::vector<boost::unordered_flat_set<std::int64_t>> dictionarySets;
+    mutable CaselessTextCache caselessTextCache;
     std::uint64_t generation = 0;
     std::uint32_t tagBloomMask = 0;
   };
@@ -575,7 +662,9 @@ namespace ao::query
 
         case OpCode::Not: reg(_registers, instr.operand) = reg(_registers, instr.operand) == 0 ? 1 : 0; break;
 
-        case OpCode::Like: executeLike(_registers, track, plan, state.dictionary, state.dictionaryIds, instr); break;
+        case OpCode::Like:
+          executeLike(_registers, track, plan, state.dictionary, state.dictionaryIds, state.caselessTextCache, instr);
+          break;
 
         case OpCode::Exists:
           reg(_registers, instr.operand) = executeExists(track, state.dictionaryIds, instr) ? 1 : 0;

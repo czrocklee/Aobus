@@ -73,6 +73,27 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
+  TEST_CASE("LibraryWriter - editTags uses canonical Unicode identity", "[runtime][unit][library][tag][unicode]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Test Track");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto const composed = std::array{std::string{"résumé"}};
+    auto const decomposed = std::array{std::string{"re\u0301sume\u0301"}};
+
+    REQUIRE(writerFixture.editTags(std::array{trackId}, composed, {}));
+    auto const duplicateRes = writerFixture.editTags(std::array{trackId}, decomposed, {});
+    REQUIRE(duplicateRes);
+    CHECK(duplicateRes->changes.empty());
+
+    auto const removeRes = writerFixture.editTags(std::array{trackId}, {}, decomposed);
+    REQUIRE(removeRes);
+    REQUIRE(removeRes->changes.size() == 1);
+    REQUIRE(removeRes->changes[0].removedTags.size() == 1);
+    CHECK(removeRes->changes[0].removedTags[0] == "résumé");
+  }
+
   TEST_CASE("LibraryWriter - editTags rejects missing tag-add targets", "[runtime][unit][library][tag]")
   {
     auto libraryFixture = MusicLibraryFixture{};

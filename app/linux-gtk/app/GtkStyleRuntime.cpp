@@ -4,6 +4,7 @@
 #include "app/GtkStyleRuntime.h"
 
 #include <ao/rt/Log.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
 
 #include <gdkmm/display.h>
@@ -220,7 +221,7 @@ namespace ao::gtk
 
     try
     {
-      _userProviderPtr->load_from_path(userCssPath.string());
+      _userProviderPtr->load_from_path(userCssPath.native());
       Gtk::StyleContext::add_provider_for_display(displayPtr, _userProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_USER);
     }
     catch (Glib::Error const& err)
@@ -262,7 +263,7 @@ namespace ao::gtk
 
     try
     {
-      _userProviderPtr->load_from_path(userCssPath.string());
+      _userProviderPtr->load_from_path(userCssPath.native());
       Gtk::StyleContext::add_provider_for_display(displayPtr, _userProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_USER);
     }
     catch (Glib::Error const& err)
@@ -273,7 +274,7 @@ namespace ao::gtk
 
   void GtkStyleRuntime::syncGtkSettings()
   {
-    auto const settingsPath = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0" / "settings.ini";
+    auto const settingsPath = utility::pathFromNative(Glib::get_user_config_dir()) / "gtk-4.0" / "settings.ini";
 
     if (!std::filesystem::exists(settingsPath))
     {
@@ -283,7 +284,7 @@ namespace ao::gtk
     try
     {
       auto const keyfilePtr = Glib::KeyFile::create();
-      keyfilePtr->load_from_file(settingsPath.string());
+      keyfilePtr->load_from_file(settingsPath.native());
 
       if (auto const schemaPtr = lookupSettingsSchema("org.gnome.desktop.interface"); schemaPtr)
       {
@@ -338,7 +339,7 @@ namespace ao::gtk
       Gtk::StyleContext::remove_provider_for_display(displayPtr, _gtkUserCssProviderPtr);
     }
 
-    auto const cssPath = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0" / "gtk.css";
+    auto const cssPath = utility::pathFromNative(Glib::get_user_config_dir()) / "gtk-4.0" / "gtk.css";
 
     if (!std::filesystem::exists(cssPath))
     {
@@ -350,7 +351,7 @@ namespace ao::gtk
 
     try
     {
-      _gtkUserCssProviderPtr->load_from_path(cssPath.string());
+      _gtkUserCssProviderPtr->load_from_path(cssPath.native());
       Gtk::StyleContext::add_provider_for_display(displayPtr, _gtkUserCssProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_USER);
     }
     catch (Glib::Error const& err)
@@ -361,8 +362,8 @@ namespace ao::gtk
 
   void GtkStyleRuntime::startGtkConfigMonitor()
   {
-    auto const configDir = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0";
-    auto const configFilePtr = Gio::File::create_for_path(configDir.string());
+    auto const configDir = utility::pathFromNative(Glib::get_user_config_dir()) / "gtk-4.0";
+    auto const configFilePtr = Gio::File::create_for_path(configDir.native());
 
     _gtkConfigMonitorPtr = configFilePtr->monitor_directory();
     _gtkConfigMonitorConnection = _gtkConfigMonitorPtr->signal_changed().connect(
@@ -396,7 +397,7 @@ namespace ao::gtk
     auto const& aobusDir = *configDirRes;
     std::filesystem::create_directories(aobusDir);
 
-    auto const aobusFilePtr = Gio::File::create_for_path(aobusDir.string());
+    auto const aobusFilePtr = Gio::File::create_for_path(aobusDir.native());
 
     _aobusConfigMonitorPtr = aobusFilePtr->monitor_directory();
     _aobusConfigMonitorConnection = _aobusConfigMonitorPtr->signal_changed().connect(

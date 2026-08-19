@@ -74,7 +74,7 @@ namespace ao::rt::test
 {
   namespace
   {
-    constexpr auto kPlaybackSessionV3SortFieldOrdinals = std::to_array<std::pair<TrackSortField, std::int32_t>>({
+    constexpr auto kPlaybackSessionV4SortFieldOrdinals = std::to_array<std::pair<TrackSortField, std::int32_t>>({
       {TrackSortField::Artist, 0},
       {TrackSortField::Album, 1},
       {TrackSortField::AlbumArtist, 2},
@@ -593,12 +593,12 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackSession - schema v3 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
+  TEST_CASE("PlaybackSession - schema v4 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
   {
-    static_assert(kPlaybackSessionV3SortFieldOrdinals.size() == kTrackSortFieldCount);
-    CHECK(kPlaybackSessionSchemaVersion == 3);
+    static_assert(kPlaybackSessionV4SortFieldOrdinals.size() == kTrackSortFieldCount);
+    CHECK(kPlaybackSessionSchemaVersion == 4);
 
-    for (auto const& [field, ordinal] : kPlaybackSessionV3SortFieldOrdinals)
+    for (auto const& [field, ordinal] : kPlaybackSessionV4SortFieldOrdinals)
     {
       CHECK(static_cast<std::int32_t>(field) == ordinal);
     }
@@ -621,7 +621,7 @@ namespace ao::rt::test
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(PlaybackSessionYamlSchema{}.serialize(tree.rootref(), state));
-    CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "3");
+    CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "4");
     CHECK(yaml::scalarView(tree.rootref()["sortBy"][0]["field"]) == "13");
 
     auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
@@ -632,6 +632,17 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSessionYamlSchema - rejects future and unknown YAML structure",
             "[runtime][unit][playback-session][schema]")
   {
+    SECTION("Previous version is rejected before interpreting its payload")
+    {
+      auto const* source = "schemaVersion: 3\nsortBy: malformed\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::NotSupported);
+    }
+
     SECTION("Future version is reported before interpreting its payload")
     {
       auto const* source = "schemaVersion: 99\nsortBy: malformed\nfuture: true\n";
@@ -646,7 +657,7 @@ namespace ao::rt::test
     SECTION("Unknown structural keys are rejected")
     {
       auto const* source = R"(
-        schemaVersion: 3
+        schemaVersion: 4
         sourceListId: 1
         quickFilterExpression: ""
         sortBy: []
@@ -694,7 +705,7 @@ namespace ao::rt::test
     CHECK(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
 
     auto const saved = storedSession(runtimePtr->playbackSessionConfigStore());
-    CHECK(saved.schemaVersion == 3);
+    CHECK(saved.schemaVersion == 4);
     CHECK(saved.sourceListId == kAllTracksListId);
     CHECK(saved.quickFilterExpression == "$year > 2000");
     CHECK(saved.sortBy == sortBy);
@@ -1150,7 +1161,7 @@ namespace ao::rt::test
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const trackId = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->reloadAllTracks();
-    auto schemaLine = std::string_view{"  schemaVersion: 3\n"};
+    auto schemaLine = std::string_view{"  schemaVersion: 4\n"};
     auto sortBy = std::string_view{"[]"};
 
     SECTION("missing schemaVersion")

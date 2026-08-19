@@ -718,14 +718,14 @@ namespace ao::cli::test
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "4");
+    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "5");
     CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
     CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
 
     result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Payload: YAML v4, mode 'full', target scope 'library'."));
+    CHECK(contains(result.out, "Payload: YAML v5, mode 'full', target scope 'library'."));
     CHECK(contains(result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0."));
 
     result = target.run({"track", "show"});

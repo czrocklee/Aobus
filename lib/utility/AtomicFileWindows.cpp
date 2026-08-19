@@ -4,6 +4,7 @@
 #include "AtomicFileTransaction.h"
 #include <ao/Error.h>
 #include <ao/utility/AtomicFile.h>
+#include <ao/utility/Path.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -295,8 +296,9 @@ namespace ao::utility
         if (auto* const handle = _file.release(); ::CloseHandle(handle) == FALSE)
         {
           auto const errorCode = ::GetLastError();
-          return makeError(Error::Code::IoError,
-                           std::format("Failed to close temp file {}: {}", _path.string(), systemMessage(errorCode)));
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to close temp file {}: {}", pathToUtf8(_path), systemMessage(errorCode)));
         }
 
         return {};
@@ -310,7 +312,7 @@ namespace ao::utility
           auto const errorCode = ::GetLastError();
           return makeError(
             Error::Code::IoError,
-            std::format("Failed to rename temp file to {}: {}", targetPath.string(), systemMessage(errorCode)));
+            std::format("Failed to rename temp file to {}: {}", pathToUtf8(targetPath), systemMessage(errorCode)));
         }
 
         _path.clear();
@@ -333,7 +335,7 @@ namespace ao::utility
         if (ec)
         {
           return makeError(Error::Code::IoError,
-                           std::format("Failed to resolve target path {}: {}", targetPath.string(), ec.message()));
+                           std::format("Failed to resolve target path {}: {}", pathToUtf8(targetPath), ec.message()));
         }
 
         return extendedPath(absolute);
@@ -346,8 +348,8 @@ namespace ao::utility
 
         if (ec)
         {
-          return makeError(
-            Error::Code::IoError, std::format("Failed to create directory {}: {}", parentPath.string(), ec.message()));
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to create directory {}: {}", pathToUtf8(parentPath), ec.message()));
         }
 
         return {};

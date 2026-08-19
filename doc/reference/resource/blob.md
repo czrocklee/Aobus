@@ -14,7 +14,7 @@ The library database reference owns the physical LMDB database and raw record pl
 
 The library stores no cover bytes. A resource row describes content and never holds it.
 
-There is no independent resource schema version; compatibility follows the library database format version, which is 6.
+There is no independent resource schema version; compatibility follows the library database format version, which is 7.
 
 ## Code boundary
 

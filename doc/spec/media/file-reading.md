@@ -9,7 +9,7 @@ summary: Defines recognition, lazy read behavior, visitor delivery, payload extr
 
 ## Scope
 
-This specification defines current behavior for recognizing and opening supported encoded audio files, visiting normalized metadata and technical properties, extracting covers, and selecting encoded-audio payload ranges.
+This specification defines current behavior for recognizing and opening supported encoded audio files, visiting mapped metadata and technical properties, extracting covers, and selecting encoded-audio payload ranges.
 
 The [supported audio files reference](../../reference/media/audio-file.md) owns the exact extension, field, codec, cover-role, callback-order, and payload-range inventories. Library scan reconciliation and identity publication belong to [library scan and audio identity](../library/runtime/scan-and-identity.md); PCM behavior belongs to the [decoder session](../playback/decoder-session.md).
 
@@ -34,6 +34,7 @@ The private application-runtime `readMediaTrack` adapter converts visitor calls 
 - `visit()` succeeds only when required parsing and non-empty payload selection succeed.
 - A failed `visit()` invokes no visitor callback.
 - A successful visit emits only accepted non-empty text, non-zero numeric and technical values, a known codec, and accepted non-empty pictures.
+- The visitor boundary does not establish a global scalar-valid UTF-8 invariant; the consuming library builder owns strict validation and NFC admission.
 - `audioPayload().offset` and `bytes.size()` describe a range entirely inside the mapped file.
 - Required parse success or failure is cached and reused by payload and content operations.
 - Returned views remain valid while the backing `File` lives, including after moving that `File`.
@@ -77,6 +78,7 @@ Callbacks are synchronous. Their string and byte arguments may be retained only 
 ### Runtime adaptation
 
 `readMediaTrack(path)` opens one `File`, creates an empty `TrackBuilder`, and maps callbacks directly into its metadata, property, and cover builders. The returned `MediaTrack` retains the `File` for the lifetime of its member builder. A copied or moved-out builder that still contains media-derived views must not outlive that `MediaTrack`. Runtime callers may mutate URI, tags, or custom metadata after reading, but those values have independent owners, are library concerns, and are never parsed as a generic public media aggregate.
+This adaptation deliberately performs no repair: malformed text remains detectable by the later library admission step, which can report the scan item without guessing an encoding.
 
 ## Required and optional format behavior
 
@@ -91,6 +93,7 @@ Every traversed atom must have a complete compact or 64-bit extended header. Rec
 ### MPEG audio and ID3
 
 A confirmed MPEG audio frame is required. A table-rate candidate is confirmed by a compatible adjacent frame when enough trailing bytes remain; an exact terminal frame is also accepted. A free-format candidate derives its frame length and bitrate from compatible adjacent frame boundaries. A valid leading ID3v2 envelope and valid trailing ID3v1/APEv2 regions are excluded from the payload. A malformed or oversized leading ID3 envelope may be ignored when a confirmed MPEG frame can still be located. A bounded but malformed ID3 frame sequence contributes no ID3 metadata; MPEG technical properties remain available. Unknown frames and unsupported `TXXX` keys are ignored.
+ID3 Latin-1, UCS-2/UTF-16, and UTF-16BE text is decoded to UTF-8 according to the frame encoding. ID3v2.4 text declared as UTF-8 is passed through after BOM and trailing-terminator handling; scalar validation belongs to library admission, so malformed declared UTF-8 can still be observed by a media visitor and then rejected as one scan-item failure.
 
 ### Ogg Opus
 
@@ -114,6 +117,8 @@ A valid supported WAVE format and non-empty `data` chunk are required. `LIST/INF
 - Malformed required bytes or absent/empty payload: a recoverable `CorruptData` or `FormatRejected` result according to the rejected structure.
 - Safely bounded malformed optional evidence: successful operation with that subtree omitted.
 - Unknown or absent optional evidence: ordinary omission.
+
+Malformed declared text encoding is not repaired at this boundary. A format-specific decoder may produce U+FFFD as part of its documented decoding algorithm, but the media/library adapter never inserts a replacement character merely to make arbitrary bytes pass admission.
 
 Format readers return `Result` directly and contain expected external-data failures without a public or private tag-exception hierarchy. Allocation failure and invariant faults are not converted to corruption.
 

@@ -30,6 +30,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -128,6 +129,16 @@ namespace ao::rt
       TrackBuilderSnapshot builder;
       library::FileManifestBuilder manifest;
     };
+
+    std::unexpected<Error> yamlRepresentationError(Error error, std::string_view const context)
+    {
+      if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
+      {
+        return makeError(Error::Code::FormatRejected,
+                         std::format("{} cannot be represented in the library: {}", context, error.message));
+      }
+      return std::unexpected{std::move(error)};
+    }
 
     Result<ryml::ConstNodeRef> requireField(ryml::ConstNodeRef const& node,
                                             std::string_view field,
@@ -676,7 +687,7 @@ namespace ao::rt
       : sourcePath{std::move(sourcePathValue)}
       , mode{modeValue}
       , buildChangeSet{buildChangeSetValue}
-      , yamlErrorState{sourcePath.string()}
+      , yamlErrorState{utility::pathToUtf8(sourcePath)}
       , tree{yaml::callbacks()}
     {
     }
@@ -866,8 +877,8 @@ namespace ao::rt
 
     if (!bufferRes)
     {
-      return makeError(
-        Error::Code::IoError, std::format("Failed to read '{}': {}", path.string(), bufferRes.error().message));
+      return makeError(Error::Code::IoError,
+                       std::format("Failed to read '{}': {}", utility::pathToUtf8(path), bufferRes.error().message));
     }
 
     preparedPtr->buffer = std::move(*bufferRes);
@@ -876,14 +887,15 @@ namespace ao::rt
     if (auto const parsedRes = yaml::parseInPlace(preparedPtr->tree, preparedPtr->buffer, preparedPtr->yamlErrorState);
         !parsedRes)
     {
-      return makeError(
-        Error::Code::FormatRejected, std::format("Failed to parse '{}': {}", path.string(), parsedRes.error().message));
+      return makeError(Error::Code::FormatRejected,
+                       std::format("Failed to parse '{}': {}", utility::pathToUtf8(path), parsedRes.error().message));
     }
 
     if (auto const resolvedRes = yaml::resolve(preparedPtr->tree, preparedPtr->yamlErrorState); !resolvedRes)
     {
-      return makeError(Error::Code::FormatRejected,
-                       std::format("Failed to resolve '{}': {}", path.string(), resolvedRes.error().message));
+      return makeError(
+        Error::Code::FormatRejected,
+        std::format("Failed to resolve '{}': {}", utility::pathToUtf8(path), resolvedRes.error().message));
     }
 
     auto validationRes = _importer._implPtr->validate(preparedPtr->tree.rootref());
@@ -939,10 +951,10 @@ namespace ao::rt
 
     if (!currentBytesRes)
     {
-      return makeError(
-        Error::Code::IoError,
-        std::format(
-          "Failed to reread '{}': {}", prepared._implPtr->sourcePath.string(), currentBytesRes.error().message));
+      return makeError(Error::Code::IoError,
+                       std::format("Failed to reread '{}': {}",
+                                   utility::pathToUtf8(prepared._implPtr->sourcePath),
+                                   currentBytesRes.error().message));
     }
 
     if (*currentBytesRes != prepared._implPtr->sourceBytes)
@@ -1722,7 +1734,7 @@ namespace ao::rt
 
       if (auto replaceRes = trackWriter.replace(targetTrackId, builder, manifestBuilder); !replaceRes)
       {
-        return std::unexpected{replaceRes.error()};
+        return yamlRepresentationError(std::move(replaceRes.error()), std::format("Track '{}'", uri));
       }
     }
     else
@@ -1731,7 +1743,7 @@ namespace ao::rt
 
       if (!createRes)
       {
-        return std::unexpected{createRes.error()};
+        return yamlRepresentationError(std::move(createRes.error()), std::format("Track '{}'", uri));
       }
 
       targetTrackId = *createRes;
@@ -1854,8 +1866,9 @@ namespace ao::rt
 
         if (fileEc)
         {
-          return makeError(Error::Code::IoError,
-                           std::format("Failed to read file size for '{}': {}", fullPath.string(), fileEc.message()));
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to read file size for '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
         }
 
         auto const lastWriteTime = std::filesystem::last_write_time(fullPath, fileEc);
@@ -1864,7 +1877,8 @@ namespace ao::rt
         {
           return makeError(
             Error::Code::IoError,
-            std::format("Failed to read modification time for '{}': {}", fullPath.string(), fileEc.message()));
+            std::format(
+              "Failed to read modification time for '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
         }
 
         manifestBuilder.fileSize(fileSize);
@@ -1874,7 +1888,8 @@ namespace ao::rt
       else if (fileEc)
       {
         return makeError(
-          Error::Code::IoError, std::format("Failed to inspect file '{}': {}", fullPath.string(), fileEc.message()));
+          Error::Code::IoError,
+          std::format("Failed to inspect file '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
       }
     }
 
@@ -1958,8 +1973,8 @@ namespace ao::rt
 
     if (fileEc)
     {
-      return makeError(
-        Error::Code::IoError, std::format("Failed to inspect file '{}': {}", fullPath.string(), fileEc.message()));
+      return makeError(Error::Code::IoError,
+                       std::format("Failed to inspect file '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
     }
 
     if (!fileExists)

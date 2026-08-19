@@ -30,6 +30,7 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/preference/ThemePreset.h>
+#include <ao/utility/Path.h>
 
 #include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>
@@ -289,7 +290,7 @@ namespace ao::gtk
 
     auto appSession = rt::AppSessionState{};
     _configStorePtr->loadAppSession(appSession);
-    appSession.lastLibraryPath = _runtime.musicRoot().string();
+    appSession.lastLibraryPath = utility::pathToUtf8(_runtime.musicRoot());
     auto persistedRes = _configStorePtr->saveAppSession(appSession);
 
     if (!persistedRes)

@@ -86,7 +86,7 @@ namespace ao::cli
                               "  Examples:\n"
                               "    aobus track show 1 2 3\n"
                               "    aobus track show --filter 'not $genre?'\n"
-                              "    aobus track show --filter '$year in 1990..1999 and $artist ~ \"Miles\"'\n"
+                              "    aobus track show --filter '$year in 1990..1999 and $artist ~ \"miles\"'\n"
                               "    aobus -O json track show --filter 'not $genre?'\n"
                               "    aobus track show --format '$artist + \" - \" + $title'\n"
                               "  Fields: "};

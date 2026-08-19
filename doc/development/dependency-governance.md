@@ -47,10 +47,11 @@ resolved versions become project policy only after an explicit
 
 ## Governed dependencies
 
-The initial governed set is deliberately small:
+The governed set is deliberately small:
 
 - Boost;
 - FTXUI;
+- ICU;
 - spdlog;
 - Windows App SDK;
 - C++/WinRT.
@@ -91,6 +92,11 @@ Version equality is never used as proof of ABI or behavior equality. The build
 also verifies required imported targets and behavior-affecting options. In
 particular, Aobus requires spdlog to advertise `SPDLOG_USE_STD_FORMAT` and to
 avoid `SPDLOG_FMT_EXTERNAL`.
+
+ICU is exact-version governed because its Unicode data affects NFC, case-fold,
+grapheme, and future derived-key behavior. Aobus calls ICU directly
+behind its own text facade; it does not discover or link Boost.Locale merely
+because the Boost distribution contains that optional component.
 
 ## Native resolution
 

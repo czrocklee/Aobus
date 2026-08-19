@@ -72,6 +72,40 @@ namespace ao::library::test
     CHECK(dictionary.generation() == initialGeneration + 1);
   }
 
+  TEST_CASE("DictionaryStore - canonicalizes Unicode identity before interning", "[library][unit][dictionary][unicode]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = openTestLibrary(temp);
+    auto transaction = writeTransaction(library);
+    auto const decomposed = std::string{"Dvor\u030Ca\u0301k"};
+
+    auto const decomposedId = requireIntern(transaction, decomposed);
+    auto const composedId = requireIntern(transaction, "Dvořák");
+
+    CHECK(decomposedId == composedId);
+    REQUIRE(transaction.commit());
+    CHECK(library.dictionary().size() == 1);
+    CHECK(library.dictionary().get(composedId) == "Dvořák");
+    CHECK(library.dictionary().findId("Dvořák") == composedId);
+    CHECK_FALSE(library.dictionary().findId(decomposed));
+  }
+
+  TEST_CASE("DictionaryStore - rejects malformed UTF-8 without staging a symbol",
+            "[library][unit][dictionary][unicode]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = openTestLibrary(temp);
+    auto transaction = writeTransaction(library);
+    auto const malformed = std::string{"\xC0\xAF", 2};
+    auto const result = physicalDictionary(transaction).intern(malformed);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(result.error().message.find("Dictionary text") != std::string::npos);
+    REQUIRE(transaction.commit());
+    CHECK(library.dictionary().size() == 0);
+  }
+
   TEST_CASE("DictionaryStore - discards an uncommitted overlay and reuses its ID", "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};

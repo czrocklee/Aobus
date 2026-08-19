@@ -7,6 +7,7 @@
 #include "check/ChronoNamingConventionCheck.h"
 #include "check/ConcreteFinalCheck.h"
 #include "check/ControlBlockSpacingCheck.h"
+#include "check/ExplicitPathConversionCheck.h"
 #include "check/ForbidRawFatalCheck.h"
 #include "check/ForbidRawThrowCheck.h"
 #include "check/ForbidTrailingReturnCheck.h"
@@ -59,6 +60,7 @@ namespace clang::tidy::readability
         checkFactories.registerCheck<AsyncCancellationGuardCheck>("aobus-async-cancellation-guard");
         checkFactories.registerCheck<ConcreteFinalCheck>("aobus-modernize-concrete-final");
         checkFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
+        checkFactories.registerCheck<ExplicitPathConversionCheck>("aobus-portability-explicit-path-conversion");
         checkFactories.registerCheck<modernize::NodiscardUsageCheck>("aobus-modernize-nodiscard-usage");
         checkFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
         checkFactories.registerCheck<ForbidRawFatalCheck>("aobus-readability-forbid-raw-fatal");

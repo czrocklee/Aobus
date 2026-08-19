@@ -6,27 +6,40 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <string>
 #include <tuple>
+#include <vector>
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - compiles like operators", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles text substring operators as Unicode caseless",
+            "[query][unit][execution-plan][string][unicode]")
   {
     auto expr = parseOk("$title ~ Love");
     auto plan = compileOk(expr);
 
-    bool hasLike = false;
+    CHECK(std::ranges::any_of(
+      plan.instructions, [](Instruction const& instruction) { return instruction.op == OpCode::Like; }));
+  }
 
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::Like)
-      {
-        hasLike = true;
-        break;
-      }
-    }
+  TEST_CASE("ExecutionPlan - compiles Unicode caseless substring keys",
+            "[query][unit][execution-plan][string][unicode]")
+  {
+    auto const plan = compileOk(parseOk("$title ~ 'STRASSE Cafe\u0301'"));
 
-    CHECK(hasLike == true);
+    REQUIRE(plan.stringConstants.size() == 1);
+    CHECK(plan.stringConstants[0] == "strasse café");
+    CHECK(std::ranges::any_of(
+      plan.instructions, [](Instruction const& instruction) { return instruction.op == OpCode::Like; }));
+  }
+
+  TEST_CASE("ExecutionPlan - validates substring operands", "[query][unit][execution-plan][string][unicode]")
+  {
+    CHECK(compileError(parseOk("$title ~ 123")).code == Error::Code::FormatRejected);
+    CHECK(compileError(parseOk("@duration ~ 'three minutes'")).code == Error::Code::FormatRejected);
+    CHECK(compileError(parseOk("$coverArt ~ 'front'")).code == Error::Code::FormatRejected);
+    CHECK(compileError(parseOk("#rock ~ 'progressive'")).code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("ExecutionPlan - compiles string constants", "[query][unit][execution-plan][string]")

@@ -24,7 +24,8 @@ namespace ao::query
    * The binding borrows the plan and, when supplied, the dictionary context; each
    * borrowed object must outlive the binding. Construct it once per evaluation
    * batch. Numeric IDs and the tag bloom mask are derived accelerators, while
-   * symbol text in the plan remains the semantic authority.
+   * symbol text in the plan remains the semantic authority. Unicode caseless
+   * search keys are cached only for this binding's evaluation batch.
    */
   class PlanBinding final
   {

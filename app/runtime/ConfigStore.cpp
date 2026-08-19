@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/AtomicFile.h>
+#include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
@@ -28,7 +29,7 @@ namespace ao::rt
 {
   ConfigStore::ConfigStore(std::filesystem::path filePath, OpenMode mode, std::optional<std::size_t> optMaxFileBytes)
     : _filePath{std::move(filePath)}
-    , _yamlErrorState{_filePath.string()}
+    , _yamlErrorState{utility::pathToUtf8(_filePath)}
     , _mode{mode}
     , _optMaxFileBytes{optMaxFileBytes}
   {
@@ -101,15 +102,17 @@ namespace ao::rt
 
     if (fileEc)
     {
-      return makeError(Error::Code::IoError,
-                       std::format("Failed to inspect config file '{}': {}", _filePath.string(), fileEc.message()));
+      return makeError(
+        Error::Code::IoError,
+        std::format("Failed to inspect config file '{}': {}", utility::pathToUtf8(_filePath), fileEc.message()));
     }
 
     if (!fileExists)
     {
       if (_mode == OpenMode::ReadOnly)
       {
-        return makeError(Error::Code::NotFound, std::format("Config file not found: {}", _filePath.string()));
+        return makeError(
+          Error::Code::NotFound, std::format("Config file not found: {}", utility::pathToUtf8(_filePath)));
       }
 
       _root.to_map(0);
@@ -131,13 +134,14 @@ namespace ao::rt
     {
       return makeError(
         Error::Code::FormatRejected,
-        std::format("Failed to parse config file '{}': {}", _filePath.string(), parsedRes.error().message));
+        std::format("Failed to parse config file '{}': {}", utility::pathToUtf8(_filePath), parsedRes.error().message));
     }
 
     if (!root.is_map(0))
     {
-      return makeError(Error::Code::FormatRejected,
-                       std::format("Config file '{}' does not contain a top-level mapping", _filePath.string()));
+      return makeError(
+        Error::Code::FormatRejected,
+        std::format("Config file '{}' does not contain a top-level mapping", utility::pathToUtf8(_filePath)));
     }
 
     constexpr auto kNoFixedGroups = std::array<std::string_view, 0>{};
@@ -146,8 +150,8 @@ namespace ao::rt
           yaml::validateMapKeys(root.rootref(), kNoFixedGroups, "config document", yaml::UnknownKeyPolicy::Allow);
         !result)
     {
-      return makeError(
-        Error::Code::FormatRejected, std::format("Config file '{}': {}", _filePath.string(), result.error().message));
+      return makeError(Error::Code::FormatRejected,
+                       std::format("Config file '{}': {}", utility::pathToUtf8(_filePath), result.error().message));
     }
 
     _inputBuffer = std::move(inputBuffer);
@@ -184,7 +188,7 @@ namespace ao::rt
       return {};
     }
 
-    APP_LOG_INFO("Saving config to: {}", _filePath.string());
+    APP_LOG_INFO("Saving config to: {}", utility::pathToUtf8(_filePath));
 
     auto const yaml = ryml::emitrs_yaml<std::string>(candidate);
 
@@ -192,7 +196,7 @@ namespace ao::rt
     {
       return makeError(Error::Code::ValueTooLarge,
                        std::format("Serialized config file '{}' is {} bytes; maximum allowed is {}",
-                                   _filePath.string(),
+                                   utility::pathToUtf8(_filePath),
                                    yaml.size(),
                                    *_optMaxFileBytes));
     }

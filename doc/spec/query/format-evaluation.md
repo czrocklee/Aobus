@@ -31,6 +31,7 @@ The compiler and evaluator are public under `include/ao/query/` and implemented 
 - A successful plan produces a string, never a predicate or presentation spec.
 - Evaluation appends instructions from left to right without implicit separators.
 - Constants append their canonical or literal text.
+- String literals are scalar-valid UTF-8 and byte-preserved; custom-key symbols are NFC in a successful plan.
 - Missing supported fields append an empty string.
 - A plan owns custom-key symbol text and captures no dictionary or library pointer.
 - Dictionary fields and custom keys are resolved through an explicit bounded dictionary context/binding.
@@ -42,7 +43,7 @@ The compiler and evaluator are public under `include/ao/query/` and implemented 
 `compileFormat(ast)` returns `Result<FormatPlan>` without reading or mutating a dictionary.
 Compilation flattens grouping and concatenation into ordered append instructions and deduplicates repeated literal storage without changing output order.
 
-Custom key names are retained as deduplicated plan-owned symbols.
+String literals are validated and retained byte-exactly; custom key names are normalized to NFC. Both are retained as deduplicated plan-owned values.
 Dictionary-backed fields mark the plan as requiring a dictionary context for evaluation.
 
 The plan access profile is:
@@ -76,6 +77,7 @@ For example, an absent album artist in `"[" + $albumArtist + "]"` produces `[]`.
 ## Failure and cancellation
 
 Invalid subset shapes, unknown fields, and non-scalar fields return `Error::Code::FormatRejected` from the public compile boundary.
+Malformed UTF-8 or text beyond the Unicode operation limit also returns `FormatRejected` without a partial plan.
 Private compiler recursion may use an internal exception, but no exception escapes for user input.
 
 Plans with no dictionary access may use the context-free evaluation overloads.

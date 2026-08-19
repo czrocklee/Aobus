@@ -253,6 +253,7 @@ namespace ao::query::test
   {
     CHECK("[b{like}[v{m}title],[c{s}Love]]" == canonicalize(parseOk("$title~Love")));
     CHECK("[b{like}[v{m}artist],[c{s}Bach]]" == canonicalize(parseOk("$artist~Bach")));
+    CHECK(parseFails("$title~*Love"));
   }
 
   TEST_CASE("Parser - parses in lists", "[query][unit][parser]")

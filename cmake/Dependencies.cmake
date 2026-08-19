@@ -123,6 +123,7 @@ function(aobus_policy_find_arguments dependency output_arguments output_version 
 endfunction()
 
 aobus_policy_find_arguments(boost AOBUS_BOOST_FIND_ARGUMENTS AOBUS_BOOST_REQUESTED_VERSION AOBUS_BOOST_EXCEPTION)
+aobus_policy_find_arguments(icu AOBUS_ICU_FIND_ARGUMENTS AOBUS_ICU_REQUESTED_VERSION AOBUS_ICU_EXCEPTION)
 aobus_policy_find_arguments(spdlog AOBUS_SPDLOG_FIND_ARGUMENTS AOBUS_SPDLOG_REQUESTED_VERSION AOBUS_SPDLOG_EXCEPTION)
 aobus_policy_find_arguments(ftxui AOBUS_FTXUI_FIND_ARGUMENTS AOBUS_FTXUI_REQUESTED_VERSION AOBUS_FTXUI_EXCEPTION)
 aobus_policy_find_arguments(
@@ -199,6 +200,14 @@ if(NOT Boost_FOUND)
     "'${Boost_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
 endif()
 
+find_package(ICU ${AOBUS_ICU_FIND_ARGUMENTS} QUIET COMPONENTS uc data)
+if(NOT ICU_FOUND)
+  message(FATAL_ERROR
+    "Aobus dependency 'icu' requires ${AOBUS_ICU_REQUESTED_VERSION}, but the active resolver "
+    "could not provide an exact compatible package. Resolved version: '${ICU_VERSION}'. "
+    "See doc/development/dependency-upgrade.md.")
+endif()
+
 find_package(spdlog ${AOBUS_SPDLOG_FIND_ARGUMENTS} CONFIG QUIET)
 if(NOT spdlog_FOUND)
   message(FATAL_ERROR
@@ -268,6 +277,7 @@ function(aobus_validate_dependency_targets dependency)
 endfunction()
 
 aobus_validate_dependency_targets(boost)
+aobus_validate_dependency_targets(icu)
 aobus_validate_dependency_targets(spdlog)
 if(AOBUS_BUILD_TUI)
   aobus_validate_dependency_targets(ftxui)
@@ -278,6 +288,7 @@ if(DEFINED Boost_VERSION_STRING)
 else()
   set(AOBUS_BOOST_RESOLVED_VERSION "${Boost_VERSION}")
 endif()
+set(AOBUS_ICU_RESOLVED_VERSION "${ICU_VERSION}")
 set(AOBUS_SPDLOG_RESOLVED_VERSION "${spdlog_VERSION}")
 if(AOBUS_BUILD_TUI)
   set(AOBUS_FTXUI_RESOLVED_VERSION "${ftxui_VERSION}")
@@ -318,11 +329,13 @@ if(SPDLOG_FMT_EXTERNAL IN_LIST AOBUS_SPDLOG_COMPILE_DEFINITIONS)
     "uses SPDLOG_FMT_EXTERNAL. spdlog_DIR='${spdlog_DIR}'.")
 endif()
 
-if(NOT AOBUS_BOOST_RESOLVED_VERSION OR NOT AOBUS_SPDLOG_RESOLVED_VERSION
+if(NOT AOBUS_BOOST_RESOLVED_VERSION OR NOT AOBUS_ICU_RESOLVED_VERSION
+   OR NOT AOBUS_SPDLOG_RESOLVED_VERSION
    OR (AOBUS_BUILD_TUI AND NOT AOBUS_FTXUI_RESOLVED_VERSION))
   message(FATAL_ERROR
     "A governed dependency package did not expose its resolved version. "
-    "Boost='${AOBUS_BOOST_RESOLVED_VERSION}', spdlog='${AOBUS_SPDLOG_RESOLVED_VERSION}', "
+    "Boost='${AOBUS_BOOST_RESOLVED_VERSION}', ICU='${AOBUS_ICU_RESOLVED_VERSION}', "
+    "spdlog='${AOBUS_SPDLOG_RESOLVED_VERSION}', "
     "ftxui='${AOBUS_FTXUI_RESOLVED_VERSION}'. See doc/development/dependency-upgrade.md.")
 endif()
 
@@ -408,6 +421,7 @@ function(aobus_nuget_dependency_report output dependency requested resolved exce
 endfunction()
 
 aobus_dependency_target_results(boost AOBUS_BOOST_TARGET_RESULTS)
+aobus_dependency_target_results(icu AOBUS_ICU_TARGET_RESULTS)
 aobus_dependency_target_results(spdlog AOBUS_SPDLOG_TARGET_RESULTS)
 if(AOBUS_BUILD_TUI)
   aobus_dependency_target_results(ftxui AOBUS_FTXUI_TARGET_RESULTS)
@@ -435,9 +449,16 @@ string(JSON AOBUS_SPDLOG_CAPABILITIES SET
 string(JSON AOBUS_SPDLOG_CAPABILITIES SET
   "${AOBUS_SPDLOG_CAPABILITIES}" spdlog-no-external-fmt true)
 
+set(AOBUS_ICU_CAPABILITIES "{}")
+string(JSON AOBUS_ICU_CAPABILITIES SET
+  "${AOBUS_ICU_CAPABILITIES}" unicode-17.0 true)
+
 aobus_dependency_report_entry(AOBUS_BOOST_REPORT boost
   "${AOBUS_BOOST_REQUESTED_VERSION}" "${AOBUS_BOOST_RESOLVED_VERSION}"
   "${AOBUS_BOOST_EXCEPTION}" "${AOBUS_BOOST_TARGET_RESULTS}" "{}")
+aobus_dependency_report_entry(AOBUS_ICU_REPORT icu
+  "${AOBUS_ICU_REQUESTED_VERSION}" "${AOBUS_ICU_RESOLVED_VERSION}"
+  "${AOBUS_ICU_EXCEPTION}" "${AOBUS_ICU_TARGET_RESULTS}" "${AOBUS_ICU_CAPABILITIES}")
 aobus_dependency_report_entry(AOBUS_SPDLOG_REPORT spdlog
   "${AOBUS_SPDLOG_REQUESTED_VERSION}" "${AOBUS_SPDLOG_RESOLVED_VERSION}"
   "${AOBUS_SPDLOG_EXCEPTION}" "${AOBUS_SPDLOG_TARGET_RESULTS}" "${AOBUS_SPDLOG_CAPABILITIES}")
@@ -572,6 +593,8 @@ string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies boost "${AOBUS_BOOST_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies ftxui "${AOBUS_FTXUI_REPORT}")
+string(JSON AOBUS_DEPENDENCY_REPORT SET
+  "${AOBUS_DEPENDENCY_REPORT}" dependencies icu "${AOBUS_ICU_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies spdlog "${AOBUS_SPDLOG_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET

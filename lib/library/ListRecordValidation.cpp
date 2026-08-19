@@ -3,6 +3,7 @@
 
 #include "ListRecordValidation.h"
 
+#include "TextAdmission.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ListLayout.h>
@@ -11,9 +12,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <limits>
 #include <span>
+#include <string_view>
 #include <unordered_set>
+#include <utility>
 
 namespace ao::library
 {
@@ -33,6 +37,22 @@ namespace ao::library
         header->filterLength > kMaxTextLength)
     {
       return makeError(Error::Code::CorruptData, "List record contains a text field above the product limit");
+    }
+
+    for (auto const& [text, context] : {
+           std::pair{view.name(), std::string_view{"List name"}},
+           std::pair{view.description(), std::string_view{"List description"}},
+         })
+    {
+      if (auto textRes = detail::validatePersistedLibraryText(text, context); !textRes)
+      {
+        return std::unexpected{textRes.error()};
+      }
+    }
+
+    if (auto filterRes = detail::validatePersistedLibraryUtf8(view.filter(), "List filter"); !filterRes)
+    {
+      return std::unexpected{filterRes.error()};
     }
 
     auto seen = std::unordered_set<std::uint32_t>{};

@@ -12,7 +12,7 @@ summary: Defines strict export, restore, merge, preview authorization, reporting
 This specification defines library YAML export and import behavior.
 It owns mode semantics, baselines, payload scope, overlays, preview-bound authorization, atomicity, reports, and change publication.
 
-The exact version 4 document shape is defined by the [library YAML format reference](../../../reference/library/format/yaml.md).
+The exact version 5 document shape is defined by the [library YAML format reference](../../../reference/library/format/yaml.md).
 Library ownership and the storage/change pipeline are defined by [library architecture](../../../architecture/library.md).
 CLI flags and output rendering belong to the [CLI command reference](../../../reference/cli/command.md).
 
@@ -37,9 +37,12 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 ## Invariants
 
 - One export observes metadata, tracks, lists, resources, dictionary values, and manifest facts through one read transaction.
-- Version 4 uses the closed schema and explicit collection scope defined by the format reference.
+- Version 5 uses the closed schema and explicit collection scope defined by the format reference.
 - Every URI crossing YAML, manifest, Writer, or scan boundaries becomes a `LibraryUri`; playback, read-model, fingerprint, export/import baseline, and scan-apply access resolve it again beneath the weakly canonical root and reject escaping or unresolved symlinks. An absent root or ordinary missing suffix remains valid for first-run metadata restore.
 - Import validates the complete document before applying any persistent mutation.
+- Track metadata, tags, custom keys and values, and List display text must be scalar-valid UTF-8; canonically decomposed input is accepted and normalized to NFC by core library preparation before persistence.
+- List filter source is scalar-valid UTF-8 but remains byte-exact so URI literals retain filesystem identity.
+- Library URI bytes retain their separate path identity and are never Unicode-normalized by transfer.
 - One committed import applies content and any adopted `libraryId` through one write transaction and one library revision.
 - Preview runs the same mutation path in an uncommitted transaction and publishes no content change.
 - A prepared plan can commit only against the exact source bytes and target runtime, library identity, and committed revision it previewed.
@@ -48,7 +51,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - A payload has at most one track record for each canonical URI; merge matches tracks only by canonical manifest URI, and payload track IDs exist only for intra-payload references.
 - Lists in the payload are recreated with new target IDs and then have parents remapped.
 - A List filter and saved order are independent: the filter determines local membership, while order references preserve rank only.
-- Complete Track preparation validates both hot and cold record size/canonicality before interning dictionary text or creating cover resources; no rejected Track leaves an item-relative staged delta.
+- Complete Track preparation validates UTF-8, canonical custom-key uniqueness, and both hot and cold post-NFC record size/canonicality before interning dictionary text or creating cover resources; no rejected Track leaves an item-relative staged delta.
 - A post-effect Track, manifest, List, identifier, or storage failure reaches the root transaction boundary, which aborts the whole import before returning the error; import never catches a private mutation marker to continue with another payload item.
 - Only manifest point-read `NotFound` means an absent merge baseline or dangling URI reference; a post-open malformed row is an `AO_INVARIANT` fault and a non-miss native read failure is `AO_FATAL`, so neither becomes partial import or export output.
 
@@ -59,7 +62,7 @@ The application import path has two operations:
 ```text
 prepare(path, import mode)
   -> read exact source bytes
-  -> parse and validate version 4
+  -> parse and validate version 5
   -> prepare track/list data
   -> capture target runtime + library id + committed revision
   -> run mutation path in an uncommitted preview transaction
@@ -183,7 +186,7 @@ Every import, preview, and plan returns an `ImportReport`:
 
 | Field | Meaning |
 |---|---|
-| `payloadVersion` | Accepted interchange version; currently `4`. |
+| `payloadVersion` | Accepted interchange version; currently `5`. |
 | `payloadMode` | `delta`, `metadata`, `full`, or `listOnly`. |
 | `targetScope` | `Library` for track-bearing payloads or `Lists` for `listOnly`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
@@ -208,6 +211,7 @@ Merge publishes `libraryReset: false` with newly inserted tracks, matched tracks
 
 File-read failures report `IoError`.
 Malformed YAML, unsupported versions, closed-schema violations, invalid values, and unsafe URIs report `FormatRejected` as defined by the [format validation rules](../../../reference/library/format/yaml.md#validation-rules).
+Malformed UTF-8 in library text and custom keys that collide after NFC normalization are invalid values under that rule; neither is repaired with a replacement character.
 Applying a plan to different source bytes, another runtime, another library identity, or another target revision reports `Conflict`.
 Every apply attempt consumes the plan, including an attempt that returns a pre-commit error; replay reports `InvalidState` and a retry requires a fresh preview.
 
@@ -223,16 +227,17 @@ Offline import has no runtime publication phase; its transaction commit result i
 Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
-Version 4 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
+Version 5 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
 No configurable prepared-memory ceiling, streaming path, or additional bounded-transfer proposal is currently defined.
 Adding a limit must preserve the guarantee that the current exporter cannot produce a file the importer rejects solely for size.
 
 ## Persistence and versioning
 
-Version 4 is a portable interchange format, not the physical database format.
+Version 5 is a portable interchange format, not the physical database format.
 Restore and merge always write current `MusicLibrary` records.
-The importer accepts no earlier interchange version, including version 3, and provides no migration or legacy-restore path.
-A version-3 document's embedded cover bytes are therefore never read: the import fails and changes nothing, so recovering that library means exporting it again from a version-4 build, or scanning the music files it describes.
+An accepted version-5 document may use a canonically decomposed spelling, but export from physical database version 7 emits NFC because that is the current library admission invariant.
+The importer accepts no earlier interchange version, including version 4, and provides no migration or legacy-restore path.
+A version-3 document's embedded cover bytes are therefore never read: the import fails and changes nothing, so recovering that library means exporting it again from a version-5 build, or scanning the music files it describes.
 
 ## Frontend observations
 

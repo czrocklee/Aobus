@@ -44,6 +44,17 @@ namespace ao::library::test
     requireCorruptOpen(temp.path());
   }
 
+  TEST_CASE("MusicLibrary - open rejects a non-NFC persisted Track title",
+            "[library][regression][track-store][track-integrity][unicode]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const hot = makeHotData({}, "Cafe\u0301");
+
+    initializeLibraryStorage(temp.path());
+    seedRawTrackRow(temp.path(), 1, hot, makeColdData());
+    requireCorruptOpen(temp.path());
+  }
+
   TEST_CASE("TrackStore - prepared updates of an absent Track are non-mutating NotFound",
             "[library][regression][track-store][track-integrity]")
   {

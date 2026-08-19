@@ -11,10 +11,10 @@
 #include <ao/query/Parser.h>
 #include <ao/query/detail/FieldResolver.h>
 #include <ao/query/detail/Predicate.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstddef>
 #include <optional>
 #include <ranges>
@@ -33,11 +33,6 @@ namespace ao::query
     constexpr auto kFallbackOperators = std::to_array<std::string_view>({"=", "!=", "in", "?"});
     constexpr auto kLogicalOperators = std::to_array<std::string_view>({"and", "or", "&&", "||"});
 
-    char lowerAscii(char ch)
-    {
-      return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-
     bool startsWithInsensitive(std::string_view candidate, std::string_view prefix)
     {
       if (prefix.size() > candidate.size())
@@ -48,7 +43,7 @@ namespace ao::query
       return std::equal(prefix.begin(),
                         prefix.end(),
                         candidate.begin(),
-                        [](char lhs, char rhs) { return lowerAscii(lhs) == lowerAscii(rhs); });
+                        [](char lhs, char rhs) { return utility::toAsciiLower(lhs) == utility::toAsciiLower(rhs); });
     }
 
     bool equalsInsensitive(std::string_view lhs, std::string_view rhs)

@@ -14,9 +14,10 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/media/mp4/SampleDescription.h>
 #include <ao/utility/MappedFile.h>
+#include <ao/utility/Path.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
-#include <cctype>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -46,8 +47,8 @@ namespace ao::audio
   Result<std::unique_ptr<DecoderSession>> openDecoderSession(std::filesystem::path const& filePath,
                                                              std::optional<SampleEncoding> optOutputEncoding)
   {
-    auto ext = filePath.extension().string();
-    std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    auto ext = utility::pathToUtf8(filePath.extension());
+    std::ranges::transform(ext, ext.begin(), utility::toAsciiLower);
 
     if (ext == ".flac")
     {
@@ -60,8 +61,8 @@ namespace ao::audio
 
       if (auto const mapRes = mappedFile.map(filePath); !mapRes)
       {
-        return makeError(
-          Error::Code::IoError, std::format("Failed to map '{}': {}", filePath.string(), mapRes.error().message));
+        return makeError(Error::Code::IoError,
+                         std::format("Failed to map '{}': {}", utility::pathToUtf8(filePath), mapRes.error().message));
       }
 
       auto const sampleEntryTypeRes = media::mp4::audioSampleEntryType(mappedFile.bytes());
@@ -70,8 +71,9 @@ namespace ao::audio
       {
         if (sampleEntryTypeRes.error().code == Error::Code::NotFound)
         {
-          return makeError(Error::Code::NotSupported,
-                           std::format("MP4 container in '{}' has no supported audio track", filePath.string()));
+          return makeError(
+            Error::Code::NotSupported,
+            std::format("MP4 container in '{}' has no supported audio track", utility::pathToUtf8(filePath)));
         }
 
         return std::unexpected{sampleEntryTypeRes.error()};
@@ -89,8 +91,9 @@ namespace ao::audio
         return openConcreteSession<AacDecoderSession>(filePath, optOutputEncoding);
       }
 
-      return makeError(Error::Code::NotSupported,
-                       std::format("Unsupported MP4 audio codec '{}' in '{}'", sampleEntryType, filePath.string()));
+      return makeError(
+        Error::Code::NotSupported,
+        std::format("Unsupported MP4 audio codec '{}' in '{}'", sampleEntryType, utility::pathToUtf8(filePath)));
     }
 
     if (ext == ".mp3")

@@ -6,7 +6,6 @@
 #include <ao/utility/String.h>
 
 #include <array>
-#include <cctype>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -50,9 +49,9 @@ namespace ao::uimodel
       auto const trimmed = utility::trim(token);
 
       // Single ASCII letters are normalized to uppercase for a stable, readable form.
-      if (trimmed.size() == 1 && std::isalpha(static_cast<unsigned char>(trimmed.front())) != 0)
+      if (trimmed.size() == 1 && utility::isAsciiAlpha(trimmed.front()))
       {
-        return std::string{static_cast<char>(std::toupper(static_cast<unsigned char>(trimmed.front())))};
+        return std::string{utility::toAsciiUpper(trimmed.front())};
       }
 
       return std::string{trimmed};

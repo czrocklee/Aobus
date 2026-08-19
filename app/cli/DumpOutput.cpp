@@ -5,9 +5,9 @@
 
 #include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <ostream>
@@ -44,7 +44,7 @@ namespace ao::cli
       for (std::size_t i = 0; i < chunk; ++i)
       {
         char const charVal = static_cast<char>(data[offset + i]);
-        std::print(os, "{}", std::isprint(static_cast<unsigned char>(charVal)) != 0 ? charVal : '.');
+        std::print(os, "{}", utility::isAsciiPrintable(charVal) ? charVal : '.');
       }
 
       std::println(os, "|");

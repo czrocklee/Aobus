@@ -18,6 +18,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/utility/Path.h>
 
 #include <ftxui/dom/elements.hpp>
 
@@ -126,7 +127,7 @@ namespace ao::tui
         case F::Tags: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.tags};
         case F::FilePath:
           return rt::TrackFieldRawValue{
-            std::in_place_type<std::string>, row.optUriPath ? row.optUriPath->string() : std::string{}};
+            std::in_place_type<std::string>, row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{}};
         case F::Codec: return rt::TrackFieldRawValue{std::in_place_type<std::string>, uimodel::formatCodec(row.codec)};
         case F::SampleRate: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.sampleRate};
         case F::Channels: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.channels};

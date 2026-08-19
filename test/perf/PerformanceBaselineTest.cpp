@@ -4,6 +4,7 @@
 // Synthetic baseline measurement — no machine-dependent pass/fail thresholds.
 
 #include "lib/library/OpenValidationMetrics.h"
+#include "lib/library/TextAdmission.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -19,7 +20,9 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWriter.h>
 #include <ao/query/Field.h>
+#include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
@@ -91,6 +94,14 @@ namespace ao::rt::test
       std::chrono::microseconds setDuration{};
       std::size_t expandedMatches = 0;
       std::size_t setMatches = 0;
+    };
+
+    struct CaselessSearchTiming final
+    {
+      std::chrono::microseconds firstPassDuration{};
+      std::chrono::microseconds secondPassDuration{};
+      std::size_t firstPassMatches = 0;
+      std::size_t secondPassMatches = 0;
     };
 
     struct SortCacheKeys final
@@ -1098,6 +1109,49 @@ namespace ao::rt::test
       }
     }
 
+    void buildCaselessSearchLibrary(ScaleBench& bench, std::int32_t trackCount)
+    {
+      constexpr auto kArtists = std::to_array<std::string_view>({
+        "Die Ärzte",
+        "Dvořák Quartet",
+        "Björk",
+        "Sigur Rós",
+        "Μίκης Θεοδωράκης",
+        "宇多田ヒカル",
+        "坂本龍一",
+        "Café Tacvba",
+      });
+      constexpr auto kAlbums = std::to_array<std::string_view>({
+        "Große Straße",
+        "Rusalka",
+        "Vespertine",
+        "Ágætis byrjun",
+        "Ζορμπάς",
+        "初恋",
+        "音楽図鑑",
+        "Re",
+      });
+
+      bench.ids.reserve(trackCount);
+
+      for (std::int32_t index = 0; index < trackCount; ++index)
+      {
+        auto const arrayIndex = static_cast<std::size_t>(index) % kArtists.size();
+        auto const artist = kArtists[arrayIndex];
+        auto const album = kAlbums[arrayIndex];
+        auto const spec = library::test::TrackSpec{
+          .title = std::format("{} — Straße {:06d}", artist, index),
+          .artist = std::string{artist},
+          .album = std::string{album},
+          .albumArtist = std::string{artist},
+          .genre = arrayIndex % 2 == 0 ? "Électronique" : "現代音楽",
+          .composer = std::string{artist},
+          .work = std::string{album},
+        };
+        bench.ids.push_back(bench.libraryFixture.addTrack(spec));
+      }
+    }
+
     class BenchmarkTrackSource final : public TrackSource
     {
     public:
@@ -1257,6 +1311,60 @@ namespace ao::rt::test
       timing.expandedDuration = std::chrono::duration_cast<std::chrono::microseconds>(expandedEnd - expandedStart);
       timing.setDuration = std::chrono::duration_cast<std::chrono::microseconds>(setEnd - setStart);
 
+      return timing;
+    }
+
+    CaselessSearchTiming measureCaselessQuickFilter(ScaleBench& bench)
+    {
+      constexpr auto kExpression = "$title ~ 'Die Ärzte' or $artist ~ 'Die Ärzte' or $album ~ 'Die Ärzte' or "
+                                   "$albumArtist ~ 'Die Ärzte' or $genre ~ 'Die Ärzte' or $composer ~ 'Die Ärzte' or "
+                                   "$work ~ 'Die Ärzte'";
+
+      auto expressionRes = query::parse(kExpression);
+      REQUIRE(expressionRes);
+
+      auto planRes = query::compileQuery(*expressionRes);
+      REQUIRE(planRes);
+
+      auto& musicLibrary = bench.libraryFixture.library();
+      auto transaction = musicLibrary.readTransaction();
+      auto reader = musicLibrary.tracks().reader(transaction);
+      auto caselessDictionaryCache = library::DictionaryReadCache{musicLibrary.dictionary()};
+      auto caselessDictionaryContext = library::DictionaryReadContext{caselessDictionaryCache};
+      auto caselessBinding = query::PlanBinding{*planRes, caselessDictionaryContext};
+      auto evaluator = query::PlanEvaluator{};
+
+      auto measure = [&](query::PlanBinding const& binding)
+      {
+        auto matches = std::size_t{0};
+        auto const start = std::chrono::steady_clock::now();
+
+        for (auto const id : bench.ids)
+        {
+          auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+          if (!optView)
+          {
+            FAIL("Benchmark track disappeared during a stable read transaction");
+          }
+
+          matches += evaluator.matches(binding, *optView) ? 1U : 0U;
+        }
+
+        auto const end = std::chrono::steady_clock::now();
+        return std::pair{
+          std::chrono::duration_cast<std::chrono::microseconds>(end - start),
+          matches,
+        };
+      };
+
+      auto timing = CaselessSearchTiming{};
+      auto const [firstPassDuration, firstPassMatches] = measure(caselessBinding);
+      timing.firstPassDuration = firstPassDuration;
+      timing.firstPassMatches = firstPassMatches;
+      auto const [secondPassDuration, secondPassMatches] = measure(caselessBinding);
+      timing.secondPassDuration = secondPassDuration;
+      timing.secondPassMatches = secondPassMatches;
       return timing;
     }
 
@@ -1826,6 +1934,105 @@ namespace ao::rt::test
     CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 
+  TEST_CASE("PerformanceBaseline - Unicode library text admission", "[perf][unit][baseline][unicode]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr std::size_t kIterations = 100'000;
+
+    auto const measurePreflight = [](std::string_view const text)
+    {
+      std::size_t checksum = 0;
+      auto const start = std::chrono::steady_clock::now();
+
+      for (std::size_t index = 0; index < kIterations; ++index)
+      {
+        auto const sizeRes = library::detail::normalizedLibraryTextSize(text, "Performance text");
+        checksum += sizeRes.value();
+      }
+
+      auto const end = std::chrono::steady_clock::now();
+      CHECK(checksum != 0);
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    };
+
+    auto const measureNormalization = [](std::string_view const text)
+    {
+      std::size_t checksum = 0;
+      auto const start = std::chrono::steady_clock::now();
+
+      for (std::size_t index = 0; index < kIterations; ++index)
+      {
+        auto normalizedRes = library::detail::normalizeLibraryText(text, "Performance text");
+        checksum += normalizedRes.value().size();
+      }
+
+      auto const end = std::chrono::steady_clock::now();
+      CHECK(checksum != 0);
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    };
+
+    auto const ascii = std::string_view{"Cafe Cafe Cafe Cafe Cafe Cafe"};
+    auto const nfc = std::string_view{"Café Café Café Café Café Café"};
+    auto const nfd = std::string_view{"Cafe\u0301 Cafe\u0301 Cafe\u0301 Cafe\u0301 Cafe\u0301 Cafe\u0301"};
+
+    // Warm immutable ICU data before separating steady-state input classes.
+    REQUIRE(library::detail::normalizedLibraryTextSize(ascii, "Performance warmup"));
+    REQUIRE(library::detail::normalizeLibraryText(nfd, "Performance warmup"));
+
+    auto const asciiPreflight = measurePreflight(ascii);
+    auto const nfcPreflight = measurePreflight(nfc);
+    auto const nfdPreflight = measurePreflight(nfd);
+    auto const asciiNormalize = measureNormalization(ascii);
+    auto const nfcNormalize = measureNormalization(nfc);
+    auto const nfdNormalize = measureNormalization(nfd);
+
+    auto const nsPerOperation = [](std::chrono::nanoseconds const duration)
+    { return duration.count() / static_cast<std::int64_t>(kIterations); };
+
+    APP_LOG_INFO("=== Unicode library text admission: {} iterations per input ===", kIterations);
+    APP_LOG_INFO("  preflight ASCII/NFC/NFD: {} / {} / {} ns/op",
+                 nsPerOperation(asciiPreflight),
+                 nsPerOperation(nfcPreflight),
+                 nsPerOperation(nfdPreflight));
+    APP_LOG_INFO("  normalize ASCII/NFC/NFD: {} / {} / {} ns/op",
+                 nsPerOperation(asciiNormalize),
+                 nsPerOperation(nfcNormalize),
+                 nsPerOperation(nfdNormalize));
+    recordBaseline("unicode-library-text-admission",
+                   {
+                     metric("iterations", kIterations, "count"),
+                     metric("preflight_ascii", nsPerOperation(asciiPreflight), "ns/op"),
+                     metric("preflight_nfc", nsPerOperation(nfcPreflight), "ns/op"),
+                     metric("preflight_nfd", nsPerOperation(nfdPreflight), "ns/op"),
+                     metric("normalize_ascii", nsPerOperation(asciiNormalize), "ns/op"),
+                     metric("normalize_nfc", nsPerOperation(nfcNormalize), "ns/op"),
+                     metric("normalize_nfd", nsPerOperation(nfdNormalize), "ns/op"),
+                   });
+  }
+
+  TEST_CASE("PerformanceBaseline - Unicode caseless Quick Filter", "[perf][unit][baseline][unicode][query]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr std::int32_t kTrackCount = 10'000;
+
+    auto bench = ScaleBench{};
+    buildCaselessSearchLibrary(bench, kTrackCount);
+    auto const timing = measureCaselessQuickFilter(bench);
+
+    APP_LOG_INFO("=== Unicode caseless Quick Filter: {} tracks, seven text fields ===", kTrackCount);
+    APP_LOG_INFO(
+      "  first/second pass: {} / {} us", timing.firstPassDuration.count(), timing.secondPassDuration.count());
+    recordBaseline("unicode-caseless-quick-filter",
+                   {
+                     metric("track_count", kTrackCount, "count"),
+                     metric("first_pass", timing.firstPassDuration.count(), "us"),
+                     metric("second_pass", timing.secondPassDuration.count(), "us"),
+                     metric("matches", static_cast<std::int64_t>(timing.secondPassMatches), "count"),
+                   });
+
+    CHECK(timing.firstPassMatches == timing.secondPassMatches);
+  }
+
   TEST_CASE("PerformanceBaseline - phase 0 query IN threshold sweep", "[perf][unit][baseline][query]")
   {
     Log::initialize(LogLevel::Info);
@@ -2151,6 +2358,7 @@ namespace ao::rt::test
   TEST_CASE("PerformanceBaseline - 100k library open admission", "[perf][unit][baseline][library-open-admission]")
   {
     constexpr std::size_t kTrackCount = 100'000;
+    constexpr std::size_t kArtistCount = 10'000;
     constexpr std::size_t kMapSize = std::size_t{512} * 1024U * 1024U;
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -2171,6 +2379,9 @@ namespace ao::rt::test
             auto const uri = std::format("open-benchmark/{:06}.flac", index);
             auto track = library::TrackBuilder::makeEmpty();
             track.property().uri(uri);
+            track.metadata()
+              .title(std::format("Café {:06}", index))
+              .artist(std::format("Dvořák {:04}", index % kArtistCount));
 
             if (auto result = writer.create(track, library::FileManifestBuilder::makeEmpty()); !result)
             {
@@ -2217,6 +2428,7 @@ namespace ao::rt::test
     recordBaseline("library-open-admission",
                    {
                      metric("track_count", static_cast<std::int64_t>(kTrackCount), "count"),
+                     metric("artist_count", static_cast<std::int64_t>(kArtistCount), "count"),
                      metric("duration", duration.count(), "ms"),
                      metric("baseline_rss", baselineRss, "KiB"),
                      metric("sampled_peak_rss", sampledPeakRss, "KiB"),

@@ -82,7 +82,7 @@ Every logical write body runs through `WriteTransaction::apply()`; an error resu
 Only that context exposes logical Track and List mutation ports plus the narrow library-identity restore operation; it exposes neither commit nor abort and exists only for the callback invocation.
 Logical writers returned by the context borrow the transaction owner, are valid only while that callback is active, and must not outlive the transaction object; retaining the context itself beyond the callback is an ordinary dangling-reference error rather than a wider lifetime guarantee.
 A successful body leaves the root active for a later explicit commit by its transaction owner.
-Track preparation owns dictionary interning and descriptor creation: interning first consults committed mappings and then the transaction overlay, and new id/text or resource descriptor rows are written into the same native transaction as the Track record that references them.
+Track preparation owns text admission, dictionary interning, and descriptor creation: user-visible text is validated and normalized to NFC, interning first consults committed canonical mappings and then the transaction overlay, and new id/text or resource descriptor rows are written into the same native transaction as the Track record that references them.
 Dropping or failing the wrapper aborts both authorities.
 Commit or abort consumes the native handle but retains the native transaction object and dictionary writer until the outer wrapper is destroyed.
 Store writers that remain in ordinary scope across `commit()` therefore observe a terminal transaction and can be destroyed safely; any post-terminal operation fails before touching an LMDB cursor.
@@ -92,7 +92,7 @@ It holds the publication locks through commit, then either publishes the diction
 Readers therefore observe either the complete old mapping or the complete new mapping, and application change publication happens only after the latter is visible.
 
 Committed dictionary ids form a dense, append-only range beginning at one; aborted tail ids may be reused, while committed ids are never reclaimed or rebound.
-Opening builds the in-memory dictionary indices and establishes the persisted key-order and value-uniqueness invariants in the same mandatory traversal rather than validating a second copy of the strings first.
+Opening builds the in-memory dictionary indices and establishes the persisted key-order, scalar-valid UTF-8 NFC, and canonical value-uniqueness invariants in the same mandatory traversal rather than validating a second copy of the strings first.
 `DictionaryStore` serializes committed index publication and lookup with its internal shared mutex.
 Published strings are immutable and use stable storage, so a borrowed view remains valid until the store is destroyed even when later commits grow the dictionary.
 `DictionaryReadCache` is a bounded, owner-thread batch accelerator over those views rather than a snapshot or a wider lock scope.
@@ -127,6 +127,7 @@ A later missing or mismatched binding is therefore an invariant failure rather t
 Manifest-only status and audio-identity updates identify the owning Track and pass only mutable manifest facts; the logical writer derives the URI and Track binding from the live aggregate.
 Paired create/update operations abort the complete library transaction when a later physical step fails, so a caller cannot commit one side of an application-level Track change by swallowing that error.
 Complete Track preparation runs pure hot and cold preflight before dictionary interning, cover-resource creation, or record mutation.
+That preflight validates text, computes post-NFC sizes, and rejects canonically duplicate custom keys; common already-NFC input uses a quick check to avoid a temporary normalized allocation.
 The corresponding item is neutral relative to its entry transaction state when preflight rejects it; after its first staged effect, a failure must reach the root operation boundary, which aborts the complete transaction before exposing the error.
 Prepared Track sides retain typed snapshots rather than a second encoded copy, so the canonical byte validators run after the zero-copy encoder fills storage and again during open admission.
 
@@ -137,16 +138,17 @@ Its unbound result always carries a zero Track id, so no caller-supplied or stal
 The writer passes the prepared owning bytes through the ordinary copied-data path; the same validator already established their canonical representation before mutation.
 Only `NotFound` denotes absence at a point read.
 A malformed manifest point-read or iterator row violates the already-established open invariant and fails fast instead of becoming a skippable item or partial output.
-`ListBuilder::prepare()` similarly snapshots one canonical List record, including bounded field sizes and nonzero unique saved-order ids.
+`ListBuilder::prepare()` similarly validates List text, normalizes display fields while preserving opaque filter bytes, then snapshots one canonical List record with bounded field sizes and nonzero unique saved-order ids.
 The logical List writer accepts the semantic `ListBuilder`, performs preparation internally, and never exposes prepared bytes as a logical mutation input.
 The Store writes that exact immutable snapshot through the ordinary copied-data path, avoiding both a second serialization pass and a second allocating saved-order validation pass.
-The local validator treats filter bytes as opaque and does not parse application query grammar; parent existence and cycle checks are cross-row logical-writer responsibilities rather than record facts.
+The local validator requires scalar-valid UTF-8 filter text but preserves its bytes and treats its syntax as opaque; parent existence and cycle checks are cross-row logical-writer responsibilities rather than record facts.
 The logical List writer performs those cross-row checks against the live write snapshot, rejects ordinary deletion while children exist, and performs explicit subtree deletion children-first.
 `ListStore` otherwise follows the same validated-iterator rule, and its optional point reads abort through `AO_INVARIANT` on a post-open structural breach because `nullopt` means absence only.
 
 `LibraryUri` is the shared core value for paths in the music-root namespace.
 YAML import, runtime Writer, scanner, `FileManifestStore`, and runtime file consumers converge on this value instead of maintaining independent path checks.
 Its bounded canonical text is root-relative and separator-stable; each actual access resolves it beneath the root so an escaping or unresolved symlink is rejected at that boundary.
+It remains outside user-visible text normalization: NFC admission never rewrites filesystem identity.
 This narrows path races but is not an adversarial filesystem sandbox: the music tree is assumed not to change between resolution and the operating-system open.
 
 ### Runtime library facade
@@ -388,6 +390,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`TrackWrite.cpp`](../../lib/library/TrackWrite.cpp) and [`ReservationWriterAccess.h`](../../lib/lmdb/detail/ReservationWriterAccess.h) own the sole production path from prepared hot/cold Track values to callback-scoped LMDB reservations.
 - [`ListWriter`](../../include/ao/library/ListWriter.h) owns logical List topology mutation and deletion ordering.
 - [`DictionaryStore`](../../include/ao/library/DictionaryStore.h) owns committed synchronized dictionary access, stable published values, generation, and bounded read contexts/caches.
+- [`TextAdmission.cpp`](../../lib/library/TextAdmission.cpp) owns the library-private translation from reusable Unicode operations to mutation and corruption semantics.
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`LibraryUri`](../../include/ao/library/LibraryUri.h) owns the canonical music-root-relative path namespace and resolved containment check.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
@@ -414,7 +417,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`ListBuilderTest.cpp`](../../test/unit/library/ListBuilderTest.cpp), [`ListStoreTest.cpp`](../../test/unit/library/ListStoreTest.cpp), [`FileManifestBuilderTest.cpp`](../../test/unit/library/FileManifestBuilderTest.cpp), and [`FileManifestStoreTest.cpp`](../../test/unit/library/FileManifestStoreTest.cpp) protect prepared snapshots, binding-independent manifest validation, prepared-only writer surfaces, local record validation, and post-open iterator fail-fast behavior.
 - [`LibraryProbeTest.cpp`](../../test/unit/library/LibraryProbeTest.cpp) protects prepared-write preconditions, post-open Store and cross-Store trust, revision exhaustion, LMDB lifetime contracts, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) protects runtime consumers that enforce admitted cross-Store references before producing external output.
-- [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
+- [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects NFC identity, malformed-input rejection, overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
 - [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.
 - [`LibraryReaderTest.cpp`](../../test/unit/runtime/library/LibraryReaderTest.cpp) and [`LibraryWriterTest.cpp`](../../test/unit/runtime/library/LibraryWriterTest.cpp) protect runtime access roles.
 - [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering and callback publication.

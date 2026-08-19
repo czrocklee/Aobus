@@ -42,6 +42,7 @@ set(AOBUS_LINT_PLUGIN_SOURCES
   check/CalleeQualificationHelpers.cpp
   check/ConcreteFinalCheck.cpp
   check/ControlBlockSpacingCheck.cpp
+  check/ExplicitPathConversionCheck.cpp
   check/IncludeConventionCheck.cpp
   check/NodiscardUsageCheck.cpp
   check/ForbidTrailingReturnCheck.cpp
@@ -101,6 +102,7 @@ if(WIN32)
     AobusClangTidyMain.cpp
     ${AOBUS_LINT_PLUGIN_SOURCES}
   )
+  aobus_enable_windows_utf8_manifest(AobusClangTidy)
   target_link_libraries(AobusClangTidy PRIVATE
     clangTidyMain
     ${AOBUS_LINT_PLUGIN_LINK_LIBS}

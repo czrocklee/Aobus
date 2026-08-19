@@ -4,6 +4,7 @@
 #include <ao/rt/Log.h>
 
 #include <ao/Contract.h>
+#include <ao/utility/Path.h>
 
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
@@ -65,8 +66,9 @@ namespace ao::rt
     auto const logPath = logDir / "app.log";
     auto const spdLevel = static_cast<spdlog::level::level_enum>(level);
 
-    auto const fileSinkPtr = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-      logPath.string(), kRotatingLogMaxSize, kRotatingLogMaxFiles);
+    auto const logFileName = utility::pathToUtf8(logPath);
+    auto const fileSinkPtr =
+      std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logFileName, kRotatingLogMaxSize, kRotatingLogMaxFiles);
     fileSinkPtr->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
     fileSinkPtr->set_level(spdlog::level::trace);
 
@@ -115,7 +117,7 @@ namespace ao::rt
     AO_INVARIANT(fatalSinkRegistered, "Application fatal sink is already registered");
 
     APP_LOG_INFO("========================================================");
-    APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
+    APP_LOG_INFO("Logging initialized. Log file: {}", utility::pathToUtf8(logPath));
   }
 
   void Log::shutdown()

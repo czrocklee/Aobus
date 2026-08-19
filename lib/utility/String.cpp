@@ -3,7 +3,6 @@
 
 #include <ao/utility/String.h>
 
-#include <cctype>
 #include <string>
 #include <string_view>
 
@@ -16,7 +15,7 @@ namespace ao::utility
 
     for (auto const ch : text)
     {
-      result.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+      result.push_back(toAsciiLower(ch));
     }
 
     return result;
@@ -24,14 +23,12 @@ namespace ao::utility
 
   std::string_view trim(std::string_view text)
   {
-    auto const isSpace = [](char ch) { return std::isspace(static_cast<unsigned char>(ch)) != 0; };
-
-    while (!text.empty() && isSpace(text.front()))
+    while (!text.empty() && isAsciiWhitespace(text.front()))
     {
       text.remove_prefix(1);
     }
 
-    while (!text.empty() && isSpace(text.back()))
+    while (!text.empty() && isAsciiWhitespace(text.back()))
     {
       text.remove_suffix(1);
     }

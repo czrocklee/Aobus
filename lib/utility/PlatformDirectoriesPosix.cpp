@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include <ao/Error.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
 
 #include <pwd.h>
@@ -32,7 +33,7 @@ namespace ao::utility
         return std::nullopt;
       }
 
-      auto path = std::filesystem::path{value};
+      auto path = pathFromNative(value);
 
       if (!path.is_absolute())
       {
@@ -68,7 +69,7 @@ namespace ao::utility
         return std::nullopt;
       }
 
-      auto home = std::filesystem::path{result->pw_dir};
+      auto home = pathFromNative(result->pw_dir);
 
       return home.is_absolute() ? std::optional{std::move(home)} : std::nullopt;
     }
@@ -78,17 +79,17 @@ namespace ao::utility
   {
     if (auto optConfigHome = environmentPath("XDG_CONFIG_HOME"); optConfigHome)
     {
-      return *optConfigHome / kApplicationDirectoryName;
+      return *optConfigHome / pathFromUtf8(kApplicationDirectoryName);
     }
 
     if (auto optHome = environmentPath("HOME"); optHome)
     {
-      return *optHome / ".config" / kApplicationDirectoryName;
+      return *optHome / ".config" / pathFromUtf8(kApplicationDirectoryName);
     }
 
     if (auto optHome = passwdHomeDirectory(); optHome)
     {
-      return *optHome / ".config" / kApplicationDirectoryName;
+      return *optHome / ".config" / pathFromUtf8(kApplicationDirectoryName);
     }
 
     return makeError(Error::Code::NotFound, "No environment or account entry names a home directory");
@@ -98,17 +99,17 @@ namespace ao::utility
   {
     if (auto optCacheHome = environmentPath("XDG_CACHE_HOME"); optCacheHome)
     {
-      return *optCacheHome / kApplicationDirectoryName;
+      return *optCacheHome / pathFromUtf8(kApplicationDirectoryName);
     }
 
     if (auto optHome = environmentPath("HOME"); optHome)
     {
-      return *optHome / ".cache" / kApplicationDirectoryName;
+      return *optHome / ".cache" / pathFromUtf8(kApplicationDirectoryName);
     }
 
     if (auto optHome = passwdHomeDirectory(); optHome)
     {
-      return *optHome / ".cache" / kApplicationDirectoryName;
+      return *optHome / ".cache" / pathFromUtf8(kApplicationDirectoryName);
     }
 
     return makeError(Error::Code::NotFound, "No environment or account entry names a home directory");

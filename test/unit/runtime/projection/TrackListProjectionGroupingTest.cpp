@@ -249,6 +249,141 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Coldplay");
   }
 
+  TEST_CASE("TrackListProjection - article-insensitive artist order keeps distinct contiguous identities",
+            "[runtime][regression][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const doorsAlpha = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .artist = "Doors"});
+    auto const theDoorsBravo =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Bravo", .artist = "The Doors"});
+    auto const doorsCharlie =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Charlie", .artist = "Doors"});
+    auto const theDoorsDelta =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Delta", .artist = "The Doors"});
+    env.setupFiltered({{theDoorsDelta, doorsCharlie, theDoorsBravo, doorsAlpha}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                                               }});
+
+    CHECK(proj.trackIdAt(0) == doorsAlpha);
+    CHECK(proj.trackIdAt(1) == doorsCharlie);
+    CHECK(proj.trackIdAt(2) == theDoorsBravo);
+    CHECK(proj.trackIdAt(3) == theDoorsDelta);
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Doors");
+    CHECK(proj.groupAt(0).rows.start == 0);
+    CHECK(proj.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "The Doors");
+    CHECK(proj.groupAt(1).rows.start == 2);
+    CHECK(proj.groupAt(1).rows.count == 2);
+  }
+
+  TEST_CASE("TrackListProjection - grouping remains contiguous when the configured sort omits the group field",
+            "[runtime][regression][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const bravoA = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Bravo"});
+    auto const alphaB = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .artist = "Alpha"});
+    auto const bravoC = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "C", .artist = "Bravo"});
+    auto const alphaD = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "D", .artist = "Alpha"});
+    env.setupFiltered({{bravoA, alphaB, bravoC, alphaD}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}},
+    });
+
+    CHECK(proj.trackIdAt(0) == alphaB);
+    CHECK(proj.trackIdAt(1) == alphaD);
+    CHECK(proj.trackIdAt(2) == bravoA);
+    CHECK(proj.trackIdAt(3) == bravoC);
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Alpha");
+    CHECK(proj.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Bravo");
+    CHECK(proj.groupAt(1).rows.count == 2);
+  }
+
+  TEST_CASE("TrackListProjection - compound group identities do not discard articles",
+            "[runtime][regression][projection]")
+  {
+    SECTION("Album identity")
+    {
+      auto env = TrackListProjectionFixture{};
+      auto const wallA =
+        env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .album = "Wall", .albumArtist = "Artist"});
+      auto const theWallB = env.libraryFixture.addTrack(
+        library::test::TrackSpec{.title = "B", .album = "The Wall", .albumArtist = "Artist"});
+      auto const wallC =
+        env.libraryFixture.addTrack(library::test::TrackSpec{.title = "C", .album = "Wall", .albumArtist = "Artist"});
+      auto const theWallD = env.libraryFixture.addTrack(
+        library::test::TrackSpec{.title = "D", .album = "The Wall", .albumArtist = "Artist"});
+      env.setupFiltered({{theWallD, wallC, theWallB, wallA}});
+
+      auto proj = env.createProjection(ViewId{1});
+      auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+      proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                                                 .sortBy = {
+                                                   TrackSortTerm{.field = TrackSortField::AlbumArtist},
+                                                   TrackSortTerm{.field = TrackSortField::Album},
+                                                   TrackSortTerm{.field = TrackSortField::Title},
+                                                 }});
+
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "The Wall");
+      CHECK(proj.groupAt(0).rows.count == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Wall");
+      CHECK(proj.groupAt(1).rows.count == 2);
+
+      proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                                                 .sortBy = {
+                                                   TrackSortTerm{.field = TrackSortField::AlbumArtist},
+                                                   TrackSortTerm{.field = TrackSortField::Album, .ascending = false},
+                                                   TrackSortTerm{.field = TrackSortField::Title},
+                                                 }});
+
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Wall");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "The Wall");
+    }
+
+    SECTION("Work identity")
+    {
+      auto env = TrackListProjectionFixture{};
+      auto const planetsA =
+        env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .composer = "Holst", .work = "Planets"});
+      auto const thePlanetsB =
+        env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .composer = "Holst", .work = "The Planets"});
+      auto const planetsC =
+        env.libraryFixture.addTrack(library::test::TrackSpec{.title = "C", .composer = "Holst", .work = "Planets"});
+      auto const thePlanetsD =
+        env.libraryFixture.addTrack(library::test::TrackSpec{.title = "D", .composer = "Holst", .work = "The Planets"});
+      env.setupFiltered({{thePlanetsD, planetsC, thePlanetsB, planetsA}});
+
+      auto proj = env.createProjection(ViewId{1});
+      auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+      proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Work,
+                                                 .sortBy = {
+                                                   TrackSortTerm{.field = TrackSortField::Composer},
+                                                   TrackSortTerm{.field = TrackSortField::Work},
+                                                   TrackSortTerm{.field = TrackSortField::Title},
+                                                 }});
+
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Planets");
+      CHECK(proj.groupAt(0).rows.count == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "The Planets");
+      CHECK(proj.groupAt(1).rows.count == 2);
+    }
+  }
+
   TEST_CASE("TrackListProjection - group sections empty for None grouping", "[runtime][unit][projection]")
   {
     auto env = TrackListProjectionFixture{};
@@ -329,6 +464,25 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Year);
   }
 
+  TEST_CASE("TrackListProjection - grouped presentation without sort terms materializes its group key",
+            "[runtime][regression][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const track2021 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Later", 2021));
+    auto const track2020 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Earlier", 2020));
+    env.setupFiltered({{track2021, track2020}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Year});
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(proj.trackIdAt(0) == track2020);
+    CHECK(trackGroupHeadingYear(proj.groupAt(0).heading.primary) == 2020);
+    CHECK(proj.trackIdAt(1) == track2021);
+    CHECK(trackGroupHeadingYear(proj.groupAt(1).heading.primary) == 2021);
+  }
+
   TEST_CASE("TrackListProjection - album groups split by album artist", "[runtime][unit][projection]")
   {
     auto env = TrackListProjectionFixture{};
@@ -357,6 +511,30 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Greatest Hits");
     CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Artist Two");
     CHECK(trackGroupHeadingYear(proj.groupAt(1).heading.tertiary) == 2020);
+  }
+
+  TEST_CASE("TrackListProjection - supplied compound group fields inherit the authored direction",
+            "[runtime][regression][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const alpha =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .album = "Shared", .albumArtist = "Alpha"});
+    auto const bravo =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .album = "Shared", .albumArtist = "Bravo"});
+    env.setupFiltered({{alpha, bravo}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Album,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Album, .ascending = false}},
+    });
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(proj.trackIdAt(0) == bravo);
+    CHECK(proj.trackIdAt(1) == alpha);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Bravo");
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Alpha");
   }
 
   TEST_CASE("TrackListProjection - presentation returns active grouping and redundant fields snapshot",

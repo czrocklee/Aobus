@@ -21,11 +21,10 @@ namespace ao::rt
   /**
    * The interchange format version this build writes, and the only one it reads.
    *
-   * Version 4 carries no cover byte in any mode. A `full` document instead names
-   * each distinct cover once in a normalized `library.resources` table and has
-   * each track's cover reference name a digest from it.
+   * Version 5 admits scalar-valid UTF-8, stores display text and custom keys in
+   * NFC, and preserves URI and saved-filter source bytes exactly.
    */
-  constexpr std::uint32_t kYamlFormatVersion = 4;
+  constexpr std::uint32_t kYamlFormatVersion = 5;
 
   /**
    * ExportMode - Controls which data is included in the YAML export.

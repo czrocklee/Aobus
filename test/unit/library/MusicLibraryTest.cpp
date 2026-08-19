@@ -409,12 +409,22 @@ namespace ao::library::test
     requireCorruptLibrary(temp.path());
   }
 
+  TEST_CASE("MusicLibrary - rejects non-NFC dictionary rows", "[library][unit][music-library][integrity][unicode]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+    createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("Dvor\u030Ca\u0301k"));
+
+    requireCorruptLibrary(temp.path());
+  }
+
   TEST_CASE("MusicLibrary - reports unsupported library versions as NotSupported", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     constexpr std::uint32_t kLegacyV1LibraryVersion = 1;
     constexpr std::uint32_t kPreviousColdLayoutLibraryVersion = 2;
     constexpr std::uint32_t kPreUnifiedListOrderingLibraryVersion = 4;
+    constexpr std::uint32_t kPreNfcTextLibraryVersion = 6;
 
     SECTION("future version")
     {
@@ -462,6 +472,16 @@ namespace ao::library::test
     {
       static_assert(kPreUnifiedListOrderingLibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kPreUnifiedListOrderingLibraryVersion);
+
+      auto const result = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("version 6 before NFC text admission")
+    {
+      static_assert(kPreNfcTextLibraryVersion != kLibraryVersion);
+      createLibraryMetadataHeader(temp.path(), kPreNfcTextLibraryVersion);
 
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);

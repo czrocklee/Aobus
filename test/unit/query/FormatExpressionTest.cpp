@@ -93,6 +93,13 @@ namespace ao::query::test
     CHECK(evaluate(R"($artist " - " $title)", fixture) == "Johann Sebastian Bach - Cello Suite");
   }
 
+  TEST_CASE("FormatExpression - preserves valid Unicode output literals", "[query][unit][format-expression][unicode]")
+  {
+    auto const plan = compileFormatOk(parseOk("'Cafe\u0301'"));
+
+    REQUIRE(plan.literals == std::vector<std::string>{"Cafe\u0301"});
+  }
+
   TEST_CASE("FormatExpression - formats cold fields custom metadata and properties", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};

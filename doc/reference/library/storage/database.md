@@ -3,13 +3,13 @@ id: library.database
 type: reference
 status: current
 domain: library
-summary: Defines the version 6 host-local LMDB environment, named databases, keys, records, and validation gates.
+summary: Defines the version 7 host-local LMDB environment, named databases, keys, records, and validation gates.
 ---
 # Library database
 
 ## Scope and version
 
-This reference defines physical library format version `6`, gated by `ao::library::kLibraryVersion`.
+This reference defines physical library format version `7`, gated by `ao::library::kLibraryVersion`.
 It owns the LMDB environment, named databases, key encodings, record composition, size and alignment requirements, and version policy.
 
 Entity meaning belongs to the [track](../model/track.md) and [list](../model/list.md) references.
@@ -42,12 +42,12 @@ A mutation that exhausts the map rolls back and leaves the recorded peak untouch
 `Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
 It is for callers that need one known capacity, including tests that mean to reach the end of a map.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-6 schema only when that catalog is empty.
+It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-7 schema only when that catalog is empty.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
 Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
 The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.
 A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
-After the version gate accepts version 6, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
+After the version gate accepts version 7, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
 
 The database is host-local rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
@@ -96,7 +96,7 @@ Filter bytes remain opaque throughout these storage operations.
 
 Writable-capability acquisition non-blockingly locks `<database-path>/.aobus-writer.lock` for the capability lifetime.
 An active write transaction retains the lock after its originating capability is destroyed and releases it on commit, failure, abort-by-destruction, or transaction destruction.
-The lock file has no governed payload and is not part of format version `6`, but it must not be removed while a writable process is active.
+The lock file has no governed payload and is not part of format version `7`, but it must not be removed while a writable process is active.
 
 ## Named databases
 
@@ -107,7 +107,7 @@ The lock file has no governed payload and is not part of format version `6`, but
 | `tracks_cold` | `TrackId` integer | `TrackColdHeader`, optional block payloads, URI bytes. |
 | `lists` | `ListId` integer | `ListHeader`, order-track-id array, name/description/filter bytes, zero padding. |
 | `resources` | Digest-derived `ResourceId` integer | 36-byte `ResourceDescriptor`. |
-| `dictionary` | `DictionaryId` integer | Raw UTF-8 bytes without a terminator. |
+| `dictionary` | `DictionaryId` integer | Scalar-valid UTF-8 NFC bytes without a terminator. |
 | `file_manifest` | Root-relative URI padded to a four-byte multiple | `FileManifestHeader`. |
 
 One database slot remains spare.
@@ -119,10 +119,10 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 - Track and list writers allocate `maxKey + 1`; the first id is `1`, and exhaustion returns `ResourceExhausted`.
 - A track is appended to `tracks_hot` first and written to `tracks_cold` under the same id.
 - A resource key starts from the first four bytes of the content's SHA-256 digest read big-endian, remaps zero to one, and linearly probes with digest comparison, stopping at the first empty slot; identical content reuses the existing id.
-- Dictionary ids produced by current writers are the dense committed range `1..entryCount`; new text receives the next id, repeated text reuses its existing id, and committed ids are never deleted or rebound.
+- Dictionary ids produced by current writers are the dense committed range `1..entryCount`; input text is normalized to NFC before identity lookup, new canonical text receives the next id, canonically equivalent text reuses its existing id, and committed ids are never deleted or rebound.
 - Persisted dictionary, Track, and List integer keys are exactly four native bytes before conversion; dictionary keys are the dense range `1..N`, Track keys are nonzero matching hot/cold pairs, and List keys are nonzero.
 - An aborted transaction-local dictionary tail has no durable identity and its ids may be reused by a later transaction.
-- The dictionary persists id-to-string rows and rebuilds its string-to-id index in memory when opened; that same traversal validates key width, dense order, and text uniqueness before the store is exposed.
+- The dictionary persists id-to-string rows and rebuilds its string-to-id index in memory when opened; that same traversal validates key width, dense order, scalar-valid UTF-8 NFC text, and canonical text uniqueness before the store is exposed.
 - Manifest keys are normalized root-relative URI bytes, limited to 500 bytes, then zero-padded to a four-byte multiple; an oversized key returns `ValueTooLarge`.
 
 ## Metadata records
@@ -161,6 +161,9 @@ Defined block slots are written in slot order:
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
 The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI bytes.
+Inline title and custom-metadata value bytes are scalar-valid UTF-8 in NFC.
+Every dictionary-backed metadata field, tag, and custom-metadata key inherits the same text invariant from its dictionary row.
+The URI is filesystem identity and is explicitly outside this text-normalization contract.
 
 Production callers pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
 The writer performs preparation itself and keeps the resulting immutable `TrackBuilder::PreparedHot` and `PreparedCold` values inside `ao_library`.
@@ -171,7 +174,8 @@ The Track writer is the only production consumer that reaches the integer writer
 Writes reject the reserved zero `TrackId` as a `CorruptData` fault.
 Complete internal preparation first runs both pure hot and cold validators; single-side logical updates run the validator for that side.
 Private serialization helpers used by representation tests follow the same preflight rules.
-Those gates check every representable size and the canonical Track URI before dictionary interning, resource creation, or Track mutation begins, so a recoverable rejection adds no item-relative dictionary, resource, or Track delta.
+Those gates validate scalar UTF-8 and check every representable post-NFC size plus the canonical Track URI before dictionary interning, resource creation, or Track mutation begins, so a recoverable rejection adds no item-relative dictionary, resource, or Track delta.
+Already-NFC input uses a quick check to avoid a temporary normalized allocation during size preflight; prepared text is normalized once before it is encoded or interned.
 They validate builder input and representability rather than encoded bytes: a prepared Track side is a typed zero-copy snapshot and does not retain a second serialized record.
 That private zero-copy path reserves the hot value, fills every byte, and validates it before its encoder callback returns, then repeats the sequence for the cold value.
 Updates follow the same per-side sequence.
@@ -256,11 +260,11 @@ recordSize   = alignUp4(logicalSize)
 
 The serializer emits exactly that size and fills the final zero through three padding bytes with zero.
 The reader rejects multiplication/addition overflow, truncated fields, a non-canonical total size, nonzero padding, and hidden trailing bytes.
-Text fields retain an independent 65,535-byte product limit; the 32-bit physical lengths do not authorize multi-gigabyte user text.
+Text fields retain an independent 65,535-byte post-NFC product limit; the 32-bit physical lengths do not authorize multi-gigabyte user text.
 
 `ListBuilder` owns copies of its name, description, and filter inputs, so a logical mutation may stage the semantic value without retaining a caller or LMDB view.
-`ListBuilder::prepare()` snapshots one immutable prepared value after checking the product limits, exact canonical layout, nonzero unique saved-order ids, and every derived extent.
-The filter field is opaque at this boundary: any byte string within the size limit is locally valid, and no query parse or compile occurs.
+`ListBuilder::prepare()` validates scalar UTF-8, normalizes name and description to NFC, preserves filter bytes, then snapshots one immutable prepared value after checking the product limits, exact canonical layout, nonzero unique saved-order ids, and every derived extent.
+The filter field is syntactically opaque at this boundary: any scalar-valid UTF-8 text within the size limit is locally valid, and no query parse or compile occurs.
 `ListStore::Writer` accepts only the prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
 It does not serialize again or allocate and rebuild a second saved-order uniqueness set before copying those bytes.
 Creation allocates the nonzero List key; update requires a nonzero key.
@@ -274,7 +278,7 @@ The row describes content and holds none of it; the content lives in the media f
 The `resources` database is append-only in practice: no production path deletes a row, because `create` stops probing at the first empty slot and a hole in a collision chain would let a later create mint a second row for one digest.
 Rows a track no longer references are retained and remain valid.
 
-Dictionary values are raw UTF-8 bytes with no header or terminator.
+Dictionary values are scalar-valid UTF-8 NFC bytes with no header or terminator.
 Dictionary rows created for a referencing record are written in the same LMDB transaction.
 
 ## Manifest records
@@ -309,26 +313,27 @@ Point reads and iterator dereference after a successful open assume the validate
 Production callers cannot submit serialized Track, List, or manifest byte spans to their structured Store writers.
 The logical Track port accepts `TrackBuilder` and `FileManifestBuilder`, the logical List port accepts `ListBuilder`, and both own their private preparation.
 Manifest-only Track updates likewise accept the owning `TrackId` plus `FileManifestBuilder`; the port derives and preserves the live URI-to-Track binding itself.
-Track preflight, List preparation, and manifest preparation return recoverable validation errors before their first related mutation, while passing an invalid prepared value is impossible through the public construction surface.
+Track preflight and List preparation reject malformed UTF-8 as `InvalidInput`, normalize admitted library text to NFC, and return recoverable validation errors before their first related mutation; manifest preparation preserves the separate native URI identity contract.
+Passing an invalid prepared value is impossible through the public construction surface.
 Once Track preparation starts interning dictionary text or creating Resource descriptors, any later failure reaches the root operation boundary and aborts the complete transaction.
 Track encoders validate the bytes they fill with the same canonical local validators used by open and treat a mismatch as an `AO_ENSURES` failure.
 Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
 After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-6 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
+A valid non-current version returns `NotSupported` before version-7 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
 The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
-For version 6, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
+For version 7, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
 Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
 The typed `meta` token contains only header record `1` plus optional revision record `2`.
 
 The current-schema gate then validates Resource keys as nonzero four-byte ids and Resource values as exactly 36 parseable descriptor bytes, requires every stored digest to be distinct, and requires every row to be reachable from its digest's initial key along an unbroken run of occupied slots; orphan Resources and orphan dictionary rows are accepted.
 A row whose key is not the first free slot at or above its digest's initial key is `CorruptData`, with the empty slot before it as the cause; a long collision cluster and a cluster spanning the wrap from the maximum key to `1` are both valid.
 Reachability is checked over the occupied key runs the same traversal already collects, so it stays linear in the number of rows.
-It validates dictionary key width, dense ids, and unique text while building the in-memory index.
-It merge-checks the hot/cold Track key sets, validates canonical records plus every dictionary and Resource reference, and proves a strict Track-to-manifest bijection.
+It validates dictionary key width, dense ids, scalar-valid UTF-8 NFC, and unique canonical text while building the in-memory index.
+It merge-checks the hot/cold Track key sets, validates canonical records including scalar-valid UTF-8 NFC inline text plus every dictionary and Resource reference, and proves a strict Track-to-manifest bijection.
 The bijection first compares row counts, then performs one canonical manifest point read for each Track URI and requires the manifest's Track id to equal that Track id.
 Equal counts, unique Track ids, and the exact point matches prove that no extra manifest row exists without allocating a Track- or manifest-sized set; duplicate Track URIs and duplicate manifest bindings cannot pass.
-It validates every List key and local record, requires each non-root parent to exist, and rejects parent cycles using memory proportional to the List count.
+It validates every List key and local record, including scalar-valid UTF-8 NFC text, requires each non-root parent to exist, and rejects parent cycles using memory proportional to the List count.
 Saved-order Track ids must be nonzero and unique, but they may be stale or currently absent because saved rank is intentionally retained outside current membership.
 Stored filter bytes remain opaque and are not parsed or compiled by database admission.
 These gates all complete in one coherent initialization transaction before exposure; their internal evaluation order after the version gate is not an error-precedence contract.
@@ -379,15 +384,16 @@ Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, 
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
-Version `6` gates the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` bytes remain opaque to database admission.
+Version `7` gates scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excludes filesystem URI bytes and opaque List filter source.
+Version `6` gated the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` text remains syntactically opaque to database admission.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../spec/query/predicate-evaluation.md).
 A grammar or predicate-semantic change does not by itself increment `kLibraryVersion`; stored text that no longer parses or compiles is an application expression error rather than corrupt storage.
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
 An explicitly tested future migration may replace reset-and-rescan recovery for an old physical version only when it converts or validates every affected record atomically and updates the metadata version after the converted data is valid; no such migration exists today.
 There is no reader for an older physical version and no in-place migration.
-Opening a version-4 or version-5 environment returns `NotSupported`; recreating the library by rescanning the music root is the supported answer.
-Preserving user-authored curation instead requires a portable export made by a compatible build before the upgrade, and a version-5 build writes version-3 YAML, which this build does not read.
+Opening a version-4, version-5, or version-6 environment returns `NotSupported`; recreating the library by rescanning the music root is the supported answer.
+Preserving user-authored curation instead requires a current version-5 portable export made before the physical upgrade.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created host-local index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority

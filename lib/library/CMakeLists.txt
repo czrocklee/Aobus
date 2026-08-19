@@ -13,6 +13,7 @@ add_library(ao_library STATIC
     ResourceLayout.cpp
     ResourceStore.cpp
     DictionaryStore.cpp
+    TextAdmission.cpp
     detail/LibraryError.cpp
     FileManifestStore.cpp
     FileManifestValidation.cpp
@@ -41,7 +42,10 @@ target_include_directories(ao_library
     PUBLIC ${AO_PUBLIC_INCLUDE_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-target_link_libraries(ao_library PUBLIC ao_lmdb ao_utility)
+target_link_libraries(ao_library
+    PUBLIC ao_lmdb ao_utility
+    PRIVATE ao_unicode_text
+)
 
 set(AO_LIBRARY_FORBIDDEN_MEDIA_FILE_INCLUDE_REGEX
     "#[ \t]*include[ \t]*[<\"]ao/media/file/"

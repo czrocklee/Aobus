@@ -47,6 +47,7 @@
 #include <optional>
 #include <stdexcept>
 #include <stop_token>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -63,10 +64,17 @@ namespace ao::rt::test
     struct FailureCounts final
     {
       std::int32_t failed = 0;
+      std::string lastStage;
+      std::string lastMessage;
 
       std::move_only_function<void(ScanFailure const&)> callback()
       {
-        return [this](ScanFailure const&) { ++failed; };
+        return [this](ScanFailure const& failure)
+        {
+          ++failed;
+          lastStage = failure.stage;
+          lastMessage = failure.message;
+        };
       }
     };
 
@@ -176,6 +184,34 @@ namespace ao::rt::test
       std::filesystem::last_write_time(target, previousTime + std::chrono::seconds{10});
     }
 
+    void installMalformedUtf8Id3v24Fixture(std::filesystem::path const& source, std::filesystem::path const& target)
+    {
+      auto bytes = audio::test::readFileBytes(source);
+      auto const frameId = std::string_view{"TIT2"};
+      auto const frame = std::search(bytes.begin(), bytes.end(), frameId.begin(), frameId.end());
+
+      REQUIRE(bytes.size() >= 10);
+      REQUIRE(std::string_view{reinterpret_cast<char const*>(bytes.data()), 3} == "ID3");
+      REQUIRE(frame != bytes.end());
+
+      auto const frameOffset = static_cast<std::size_t>(std::distance(bytes.begin(), frame));
+      constexpr std::size_t kFrameHeaderSize = 10;
+      REQUIRE(frameOffset + kFrameHeaderSize + 3 <= bytes.size());
+
+      // The fixture uses small v2.3 frame sizes whose byte encoding is also
+      // syncsafe. Reclassify the tag as v2.4, declare TIT2 as UTF-8, and put an
+      // overlong sequence at the start of its unchanged-length payload.
+      bytes[3] = 4;
+      bytes[frameOffset + kFrameHeaderSize] = 3;
+      bytes[frameOffset + kFrameHeaderSize + 1] = 0xC0;
+      bytes[frameOffset + kFrameHeaderSize + 2] = 0xAF;
+
+      auto output = std::ofstream{target, std::ios::binary};
+      REQUIRE(output);
+      output.write(reinterpret_cast<char const*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+      REQUIRE(output.good());
+    }
+
     void curateTrack(library::MusicLibrary& ml, TrackId const trackId)
     {
       updateTrackSpec(ml,
@@ -240,6 +276,40 @@ namespace ao::rt::test
     REQUIRE(optManifest);
     CHECK(optManifest->audioPayloadLength() > 0);
     CHECK(optManifest->audioSignature() != utility::Hash128{});
+  }
+
+  TEST_CASE("ScanApplyOperation - rejects malformed declared UTF-8 metadata without replacing it",
+            "[runtime][unit][library][scan][unicode]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.mp3");
+    auto const targetFile = musicRoot / "malformed.mp3";
+    installMalformedUtf8Id3v24Fixture(sourceFile, targetFile);
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(plan.size() == 1);
+    REQUIRE(plan.items()[0].classification == ScanClassification::New);
+
+    auto failures = FailureCounts{};
+    auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, failures.callback()};
+    auto const runRes = operation.run();
+
+    REQUIRE(runRes);
+    CHECK(runRes->insertedIds.empty());
+    CHECK(runRes->mutatedIds.empty());
+    CHECK(runRes->failureCount == 1);
+    CHECK(failures.failed == 1);
+    CHECK(failures.lastStage == "serialize");
+    CHECK(failures.lastMessage.find("Track title") != std::string::npos);
+
+    auto transaction = ml.readTransaction();
+    CHECK(ml.tracks().reader(transaction).entryCount() == 0);
+    CHECK_FALSE(ml.manifest().reader(transaction).get("malformed.mp3"));
+    CHECK(ml.dictionary().size() == 0);
   }
 
   TEST_CASE("ScanApplyOperation - deferred new scans write pending audio identity", "[runtime][unit][library][scan]")

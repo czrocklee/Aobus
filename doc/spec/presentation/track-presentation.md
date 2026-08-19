@@ -23,8 +23,10 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 
 - Presentation affects grouping, ordering, visible fields, and redundant-field suppression, never list membership.
 - A quick filter changes the source supplied to a presentation but does not select a new presentation.
-- An empty sort preserves source order exactly.
+- A flat presentation with an empty sort preserves source order exactly.
 - Sorts are stable for equal keys.
+- Every group identity occupies one contiguous row range, including when a
+  custom sort omits its grouping field.
 - A redundant field is suppressed only when the group header presents the same fact.
 - Every materialized group section has a nonempty primary display value after UIModel formatting.
 - Album groups use `(album artist, album)` identity; Work groups use `(composer, work)` identity.
@@ -37,6 +39,20 @@ Each slot retains absence, raw text, a numeric year, or a typed `MissingTrackVal
 Every grouping populates the primary slot with raw text, a numeric year, or a typed missing value before materializing a section.
 Unknown group values remain distinct semantic keys rather than merging with an unrelated concrete value or becoming English inside runtime.
 UIModel resolves the slots through `PresentationTextCatalog`, and frontend adapters own only markup and geometry.
+
+Text display, group identity, and ordering use separate keys. The dependency-free
+implementation ASCII-folds group identity without removing a leading `the`,
+`a`, or `an`; ordering applies the same fold after removing that article. Thus
+`The Doors` and `Doors` sort together but remain separate groups. Full Unicode
+case folding and locale collation are separate later policies rather than
+implicit byte transformations.
+
+Grouped comparison orders the grouping components first, then the complete
+unstripped identity, then the configured row sort terms. Configured grouping
+terms retain their authored order and direction; missing compound components
+are supplied in the direction of the first authored grouping term, or ascending
+when none is authored. This keeps Album `(album artist, album)` and Work
+`(composer, work)` identities contiguous even for custom presentation shapes.
 
 Only `TrackSortField` values resident in projection snapshots are sortable.
 Manifest-backed file size and modified time remain display-only.

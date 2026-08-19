@@ -36,6 +36,7 @@
 #include <ao/utility/ByteView.h>
 #include <ao/utility/FileAllocation.h>
 #include <ao/utility/Hash128.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/Reflect.h>
@@ -245,8 +246,9 @@ namespace ao::cli
       }
 
       auto exporter = rt::LibraryYamlExporter{ml};
+      auto const exportPath = utility::pathFromUtf8(path);
 
-      if (auto const result = exporter.exportToYaml(path, mode); !result)
+      if (auto const result = exporter.exportToYaml(exportPath, mode); !result)
       {
         auto const& error = result.error();
         throwCommandError(error, "export failed: {}", error.message);
@@ -285,7 +287,8 @@ namespace ao::cli
           Error::Code::InvalidInput, "restore requires --confirm-destructive-restore after reviewing --dry-run output");
       }
 
-      auto planRes = cli.runTask(cli.library().taskService().prepareLibraryImportAsync(path, mode));
+      auto planRes =
+        cli.runTask(cli.library().taskService().prepareLibraryImportAsync(utility::pathFromUtf8(path), mode));
 
       if (!planRes)
       {
@@ -684,7 +687,7 @@ namespace ao::cli
       if (!optIdentity)
       {
         throwCommandError(
-          Error::Code::InvalidState, "fingerprinting relink candidate was cancelled: {}", path.string());
+          Error::Code::InvalidState, "fingerprinting relink candidate was cancelled: {}", utility::pathToUtf8(path));
       }
 
       return RelinkIdentity{.payloadLength = optIdentity->payloadLength, .signature = optIdentity->signature};
@@ -697,7 +700,7 @@ namespace ao::cli
 
     std::string normalizeRelinkUri(library::MusicLibrary const& ml, std::string const& input)
     {
-      auto path = std::filesystem::path{input};
+      auto path = utility::pathFromUtf8(input);
 
       if (path.is_absolute())
       {
@@ -711,7 +714,7 @@ namespace ao::cli
       }
 
       path = path.lexically_normal();
-      auto uriRes = library::LibraryUri::parse(path.generic_string());
+      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(path));
 
       if (!uriRes)
       {
@@ -1033,8 +1036,9 @@ namespace ao::cli
                                                          {
                                                            if (progress.itemFraction == 0.0)
                                                            {
-                                                             std::println(
-                                                               err, "fingerprint: {}", progress.path.generic_string());
+                                                             std::println(err,
+                                                                          "fingerprint: {}",
+                                                                          utility::pathToGenericUtf8(progress.path));
                                                            }
                                                          }}
                 : nullptr,
@@ -1089,11 +1093,13 @@ namespace ao::cli
       if (format != OutputFormat::Plain)
       {
         emitDocument(
-          os, format, ResourceExportDto{.id = id, .output = path.string(), .size = static_cast<std::uint64_t>(size)});
+          os,
+          format,
+          ResourceExportDto{.id = id, .output = utility::pathToUtf8(path), .size = static_cast<std::uint64_t>(size)});
         return;
       }
 
-      std::println(os, "exported resource: {} {}", id, path.string());
+      std::println(os, "exported resource: {} {}", id, utility::pathToUtf8(path));
     }
 
     /**
@@ -1151,14 +1157,14 @@ namespace ao::cli
       if (auto const parent = path.parent_path();
           !parent.empty() && !std::filesystem::is_directory(parent, directoryError))
       {
-        throwCommandError(Error::Code::IoError, "failed to open resource output: {}", path.string());
+        throwCommandError(Error::Code::IoError, "failed to open resource output: {}", utility::pathToUtf8(path));
       }
 
       // Installed whole or not at all, so a failed export neither leaves a
       // truncated image nor spends a file the user already had at that path.
       if (auto const writtenRes = utility::writeAtomically(path, utility::bytes::stringView(bytes)); !writtenRes)
       {
-        throwCommandError(Error::Code::IoError, "failed to write resource output: {}", path.string());
+        throwCommandError(Error::Code::IoError, "failed to write resource output: {}", utility::pathToUtf8(path));
       }
 
       printResourceExport(id, path, bytes.size(), format, os);

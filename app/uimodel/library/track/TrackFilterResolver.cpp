@@ -8,9 +8,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/TrackField.h>
-
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/trim.hpp>
+#include <ao/utility/String.h>
 
 #include <array>
 #include <cstddef>
@@ -67,7 +65,7 @@ namespace ao::uimodel
 
   ResolvedTrackFilter resolveTrackFilterExpression(std::string_view rawFilter)
   {
-    auto const trimmed = boost::algorithm::trim_copy_if(std::string{rawFilter}, boost::algorithm::is_space());
+    auto const trimmed = utility::trim(rawFilter);
 
     if (trimmed.empty())
     {
@@ -76,7 +74,7 @@ namespace ao::uimodel
 
     if (detail::isExplicitTrackFilterExpression(trimmed))
     {
-      return ResolvedTrackFilter{.mode = TrackFilterMode::Expression, .expression = trimmed};
+      return ResolvedTrackFilter{.mode = TrackFilterMode::Expression, .expression = std::string{trimmed}};
     }
 
     auto const terms = detail::splitQuickFilterTerms(trimmed);

@@ -24,6 +24,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
 #include <ao/utility/AtomicFile.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -577,7 +578,8 @@ namespace ao::rt
     if (auto const parent = path.parent_path();
         !parent.empty() && !std::filesystem::is_directory(parent, directoryError))
     {
-      return makeError(Error::Code::IoError, std::format("Export directory does not exist: '{}'", parent.string()));
+      return makeError(
+        Error::Code::IoError, std::format("Export directory does not exist: '{}'", utility::pathToUtf8(parent)));
     }
 
     std::string const yaml = ryml::emitrs_yaml<std::string>(tree);
@@ -675,7 +677,8 @@ namespace ao::rt
       else if (fileEc)
       {
         return makeError(
-          Error::Code::IoError, std::format("Failed to inspect file '{}': {}", fullPath.string(), fileEc.message()));
+          Error::Code::IoError,
+          std::format("Failed to inspect file '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
       }
     }
 

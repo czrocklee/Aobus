@@ -61,6 +61,7 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - Order commits require a current order binding and revalidate runtime identity, availability, revision, List identity, selection, and anchor while holding coordinator writer ownership.
 - A preview returns the same classifications and report values as its committing counterpart from the same starting state, except it returns no allocated durable id.
 - Dictionary rows and every record that references them commit in the same native transaction; committed dictionary publication completes before application change delivery.
+- Track and List preparation rejects malformed UTF-8 as `InvalidInput`, normalizes admitted library text to NFC, and applies storage limits to the normalized bytes before its first persistent effect; filesystem URIs remain outside that transformation.
 - A preview, abort, serialization failure, or commit failure leaves committed dictionary lookup, size, and generation unchanged.
 - User-authored validation failure, storage failure, serialization failure, and commit failure leave library content unchanged.
 - Runtime return values own their data and never retain transaction-bound `TrackView`, `ListView`, or manifest views.

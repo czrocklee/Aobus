@@ -69,7 +69,8 @@ $work
 The quick-search policy retains that list as typed runtime `TrackField` values and derives each canonical `$` variable through the field's typed query bridge.
 The field list remains UIModel authoring policy rather than a query-language capability flag.
 
-Text fields use `~`; the tag branch uses a serialized tag variable.
+Text fields use substring `~`, whose text semantic is Unicode-caseless; the tag branch uses a serialized tag variable and retains exact tag identity.
+Caseless matching is locale-independent Unicode default full case folding: case-only and full-fold variants such as `Straße`/`STRASSE` match, while accent differences remain significant.
 Multiple terms are parenthesized and joined with `and`.
 
 The resolver serializes each term as an expression string constant and serializes the tag branch through the core query serializer.
@@ -141,6 +142,7 @@ Workspace/navigation state may retain base list, expression text, and exact pres
 
 Choosing Create List opens the ordinary List mutation flow using the resolved expression.
 Only a successful library mutation turns that text into durable list data.
+The saved List retains the ordinary `~` expression and needs no hidden search-policy flag.
 
 ## Frontend observations
 
@@ -163,9 +165,9 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 
 ## Test map
 
-- [`TrackFilterResolverTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and expansion.
+- [`TrackFilterResolverTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and explicit caseless expansion.
 - [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the live field set, ranking, limits, replacement, escaping, and Quick/expression boundary.
-- [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, synchronous failure handling, and single-render policy.
+- [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, end-to-end caseless Quick-filter membership, synchronous failure handling, and single-render policy.
 - [`ViewServiceListFilterTest.cpp`](../../../test/unit/runtime/ViewServiceListFilterTest.cpp) protects runtime replacement, transient expression errors, and contextual stored-parent errors with empty projections.
 - Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source/) protect source membership and dependency propagation.
 - GTK quick-filter and TUI library-controller tests protect frontend adaptation.

@@ -39,6 +39,8 @@ A successful visit emits present values in this fixed order:
 4. `picture` callbacks in source order.
 
 Empty text, zero numeric and technical values, `AudioCodec::Unknown`, and rejected pictures produce no callback. A required failure produces no callback at all.
+Visitor text has undergone the source format's declared legacy-encoding conversion where applicable, but this media surface does not promise scalar-valid UTF-8.
+`readMediaTrack` passes the bytes to core library admission, where malformed text rejects that scan item and valid text is normalized to NFC before persistence; no generic replacement-character repair occurs between the two boundaries.
 
 ## Source field mapping
 

@@ -3,13 +3,13 @@ id: playback.session-state
 type: reference
 status: current
 domain: playback
-summary: Enumerates the exact playback-session group, version 3 fields, types, defaults, transient exclusions, and compatibility gate.
+summary: Enumerates the exact playback-session group, version 4 fields, types, defaults, transient exclusions, and compatibility gate.
 ---
 # Playback session state
 
 ## Scope and version
 
-This reference owns the exact serialized `PlaybackSessionState` payload in schema version `3`.
+This reference owns the exact serialized `PlaybackSessionState` payload in schema version `4`.
 Capture, validation, restore, normalization, save scheduling, failure, discard, and shutdown behavior belongs to the [playback session persistence specification](../../spec/playback/session-persistence.md).
 
 ## Code boundary
@@ -74,16 +74,16 @@ The payload contains none of these:
 
 ## Compatibility and versioning
 
-Only version `3` is accepted.
+Only version `4` is accepted.
 There is no migration or seeded missing-field fallback for another/malformed version.
-Version `3` includes the accepted predicate grammar, field binding, and evaluation meaning of `quickFilterExpression`.
-A predicate change that can emit quick-filter text an existing version-3 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `3` or provide an explicit tested migration.
+Version `4` includes the accepted predicate grammar, field binding, and Unicode-caseless `~` evaluation meaning of `quickFilterExpression`.
+A predicate change that can emit quick-filter text an existing version-4 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `4` or provide an explicit tested migration.
 The expression carries no separate language version.
 
-Version `3` also includes the current numeric `TrackSortField` mapping.
-Changing a sort-field raw value requires a playback schema version or an explicit version-3 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
+Version `4` also includes the current numeric `TrackSortField` mapping.
+Changing a sort-field raw value requires a playback schema version or an explicit version-4 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
-List and track ids are scoped to one library, but version 3 stores no library UUID.
+List and track ids are scoped to one library, but version 4 stores no library UUID.
 The current GTK lifecycle prevents cross-library interpretation by physically deleting the group and terminally sealing persistence in the old process, fully destroying that graph, and activating a successor process with idle playback.
 The successor admits future playback writes only after the matching root is durable; root-commit failure keeps the prior root, no payload, and a permanent write seal.
 
@@ -91,7 +91,7 @@ The successor admits future playback writes only after the matching root is dura
 
 ```yaml
 playback-session:
-  schemaVersion: 3
+  schemaVersion: 4
   sourceListId: 1
   quickFilterExpression: "artist = 'Example'"
   sortBy: []
@@ -104,7 +104,7 @@ playback-session:
   muted: false
 ```
 
-The runtime schema writes strong ids through their explicit unsigned raw values and writes playback and sort enums through the version-3 numeric mappings above.
+The runtime schema writes strong ids through their explicit unsigned raw values and writes playback and sort enums through the version-4 numeric mappings above.
 
 ## Implementation authority
 

@@ -6,6 +6,7 @@
 #include "PlaybackStatusFormatter.h"
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/utility/Path.h>
 
 #include <format>
 #include <string>
@@ -31,7 +32,7 @@ namespace ao::tui
 
     if (row.optUriPath)
     {
-      return row.optUriPath->filename().string();
+      return utility::pathToUtf8(row.optUriPath->filename());
     }
 
     return std::format("Track {}", row.id.raw());
