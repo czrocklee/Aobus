@@ -7,6 +7,7 @@ add_library(ao_audio STATIC
     FlacDecoderSession.cpp
     AlacDecoderSession.cpp
     Mp3DecoderSession.cpp
+    OpusDecoderSession.cpp
     NodeFormat.cpp
     NullBackend.cpp
     OpenedModeValidation.cpp
@@ -17,6 +18,7 @@ add_library(ao_audio STATIC
     detail/EngineEventQueueInvariants.cpp
     detail/MappedFileCursor.cpp
     detail/Mp4PacketSource.cpp
+    detail/OggPacketSource.cpp
     detail/RenderPath.cpp
     detail/RenderTimeline.cpp
     detail/StreamingBufferPolicy.cpp
@@ -35,7 +37,7 @@ target_include_directories(ao_audio
     PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(ao_audio PUBLIC ao_media ao_utility PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
+target_link_libraries(ao_audio PUBLIC ao_media ao_utility PkgFLAC PkgALAC PkgFDKAAC PkgMPG123 PkgOpus)
 
 if(WIN32)
     target_sources(ao_audio PRIVATE

@@ -34,6 +34,7 @@ namespace ao::audio::test
       Case{.fileName = "basic_metadata.m4a", .codec = AudioCodec::Aac},
       Case{.fileName = "basic_metadata.mp3", .codec = AudioCodec::Mp3},
       Case{.fileName = "basic_metadata.wav", .codec = AudioCodec::Wav},
+      Case{.fileName = "basic_metadata.opus", .codec = AudioCodec::Opus},
     };
 
     for (auto const& testCase : kCases)
@@ -142,6 +143,7 @@ namespace ao::audio::test
       Case{.sourceName = "basic_metadata.m4a", .suffix = ".M4A", .codec = AudioCodec::Aac},
       Case{.sourceName = "basic_metadata.mp3", .suffix = ".MP3", .codec = AudioCodec::Mp3},
       Case{.sourceName = "basic_metadata.wav", .suffix = ".WAV", .codec = AudioCodec::Wav},
+      Case{.sourceName = "basic_metadata.opus", .suffix = ".OPUS", .codec = AudioCodec::Opus},
     };
 
     for (auto const& testCase : kCases)

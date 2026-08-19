@@ -15,6 +15,7 @@ namespace ao
     Wav = 3,
     Aac = 128,
     Mp3 = 129,
+    Opus = 130,
   };
 
   constexpr AudioCodec audioCodecFromStorage(std::uint8_t value) noexcept
@@ -26,7 +27,8 @@ namespace ao
       case AudioCodec::Alac:
       case AudioCodec::Wav:
       case AudioCodec::Aac:
-      case AudioCodec::Mp3: return static_cast<AudioCodec>(value);
+      case AudioCodec::Mp3:
+      case AudioCodec::Opus: return static_cast<AudioCodec>(value);
     }
 
     return AudioCodec::Unknown;

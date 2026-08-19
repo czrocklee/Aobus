@@ -20,7 +20,7 @@ Those facts belong to the [media file reading specification](../spec/media/file-
 
 The [architecture landscape](README.md) places encoded media as a domain system within the Core-library layer defined by the [system architecture](system-overview.md).
 Encoded media is below application runtime, UIModel, and frontends.
-The `ao_media` target provides two cooperating surfaces: `media::file` reads a supported encoded file into library-oriented evidence, while reusable MP4 and WAVE primitives expose validated byte structure to both file readers and audio decoders.
+The `ao_media` target provides two cooperating surfaces: `media::file` reads a supported encoded file into library-oriented evidence, while reusable MP4, Ogg, and WAVE primitives expose validated byte structure to both file readers and audio decoders.
 The FLAC file reader owns its metadata-block traversal directly; FLAC decoding remains inside the audio decoder and its codec library.
 
 ```text
@@ -33,7 +33,7 @@ ao_media
   |              |                              +-> runtime audio-identity workflow
   |              +-> ao::rt::readMediaTrack -> MediaTrack -> library TrackBuilder
   |
-  `-- MP4 / WAVE container primitives
+  `-- MP4 / Ogg / WAVE container primitives
                  |                         |
                  +-> media::file readers   `-> ao_audio decoders -> PCM
 ```
@@ -57,11 +57,17 @@ Format readers own format-specific indexing, optional evidence extraction, and p
 
 ### Reusable container primitives
 
-The MP4 atom/demux/sample-description and WAVE RIFF facilities own validated non-owning views over container structure.
+The MP4 atom/demux/sample-description, Ogg page/packet demux, and WAVE RIFF facilities own validated non-owning views over container structure.
 They are representation mechanisms below product policy: they do not construct library tracks, choose playback succession, publish errors to users, or own decoder sessions.
+
+The Ogg demuxer and the Opus header and timeline parsers are public for the same reason the MP4 pair is: the Opus file reader and the Opus decoder session are two independent consumers of one representation.
+The demuxer stays codec-neutral and names its packets by index, so an Opus consumer supplies the knowledge that the first two packets are headers.
+Reassembling a packet that spans pages is the one place a primitive owns bytes rather than viewing them, and that storage belongs to the demuxer for its whole lifetime.
+The Opus timeline parser sits above the Ogg demuxer inside `ao_media`: it combines codec-neutral page groups and granule positions with Opus packet table-of-contents durations, then supplies one decode origin, playback start, and optional audible length to both consumers without linking libopus.
 
 FLAC metadata traversal is private to its file reader because no second consumer shares that representation.
 Keeping the parser private avoids a parallel public contract and error mechanism with no architectural consumer.
+Vorbis comment and picture-block parsing is likewise private to `media::file`, shared there between the FLAC and Opus readers, because both are metadata policy rather than container structure.
 
 File readers may compose these primitives into normalized library evidence.
 Audio decoders may compose the same primitives into packet and sample access while retaining independent decoder state and PCM policy.
@@ -85,6 +91,7 @@ File recognition and decoder selection therefore remain independent capabilities
 ## Boundaries and dependency direction
 
 - `ao_media` depends on `ao_utility` and does not depend on audio, library, runtime, UIModel, or frontend code.
+- Within `ao_media`, `media::opus` may consume `media::ogg` structure to interpret an Ogg Opus timeline; `media::ogg` remains codec-neutral and does not depend on Opus.
 - `ao_audio` may depend on `ao_media`; the reverse dependency is forbidden.
 - `ao_library` does not include `ao/media/file/`. Its audio-identity helper accepts caller-owned bytes instead of opening media paths.
 - Application runtime may compose `ao_media` and `ao_library` and owns their private adapter.
@@ -172,7 +179,7 @@ Decoder mappings, demux state, and packet views instead belong to each decoder s
 ## Implementation map
 
 - [`File`](../../include/ao/media/file/File.h) and [`Visitor`](../../include/ao/media/file/Visitor.h) define the public encoded-file boundary; [`lib/media/file/`](../../lib/media/file/) contains its dispatcher and format readers.
-- [`MP4 Atom`](../../include/ao/media/mp4/Atom.h), [`MP4 Demuxer`](../../include/ao/media/mp4/Demuxer.h), and [`WAVE Riff`](../../include/ao/media/wav/Riff.h) define reusable container primitives.
+- [`MP4 Atom`](../../include/ao/media/mp4/Atom.h), [`MP4 Demuxer`](../../include/ao/media/mp4/Demuxer.h), [`Ogg Demuxer`](../../include/ao/media/ogg/Demuxer.h), [`Opus Header`](../../include/ao/media/opus/Header.h), [`Opus Timeline`](../../include/ao/media/opus/Timeline.h), and [`WAVE Riff`](../../include/ao/media/wav/Riff.h) define reusable encoded-media primitives.
 - [`lib/media/CMakeLists.txt`](../../lib/media/CMakeLists.txt) defines `ao_media` and enforces its forbidden dependencies.
 - [`readMediaTrack` and `MediaTrack`](../../app/runtime/library/MediaTrack.h) own runtime visitor adaptation and the builder-backing lifetime.
 - [`AudioIdentity`](../../include/ao/library/AudioIdentity.h), [`AudioIdentityIndexer`](../../app/runtime/library/AudioIdentityIndexer.cpp), and [`LibraryScan`](../../app/runtime/library/LibraryScan.cpp) define the payload consumer path.
@@ -182,7 +189,7 @@ Decoder mappings, demux state, and packet views instead belong to each decoder s
 
 - [`test/unit/media/file/`](../../test/unit/media/file/) protects file dispatch, format evidence, payload ranges, error atomicity, caching, and view lifetime.
 - [`FileTest.cpp`](../../test/integration/media/file/FileTest.cpp) protects supported formats with encoded fixtures.
-- [`AtomTest.cpp`](../../test/unit/media/mp4/AtomTest.cpp), [`DemuxerTest.cpp`](../../test/unit/media/mp4/DemuxerTest.cpp), and [`RiffTest.cpp`](../../test/unit/media/wav/RiffTest.cpp) protect reusable container boundaries.
+- [`AtomTest.cpp`](../../test/unit/media/mp4/AtomTest.cpp), [MP4 `DemuxerTest.cpp`](../../test/unit/media/mp4/DemuxerTest.cpp), [Ogg `DemuxerTest.cpp`](../../test/unit/media/ogg/DemuxerTest.cpp), [`HeaderTest.cpp`](../../test/unit/media/opus/HeaderTest.cpp), [`TimelineTest.cpp`](../../test/unit/media/opus/TimelineTest.cpp), and [`RiffTest.cpp`](../../test/unit/media/wav/RiffTest.cpp) protect reusable encoded-media boundaries.
 - [`MediaTrackTest.cpp`](../../test/unit/runtime/library/MediaTrackTest.cpp) protects runtime adaptation and backing lifetime.
 - [`AudioIdentityTest.cpp`](../../test/unit/library/AudioIdentityTest.cpp), [`AudioIdentityIndexerTest.cpp`](../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp), and [`ScanPlanTest.cpp`](../../test/unit/runtime/library/ScanPlanTest.cpp) protect payload consumption without a library-to-reader dependency.
 - Decoder-session tests under [`test/unit/audio/`](../../test/unit/audio/) and [`Mp4PacketSourceTest.cpp`](../../test/unit/audio/detail/Mp4PacketSourceTest.cpp) protect media-primitive consumption from the audio side.

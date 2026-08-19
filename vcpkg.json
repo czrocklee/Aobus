@@ -36,6 +36,7 @@
     "lmdb",
     "mimalloc",
     "mpg123",
+    "opus",
     "ryml",
     {
       "name": "spdlog",

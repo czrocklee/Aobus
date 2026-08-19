@@ -145,7 +145,7 @@ Quoted user-variable names must be non-empty.
 | `@bitDepth` | `@bd` |
 | `@codec` | None |
 
-`@codec` constants are `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, and `MP3`, matched case-insensitively.
+`@codec` constants are `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, `MP3`, and `Opus`, matched case-insensitively.
 
 ### Unit literals
 
@@ -216,7 +216,7 @@ Representative invalid forms are:
 | `!$year` | Missing-field syntax requires `!$year?`. |
 | `$title + $artist = x` | Predicate compilation rejects concatenation. |
 | `@duration >= 10k` | `k` is not a duration unit. |
-| `@codec = OPUS` | `OPUS` is not a supported codec constant. |
+| `@codec = VORBIS` | `VORBIS` is not a supported codec constant. |
 
 ## Implementation authority
 

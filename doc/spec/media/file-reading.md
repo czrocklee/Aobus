@@ -92,6 +92,16 @@ Every traversed atom must have a complete compact or 64-bit extended header. Rec
 
 A confirmed MPEG audio frame is required. A table-rate candidate is confirmed by a compatible adjacent frame when enough trailing bytes remain; an exact terminal frame is also accepted. A free-format candidate derives its frame length and bitrate from compatible adjacent frame boundaries. A valid leading ID3v2 envelope and valid trailing ID3v1/APEv2 regions are excluded from the payload. A malformed or oversized leading ID3 envelope may be ignored when a confirmed MPEG frame can still be located. A bounded but malformed ID3 frame sequence contributes no ID3 metadata; MPEG technical properties remain available. Unknown frames and unsupported `TXXX` keys are ignored.
 
+### Ogg Opus
+
+The first page must begin a logical bitstream, and its serial number selects the only demuxed stream, so a multiplexed or chained file exposes only its first logical bitstream. A later page of that selected stream that repeats the begin-of-stream flag is corrupt. Page checksums are not verified, but page sequence numbers are: a gap in the selected stream rejects the file rather than reassembling a packet from fragments on either side of it or displacing every later seek, while pages of an interleaved foreign serial pass through without disturbing that count. The first packet must be a usable `OpusHead`, and at least one audio packet must follow the two header packets. Demuxing stops cleanly at the first position that does not begin a page and at a page cut short by the end of the file, so an appended tag does not reject the file and a truncated download keeps the audio its complete pages carry. Because a page is atomic, a truncation that reaches into the first audio page leaves no audio packet and rejects the file. A second packet that is not `OpusTags` contributes no metadata and does not reject the file. The selected payload begins at the first audio page rather than the file start, so retagging leaves the recorded audio identity unchanged unless the tag edit changes how many pages the header occupies.
+
+RFC 7845 lets the first audio page declare a granule position larger than the audio it carries, which crops the front of a stream or joins a live one without renumbering later pages.
+The reader derives that origin by subtracting the decoded length of the packets completing on that page, read from their tables of contents rather than from a decoder, and measures duration from it.
+When the first audio page is also the end-of-stream page and declares fewer samples than its completed packets decode, the smaller granule position is an end trim and the decode origin remains zero.
+The same declaration on a non-final first audio page is corrupt because it can name neither a valid origin nor a permitted end trim.
+A stream that reached a complete end of stream at a granule position below its own playback start is rejected; one that never reached a complete end of stream reports no duration instead.
+
 ### RIFF/WAVE
 
 A valid supported WAVE format and non-empty `data` chunk are required. `LIST/INFO` fields are applied only after the entire bounded list validates. A malformed embedded ID3 chunk contributes no ID3 fields. WAVE technical properties and other valid optional evidence remain available.
@@ -129,6 +139,7 @@ There is no direct frontend observation. Runtime library workflows translate rea
 ## Test map
 
 - [`FileTest.cpp`](../../../test/unit/media/file/FileTest.cpp) protects dispatch, mapping, failure atomicity, and move lifetime.
+- [`DemuxerTest.cpp`](../../../test/unit/media/ogg/DemuxerTest.cpp) protects Ogg page scanning, packet reassembly, stream selection, and incomplete endings.
 - Format tests under [`test/unit/media/file/`](../../../test/unit/media/file/) protect mappings, properties, covers, payloads, caches, and malformed input.
 - [`FileTest.cpp`](../../../test/integration/media/file/FileTest.cpp) protects real encoded fixtures across all supported formats.
 - [`MediaTrackTest.cpp`](../../../test/unit/runtime/library/MediaTrackTest.cpp) protects the runtime retention contract.

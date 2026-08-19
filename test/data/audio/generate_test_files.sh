@@ -339,7 +339,123 @@ cat "$VBR_TMP_DIR/high.mp3" "$VBR_TMP_DIR/low.mp3" > "$OUTPUT_DIR/vbr_no_seek_ta
 rm -r "$VBR_TMP_DIR"
 echo "  Created vbr_no_seek_table.mp3 (VBR without Xing/VBRI)"
 
+# ============================================================================
+# Opus files (Ogg Opus, always decoded at 48kHz)
+# ============================================================================
+# The Ogg muxer does not accept an attached-picture stream, so Opus cover art is
+# written the way the format defines it: a Base64 METADATA_BLOCK_PICTURE tag.
+PICTURE_TAG=$(python3 -c '
+import base64, struct, sys
+
+with open(sys.argv[1], "rb") as handle:
+    image = handle.read()
+
+mime = b"image/png"
+body = struct.pack(">I", 3)                 # picture type: front cover
+body += struct.pack(">I", len(mime)) + mime
+body += struct.pack(">I", 0)                # empty description
+body += struct.pack(">IIII", 1, 1, 24, 0)   # width, height, colour depth, indexed colours
+body += struct.pack(">I", len(image)) + image
+sys.stdout.write(base64.b64encode(body).decode("ascii"))
+' "$COVER_PNG")
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Test Title" \
+    -metadata "artist=Test Artist" \
+    -metadata "album=Test Album" \
+    -metadata "genre=Rock" \
+    -metadata "composer=Test Composer" \
+    -metadata "grouping=Symphony No. 5" \
+    -metadata "track=1" \
+    -metadata "date=2024" \
+    -af "aformat=channel_layouts=stereo" \
+    -codec:a libopus \
+    -y "$OUTPUT_DIR/basic_metadata.opus" 2>/dev/null
+echo "  Created basic_metadata.opus"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Test Title" \
+    -metadata "artist=Test Artist" \
+    -metadata "album=Test Album" \
+    -metadata "METADATA_BLOCK_PICTURE=$PICTURE_TAG" \
+    -af "aformat=channel_layouts=stereo" \
+    -codec:a libopus \
+    -y "$OUTPUT_DIR/with_cover.opus" 2>/dev/null
+echo "  Created with_cover.opus"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -map_metadata -1 \
+    -af "aformat=channel_layouts=stereo" \
+    -codec:a libopus \
+    -y "$OUTPUT_DIR/empty.opus" 2>/dev/null
+echo "  Created empty.opus"
+
+# One 20 ms packet per page, the pagination live and remuxed streams carry.
+# Seek accuracy depends on page granularity, so a fixture that pages finely
+# than the default one second keeps that path covered.
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -map_metadata -1 \
+    -af "aformat=channel_layouts=stereo" \
+    -codec:a libopus \
+    -page_duration 20000 \
+    -y "$OUTPUT_DIR/short_pages.opus" 2>/dev/null
+echo "  Created short_pages.opus (one packet per page)"
+
+# 5.1 with a distinct tone per speaker, so a decoder test can prove the
+# family-1 Vorbis channel order was permuted into WAV speaker order. The join
+# filter fixes the assignment; decoded WAV order is FL=600 FR=900 FC=300
+# LFE=60 BL=1500 BR=1800.
+ffmpeg -f lavfi -i "sine=frequency=300:duration=1" \
+    -f lavfi -i "sine=frequency=600:duration=1" \
+    -f lavfi -i "sine=frequency=900:duration=1" \
+    -f lavfi -i "sine=frequency=60:duration=1" \
+    -f lavfi -i "sine=frequency=1500:duration=1" \
+    -f lavfi -i "sine=frequency=1800:duration=1" \
+    -filter_complex "[0:a][1:a][2:a][3:a][4:a][5:a]join=inputs=6:channel_layout=5.1[a]" \
+    -map "[a]" \
+    -map_metadata -1 \
+    -codec:a libopus \
+    -b:a 128k \
+    -y "$OUTPUT_DIR/surround.opus" 2>/dev/null
+echo "  Created surround.opus (5.1, one tone per speaker)"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fixture" \
+    -metadata "artist=Classical Artist" \
+    -metadata "album=Classical Album" \
+    -metadata "genre=Classical" \
+    -metadata "composer=Fixture Composer" \
+    -metadata "conductor=Fixture Conductor" \
+    -metadata "ensemble=Fixture Ensemble" \
+    -metadata "soloist=Fixture Soloist" \
+    -metadata "work=Fixture Work" \
+    -metadata "movementname=Fixture Movement" \
+    -metadata "movement=2/4" \
+    -metadata "track=3/9" \
+    -metadata "date=2026" \
+    -af "aformat=channel_layouts=stereo" \
+    -codec:a libopus \
+    -y "$OUTPUT_DIR/classical_metadata.opus" 2>/dev/null
+echo "  Created classical_metadata.opus"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fallback" \
+    -metadata "orchestra=Fixture Fallback Ensemble" \
+    -metadata "performer=Fixture Fallback Soloist" \
+    -af "aformat=channel_layouts=stereo" \
+    -codec:a libopus \
+    -y "$OUTPUT_DIR/classical_fallback.opus" 2>/dev/null
+echo "  Created classical_fallback.opus"
+
+# Mono Opus: the decoder session and reader must report one channel.
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Mono Title" \
+    -af "aformat=channel_layouts=mono" \
+    -codec:a libopus \
+    -y "$OUTPUT_DIR/mono.opus" 2>/dev/null
+echo "  Created mono.opus (48kHz mono)"
+
 # Cleanup cover image
 rm -f "$COVER_PNG"
 
-echo "Done. Generated 25 test audio files."
+echo "Done. Generated 33 test audio files."

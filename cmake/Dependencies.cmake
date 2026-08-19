@@ -619,6 +619,10 @@ if(WIN32)
   add_library(PkgMPG123 INTERFACE)
   target_link_libraries(PkgMPG123 INTERFACE MPG123::libmpg123)
 
+  find_package(Opus CONFIG REQUIRED)
+  add_library(PkgOpus INTERFACE)
+  target_link_libraries(PkgOpus INTERFACE Opus::opus)
+
   find_package(unofficial-lmdb CONFIG REQUIRED)
   add_library(PkgLMDB INTERFACE)
   target_link_libraries(PkgLMDB INTERFACE unofficial::lmdb::lmdb)
@@ -660,6 +664,14 @@ else()
   pkg_check_modules(FDKAAC REQUIRED IMPORTED_TARGET fdk-aac)
   add_library(PkgFDKAAC INTERFACE)
   target_link_libraries(PkgFDKAAC INTERFACE PkgConfig::FDKAAC)
+
+  # Upstream libopus points its pkg-config Cflags at <includedir>/opus, so the
+  # imported target alone only resolves <opus.h>. Add the parent include root so
+  # sources use the same prefixed <opus/opus.h> form as the other codec libraries.
+  pkg_check_modules(OPUS REQUIRED IMPORTED_TARGET opus)
+  add_library(PkgOpus INTERFACE)
+  target_include_directories(PkgOpus INTERFACE "${OPUS_INCLUDEDIR}")
+  target_link_libraries(PkgOpus INTERFACE PkgConfig::OPUS)
 
   # PipeWire and ALSA are the only Linux audio backends, so both are hard
   # requirements: lib/audio unconditionally compiles their providers.

@@ -25,7 +25,8 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 - Every published `DecoderSession` is already open and has complete, valid `streamInfo()`; the public interface has no unopened or closed state.
 - A decoder created without a requested encoding inspects the stream and chooses its preferred lossless native representation.
 - A decoder created with a requested `SampleEncoding` either produces exactly that interleaved representation or is not published.
-- Decoders preserve inspected sample rate, channel count, sample kind, and precision; they do not silently resample, remap channels, or reduce precision.
+- Decoders preserve inspected sample rate, channel count, sample kind, and precision; they do not silently resample, add or remove channels, or reduce precision.
+- A codec-native identified speaker layout is normalized to the order owned by the [PCM format reference](../../reference/playback/pcm-format.md); an unidentified channel layout retains its index order.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -45,8 +46,9 @@ The ordered exact enum surface and byte layouts belong to the [PCM format refere
 Integer-to-float mapping is bit-transparent only through 24-bit precision.
 No decoder advertises or accepts a representation that reduces the inspected signal precision.
 
-AAC and MP3 expose a 16-bit decoded integer signal for this contract; their encoded sources remain lossy.
+AAC, MP3, and Opus expose a 16-bit decoded integer signal for this contract; their encoded sources remain lossy.
 FLAC, ALAC, and integer WAV expose their encoded PCM precision, while float WAV retains the floating-point domain.
+Opus is internally a floating-point codec, but decoding it to float would make its sessions unopenable for the integer encodings exclusive-mode devices expose, because the PCM adapter refuses every float-to-integer conversion.
 
 ## Stream lifecycle and seeking
 
@@ -58,6 +60,37 @@ The backend-selected encoding is always a member of the inspected signal's lossl
 
 Decoder blocks containing PCM remain consumable before a later empty end-of-stream block.
 `firstFrameIndex` identifies the actual first PCM frame in a block, including after decoder-level seek adjustment.
+
+Opus decodes at a fixed 48 kHz and reports that rate as its source rate; the
+identification packet's input sample rate describes the encoder's source and is
+never published.
+
+Every position in an Opus stream is measured against the timeline the container
+establishes, which the session derives once and shares with the media-file
+reader. A stream cropped at the front or joined from a live source starts at a
+nonzero decode origin, and playback starts at that origin advanced past the
+header pre-skip, because pre-skip is a length discarded from the decoder output
+rather than a region of the absolute timeline. The session discards that
+pre-skip before emitting its first frame and stops at the total the timeline
+states, so a block sequence carries exactly the audible frames and no
+codec-internal padding. A stream whose declared total is zero reaches end of
+stream without emitting a block, which is distinct from a stream that never
+declared a total and is decoded for as long as it yields packets.
+
+Seeking converts a playback offset into a granule position by measuring from the
+playback start, restarts at the earliest packet that can produce a position
+80 ms ahead of it, resets decoder state, and discards decoded samples up to the
+target, so `firstFrameIndex` names the requested frame exactly. A restart at or
+before the first audio packet resumes at the decode origin rather than at zero,
+because the header pages carry the granule position zero RFC 7845 fixes for
+them, which names no position on a stream that starts cropped. The pre-roll
+makes the discarded run long enough for the decoder to converge before the first
+audible frame, which matters on streams paged finely enough that a restart would
+otherwise land within one packet of the target.
+
+The identification packet's output gain reaches libopus unconverted, which applies the RFC 7845 header gain during decoding.
+Channel mapping family 1 orders its channels the way Vorbis does, so the session permutes the mapping it hands libopus into the WAV speaker order every PCM surface expects.
+Family 0 is already compatible; family 255 defines no speaker positions and remains in header-defined output-index order.
 
 MP3 construction scans the complete stream with mpg123 before reporting stream
 information. The scan builds an exact frame index and duration even when the
@@ -81,6 +114,8 @@ FLAC treats corrupted metadata, headers, frames, CRC mismatches, missing frames,
 
 Decoder operations and streaming-source entry points use `Result` for external media, IO, and capability failures.
 The source-private `openDecoderSession` construction boundary returns a non-null ready session or a recoverable error; `nullptr` is not an alternate error channel.
+An Ogg stream whose pages carry no complete audio packet is translated to `FormatRejected`, while a malformed page structure or an unusable identification packet preserves its parser error. Because an Ogg page is atomic, a truncation reaching into the first audio page leaves no decodable audio.
+An Opus first audio page whose granule position is smaller than the samples it completes is corrupt unless that page also ends the stream, where the smaller position is permitted end trim.
 MP4 factory routing stops after selecting the first usable audio track. No matching audio track is translated to `NotSupported`, while a structural parser failure encountered before selection preserves its parser error.
 WAV construction validates chunk boundaries only through the first complete supported `fmt` and non-empty `data` pair; unrelated later chunks do not prevent decoding already-bounded audio data.
 End of stream is a normal `PcmBlock` value.

@@ -25,8 +25,9 @@ The public Core surface is `ao::media::file::File`, `Visitor`, and `PayloadView`
 | `.mp3` | MPEG audio with optional ID3 | `Mp3` |
 | `.m4a` | MP4 audio | `Alac` for `alac`; `Aac` for `mp4a`; otherwise no codec callback |
 | `.wav` | RIFF/WAVE | `Wav` |
+| `.opus` | Ogg Opus | `Opus` |
 
-Other paths are unsupported. In particular, ADTS `.aac`, literal `.alac`, `.ogg`, images, and playlists are not recognized scan inputs.
+Other paths are unsupported. In particular, ADTS `.aac`, literal `.alac`, images, and playlists are not recognized scan inputs. `.ogg` is also unrecognized: it names a container rather than a codec, and its common Vorbis payload has no reader, so accepting it would make scanning report errors for most real files. Opus is recognized only under its own `.opus` extension.
 
 ## Visitor surface and order
 
@@ -43,12 +44,14 @@ Empty text, zero numeric and technical values, `AudioCodec::Unknown`, and reject
 
 Mappings are case-insensitive for FLAC/Vorbis keys, MP4 metadata/freeform aliases where stated, and ID3 `TXXX` keys. A dash means no mapping.
 
+Opus carries its metadata as a Vorbis comment list in its `OpusTags` packet and therefore uses the FLAC/Vorbis column below unchanged, including its `ORCHESTRA` and `PERFORMER` fallbacks.
+
 | Visitor field | FLAC/Vorbis | MP4/iTunes or `mdta` | ID3v2 | WAVE `INFO` |
 |---|---|---|---|---|
 | `Title` | `TITLE` | `©nam`; `title` | `TIT2` | `INAM` |
 | `Artist` | `ARTIST` | `©ART`; `artist` | `TPE1` | `IART` |
 | `Album` | `ALBUM` | `©alb`; `album` | `TALB` | `IPRD` |
-| `AlbumArtist` | `ALBUMARTIST` | `aART`; `album_artist`, `albumartist` | `TPE2` | — |
+| `AlbumArtist` | `ALBUMARTIST`, `ALBUM ARTIST`, `ALBUM_ARTIST` | `aART`; `album_artist`, `albumartist` | `TPE2` | — |
 | `Composer` | `COMPOSER` | `©wrt`; `composer` | `TCOM` | — |
 | `Conductor` | `CONDUCTOR` | freeform/`mdta` `conductor` | `TPE3`; `TXXX:conductor` | — |
 | `Ensemble` | `ENSEMBLE`; fallback `ORCHESTRA` | freeform/`mdta` `ensemble`; fallback `orchestra` | `TXXX:ensemble`; fallback `TXXX:orchestra` | — |
@@ -56,9 +59,9 @@ Mappings are case-insensitive for FLAC/Vorbis keys, MP4 metadata/freeform aliase
 | `Work` | `WORK`, `GROUPING` | `©wrk`, `©grp`; `work`, `grouping` | `TIT1`; `TXXX:work`, `TXXX:grouping` | — |
 | `Movement` | `MOVEMENTNAME` | `©mvn`; `movementname`, `movement_name`, `mvnm` | `MVNM`; equivalent `TXXX` aliases | — |
 | `Soloist` | `SOLOIST`; fallback `PERFORMER` | freeform/`mdta` `soloist` | `TXXX:soloist` | — |
-| `Year` | `DATE` | `©day`; `date`, `year` | `TYER`, `TDRC` | first four decimal digits of `ICRD` |
-| Track number/total | `TRACKNUMBER` as `n` or `n/total`; `TRACKTOTAL`, `TOTALTRACKS` | `trkn`; `track`, `tracknumber` slash value | `TRCK` slash value | — |
-| Disc number/total | `DISCNUMBER` slash value; `DISCTOTAL`, `TOTALDISCS` | `disk`; `disc`, `disk`, `discnumber` slash value | `TPOS` slash value | — |
+| `Year` | `DATE`, `YEAR` | `©day`; `date`, `year` | `TYER`, `TDRC` | first four decimal digits of `ICRD` |
+| Track number/total | `TRACKNUMBER`, `TRACK` as `n` or `n/total`; `TRACKTOTAL`, `TOTALTRACKS` | `trkn`; `track`, `tracknumber` slash value | `TRCK` slash value | — |
+| Disc number/total | `DISCNUMBER`, `DISC` slash value; `DISCTOTAL`, `TOTALDISCS` | `disk`; `disc`, `disk`, `discnumber` slash value | `TPOS` slash value | — |
 | Movement number/total | `MOVEMENT` slash value; `MOVEMENTTOTAL` | `©mvi`, `©mvc` signed non-negative big-endian integer; equivalent `mdta` aliases | `MVIN` slash value; equivalent `TXXX` aliases | — |
 
 Unknown fields do not become `TrackBuilder::customMetadata`. Invalid isolated scalar values leave their field at zero. Primary ensemble and soloist mappings win over their fallback aliases.
@@ -67,9 +70,9 @@ MP4 integer movement payloads accept widths 1, 2, 3, 4, or 8, data type `0` or `
 
 ## Cover import
 
-`PictureType` uses the ID3v2/FLAC numeric range `0x00` through `0x14` (`Other` through `PublisherLogo`). FLAC picture blocks and ID3v2 APIC frames preserve their source role and order; out-of-range roles normalize to `Other`. MP4 `covr` images preserve source order and emit `FrontCover` because that container entry has no APIC-style role. WAVE `INFO` and embedded ID3 currently contribute no cover callback.
+`PictureType` uses the ID3v2/FLAC numeric range `0x00` through `0x14` (`Other` through `PublisherLogo`). FLAC picture blocks and ID3v2 APIC frames preserve their source role and order; out-of-range roles normalize to `Other`. MP4 `covr` images preserve source order and emit `FrontCover` because that container entry has no APIC-style role. Opus covers arrive as Base64 `METADATA_BLOCK_PICTURE` comments whose decoded body has the same layout as a FLAC picture block and therefore preserve their source role; a comment that is not valid Base64 or whose body does not exactly fill that layout contributes no cover. The legacy `COVERART` comment is not read. WAVE `INFO` and embedded ID3 currently contribute no cover callback.
 
-Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to the track cover builder, and `ResourceStore` later records a descriptor naming that content by digest; the bytes themselves stay in the file, and identical content deduplicates to one row.
+Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to the track cover builder, and `ResourceStore` later records a descriptor naming that content by digest; the bytes themselves stay in the backing file mapping or, where a container stores them encoded as with Opus Base64 comments, in the interpreted-content cache that decoded them, and identical content deduplicates to one row.
 
 ## Technical properties
 
@@ -79,6 +82,7 @@ Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to
 | MP3 | First confirmed MPEG frame; table bitrate or adjacent-frame-derived free-format bitrate; Xing frame/byte evidence when valid, otherwise frame bitrate and tag-trimmed payload extent. Bit depth is `16`. |
 | MP4 | Selected audio track `mdhd` timing and first `stsd` `alac`/`mp4a` sample entry. Malformed optional timing may leave duration absent. |
 | WAVE | Validated format and data chunks; duration from frames and sample rate, bitrate from mapped file bytes and duration. |
+| Opus | `OpusHead` channel count; sample rate is always the fixed 48 kHz decode rate, never the header's informational input rate. Duration is the final page granule position less the stream's playback start, which is the derived decode origin advanced past the header pre-skip; bitrate comes from mapped file bytes and duration. A stream that never reached a complete end of stream reports no duration and therefore no bitrate. No bit depth is emitted, because Opus defines none. |
 
 ## Encoded audio payload
 
@@ -90,8 +94,9 @@ Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to
 | MP4 | Payload of the single non-empty top-level `mdat`, after its compact or extended header; a size `0` `mdat` extends to end of file. Multiple `mdat` atoms are rejected. |
 | MP3 | From the first confirmed MPEG frame through the bytes before validated trailing ID3v1/APEv2. A valid leading ID3v2 envelope is excluded. |
 | WAV | RIFF `data` chunk payload. |
+| Opus | From the start of the first audio page through the end of the file, excluding the identification and tag pages. |
 
-The range excludes known tag and non-audio container regions but does not decode samples. MP3 encoder padding inside frames remains part of the payload.
+The range excludes known tag and non-audio container regions but does not decode samples. MP3 encoder padding inside frames remains part of the payload. Opus page headers stay inside the range, so a tag edit that changes how many pages the Opus header occupies shifts the audio page sequence numbers and changes the identity of an otherwise unmodified file.
 
 ## Errors and lifetime
 
@@ -107,7 +112,7 @@ The range excludes known tag and non-audio container regions but does not decode
 
 ## Compatibility and versioning
 
-Adding an extension requires the single dispatch entry plus parser, scan, payload, and identity tests. Changing a field mapping requires this reference and matching fixtures to change together. Changing an encoded payload boundary changes persisted identity semantics and requires a database version increment or an explicitly specified compatible re-index policy.
+Adding an extension requires the single dispatch entry plus parser, scan, payload, and identity tests. Adding a second Ogg codec additionally requires deciding how `.ogg` selects a reader, because that extension does not name one. Changing a field mapping requires this reference and matching fixtures to change together. Changing an encoded payload boundary changes persisted identity semantics and requires a database version increment or an explicitly specified compatible re-index policy.
 
 ## Implementation authority
 

@@ -26,6 +26,7 @@ namespace ao
       {.codec = AudioCodec::Wav, .name = "WAV"},
       {.codec = AudioCodec::Aac, .name = "AAC"},
       {.codec = AudioCodec::Mp3, .name = "MP3"},
+      {.codec = AudioCodec::Opus, .name = "Opus"},
     });
 
     constexpr char toUpperAscii(char ch) noexcept

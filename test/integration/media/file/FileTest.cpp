@@ -69,7 +69,7 @@ namespace ao::media::file::test
 
   TEST_CASE("Media File - basic fixture exposes metadata", "[media][integration][metadata]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav", "opus");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
     auto loaded = loadTrack(path);
@@ -118,7 +118,7 @@ namespace ao::media::file::test
 
   TEST_CASE("Media File - classical fixture exposes metadata", "[media][integration][metadata][classical]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "opus");
     CAPTURE(format);
     auto const path = kTestDataDir / ("classical_metadata." + std::string{format});
 
@@ -145,7 +145,7 @@ namespace ao::media::file::test
   TEST_CASE("Media File - classical fallback fixture maps orchestra fields",
             "[media][integration][metadata][classical]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "opus");
     CAPTURE(format);
     auto const path = kTestDataDir / ("classical_fallback." + std::string{format});
 
@@ -155,7 +155,8 @@ namespace ao::media::file::test
     CHECK(metadata.title() == "Classical Fallback");
     CHECK(metadata.ensemble() == "Fixture Fallback Ensemble");
 
-    if (std::string_view{format} == "flac")
+    // FLAC and Opus share one Vorbis comment vocabulary, so both map PERFORMER.
+    if (std::string_view{format} == "flac" || std::string_view{format} == "opus")
     {
       CHECK(metadata.soloist() == "Fixture Fallback Soloist");
     }
@@ -246,7 +247,7 @@ namespace ao::media::file::test
   // ============================================================================
   TEST_CASE("Media File - cover art fixture exposes primary artwork", "[media][integration][cover-art]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "opus");
     auto const path = kTestDataDir / ("with_cover." + std::string{format});
 
     auto loaded = loadTrack(path);
@@ -268,7 +269,11 @@ namespace ao::media::file::test
     // Check cover art is present via TrackView
     auto const view = library::TrackView{hotData, coldData};
     REQUIRE(view.coverArt().count() == 1);
-    auto const expectedType = std::string_view{format} == "m4a" ? PictureType::FrontCover : PictureType::Other;
+    // MP4 covr entries and Opus METADATA_BLOCK_PICTURE name a front cover; the
+    // FLAC and ID3 fixtures carry the default role instead.
+    auto const formatName = std::string_view{format};
+    auto const expectedType =
+      (formatName == "m4a" || formatName == "opus") ? PictureType::FrontCover : PictureType::Other;
     auto const cover = view.coverArt().at(0);
     CHECK(cover.type == expectedType);
     CHECK(cover.resourceId != kInvalidResourceId);
@@ -294,12 +299,30 @@ namespace ao::media::file::test
     CHECK(library::deriveResourceId(optDescriptor->digest) == cover.resourceId);
   }
 
+  TEST_CASE("Media File - opus fixture exposes decoded audio properties", "[media][integration][property]")
+  {
+    auto const* const fixture = GENERATE("basic_metadata.opus", "mono.opus");
+    CAPTURE(fixture);
+
+    auto loaded = loadTrack(kTestDataDir / fixture);
+    auto& prop = loaded.builder().property();
+
+    CHECK(prop.duration() >= std::chrono::milliseconds{950});
+    CHECK(prop.duration() <= std::chrono::milliseconds{1050});
+
+    // Opus always decodes at 48kHz and carries no sample depth of its own.
+    CHECK(prop.sampleRate() == 48000);
+    CHECK(prop.bitDepth() == 0);
+    CHECK(prop.bitrate() > 0);
+    CHECK(prop.channels() == (std::string_view{fixture} == "mono.opus" ? 1 : 2));
+  }
+
   // ============================================================================
   // Empty/Missing Metadata Tests
   // ============================================================================
   TEST_CASE("Media File - empty fixture exposes empty metadata", "[media][integration][metadata]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav", "opus");
     auto const path = kTestDataDir / ("empty." + std::string{format});
 
     auto loaded = loadTrack(path);

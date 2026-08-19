@@ -5,10 +5,14 @@
 
 #include <ao/utility/ByteView.h>
 
+#include <boost/endian/conversion.hpp>
+#include <boost/endian/detail/order.hpp>
+
 #include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <span>
 #include <string>
@@ -20,6 +24,47 @@ namespace ao::media::file
   std::string decodeString(std::span<std::byte const> buf)
   {
     return std::string{utility::bytes::stringView(buf)};
+  }
+
+  std::optional<std::uint32_t> readU32(std::span<std::byte const> bytes,
+                                       std::size_t& offset,
+                                       boost::endian::order order) noexcept
+  {
+    if (offset > bytes.size() || sizeof(std::uint32_t) > bytes.size() - offset)
+    {
+      return std::nullopt;
+    }
+
+    std::uint32_t value = 0;
+    std::memcpy(&value, bytes.data() + offset, sizeof(value));
+    offset += sizeof(value);
+
+    if (order == boost::endian::order::big)
+    {
+      boost::endian::big_to_native_inplace(value);
+    }
+    else
+    {
+      boost::endian::little_to_native_inplace(value);
+    }
+
+    return value;
+  }
+
+  std::optional<std::span<std::byte const>> readSized(std::span<std::byte const> bytes,
+                                                      std::size_t& offset,
+                                                      boost::endian::order order) noexcept
+  {
+    auto const optLength = readU32(bytes, offset, order);
+
+    if (!optLength || offset > bytes.size() || *optLength > bytes.size() - offset)
+    {
+      return std::nullopt;
+    }
+
+    auto const value = bytes.subspan(offset, *optLength);
+    offset += *optLength;
+    return value;
   }
 
   std::optional<std::uint16_t> decodeUint16(std::string_view text)

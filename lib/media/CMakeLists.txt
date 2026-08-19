@@ -5,9 +5,9 @@ add_gperf_header(
   "media/mp4/AtomDispatch.h"
 )
 add_gperf_header(
-  MEDIA_FILE_FLAC_VORBIS_DISPATCH_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/file/flac/VorbisCommentDispatch.gperf"
-  "media/file/flac/VorbisCommentDispatch.h"
+  MEDIA_FILE_VORBIS_COMMENT_DISPATCH_HEADER
+  "${CMAKE_CURRENT_SOURCE_DIR}/file/detail/VorbisCommentDispatch.gperf"
+  "media/file/detail/VorbisCommentDispatch.h"
 )
 add_gperf_header(
   MEDIA_FILE_MP4_ATOM_DISPATCH_HEADER
@@ -25,6 +25,8 @@ add_library(ao_media STATIC
     file/File.cpp
     file/detail/Content.cpp
     file/detail/Decoder.cpp
+    file/detail/PictureBlock.cpp
+    file/detail/VorbisComment.cpp
     file/flac/File.cpp
     file/mp4/File.cpp
     file/mpeg/File.cpp
@@ -32,14 +34,18 @@ add_library(ao_media STATIC
     file/mpeg/id3v2/Frame.cpp
     file/mpeg/id3v2/Layout.cpp
     file/mpeg/id3v2/Reader.cpp
+    file/opus/File.cpp
     file/wav/File.cpp
+    ogg/Demuxer.cpp
+    opus/Header.cpp
+    opus/Timeline.cpp
     mp4/Demuxer.cpp
     mp4/SampleDescription.cpp
     mp4/TrackSelection.cpp
     mp4/Atom.cpp
     wav/Riff.cpp
     "${MEDIA_ATOM_DISPATCH_HEADER}"
-    "${MEDIA_FILE_FLAC_VORBIS_DISPATCH_HEADER}"
+    "${MEDIA_FILE_VORBIS_COMMENT_DISPATCH_HEADER}"
     "${MEDIA_FILE_MP4_ATOM_DISPATCH_HEADER}"
     "${MEDIA_FILE_MPEG_FRAME_DISPATCH_HEADER}"
 )

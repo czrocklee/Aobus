@@ -12,7 +12,7 @@ namespace include_convention_fixture
   }
 
 // NEGATIVE
-#include "media/file/flac/VorbisCommentDispatch.h"
+#include "media/file/detail/VorbisCommentDispatch.h"
 }
 
 int main()

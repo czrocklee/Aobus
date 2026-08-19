@@ -120,7 +120,7 @@ These names come from `rt::trackFieldId()` and use hyphens rather than underscor
 | `duration` | Unsigned 32-bit integer. | Milliseconds. |
 | `bitrate` | Unsigned 32-bit integer. | Bits per second. |
 | `sample-rate` | Unsigned 32-bit integer. | Hertz. |
-| `codec` | String. | Case-insensitive `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, or `MP3`. |
+| `codec` | String. | Case-insensitive `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, `MP3`, or `Opus`. |
 | `channels` | Unsigned 8-bit integer. | Channel count. |
 | `bit-depth` | Unsigned 8-bit integer. | Bits per sample. |
 
@@ -294,7 +294,8 @@ library:
 - [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) defines accepted input and validation.
 - [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines the path namespace.
 - [`TrackField.cpp`](../../../../app/runtime/TrackField.cpp) defines canonical metadata and technical field IDs.
-- [`AudioCodec.h`](../../../../include/ao/AudioCodec.h) defines codec names and case-insensitive parsing.
+- [`AudioCodec.h`](../../../../include/ao/AudioCodec.h) defines codec values and their stable storage representation.
+- [`AudioCodecText.h`](../../../../include/ao/AudioCodecText.h) defines codec display names and case-insensitive parsing.
 
 ## Test authority
 

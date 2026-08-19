@@ -230,10 +230,15 @@ add_executable(ao_core_test
     unit/media/file/id3v2/ReaderTest.cpp
     unit/media/file/FlacFileTest.cpp
     unit/media/file/WavFileTest.cpp
+    unit/media/file/OpusFileTest.cpp
     unit/media/file/FileTest.cpp
     unit/media/file/DecoderTest.cpp
 
     # media tests
+    unit/media/ogg/TestOgg.cpp
+    unit/media/ogg/DemuxerTest.cpp
+    unit/media/opus/HeaderTest.cpp
+    unit/media/opus/TimelineTest.cpp
     unit/media/mp4/TestAtoms.cpp
     unit/media/mp4/AtomTest.cpp
     unit/media/mp4/DemuxerTest.cpp
@@ -310,6 +315,8 @@ add_executable(ao_core_test
     unit/audio/AlacDecoderSessionTest.cpp
     unit/audio/AlacDecoderMalformedMp4Test.cpp
     unit/audio/Mp3DecoderSessionTest.cpp
+    unit/audio/OpusDecoderSessionTest.cpp
+    unit/audio/OpusDecoderMalformedTest.cpp
     unit/audio/WavDecoderSessionTest.cpp
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp

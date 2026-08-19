@@ -7,6 +7,7 @@
 #include "detail/Reader.h"
 #include "mp4/File.h"
 #include "mpeg/File.h"
+#include "opus/File.h"
 #include "wav/File.h"
 #include <ao/Error.h>
 #include <ao/media/file/File.h>
@@ -39,6 +40,7 @@ namespace ao::media::file
       {".m4a", [](auto bytes) -> std::unique_ptr<detail::Reader> { return std::make_unique<mp4::File>(bytes); }},
       {".flac", [](auto bytes) -> std::unique_ptr<detail::Reader> { return std::make_unique<flac::File>(bytes); }},
       {".wav", [](auto bytes) -> std::unique_ptr<detail::Reader> { return std::make_unique<wav::File>(bytes); }},
+      {".opus", [](auto bytes) -> std::unique_ptr<detail::Reader> { return std::make_unique<opus::File>(bytes); }},
     });
 
     std::string normalizedExtension(std::filesystem::path const& path)

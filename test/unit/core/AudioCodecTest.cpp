@@ -15,6 +15,7 @@ namespace ao::test
   static_assert(audioCodecStorageValue(AudioCodec::Wav) == 3);
   static_assert(audioCodecStorageValue(AudioCodec::Aac) == 128);
   static_assert(audioCodecStorageValue(AudioCodec::Mp3) == 129);
+  static_assert(audioCodecStorageValue(AudioCodec::Opus) == 130);
   static_assert(audioCodecFromStorage(255) == AudioCodec::Unknown);
 
   TEST_CASE("AudioCodec - names map to stable display strings", "[core][unit][codec]")
@@ -25,6 +26,7 @@ namespace ao::test
     CHECK(audioCodecName(AudioCodec::Wav) == "WAV");
     CHECK(audioCodecName(AudioCodec::Aac) == "AAC");
     CHECK(audioCodecName(AudioCodec::Mp3) == "MP3");
+    CHECK(audioCodecName(AudioCodec::Opus) == "Opus");
   }
 
   TEST_CASE("AudioCodec - parser accepts case-insensitive names", "[core][unit][codec]")
@@ -34,6 +36,7 @@ namespace ao::test
     CHECK(parseAudioCodecName("wav") == AudioCodec::Wav);
     CHECK(parseAudioCodecName("aac") == AudioCodec::Aac);
     CHECK(parseAudioCodecName("mp3") == AudioCodec::Mp3);
+    CHECK(parseAudioCodecName("opus") == AudioCodec::Opus);
     CHECK(parseAudioCodecName("unknown") == AudioCodec::Unknown);
     CHECK_FALSE(parseAudioCodecName("not-a-codec").has_value());
   }
@@ -45,11 +48,13 @@ namespace ao::test
     CHECK(audioCodecStorageValue(AudioCodec::Wav) == 3);
     CHECK(audioCodecStorageValue(AudioCodec::Aac) == 128);
     CHECK(audioCodecStorageValue(AudioCodec::Mp3) == 129);
+    CHECK(audioCodecStorageValue(AudioCodec::Opus) == 130);
     CHECK(audioCodecFromStorage(1) == AudioCodec::Flac);
     CHECK(audioCodecFromStorage(2) == AudioCodec::Alac);
     CHECK(audioCodecFromStorage(3) == AudioCodec::Wav);
     CHECK(audioCodecFromStorage(128) == AudioCodec::Aac);
     CHECK(audioCodecFromStorage(129) == AudioCodec::Mp3);
+    CHECK(audioCodecFromStorage(130) == AudioCodec::Opus);
     CHECK(audioCodecFromStorage(4) == AudioCodec::Unknown);
     CHECK(audioCodecFromStorage(255) == AudioCodec::Unknown);
   }

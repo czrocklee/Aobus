@@ -85,6 +85,7 @@ Tag additions/removals use the separate tag command contract in [library access 
 | `Wav` | `3` | `WAV` |
 | `Aac` | `128` | `AAC` |
 | `Mp3` | `129` | `MP3` |
+| `Opus` | `130` | `Opus` |
 
 `audioCodecName` produces the canonical name, `parseAudioCodecName` parses names case-insensitively, and `audioCodecFromStorage` converts unknown raw values to `Unknown`.
 

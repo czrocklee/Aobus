@@ -33,6 +33,28 @@ Public PCM values and Backend methods live under `include/ao/audio/`; lossless c
 
 `SampleKind` contains `Integer` and `FloatingPoint`.
 
+### Channel order
+
+No PCM surface carries channel-layout metadata.
+For an identified speaker layout of one through eight channels, the channel count therefore selects this WAV/Microsoft order:
+
+| Channels | Order |
+|---:|---|
+| 1 | Mono |
+| 2 | `FL`, `FR` |
+| 3 | `FL`, `FR`, `FC` |
+| 4 | `FL`, `FR`, `BL`, `BR` |
+| 5 | `FL`, `FR`, `FC`, `BL`, `BR` |
+| 6 | `FL`, `FR`, `FC`, `LFE`, `BL`, `BR` |
+| 7 | `FL`, `FR`, `FC`, `LFE`, `BC`, `SL`, `SR` |
+| 8 | `FL`, `FR`, `FC`, `LFE`, `BL`, `BR`, `SL`, `SR` |
+
+A decoder whose codec orders identified speakers differently normalizes before emitting PCM; it never publishes that codec-native speaker order.
+AAC does this through the FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING` parameter, and Opus mapping family 1 does it by permuting the channel mapping it hands libopus.
+FLAC, WAVE, and ALAC are already in this order.
+
+Opus mapping family 255 is the exception to the identified-layout table: it may expose up to 255 channels, but those channels have no assigned speaker positions and remain in header-defined output-index order.
+
 ### PCM encoding
 
 `SampleEncoding` identifies the exact little-endian bytes exchanged with a backend.

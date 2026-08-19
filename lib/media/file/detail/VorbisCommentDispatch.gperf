@@ -3,19 +3,21 @@
 %ignore-case
 %compare-lengths
 %struct-type
-%define class-name FlacVorbisDispatchTable
+%define class-name VorbisCommentDispatchTable
 %define lookup-function-name lookupVorbisField
-struct FlacVorbisDispatchEntry
+struct VorbisCommentDispatchEntry
 {
-  using VorbisHandler = void (*)(ao::media::file::detail::ContentBuilder&, std::string_view);
+  using VorbisCommentHandler = void (*)(ao::media::file::detail::ContentBuilder&, std::string_view);
   char const* name;
-  VorbisHandler handler;
+  VorbisCommentHandler handler;
 };
 %%
 TITLE, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::title>
 ARTIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::artist>
 ALBUM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::album>
 ALBUMARTIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
+ALBUM ARTIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
+ALBUM_ARTIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
 COMPOSER, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::composer>
 CONDUCTOR, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::conductor>
 ENSEMBLE, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::ensemble>
@@ -23,9 +25,11 @@ ORCHESTRA, &handleEnsembleFallback
 SOLOIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::soloist>
 PERFORMER, &handleSoloistFallback
 TRACKNUMBER, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
+TRACK, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 TRACKTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 TOTALTRACKS, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 DISCNUMBER, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
+DISC, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
 DISCTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
 TOTALDISCS, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
 GENRE, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::genre>
@@ -35,3 +39,4 @@ MOVEMENTNAME, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuil
 MOVEMENT, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
 MOVEMENTTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
 DATE, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
+YEAR, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>

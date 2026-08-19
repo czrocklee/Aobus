@@ -28,7 +28,7 @@ namespace ao::media::file::test
 
   TEST_CASE("Media File - recognizes and opens supported extensions", "[media][unit][factory]")
   {
-    constexpr auto kExtensions = std::to_array<std::string_view>({".mp3", ".m4a", ".flac", ".wav"});
+    constexpr auto kExtensions = std::to_array<std::string_view>({".mp3", ".m4a", ".flac", ".wav", ".opus"});
 
     for (auto const extension : kExtensions)
     {

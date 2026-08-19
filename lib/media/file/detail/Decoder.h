@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
+
+#include <boost/endian/detail/order.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -14,6 +16,24 @@
 namespace ao::media::file
 {
   std::string decodeString(std::span<std::byte const> buf);
+
+  /**
+   * @brief Reads one 32-bit field at @p offset and advances it. Returns nullopt
+   * when the field does not fit. Shared by the length-prefixed structures of
+   * Vorbis comment lists and METADATA_BLOCK_PICTURE bodies, which use opposite
+   * byte orders.
+   */
+  std::optional<std::uint32_t> readU32(std::span<std::byte const> bytes,
+                                       std::size_t& offset,
+                                       boost::endian::order order) noexcept;
+
+  /**
+   * @brief Reads a 32-bit length followed by that many bytes at @p offset and
+   * advances it. Returns nullopt when either part does not fit.
+   */
+  std::optional<std::span<std::byte const>> readSized(std::span<std::byte const> bytes,
+                                                      std::size_t& offset,
+                                                      boost::endian::order order) noexcept;
 
   std::optional<std::uint16_t> decodeUint16(std::string_view text);
 

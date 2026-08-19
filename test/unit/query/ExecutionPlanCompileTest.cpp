@@ -86,17 +86,30 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - compiles codec constants", "[query][unit][execution-plan]")
   {
-    auto plan = compileOk(parseOk("@codec = WAV"));
+    SECTION("WAV")
+    {
+      auto plan = compileOk(parseOk("@codec = WAV"));
 
-    auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
+      auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
 
-    REQUIRE(it != plan.instructions.end());
-    CHECK(std::cmp_equal(it->constValue, audioCodecStorageValue(AudioCodec::Wav)));
+      REQUIRE(it != plan.instructions.end());
+      CHECK(std::cmp_equal(it->constValue, audioCodecStorageValue(AudioCodec::Wav)));
+    }
+
+    SECTION("Opus")
+    {
+      auto plan = compileOk(parseOk("@codec = Opus"));
+
+      auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
+
+      REQUIRE(it != plan.instructions.end());
+      CHECK(std::cmp_equal(it->constValue, audioCodecStorageValue(AudioCodec::Opus)));
+    }
   }
 
   TEST_CASE("ExecutionPlan - rejects unsupported codec constants", "[query][unit][execution-plan]")
   {
-    std::ignore = compileError(parseOk("@codec = OPUS"));
+    std::ignore = compileError(parseOk("@codec = VORBIS"));
   }
 
   TEST_CASE("ExecutionPlan - compiles logical and", "[query][unit][execution-plan]")

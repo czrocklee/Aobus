@@ -7,6 +7,7 @@
 #include "AlacDecoderSession.h"
 #include "FlacDecoderSession.h"
 #include "Mp3DecoderSession.h"
+#include "OpusDecoderSession.h"
 #include "WavDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/DecoderSession.h>
@@ -100,6 +101,11 @@ namespace ao::audio
     if (ext == ".wav")
     {
       return openConcreteSession<WavDecoderSession>(filePath, optOutputEncoding);
+    }
+
+    if (ext == ".opus")
+    {
+      return openConcreteSession<OpusDecoderSession>(filePath, optOutputEncoding);
     }
 
     return makeError(Error::Code::NotSupported, std::format("Unsupported audio file extension '{}'", ext));

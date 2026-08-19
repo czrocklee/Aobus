@@ -5,9 +5,12 @@
 #include "lib/audio/AudioTime.h"
 #include "lib/audio/FlacDecoderSession.h"
 #include "lib/audio/Mp3DecoderSession.h"
+#include "lib/audio/OpusDecoderSession.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 
@@ -15,11 +18,17 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <ios>
+#include <iterator>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::test
@@ -59,6 +68,41 @@ namespace ao::audio::test
       auto const* data = reinterpret_cast<T const*>(blockRes->bytes.data());
 
       return {data, data + available};
+    }
+
+    /**
+     * @brief Reads a fixture into memory so a test can patch its header bytes.
+     */
+    std::vector<std::uint8_t> readFileBytes(std::filesystem::path const& path)
+    {
+      auto stream = std::ifstream{path, std::ios::binary};
+      REQUIRE(stream);
+      return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+    }
+
+    /**
+     * @brief Root mean square of a 16-bit block, used as a stable measure of the
+     * decoded signal level at one position.
+     */
+    double rootMeanSquare(PcmBlock const& block)
+    {
+      auto const samples = block.bytes.size() / sizeof(std::int16_t);
+
+      if (samples == 0)
+      {
+        return 0.0;
+      }
+
+      double total = 0.0;
+
+      for (std::size_t index = 0; index < samples; ++index)
+      {
+        std::int16_t sample = 0;
+        std::memcpy(&sample, block.bytes.data() + (index * sizeof(sample)), sizeof(sample));
+        total += static_cast<double>(sample) * sample;
+      }
+
+      return std::sqrt(total / static_cast<double>(samples));
     }
 
     /**
@@ -272,6 +316,182 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.channels == 2);
       CHECK(info.isLossy == true);
     }
+  }
+
+  TEST_CASE("OpusDecoder - fixture decodes with expected integrity", "[audio][integration][opus]")
+  {
+    auto const testFile = requireAudioFixture("basic_metadata.opus");
+    constexpr std::uint64_t kHalfwayFrame = 24000;
+
+    auto openDecoder = [&testFile]
+    {
+      auto decoderRes = OpusDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+      return std::move(*decoderRes);
+    };
+
+    SECTION("Metadata Extraction")
+    {
+      auto const decoderPtr = openDecoder();
+      auto const info = decoderPtr->streamInfo();
+
+      CHECK(info.codec == AudioCodec::Opus);
+      CHECK(info.sourceFormat.sampleRate == 48000);
+      CHECK(info.sourceFormat.channels == 2);
+      CHECK(info.isLossy == true);
+      CHECK(info.duration == std::chrono::seconds{1});
+    }
+
+    SECTION("A seek lands on the same signal a sequential read reaches")
+    {
+      // Frame bookkeeping alone cannot show that the audio lines up, so this
+      // compares the decoded energy at one position reached two ways. The
+      // fixture is a constant-amplitude tone, which makes that comparison stable
+      // despite the codec being lossy.
+      auto sequentialPtr = openDecoder();
+      double sequentialRms = 0.0;
+
+      while (true)
+      {
+        auto const blockRes = sequentialPtr->readNextBlock();
+        REQUIRE(blockRes);
+        REQUIRE_FALSE(blockRes->bytes.empty());
+
+        if (blockRes->firstFrameIndex + blockRes->frames > kHalfwayFrame)
+        {
+          sequentialRms = rootMeanSquare(*blockRes);
+          break;
+        }
+
+        REQUIRE_FALSE(blockRes->endOfStream);
+      }
+
+      auto soughtPtr = openDecoder();
+      REQUIRE(soughtPtr->seek(std::chrono::milliseconds{500}));
+
+      auto const soughtBlockRes = soughtPtr->readNextBlock();
+      REQUIRE(soughtBlockRes);
+      CHECK(soughtBlockRes->firstFrameIndex == kHalfwayFrame);
+
+      auto const soughtRms = rootMeanSquare(*soughtBlockRes);
+      CHECK(sequentialRms > 0.0);
+      CHECK(soughtRms > 0.0);
+      CHECK(std::abs(soughtRms - sequentialRms) < sequentialRms * 0.2);
+    }
+  }
+
+  TEST_CASE("OpusDecoder - a seek pre-rolls the decoder before its target", "[audio][integration][opus]")
+  {
+    // The default one-second pagination puts every mid-stream seek back at the
+    // start of the audio, so the decoder is warm by the time it reaches the
+    // target whether or not a pre-roll is applied. One packet per page is the
+    // pagination live and remuxed streams carry, and it is the shape where a
+    // restart lands close enough to the target to still be converging.
+    auto const testFile = requireAudioFixture("short_pages.opus");
+    constexpr std::uint64_t kSeekFrame = 24000;
+
+    auto openDecoder = [&testFile]
+    {
+      auto decoderRes = OpusDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+      return std::move(*decoderRes);
+    };
+
+    // Every audible sample the stream holds, addressed by absolute frame, so a
+    // block reached by seeking can be compared against the same frames reached
+    // by playing from the beginning.
+    auto const reference = [&openDecoder]
+    {
+      auto samples = std::vector<std::int16_t>{};
+      auto decoderPtr = openDecoder();
+
+      while (true)
+      {
+        auto const blockRes = decoderPtr->readNextBlock();
+        REQUIRE(blockRes);
+
+        auto const* const data = reinterpret_cast<std::int16_t const*>(blockRes->bytes.data());
+        samples.insert(samples.end(), data, data + (blockRes->bytes.size() / sizeof(std::int16_t)));
+
+        if (blockRes->endOfStream)
+        {
+          return samples;
+        }
+      }
+    }();
+
+    auto soughtPtr = openDecoder();
+    REQUIRE(soughtPtr->seek(std::chrono::milliseconds{500}));
+
+    auto const blockRes = soughtPtr->readNextBlock();
+    REQUIRE(blockRes);
+    REQUIRE(blockRes->firstFrameIndex == kSeekFrame);
+    REQUIRE(blockRes->frames > 0);
+
+    auto const channels = soughtPtr->streamInfo().sourceFormat.channels;
+    auto const count = static_cast<std::size_t>(blockRes->frames) * channels;
+    auto const offset = static_cast<std::size_t>(kSeekFrame) * channels;
+    REQUIRE(offset + count <= reference.size());
+
+    auto const* const sought = reinterpret_cast<std::int16_t const*>(blockRes->bytes.data());
+    double error = 0.0;
+    double energy = 0.0;
+
+    for (std::size_t index = 0; index < count; ++index)
+    {
+      auto const expected = static_cast<double>(reference[offset + index]);
+      error += std::abs(static_cast<double>(sought[index]) - expected);
+      energy += std::abs(expected);
+    }
+
+    // A decoder resumed cold reproduces the level but not the waveform, so the
+    // comparison has to be per sample. Opus does not converge exactly, hence a
+    // tolerance rather than equality.
+    REQUIRE(energy > 0.0);
+    CHECK(error / energy < 0.1);
+  }
+
+  TEST_CASE("OpusDecoder - applies the identification packet output gain", "[audio][integration][opus]")
+  {
+    // No encoder writes a header gain by default, so the only way to prove the
+    // field reaches libopus is to set it and measure the decoded level. -1536 in
+    // Q7.8 decibels is -6 dB, which halves the amplitude.
+    constexpr std::int16_t kMinusSixDecibels = -1536;
+
+    auto const testFile = requireAudioFixture("basic_metadata.opus");
+    auto source = readFileBytes(testFile);
+
+    auto const magic = std::vector<std::uint8_t>{'O', 'p', 'u', 's', 'H', 'e', 'a', 'd'};
+    auto const found = std::ranges::search(source, magic).begin();
+    REQUIRE(found != source.end());
+
+    // The gain follows the magic signature, version, channel count, pre-skip,
+    // and input sample rate.
+    auto const gainOffset = static_cast<std::size_t>(std::distance(source.begin(), found)) + 16;
+    REQUIRE(gainOffset + 1 < source.size());
+    source[gainOffset] = static_cast<std::uint8_t>(static_cast<std::uint16_t>(kMinusSixDecibels) & 0xFFU);
+    source[gainOffset + 1] = static_cast<std::uint8_t>((static_cast<std::uint16_t>(kMinusSixDecibels) >> 8U) & 0xFFU);
+
+    auto const attenuated = ao::test::TempFile{source, ".opus"};
+
+    auto const firstBlockRms = [](std::filesystem::path const& path)
+    {
+      auto decoderRes = OpusDecoderSession::open(path, SampleEncoding::Signed16Le);
+      REQUIRE(decoderRes);
+
+      auto const blockRes = (*decoderRes)->readNextBlock();
+      REQUIRE(blockRes);
+      REQUIRE_FALSE(blockRes->bytes.empty());
+      return rootMeanSquare(*blockRes);
+    };
+
+    auto const plainRms = firstBlockRms(testFile);
+    auto const attenuatedRms = firstBlockRms(attenuated.path);
+
+    REQUIRE(plainRms > 0.0);
+    CHECK(attenuatedRms < plainRms);
+    CHECK(attenuatedRms / plainRms > 0.45);
+    CHECK(attenuatedRms / plainRms < 0.56);
   }
 
   TEST_CASE("Decoder - malformed and unsupported inputs fail without crashing", "[audio][integration][decoder]")

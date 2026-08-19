@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-struct FlacVorbisDispatchEntry
+struct VorbisCommentDispatchEntry
 {
   char const* name;
   Handler handler;
 };
 
-inline constexpr FlacVorbisDispatchEntry kGeneratedDispatchEntries[] = {
+inline constexpr VorbisCommentDispatchEntry kGeneratedDispatchEntries[] = {
   {.name = "TITLE", .handler = &handleGenerated},
 };

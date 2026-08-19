@@ -117,7 +117,6 @@ pkgs.mkShell {
       gsl-lite
       rapidyaml
       ftxui
-      libogg
       libxml2
       sysprof
 
@@ -136,6 +135,7 @@ pkgs.mkShell {
       alac
       fdk_aac.dev
       mpg123
+      libopus
       pipewire
       alsa-lib
       udev
