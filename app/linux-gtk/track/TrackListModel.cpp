@@ -19,6 +19,7 @@
 #include <glibmm/refptr.h>
 #include <gtkmm/sectionmodel.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -29,6 +30,19 @@
 
 namespace ao::gtk
 {
+  namespace
+  {
+    void invalidateUpdatedRows(TrackRowCache const& provider,
+                               rt::TrackListProjection const& projection,
+                               rt::ProjectionUpdateRange const& delta)
+    {
+      for (auto const index : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
+      {
+        provider.invalidate(projection.trackIdAt(index));
+      }
+    }
+  } // namespace
+
   TrackListModel::TrackListModel()
     : Glib::ObjectBase{typeid(TrackListModel)}, Gio::ListModel{}, Gtk::SectionModel{}
   {
@@ -111,8 +125,8 @@ namespace ao::gtk
 
     if (auto const optGroupRange = _projectionPtr->groupRangeAt(position); optGroupRange)
     {
-      outStart = static_cast<::guint>(optGroupRange->start);
-      outEnd = static_cast<::guint>(optGroupRange->start + optGroupRange->count);
+      outStart = std::min(static_cast<::guint>(optGroupRange->start), position);
+      outEnd = std::clamp(static_cast<::guint>(optGroupRange->start + optGroupRange->count), position + 1, size);
       return;
     }
 
@@ -150,16 +164,39 @@ namespace ao::gtk
       return;
     }
 
-    for (auto const& delta : batch.deltas)
+    auto const containsOnlyUpdates =
+      std::ranges::all_of(batch.deltas,
+                          [](rt::TrackListProjectionDelta const& delta)
+                          { return std::holds_alternative<rt::ProjectionUpdateRange>(delta); });
+
+    if (batch.deltas.size() == 1 || containsOnlyUpdates)
     {
-      std::visit(
-        utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
-                             std::bind_front(&TrackListModel::applyInsertRange, this),
-                             std::bind_front(&TrackListModel::applyRemoveRange, this),
-                             std::bind_front(&TrackListModel::applyUpdateRange, this),
-                             [](rt::ProjectionSourceInvalidated const&)
-                             { AO_FATAL("TrackListModel cannot apply source invalidation as a regular delta"); }),
-        delta);
+      for (auto const& delta : batch.deltas)
+      {
+        std::visit(
+          utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
+                               std::bind_front(&TrackListModel::applyInsertRange, this),
+                               std::bind_front(&TrackListModel::applyRemoveRange, this),
+                               std::bind_front(&TrackListModel::applyUpdateRange, this),
+                               [](rt::ProjectionSourceInvalidated const&)
+                               { AO_FATAL("TrackListModel cannot apply source invalidation as a regular delta"); }),
+          delta);
+      }
+    }
+    else
+    {
+      // The projection has already reached the batch's final state. Structural
+      // deltas cannot be exposed sequentially, but final-coordinate updates
+      // still need to evict any materialized row objects before the reset.
+      for (auto const& delta : batch.deltas)
+      {
+        if (auto const* update = std::get_if<rt::ProjectionUpdateRange>(&delta); update != nullptr)
+        {
+          invalidateUpdatedRows(*_provider, *_projectionPtr, *update);
+        }
+      }
+
+      applyResetDelta();
     }
 
     AO_ENSURES(_modelSize == _projectionPtr->size());
@@ -211,11 +248,7 @@ namespace ao::gtk
     auto const rowPosition = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
 
-    for (auto const index : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
-    {
-      _provider->invalidate(_projectionPtr->trackIdAt(index));
-    }
-
+    invalidateUpdatedRows(*_provider, *_projectionPtr, delta);
     notifyUpdate(rowPosition, count);
   }
 
