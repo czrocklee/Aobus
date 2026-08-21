@@ -66,6 +66,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/window.h>
+#include <pangomm/layout.h>
 #include <sigc++/functors/slot.h>
 
 #include <algorithm>
@@ -88,6 +89,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::drainGtkEvents;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findButtonByLabel;
+  using ao::gtk::test::findLabelByText;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
   using ao::gtk::test::measureWidget;
@@ -875,6 +877,10 @@ namespace ao::gtk::layout::test
 
     CHECK(trackSpecFor(musicLibrary, trackId).customMetadata.empty());
     CHECK(undoBar->get_visible());
+    auto* const undoLabel = findLabelByText(root, "Custom metadata 'Mood' removed");
+    REQUIRE(undoLabel != nullptr);
+    CHECK(undoLabel->get_ellipsize() == Pango::EllipsizeMode::END);
+    CHECK(undoLabel->get_tooltip_text() == "Custom metadata 'Mood' removed");
 
     auto* const undoButton = findWidgetByClass<Gtk::Button>(root, "ao-undo-button");
     REQUIRE(undoButton != nullptr);

@@ -5,6 +5,7 @@
 
 #include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -17,6 +18,7 @@
 #include <gdkmm/enums.h>
 #include <gtkmm/button.h>
 #include <gtkmm/eventcontrollerkey.h>
+#include <gtkmm/label.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -163,6 +165,37 @@ namespace ao::gtk::test
     CHECK(findLabelByText(editor, "Tastaturkürzel anpassen") != nullptr);
     CHECK(findButtonByLabel(editor, "Alle zurücksetzen") != nullptr);
     CHECK(findButtonByLabel(editor, "Hinzufügen…") != nullptr);
+  }
+
+  TEST_CASE("ShortcutEditorWidget - long action names preserve shortcut controls at constrained width",
+            "[gtk][regression][preferences][geometry]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto const longActionLabel = std::string{"Activar/desactivar reproducción aleatoria excepcionalmente larga"};
+    auto catalog = uimodel::LayoutActionCatalog{};
+    catalog.registerActionDescriptor({.id = "playback.toggleShuffle",
+                                      .label = longActionLabel,
+                                      .category = "Playback",
+                                      .capabilities = LayoutActionCapability::None});
+    auto hostWindow = Gtk::Window{};
+    auto editor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
+                                       catalog,
+                                       uimodel::KeymapModel{uimodel::defaultKeymap()},
+                                       {},
+                                       hostWindow};
+
+    auto allocationHost = AllocationHost{editor};
+    allocationHost.allocateChild(420, 480);
+    drainGtkEvents();
+
+    auto* const actionLabel = findLabelByText(editor, longActionLabel);
+    REQUIRE(actionLabel != nullptr);
+    auto const layoutPtr = actionLabel->get_layout();
+    REQUIRE(layoutPtr != nullptr);
+    CHECK(layoutPtr->is_ellipsized());
+    CHECK(actionLabel->get_tooltip_text() == longActionLabel);
+    CHECK(findButtonByLabel(editor, "Add…") != nullptr);
+    CHECK(findButtonByLabel(editor, "Reset") != nullptr);
   }
 
   TEST_CASE("ShortcutEditorWidget - routes shortcut button events to keymap changes",

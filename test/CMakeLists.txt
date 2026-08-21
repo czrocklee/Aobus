@@ -806,6 +806,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/image/ImageCacheTest.cpp
     unit/linux-gtk/image/ResourceImageLoaderTest.cpp
     unit/linux-gtk/app/AppDialogTest.cpp
+    unit/linux-gtk/app/FormBuilderTest.cpp
     unit/linux-gtk/app/ThemeCoordinatorTest.cpp
     unit/linux-gtk/app/ThemePresetTest.cpp
     unit/linux-gtk/app/MainWindowCoordinatorTest.cpp

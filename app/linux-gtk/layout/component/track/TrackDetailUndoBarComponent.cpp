@@ -20,6 +20,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
+#include <pangomm/layout.h>
 #include <sigc++/connection.h>
 
 #include <memory>
@@ -46,6 +47,8 @@ namespace ao::gtk::layout
 
         _label.set_halign(Gtk::Align::START);
         _label.set_hexpand(true);
+        _label.set_ellipsize(Pango::EllipsizeMode::END);
+        _label.set_single_line_mode(true);
         _bar.append(_label);
 
         _undoButton.add_css_class("flat");
@@ -97,7 +100,9 @@ namespace ao::gtk::layout
         }
 
         auto const& pending = *_undoController->pendingCustomMetadataUndo();
-        _label.set_text(_textCatalog.format(i18n::MessageId::GtkCustomMetadataDeleted, {{"key", pending.key}}));
+        auto const text = _textCatalog.format(i18n::MessageId::GtkCustomMetadataDeleted, {{"key", pending.key}});
+        _label.set_text(text);
+        _label.set_tooltip_text(text);
         _bar.set_visible(true);
       }
 

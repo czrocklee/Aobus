@@ -42,6 +42,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::emitGesturePressed;
   using ao::gtk::test::findButtonByLabel;
+  using ao::gtk::test::findLabelByText;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
   using ao::gtk::test::hasAccessibleLabel;
@@ -177,6 +178,51 @@ namespace ao::gtk::layout::test
       CHECK(editor->editButton().get_tooltip_text() == "Wert bearbeiten");
       CHECK(hasAccessibleLabel(editor->editButton(), "Wert bearbeiten"));
     }
+  }
+
+  TEST_CASE("TrackFieldGrid - long localized keys preserve value-column space",
+            "[gtk][regression][track-field-grid][geometry]")
+  {
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_key_width_localization_test", {}, "fr-FR"};
+    auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
+    REQUIRE(componentPtr != nullptr);
+
+    auto& root = componentPtr->widget();
+    auto* const grid = findWidget<Gtk::Grid>(root);
+    REQUIRE(grid != nullptr);
+    auto* const technicalHeader = findWidgetByClass<Gtk::Button>(*grid, "ao-track-detail-section-tech");
+    REQUIRE(technicalHeader != nullptr);
+    emitClicked(*technicalHeader);
+    ao::gtk::test::drainGtkEvents();
+
+    auto* const label = findLabelByText(root, "Fréquence d'échantillonnage");
+    REQUIRE(label != nullptr);
+    auto* const keySlot = label->get_parent();
+    REQUIRE(keySlot != nullptr);
+
+    std::int32_t keyLeft = 0;
+    std::int32_t keyTop = 0;
+    std::int32_t keyWidth = 0;
+    std::int32_t keyHeight = 0;
+    grid->query_child(*keySlot, keyLeft, keyTop, keyWidth, keyHeight);
+    auto* const valueSlot = gridChildAt(*grid, 1, keyTop);
+    REQUIRE(valueSlot != nullptr);
+
+    constexpr std::int32_t kPanelWidth = 420;
+    constexpr std::int32_t kPanelHeight = 2000;
+    std::int32_t minimum = 0;
+    std::int32_t natural = 0;
+    std::int32_t minimumBaseline = -1;
+    std::int32_t naturalBaseline = -1;
+    root.measure(Gtk::Orientation::VERTICAL, kPanelWidth, minimum, natural, minimumBaseline, naturalBaseline);
+    root.size_allocate(Gtk::Allocation{0, 0, kPanelWidth, kPanelHeight}, -1);
+
+    auto const layoutPtr = label->get_layout();
+    REQUIRE(layoutPtr != nullptr);
+    CHECK(layoutPtr->is_ellipsized());
+    CHECK(label->get_max_width_chars() == 12);
+    CHECK(label->get_tooltip_text() == "Fréquence d'échantillonnage");
+    CHECK(valueSlot->get_width() > keySlot->get_width());
   }
 
   TEST_CASE("AddCustomMetadataButton - submits popover values", "[gtk][unit][track]")
@@ -459,7 +505,8 @@ namespace ao::gtk::layout::test
                         CHECK(height == -1);
                         CHECK(label->get_halign() == Gtk::Align::END);
                         CHECK(label->get_overflow() == Gtk::Overflow::HIDDEN);
-                        CHECK(label->get_ellipsize() == Pango::EllipsizeMode::NONE);
+                        CHECK(label->get_ellipsize() == Pango::EllipsizeMode::END);
+                        CHECK_FALSE(label->get_tooltip_text().empty());
                       }
                     }
                     else if (widget.has_css_class("ao-property-value"))
@@ -614,7 +661,7 @@ namespace ao::gtk::layout::test
       CHECK(scopedGrid->get_width() <= 1000);
       CHECK(scopedGrid->get_width() > 0);
       CHECK(customKeyLabel->get_ellipsize() == Pango::EllipsizeMode::END);
-      CHECK(customKeyLabel->get_max_width_chars() == 24);
+      CHECK(customKeyLabel->get_tooltip_text() == "very long custom metadata key");
       CHECK(customValueEditor->get_overflow() == Gtk::Overflow::HIDDEN);
       CHECK(customValueLabel.get_ellipsize() == Pango::EllipsizeMode::END);
       CHECK(customValueLabel.get_max_width_chars() == 1);

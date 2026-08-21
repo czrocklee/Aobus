@@ -10,6 +10,7 @@
 #include <gtkmm/object.h>
 #include <gtkmm/sizegroup.h>
 #include <gtkmm/widget.h>
+#include <pangomm/layout.h>
 
 #include <string>
 
@@ -38,6 +39,9 @@ namespace ao::gtk
     label->set_halign(Gtk::Align::FILL);
     label->set_xalign(0.0F);
     label->set_hexpand(true);
+    label->set_ellipsize(Pango::EllipsizeMode::END);
+    label->set_single_line_mode(true);
+    label->set_tooltip_text(labelText);
     _labelSizeGroupPtr->add_widget(*label);
 
     box->append(*label);

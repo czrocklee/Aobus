@@ -248,6 +248,8 @@ namespace ao::gtk::layout
       static constexpr std::int32_t kGridColumnSpacing = 12;
       static constexpr std::int32_t kValueColWidth = 3;
       static constexpr std::int32_t kFieldRowHeight = 28;
+      // Keep metadata values useful in narrow detail panes; the tooltip retains the complete key.
+      static constexpr std::int32_t kKeyLabelMaxWidthChars = 12;
 
       bool shouldShowRow(BuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
       {
@@ -456,8 +458,7 @@ namespace ao::gtk::layout
       void configureBuiltInRow(BuiltInRow& row, bool isTechnical = false)
       {
         auto const* def = rt::trackFieldDefinition(row.field);
-        row.label.set_text(std::string{def != nullptr ? _textCatalog.trackFieldLabel(def->field) : ""});
-        configureKeyLabel(row.label);
+        configureKeyLabel(row.label, std::string{def != nullptr ? _textCatalog.trackFieldLabel(def->field) : ""});
 
         row.label.set_opacity(kLabelOpacity);
         row.label.add_css_class("ao-property-label");
@@ -508,8 +509,7 @@ namespace ao::gtk::layout
       void configureCompositeRow(CompositeBuiltInRow& row)
       {
         auto const* def = rt::trackFieldDefinition(row.primaryField);
-        row.label.set_text(std::string{def != nullptr ? _textCatalog.trackFieldLabel(def->field) : ""});
-        configureKeyLabel(row.label);
+        configureKeyLabel(row.label, std::string{def != nullptr ? _textCatalog.trackFieldLabel(def->field) : ""});
 
         row.label.set_opacity(kLabelOpacity);
         row.label.add_css_class("ao-property-label");
@@ -766,11 +766,7 @@ namespace ao::gtk::layout
 
       void configureCustomRow(CustomRow& row)
       {
-        row.label.set_text(validUtf8Text(row.key));
-        configureKeyLabel(row.label);
-        row.label.set_ellipsize(Pango::EllipsizeMode::END);
-        row.label.set_width_chars(0);
-        row.label.set_max_width_chars(24);
+        configureKeyLabel(row.label, validUtf8Text(row.key));
         row.label.set_opacity(kLabelOpacity);
         row.label.add_css_class("ao-property-label");
 
@@ -1097,16 +1093,18 @@ namespace ao::gtk::layout
         box.set_size_request(0, -1);
       }
 
-      void configureKeyLabel(Gtk::Label& label)
+      void configureKeyLabel(Gtk::Label& label, std::string const& text)
       {
+        label.set_text(text);
         label.set_halign(Gtk::Align::END);
         label.set_xalign(1.0F);
         label.set_hexpand(false);
         label.set_overflow(Gtk::Overflow::HIDDEN);
         label.set_size_request(0, -1);
-        label.set_ellipsize(Pango::EllipsizeMode::NONE);
+        label.set_max_width_chars(kKeyLabelMaxWidthChars);
+        label.set_ellipsize(Pango::EllipsizeMode::END);
         label.set_wrap(false);
-        label.set_lines(1);
+        label.set_tooltip_text(text);
       }
 
       void configureValueEditor(DetailFieldEditor& editor)

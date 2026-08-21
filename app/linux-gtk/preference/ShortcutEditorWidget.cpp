@@ -26,6 +26,7 @@
 #include <gtkmm/object.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/window.h>
+#include <pangomm/layout.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -316,6 +317,9 @@ namespace ao::gtk
     auto* const nameLabel = Gtk::make_managed<Gtk::Label>(action.label);
     nameLabel->set_xalign(0.0F);
     nameLabel->set_hexpand(true);
+    nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
+    nameLabel->set_single_line_mode(true);
+    nameLabel->set_tooltip_text(action.label);
     row->append(*nameLabel);
 
     if (auto const chords = _keymap.chordsFor(action.id); chords.empty())
