@@ -120,7 +120,8 @@ namespace ao::rt
                                                 std::move(dependencies.cacheDirectory),
                                                 dependencies.musicLibraryPinnedMapBytes,
                                                 dependencies.sleeper,
-                                                dependencies.textOrderingPolicy);
+                                                dependencies.textOrderingPolicy,
+                                                dependencies.completionAliasPolicy);
 
     if (!initializeRes)
     {

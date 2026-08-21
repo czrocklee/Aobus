@@ -11,6 +11,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 
@@ -124,10 +125,11 @@ namespace ao::rt
         { return lhs.frequency > rhs.frequency || (lhs.frequency == rhs.frequency && lhs.value < rhs.value); });
     }
 
-    template<typename Frequencies>
+    template<typename Frequencies, typename GetAliases>
     std::vector<VocabularyEntry> sortedDictionaryVocabulary(Frequencies const& frequencies,
                                                             library::DictionaryStore const& dictionary,
-                                                            TextOrderingPolicy const* textOrderingPolicy)
+                                                            TextOrderingPolicy const* textOrderingPolicy,
+                                                            GetAliases getAliases)
     {
       auto entries = std::vector<VocabularyEntry>{};
       entries.reserve(frequencies.size());
@@ -136,7 +138,11 @@ namespace ao::rt
       {
         if (auto const value = dictionary.getOrDefault(entry.id); !value.empty())
         {
-          entries.push_back(VocabularyEntry{.value = std::string{value}, .frequency = entry.frequency});
+          entries.push_back(VocabularyEntry{
+            .value = std::string{value},
+            .frequency = entry.frequency,
+            .aliases = std::invoke(getAliases, entry.id, value),
+          });
         }
       }
 
@@ -159,9 +165,11 @@ namespace ao::rt
 
   CompletionService::CompletionService(library::MusicLibrary const& library,
                                        LibraryChanges const& changes,
-                                       TextOrderingPolicy const* textOrderingPolicy)
+                                       TextOrderingPolicy const* textOrderingPolicy,
+                                       CompletionAliasPolicy const* completionAliasPolicy)
     : _library{library}
     , _textOrderingPolicy{textOrderingPolicy}
+    , _completionAliasPolicy{completionAliasPolicy}
     , _ownerThread{std::this_thread::get_id()}
     , _libraryChangeSubscription{changes.onChanged(
         [this](LibraryChangeSet const& changeSet)
@@ -365,11 +373,7 @@ namespace ao::rt
       trackFieldArrayAt(valueFrequencies, source.field) = compress(trackFieldArrayAt(valueCounts, source.field));
     }
 
-    _titleFrequencies = std::move(titleFrequencies);
-    _tagFrequencies = compress(tagCounts);
-    _customKeyFrequencies = compress(customKeyCounts);
-    _valueFrequencies = std::move(valueFrequencies);
-
+    // Retire every span borrower before replacing the snapshot-owned alias records.
     _tags.clear();
     _customKeys.clear();
     _aggregateValues.clear();
@@ -377,6 +381,22 @@ namespace ao::rt
     for (auto& values : _values)
     {
       values.clear();
+    }
+
+    _titleFrequencies = std::move(titleFrequencies);
+    _tagFrequencies = compress(tagCounts);
+    _customKeyFrequencies = compress(customKeyCounts);
+    _valueFrequencies = std::move(valueFrequencies);
+
+    if (_completionAliasPolicy != nullptr)
+    {
+      _dictionaryAliases = std::vector<AliasRecord>(dictionarySize + 1);
+      _titleAliases = std::vector<AliasRecord>(_titleFrequencies.size());
+    }
+    else
+    {
+      _dictionaryAliases.clear();
+      _titleAliases.clear();
     }
 
     _tagsReady = false;
@@ -388,36 +408,132 @@ namespace ao::rt
 
   void CompletionService::materializeTags()
   {
-    _tags = sortedDictionaryVocabulary(_tagFrequencies, _library.dictionary(), _textOrderingPolicy);
+    _tags = sortedDictionaryVocabulary(_tagFrequencies,
+                                       _library.dictionary(),
+                                       _textOrderingPolicy,
+                                       [this](DictionaryId const id, std::string_view const text)
+                                       { return aliasesForDictionary(id, text); });
     _tagsReady = true;
   }
 
   void CompletionService::materializeCustomKeys()
   {
-    _customKeys = sortedDictionaryVocabulary(_customKeyFrequencies, _library.dictionary(), _textOrderingPolicy);
+    _customKeys = sortedDictionaryVocabulary(_customKeyFrequencies,
+                                             _library.dictionary(),
+                                             _textOrderingPolicy,
+                                             [this](DictionaryId const id, std::string_view const text)
+                                             { return aliasesForDictionary(id, text); });
     _customKeysReady = true;
   }
 
   void CompletionService::materializeValues(TrackField field)
   {
     trackFieldArrayAt(_values, field) = sortedDictionaryVocabulary(
-      trackFieldArrayAt(_valueFrequencies, field), _library.dictionary(), _textOrderingPolicy);
+      trackFieldArrayAt(_valueFrequencies, field),
+      _library.dictionary(),
+      _textOrderingPolicy,
+      [this](DictionaryId const id, std::string_view const text) { return aliasesForDictionary(id, text); });
     trackFieldArrayAt(_valuesReady, field) = true;
+  }
+
+  std::span<std::string const> CompletionService::aliasesForDictionary(DictionaryId const id,
+                                                                       std::string_view const text)
+  {
+    if (_completionAliasPolicy == nullptr)
+    {
+      return {};
+    }
+
+    AO_INVARIANT(id != kInvalidDictionaryId && id.raw() < _dictionaryAliases.size());
+    return resolveAliases(_dictionaryAliases[id.raw()], text);
+  }
+
+  std::span<std::string const> CompletionService::aliasesForTitle(std::size_t const titleIndex,
+                                                                  std::string_view const text)
+  {
+    if (_completionAliasPolicy == nullptr)
+    {
+      return {};
+    }
+
+    AO_INVARIANT(titleIndex < _titleAliases.size());
+    return resolveAliases(_titleAliases[titleIndex], text);
+  }
+
+  std::span<std::string const> CompletionService::aliasesFor(AliasHandle const handle, std::string_view const text)
+  {
+    switch (handle.source)
+    {
+      case AliasSource::Dictionary:
+        return aliasesForDictionary(DictionaryId{static_cast<std::uint32_t>(handle.index)}, text);
+      case AliasSource::Title: return aliasesForTitle(handle.index, text);
+    }
+
+    AO_FATAL("Unhandled completion alias source");
+  }
+
+  std::span<std::string const> CompletionService::resolveAliases(AliasRecord& record, std::string_view const text)
+  {
+    if (_completionAliasPolicy == nullptr)
+    {
+      return {};
+    }
+
+    if (!record.resolved)
+    {
+      auto const result = _completionAliasPolicy->makeAliasesInto(record.values, text);
+      AO_INVARIANT(result.has_value(), "Admitted completion text failed alias derivation: {}", result.error().message);
+      record.resolved = true;
+    }
+
+    return record.values;
   }
 
   void CompletionService::materializeAggregateValues()
   {
-    auto counts = OwnedValueFrequencies{};
+    struct AggregateValue final
+    {
+      std::uint32_t frequency = 0;
+      AliasHandle aliasHandle;
+    };
+
+    using OwnedAggregateValues =
+      boost::unordered_flat_map<std::string, AggregateValue, TransparentStringHash, std::equal_to<>>;
+
+    auto counts = OwnedAggregateValues{};
     counts.reserve(_library.dictionary().size());
     auto dictionaryFrequencies = std::vector<std::uint32_t>(_library.dictionary().size() + 1);
+    auto const addAggregateValue =
+      [&](std::string_view const value, std::uint32_t const frequency, AliasHandle const aliasHandle)
+    {
+      if (value.empty())
+      {
+        return;
+      }
+
+      if (auto const iter = counts.find(value); iter != counts.end())
+      {
+        iter->second.frequency += frequency;
+
+        if (aliasHandle.source == AliasSource::Dictionary && iter->second.aliasHandle.source != AliasSource::Dictionary)
+        {
+          iter->second.aliasHandle = aliasHandle;
+        }
+      }
+      else
+      {
+        counts.emplace(std::string{value}, AggregateValue{.frequency = frequency, .aliasHandle = aliasHandle});
+      }
+    };
 
     for (auto const field : _aggregateFields)
     {
       if (field == TrackField::Title)
       {
-        for (auto const& entry : _titleFrequencies)
+        for (std::size_t index = 0; index < _titleFrequencies.size(); ++index)
         {
-          addValue(counts, entry.value, entry.frequency);
+          auto const& entry = _titleFrequencies[index];
+          addAggregateValue(entry.value, entry.frequency, AliasHandle{.source = AliasSource::Title, .index = index});
         }
 
         continue;
@@ -443,16 +559,22 @@ namespace ao::rt
     {
       if (auto const frequency = dictionaryFrequencies[rawId]; frequency != 0)
       {
-        addValue(counts, dictionary.getOrDefault(DictionaryId{static_cast<std::uint32_t>(rawId)}), frequency);
+        addAggregateValue(dictionary.getOrDefault(DictionaryId{static_cast<std::uint32_t>(rawId)}),
+                          frequency,
+                          AliasHandle{.source = AliasSource::Dictionary, .index = rawId});
       }
     }
 
     auto values = std::vector<VocabularyEntry>{};
     values.reserve(counts.size());
 
-    for (auto const& [value, frequency] : counts)
+    for (auto const& [value, aggregate] : counts)
     {
-      values.push_back(VocabularyEntry{.value = value, .frequency = frequency});
+      values.push_back(VocabularyEntry{
+        .value = value,
+        .frequency = aggregate.frequency,
+        .aliases = aliasesFor(aggregate.aliasHandle, value),
+      });
     }
 
     _aggregateValues = std::move(values);

@@ -24,6 +24,7 @@ namespace ao::async
 
 namespace ao::rt
 {
+  class CompletionAliasPolicy;
   class ConfigStore;
   class PlaybackService;
   class TextOrderingPolicy;
@@ -47,6 +48,8 @@ namespace ao::rt
     async::Sleeper* sleeper = nullptr;
     /// Optional interactive text order selected and owned by the composition root.
     TextOrderingPolicy const* textOrderingPolicy = nullptr;
+    /// Optional transient completion spelling policy owned by the composition root.
+    CompletionAliasPolicy const* completionAliasPolicy = nullptr;
   };
 
   struct PlaybackSessionRestoreResult final

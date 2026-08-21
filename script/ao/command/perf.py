@@ -16,6 +16,7 @@ TARGET = "ao_perf_baseline"
 DEFAULT_FILTER = "[perf][review]"
 DEFAULT_SAMPLES = 20
 DEFAULT_WARMUPS = 1
+REPORT_SCHEMA = "aobus-performance-review/v2"
 
 
 def _positive_integer(value: str) -> int:
@@ -85,24 +86,62 @@ def _print_report(path: Path) -> None:
     except (OSError, json.JSONDecodeError) as exc:
         raise die(f"could not read performance report '{path}': {exc}") from exc
 
-    if report.get("schema") != "aobus-performance-review/v1":
+    if not isinstance(report, dict) or report.get("schema") != REPORT_SCHEMA:
         raise die(f"performance report '{path}' has an unsupported schema")
 
-    metadata = report["metadata"]
+    metadata = report.get("metadata")
+    measurements = report.get("measurements")
+    if not isinstance(metadata, dict) or not isinstance(measurements, list):
+        raise die(f"performance report '{path}' is missing metadata or measurements")
+
+    for key in ("platform", "build_mode", "compiler", "icu_version"):
+        if not isinstance(metadata.get(key), str) or not metadata[key]:
+            raise die(f"performance report '{path}' has invalid metadata field '{key}'")
+
     print()
     print(
         f"Performance review: {metadata['platform']} {metadata['build_mode']} "
         f"{metadata['compiler']}, ICU {metadata['icu_version']}"
     )
-    for measurement in report["measurements"]:
+    for index, measurement in enumerate(measurements):
+        context = f"measurement {index}"
+        if not isinstance(measurement, dict):
+            raise die(f"performance report '{path}' has invalid {context}")
+
+        for key in ("capability", "scenario", "dataset"):
+            if not isinstance(measurement.get(key), str) or not measurement[key]:
+                raise die(f"performance report '{path}' has invalid {context} field '{key}'")
+
+        for key in ("input_count", "median_ns", "p95_ns"):
+            if type(measurement.get(key)) is not int:
+                raise die(f"performance report '{path}' has invalid {context} field '{key}'")
+
+        for key in ("policy", "locale"):
+            if key in measurement and (not isinstance(measurement[key], str) or not measurement[key]):
+                raise die(f"performance report '{path}' has invalid {context} field '{key}'")
+
+        byte_metric = measurement.get("byte_metric")
+        if byte_metric is not None and (
+            not isinstance(byte_metric, dict)
+            or not isinstance(byte_metric.get("kind"), str)
+            or not byte_metric["kind"]
+            or type(byte_metric.get("count")) is not int
+        ):
+            raise die(f"performance report '{path}' has invalid {context} field 'byte_metric'")
+
         median_ms = measurement["median_ns"] / 1_000_000
         p95_ms = measurement["p95_ns"] / 1_000_000
-        print(
-            f"  {measurement['policy']}/{measurement['scenario']}/"
-            f"{measurement['locale']}/{measurement['dataset']}-{measurement['track_count']}: "
-            f"median {median_ms:.3f} ms, p95 {p95_ms:.3f} ms, "
-            f"{measurement['generated_key_bytes']} key bytes"
-        )
+        dimensions = [measurement["capability"]]
+        if policy := measurement.get("policy"):
+            dimensions.append(policy)
+        dimensions.append(measurement["scenario"])
+        if locale := measurement.get("locale"):
+            dimensions.append(locale)
+        dimensions.append(f"{measurement['dataset']}-{measurement['input_count']}")
+        summary = f"  {'/'.join(dimensions)}: median {median_ms:.3f} ms, p95 {p95_ms:.3f} ms"
+        if byte_metric is not None:
+            summary += f", {byte_metric['count']} {byte_metric['kind']}"
+        print(summary)
     print(f"  Report: {path}")
 
 

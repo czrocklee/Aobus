@@ -197,6 +197,7 @@ add_dependencies(aobus-gtk-lib ao_frontend_library_path_boundary_check ao_linux_
 add_executable(aobus-gtk main.cpp)
 target_link_libraries(aobus-gtk PRIVATE
     aobus-gtk-lib
+    ao_app_i18n_completion
     ao_app_i18n_ordering
     ao_app_i18n
     ao

@@ -29,36 +29,89 @@ namespace ao::uimodel
       return lhs.frequency > rhs.frequency || (lhs.frequency == rhs.frequency && lhs.value < rhs.value);
     }
 
+    void insertRanked(std::vector<rt::VocabularyEntry const*>& matches,
+                      rt::VocabularyEntry const& entry,
+                      std::size_t const limit)
+    {
+      auto const position = std::ranges::lower_bound(matches,
+                                                     &entry,
+                                                     [](rt::VocabularyEntry const* lhs, rt::VocabularyEntry const* rhs)
+                                                     { return rankedBefore(*lhs, *rhs); });
+
+      if (matches.size() < limit)
+      {
+        matches.insert(position, &entry);
+      }
+      else if (position != matches.end())
+      {
+        matches.insert(position, &entry);
+        matches.pop_back();
+      }
+    }
+
     std::vector<rt::VocabularyEntry const*> bestMatches(std::span<rt::VocabularyEntry const> vocabulary,
                                                         std::string_view prefix,
                                                         std::size_t limit)
     {
-      auto matches = std::vector<rt::VocabularyEntry const*>{};
-      matches.reserve(limit + 1);
+      auto directMatches = std::vector<rt::VocabularyEntry const*>{};
+      auto wordMatches = std::vector<rt::VocabularyEntry const*>{};
+      directMatches.reserve(limit + 1);
+      wordMatches.reserve(limit + 1);
 
       for (auto const& entry : vocabulary)
       {
-        if (!rt::startsWithCompletionPrefixInsensitive(entry.value, prefix))
+        auto const optMatchOffset = rt::findCompletionWordPrefixInsensitive(entry.value, prefix);
+
+        if (!optMatchOffset)
         {
           continue;
         }
 
-        auto const position = std::ranges::lower_bound(
-          matches,
-          &entry,
-          [](rt::VocabularyEntry const* lhs, rt::VocabularyEntry const* rhs) { return rankedBefore(*lhs, *rhs); });
+        insertRanked(*optMatchOffset == 0 ? directMatches : wordMatches, entry, limit);
+      }
 
-        if (matches.size() < limit)
+      auto matches = std::move(directMatches);
+
+      if (matches.size() < limit)
+      {
+        auto const wordCount = std::min(wordMatches.size(), limit - matches.size());
+
+        for (std::size_t index = 0; index < wordCount; ++index)
         {
-          matches.insert(position, &entry);
-        }
-        else if (position != matches.end())
-        {
-          matches.insert(position, &entry);
-          matches.pop_back();
+          matches.push_back(wordMatches[index]);
         }
       }
 
+      if (matches.size() >= limit)
+      {
+        return matches;
+      }
+
+      auto const optAliasPrefix = rt::makeCompletionAliasPrefixKey(prefix);
+
+      if (!optAliasPrefix)
+      {
+        return matches;
+      }
+
+      auto aliasMatches = std::vector<rt::VocabularyEntry const*>{};
+      auto const aliasLimit = limit - matches.size();
+      aliasMatches.reserve(aliasLimit + 1);
+
+      for (auto const& entry : vocabulary)
+      {
+        if (entry.aliases.empty() ||
+            std::ranges::none_of(
+              entry.aliases, [&](std::string_view const alias) { return alias.starts_with(*optAliasPrefix); }) ||
+            rt::findCompletionWordPrefixInsensitive(entry.value, prefix))
+        {
+          continue;
+        }
+
+        insertRanked(aliasMatches, entry, aliasLimit);
+      }
+
+      matches.insert(matches.end(), aliasMatches.begin(), aliasMatches.end());
       return matches;
     }
   } // namespace

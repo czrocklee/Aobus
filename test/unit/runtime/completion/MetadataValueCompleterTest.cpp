@@ -5,6 +5,7 @@
 
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -84,6 +85,24 @@ namespace ao::rt::test
     CHECK(artistCompleter.complete("artist", 0).empty());
   }
 
+  TEST_CASE("MetadataValueCompleter - whole-value prefixes outrank interior word prefixes",
+            "[runtime][unit][completion-value][ranking]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    addMetadataValueTrack(libraryFixture, "Trevor Pinnock", "One");
+    addMetadataValueTrack(libraryFixture, "Trevor Pinnock", "Two");
+    addMetadataValueTrack(libraryFixture, "Pinnock Ensemble", "Three");
+
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto service = CompletionService{libraryFixture.library(), changes};
+    auto completer = MetadataValueCompleter{service, TrackField::Artist};
+
+    CHECK(insertTexts(completer.complete("pinn")) == std::vector<std::string>{"Pinnock Ensemble", "Trevor Pinnock"});
+    CHECK(insertTexts(completer.complete("PINNOCK", 1)) == std::vector<std::string>{"Pinnock Ensemble"});
+    CHECK(completer.complete("innock").empty());
+    CHECK(completer.complete("pinnok").empty());
+  }
+
   TEST_CASE("MetadataValueCompleter - adapts entry text to whole-value replacement",
             "[runtime][unit][completion-value][provider]")
   {
@@ -104,5 +123,24 @@ namespace ao::rt::test
 
     auto unsupportedProvider = MetadataValueCompleter{service, TrackField::Title}.asProvider();
     CHECK_FALSE(unsupportedProvider("Metadata", 3));
+  }
+
+  TEST_CASE("MetadataValueCompleter - alias matches preserve source text and rank below direct matches",
+            "[runtime][unit][completion-alias][value]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    addMetadataValueTrack(libraryFixture, "周杰倫", "One");
+    addMetadataValueTrack(libraryFixture, "周杰倫", "Two");
+    addMetadataValueTrack(libraryFixture, "Zhou Direct", "Three");
+    addMetadataValueTrack(libraryFixture, "hanハンバート", "Four");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
+    auto service = CompletionService{libraryFixture.library(), changes, nullptr, aliasPolicyPtr.get()};
+    auto completer = MetadataValueCompleter{service, TrackField::Artist};
+
+    CHECK(insertTexts(completer.complete("zhoujielun")) == std::vector<std::string>{"周杰倫"});
+    CHECK(insertTexts(completer.complete("zhou", 1)) == std::vector<std::string>{"Zhou Direct"});
+    CHECK(insertTexts(completer.complete("han")) == std::vector<std::string>{"hanハンバート"});
+    CHECK(completer.complete("周abc").empty());
   }
 } // namespace ao::rt::test

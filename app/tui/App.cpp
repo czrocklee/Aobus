@@ -713,7 +713,8 @@ namespace ao::tui
   std::int32_t run(AppOptions const& options,
                    uimodel::PresentationTextCatalog const& textCatalog,
                    TuiTextCatalog const& tuiTextCatalog,
-                   rt::TextOrderingPolicy const& textOrderingPolicy)
+                   rt::TextOrderingPolicy const& textOrderingPolicy,
+                   rt::CompletionAliasPolicy const& completionAliasPolicy)
   {
     auto const coverArtMode = parseCoverArtMode(options.coverArtMode);
     auto const kittyCoverArt = shouldUseKittyCoverArt(coverArtMode);
@@ -749,6 +750,7 @@ namespace ao::tui
       .cacheDirectory = resolveCacheDirectory(),
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
       .textOrderingPolicy = &textOrderingPolicy,
+      .completionAliasPolicy = &completionAliasPolicy,
     });
 
     if (!runtimeRes)

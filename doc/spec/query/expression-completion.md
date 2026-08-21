@@ -38,6 +38,7 @@ Core analysis is public under `include/ao/query/`; runtime composition is public
 - Applying a completion replaces exactly the reported range.
 - A completion item always inserts the canonical `$` or `@` variable even when an alias triggered it.
 - Runtime live values are suggestions only; their absence does not change what the language accepts.
+- A transient romanized alias may select a live source value, but the item displays and serializes that original value; aliases never become expression syntax or predicate semantics.
 
 ## Completion contexts
 
@@ -79,6 +80,7 @@ After a complete binary operator, and inside subsequent elements of an `in [...]
 Runtime suggestions are currently provided only for query fields whose typed reverse bridge resolves to a value-completable runtime track field.
 
 Insertion serializes the suggested value as a string constant, so a value such as `Massive Attack` becomes `"Massive Attack"`.
+When a completion alias matches, the same serializer receives the original admitted source text rather than the typed alias.
 Custom values, numeric templates, unit templates, and codec templates are not currently populated.
 
 ## State model
@@ -88,6 +90,8 @@ Otherwise it returns one typed context carrying its replacement range and typed 
 
 `QueryExpressionCompleter` visits that context, applies the requested result limit, and returns no `CompletionResult` when no items remain.
 Results are ordered by their owning catalog or live-vocabulary rank and receive monotonic runtime rank values in that order.
+For a live vocabulary, whole-value prefix matches precede interior ASCII-delimited word-prefix matches, which precede alias-prefix matches; an entry satisfying more than one path appears once in its highest tier.
+Alias-prefix compaction and the minimum-length/non-ASCII gates are owned by [track-field value completion](../presentation/field-completion.md).
 
 ## Failure and cancellation
 

@@ -6,6 +6,8 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/i18n/IcuCompletionAliases.h>
+#include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -44,13 +46,15 @@ namespace ao::rt::test
 
     QueryExpressionCompleter makeCompleter(MusicLibraryFixture& libraryFixture,
                                            std::unique_ptr<LibraryChanges>& changesPtr,
-                                           std::unique_ptr<CompletionService>& servicePtr)
+                                           std::unique_ptr<CompletionService>& servicePtr,
+                                           CompletionAliasPolicy const* completionAliasPolicy = nullptr)
     {
       static thread_local auto executor = InlineExecutor{};
       auto const transaction = libraryFixture.library().readTransaction();
       changesPtr = std::make_unique<LibraryChanges>(
         executor, libraryFixture.library().libraryRevision(transaction), "test-library");
-      servicePtr = std::make_unique<CompletionService>(libraryFixture.library(), *changesPtr);
+      servicePtr =
+        std::make_unique<CompletionService>(libraryFixture.library(), *changesPtr, nullptr, completionAliasPolicy);
       return QueryExpressionCompleter{*servicePtr};
     }
 
@@ -79,7 +83,7 @@ namespace ao::rt::test
     REQUIRE(optAlbum);
     CHECK(optAlbum->replaceBegin == 0);
     CHECK(optAlbum->replaceEnd == 3);
-    CHECK(insertTexts(optAlbum->items) == std::vector<std::string>{"$album", "$albumArtist"});
+    REQUIRE(insertTexts(optAlbum->items) == std::vector<std::string>{"$album", "$albumArtist"});
     CHECK(optAlbum->items[0].detail.kind == CompletionDetailKind::Alias);
 
     auto optTrackNumber = completer.complete("$tn", 3);
@@ -152,6 +156,8 @@ namespace ao::rt::test
     auto tags = std::vector<std::string>{};
     auto custom = std::vector<std::pair<std::string, std::string>>{};
     addCompletionTrack(libraryFixture, tags, custom);
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Second", .artist = "Trevor Pinnock"});
 
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
@@ -161,8 +167,8 @@ namespace ao::rt::test
     REQUIRE(optArtist);
     CHECK(optArtist->replaceBegin == 10);
     CHECK(optArtist->replaceEnd == 12);
+    REQUIRE(insertTexts(optArtist->items) == std::vector<std::string>{R"("Artist")"});
     CHECK(optArtist->items.front().displayText == "Artist");
-    CHECK(insertTexts(optArtist->items) == std::vector<std::string>{R"("Artist")"});
 
     auto optListCompletion = completer.complete("$artist in [Ar", 14);
     REQUIRE(optListCompletion);
@@ -176,7 +182,32 @@ namespace ao::rt::test
     CHECK(optConductor->replaceEnd == 16);
     CHECK(insertTexts(optConductor->items) == std::vector<std::string>{R"("Conductor")"});
 
+    auto const wordExpression = std::string{"$artist = pinnock"};
+    auto optWordPrefix = completer.complete(wordExpression, wordExpression.size());
+    REQUIRE(optWordPrefix);
+    CHECK(insertTexts(optWordPrefix->items) == std::vector<std::string>{R"("Trevor Pinnock")"});
+
     CHECK_FALSE(completer.complete(R"(%"Mood" = Br)", 12));
+  }
+
+  TEST_CASE("QueryExpressionCompleter - romanized value completion inserts the original expression value",
+            "[runtime][unit][completion-alias][completion-query]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "周杰倫"});
+    auto changesPtr = std::unique_ptr<LibraryChanges>{};
+    auto servicePtr = std::unique_ptr<CompletionService>{};
+    auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
+    auto completer = makeCompleter(libraryFixture, changesPtr, servicePtr, aliasPolicyPtr.get());
+    auto const expression = std::string{"$artist = zhoujielun"};
+    auto const optResult = completer.complete(expression, expression.size());
+
+    REQUIRE(optResult);
+    CHECK(optResult->replaceBegin == std::string_view{"$artist = "}.size());
+    CHECK(optResult->replaceEnd == expression.size());
+    REQUIRE(insertTexts(optResult->items) == std::vector<std::string>{R"("周杰倫")"});
+    CHECK(optResult->items.front().displayText == "周杰倫");
   }
 
   TEST_CASE("QueryExpressionCompleter - completes tag and custom-key variables",
@@ -199,7 +230,7 @@ namespace ao::rt::test
     REQUIRE(optBareTag);
     CHECK(optBareTag->replaceBegin == 0);
     CHECK(optBareTag->replaceEnd == 5);
-    CHECK(insertTexts(optBareTag->items) == std::vector<std::string>{"#Rock"});
+    CHECK(insertTexts(optBareTag->items) == std::vector<std::string>{"#Rock", R"(#"90s Rock")"});
 
     auto optCustomKey = completer.complete("%Replay", 7);
     REQUIRE(optCustomKey);

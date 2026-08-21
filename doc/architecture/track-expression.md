@@ -62,6 +62,9 @@ The runtime `TrackFieldDefinition` catalog bridges application fields to those c
 `CompletionService` derives its value-completable fields and dictionary extraction from that bridge, and `QueryExpressionCompleter` combines the live vocabularies with core completion analysis through the reverse mapping.
 The service captures titles, tags, custom keys, and dictionary-backed track fields in one source-preserving live frequency snapshot after invalidation.
 Single-field completion and a caller-selected cross-field aggregate materialize from that snapshot without additional track-store scans; runtime owns storage access and invalidation but not the aggregate field choice.
+Interactive composition roots may also inject an ICU-free completion-alias policy.
+The runtime derives transient romanized aliases once per dictionary id or inline-title slot in that same snapshot, while consumers continue to display and insert the admitted source text.
+The ICU implementation remains in an interactive leaf target; the CLI supplies no policy and neither runtime headers nor the query core expose ICU types.
 The runtime does not redefine expression grammar or field aliases.
 
 ### UIModel authoring and recommendation
@@ -78,7 +81,8 @@ That inspection selects a view shape only; it never changes membership or expres
 ### Frontend adapters
 
 GTK and TUI bind the same UIModel filter completion and resolution results to their native interaction models.
-They send the resolved expression to runtime rather than evaluating tracks themselves.
+WinUI binds the same resolution policy but does not currently expose filter completion candidates.
+All three send the resolved expression to runtime rather than evaluating tracks themselves.
 
 The CLI uses the core predicate path for `--filter` and the core string path for `track show --format`.
 The format path currently terminates at plain CLI output and is not a track-list presentation mechanism.
@@ -156,6 +160,7 @@ cursor + incomplete expression
   -> runtime query completer
        + core variable/operator catalog
        + live tag/custom/value vocabulary
+       + optional transient source-text aliases
   -> frontend-neutral replacement range, syntax, typed detail, and rank
   -> UIModel presentation-text resolution
   -> GTK/TUI adapter
@@ -191,6 +196,8 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 - Quick search expansion is UIModel policy, not grammar; direct query entry points receive expression text.
 - Quick search emits ordinary `~` expressions and relies on the core language's Unicode-caseless text semantic rather than passing an out-of-band evaluator option.
 - Runtime aggregate vocabulary requests carry typed fields selected by UIModel; no Quick-search or frontend role is added to runtime field metadata.
+- Completion aliases are transient spelling aids over live vocabulary values; they never enter expression text, query evaluation, library identity, grouping, ordering, LMDB, or YAML.
+- Interactive alias matching may suggest an admitted source value, but submitting the unselected romanized input retains the ordinary query and Quick-filter predicate semantics.
 - The runtime field catalog may advertise a query-variable bridge only when that typed field resolves in the core query descriptor catalog.
 - Query-to-runtime reverse lookup, value-completion eligibility, quick-search construction, and presentation recommendation consume that typed identity instead of maintaining raw variable-name mappings.
 - A frontend must not scan `MusicLibrary` to implement ordinary expression evaluation or completion when a runtime service exists.
@@ -205,6 +212,8 @@ View filtering publishes the accepted expression, replacement projection, revisi
 
 Completion is synchronous and tolerant of incomplete text.
 `CompletionService` caches are owner-thread confined; committed track insertion, mutation, deletion, or library reset invalidates the shared snapshot before its next lazy one-pass rebuild.
+Its optional completion-alias policy is borrowed from the interactive composition root, and snapshot rebuild retires every borrowed alias range before replacing the snapshot-owned alias records.
+Failure to derive an alias from already-admitted text is an invariant failure rather than a per-entry fallback to mixed matching rules.
 
 Execution and format plans own no dictionary state.
 `PlanBinding` and `FormatBinding` borrow their plan and a synchronous `DictionaryReadContext`; those bindings and the context cannot outlive the backing `MusicLibrary`.
@@ -227,6 +236,7 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`ListOrderSource`](../../app/include/ao/rt/source/ListOrderSource.h) applies independent saved rank after predicate evaluation.
 - [`ViewService`](../../app/include/ao/rt/ViewService.h) combines base list, transient filter, presentation, and projection state.
 - [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live runtime completion.
+- [`CompletionAliasPolicy`](../../app/include/ao/rt/completion/CompletionAliasPolicy.h) defines the ICU-free alias seam; [`IcuCompletionAliases`](../../app/include/ao/i18n/IcuCompletionAliases.h) supplies the interactive implementation.
 - [`TrackFilterResolver`](../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) own shared quick-filter authoring and completion policy.
 - [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) resolves completion roles and counts without changing query syntax.
 - [`TrackCommand.cpp`](../../app/cli/TrackCommand.cpp) is the current format-expression consumer.

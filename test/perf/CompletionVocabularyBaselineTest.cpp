@@ -8,7 +8,11 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/Error.h>
+#include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -23,6 +27,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <format>
 #include <optional>
 #include <string_view>
@@ -37,6 +42,12 @@ namespace ao::rt::test
     constexpr std::size_t kMeasuredRuns = 5;
     constexpr std::size_t kLookupIterations = 100;
     constexpr std::size_t kLookupLimit = 8;
+    constexpr auto kRepresentativeAliasValues = std::to_array<std::string_view>({
+      "周杰倫",
+      "宇多田ヒカル",
+      "行かないで",
+      "ﾊﾝﾊﾞｰﾄ",
+    });
     constexpr auto kRepresentativeQuickFilterFields = std::to_array({
       TrackField::Title,
       TrackField::Artist,
@@ -209,34 +220,55 @@ namespace ao::rt::test
     Log::initialize(LogLevel::Info);
     auto libraryFixture = MusicLibraryFixture{};
 
-    for (std::size_t index = 0; index < kTrackCount; ++index)
-    {
-      libraryFixture.addTrack(library::test::TrackSpec{
-        .title = std::format("Track {:05}", index),
-        .artist = std::format("Artist {:05}", index % (kTrackCount / 10)),
-        .album = std::format("Album {:05}", index % (kTrackCount / 5)),
-        .albumArtist = std::format("Album Artist {:04}", index % (kTrackCount / 50)),
-        .genre = std::format("Genre {:02}", index % 50),
-        .composer = std::format("Composer {:04}", index % (kTrackCount / 20)),
-        .conductor = std::format("Conductor {:03}", index % (kTrackCount / 100)),
-        .ensemble = std::format("Ensemble {:04}", index % (kTrackCount / 50)),
-        .work = std::format("Work {:05}", index % (kTrackCount / 2)),
-        .movement = std::format("Movement {:05}", index % (kTrackCount / 5)),
-        .soloist = std::format("Soloist {:05}", index % (kTrackCount / 10)),
-        .tags =
+    auto transaction = library::test::writeTransaction(libraryFixture.library());
+    auto populateRes = transaction.apply(
+      [&](library::LibraryWrite& write) -> Result<>
+      {
+        auto writer = write.tracks();
+
+        for (std::size_t index = 0; index < kTrackCount; ++index)
+        {
+          auto const spec = library::test::TrackSpec{
+            .title = std::format("Track {:05}", index),
+            .artist = std::format("Artist {:05}", index % (kTrackCount / 10)),
+            .album = std::format("Album {:05}", index % (kTrackCount / 5)),
+            .albumArtist = std::format("Album Artist {:04}", index % (kTrackCount / 50)),
+            .genre = std::format("Genre {:02}", index % 50),
+            .composer = std::format("Composer {:04}", index % (kTrackCount / 20)),
+            .conductor = std::format("Conductor {:03}", index % (kTrackCount / 100)),
+            .ensemble = std::format("Ensemble {:04}", index % (kTrackCount / 50)),
+            .work = std::format("Work {:05}", index % (kTrackCount / 2)),
+            .movement = std::format("Movement {:05}", index % (kTrackCount / 5)),
+            .soloist = std::format("Soloist {:05}", index % (kTrackCount / 10)),
+            .uri = std::format("completion-baseline/{:06}.flac", index),
+            .tags =
+              {
+                std::format("Tag {:02}", index % 100),
+                std::format("Mood {:02}", index % 20),
+                std::string{kRepresentativeAliasValues[index % kRepresentativeAliasValues.size()]},
+              },
+            .customMetadata = {{std::format("Custom Key {:02}", index % 20), "Value"}},
+          };
+          auto builder = library::TrackBuilder::makeEmpty();
+          library::test::applyTrackSpec(builder, spec);
+
+          if (auto createRes = writer.create(builder, library::FileManifestBuilder::makeEmpty()); !createRes)
           {
-            std::format("Tag {:02}", index % 100),
-            std::format("Mood {:02}", index % 20),
-          },
-        .customMetadata = {{std::format("Custom Key {:02}", index % 20), "Value"}},
+            return std::unexpected{createRes.error()};
+          }
+        }
+
+        return {};
       });
-    }
+    REQUIRE(populateRes);
+    REQUIRE(transaction.commit());
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto executor = InlineExecutor{};
     auto mutationService =
       LibraryMutationService{executor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
-    auto service = CompletionService{libraryFixture.library(), changes};
+    auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
+    auto service = CompletionService{libraryFixture.library(), changes, nullptr, aliasPolicyPtr.get()};
     auto const vocabulary = measureVocabularyRebuilds(service, mutationService);
 
     APP_LOG_INFO("=== Shared completion vocabulary snapshot: {} tracks ===", kTrackCount);
@@ -262,37 +294,34 @@ namespace ao::rt::test
                  vocabulary.work.percentile95,
                  vocabulary.work.resultSize);
 
-    CHECK(vocabulary.tags.resultSize == 120);
+    CHECK(vocabulary.tags.resultSize == 124);
     CHECK(vocabulary.customKeys.resultSize == 20);
     CHECK(vocabulary.artist.resultSize == kTrackCount / 10);
     CHECK(vocabulary.work.resultSize == kTrackCount / 2);
-    REQUIRE(vocabulary.snapshotAndAggregate.resultSize == 93670);
+    REQUIRE(vocabulary.snapshotAndAggregate.resultSize == 93674);
 
     auto completer = uimodel::TrackFilterCompleter{service};
-    constexpr auto kLookupPrefixes = std::to_array<std::string_view>({
-      "Track",
-      "\"artist 049",
-      "\"Work 2499",
-      "missing",
+    constexpr auto kLookupPrefixes = std::to_array<std::pair<std::string_view, std::size_t>>({
+      {"Track", kLookupLimit},
+      {"\"artist 049", kLookupLimit},
+      {"\"Work 2499", kLookupLimit},
+      {"zhoujielun", 1},
+      {"hikaru", 1},
+      {"kanaide", 1},
+      {"hanbato", 1},
+      {"missing", 0},
     });
 
     APP_LOG_INFO("=== Cached Quick-filter lookup: {} iterations per sample ===", kLookupIterations);
 
-    for (auto const prefix : kLookupPrefixes)
+    for (auto const& [prefix, expectedSize] : kLookupPrefixes)
     {
       auto const timing = measureLookups(completer, prefix);
       APP_LOG_INFO(
         "  '{}': {} candidates; median/p95 {} / {} ns", prefix, timing.resultSize, timing.median, timing.percentile95);
       CHECK(timing.checksum != 0);
 
-      if (prefix == "missing")
-      {
-        CHECK(timing.resultSize == 0);
-      }
-      else
-      {
-        CHECK(timing.resultSize == kLookupLimit);
-      }
+      CHECK(timing.resultSize == expectedSize);
     }
   }
 } // namespace ao::rt::test

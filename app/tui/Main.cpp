@@ -5,6 +5,7 @@
 #include "TuiTextCatalog.h"
 #include <ao/AppVersion.h>
 #include <ao/Contract.h>
+#include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
@@ -114,10 +115,14 @@ int main(int argc, char* argv[])
     }
 
     auto textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
+    auto completionAliasPolicyPtr = ao::i18n::createIcuCompletionAliasPolicy();
     auto const textCatalog = ao::uimodel::PresentationTextCatalog{catalog};
     auto const tuiTextCatalog = ao::tui::TuiTextCatalog{catalog};
-    return ao::tui::run(
-      parseOptions({argv, static_cast<std::size_t>(argc)}), textCatalog, tuiTextCatalog, *textOrderingPolicyPtr);
+    return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}),
+                        textCatalog,
+                        tuiTextCatalog,
+                        *textOrderingPolicyPtr,
+                        *completionAliasPolicyPtr);
   }
   catch (...)
   {

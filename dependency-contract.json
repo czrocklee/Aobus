@@ -98,7 +98,8 @@
         "unicode-17.0",
         "resource-bundles",
         "classic-message-format",
-        "locale-collation"
+        "locale-collation",
+        "script-transliteration"
       ]
     },
     "spdlog": {

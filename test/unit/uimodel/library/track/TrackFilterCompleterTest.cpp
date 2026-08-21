@@ -5,6 +5,7 @@
 
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
@@ -77,7 +78,9 @@ namespace ao::uimodel::test
       auto const optResult = completer.complete(prefix, prefix.size());
 
       REQUIRE(optResult);
-      CHECK(displayTexts(*optResult).front() == expected);
+      auto const values = displayTexts(*optResult);
+      REQUIRE_FALSE(values.empty());
+      CHECK(values.front() == expected);
     }
 
     CHECK_FALSE(completer.complete("Conductor", std::string_view{"Conductor"}.size()));
@@ -101,7 +104,7 @@ namespace ao::uimodel::test
     auto const optResult = completer.complete("Al", 2, 2);
 
     REQUIRE(optResult);
-    CHECK(displayTexts(*optResult) == std::vector<std::string>{"Alpha", "Albatross"});
+    REQUIRE(displayTexts(*optResult) == std::vector<std::string>{"Alpha", "Albatross"});
     CHECK(optResult->items[0].detail.kind == rt::CompletionDetailKind::Frequency);
     CHECK(optResult->items[0].detail.frequency == 3);
     CHECK(optResult->items[0].rank == 0);
@@ -126,6 +129,25 @@ namespace ao::uimodel::test
     CHECK(optResult->replaceBegin == 5);
     CHECK(optResult->replaceEnd == 9);
     CHECK(applyFirst(text, *optResult) == "road \"Alpha\" trip");
+  }
+
+  TEST_CASE("TrackFilterCompleter - completes word prefixes without fuzzy correction",
+            "[uimodel][unit][track-filter-completion][word-prefix]")
+  {
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "Trevor Pinnock"});
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
+    auto completer = TrackFilterCompleter{vocabulary};
+    auto const prefix = std::string{"pinnock"};
+    auto const optResult = completer.complete(prefix, prefix.size());
+
+    REQUIRE(optResult);
+    CHECK(displayTexts(*optResult) == std::vector<std::string>{"Trevor Pinnock"});
+    CHECK(applyFirst(prefix, *optResult) == query::serialize(query::ConstantExpression{"Trevor Pinnock"}));
+    CHECK_FALSE(completer.complete("innock", std::string_view{"innock"}.size()));
+    CHECK_FALSE(completer.complete("pinnok", std::string_view{"pinnok"}.size()));
   }
 
   TEST_CASE("TrackFilterCompleter - quotes inserted values for lossless Quick-filter resolution",
@@ -161,15 +183,83 @@ namespace ao::uimodel::test
 
     auto optResult = completer.complete("P!n", 3);
     REQUIRE(optResult);
-    CHECK(displayTexts(*optResult).front() == "P!nk");
+    auto const values = displayTexts(*optResult);
+    REQUIRE_FALSE(values.empty());
+    CHECK(values.front() == "P!nk");
     CHECK(resolveTrackFilterExpression("P!nk").mode == TrackFilterMode::Quick);
 
     optResult = completer.complete("$ar", 3);
     REQUIRE(optResult);
+    REQUIRE_FALSE(optResult->items.empty());
     CHECK(optResult->items.front().insertText == "$artist");
     CHECK(resolveTrackFilterExpression("$artist = \"P!nk\"").mode == TrackFilterMode::Expression);
 
     CHECK_FALSE(completer.complete("", 0));
     CHECK_FALSE(completer.complete("road ", 5));
+  }
+
+  TEST_CASE("TrackFilterCompleter - romanized completion remains an original-text selection aid",
+            "[uimodel][unit][completion-alias][track-filter-completion]")
+  {
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "周杰倫"});
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
+    auto vocabulary = rt::CompletionService{libraryFixture.library(), changes, nullptr, aliasPolicyPtr.get()};
+    auto completer = TrackFilterCompleter{vocabulary};
+    auto const optResult = completer.complete("zhoujielun", std::string_view{"zhoujielun"}.size());
+
+    REQUIRE(optResult);
+    CHECK(displayTexts(*optResult) == std::vector<std::string>{"周杰倫"});
+    auto const completed = applyFirst("zhoujielun", *optResult);
+    CHECK(completed == query::serialize(query::ConstantExpression{"周杰倫"}));
+    CHECK(query::parse(resolveTrackFilterExpression(completed).expression).has_value());
+
+    auto const unresolved = resolveTrackFilterExpression("zhoujielun");
+    CHECK(unresolved.mode == TrackFilterMode::Quick);
+    CHECK_FALSE(unresolved.expression.contains("周杰倫"));
+    CHECK_FALSE(completer.complete("周abc", std::string_view{"周abc"}.size()));
+  }
+
+  TEST_CASE("TrackFilterCompleter - direct matches outrank aliases and alias collisions remain distinct",
+            "[uimodel][unit][completion-alias][track-filter-completion]")
+  {
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "周杰倫"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Two", .artist = "周杰倫"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Three", .artist = "Zhou Direct"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Four", .artist = "王菲"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Five", .artist = "王妃"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Six", .artist = "宇多田ヒカル"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Seven", .artist = "久石譲"});
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
+    auto vocabulary = rt::CompletionService{libraryFixture.library(), changes, nullptr, aliasPolicyPtr.get()};
+    auto completer = TrackFilterCompleter{vocabulary};
+
+    auto optResult = completer.complete("zhou", 4, 1);
+    REQUIRE(optResult);
+    CHECK(displayTexts(*optResult) == std::vector<std::string>{"Zhou Direct"});
+
+    optResult = completer.complete("wangfei", 7);
+    REQUIRE(optResult);
+    CHECK(displayTexts(*optResult) == std::vector<std::string>{"王妃", "王菲"});
+
+    optResult = completer.complete("hikaru", 6);
+    REQUIRE(optResult);
+    CHECK(displayTexts(*optResult) == std::vector<std::string>{"宇多田ヒカル"});
+
+    CHECK_FALSE(completer.complete("hisaishijoe", 11));
+    optResult = completer.complete("jiushirang", 10);
+    REQUIRE(optResult);
+    CHECK(displayTexts(*optResult) == std::vector<std::string>{"久石譲"});
   }
 } // namespace ao::uimodel::test

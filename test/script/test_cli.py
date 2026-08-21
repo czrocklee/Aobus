@@ -222,7 +222,7 @@ class CliParseTest(unittest.TestCase):
                 Path(env["AOBUS_PERF_REPORT_JSON"]).write_text(
                     json.dumps(
                         {
-                            "schema": "aobus-performance-review/v1",
+                            "schema": "aobus-performance-review/v2",
                             "metadata": {
                                 "platform": "linux",
                                 "build_mode": "release",
@@ -285,13 +285,13 @@ class CliParseTest(unittest.TestCase):
 
             self.assertFalse(output.exists())
 
-    def test_perf_summary_distinguishes_measurement_locales(self):
+    def test_perf_summary_supports_capability_specific_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             report_path = Path(temp_dir) / "review.json"
             report_path.write_text(
                 json.dumps(
                     {
-                        "schema": "aobus-performance-review/v1",
+                        "schema": "aobus-performance-review/v2",
                         "metadata": {
                             "platform": "linux",
                             "build_mode": "release",
@@ -300,15 +300,33 @@ class CliParseTest(unittest.TestCase):
                         },
                         "measurements": [
                             {
+                                "capability": "ordering",
                                 "policy": "icu-secondary",
                                 "scenario": "construction",
                                 "locale": "de-DE",
                                 "dataset": "none",
-                                "track_count": 0,
+                                "input_count": 0,
                                 "median_ns": 125_000,
                                 "p95_ns": 250_000,
-                                "generated_key_bytes": 0,
-                            }
+                            },
+                            {
+                                "capability": "completion-alias",
+                                "scenario": "direct-hit",
+                                "dataset": "ascii",
+                                "input_count": 50_000,
+                                "median_ns": 500_000,
+                                "p95_ns": 750_000,
+                            },
+                            {
+                                "capability": "completion-alias",
+                                "policy": "icu-transliteration",
+                                "scenario": "alias-hit",
+                                "dataset": "cjk",
+                                "input_count": 5_000,
+                                "median_ns": 1_500_000,
+                                "p95_ns": 2_000_000,
+                                "byte_metric": {"kind": "snapshot-alias-bytes", "count": 2048},
+                            },
                         ],
                     }
                 ),
@@ -319,7 +337,100 @@ class CliParseTest(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 perf_command._print_report(report_path)
 
-        self.assertIn("icu-secondary/construction/de-DE/none-0", output.getvalue())
+        self.assertIn("ordering/icu-secondary/construction/de-DE/none-0", output.getvalue())
+        self.assertIn("completion-alias/direct-hit/ascii-50000", output.getvalue())
+        self.assertIn("completion-alias/icu-transliteration/alias-hit/cjk-5000", output.getvalue())
+        self.assertIn("2048 snapshot-alias-bytes", output.getvalue())
+
+    def test_perf_summary_rejects_missing_required_measurement_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "review.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "aobus-performance-review/v2",
+                        "metadata": {
+                            "platform": "linux",
+                            "build_mode": "release",
+                            "compiler": "gcc",
+                            "icu_version": "78.3",
+                        },
+                        "measurements": [
+                            {
+                                "capability": "completion-alias",
+                                "scenario": "alias-hit",
+                                "dataset": "cjk",
+                                "median_ns": 1,
+                                "p95_ns": 2,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SystemExit):
+                perf_command._print_report(report_path)
+
+    def test_perf_summary_rejects_empty_dimensions(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "review.json"
+            metadata = {
+                "platform": "linux",
+                "build_mode": "release",
+                "compiler": "gcc",
+                "icu_version": "78.3",
+            }
+            measurement = {
+                "capability": "completion-alias",
+                "scenario": "alias-hit",
+                "dataset": "cjk",
+                "input_count": 5_000,
+                "median_ns": 1,
+                "p95_ns": 2,
+                "policy": "icu-transliteration",
+                "locale": "und",
+                "byte_metric": {"kind": "snapshot-alias-bytes", "count": 128},
+            }
+
+            for section, key in (
+                (metadata, "platform"),
+                (measurement, "capability"),
+                (measurement, "scenario"),
+                (measurement, "dataset"),
+                (measurement, "policy"),
+                (measurement, "locale"),
+                (measurement["byte_metric"], "kind"),
+            ):
+                with self.subTest(key=key):
+                    original = section[key]
+                    section[key] = ""
+                    report_path.write_text(
+                        json.dumps(
+                            {
+                                "schema": "aobus-performance-review/v2",
+                                "metadata": metadata,
+                                "measurements": [measurement],
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+
+                    with self.assertRaises(SystemExit):
+                        perf_command._print_report(report_path)
+
+                    section[key] = original
+
+    def test_perf_summary_rejects_unsupported_report_schema(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "review.json"
+            report_path.write_text(
+                json.dumps({"schema": "aobus-performance-review/v1", "metadata": {}, "measurements": []}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SystemExit):
+                perf_command._print_report(report_path)
 
     def test_removed_optimization_flavors_are_rejected(self):
         commands = (

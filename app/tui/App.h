@@ -16,6 +16,7 @@ namespace ao::uimodel
 
 namespace ao::rt
 {
+  class CompletionAliasPolicy;
   class TextOrderingPolicy;
 }
 
@@ -34,5 +35,6 @@ namespace ao::tui
   std::int32_t run(AppOptions const& options,
                    uimodel::PresentationTextCatalog const& textCatalog,
                    TuiTextCatalog const& tuiTextCatalog,
-                   rt::TextOrderingPolicy const& textOrderingPolicy);
+                   rt::TextOrderingPolicy const& textOrderingPolicy,
+                   rt::CompletionAliasPolicy const& completionAliasPolicy);
 } // namespace ao::tui

@@ -16,6 +16,7 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -23,9 +24,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -33,6 +36,43 @@ namespace ao::rt::test
 {
   namespace
   {
+    class RecordingCompletionAliasPolicy final : public CompletionAliasPolicy
+    {
+    public:
+      Result<> makeAliasesInto(std::vector<std::string>& output, std::string_view const text) const override
+      {
+        _inputs.emplace_back(text);
+        output.clear();
+
+        if (text == "周杰倫")
+        {
+          output.emplace_back("zhoujielun");
+        }
+        else if (text == "王菲")
+        {
+          output.emplace_back("wangfei");
+        }
+        else if (text == "宇多田ヒカル")
+        {
+          output.emplace_back("hikaru");
+        }
+        else if (text == "音乐")
+        {
+          output.emplace_back("yinle");
+        }
+
+        return {};
+      }
+
+      std::size_t callCount(std::string_view const text) const
+      {
+        return static_cast<std::size_t>(std::ranges::count(_inputs, text));
+      }
+
+    private:
+      mutable std::vector<std::string> _inputs;
+    };
+
     std::vector<std::pair<std::string, std::uint32_t>> pairs(std::span<VocabularyEntry const> entries)
     {
       auto result = std::vector<std::pair<std::string, std::uint32_t>>{};
@@ -43,6 +83,11 @@ namespace ao::rt::test
       }
 
       return result;
+    }
+
+    std::vector<std::string> aliasValues(std::span<std::string const> aliases)
+    {
+      return {aliases.begin(), aliases.end()};
     }
 
     std::vector<std::pair<std::string, std::uint32_t>> sortedPairs(std::span<VocabularyEntry const> entries)
@@ -242,6 +287,71 @@ namespace ao::rt::test
             {"Other", 1},
             {"Shared", 1},
           });
+  }
+
+  TEST_CASE("CompletionService - one snapshot alias record serves every materialized vocabulary",
+            "[runtime][unit][completion-alias][cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "周杰倫", .artist = "周杰倫", .albumArtist = "周杰倫", .tags = {"周杰倫"}});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "Other", .artist = "王菲", .albumArtist = "宇多田ヒカル", .tags = {"音乐"}});
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto policy = RecordingCompletionAliasPolicy{};
+    auto service = CompletionService{libraryFixture.library(), changes, nullptr, &policy};
+
+    auto const artists = service.valuesFor(TrackField::Artist);
+    auto const shared = std::ranges::find(artists, std::string_view{"周杰倫"}, &VocabularyEntry::value);
+    REQUIRE(shared != artists.end());
+    REQUIRE(aliasValues(shared->aliases) == std::vector<std::string>{"zhoujielun"});
+    auto const* const borrowedAliasData = shared->aliases.data();
+
+    REQUIRE_FALSE(service.valuesFor(TrackField::AlbumArtist).empty());
+    REQUIRE_FALSE(service.tags().empty());
+    CHECK(shared->aliases.data() == borrowedAliasData);
+    CHECK(aliasValues(shared->aliases) == std::vector<std::string>{"zhoujielun"});
+
+    constexpr auto kFirstAggregate = std::to_array({TrackField::Title, TrackField::Artist});
+    auto aggregate = service.aggregateValues({.fields = kFirstAggregate, .includeTags = true});
+    auto aggregateShared = std::ranges::find(aggregate, std::string_view{"周杰倫"}, &VocabularyEntry::value);
+    REQUIRE(aggregateShared != aggregate.end());
+    CHECK(aggregateShared->frequency == 3);
+    CHECK(aliasValues(aggregateShared->aliases) == std::vector<std::string>{"zhoujielun"});
+
+    constexpr auto kSecondAggregate = std::to_array({TrackField::AlbumArtist, TrackField::Artist});
+    aggregate = service.aggregateValues({.fields = kSecondAggregate, .includeTags = true});
+    aggregateShared = std::ranges::find(aggregate, std::string_view{"周杰倫"}, &VocabularyEntry::value);
+    REQUIRE(aggregateShared != aggregate.end());
+    CHECK(aggregateShared->frequency == 3);
+    CHECK(policy.callCount("周杰倫") == 1);
+  }
+
+  TEST_CASE("CompletionService - snapshot invalidation retires stale aliases",
+            "[runtime][unit][completion-alias][cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "周杰倫"});
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto policy = RecordingCompletionAliasPolicy{};
+    auto service = CompletionService{libraryFixture.library(), changes, nullptr, &policy};
+
+    auto artists = service.valuesFor(TrackField::Artist);
+    REQUIRE(artists.size() == 1);
+    REQUIRE(aliasValues(artists.front().aliases) == std::vector<std::string>{"zhoujielun"});
+
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    REQUIRE(writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optArtist = "王菲"}));
+
+    artists = service.valuesFor(TrackField::Artist);
+    REQUIRE(artists.size() == 1);
+    CHECK(artists.front().value == "王菲");
+    CHECK(aliasValues(artists.front().aliases) == std::vector<std::string>{"wangfei"});
+    CHECK(policy.callCount("周杰倫") == 1);
+    CHECK(policy.callCount("王菲") == 1);
   }
 
   TEST_CASE("CompletionService - one library snapshot serves every live vocabulary",

@@ -23,6 +23,7 @@ namespace ao::uimodel
 
 namespace ao::rt
 {
+  class CompletionAliasPolicy;
   class TextOrderingPolicy;
 }
 
@@ -46,7 +47,8 @@ namespace ao::gtk
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
     uimodel::PresentationTextCatalog const& textCatalog,
     GtkTextCatalog const& gtkTextCatalog,
-    rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
+    rt::TextOrderingPolicy const* textOrderingPolicy = nullptr,
+    rt::CompletionAliasPolicy const* completionAliasPolicy = nullptr);
 
   Result<> activateLibraryWindow(Gtk::Application& app,
                                  Glib::RefPtr<MainWindow> const& windowPtr,

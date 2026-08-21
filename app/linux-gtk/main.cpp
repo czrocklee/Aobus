@@ -22,6 +22,7 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppPrefsState.h>
@@ -522,6 +523,7 @@ namespace
                          uimodel::PresentationTextCatalog const& textCatalog,
                          GtkTextCatalog const& gtkTextCatalog,
                          rt::TextOrderingPolicy const& textOrderingPolicy,
+                         rt::CompletionAliasPolicy const& completionAliasPolicy,
                          GtkStartupPlan const& startupPlan,
                          std::optional<LibraryRestartRequest>& optRestartRequest,
                          std::optional<std::string>& optDiagnosticMessage,
@@ -558,7 +560,8 @@ namespace
                            componentStateStorePtr,
                            textCatalog,
                            gtkTextCatalog,
-                           &textOrderingPolicy);
+                           &textOrderingPolicy,
+                           &completionAliasPolicy);
 
     if (!windowRes)
     {
@@ -633,7 +636,8 @@ namespace
                       ProcessSignalHandlers& processSignalHandlers,
                       uimodel::PresentationTextCatalog const& textCatalog,
                       GtkTextCatalog const& gtkTextCatalog,
-                      rt::TextOrderingPolicy const& textOrderingPolicy)
+                      rt::TextOrderingPolicy const& textOrderingPolicy,
+                      rt::CompletionAliasPolicy const& completionAliasPolicy)
   {
     auto argumentViews = std::vector<std::string_view>{};
     argumentViews.reserve(args.size());
@@ -769,6 +773,7 @@ namespace
        &textCatalog,
        &gtkTextCatalog,
        &textOrderingPolicy,
+       &completionAliasPolicy,
        &startupPlan,
        &optRestartRequest,
        &optDiagnosticMessage,
@@ -784,6 +789,7 @@ namespace
                           textCatalog,
                           gtkTextCatalog,
                           textOrderingPolicy,
+                          completionAliasPolicy,
                           startupPlan,
                           optRestartRequest,
                           optDiagnosticMessage,
@@ -874,13 +880,15 @@ int main(int argc, char* argv[])
     }
 
     auto textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
+    auto completionAliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
     auto const textCatalog = uimodel::PresentationTextCatalog{catalog};
     auto const gtkTextCatalog = GtkTextCatalog{catalog};
     auto result = runApp({argv, static_cast<std::size_t>(argc)},
                          processSignalHandlers,
                          textCatalog,
                          gtkTextCatalog,
-                         *textOrderingPolicyPtr);
+                         *textOrderingPolicyPtr,
+                         *completionAliasPolicyPtr);
     processSignalHandlers.uninstall();
 
     if (result.optRestartRequest)

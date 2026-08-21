@@ -149,6 +149,15 @@ Treat the spdlog version and formatting backend as one contract. A matching
 version is insufficient unless CMake also confirms `SPDLOG_USE_STD_FORMAT` and
 rejects `SPDLOG_FMT_EXTERNAL`.
 
+### ICU
+
+Treat ICU data behavior as part of the governed capability contract, not only as a library version and target list.
+An ICU upgrade must run the Unicode, catalog, collation, and completion-transliteration fixtures on Linux and native Windows.
+In particular, rebaseline the fixed Kana and explicitly Mandarin Han aliases because transform output can change with ICU data even when the Aobus source is unchanged.
+
+Run the Release performance review on both hosts and compare first-use transform construction, the 50,000-track ASCII snapshot, the 5,155-track CJK-heavy snapshot, and the four cached lookup shapes.
+Verify that the dependency report still declares and resolves `script-transliteration`, and exercise both lazy transform constructors so a missing packaged transform is not mistaken for a valid CMake target.
+
 ## Updating Python, Ruff, or mypy
 
 `script/ao/toolchain.json` is the version policy source.

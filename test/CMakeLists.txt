@@ -209,6 +209,7 @@ add_executable(ao_core_test
     # localization foundation tests
     unit/i18n/CatalogPatternTest.cpp
     unit/i18n/IcuTextOrderingTest.cpp
+    unit/i18n/IcuCompletionAliasesTest.cpp
     unit/i18n/MessageCatalogTest.cpp
 
     # query tests
@@ -452,6 +453,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryPathsTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
+    unit/runtime/completion/CompletionTextTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/LogTest.cpp
@@ -611,6 +613,7 @@ target_link_libraries(ao_core_test PRIVATE
     ao_app_desktop
     ao_app_uimodel
     ao_app_i18n
+    ao_app_i18n_completion
     ao_app_i18n_ordering
     ao_catalog_pattern
     ao_unicode_text
@@ -914,12 +917,14 @@ endif()
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline EXCLUDE_FROM_ALL
     perf/CompletionVocabularyBaselineTest.cpp
-    perf/OrderingPerformanceReviewTest.cpp
+    perf/PerformanceReviewTest.cpp
     perf/PerformanceBaselineTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_perf_baseline)
 
 target_link_libraries(ao_perf_baseline PRIVATE
+    ICU::uc
+    ao_app_i18n_completion
     ao_app_i18n_ordering
     ao_app_uimodel
     ao_test_support_runtime

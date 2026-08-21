@@ -51,7 +51,8 @@ namespace ao::rt
          std::filesystem::path databasePath,
          std::unique_ptr<library::MusicLibrary> libraryPtr,
          async::Sleeper* sleeper,
-         TextOrderingPolicy const* orderingPolicy)
+         TextOrderingPolicy const* orderingPolicy,
+         CompletionAliasPolicy const* aliasPolicy)
       : executorPtr{std::move(execPtr)}
       , asyncRuntime{*executorPtr, sleeper}
       , musicRoot{std::move(musicRoot)}
@@ -60,7 +61,7 @@ namespace ao::rt
       , libraryChanges{*executorPtr,
                        currentLibraryRevision(*musicLibraryPtr),
                        utility::pathToUtf8(musicLibraryPtr->databasePath())}
-      , completionService{*musicLibraryPtr, libraryChanges, orderingPolicy}
+      , completionService{*musicLibraryPtr, libraryChanges, orderingPolicy, aliasPolicy}
       , trackSourceCache{*musicLibraryPtr, libraryChanges}
       , notificationService{asyncRuntime}
       , textOrderingPolicy{orderingPolicy}
@@ -110,6 +111,7 @@ namespace ao::rt
                                          std::move(cacheDirectory),
                                          musicLibraryPinnedMapBytes,
                                          sleeper,
+                                         nullptr,
                                          nullptr);
 
     if (!result)
@@ -126,7 +128,8 @@ namespace ao::rt
                                    std::filesystem::path cacheDirectory,
                                    std::uint64_t const musicLibraryPinnedMapBytes,
                                    async::Sleeper* const sleeper,
-                                   TextOrderingPolicy const* const textOrderingPolicy)
+                                   TextOrderingPolicy const* const textOrderingPolicy,
+                                   CompletionAliasPolicy const* const completionAliasPolicy)
   {
     if (executorPtr == nullptr)
     {
@@ -147,7 +150,8 @@ namespace ao::rt
                                           std::move(databasePath),
                                           std::move(storagePtr),
                                           sleeper,
-                                          textOrderingPolicy);
+                                          textOrderingPolicy,
+                                          completionAliasPolicy);
     auto libraryRes = Library::create(
       implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges, std::move(cacheDirectory));
 

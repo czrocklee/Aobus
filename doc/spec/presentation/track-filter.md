@@ -35,8 +35,9 @@ UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; r
 - Filtering changes membership but does not choose or persist a presentation.
 - Clearing the filter restores the base source while retaining the active presentation.
 - A transient filter is represented by base `ListId` plus expression text; it is not a stored List.
-- GTK and TUI use the same UIModel resolver.
+- GTK, TUI, and WinUI use the same UIModel resolver.
 - GTK and TUI use the same UIModel completer and therefore expose the same value set, ranking, replacement, and expression boundary.
+- WinUI currently resolves submitted filter text without exposing completion candidates.
 - Runtime evaluates resolved text through the same source and predicate path used by saved Lists.
 - An invalid expression is observable in the view state and empty filtered membership without corrupting the base source.
 - An error inherited from the saved-List base source is observable through the same view-state error field and keeps the projection empty.
@@ -84,13 +85,20 @@ Expression-mode text delegates unchanged to `QueryExpressionCompleter`.
 Quick-mode text completes the non-empty term at the cursor from live titles, artist, album, album artist, genre, composer, work, and tag values.
 It does not include merely queryable fields such as conductor, ensemble, movement, soloist, or technical properties.
 
-Matching is ASCII-case-insensitive prefix matching.
+Direct matching is ASCII-case-insensitive and has two tiers: prefixes of the complete value, then prefixes beginning after an ASCII non-alphanumeric delimiter.
+It performs neither fuzzy correction nor Unicode word segmentation, so `pinnock` may select `Trevor Pinnock`, while `innock` and misspelled `pinnok` do not.
+When the interactive runtime provides completion aliases, an ASCII romanized prefix of at least three alphanumeric characters may also select a value derived from Kana or from the explicitly Mandarin Han transform.
+Any non-ASCII byte in the typed prefix disables this alias path.
 Identical text contributed by several fields, tags, or tracks is one candidate whose frequency is the sum of those live occurrences.
-Candidates rank by descending frequency and then ascending value, and the requested result limit is applied after ranking.
+Whole-value, interior-word, and alias-only candidates form three strict tiers; a higher-frequency lower-tier candidate can never displace a higher-tier match.
+Within each tier candidates rank by descending frequency and then ascending value, and the requested result limit is applied after tiering.
+Distinct source values sharing an alias remain distinct candidates.
 An empty term does not open an arbitrary whole-library candidate list.
 
 A selected value is serialized as one quoted string term and replaces only the term containing the cursor, including any unfinished quoted text or suffix after the cursor.
 The resolver decodes that serialized term before building its predicate, so spaces, quotes, backslashes, and control escapes round-trip without changing the Quick-filter meaning.
+An alias match still serializes the exact admitted source value.
+Submitting romanized text without selecting its candidate remains an ordinary Quick term expanded to the existing Unicode-caseless `~` predicates; filtering itself performs no transliteration.
 The runtime owns aggregate vocabulary storage and invalidation; the selected field set, expression boundary, ranking use, and insertion policy remain UIModel behavior.
 
 ## State model

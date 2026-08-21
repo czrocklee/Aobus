@@ -23,6 +23,7 @@ namespace ao::async
 
 namespace ao::rt
 {
+  class CompletionAliasPolicy;
   class CompletionService;
   class Library;
   class TrackSourceCache;
@@ -82,7 +83,8 @@ namespace ao::rt
                         std::filesystem::path cacheDirectory,
                         std::uint64_t musicLibraryPinnedMapBytes,
                         async::Sleeper* sleeper,
-                        TextOrderingPolicy const* textOrderingPolicy = nullptr);
+                        TextOrderingPolicy const* textOrderingPolicy = nullptr,
+                        CompletionAliasPolicy const* completionAliasPolicy = nullptr);
 
   private:
     struct Impl;

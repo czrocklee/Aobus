@@ -191,6 +191,18 @@ target_include_directories(ao_app_i18n_ordering
 target_link_libraries(ao_app_i18n_ordering
     PRIVATE ao_unicode_text ICU::i18n ICU::uc ICU::data)
 
+# Completion aliases use the same ICU leaf boundary as locale ordering. The
+# runtime policy carries no ICU types and the CLI must not reach this target.
+add_library(ao_app_i18n_completion STATIC
+    i18n/IcuCompletionAliases.cpp
+)
+target_include_directories(ao_app_i18n_completion
+    PUBLIC
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+      "${CMAKE_SOURCE_DIR}/include")
+target_link_libraries(ao_app_i18n_completion
+    PRIVATE ao_unicode_text ICU::i18n ICU::uc ICU::data)
+
 # Prepared-next contract diagnostics are compiled once and shared with the
 # minimal fatal probe so source-location coverage does not duplicate a source
 # file across targets with incompatible compile commands.
