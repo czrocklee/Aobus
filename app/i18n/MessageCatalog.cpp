@@ -242,10 +242,13 @@ namespace ao::i18n
       }
 
       auto candidates = std::vector<LocaleCandidate>{};
-      auto current = *localeIdRes;
-
-      while (!current.empty())
+      auto addCandidate = [&](std::string current) -> Result<>
       {
+        if (current.empty() || std::ranges::contains(candidates, current, &LocaleCandidate::resourceLocale))
+        {
+          return {};
+        }
+
         auto tagRes = languageTagFromLocaleId(current);
 
         if (!tagRes)
@@ -254,6 +257,29 @@ namespace ao::i18n
         }
 
         candidates.push_back({.resourceLocale = current, .publicLocale = *tagRes, .formatLocale = std::move(*tagRes)});
+        return {};
+      };
+
+      if (auto res = addCandidate(*localeIdRes); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      auto maximized = std::array<char, ULOC_FULLNAME_CAPACITY>{};
+      UErrorCode status = U_ZERO_ERROR;
+      auto const maxLen = ::uloc_addLikelySubtags(
+        localeIdRes->c_str(), maximized.data(), static_cast<std::int32_t>(maximized.size()), &status);
+      // The strict original tag remains a valid fallback when ICU has no likely-subtag expansion.
+      auto current = (U_SUCCESS(status) != 0 && maxLen > 0)
+                       ? std::string{maximized.data(), static_cast<std::size_t>(maxLen)}
+                       : *localeIdRes;
+
+      while (!current.empty())
+      {
+        if (auto res = addCandidate(current); !res)
+        {
+          return std::unexpected{res.error()};
+        }
 
         auto parentRes = parentLocaleId(current);
 

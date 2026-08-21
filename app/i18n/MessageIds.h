@@ -25,6 +25,7 @@ namespace ao::i18n::detail
     {.id = MessageId::PilotPlaybackState, .key = "pilot_playback_state"},
     {.id = MessageId::PilotRegionalFallback, .key = "pilot_regional_fallback"},
     {.id = MessageId::PilotEnglishFallback, .key = "pilot_english_fallback"},
+    {.id = MessageId::PilotSimplifiedOnlyProbe, .key = "pilot_simplified_only_probe"},
     {.id = MessageId::PilotPseudoProbe, .key = "pilot_pseudo_probe"},
     {.id = MessageId::TrackFieldTitle, .key = "track_field_title"},
     {.id = MessageId::TrackFieldArtist, .key = "track_field_artist"},

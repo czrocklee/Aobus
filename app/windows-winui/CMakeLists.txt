@@ -194,18 +194,14 @@ add_dependencies(aobus-winui-lib
 add_executable(aobus-winui WIN32
   ${AOBUS_NO_COVER_ASSETS}
   ${AOBUS_SHELL_LAYOUT_ASSETS}
-  ${AOBUS_CATALOG_EN_RESW}
-  ${AOBUS_CATALOG_DE_RESW}
-  ${AOBUS_CATALOG_PSEUDO_RESW}
+  ${AOBUS_CATALOG_WINUI_RESW_FILES}
   app.manifest
 )
 
 add_executable(ao_winui_localization_probe EXCLUDE_FROM_ALL
   ${CMAKE_SOURCE_DIR}/test/helper/WinUiLocalizationProbe.cpp
   platform/StringResources.cpp
-  ${AOBUS_CATALOG_EN_RESW}
-  ${AOBUS_CATALOG_DE_RESW}
-  ${AOBUS_CATALOG_PSEUDO_RESW}
+  ${AOBUS_CATALOG_WINUI_RESW_FILES}
 )
 aobus_enable_windows_utf8_manifest(ao_winui_localization_probe)
 target_include_directories(ao_winui_localization_probe PRIVATE
@@ -245,9 +241,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
   ${AOBUS_WINUI_LIBRARY_SOURCES}
   app.manifest)
 source_group("Generated Localization" FILES
-  ${AOBUS_CATALOG_EN_RESW}
-  ${AOBUS_CATALOG_DE_RESW}
-  ${AOBUS_CATALOG_PSEUDO_RESW})
+  ${AOBUS_CATALOG_WINUI_RESW_FILES})
 source_group("Asset" FILES ${AOBUS_NO_COVER_ASSETS} ${AOBUS_SHELL_LAYOUT_ASSETS})
 
 set_source_files_properties(App.xaml PROPERTIES
@@ -267,6 +261,26 @@ set_source_files_properties(${AOBUS_CATALOG_DE_RESW} PROPERTIES
   GENERATED TRUE
   VS_TOOL_OVERRIDE PRIResource
   VS_SETTINGS "Link=Resources\\de\\Resources.resw")
+set_source_files_properties(${AOBUS_CATALOG_ZH_HANS_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\zh-Hans\\Resources.resw")
+set_source_files_properties(${AOBUS_CATALOG_ZH_HANT_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\zh-Hant\\Resources.resw")
+set_source_files_properties(${AOBUS_CATALOG_JA_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\ja\\Resources.resw")
+set_source_files_properties(${AOBUS_CATALOG_ES_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\es\\Resources.resw")
+set_source_files_properties(${AOBUS_CATALOG_FR_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\fr\\Resources.resw")
 set_source_files_properties(${AOBUS_CATALOG_PSEUDO_RESW} PROPERTIES
   GENERATED TRUE
   VS_TOOL_OVERRIDE PRIResource

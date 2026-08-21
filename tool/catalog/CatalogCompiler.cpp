@@ -15,7 +15,6 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <span>
 #include <string>
@@ -25,93 +24,98 @@
 
 namespace
 {
-  constexpr std::size_t kExpectedArgCount = 13;
-  constexpr std::size_t kOptionSlotCount = 6;
-  constexpr std::size_t kOptionRootResSlot = 0;
-  constexpr std::size_t kOptionDeResSlot = 1;
-  constexpr std::size_t kOptionPseudoSourceSlot = 2;
-  constexpr std::size_t kOptionEnReswSlot = 3;
-  constexpr std::size_t kOptionDeReswSlot = 4;
-  constexpr std::size_t kOptionPseudoReswSlot = 5;
+  struct TranslationTarget final
+  {
+    std::filesystem::path resourceFile;
+    std::filesystem::path reswFile;
+  };
+
+  struct GeneratedFile final
+  {
+    std::filesystem::path path;
+    std::string content;
+  };
 
   struct Options final
   {
     std::filesystem::path rootResource;
-    std::filesystem::path germanResource;
     std::filesystem::path pseudoSource;
     std::filesystem::path englishResw;
-    std::filesystem::path germanResw;
     std::filesystem::path pseudoResw;
+    std::vector<TranslationTarget> translations;
   };
+
+  using PathMember = std::filesystem::path Options::*;
+
+  struct SinglePathOption final
+  {
+    std::string_view name;
+    PathMember destination;
+    bool assigned = false;
+  };
+
+  constexpr auto kUsage = std::string_view{
+    "Usage: ao_catalog_compiler --root-res PATH --pseudo-source PATH --en-resw PATH --pseudo-resw PATH "
+    "[--translation RES_PATH RESW_PATH]..."};
 
   ao::Result<Options> parseOptions(std::span<char const* const> const args)
   {
-    if (args.size() != kExpectedArgCount)
-    {
-      return ao::makeError(ao::Error::Code::InvalidInput,
-                           "Usage: ao_catalog_compiler --root-res PATH --de-res PATH "
-                           "--pseudo-source PATH --en-resw PATH --de-resw PATH --pseudo-resw PATH");
-    }
-
     auto options = Options{};
-    auto assigned = std::array<bool, kOptionSlotCount>{};
+    auto singlePathOptions = std::array{
+      SinglePathOption{.name = "--root-res", .destination = &Options::rootResource},
+      SinglePathOption{.name = "--pseudo-source", .destination = &Options::pseudoSource},
+      SinglePathOption{.name = "--en-resw", .destination = &Options::englishResw},
+      SinglePathOption{.name = "--pseudo-resw", .destination = &Options::pseudoResw},
+    };
+    auto* const singlePathOptionsEnd = singlePathOptions.data() + singlePathOptions.size();
 
-    for (std::size_t index = 1; index < args.size(); index += 2)
+    for (std::size_t index = 1; index < args.size();)
     {
       auto const name = std::string_view{args[index]};
-      auto const value = ao::utility::pathFromUtf8(args[index + 1]);
-      auto assign = [&](std::size_t const slot, std::filesystem::path& destination) -> ao::Result<>
+      auto* const singlePathOption =
+        std::ranges::find(singlePathOptions.data(), singlePathOptionsEnd, name, &SinglePathOption::name);
+
+      if (singlePathOption != singlePathOptionsEnd)
       {
-        if (assigned[slot])
+        if (singlePathOption->assigned)
         {
-          return ao::makeError(ao::Error::Code::InvalidInput, std::string{name} + " appears more than once");
+          return ao::makeError(ao::Error::Code::InvalidInput, "Duplicate option: " + std::string{name});
         }
 
-        assigned[slot] = true;
-        destination = value;
-        return {};
-      };
+        if (index + 1 >= args.size())
+        {
+          return ao::makeError(ao::Error::Code::InvalidInput, "Missing value for " + std::string{name});
+        }
 
-      auto assignedRes = ao::Result<>{};
-
-      if (name == "--root-res")
-      {
-        assignedRes = assign(kOptionRootResSlot, options.rootResource);
-      }
-      else if (name == "--de-res")
-      {
-        assignedRes = assign(kOptionDeResSlot, options.germanResource);
-      }
-      else if (name == "--pseudo-source")
-      {
-        assignedRes = assign(kOptionPseudoSourceSlot, options.pseudoSource);
-      }
-      else if (name == "--en-resw")
-      {
-        assignedRes = assign(kOptionEnReswSlot, options.englishResw);
-      }
-      else if (name == "--de-resw")
-      {
-        assignedRes = assign(kOptionDeReswSlot, options.germanResw);
-      }
-      else if (name == "--pseudo-resw")
-      {
-        assignedRes = assign(kOptionPseudoReswSlot, options.pseudoResw);
-      }
-      else
-      {
-        return ao::makeError(ao::Error::Code::InvalidInput, std::string{"Unknown option: "} + std::string{name});
+        options.*(singlePathOption->destination) = ao::utility::pathFromUtf8(args[index + 1]);
+        singlePathOption->assigned = true;
+        index += 2;
+        continue;
       }
 
-      if (!assignedRes)
+      if (name == "--translation")
       {
-        return std::unexpected{assignedRes.error()};
+        if (index + 2 >= args.size())
+        {
+          return ao::makeError(ao::Error::Code::InvalidInput, std::string{kUsage});
+        }
+
+        auto resourcePath = ao::utility::pathFromUtf8(args[index + 1]);
+        auto reswPath = ao::utility::pathFromUtf8(args[index + 2]);
+        options.translations.push_back({
+          .resourceFile = std::move(resourcePath),
+          .reswFile = std::move(reswPath),
+        });
+        index += 3;
+        continue;
       }
+
+      return ao::makeError(ao::Error::Code::InvalidInput, std::string{"Unknown option: "} + std::string{name});
     }
 
-    if (!std::ranges::all_of(assigned, std::identity{}))
+    if (!std::ranges::all_of(singlePathOptions, &SinglePathOption::assigned))
     {
-      return ao::makeError(ao::Error::Code::InvalidInput, "Catalog compiler is missing a required output option");
+      return ao::makeError(ao::Error::Code::InvalidInput, std::string{kUsage});
     }
 
     return options;
@@ -169,77 +173,6 @@ namespace
     return {};
   }
 
-  ao::Result<std::vector<ao::i18n::detail::CatalogMessage>> projectWinUiResources(
-    std::span<ao::i18n::detail::CatalogMessage const> const messages)
-  {
-    auto result = std::vector<ao::i18n::detail::CatalogMessage>{messages.begin(), messages.end()};
-    result.reserve(result.size() + ao::i18n::detail::kWinUiResourceAliases.size());
-
-    for (auto const& positional : ao::i18n::detail::kWinUiPositionalResources)
-    {
-      auto source = std::ranges::find(result, positional.messageId, &ao::i18n::detail::CatalogMessage::id);
-
-      if (source == result.end())
-      {
-        return ao::makeError(
-          ao::Error::Code::FormatRejected,
-          "WinUI positional resource references unknown message id '" + std::string{positional.messageId} + "'");
-      }
-
-      auto projectedRes = ao::i18n::detail::projectWinUiPositionalPattern(source->pattern, positional.argumentName);
-
-      if (!projectedRes)
-      {
-        return ao::makeError(projectedRes.error().code,
-                             "WinUI resource cannot positionalize message '" + std::string{positional.messageId} +
-                               "': " + projectedRes.error().message);
-      }
-
-      source->pattern = std::move(*projectedRes);
-    }
-
-    for (auto& message : result)
-    {
-      message.pattern = ao::i18n::detail::unescapeIcuApostrophePairs(message.pattern);
-    }
-
-    for (auto const& alias : ao::i18n::detail::kWinUiResourceAliases)
-    {
-      auto const source = std::ranges::find(result, alias.messageId, &ao::i18n::detail::CatalogMessage::id);
-
-      if (source == result.end())
-      {
-        return ao::makeError(
-          ao::Error::Code::FormatRejected,
-          "WinUI resource alias references unknown message id '" + std::string{alias.messageId} + "'");
-      }
-
-      auto signatureRes = ao::i18n::detail::messageArgumentSignature(source->pattern);
-
-      if (!signatureRes)
-      {
-        return std::unexpected{signatureRes.error()};
-      }
-
-      if (!signatureRes->empty())
-      {
-        return ao::makeError(
-          ao::Error::Code::FormatRejected,
-          "WinUI resource alias has an incompatible message signature for '" + std::string{alias.messageId} + "'");
-      }
-
-      if (std::ranges::contains(result, alias.resourceId, &ao::i18n::detail::CatalogMessage::id))
-      {
-        return ao::makeError(ao::Error::Code::FormatRejected,
-                             "WinUI resource alias collides with message id '" + std::string{alias.resourceId} + "'");
-      }
-
-      result.push_back({.id = std::string{alias.resourceId}, .pattern = source->pattern});
-    }
-
-    return result;
-  }
-
   ao::Result<> appendWinUiEnglishResources(std::vector<ao::i18n::detail::CatalogMessage>& messages)
   {
     messages.reserve(messages.size() + ao::i18n::detail::kWinUiEnglishResources.size());
@@ -261,28 +194,65 @@ namespace
 
   ao::Result<Options> absoluteOptions(Options options)
   {
-    auto const paths = std::array{
-      &options.rootResource,
-      &options.germanResource,
-      &options.pseudoSource,
-      &options.englishResw,
-      &options.germanResw,
-      &options.pseudoResw,
-    };
-
-    for (auto* const path : paths)
+    auto makeAbsolute = [](std::filesystem::path& path) -> ao::Result<>
     {
       auto error = std::error_code{};
-      auto absolute = std::filesystem::absolute(*path, error);
+      auto absolute = std::filesystem::absolute(path, error);
 
       if (error)
       {
         return ao::makeError(
           ao::Error::Code::IoError,
-          "Could not resolve catalog path " + ao::utility::pathToUtf8(*path) + ": " + error.message());
+          "Could not resolve catalog path " + ao::utility::pathToUtf8(path) + ": " + error.message());
       }
 
-      *path = std::move(absolute);
+      path = std::move(absolute);
+      return {};
+    };
+
+    auto const fixedPaths = std::array{
+      &options.rootResource,
+      &options.pseudoSource,
+      &options.englishResw,
+      &options.pseudoResw,
+    };
+
+    for (auto* const path : fixedPaths)
+    {
+      if (auto res = makeAbsolute(*path); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+    }
+
+    for (auto& translation : options.translations)
+    {
+      auto const translationPaths = std::array{
+        &translation.resourceFile,
+        &translation.reswFile,
+      };
+
+      for (auto* const path : translationPaths)
+      {
+        if (auto res = makeAbsolute(*path); !res)
+        {
+          return std::unexpected{res.error()};
+        }
+      }
+    }
+
+    auto outputPaths = std::vector{options.englishResw, options.pseudoResw};
+
+    for (auto const& translation : options.translations)
+    {
+      if (std::ranges::contains(outputPaths, translation.reswFile))
+      {
+        return ao::makeError(
+          ao::Error::Code::InvalidInput,
+          "Catalog outputs resolve to the same path: " + ao::utility::pathToUtf8(translation.reswFile));
+      }
+
+      outputPaths.push_back(translation.reswFile);
     }
 
     return options;
@@ -308,23 +278,42 @@ namespace
       return std::unexpected{rootRes.error()};
     }
 
-    auto const germanDirectory = ao::utility::pathToUtf8(paths.germanResource.parent_path());
-    auto germanRes =
-      ao::i18n::detail::loadCompiledCatalog(germanDirectory, ao::utility::pathToUtf8(paths.germanResource.stem()));
-
-    if (!germanRes)
-    {
-      return std::unexpected{germanRes.error()};
-    }
-
     if (auto rootIdsRes = validateRootIds(*rootRes); !rootIdsRes)
     {
       return rootIdsRes;
     }
 
-    if (auto validationRes = ao::i18n::detail::validateTranslationCatalog(*rootRes, *germanRes); !validationRes)
+    auto generatedFiles = std::vector<GeneratedFile>{};
+    generatedFiles.reserve(paths.translations.size() + 3U);
+
+    for (auto const& translation : paths.translations)
     {
-      return validationRes;
+      auto const translationDirectory = ao::utility::pathToUtf8(translation.resourceFile.parent_path());
+      auto translationRes = ao::i18n::detail::loadCompiledCatalog(
+        translationDirectory, ao::utility::pathToUtf8(translation.resourceFile.stem()));
+
+      if (!translationRes)
+      {
+        return std::unexpected{translationRes.error()};
+      }
+
+      if (auto validationRes = ao::i18n::detail::validateTranslationCatalog(*rootRes, *translationRes); !validationRes)
+      {
+        return validationRes;
+      }
+
+      auto translationMessagesRes =
+        ao::i18n::detail::projectWinUiResources(*translationRes, ao::i18n::detail::MissingWinUiMessagePolicy::Omit);
+
+      if (!translationMessagesRes)
+      {
+        return std::unexpected{translationMessagesRes.error()};
+      }
+
+      generatedFiles.push_back({
+        .path = translation.reswFile,
+        .content = ao::i18n::detail::renderResw(*translationMessagesRes),
+      });
     }
 
     auto pseudo = std::vector<ao::i18n::detail::CatalogMessage>{};
@@ -348,29 +337,8 @@ namespace
       return validationRes;
     }
 
-    for (auto const& output : {paths.pseudoSource.parent_path(),
-                               paths.englishResw.parent_path(),
-                               paths.germanResw.parent_path(),
-                               paths.pseudoResw.parent_path()})
-    {
-      auto error = std::error_code{};
-      std::filesystem::create_directories(output, error);
-
-      if (error)
-      {
-        return ao::makeError(
-          ao::Error::Code::IoError,
-          "Could not create catalog output directory " + ao::utility::pathToUtf8(output) + ": " + error.message());
-      }
-    }
-
-    if (auto writeRes = writeFile(paths.pseudoSource, ao::i18n::detail::renderIcuResource("qps_Ploc", pseudo));
-        !writeRes)
-    {
-      return writeRes;
-    }
-
-    auto englishReswMessagesRes = projectWinUiResources(*rootRes);
+    auto englishReswMessagesRes =
+      ao::i18n::detail::projectWinUiResources(*rootRes, ao::i18n::detail::MissingWinUiMessagePolicy::Reject);
 
     if (!englishReswMessagesRes)
     {
@@ -382,31 +350,49 @@ namespace
       return appendRes;
     }
 
-    auto germanReswMessagesRes = projectWinUiResources(*germanRes);
-
-    if (!germanReswMessagesRes)
-    {
-      return std::unexpected{germanReswMessagesRes.error()};
-    }
-
-    auto pseudoReswMessagesRes = projectWinUiResources(pseudo);
+    auto pseudoReswMessagesRes =
+      ao::i18n::detail::projectWinUiResources(pseudo, ao::i18n::detail::MissingWinUiMessagePolicy::Reject);
 
     if (!pseudoReswMessagesRes)
     {
       return std::unexpected{pseudoReswMessagesRes.error()};
     }
 
-    if (auto writeRes = writeFile(paths.englishResw, ao::i18n::detail::renderResw(*englishReswMessagesRes)); !writeRes)
+    generatedFiles.push_back({
+      .path = paths.pseudoSource,
+      .content = ao::i18n::detail::renderIcuResource("qps_Ploc", pseudo),
+    });
+    generatedFiles.push_back({
+      .path = paths.englishResw,
+      .content = ao::i18n::detail::renderResw(*englishReswMessagesRes),
+    });
+    generatedFiles.push_back({
+      .path = paths.pseudoResw,
+      .content = ao::i18n::detail::renderResw(*pseudoReswMessagesRes),
+    });
+
+    for (auto const& generatedFile : generatedFiles)
     {
-      return writeRes;
+      auto error = std::error_code{};
+      std::filesystem::create_directories(generatedFile.path.parent_path(), error);
+
+      if (error)
+      {
+        return ao::makeError(ao::Error::Code::IoError,
+                             "Could not create catalog output directory " +
+                               ao::utility::pathToUtf8(generatedFile.path.parent_path()) + ": " + error.message());
+      }
     }
 
-    if (auto writeRes = writeFile(paths.germanResw, ao::i18n::detail::renderResw(*germanReswMessagesRes)); !writeRes)
+    for (auto const& generatedFile : generatedFiles)
     {
-      return writeRes;
+      if (auto writeRes = writeFile(generatedFile.path, generatedFile.content); !writeRes)
+      {
+        return writeRes;
+      }
     }
 
-    return writeFile(paths.pseudoResw, ao::i18n::detail::renderResw(*pseudoReswMessagesRes));
+    return {};
   }
 } // namespace
 

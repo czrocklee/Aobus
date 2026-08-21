@@ -95,14 +95,15 @@ The production shared-id families are:
 | `winui_shell_*`, `winui_playback_*`, `winui_library_*`, `winui_*_failed` | WinUI shell, playback, library, native tooltip, empty-state, and recoverable-error copy through MRT |
 
 [`MessageIds.h`](../../../app/i18n/MessageIds.h) is the exact typed-id-to-key map.
-The complete English patterns and maintained German overrides live in [`root.txt`](../../../app/i18n/catalog/root.txt) and [`de.txt`](../../../app/i18n/catalog/de.txt); generated WinUI resources use those same keys.
+The complete English patterns and maintained localized overrides live in [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt); generated WinUI resources use those same keys.
 
 Bare `value` and simple-format arguments accept any `MessageArgumentValue` alternative.
 Plural, select-ordinal, and choice arguments accept integer or double values; select arguments accept text.
 Arguments are order-independent but must contain every expected name exactly once and no unknown name.
 
-The authored asset set is complete English ICU `root` and sparse neutral German `de`.
-Build tooling derives `qps_Ploc` by transforming literal spans and maps those three assets to WinUI PRI qualifiers `en`, `de`, and `qps-ploc`.
+The authored asset set is complete English ICU `root` and maintained locale catalogs (`de`, `zh_Hans`, `zh_Hant`, `ja`, `es`, `fr`).
+Build tooling derives `qps_Ploc` by transforming literal spans and maps those assets to WinUI PRI qualifiers `en`, `de`, `zh-Hans`, `zh-Hant`, `ja`, `es`, `fr`, and `qps-ploc`.
+MRT resolves `zh-CN` and `zh-TW` requests through the corresponding script-qualified Chinese resource rather than a duplicate regional asset.
 The exact fallback behavior belongs to the [interactive localization specification](../../spec/presentation/localization.md).
 
 ### Frontend shell catalogs
@@ -363,7 +364,7 @@ Open backend/profile ids remain usable through id-only fallback; Aobus does not 
 - [`TrackGroupHeadingPresentation.cpp`](../../../app/uimodel/library/presentation/TrackGroupHeadingPresentation.cpp)
 - [`MessageCatalog.h`](../../../app/include/ao/i18n/MessageCatalog.h)
 - [`MessageIds.h`](../../../app/i18n/MessageIds.h)
-- [`root.txt`](../../../app/i18n/catalog/root.txt) and [`de.txt`](../../../app/i18n/catalog/de.txt)
+- [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt)
 - [`GtkTextCatalog.h`](../../../app/linux-gtk/i18n/GtkTextCatalog.h) and [`GtkTextCatalog.cpp`](../../../app/linux-gtk/i18n/GtkTextCatalog.cpp)
 - [`TuiTextCatalog.h`](../../../app/tui/TuiTextCatalog.h) and [`TuiTextCatalog.cpp`](../../../app/tui/TuiTextCatalog.cpp)
 - [`WinUiResourceProjection.h`](../../../app/i18n/WinUiResourceProjection.h)

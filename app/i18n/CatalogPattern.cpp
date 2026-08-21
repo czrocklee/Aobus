@@ -3,6 +3,7 @@
 
 #include "CatalogPattern.h"
 
+#include "WinUiResourceProjection.h"
 #include <ao/Error.h>
 
 #include <unicode/messagepattern.h>
@@ -406,6 +407,86 @@ namespace ao::i18n::detail
         return makeError(
           Error::Code::FormatRejected, "A WinUI positional resource contains unsupported MessageFormat syntax");
       }
+    }
+
+    return result;
+  }
+
+  Result<std::vector<CatalogMessage>> projectWinUiResources(std::span<CatalogMessage const> const messages,
+                                                            MissingWinUiMessagePolicy const missingMessagePolicy)
+  {
+    auto result = std::vector<CatalogMessage>{messages.begin(), messages.end()};
+    result.reserve(result.size() + kWinUiResourceAliases.size());
+
+    for (auto const& positional : kWinUiPositionalResources)
+    {
+      auto source = std::ranges::find(result, positional.messageId, &CatalogMessage::id);
+
+      if (source == result.end())
+      {
+        if (missingMessagePolicy == MissingWinUiMessagePolicy::Omit)
+        {
+          continue;
+        }
+
+        return makeError(
+          Error::Code::FormatRejected,
+          "WinUI positional resource references unknown message id '" + std::string{positional.messageId} + "'");
+      }
+
+      auto projectedRes = projectWinUiPositionalPattern(source->pattern, positional.argumentName);
+
+      if (!projectedRes)
+      {
+        return makeError(projectedRes.error().code,
+                         "WinUI resource cannot positionalize message '" + std::string{positional.messageId} +
+                           "': " + projectedRes.error().message);
+      }
+
+      source->pattern = std::move(*projectedRes);
+    }
+
+    for (auto& message : result)
+    {
+      message.pattern = unescapeIcuApostrophePairs(message.pattern);
+    }
+
+    for (auto const& alias : kWinUiResourceAliases)
+    {
+      auto const source = std::ranges::find(result, alias.messageId, &CatalogMessage::id);
+
+      if (source == result.end())
+      {
+        if (missingMessagePolicy == MissingWinUiMessagePolicy::Omit)
+        {
+          continue;
+        }
+
+        return makeError(Error::Code::FormatRejected,
+                         "WinUI resource alias references unknown message id '" + std::string{alias.messageId} + "'");
+      }
+
+      auto signatureRes = messageArgumentSignature(source->pattern);
+
+      if (!signatureRes)
+      {
+        return std::unexpected{signatureRes.error()};
+      }
+
+      if (!signatureRes->empty())
+      {
+        return makeError(
+          Error::Code::FormatRejected,
+          "WinUI resource alias has an incompatible message signature for '" + std::string{alias.messageId} + "'");
+      }
+
+      if (std::ranges::contains(result, alias.resourceId, &CatalogMessage::id))
+      {
+        return makeError(Error::Code::FormatRejected,
+                         "WinUI resource alias collides with message id '" + std::string{alias.resourceId} + "'");
+      }
+
+      result.push_back({.id = std::string{alias.resourceId}, .pattern = source->pattern});
     }
 
     return result;

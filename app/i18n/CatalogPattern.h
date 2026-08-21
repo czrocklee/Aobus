@@ -39,12 +39,20 @@ namespace ao::i18n::detail
     bool operator==(CatalogMessage const&) const = default;
   };
 
+  enum class MissingWinUiMessagePolicy : std::uint8_t
+  {
+    Reject,
+    Omit,
+  };
+
   Result<std::vector<MessageArgumentSignature>> messageArgumentSignature(std::string_view pattern);
   Result<> validateTranslationCatalog(std::span<CatalogMessage const> root,
                                       std::span<CatalogMessage const> translation);
   Result<std::string> pseudoLocalizePattern(std::string_view pattern);
   std::string unescapeIcuApostrophePairs(std::string_view pattern);
   Result<std::string> projectWinUiPositionalPattern(std::string_view pattern, std::string_view argumentName);
+  Result<std::vector<CatalogMessage>> projectWinUiResources(std::span<CatalogMessage const> messages,
+                                                            MissingWinUiMessagePolicy missingMessagePolicy);
 
   Result<std::vector<CatalogMessage>> loadCompiledCatalog(std::string_view resourceDirectory, std::string_view locale);
   std::string renderIcuResource(std::string_view locale, std::span<CatalogMessage const> messages);

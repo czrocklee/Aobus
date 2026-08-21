@@ -1,0 +1,800 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+ja:table {
+  messages:table {
+    pilot_library_title { "音楽ライブラリ" }
+    pilot_greeting { "ようこそ、{name}" }
+    pilot_copy_summary { "{destination} に {count} 曲をコピーしました" }
+    pilot_track_count { "{count, plural, one {# 曲} other {# 曲}}" }
+    pilot_playback_state { "{state, select, playing {再生中} paused {一時停止} other {停止}}" }
+    pilot_regional_fallback { "日本語地域フォールバック" }
+    pilot_pseudo_probe { "{application} 音楽ライブラリを開く" }
+    track_field_title { "タイトル" }
+    track_field_artist { "アーティスト" }
+    track_field_album { "アルバム" }
+    track_field_album_artist { "アルバムアーティスト" }
+    track_field_genre { "ジャンル" }
+    track_field_composer { "作曲者" }
+    track_field_conductor { "指揮者" }
+    track_field_ensemble { "アンサンブル" }
+    track_field_work { "作品" }
+    track_field_movement { "楽章" }
+    track_field_soloist { "ソリスト" }
+    track_field_year { "年" }
+    track_field_disc_number { "ディスク番号" }
+    track_field_disc_total { "総ディスク数" }
+    track_field_track_number { "トラック番号" }
+    track_field_track_total { "総トラック数" }
+    track_field_movement_number { "楽章番号" }
+    track_field_movement_total { "総楽章数" }
+    track_field_duration { "再生時間" }
+    track_field_tags { "タグ" }
+    track_field_file_path { "ファイルパス" }
+    track_field_codec { "コーデック" }
+    track_field_sample_rate { "サンプリングレート" }
+    track_field_channels { "チャンネル" }
+    track_field_bit_depth { "ビット深度" }
+    track_field_bitrate { "ビットレート" }
+    track_field_file_size { "ファイルサイズ" }
+    track_field_modified_time { "変更日時" }
+    track_field_display_track_number { "トラック#" }
+    track_field_technical_summary { "技術仕様" }
+    track_field_quality { "音質" }
+    track_group_none { "なし" }
+    missing_track_artist { "不明なアーティスト" }
+    missing_track_album { "不明なアルバム" }
+    missing_track_year { "不明な年" }
+    missing_track_genre { "不明なジャンル" }
+    missing_track_composer { "不明な作曲者" }
+    missing_track_conductor { "不明な指揮者" }
+    missing_track_ensemble { "不明なアンサンブル" }
+    missing_track_work { "不明な作品" }
+    track_presentation_library { "ライブラリ" }
+    track_presentation_description_library { "全曲をアルバムアーティスト、アルバムの順に表示します。" }
+    track_presentation_list_order { "手動の順序" }
+    track_presentation_description_list_order { "曲を好きな順に並べます。" }
+    track_presentation_songs { "曲" }
+    track_presentation_description_songs { "全曲をタイトル順に一覧表示します。" }
+    track_presentation_albums { "アルバム" }
+    track_presentation_description_albums { "アルバムごとにグループ化し、曲向けの列を表示します。" }
+    track_presentation_artists { "アーティスト" }
+    track_presentation_description_artists { "アルバムアーティストごとにグループ化し、ディスコグラフィ順に表示します。" }
+    track_presentation_performers { "演奏者" }
+    track_presentation_description_performers { "客演を含む曲のアーティストごとにグループ化します。" }
+    track_presentation_genres { "ジャンル" }
+    track_presentation_description_genres { "ジャンルごとにグループ化します。" }
+    track_presentation_years { "年" }
+    track_presentation_description_years { "年ごとにグループ化します。" }
+    track_presentation_classical_composers { "クラシック：作曲者" }
+    track_presentation_description_classical_composers { "作曲者ごとにグループ化し、作品向けの列を表示します。" }
+    track_presentation_classical_conductors { "クラシック：指揮者" }
+    track_presentation_description_classical_conductors { "指揮者ごとにグループ化し、作品とアンサンブルの列を表示します。" }
+    track_presentation_classical_works { "クラシック：作品" }
+    track_presentation_description_classical_works { "作品ごとにグループ化し、作曲者向けの列を表示します。" }
+    track_presentation_tagging { "タグ付け" }
+    track_presentation_description_tagging { "整理用に、未整形のディスク/トラック番号、ジャンル、年、タグを一覧表示します。" }
+    track_presentation_technical { "技術仕様" }
+    track_presentation_description_technical { "ファイル確認用に、コーデック、ビットレート、サイズ、パスを一覧表示します。" }
+    create_custom_track_presentation { "カスタム表示を作成..." }
+    track_presentation_picker_label { "表示" }
+    track_presentation_all_tracks_manual_order_unavailable { "「すべての曲」には保存された順序がありません。ライブラリ全体を手動で並べ替えるには、保存済みリストを作成してください。" }
+    audio_backend_pipewire_description { "低レイテンシの最新 Linux オーディオサーバー" }
+    audio_backend_alsa_description { "Advanced Linux Sound Architecture（直接ハードウェアアクセス）" }
+    audio_backend_wasapi_description { "Windows Audio Session API" }
+    audio_backend_wasapi_output_fallback { "WASAPI レンダリングエンドポイント" }
+    audio_profile_shared { "共有モード" }
+    audio_profile_shared_description { "システム側で他のアプリケーションの音声とミキシング" }
+    audio_profile_exclusive { "排他モード" }
+    audio_profile_exclusive_description { "ハードウェアデバイスへの直接アクセス" }
+    system_default_output_device { "システムデフォルト" }
+    completion_field { "フィールド" }
+    completion_alias { "エイリアス" }
+    completion_operator { "演算子" }
+    completion_logical_operator { "論理演算子" }
+    notification_unknown_error { "不明なエラー" }
+    notification_track_label { "曲 {id}" }
+    notification_playback_subject { "再生" }
+    notification_track_open_failed { "{track} を再生できませんでした: {reason}" }
+    notification_decode_failed { "{track} の再生に失敗しました: {reason}" }
+    notification_route_activation_failed { "再生を開始できませんでした: {reason}" }
+    notification_device_lost { "再生デバイスエラー: {reason}" }
+    notification_sequence_finished { "再生シーケンスが終了しました" }
+    notification_tracks_skipped { "{count, plural, one {再生できない曲を # 曲スキップしました} other {再生できない曲を # 曲スキップしました}}" }
+    notification_stopped_after_failures { "再生できない曲が {count} 曲続いたため、再生を停止しました" }
+    notification_stopped_for_track { "{hasSubject, select, yes {{hasDetail, select, yes {{subject} の再生を停止しました: {detail}} other {{subject} の再生を停止しました}}} other {{hasDetail, select, yes {再生を停止しました: {detail}} other {再生を停止しました}}}}" }
+    notification_fallback { "通知" }
+    notification_grouped_info { "{count, plural, one {# 件の通知} other {# 件の通知}}" }
+    notification_grouped_warning { "{count, plural, one {# 件の警告} other {# 件の警告}}" }
+    notification_grouped_error { "{count, plural, one {# 件のエラー} other {# 件のエラー}}" }
+    library_task_scanning { "スキャン中" }
+    library_task_updating { "更新中" }
+    library_task_fingerprinting { "フィンガープリント作成中" }
+    library_task_indexing_audio_identity { "オーディオ識別インデックス作成中" }
+    library_task_progress_detail { "{hasSubject, select, yes {{activity}: {subject}} other {{activity}}}" }
+    library_task_scanning_compact { "ライブラリをスキャン中" }
+    library_task_updating_compact { "ライブラリを更新中" }
+    library_scan_up_to_date { "ライブラリは最新です" }
+    library_scan_complete { "ライブラリスキャン完了" }
+    library_scan_relinked { "{count, plural, one {移動されたファイル # 件を再リンクしました} other {移動されたファイル # 件を再リンクしました}}" }
+    library_scan_missing { "{count, plural, one {見つからないファイル # 件を確認する必要があります} other {見つからないファイル # 件を確認する必要があります}}" }
+    library_scan_changes_combined { "{relinked}; {missing}" }
+    library_scan_completed_with_errors { "{hasChanges, select, yes {エラー付きでスキャン完了; {changes}} other {エラー付きでスキャン完了}}" }
+    library_scan_unreadable { "ライブラリスキャンで {count, plural, one {# 件の読み取れないファイル} other {# 件の読み取れないファイル}} が見つかり、利用可能な変更はありませんでした" }
+    library_scan_failed { "{hasError, select, yes {スキャン失敗: {error}} other {スキャン失敗}}" }
+    library_all_tracks { "すべての曲" }
+    library_unnamed_list { "<無名のリスト>" }
+    library_audio_identity_indexing_failed { "オーディオ識別インデックスの作成に失敗しました" }
+    library_audio_identity_indexing_completed_with_errors { "オーディオ識別インデックスの作成がエラー付きで完了しました" }
+    library_audio_identity_indexing_complete { "オーディオ識別インデックスの作成が完了しました" }
+    library_ready_indexing_audio_identity { "ライブラリの準備が完了しました。バックグラウンドでオーディオ識別インデックスを作成中" }
+    library_export_failed { "エクスポート失敗: {error}" }
+    library_exported { "ライブラリのエクスポートに成功しました" }
+    library_import_failed { "インポート失敗: {error}" }
+    library_import_confirmation_unavailable { "インポート失敗: 確認を利用できません" }
+    library_imported { "ライブラリのインポートに成功しました" }
+    track_filter_error { "フィルターエラー: {diagnostic}" }
+    track_count { "{count, plural, one {# 曲} other {# 曲}}" }
+    track_selection_summary { "{count, plural, one {# 項目を選択} other {# 項目を選択}}{hasDuration, select, yes { ({duration})} other {}}" }
+    smart_list_membership_direct { "{expression} による直接メンバーシップ編集" }
+    smart_list_membership_computed { "計算されたメンバーシップ — タグまたは式を編集" }
+    smart_list_expression_none { "(なし)" }
+    smart_list_no_tracks { "{source, select, library {ライブラリに曲がありません} other {ソースに曲がありません}}" }
+    smart_list_showing_source { "{source, select, library {全 {count, plural, one {# 曲} other {# 曲}} を表示中} other {ソースから全 {count, plural, one {# 曲} other {# 曲}} を表示中}}" }
+    smart_list_invalid_filter { "無効なフィルター" }
+    smart_list_no_matches { "一致なし" }
+    smart_list_showing_all_matches { "全 {count, plural, one {# 件の一致} other {# 件の一致}} を表示中" }
+    smart_list_showing_first_matches { "{count} 件中 {visible} 件の一致を表示中" }
+    smart_list_untitled_track { "(無題)" }
+    list_order_saved_lists_only { "手動並べ替えは保存されたリストでのみ利用できます。" }
+    list_order_library_busy { "ライブラリがビジー状態です。メンテナンス完了後に手動並べ替えが利用可能になります。" }
+    list_order_authoring_unavailable { "現在ライブラリを編集できません。" }
+    list_order_list_unavailable { "このリストは利用できなくなりました。" }
+    list_order_fix_filter { "順序を変更する前に、リストまたはクイックフィルター式を修正してください。" }
+    list_order_choose_flat_presentation { "曲を並べ替えるには、「手動の順序」またはその他のフラットな未ソート表示を選択してください。" }
+    list_order_clear_quick_filter { "ドラッグまたは相対移動を行うにはクイックフィルターをクリアしてください。最上部または最下部への移動は引き続き利用可能です。" }
+    list_order_changed { "リストが変更されました。並べ替え操作をやり直してください。" }
+    list_order_unchanged { "順序は変更されていません。" }
+    list_order_editing_unavailable { "現在ライブラリを編集できません。" }
+    list_order_moved { "手動の順序で {count, plural, one {# 曲} other {# 曲}} を移動しました。" }
+    list_order_reset { "手動の順序をリセットし、{count, plural, one {# 件の保存された位置} other {# 件の保存された位置}} を破棄しました。" }
+    list_order_forgot_hidden { "{count, plural, one {# 件の非表示の保存された位置} other {# 件の非表示の保存された位置}} を破棄しました。" }
+    list_membership_add_stale { "曲を追加する前にライブラリが変更されました。再試行してください。" }
+    list_membership_add_unavailable { "ライブラリがビジー状態です。曲は追加されませんでした。" }
+    list_membership_add_noop { "{list} の選択した曲にはすでに {tag} が付いています。" }
+    list_membership_added { "{list} の {count, plural, one {# 曲} other {# 曲}} に {tag} を追加しました。" }
+    list_membership_remove_stale { "曲を削除する前にライブラリが変更されました。再試行してください。" }
+    list_membership_remove_unavailable { "ライブラリがビジー状態です。曲は削除されませんでした。" }
+    list_membership_remove_noop { "{list} に {tag} が付いた曲も、保存された位置もありませんでした。" }
+    list_membership_removed_without_position { "{count, plural, one {# 曲} other {# 曲}} から {tag} を削除し、{list} に保存された位置が残っていないことを確認しました。" }
+    list_membership_removed_with_positions { "{trackCount, plural, one {# 曲} other {# 曲}} から {tag} を削除し、{list} 内の {positionCount, plural, one {# 件の保存された位置} other {# 件の保存された位置}} を破棄しました。" }
+    track_channel_mono { "モノラル" }
+    track_channel_stereo { "ステレオ" }
+    track_channel_count { "{count, plural, one {# チャンネル} other {# チャンネル}}" }
+    track_technical_unknown { "不明" }
+    playback_not_playing { "再生していません" }
+    playback_connecting_audio_engine { "オーディオエンジンに接続中..." }
+    playback_unknown_artist { "不明なアーティスト" }
+    playback_audio_pipeline { "オーディオパイプライン" }
+    audio_node_source { "[ソース]" }
+    audio_node_decoder { "[デコーダー]" }
+    audio_node_engine { "[エンジン]" }
+    audio_node_stream { "[ストリーム]" }
+    audio_node_filter { "[フィルター]" }
+    audio_node_device { "[デバイス]" }
+    audio_node_other_source { "[その他のソース]" }
+    audio_node_unknown { "[不明]" }
+    audio_format { "{sampleRate} kHz · {bits} ビット · {channels}" }
+    audio_channels_compact { "{count} ch" }
+    audio_finding_lossy_source { "非可逆圧縮音源" }
+    audio_finding_software_volume_attenuation { "{hasGain, select, yes {ソフトウェア音量減衰: {gain}} other {ソフトウェア音量減衰}}" }
+    audio_finding_software_amplification { "{hasGain, select, yes {ソフトウェア増幅: ゲイン {gain}（クリッピングのリスク）} other {ソフトウェア増幅（クリッピングのリスク）}}" }
+    audio_finding_hardware_volume_modification { "ハードウェア音量調整" }
+    audio_finding_unclassified_volume_modification { "未分類の音量変更" }
+    audio_finding_muted { "ミュート" }
+    audio_finding_resampling { "{hasFormats, select, yes {リサンプリング: {fromRate} Hz → {toRate} Hz} other {リサンプリング}}" }
+    audio_finding_channel_mapping { "{hasFormats, select, yes {チャンネルマッピング: {fromChannels} ch → {toChannels} ch} other {チャンネルマッピング}}" }
+    audio_finding_lossless_padding { "信号を保持する整数拡張" }
+    audio_finding_lossless_float { "信号を保持する浮動小数点変換" }
+    audio_finding_lossless_round_trip { "信号を保持する往復変換（浮動小数点エンジン）" }
+    audio_finding_truncation { "{kind, select, floatToInteger {浮動小数点 → 整数の量子化: {fromPrecision} → {toPrecision}} integerToFloat {整数 → 浮動小数点の量子化: {fromPrecision} → {toPrecision}} precision {精度切り捨て: {fromPrecision} → {toPrecision}} other {精度切り捨て}}" }
+    audio_finding_mixed_sources { "{hasApps, select, yes {{apps} とミキシング} other {複数音源の混合}}" }
+    audio_quality_bit_perfect_playback { "ビットパーフェクト再生" }
+    audio_quality_signal_preserved { "信号を保持" }
+    audio_quality_pipeline_intervention { "オーディオ処理あり" }
+    audio_quality_signal_clipping_detected { "信号クリッピングを検出" }
+    audio_quality_unknown_pipeline { "オーディオ経路不明" }
+    audio_quality_clipping_risk { "クリッピングのリスク" }
+    audio_quality_partially_verified_path { "オーディオ経路を一部のみ検証" }
+    audio_quality_clean_lossy_delivery { "非可逆圧縮音源を追加処理なしで出力" }
+    audio_quality_clean_delivery { "追加処理なしで出力" }
+    playback_control_play { "再生" }
+    playback_control_pause { "一時停止" }
+    playback_control_stop { "停止" }
+    playback_control_next_track { "次の曲" }
+    playback_control_previous_track { "前の曲" }
+    playback_control_shuffle { "シャッフル" }
+    playback_control_repeat { "リピート" }
+    playback_action_play_pause { "再生/一時停止" }
+    playback_action_next { "次へ" }
+    playback_action_previous { "前へ" }
+    playback_action_toggle_shuffle { "シャッフルのオン/オフ" }
+    playback_action_cycle_repeat { "リピートモードを切り替え" }
+    playback_volume_tooltip { "音量: {percent}%{state, select, muted { (ミュート)} hardware { (ハードウェア)} other {}}" }
+    gtk_shell_menu_file { "ファイル" }
+    gtk_shell_open_library { "ライブラリを開く..." }
+    gtk_shell_scan_library { "ライブラリをスキャン" }
+    gtk_shell_import_library_data { "ライブラリデータをインポート..." }
+    gtk_shell_export_library_data { "ライブラリデータをエクスポート..." }
+    gtk_shell_quit { "終了" }
+    gtk_shell_menu_edit { "編集" }
+    gtk_shell_preferences { "設定..." }
+    gtk_shell_menu_view { "表示" }
+    gtk_shell_edit_layout { "レイアウトを編集..." }
+    gtk_shell_save_panel_sizes_as_layout_defaults { "現在のパネルサイズをレイアウトのデフォルトとして保存" }
+    gtk_shell_reset_runtime_layout_state { "ランタイムレイアウト状態をリセット" }
+    gtk_shell_menu_help { "ヘルプ" }
+    gtk_shell_about { "情報" }
+    gtk_shell_application_menu { "アプリケーションメニュー" }
+    gtk_playback_show_playing_list { "クリックして再生リストを表示" }
+    gtk_playback_toggle_mute { "ミュートのオン/オフ" }
+    gtk_playback_show_current_album { "現在のアルバムを表示" }
+    gtk_playback_now_playing_cover_art { "再生中のカバーアート" }
+    gtk_library_quick_filter_placeholder { "曲、アーティスト、アルバム、タグを検索..." }
+    gtk_library_clear_filter { "フィルターをクリア" }
+    gtk_library_create_list_from_filter { "現在のフィルターからリストを作成" }
+    gtk_list_new { "新規リスト..." }
+    gtk_list_new_playlist { "新規プレイリスト..." }
+    gtk_list_edit { "リストを編集..." }
+    gtk_list_delete { "リストを削除" }
+    gtk_list_delete_subtree { "リストとサブツリーを削除..." }
+    gtk_smart_list_new_title { "新規リスト" }
+    gtk_smart_list_edit_title { "リストを編集" }
+    gtk_smart_list_new_playlist_title { "新規プレイリスト" }
+    gtk_common_cancel { "キャンセル" }
+    gtk_common_create { "作成" }
+    gtk_common_save { "保存" }
+    gtk_common_close { "閉じる" }
+    gtk_smart_list_name_placeholder { "リスト名" }
+    gtk_smart_list_name { "名前" }
+    gtk_smart_list_description_placeholder { "説明（任意）" }
+    gtk_smart_list_description { "説明" }
+    gtk_smart_list_membership_tag_placeholder { "メンバーシップに使用する表示タグ" }
+    gtk_smart_list_membership_tag { "メンバーシップタグ" }
+    gtk_smart_list_inherited_filter { "継承されたフィルター" }
+    gtk_smart_list_filter_expression_placeholder { "フィルター式（$、@、#、% を入力）" }
+    gtk_smart_list_local_filter { "ローカルフィルター" }
+    gtk_smart_list_effective_filter { "有効なフィルター" }
+    gtk_smart_list_membership { "メンバーシップ" }
+    gtk_smart_list_auto_presentation { "自動" }
+    gtk_smart_list_presentation { "表示" }
+    gtk_smart_list_preview { "プレビュー" }
+    gtk_smart_list_waiting_for_filter { "フィルターを待機中..." }
+    gtk_smart_list_track { "曲" }
+    gtk_smart_list_invalid_source { "(無効なソース)" }
+    gtk_smart_list_choose_membership_tag { "プレイリストのメンバーシップに使用する表示タグを選択してください" }
+    gtk_library_open_music_library { "音楽ライブラリを開く" }
+    gtk_library_select_export_mode { "エクスポートモードを選択" }
+    gtk_library_choose_backup_contents { "バックアップに含める内容を選択してください:" }
+    gtk_library_export_mode_delta { "差分（ユーザー編集、タグ、リストを同期）" }
+    gtk_library_export_mode_metadata { "メタデータ（テキストとカバーアート、技術情報なし）" }
+    gtk_library_export_mode_full { "完全（障害復旧用: すべてを含む）" }
+    gtk_library_export_mode_list_only { "リストのみ（曲を変更せずにプレイリストを同期）" }
+    gtk_library_include { "含める" }
+    gtk_library_next { "次へ" }
+    gtk_library_export_yaml { "ライブラリを YAML にエクスポート" }
+    gtk_library_yaml_files { "YAML ファイル" }
+    gtk_library_import_yaml { "YAML からライブラリをインポート" }
+    gtk_library_confirm_restore { "ライブラリ復元の確認" }
+    gtk_library_restore_library { "ライブラリを復元" }
+    gtk_library_restore_lists { "リストを復元" }
+    gtk_library_restore_scope_library { "ライブラリの曲とリスト" }
+    gtk_library_restore_scope_lists { "リスト" }
+    gtk_library_file_selection_failed { "ファイル選択に失敗しました" }
+    gtk_library_could_not_select_music_folder { "音楽ライブラリフォルダーを選択できませんでした" }
+    gtk_library_could_not_select_export_file { "エクスポートファイルを選択できませんでした" }
+    gtk_library_could_not_select_backup { "ライブラリバックアップを選択できませんでした" }
+    gtk_list_delete_question_title { "リストを削除しますか？" }
+    gtk_list_delete_subtree_title { "リストとサブツリーを削除しますか？" }
+    gtk_list_delete_action { "削除" }
+    gtk_list_delete_all_action { "すべて削除" }
+    gtk_list_unable_to_delete_title { "リストを削除できません" }
+    gtk_list_delete_question { "「{name}」を削除しますか？\n\nリストは削除されますが、音楽ファイルは保持されます。" }
+    gtk_list_delete_subtree_question { "このサブツリー内の {count, plural, one {# 件のリスト} other {# 件のリスト}} を削除しますか？\n\n{entries}\nネストされたプレイリストで使用されているタグは保持されます。\n音楽ファイルは保持されます。" }
+    gtk_list_remove_tag { "{count, plural, one {# 曲} other {# 曲}} からも {tag} を削除する" }
+    gtk_list_tag_references { "{tag} は次でも参照されています: {references}。削除すると、これらのリストが変更される可能性があります。" }
+    gtk_library_restore_confirmation { "この復元により現在の {scope} が置き換えられます。\n\nデータ: YAML v{version}、モード ''{mode}''。\nプレビュー: 作成 {tracksCreated} 件、更新 {tracksUpdated} 件、削除 {tracksDeleted} 件; リスト作成 {listsCreated} 件、削除 {listsDeleted} 件; 無視された未解決参照 {dangling} 件。\n\n選択したバックアップと一致する場合にのみ続行してください。" }
+    gtk_library_file_selection_error { "{operation}: {message}" }
+    gtk_list_other_computed_membership { "他のリストには計算されたメンバーシップがあります。代わりにその式または曲のタグを編集してください。" }
+    gtk_list_no_editable_playlists { "直接編集可能なプレイリストはありません" }
+    gtk_list_create_playlist { "プレイリストを作成..." }
+    gtk_list_manage_lists { "リストを管理..." }
+    gtk_list_add_to_playlist { "プレイリストに追加" }
+    gtk_list_remove_from_current { "{name} ({tag}) から削除" }
+    gtk_list_remove_computed_unavailable { "メンバーシップが計算されているため、このリストからの削除は利用できません。" }
+    gtk_list_move_up { "上へ移動" }
+    gtk_list_move_down { "下へ移動" }
+    gtk_list_move_to_top { "先頭へ移動" }
+    gtk_list_move_to_bottom { "末尾へ移動" }
+    gtk_list_reset_order { "順序をリセット" }
+    gtk_list_forget_hidden_positions { "非表示の位置を破棄" }
+    gtk_list_manual_order { "手動の順序" }
+    gtk_list_select_tracks_for_order { "手動の順序を変更するには、少なくとも 1 曲を選択してください。" }
+    gtk_list_move_up_action { "手動の順序で上へ移動" }
+    gtk_list_move_down_action { "手動の順序で下へ移動" }
+    gtk_list_move_to_top_action { "手動の順序の先頭へ移動" }
+    gtk_list_move_to_bottom_action { "手動の順序の末尾へ移動" }
+    gtk_list_reset_order_action { "手動の順序をリセット" }
+    gtk_preferences_title { "設定" }
+    gtk_preferences_page_general { "一般" }
+    gtk_preferences_page_appearance { "外観" }
+    gtk_preferences_page_playback_output { "再生/出力" }
+    gtk_preferences_page_layout { "レイアウト" }
+    gtk_preferences_page_keyboard { "キーボード" }
+    gtk_preferences_theme { "テーマ" }
+    gtk_preferences_theme_classic { "クラシック" }
+    gtk_preferences_theme_modern { "モダン" }
+    gtk_preferences_output_device { "出力デバイス" }
+    gtk_preferences_choose_output_device { "出力デバイスを選択..." }
+    gtk_preferences_output_unavailable { "利用不可" }
+    gtk_preferences_default_layout_preset { "デフォルトプリセット" }
+    gtk_preferences_layout_preset_classic { "クラシック" }
+    gtk_preferences_layout_preset_modern { "モダン" }
+    gtk_preferences_actions { "アクション" }
+    gtk_shortcut_title { "キーボードショートカットのカスタマイズ" }
+    gtk_shortcut_reset_all { "すべてリセット" }
+    gtk_shortcut_reset_all_tooltip { "すべてのショートカットをデフォルトにリセット" }
+    gtk_shortcut_other_category { "その他" }
+    gtk_shortcut_conflict_title { "ショートカットを再割り当てしますか？" }
+    gtk_shortcut_conflict_message { "{chord} はすでに「{owner}」に割り当てられています。このアクションに再割り当てしますか？" }
+    gtk_shortcut_reassign { "再割り当て" }
+    gtk_shortcut_conflicts { "競合するショートカット: {chords}" }
+    gtk_shortcut_unassigned { "未割り当て" }
+    gtk_shortcut_remove { "{chord} を削除" }
+    gtk_shortcut_add { "追加…" }
+    gtk_shortcut_add_tooltip { "このアクションの新しいショートカットを記録" }
+    gtk_shortcut_reset { "リセット" }
+    gtk_shortcut_reset_tooltip { "このアクションをデフォルトにリセット" }
+    gtk_shortcut_capture_title { "ショートカットを設定" }
+    gtk_shortcut_capture_prompt { "新しいショートカットの組み合わせを押してください。" }
+    gtk_shortcut_capture_cancel_hint { "{key} でキャンセル" }
+    gtk_action_category_playback { "再生" }
+    gtk_action_category_shell { "シェル" }
+    gtk_action_category_workspace { "ワークスペース" }
+    gtk_action_category_tracks { "曲" }
+    gtk_action_output_devices { "出力デバイス" }
+    gtk_action_system_menu { "システムメニュー" }
+    gtk_action_reveal_track { "曲を表示" }
+    gtk_action_track_properties { "プロパティ" }
+    gtk_action_edit_tags { "タグを編集" }
+    gtk_custom_view_title { "カスタム表示を編集" }
+    gtk_custom_view_label_placeholder { "表示名" }
+    gtk_custom_view_name { "名前" }
+    gtk_custom_view_group_by { "グループ化" }
+    gtk_custom_view_add_sort_field { "ソートフィールドを追加" }
+    gtk_custom_view_sort_order { "並べ替え順序" }
+    gtk_custom_view_add_column { "列を追加" }
+    gtk_custom_view_visible_columns { "表示列" }
+    gtk_custom_view_sort_ascending { "昇順で並べ替え" }
+    gtk_custom_view_sort_descending { "降順で並べ替え" }
+    gtk_common_remove { "削除" }
+    gtk_presentation_view_inactive { "選択した曲表示はアクティブではなくなりました。" }
+    gtk_presentation_unable_to_change { "曲表示を変更できません" }
+    gtk_presentation_copy_label { "{label} のコピー" }
+    tui_shell_command_palette_title { "コマンドパレット" }
+    tui_shell_command_palette_no_matches { "一致なし" }
+    tui_shell_command_palette_footer { "{completeKey} 補完  {runKey} 実行  {cancelKey} キャンセル" }
+    tui_shell_workspace_list { "リスト" }
+    tui_shell_workspace_view { "表示" }
+    tui_shell_overlay_tracks { "曲" }
+    tui_shell_overlay_lists { "リスト" }
+    tui_shell_overlay_detail { "詳細" }
+    tui_shell_overlay_pipeline { "パイプライン" }
+    tui_shell_overlay_output { "出力" }
+    tui_shell_overlay_views { "表示" }
+    tui_shell_overlay_notifications { "通知" }
+    tui_shell_overlay_help { "ヘルプ" }
+    tui_shell_hint_workspace { "{commandKey} コマンド  {listsKey} リスト  {viewKey} 表示  {notificationsKey} 通知  {detailKey} 詳細  {pipelineKey} パイプライン  {outputKey} 出力  {groupsKey} グループ  {currentKey} 現在  {quitKey} 終了" }
+    tui_shell_hint_lists { "{toggleKey} 切り替え  {openKey} 開く  {closeKey} 閉じる" }
+    tui_shell_hint_detail { "{toggleKey} 切り替え  {closeKey} 閉じる" }
+    tui_shell_hint_pipeline { "{toggleKey} 切り替え  {closeKey} 閉じる" }
+    tui_shell_hint_output { "{toggleKey} 切り替え  {selectKey} 選択  {closeKey} 閉じる" }
+    tui_shell_hint_views { "{toggleKey} 切り替え  {selectKey} 選択  {closeKey} 閉じる" }
+    tui_shell_hint_notifications { "{toggleKey} 切り替え  {hideKey} コンパクト非表示  {closeKey} 閉じる" }
+    tui_shell_hint_help { "{closeKey} 閉じる" }
+    tui_shell_status_command { "コマンド" }
+    tui_shell_status_lists { "リスト" }
+    tui_shell_status_view { "表示" }
+    tui_shell_status_notifications { "通知" }
+    tui_shell_status_detail { "詳細" }
+    tui_shell_status_pipeline { "パイプライン" }
+    tui_shell_status_output { "出力" }
+    tui_shell_status_groups { "グループ" }
+    tui_shell_status_current { "現在" }
+    tui_shell_status_quit { "終了" }
+    tui_shell_filter_label { "フィルター" }
+    tui_shell_category_library { "ライブラリ" }
+    tui_shell_category_view { "表示" }
+    tui_shell_category_track { "曲" }
+    tui_shell_category_audio { "オーディオ" }
+    tui_shell_category_status { "ステータス" }
+    tui_shell_category_ui { "UI" }
+    tui_shell_category_playback { "再生" }
+    tui_shell_category_app { "アプリ" }
+    tui_shell_detail_quick_filter { "クイックフィルター" }
+    tui_shell_detail_track_view { "曲表示" }
+    tui_shell_detail_choose_list { "リストを選択" }
+    tui_shell_detail_track_detail { "曲詳細" }
+    tui_shell_detail_audio_pipeline { "オーディオパイプライン" }
+    tui_shell_detail_output_device { "出力デバイス" }
+    tui_shell_detail_choose_view { "表示を選択" }
+    tui_shell_detail_notification_center { "通知センター" }
+    tui_shell_detail_close_overlay { "オーバーレイを閉じる" }
+    tui_shell_detail_help { "ヘルプ" }
+    tui_shell_detail_now_playing { "再生中" }
+    tui_shell_detail_clear_filter { "フィルターをクリア" }
+    tui_shell_detail_reload_list { "リストを再読み込み" }
+    tui_shell_detail_play { "再生" }
+    tui_shell_detail_pause { "一時停止" }
+    tui_shell_detail_toggle_playback { "再生/一時停止の切り替え" }
+    tui_shell_detail_stop { "停止" }
+    tui_shell_detail_quit { "終了" }
+    tui_shell_output_devices_title { "出力デバイス" }
+    tui_playback_no_active_track { "アクティブな曲はありません" }
+    tui_playback_volume { "音量 {percent}%" }
+    tui_playback_no_output_device_selected { "出力デバイスが選択されていません" }
+    tui_playback_no_output_devices_found { "出力デバイスが見つかりません" }
+    tui_playback_no_audio_pipeline { "オーディオパイプラインはまだありません" }
+    tui_shell_help_quick_filter { "{command}              クイックフィルター" }
+    tui_shell_help_choose_list { "{command} または {alias}       リストを選択" }
+    tui_shell_help_track_detail { "{command} または {alias}      選択した曲の詳細を表示" }
+    tui_shell_help_audio_pipeline { "{command} または {alias}    オーディオパイプラインを表示" }
+    tui_shell_help_output_device { "{command} または {alias}      出力デバイスを選択" }
+    tui_shell_help_choose_view { "{command} または {alias}       表示を選択" }
+    tui_shell_help_notifications { "{command} または {alias} 通知センターを表示" }
+    tui_shell_help_current_track { "{command}           現在の曲を表示" }
+    tui_shell_help_switch_presentation { "{command}         表示を切り替え" }
+    tui_shell_help_previous_next_group { "{command}              前 / 次のグループ" }
+    tui_shell_help_clear_filter { "{command}             フィルターをクリア" }
+    tui_shell_help_reload_list { "{command}            アクティブなリストを再読み込み" }
+    tui_shell_help_playback { "{command} 再生" }
+    tui_shell_help_quit { "{command}              終了" }
+    tui_shell_help_footer { "{closeKey} 閉じる  {runKey} 実行" }
+    tui_shell_notification_footer { "{toggleKey} 切り替え  {hideKey} コンパクト非表示  消去可能な行をクリック  {closeKey} 閉じる" }
+    tui_library_detail { "ライブラリ" }
+    tui_library_no_sections { "この表示にはセクションがありません" }
+    tui_library_no_section_selected { "セクションが選択されていません" }
+    tui_library_no_current_track { "現在の曲はありません" }
+    tui_library_current_track_not_in_view { "現在の曲はこの表示にありません" }
+    tui_library_no_active_track_view { "アクティブな曲表示はありません" }
+    tui_library_no_views_available { "利用可能な表示はありません" }
+    tui_library_no_lists_available { "利用可能なリストはありません" }
+    tui_library_filter_cleared { "フィルターがクリアされました" }
+    tui_library_filter_applied { "フィルターが適用されました" }
+    tui_library_no_tracks_found { "曲が見つかりません。まずこのライブラリで `aobus init` を実行してください。" }
+    tui_library_no_lists_found { "リストが見つかりません" }
+    tui_library_ready { "準備完了" }
+    tui_library_section { "セクション: {name}" }
+    tui_library_revealed_track { "{track} を表示しました" }
+    tui_library_unknown_view { "不明な表示 {id}" }
+    tui_library_view { "表示: {id}" }
+    tui_library_opened_list { "{list} を開きました" }
+    tui_library_reloaded_tracks { "{count, plural, one {# 曲} other {# 曲}} を再読み込みしました" }
+    tui_library_quick_filter_matched { "クイックフィルターが {count, plural, one {# 曲} other {# 曲}} に一致しました" }
+    tui_library_expression_filter_matched { "式フィルターが {count, plural, one {# 曲} other {# 曲}} に一致しました" }
+    tui_presentation_custom { "カスタム" }
+    tui_presentation_custom_from { "{id} からのカスタム" }
+    tui_presentation_default { "デフォルト" }
+    tui_presentation_badge { "表示:{id}" }
+    winui_shell_menu_file { "ファイル" }
+    winui_shell_open_library { "ライブラリを開く..." }
+    winui_shell_rescan { "再スキャン" }
+    winui_shell_rescan_library { "ライブラリを再スキャン" }
+    winui_shell_menu_view { "表示" }
+    winui_shell_modern_mode { "モダンモード" }
+    winui_shell_columns { "列..." }
+    winui_shell_reload_theme { "テーマを再読み込み" }
+    winui_shell_menu_playback { "再生" }
+    winui_shell_play_pause { "再生/一時停止" }
+    winui_shell_stop { "停止" }
+    winui_shell_track_details { "曲詳細" }
+    winui_shell_classic_mode { "クラシックモード" }
+    winui_playback_output_device { "出力デバイス" }
+    winui_playback_volume { "音量" }
+    winui_playback_no_output_devices { "出力デバイスなし" }
+    winui_library_open_label { "開く" }
+    winui_library_rescan_label { "再スキャン" }
+    winui_library_navigation_pane_title { "ライブラリ" }
+    winui_library_quick_filter_placeholder { "曲をフィルター" }
+    winui_library_ready { "準備完了" }
+    winui_library_rescanning { "ライブラリを再スキャン中..." }
+    winui_library_no_selection { "選択なし" }
+    winui_track_move_column_left { "左へ移動" }
+    winui_track_move_column_right { "右へ移動" }
+    winui_more_menu { "その他" }
+    winui_error { "エラー: {detail}" }
+    winui_save_settings_failed { "設定を保存できませんでした: {detail}" }
+    winui_open_library_picker { "ライブラリを開く" }
+    winui_folder_picker_failed { "フォルダーピッカーに失敗しました: {detail}" }
+    winui_library_switch_failed { "ライブラリを切り替えられませんでした: {detail}" }
+    winui_theme_override_removed { "テーマの上書きを削除しました。Windows の外観に従います" }
+    winui_theme_reload_failed { "テーマの再読み込みに失敗しました: {detail}" }
+    winui_theme_reloaded { "テーマを再読み込みしました: {path}" }
+    winui_smtc_unavailable { "SMTC を利用できません: {detail}" }
+    winui_shell_layout_failed { "シェルレイアウトを構築できませんでした: {detail}" }
+    winui_activity_details { "アクティビティの詳細を表示" }
+    winui_activity_notifications { "通知" }
+    winui_activity_hide_notification { "ステータスから通知を非表示にする" }
+    winui_library_ready_at { "ライブラリ準備完了: {root}" }
+    winui_navigation_failed { "ナビゲーションに失敗しました: {detail}" }
+    winui_list_status { "リスト: {list}" }
+    winui_presentation_failed { "表示に失敗しました: {detail}" }
+    winui_playback_failed { "再生に失敗しました: {detail}" }
+    winui_column_resize_failed { "列のサイズ変更に失敗しました: {detail}" }
+    winui_column_settings_failed { "列の設定に失敗しました: {detail}" }
+    winui_column_move_failed { "列の移動に失敗しました: {detail}" }
+    winui_column_visibility_failed { "列の表示設定に失敗しました: {detail}" }
+    winui_column_not_sortable { "列 ''{column}'' は並べ替えできません" }
+    winui_sort_failed { "並べ替えに失敗しました: {detail}" }
+    winui_unavailable_track { "利用できない曲" }
+    winui_theme_file_not_found { "テーマファイルが見つかりません: {path}" }
+    winui_theme_load_failed { "Windows テーマの読み込みに失敗しました: {detail}" }
+    winui_startup_failure { "Aobus を起動できませんでした:\n\n{detail}" }
+    track_multiple_values { "<複数の値>" }
+    track_metadata_heading { "メタデータ" }
+    track_audio_properties_heading { "オーディオ情報" }
+    track_show_empty_fields { "空のフィールドを表示" }
+    track_hide_empty_fields { "空のフィールドを非表示" }
+    track_missing_on_some { "一部の曲で未設定" }
+    track_fallback { "曲 {id}" }
+    track_detail_title { "曲詳細" }
+    track_no_selection { "曲が選択されていません" }
+    cover_art_title { "カバーアート" }
+    cover_art_none { "カバーアートなし" }
+    library_task_label { "ライブラリタスク" }
+    track_tags_changed { "{hasAdded, select, yes {{trackCount, plural, one {# 曲} other {# 曲}} にタグを追加 {addedCount} 件{hasRemoved, select, yes {、削除 {removedCount} 件} other {}}} other {{trackCount, plural, one {# 曲} other {# 曲}} からタグを削除 {removedCount} 件}}" }
+    track_tags_stale { "タグエディターが開いている間にライブラリが変更されました。再読み込みして再試行してください。" }
+    track_edit_stale { "この編集が開いている間にライブラリが変更されました。値を再読み込みして再試行してください。" }
+    track_editing_unavailable { "現在ライブラリを編集できません。" }
+    gtk_track_properties_title { "プロパティ" }
+    gtk_track_properties_selected_title { "プロパティ — {count, plural, one {# 曲} other {# 曲}} を選択中" }
+    gtk_track_editing_unavailable { "編集不可: {detail}" }
+    gtk_track_save_failed { "保存に失敗しました" }
+    gtk_track_save_stale_title { "保存を適用できません" }
+    gtk_track_save_stale { "このダイアログが開いている間にライブラリが変更されました。プロパティを再読み込みして再試行してください。" }
+    gtk_tag_add { "追加…" }
+    gtk_tag_add_placeholder { "タグを追加…" }
+    gtk_tag_remove { "タグ {tag} を削除" }
+    gtk_custom_metadata_title { "カスタムメタデータ" }
+    gtk_custom_metadata_key { "キー" }
+    gtk_custom_metadata_value { "値" }
+    gtk_custom_metadata_deleted { "カスタムメタデータ ''{key}'' を削除しました" }
+    gtk_custom_metadata_delete { "カスタムメタデータを削除" }
+    gtk_activity_hide_status { "ステータスを非表示" }
+    gtk_activity_hide_notification { "ステータスから通知を非表示にする" }
+    gtk_manual_order_drag { "ドラッグして手動の順序で曲を並べ替え" }
+    gtk_manual_order_rearrange { "曲を並べ替え" }
+    gtk_status_ready { "Aobus 準備完了" }
+    gtk_edit_value { "値を編集" }
+    gtk_collapse_panel { "パネルを折りたたむ" }
+    gtk_expand_panel { "パネルを展開" }
+    gtk_hide_details { "詳細を非表示" }
+    gtk_show_details { "詳細を表示" }
+    gtk_no_track_view_available { "利用可能な曲表示はありません。" }
+    gtk_save_layout_defaults_message { "これにより、現在のパネルサイズでディスク上のレイアウトプリセット ''{preset}'' が更新されます。\n\n反映されたサイズはランタイム状態から削除され、表示状態などの他のランタイム値は保持されます。" }
+    gtk_unable_switch_libraries { "ライブラリを切り替えられません" }
+    gtk_startup_failed_title { "Aobus 起動失敗" }
+    gtk_startup_select_library_failed { "Aobus は起動ライブラリを選択できませんでした: {detail}" }
+    gtk_startup_open_library_failed { "Aobus はライブラリを開けませんでした: {detail}" }
+    gtk_startup_activate_library_failed { "Aobus はライブラリをアクティブ化できませんでした: {detail}" }
+    gtk_startup_launch_library_failed { "Aobus は選択したライブラリを起動できませんでした: {detail}" }
+    gtk_layout_editor_title { "レイアウトエディター" }
+    gtk_layout_apply { "適用" }
+    gtk_layout_unable_to_save { "レイアウトを保存できません" }
+    gtk_layout_tree_node { "ノード" }
+    gtk_layout_tree_type { "タイプ" }
+    gtk_layout_classic_preset { "クラシックレイアウト" }
+    gtk_layout_modern_preset { "モダンレイアウト" }
+    gtk_layout_classic_theme { "クラシックテーマ" }
+    gtk_layout_modern_theme { "モダンテーマ" }
+    gtk_layout_reset_preset { "選択したプリセットをデフォルトのレイアウトにリセット" }
+    gtk_layout_add_child { "子を追加" }
+    gtk_layout_wrap_node { "ノードをラップ" }
+    gtk_layout_remove_node { "ノードを削除" }
+    gtk_layout_move_up { "上へ移動" }
+    gtk_layout_move_down { "下へ移動" }
+    gtk_layout_invalid_document { "無効なレイアウトドキュメント" }
+    gtk_layout_validation_preset { "プリセット ''{preset}'' の検証に失敗しました:\n\n{detail}" }
+    gtk_layout_invalid_component_ids { "無効なレイアウトコンポーネント ID" }
+    gtk_layout_validation_component { "プリセット ''{preset}''、コンポーネント ''{component}''、タイプ ''{type}'' の検証に失敗しました:\n\n{detail}" }
+    gtk_layout_invalid_actions { "無効なレイアウトアクション" }
+    gtk_layout_validation_action { "プリセット ''{preset}''、コンポーネント ''{component}''、プロパティ ''{property}'' の検証に失敗しました:\n\n{detail}" }
+    gtk_common_ok { "OK" }
+    gtk_common_add { "追加" }
+    gtk_common_undo { "元に戻す" }
+    gtk_common_no { "いいえ" }
+    gtk_common_yes { "はい" }
+    gtk_layout_id { "ID" }
+    gtk_layout_none { "なし" }
+    gtk_layout_capability_anchor { "アンカー" }
+    gtk_layout_capability_menu { "メニュー" }
+    gtk_layout_unknown_id { "⚠ 不明な ID: {id}" }
+    gtk_layout_unsupported_editor { "(サポートされていないエディター)" }
+    gtk_layout_no_selection { "選択なし" }
+    gtk_layout_general { "一般" }
+    gtk_layout_properties { "レイアウトプロパティ" }
+    gtk_layout_no_descriptor { "記述子が見つかりません" }
+    gtk_layout_category_containers { "コンテナー" }
+    gtk_layout_category_decorators { "デコレーター" }
+    gtk_layout_category_tracks { "曲" }
+    gtk_layout_category_playback { "再生" }
+    gtk_layout_category_status { "ステータス" }
+    gtk_layout_category_generic { "汎用" }
+    gtk_layout_category_application { "アプリケーション" }
+    gtk_layout_category_library { "ライブラリ" }
+    gtk_layout_category_layout { "レイアウト" }
+    gtk_layout_component_box { "ボックス (Box)" }
+    gtk_layout_component_split_pane { "分割ペイン (Split Pane)" }
+    gtk_layout_component_label { "ラベル (Label)" }
+    gtk_layout_component_action_button { "アクションボタン (Action Button)" }
+    gtk_layout_component_menu_button { "メニューボタン (Menu Button)" }
+    gtk_layout_component_menu_bar { "メニューバー (Menu Bar)" }
+    gtk_layout_component_track_table { "トラックテーブル (Track Table)" }
+    gtk_layout_component_quick_filter { "クイックフィルター (Quick Filter)" }
+    gtk_layout_component_presentation_button { "表示ボタン (Presentation Button)" }
+    gtk_layout_component_cover_art { "カバーアート (Cover Art)" }
+    gtk_layout_component_transport_button { "トランスポートボタン (Transport Button)" }
+    gtk_layout_component_soul_button { "Soul ボタン (Soul Button)" }
+    gtk_layout_component_seek_slider { "シークスライダー (Seek Slider)" }
+    gtk_layout_component_time_label { "時間ラベル (Time Label)" }
+    gtk_layout_component_volume_control { "音量コントロール (Volume Control)" }
+    gtk_layout_component_output_device_selector { "出力デバイスセレクター (Output Device Selector)" }
+    gtk_layout_component_activity_status { "アクティビティステータス (Activity Status)" }
+    gtk_layout_component_track_count { "曲数 (Track Count)" }
+    gtk_layout_component_selection_info { "選択情報 (Selection Info)" }
+    gtk_layout_component_status_message { "ステータスメッセージ (Status Message)" }
+    gtk_layout_component_now_playing_status { "再生中ステータス (Now Playing Status)" }
+    gtk_layout_component_playback_details { "再生詳細 (Playback Details)" }
+    gtk_layout_component_library_tree { "ライブラリツリー (Library Tree)" }
+    gtk_layout_component_playback_cover_art { "再生カバーアート (Playback Cover Art)" }
+    gtk_layout_component_soul_play_pause { "Soul 再生/一時停止ボタン (Soul Play/Pause Button)" }
+    gtk_layout_component_quality_indicator { "音質インジケーター (Quality Indicator)" }
+    gtk_layout_component_audio_pipeline_panel { "オーディオパイプラインパネル (Audio Pipeline Panel)" }
+    gtk_layout_component_current_title_label { "現在のタイトルラベル (Current Title Label)" }
+    gtk_layout_component_current_artist_label { "現在のアーティストラベル (Current Artist Label)" }
+    gtk_layout_component_separator { "セパレーター (Separator)" }
+    gtk_layout_component_absolute_canvas { "絶対キャンバス (Absolute Canvas)" }
+    gtk_layout_component_spacer { "スペーサー (Spacer)" }
+    gtk_layout_component_scroll_window { "スクロールウィンドウ (Scroll Window)" }
+    gtk_layout_component_tabs { "タブ (Tabs)" }
+    gtk_layout_component_responsive_class { "レスポンシブクラス (Responsive Class)" }
+    gtk_layout_component_center_box { "センターボックス (Center Box)" }
+    gtk_layout_component_open_library_button { "ライブラリを開くボタン (Open Library Button)" }
+    gtk_layout_component_workspace_with_detail { "詳細付きワークスペース (Workspace with Detail)" }
+    gtk_layout_component_collapsible_split { "折りたたみ可能分割 (Collapsible Split)" }
+    gtk_layout_component_detail_scope { "詳細スコープ (Detail Scope)" }
+    gtk_layout_component_field_grid { "フィールドグリッド (Field Grid)" }
+    gtk_layout_component_tag_editor { "タグエディター (Tag Editor)" }
+    gtk_layout_component_selection_region { "選択領域 (Selection Region)" }
+    gtk_layout_component_detail_undo_bar { "詳細元に戻すバー (Detail Undo Bar)" }
+    gtk_layout_property_text { "テキスト" }
+    gtk_layout_property_orientation { "向き" }
+    gtk_layout_property_spacing { "間隔" }
+    gtk_layout_property_variant { "バリアント" }
+    gtk_layout_property_placeholder_style { "プレースホルダーのスタイル" }
+    gtk_layout_property_command { "コマンド" }
+    gtk_layout_property_stroke_width { "線の太さ" }
+    gtk_layout_property_glyph_scale { "グリフのスケール" }
+    gtk_layout_property_mode { "モード" }
+    gtk_layout_property_idle_behavior { "アイドル時の動作" }
+    gtk_layout_property_max_text_chars { "最大テキスト文字数" }
+    gtk_layout_property_glyph { "グリフ" }
+    gtk_layout_property_show_full_logo { "完全なロゴを表示" }
+    gtk_layout_property_target_size { "ターゲットサイズ" }
+    gtk_layout_property_force_square { "正方形を強制" }
+    gtk_layout_property_action { "アクション" }
+    gtk_layout_property_show_label { "ラベルを表示" }
+    gtk_layout_property_size { "サイズ" }
+    gtk_layout_property_icon_symbolic { "アイコン (Symbolic)" }
+    gtk_layout_property_style { "スタイル" }
+    gtk_layout_property_homogeneous { "均等配置" }
+    gtk_layout_property_snap_to_grid { "グリッドにスナップ" }
+    gtk_layout_property_grid_size { "グリッドサイズ" }
+    gtk_layout_property_horizontal_scroll_policy { "水平スクロールポリシー" }
+    gtk_layout_property_vertical_scroll_policy { "垂直スクロールポリシー" }
+    gtk_layout_property_min_content_width { "最小コンテンツ幅" }
+    gtk_layout_property_min_content_height { "最小コンテンツ高" }
+    gtk_layout_property_propagate_natural_width { "自然な幅を伝播" }
+    gtk_layout_property_propagate_natural_height { "自然な高さを伝播" }
+    gtk_layout_property_tab_title { "タブタイトル" }
+    gtk_layout_property_tab_icon { "タブアイコン" }
+    gtk_layout_property_axis { "軸" }
+    gtk_layout_property_compact_max { "コンパクト最大" }
+    gtk_layout_property_regular_max { "標準最大" }
+    gtk_layout_property_class_prefix { "クラスプレフィックス" }
+    gtk_layout_property_slot { "スロット" }
+    gtk_layout_property_view_source { "表示ソース" }
+    gtk_layout_property_group_cover_placeholder { "グループカバープレースホルダー" }
+    gtk_layout_property_position { "位置" }
+    gtk_layout_property_initial_position { "初期位置 (%)" }
+    gtk_layout_property_resize_start { "開始側のリサイズ" }
+    gtk_layout_property_shrink_start { "開始側の縮小" }
+    gtk_layout_property_resize_end { "終了側のリサイズ" }
+    gtk_layout_property_shrink_end { "終了側の縮小" }
+    gtk_layout_property_collapse_side { "折りたたみ側" }
+    gtk_layout_property_initially_revealed { "初期状態で展開" }
+    gtk_layout_property_css_classes { "CSS クラス" }
+    gtk_layout_property_categories { "カテゴリー" }
+    gtk_layout_property_show_when { "表示条件" }
+    gtk_layout_property_show_placeholder { "プレースホルダーを表示" }
+    gtk_layout_property_expand_horizontal { "水平方向に拡張" }
+    gtk_layout_property_expand_vertical { "垂直方向に拡張" }
+    gtk_layout_property_horizontal_align { "水平方向の配置" }
+    gtk_layout_property_vertical_align { "垂直方向の配置" }
+    gtk_layout_property_width_request { "要求幅" }
+    gtk_layout_property_height_request { "要求高" }
+    gtk_layout_property_x { "X" }
+    gtk_layout_property_y { "Y" }
+    gtk_layout_property_width { "幅" }
+    gtk_layout_property_height { "高さ" }
+    gtk_layout_property_z_index { "Z-Index" }
+    gtk_layout_value_ambient { "アンビエント" }
+    gtk_layout_value_classic_inline { "クラシックインライン" }
+    gtk_layout_value_hidden { "非表示" }
+    gtk_layout_value_reserve { "スペースを予約" }
+    gtk_layout_value_small { "小" }
+    gtk_layout_value_normal { "標準" }
+    gtk_layout_value_large { "大" }
+    gtk_layout_value_flat { "フラット" }
+    gtk_layout_value_raised { "浮き出し" }
+    gtk_layout_value_circular { "円形" }
+    gtk_layout_value_suggested { "推奨" }
+    gtk_layout_value_destructive { "破壊的" }
+    gtk_layout_value_monogram { "モノグラム" }
+    gtk_layout_value_note { "音符" }
+    gtk_layout_value_vinyl { "レコード" }
+    gtk_layout_value_equalizer { "イコライザー" }
+    gtk_layout_value_soul { "Soul" }
+    gtk_layout_value_sigil { "シギル" }
+    gtk_layout_value_seal { "シール" }
+    gtk_layout_value_horizontal { "水平" }
+    gtk_layout_value_vertical { "垂直" }
+    gtk_layout_value_jump_to_album { "アルバムへ移動" }
+    gtk_layout_value_inline { "インライン" }
+    gtk_layout_value_compact { "コンパクト" }
+    gtk_layout_value_tooltip { "ツールチップ" }
+    gtk_layout_value_reveal { "現在の曲を表示" }
+    gtk_layout_value_play_pause { "再生/一時停止" }
+    gtk_layout_value_filter_by_field { "フィールドでフィルター" }
+    gtk_layout_value_start { "開始" }
+    gtk_layout_value_end { "終了" }
+    gtk_layout_value_automatic { "自動" }
+    gtk_layout_value_always { "常時" }
+    gtk_layout_value_never { "なし" }
+    gtk_layout_value_width { "幅" }
+    gtk_layout_value_height { "高さ" }
+    gtk_layout_value_fill { "塗りつぶし" }
+    gtk_layout_value_center { "中央" }
+    tui_untitled_section { "無題のセクション" }
+    tui_notification_none { "通知なし" }
+    tui_lists_closed { "リストが閉じられました" }
+    tui_lists_opened { "リスト" }
+    tui_detail_closed { "詳細が閉じられました" }
+    tui_detail_opened { "詳細パネル" }
+    tui_pipeline_closed { "パイプラインが閉じられました" }
+    tui_pipeline_opened { "オーディオパイプライン" }
+    tui_output_closed { "出力デバイスが閉じられました" }
+    tui_output_unavailable { "出力デバイス利用不可" }
+    tui_output_opened { "出力デバイス" }
+    tui_views_closed { "表示が閉じられました" }
+    tui_views_opened { "表示" }
+    tui_notifications_closed { "通知が閉じられました" }
+    tui_notifications_opened { "通知" }
+    tui_playback_start_failed { "再生を開始できませんでした。出力デバイス、ファイルパス、ログを確認してください。" }
+    tui_playback_control_unavailable { "再生コントロール利用不可" }
+    tui_overlay_closed { "オーバーレイが閉じられました" }
+    tui_help_opened { "ヘルプ" }
+    tui_section_unavailable { "セクションは利用できなくなりました" }
+    tui_filter_failed { "フィルター失敗: {detail}" }
+  }
+}

@@ -59,6 +59,79 @@ namespace ao::i18n::test
       CHECK(*fallbackRes == ResolvedMessage{.text = "English message fallback", .locale = "en"});
     }
 
+    for (auto const* const request : {"zh-CN", "zh-Hans", "zh-Hans-CN", "zh"})
+    {
+      auto chineseRes = MessageCatalog::create(request);
+      REQUIRE(chineseRes);
+      auto titleRes = chineseRes->format(MessageId::PilotLibraryTitle);
+      REQUIRE(titleRes);
+      CHECK(titleRes->text == "音乐库");
+
+      auto fallbackRes = chineseRes->format(MessageId::PilotEnglishFallback);
+      REQUIRE(fallbackRes);
+      CHECK(*fallbackRes == ResolvedMessage{.text = "English message fallback", .locale = "en"});
+
+      auto simplifiedOnlyRes = chineseRes->format(MessageId::PilotSimplifiedOnlyProbe);
+      REQUIRE(simplifiedOnlyRes);
+      CHECK(*simplifiedOnlyRes == ResolvedMessage{.text = "仅简体中文探针", .locale = "zh-Hans"});
+    }
+
+    for (auto const* const request : {"zh-TW", "zh-HK", "zh-Hant", "zh-Hant-TW"})
+    {
+      auto traditionalRes = MessageCatalog::create(request);
+      REQUIRE(traditionalRes);
+      auto titleRes = traditionalRes->format(MessageId::PilotLibraryTitle);
+      REQUIRE(titleRes);
+      CHECK(titleRes->text == "音樂庫");
+
+      auto fallbackRes = traditionalRes->format(MessageId::PilotEnglishFallback);
+      REQUIRE(fallbackRes);
+      CHECK(*fallbackRes == ResolvedMessage{.text = "English message fallback", .locale = "en"});
+
+      auto simplifiedOnlyRes = traditionalRes->format(MessageId::PilotSimplifiedOnlyProbe);
+      REQUIRE(simplifiedOnlyRes);
+      CHECK(*simplifiedOnlyRes == ResolvedMessage{.text = "Simplified only probe", .locale = "en"});
+    }
+
+    for (auto const* const request : {"ja-JP", "ja"})
+    {
+      auto japaneseRes = MessageCatalog::create(request);
+      REQUIRE(japaneseRes);
+      auto titleRes = japaneseRes->format(MessageId::PilotLibraryTitle);
+      REQUIRE(titleRes);
+      CHECK(*titleRes == ResolvedMessage{.text = "音楽ライブラリ", .locale = "ja"});
+
+      auto fallbackRes = japaneseRes->format(MessageId::PilotEnglishFallback);
+      REQUIRE(fallbackRes);
+      CHECK(*fallbackRes == ResolvedMessage{.text = "English message fallback", .locale = "en"});
+    }
+
+    for (auto const* const request : {"es-ES", "es"})
+    {
+      auto spanishRes = MessageCatalog::create(request);
+      REQUIRE(spanishRes);
+      auto titleRes = spanishRes->format(MessageId::PilotLibraryTitle);
+      REQUIRE(titleRes);
+      CHECK(*titleRes == ResolvedMessage{.text = "Biblioteca de música", .locale = "es"});
+
+      auto fallbackRes = spanishRes->format(MessageId::PilotEnglishFallback);
+      REQUIRE(fallbackRes);
+      CHECK(*fallbackRes == ResolvedMessage{.text = "English message fallback", .locale = "en"});
+    }
+
+    for (auto const* const request : {"fr-FR", "fr"})
+    {
+      auto frenchRes = MessageCatalog::create(request);
+      REQUIRE(frenchRes);
+      auto titleRes = frenchRes->format(MessageId::PilotLibraryTitle);
+      REQUIRE(titleRes);
+      CHECK(*titleRes == ResolvedMessage{.text = "Bibliothèque musicale", .locale = "fr"});
+
+      auto fallbackRes = frenchRes->format(MessageId::PilotEnglishFallback);
+      REQUIRE(fallbackRes);
+      CHECK(*fallbackRes == ResolvedMessage{.text = "English message fallback", .locale = "en"});
+    }
+
     auto unsupportedRes = MessageCatalog::create("sv-SE");
     REQUIRE(unsupportedRes);
     auto unsupportedTitleRes = unsupportedRes->format(MessageId::PilotLibraryTitle);
@@ -141,6 +214,57 @@ namespace ao::i18n::test
     auto stateRes = catalogRes->format(MessageId::PilotPlaybackState, stateArguments);
     REQUIRE(stateRes);
     CHECK(stateRes->text == "Pausiert");
+
+    auto chineseCatalogRes = MessageCatalog::create("zh-CN");
+    REQUIRE(chineseCatalogRes);
+    auto zhOneRes = chineseCatalogRes->format(MessageId::PilotTrackCount, oneArgument);
+    REQUIRE(zhOneRes);
+    CHECK(zhOneRes->text == "1 首曲目");
+    auto zhStateRes = chineseCatalogRes->format(MessageId::PilotPlaybackState, stateArguments);
+    REQUIRE(zhStateRes);
+    CHECK(zhStateRes->text == "已暂停");
+
+    auto traditionalCatalogRes = MessageCatalog::create("zh-TW");
+    REQUIRE(traditionalCatalogRes);
+    auto zhHantOneRes = traditionalCatalogRes->format(MessageId::PilotTrackCount, oneArgument);
+    REQUIRE(zhHantOneRes);
+    CHECK(zhHantOneRes->text == "1 首曲目");
+    auto zhHantStateRes = traditionalCatalogRes->format(MessageId::PilotPlaybackState, stateArguments);
+    REQUIRE(zhHantStateRes);
+    CHECK(zhHantStateRes->text == "已暫停");
+
+    auto japaneseCatalogRes = MessageCatalog::create("ja-JP");
+    REQUIRE(japaneseCatalogRes);
+    auto jaOneRes = japaneseCatalogRes->format(MessageId::PilotTrackCount, oneArgument);
+    REQUIRE(jaOneRes);
+    CHECK(jaOneRes->text == "1 曲");
+    auto jaStateRes = japaneseCatalogRes->format(MessageId::PilotPlaybackState, stateArguments);
+    REQUIRE(jaStateRes);
+    CHECK(jaStateRes->text == "一時停止");
+
+    auto spanishCatalogRes = MessageCatalog::create("es-ES");
+    REQUIRE(spanishCatalogRes);
+    auto esOneRes = spanishCatalogRes->format(MessageId::PilotTrackCount, oneArgument);
+    REQUIRE(esOneRes);
+    CHECK(esOneRes->text == "1 pista");
+    auto esManyRes = spanishCatalogRes->format(MessageId::PilotTrackCount, {{"count", std::size_t{2}}});
+    REQUIRE(esManyRes);
+    CHECK(esManyRes->text == "2 pistas");
+    auto esStateRes = spanishCatalogRes->format(MessageId::PilotPlaybackState, stateArguments);
+    REQUIRE(esStateRes);
+    CHECK(esStateRes->text == "Pausado");
+
+    auto frenchCatalogRes = MessageCatalog::create("fr-FR");
+    REQUIRE(frenchCatalogRes);
+    auto frOneRes = frenchCatalogRes->format(MessageId::PilotTrackCount, oneArgument);
+    REQUIRE(frOneRes);
+    CHECK(frOneRes->text == "1 morceau");
+    auto frManyRes = frenchCatalogRes->format(MessageId::PilotTrackCount, {{"count", std::size_t{2}}});
+    REQUIRE(frManyRes);
+    CHECK(frManyRes->text == "2 morceaux");
+    auto frStateRes = frenchCatalogRes->format(MessageId::PilotPlaybackState, stateArguments);
+    REQUIRE(frStateRes);
+    CHECK(frStateRes->text == "En pause");
   }
 
   TEST_CASE("MessageCatalog - pseudo output expands literals but preserves argument values", "[core][unit][catalog]")

@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <string>
 #include <vector>
@@ -94,6 +95,36 @@ namespace ao::i18n::detail::test
     auto pluralRes = projectWinUiPositionalPattern("{count, plural, one {One} other {Many}}", "count");
     REQUIRE_FALSE(pluralRes);
     CHECK(pluralRes.error().message.contains("exactly one plain named argument"));
+  }
+
+  TEST_CASE("CatalogPattern - partial WinUI projections omit untranslated governed messages",
+            "[core][unit][catalog][winui]")
+  {
+    auto const translated = std::array{
+      CatalogMessage{.id = "winui_error", .pattern = "Fehler: {detail}"},
+      CatalogMessage{.id = "winui_track_move_column_left", .pattern = "Nach links"},
+    };
+
+    auto projectedRes = projectWinUiResources(translated, MissingWinUiMessagePolicy::Omit);
+    REQUIRE(projectedRes);
+
+    auto const findMessage = [&projectedRes](std::string_view const id)
+    { return std::ranges::find(*projectedRes, id, &CatalogMessage::id); };
+
+    auto const positional = findMessage("winui_error");
+    REQUIRE(positional != projectedRes->end());
+    CHECK(positional->pattern == "Fehler: {0}");
+
+    auto const alias = findMessage("winui_track_move_column_left_button.Text");
+    REQUIRE(alias != projectedRes->end());
+    CHECK(alias->pattern == "Nach links");
+
+    CHECK(findMessage("winui_save_settings_failed") == projectedRes->end());
+    CHECK(findMessage("winui_track_move_column_right_button.Text") == projectedRes->end());
+
+    auto completeProjectionRes = projectWinUiResources(translated, MissingWinUiMessagePolicy::Reject);
+    REQUIRE_FALSE(completeProjectionRes);
+    CHECK(completeProjectionRes.error().message.contains("references unknown message id"));
   }
 
   TEST_CASE("CatalogPattern - native resource output is stable, sorted, and escaped", "[core][unit][catalog]")

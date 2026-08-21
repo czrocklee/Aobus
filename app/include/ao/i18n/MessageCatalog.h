@@ -26,6 +26,7 @@ namespace ao::i18n
     PilotPlaybackState,
     PilotRegionalFallback,
     PilotEnglishFallback,
+    PilotSimplifiedOnlyProbe,
     PilotPseudoProbe,
     TrackFieldTitle,
     TrackFieldArtist,

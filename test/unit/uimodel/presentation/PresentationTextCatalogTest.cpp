@@ -45,6 +45,36 @@ namespace ao::uimodel::test
     CHECK(german.format(MessageId::GtkPresentationCopyLabel, {{"label", "Alben"}}) == "Kopie von Alben");
     CHECK(german.format(MessageId::TuiPresentationBadge, {{"id", "Standard"}}) == "Ansicht:Standard");
     CHECK(german.playbackActionLabel(PlaybackCommand::PlayPause) == "Wiedergabe/Pause");
+
+    auto const chinese = ao::test::presentationTextCatalog("zh-CN");
+    CHECK(chinese.format(MessageId::GtkPresentationCopyLabel, {{"label", "专辑"}}) == "专辑 副本");
+    CHECK(chinese.format(MessageId::TuiPresentationBadge, {{"id", "默认"}}) == "视图:默认");
+    CHECK(chinese.playbackActionLabel(PlaybackCommand::PlayPause) == "播放/暂停");
+    CHECK(chinese.trackFieldLabel(rt::TrackField::SampleRate) == "采样率");
+
+    auto const traditionalChinese = ao::test::presentationTextCatalog("zh-TW");
+    CHECK(traditionalChinese.format(MessageId::GtkPresentationCopyLabel, {{"label", "專輯"}}) == "專輯 複本");
+    CHECK(traditionalChinese.format(MessageId::TuiPresentationBadge, {{"id", "預設"}}) == "檢視:預設");
+    CHECK(traditionalChinese.playbackActionLabel(PlaybackCommand::PlayPause) == "播放/暫停");
+    CHECK(traditionalChinese.trackFieldLabel(rt::TrackField::SampleRate) == "取樣率");
+
+    auto const japanese = ao::test::presentationTextCatalog("ja-JP");
+    CHECK(japanese.format(MessageId::GtkPresentationCopyLabel, {{"label", "アルバム"}}) == "アルバム のコピー");
+    CHECK(japanese.format(MessageId::TuiPresentationBadge, {{"id", "デフォルト"}}) == "表示:デフォルト");
+    CHECK(japanese.playbackActionLabel(PlaybackCommand::PlayPause) == "再生/一時停止");
+    CHECK(japanese.trackFieldLabel(rt::TrackField::SampleRate) == "サンプリングレート");
+
+    auto const spanish = ao::test::presentationTextCatalog("es-ES");
+    CHECK(spanish.format(MessageId::GtkPresentationCopyLabel, {{"label", "Álbumes"}}) == "Copia de Álbumes");
+    CHECK(spanish.format(MessageId::TuiPresentationBadge, {{"id", "predeterminado"}}) == "vista:predeterminado");
+    CHECK(spanish.playbackActionLabel(PlaybackCommand::PlayPause) == "Reproducir/Pausar");
+    CHECK(spanish.trackFieldLabel(rt::TrackField::SampleRate) == "Frecuencia de muestreo");
+
+    auto const french = ao::test::presentationTextCatalog("fr-FR");
+    CHECK(french.format(MessageId::GtkPresentationCopyLabel, {{"label", "Albums"}}) == "Copie de « Albums »");
+    CHECK(french.format(MessageId::TuiPresentationBadge, {{"id", "par défaut"}}) == "vue:par défaut");
+    CHECK(french.playbackActionLabel(PlaybackCommand::PlayPause) == "Lecture/Pause");
+    CHECK(french.trackFieldLabel(rt::TrackField::SampleRate) == "Fréquence d'échantillonnage");
   }
 
   TEST_CASE("PresentationTextCatalog - exhaustively labels track presentation semantics",
@@ -298,7 +328,7 @@ namespace ao::uimodel::test
     REQUIRE(catalog.builtinTrackPresentation("library"));
     CHECK(catalog.builtinTrackPresentation("library")->label == "Bibliothek");
     CHECK(catalog.text(MessageId::CreateCustomTrackPresentation) == "Benutzerdefinierte Ansicht erstellen...");
-    CHECK(catalog.audioProfile(audio::kProfileShared).label == "Gemeinsamer Modus");
+    CHECK(catalog.audioProfile(audio::kProfileShared).label == "Gemeinsam genutzter Modus");
     CHECK(catalog.text(MessageId::SystemDefaultOutputDevice) == "Systemstandard");
     CHECK(catalog.completionDetail({.kind = rt::CompletionDetailKind::Field}) == "Feld");
     CHECK(catalog.trackChannelText(1) == "Mono");

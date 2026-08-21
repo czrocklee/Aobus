@@ -504,7 +504,7 @@ namespace ao::tui::test
     CHECK(text.contains("Dvořák DAC"));
     CHECK(text.contains("[Quelle] 誰か"));
     CHECK(text.contains("Neuabtastung: 44100 Hz → 48000 Hz"));
-    CHECK(text.contains("Eingriff in die Audiokette"));
+    CHECK(text.contains("Signalverarbeitung in der Audiokette"));
 
     state.quality.assessments.clear();
     auto const emptyText = renderPlaybackText(qualityPanel(tuiText, presentationText, state, 0));

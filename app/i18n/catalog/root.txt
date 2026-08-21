@@ -10,6 +10,7 @@ root:table {
     pilot_playback_state { "{state, select, playing {Playing} paused {Paused} other {Stopped}}" }
     pilot_regional_fallback { "English regional fallback" }
     pilot_english_fallback { "English message fallback" }
+    pilot_simplified_only_probe { "Simplified only probe" }
     pilot_pseudo_probe { "Open {application} music library" }
     track_field_title { "Title" }
     track_field_artist { "Artist" }

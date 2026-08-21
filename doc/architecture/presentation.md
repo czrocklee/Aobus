@@ -187,7 +187,8 @@ construction where useful, but only the native Windows suite compiles their
 frontend-specific tests; naming a frontend is what keeps them out of the shared
 model, not what they include.
 
-Canonical ICU catalog sources generate WinUI's migrated shared resources as neutral `en`, `de`, and `qps-ploc` PRI candidates.
+Canonical ICU catalog sources generate WinUI's migrated shared resources as `en`, `de`, `zh-Hans`, `zh-Hant`, `ja`, `es`, `fr`, and `qps-ploc` PRI candidates.
+Chinese region requests resolve to the corresponding script-qualified candidate, so the build never emits region and script aliases for the same MRT resource.
 The WinUI composition root binds one explicit MRT `ResourceContext` to the same canonical tag held by `MessageCatalog` before XAML initialization, so MRT cannot independently select another UI language.
 Generated C++ lookups retain canonical message keys. The build projection changes a governed single named argument to `{0}` only for native formatting and emits property-qualified aliases only for XAML `x:Uid` consumers.
 Checked-in WinUI-only English resource definitions remain authority only for product names, symbolic suffixes, and internal diagnostic/protocol text. The catalog compiler merges them into the single generated neutral `en` PRI input; shared and user-facing frontend copy is generated from the canonical catalog and is not duplicated there.

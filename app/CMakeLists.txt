@@ -20,46 +20,94 @@ file(MAKE_DIRECTORY
     "${AOBUS_CATALOG_GENERATED_DIR}"
     "${AOBUS_CATALOG_RESW_DIR}/en"
     "${AOBUS_CATALOG_RESW_DIR}/de"
+    "${AOBUS_CATALOG_RESW_DIR}/zh-Hans"
+    "${AOBUS_CATALOG_RESW_DIR}/zh-Hant"
+    "${AOBUS_CATALOG_RESW_DIR}/ja"
+    "${AOBUS_CATALOG_RESW_DIR}/es"
+    "${AOBUS_CATALOG_RESW_DIR}/fr"
     "${AOBUS_CATALOG_RESW_DIR}/qps-ploc")
 
 set(AOBUS_CATALOG_ROOT_RES "${AOBUS_CATALOG_GENERATED_DIR}/root.res")
 set(AOBUS_CATALOG_DE_RES "${AOBUS_CATALOG_GENERATED_DIR}/de.res")
+set(AOBUS_CATALOG_ZH_HANS_RES "${AOBUS_CATALOG_GENERATED_DIR}/zh_Hans.res")
+set(AOBUS_CATALOG_ZH_HANT_RES "${AOBUS_CATALOG_GENERATED_DIR}/zh_Hant.res")
+set(AOBUS_CATALOG_JA_RES "${AOBUS_CATALOG_GENERATED_DIR}/ja.res")
+set(AOBUS_CATALOG_ES_RES "${AOBUS_CATALOG_GENERATED_DIR}/es.res")
+set(AOBUS_CATALOG_FR_RES "${AOBUS_CATALOG_GENERATED_DIR}/fr.res")
+
 set(AOBUS_CATALOG_PSEUDO_SOURCE "${AOBUS_CATALOG_GENERATED_DIR}/qps_Ploc.txt")
 set(AOBUS_CATALOG_PSEUDO_RES "${AOBUS_CATALOG_GENERATED_DIR}/qps_Ploc.res")
 set(AOBUS_CATALOG_DATA "${AOBUS_CATALOG_GENERATED_DIR}/aobus_messages.dat")
 set(AOBUS_CATALOG_EMBEDDED_CPP "${AOBUS_CATALOG_GENERATED_DIR}/EmbeddedCatalogData.cpp")
+
 set(AOBUS_CATALOG_EN_RESW "${AOBUS_CATALOG_RESW_DIR}/en/Resources.resw")
 set(AOBUS_CATALOG_DE_RESW "${AOBUS_CATALOG_RESW_DIR}/de/Resources.resw")
+set(AOBUS_CATALOG_ZH_HANS_RESW "${AOBUS_CATALOG_RESW_DIR}/zh-Hans/Resources.resw")
+set(AOBUS_CATALOG_ZH_HANT_RESW "${AOBUS_CATALOG_RESW_DIR}/zh-Hant/Resources.resw")
+set(AOBUS_CATALOG_JA_RESW "${AOBUS_CATALOG_RESW_DIR}/ja/Resources.resw")
+set(AOBUS_CATALOG_ES_RESW "${AOBUS_CATALOG_RESW_DIR}/es/Resources.resw")
+set(AOBUS_CATALOG_FR_RESW "${AOBUS_CATALOG_RESW_DIR}/fr/Resources.resw")
 set(AOBUS_CATALOG_PSEUDO_RESW "${AOBUS_CATALOG_RESW_DIR}/qps-ploc/Resources.resw")
 
+set(AOBUS_CATALOG_WINUI_RESW_FILES
+    "${AOBUS_CATALOG_EN_RESW}"
+    "${AOBUS_CATALOG_DE_RESW}"
+    "${AOBUS_CATALOG_ZH_HANS_RESW}"
+    "${AOBUS_CATALOG_ZH_HANT_RESW}"
+    "${AOBUS_CATALOG_JA_RESW}"
+    "${AOBUS_CATALOG_ES_RESW}"
+    "${AOBUS_CATALOG_FR_RESW}"
+    "${AOBUS_CATALOG_PSEUDO_RESW}")
+
 add_custom_command(
-    OUTPUT "${AOBUS_CATALOG_ROOT_RES}" "${AOBUS_CATALOG_DE_RES}"
+    OUTPUT
+            "${AOBUS_CATALOG_ROOT_RES}"
+            "${AOBUS_CATALOG_DE_RES}"
+            "${AOBUS_CATALOG_ZH_HANS_RES}"
+            "${AOBUS_CATALOG_ZH_HANT_RES}"
+            "${AOBUS_CATALOG_JA_RES}"
+            "${AOBUS_CATALOG_ES_RES}"
+            "${AOBUS_CATALOG_FR_RES}"
     COMMAND "${AOBUS_ICU_GENRB_EXECUTABLE}"
             --strict
             --encoding UTF-8
             --sourcedir "${AOBUS_CATALOG_SOURCE_DIR}"
             --destdir "${AOBUS_CATALOG_GENERATED_DIR}"
-            root.txt de.txt
+            root.txt de.txt zh_Hans.txt zh_Hant.txt ja.txt es.txt fr.txt
     DEPENDS
             "${AOBUS_CATALOG_SOURCE_DIR}/root.txt"
             "${AOBUS_CATALOG_SOURCE_DIR}/de.txt"
+            "${AOBUS_CATALOG_SOURCE_DIR}/zh_Hans.txt"
+            "${AOBUS_CATALOG_SOURCE_DIR}/zh_Hant.txt"
+            "${AOBUS_CATALOG_SOURCE_DIR}/ja.txt"
+            "${AOBUS_CATALOG_SOURCE_DIR}/es.txt"
+            "${AOBUS_CATALOG_SOURCE_DIR}/fr.txt"
     COMMENT "Compiling canonical ICU message catalogs"
     VERBATIM)
 
 add_custom_command(
     OUTPUT
             "${AOBUS_CATALOG_PSEUDO_SOURCE}"
-            "${AOBUS_CATALOG_EN_RESW}"
-            "${AOBUS_CATALOG_DE_RESW}"
-            "${AOBUS_CATALOG_PSEUDO_RESW}"
+            ${AOBUS_CATALOG_WINUI_RESW_FILES}
     COMMAND $<TARGET_FILE:ao_catalog_compiler>
             --root-res root.res
-            --de-res de.res
             --pseudo-source qps_Ploc.txt
             --en-resw ../resw/en/Resources.resw
-            --de-resw ../resw/de/Resources.resw
             --pseudo-resw ../resw/qps-ploc/Resources.resw
-    DEPENDS ao_catalog_compiler "${AOBUS_CATALOG_ROOT_RES}" "${AOBUS_CATALOG_DE_RES}"
+            --translation de.res ../resw/de/Resources.resw
+            --translation zh_Hans.res ../resw/zh-Hans/Resources.resw
+            --translation zh_Hant.res ../resw/zh-Hant/Resources.resw
+            --translation ja.res ../resw/ja/Resources.resw
+            --translation es.res ../resw/es/Resources.resw
+            --translation fr.res ../resw/fr/Resources.resw
+    DEPENDS ao_catalog_compiler
+            "${AOBUS_CATALOG_ROOT_RES}"
+            "${AOBUS_CATALOG_DE_RES}"
+            "${AOBUS_CATALOG_ZH_HANS_RES}"
+            "${AOBUS_CATALOG_ZH_HANT_RES}"
+            "${AOBUS_CATALOG_JA_RES}"
+            "${AOBUS_CATALOG_ES_RES}"
+            "${AOBUS_CATALOG_FR_RES}"
     WORKING_DIRECTORY "${AOBUS_CATALOG_GENERATED_DIR}"
     COMMENT "Validating catalogs and generating pseudo/WinUI resources"
     VERBATIM)
@@ -90,6 +138,11 @@ add_custom_command(
     DEPENDS
             "${AOBUS_CATALOG_ROOT_RES}"
             "${AOBUS_CATALOG_DE_RES}"
+            "${AOBUS_CATALOG_ZH_HANS_RES}"
+            "${AOBUS_CATALOG_ZH_HANT_RES}"
+            "${AOBUS_CATALOG_JA_RES}"
+            "${AOBUS_CATALOG_ES_RES}"
+            "${AOBUS_CATALOG_FR_RES}"
             "${AOBUS_CATALOG_PSEUDO_RES}"
             "${AOBUS_CATALOG_SOURCE_DIR}/package.lst"
     COMMENT "Packaging embedded ICU message data"

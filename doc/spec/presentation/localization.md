@@ -35,7 +35,7 @@ Core, application runtime, UIModel, and CLI do not depend on the concrete catalo
 - Each interactive composition root constructs one `PresentationTextCatalog` from that message catalog and injects it through the UI graph; production code has no hidden English/default construction path.
 - GTK and TUI resolve dense frontend-owned shell, playback, and library copy into process-lifetime typed catalogs before constructing their widget or render graphs. One-to-one preference, shortcut, presentation-editor, metadata, and Layout Editor messages use canonical typed `MessageId` values through the injected `PresentationTextCatalog`; WinUI consumes generated MRT resources where native lookup is required.
 - Explicit locale input must be a complete strict BCP 47 tag; invalid input is never repaired or interpreted through the ambient C locale.
-- Resolution tries the exact locale, its ICU parent sequence, and English root in that order.
+- Resolution tries the exact locale, its ICU likely-subtags expansion, parent sequence, and English root in that order.
 - English root contains every typed message id; maintained locale catalogs may contain overrides only.
 - Resource loading, fallback selection, pattern parsing, `MessageFormat` construction, and fixed-message rendering finish before a catalog is published.
 - Published catalog semantics and patterns are immutable. Concurrent calls serialize access per cached ICU formatter and own argument conversion and output per call.
@@ -45,7 +45,8 @@ Core, application runtime, UIModel, and CLI do not depend on the concrete catalo
 - Pseudo-localization changes only literal spans; argument syntax, selectors, replacement-number markers, and inserted argument values remain intact.
 - TUI command syntax, shortcut names, and key tokens are message arguments rather than translated literals. Localization may reorder them but cannot change what the shell parses or dispatches.
 - WinUI lookup uses an explicit MRT `Language` qualifier derived from the catalog's requested locale. It does not independently resolve a language through a default `ResourceLoader` context.
-- ICU `root`, `de`, and `qps_Ploc` generate neutral MRT `en`, `de`, and `qps-ploc` candidates from the same authored patterns; MakePri uses neutral `en` as its default language.
+- ICU `root`, `de`, `zh_Hans`, `zh_Hant`, `ja`, `es`, `fr`, and `qps_Ploc` generate MRT `en`, `de`, `zh-Hans`, `zh-Hant`, `ja`, `es`, `fr`, and `qps-ploc` candidates from the same authored patterns; MakePri uses neutral `en` as its default language. Chinese region requests resolve to the corresponding script-qualified candidate instead of duplicating equivalent region and script assets.
+- Maintained-locale MRT resources contain only authored overrides; a missing positional or aliased message is omitted so MRT can resolve the neutral-English resource. English-root and pseudo-locale projections require every governed message.
 - Generated WinUI resources retain canonical message keys. The generator changes a governed single named argument to `{0}` only for native `std::vformat` consumers and emits property-qualified aliases only where XAML `x:Uid` requires them.
 - The concrete localization target and ICU i18n runtime remain outside the CLI source and link closure.
 
@@ -88,6 +89,13 @@ The required cross-adapter outcomes are:
 | `en-GB` | English root | `en` |
 | `de-DE` | neutral German when present, otherwise English root | `de`, then `en` |
 | `de-AT` | neutral German when present, otherwise English root | `de`, then `en` |
+| `zh-CN` | Simplified Chinese when present, otherwise English root | `zh-Hans`, then `en` |
+| `zh-Hans` | Simplified Chinese when present, otherwise English root | `zh-Hans`, then `en` |
+| `zh-TW` | Traditional Chinese when present, otherwise English root | `zh-Hant`, then `en` |
+| `zh-Hant` | Traditional Chinese when present, otherwise English root | `zh-Hant`, then `en` |
+| `ja-JP` | Japanese when present, otherwise English root | `ja`, then `en` |
+| `es-ES` | Spanish when present, otherwise English root | `es`, then `en` |
+| `fr-FR` | French when present, otherwise English root | `fr`, then `en` |
 | unsupported valid tag such as `sv-SE` | English root | `en` |
 | `qps-ploc` | generated pseudo | `qps-ploc` |
 
@@ -131,7 +139,7 @@ CLI does not construct a catalog and retains English command, diagnostic, and ma
 - [`PresentationTextCatalog.cpp`](../../../app/uimodel/presentation/PresentationTextCatalog.cpp) forwards direct typed ids and maps domain inputs only where message selection or fallback is semantic.
 - [`GtkTextCatalog.cpp`](../../../app/linux-gtk/i18n/GtkTextCatalog.cpp) and [`TuiTextCatalog.cpp`](../../../app/tui/TuiTextCatalog.cpp) own eagerly resolved frontend shell copy.
 - [`CatalogPattern.cpp`](../../../app/i18n/CatalogPattern.cpp) owns signature validation and structure-aware pseudo transformation.
-- [`root.txt`](../../../app/i18n/catalog/root.txt) and [`de.txt`](../../../app/i18n/catalog/de.txt) are the canonical authored catalogs.
+- [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt) are the canonical authored catalogs.
 - [`CatalogCompiler.cpp`](../../../tool/catalog/CatalogCompiler.cpp) validates assets and generates pseudo and WinUI resources.
 - [`WinUiResourceProjection.h`](../../../app/i18n/WinUiResourceProjection.h) declares the narrow positional and XAML-property projection set.
 - [`StringResources.cpp`](../../../app/windows-winui/platform/StringResources.cpp) owns the explicit MRT context.

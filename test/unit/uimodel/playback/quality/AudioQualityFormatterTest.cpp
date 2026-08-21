@@ -374,7 +374,7 @@ namespace ao::uimodel::test
             .sharedApps = {"Dvořák", "誰か"},
           }) == "Gemischt mit Dvořák, 誰か");
     CHECK(formatter.presentation(rt::QualityState{.overall = audio::Quality::Unknown}).headline ==
-          "Unbekannte Audiokette");
+          "Audiokette unbekannt");
   }
 
   TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values", "[uimodel][unit][quality][localization]")

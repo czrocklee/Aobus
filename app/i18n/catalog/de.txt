@@ -55,11 +55,11 @@ de:table {
     track_presentation_list_order { "Manuelle Reihenfolge" }
     track_presentation_description_list_order { "Titel in eigener Reihenfolge anordnen." }
     track_presentation_songs { "Titel" }
-    track_presentation_description_songs { "Flache Liste aller Titel, nach Titelname sortiert." }
+    track_presentation_description_songs { "Alle Titel in einer nach Titelname sortierten Liste." }
     track_presentation_albums { "Alben" }
     track_presentation_description_albums { "Nach Album gruppiert, mit titelbezogenen Spalten." }
     track_presentation_artists { "Interpreten" }
-    track_presentation_description_artists { "Nach Albuminterpret gruppiert, in Diskografie-Reihenfolge." }
+    track_presentation_description_artists { "Nach Albuminterpret gruppiert und in Diskografie-Reihenfolge sortiert." }
     track_presentation_performers { "Mitwirkende" }
     track_presentation_description_performers { "Nach Titelinterpret gruppiert, einschließlich Gastinterpreten." }
     track_presentation_genres { "Genres" }
@@ -67,23 +67,23 @@ de:table {
     track_presentation_years { "Jahre" }
     track_presentation_description_years { "Nach Jahr gruppiert." }
     track_presentation_classical_composers { "Klassik: Komponisten" }
-    track_presentation_description_classical_composers { "Nach Komponist gruppiert, mit werkbezogenen Spalten." }
+    track_presentation_description_classical_composers { "Nach Komponisten gruppiert, mit werkbezogenen Spalten." }
     track_presentation_classical_conductors { "Klassik: Dirigenten" }
-    track_presentation_description_classical_conductors { "Nach Dirigent gruppiert, mit Werk- und Ensemble-Spalten." }
+    track_presentation_description_classical_conductors { "Nach Dirigenten gruppiert, mit Werk- und Ensemble-Spalten." }
     track_presentation_classical_works { "Klassik: Werke" }
-    track_presentation_description_classical_works { "Nach Werk gruppiert, mit komponistenbezogenen Spalten." }
+    track_presentation_description_classical_works { "Nach Werken gruppiert, mit komponistenbezogenen Spalten." }
     track_presentation_tagging { "Verschlagwortung" }
-    track_presentation_description_tagging { "Flache Liste mit Disc-/Titelnummer, Genre, Jahr und Tags zur Pflege." }
+    track_presentation_description_tagging { "Liste mit unformatierter Disc-/Titelnummer, Genre, Jahr und Tags zur Katalogpflege." }
     track_presentation_technical { "Technisch" }
-    track_presentation_description_technical { "Flache Liste mit Codec, Bitrate, Größe und Pfad zur Dateiprüfung." }
+    track_presentation_description_technical { "Liste mit Codec, Bitrate, Größe und Pfad zur Dateiprüfung." }
     create_custom_track_presentation { "Benutzerdefinierte Ansicht erstellen..." }
-    track_presentation_picker_label { "Darstellung" }
+    track_presentation_picker_label { "Ansicht" }
     track_presentation_all_tracks_manual_order_unavailable { "Alle Titel haben keine gespeicherte Reihenfolge. Erstellen Sie eine gespeicherte Liste, um die gesamte Bibliothek manuell anzuordnen." }
     audio_backend_pipewire_description { "Moderner Linux-Audioserver mit niedriger Latenz" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture (direkter Hardwarezugriff)" }
     audio_backend_wasapi_description { "Windows Audio Session API" }
     audio_backend_wasapi_output_fallback { "WASAPI-Wiedergabeendpunkt" }
-    audio_profile_shared { "Gemeinsamer Modus" }
+    audio_profile_shared { "Gemeinsam genutzter Modus" }
     audio_profile_shared_description { "Systemweite Mischung mit anderen Anwendungen" }
     audio_profile_exclusive { "Exklusiver Modus" }
     audio_profile_exclusive_description { "Direkter Zugriff auf das Audiogerät" }
@@ -194,31 +194,31 @@ de:table {
     audio_finding_muted { "Stummgeschaltet" }
     audio_finding_resampling { "{hasFormats, select, yes {Neuabtastung: {fromRate} Hz → {toRate} Hz} other {Neuabtastung}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Kanäle: {fromChannels} → {toChannels}} other {Kanalzuordnung}}" }
-    audio_finding_lossless_padding { "Bittransparente Ganzzahl-Auffüllung" }
-    audio_finding_lossless_float { "Bittransparente Gleitkomma-Abbildung" }
-    audio_finding_lossless_round_trip { "Bittransparenter Rundlauf (Gleitkomma-Engine)" }
+    audio_finding_lossless_padding { "Verlustfreie Ganzzahlerweiterung" }
+    audio_finding_lossless_float { "Verlustfreie Gleitkommakonvertierung" }
+    audio_finding_lossless_round_trip { "Verlustfreie Hin- und Rückwandlung (Gleitkomma-Engine)" }
     audio_finding_truncation { "{kind, select, floatToInteger {Gleitkomma → Ganzzahl-Quantisierung: {fromPrecision} → {toPrecision}} integerToFloat {Ganzzahl → Gleitkomma-Quantisierung: {fromPrecision} → {toPrecision}} precision {Präzision gekürzt: {fromPrecision} → {toPrecision}} other {Präzision gekürzt}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {Gemischt mit {apps}} other {Gemischte Quellen}}" }
     audio_quality_bit_perfect_playback { "Bitperfekte Wiedergabe" }
-    audio_quality_signal_preserved { "Signal erhalten" }
-    audio_quality_pipeline_intervention { "Eingriff in die Audiokette" }
+    audio_quality_signal_preserved { "Signal unverändert" }
+    audio_quality_pipeline_intervention { "Signalverarbeitung in der Audiokette" }
     audio_quality_signal_clipping_detected { "Signalübersteuerung erkannt" }
-    audio_quality_unknown_pipeline { "Unbekannte Audiokette" }
+    audio_quality_unknown_pipeline { "Audiokette unbekannt" }
     audio_quality_clipping_risk { "Übersteuerungsgefahr" }
-    audio_quality_partially_verified_path { "Teilweise geprüfter Signalweg" }
-    audio_quality_clean_lossy_delivery { "Saubere verlustbehaftete Ausgabe" }
-    audio_quality_clean_delivery { "Saubere Ausgabe" }
+    audio_quality_partially_verified_path { "Signalweg nur teilweise geprüft" }
+    audio_quality_clean_lossy_delivery { "Verlustbehaftete Quelle ohne weitere Verarbeitung" }
+    audio_quality_clean_delivery { "Ausgabe ohne weitere Verarbeitung" }
     playback_control_play { "Wiedergeben" }
     playback_control_pause { "Pausieren" }
     playback_control_stop { "Stoppen" }
     playback_control_next_track { "Nächster Titel" }
     playback_control_previous_track { "Vorheriger Titel" }
     playback_control_shuffle { "Zufallswiedergabe" }
-    playback_control_repeat { "Wiederholen" }
+    playback_control_repeat { "Wiederholung" }
     playback_action_play_pause { "Wiedergabe/Pause" }
     playback_action_next { "Nächster Titel" }
     playback_action_previous { "Vorheriger Titel" }
-    playback_action_toggle_shuffle { "Zufallswiedergabe umschalten" }
+    playback_action_toggle_shuffle { "Zufallswiedergabe ein-/ausschalten" }
     playback_action_cycle_repeat { "Wiederholungsmodus wechseln" }
     playback_volume_tooltip { "Lautstärke: {percent}%{state, select, muted { (Stumm)} hardware { (Hardware)} other {}}" }
     gtk_shell_menu_file { "Datei" }
@@ -237,7 +237,7 @@ de:table {
     gtk_shell_about { "Über" }
     gtk_shell_application_menu { "Anwendungsmenü" }
     gtk_playback_show_playing_list { "Klicken, um die Wiedergabeliste anzuzeigen" }
-    gtk_playback_toggle_mute { "Stummschaltung umschalten" }
+    gtk_playback_toggle_mute { "Stumm ein-/ausschalten" }
     gtk_playback_show_current_album { "Aktuelles Album anzeigen" }
     gtk_playback_now_playing_cover_art { "Cover der aktuellen Wiedergabe" }
     gtk_library_quick_filter_placeholder { "Titel, Interpreten, Alben und Tags durchsuchen..." }
@@ -267,7 +267,7 @@ de:table {
     gtk_smart_list_effective_filter { "Wirksamer Filter" }
     gtk_smart_list_membership { "Mitgliedschaft" }
     gtk_smart_list_auto_presentation { "Automatisch" }
-    gtk_smart_list_presentation { "Darstellung" }
+    gtk_smart_list_presentation { "Ansicht" }
     gtk_smart_list_preview { "Vorschau" }
     gtk_smart_list_waiting_for_filter { "Warten auf Filter..." }
     gtk_smart_list_track { "Titel" }
@@ -528,7 +528,7 @@ de:table {
     winui_library_ready_at { "Bibliothek bereit: {root}" }
     winui_navigation_failed { "Navigation fehlgeschlagen: {detail}" }
     winui_list_status { "Liste: {list}" }
-    winui_presentation_failed { "Darstellung fehlgeschlagen: {detail}" }
+    winui_presentation_failed { "Ansicht fehlgeschlagen: {detail}" }
     winui_playback_failed { "Wiedergabe fehlgeschlagen: {detail}" }
     winui_column_resize_failed { "Spaltengröße konnte nicht geändert werden: {detail}" }
     winui_column_settings_failed { "Spalteneinstellungen konnten nicht gespeichert werden: {detail}" }
@@ -641,7 +641,7 @@ de:table {
     gtk_layout_component_menu_bar { "Menüleiste" }
     gtk_layout_component_track_table { "Titeltabelle" }
     gtk_layout_component_quick_filter { "Schnellfilter" }
-    gtk_layout_component_presentation_button { "Darstellungsschaltfläche" }
+    gtk_layout_component_presentation_button { "Ansichtsschaltfläche" }
     gtk_layout_component_cover_art { "Cover" }
     gtk_layout_component_transport_button { "Wiedergabeschaltfläche" }
     gtk_layout_component_soul_button { "Soul-Schaltfläche" }
