@@ -191,7 +191,7 @@ zh_Hans:table {
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {软件音量衰减：{gain}} other {软件音量衰减}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {软件放大：增益 {gain}（有削波风险）} other {软件放大（有削波风险）}}" }
     audio_finding_hardware_volume_modification { "硬件音量控制" }
-    audio_finding_unclassified_volume_modification { "未分类的音量更改" }
+    audio_finding_unclassified_volume_modification { "{hasGain, select, yes {设备音量：{gain}（归属未明）} other {设备音量已更改（归属未明）}}" }
     audio_finding_muted { "已静音" }
     audio_finding_resampling { "{hasFormats, select, yes {重采样：{fromRate} Hz → {toRate} Hz} other {重采样}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {声道映射：{fromChannels} 声道 → {toChannels} 声道} other {声道映射}}" }

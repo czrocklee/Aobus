@@ -70,6 +70,8 @@ namespace ao::audio::backend::detail
       float maxSoftwareGain = 0.0F;
       float minSoftwareGain = 0.0F;
       bool unclassifiedNotUnity = false;
+      float maxUnclassifiedGain = 0.0F;
+      float minUnclassifiedGain = 0.0F;
     };
 
     /**

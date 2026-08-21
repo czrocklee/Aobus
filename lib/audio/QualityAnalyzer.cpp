@@ -31,6 +31,18 @@ namespace ao::audio
   {
     constexpr float kGainEpsilon = 1e-4F;
 
+    /// Selects the representative reported factor of a volume range: the maximum when it is above
+    /// unity, otherwise the positive minimum. Returns zero when the range carries no factor.
+    constexpr float representativeGain(float const maxGain, float const minGain) noexcept
+    {
+      if (maxGain > 1.0F + kGainEpsilon)
+      {
+        return maxGain;
+      }
+
+      return minGain > 0.0F ? minGain : maxGain;
+    }
+
     std::uint8_t representationBits(NodeFormat const& format) noexcept
     {
       if (auto const* pcmFormat = std::get_if<PcmFormat>(&format); pcmFormat != nullptr)
@@ -196,13 +208,11 @@ namespace ao::audio
       if (node.softwareVolumeNotUnity)
       {
         auto const isAmplification = node.maxSoftwareGain > 1.0F + kGainEpsilon;
-        auto const attenuationGain = node.minSoftwareGain > 0.0F ? node.minSoftwareGain : node.maxSoftwareGain;
-        auto const gain = isAmplification ? node.maxSoftwareGain : attenuationGain;
         addFinding(assessment,
                    QualityFinding{.kind = isAmplification ? QualityFindingKind::SoftwareAmplification
                                                           : QualityFindingKind::SoftwareVolumeModification,
                                   .quality = Quality::LinearIntervention,
-                                  .gain = gain});
+                                  .gain = representativeGain(node.maxSoftwareGain, node.minSoftwareGain)});
       }
       else if (node.maxSoftwareGain > 1.0F + kGainEpsilon)
       {
@@ -221,9 +231,12 @@ namespace ao::audio
 
       if (node.unclassifiedVolumeNotUnity)
       {
+        // A factor above unity keeps this kind: the provenance is unknown, so the backend evidence
+        // does not support asserting software amplification or its clipping risk.
         addFinding(assessment,
                    QualityFinding{.kind = QualityFindingKind::UnclassifiedVolumeModification,
-                                  .quality = Quality::LinearIntervention});
+                                  .quality = Quality::LinearIntervention,
+                                  .gain = representativeGain(node.maxUnclassifiedGain, node.minUnclassifiedGain)});
       }
 
       if (node.isMuted)

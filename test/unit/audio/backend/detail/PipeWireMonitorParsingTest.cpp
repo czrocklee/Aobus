@@ -117,6 +117,27 @@ namespace ao::audio::backend::detail::test
     }
   }
 
+  TEST_CASE("SinkProps::classifyVolume - zero channel gain remains the range minimum regardless of order",
+            "[audio][regression][pipewire]")
+  {
+    for (auto const& channelVolumes : {std::vector{0.0F, 0.8F}, std::vector{0.8F, 0.0F}})
+    {
+      auto props = SinkProps{};
+      props.hasChannelVolumes = true;
+      props.channelVolumes = channelVolumes;
+
+      auto const sinkCls = props.classifyVolume();
+      CHECK(sinkCls.unclassifiedNotUnity == true);
+      CHECK(sinkCls.maxUnclassifiedGain == 0.8F);
+      CHECK(sinkCls.minUnclassifiedGain == 0.0F);
+
+      auto const streamCls = props.classifyVolume(SinkProps::VolumeClassificationScope::Stream);
+      CHECK(streamCls.softwareNotUnity == true);
+      CHECK(streamCls.maxSoftwareGain == 0.8F);
+      CHECK(streamCls.minSoftwareGain == 0.0F);
+    }
+  }
+
   TEST_CASE("PipeWireMonitorParsing - SPA pods expose current format and properties",
             "[audio][unit][pipewire][monitor]")
   {
@@ -320,13 +341,15 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Mixed Scalar Hardware / Channel Unclassified")
     {
+      // Deliberately distinct magnitudes so a hardware value leaking into the unclassified range
+      // cannot hide behind an equal channel value.
       auto const vols = std::array{0.5F, 0.5F};
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
 
       // Scalar volume with hardware flag
       ::spa_pod_builder_prop(&b, SPA_PROP_volume, SPA_POD_PROP_FLAG_HARDWARE);
-      ::spa_pod_builder_float(&b, 0.5F);
+      ::spa_pod_builder_float(&b, 0.25F);
 
       // Channel volume without hardware flag
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
@@ -342,6 +365,189 @@ namespace ao::audio::backend::detail::test
       CHECK(cls.hardwareNotUnity == true);
       CHECK(cls.softwareNotUnity == false);
       CHECK(cls.unclassifiedNotUnity == true);
+      CHECK(cls.maxUnclassifiedGain == 0.5F);
+      CHECK(cls.minUnclassifiedGain == 0.5F);
+
+      auto const streamCls = props.classifyVolume(SinkProps::VolumeClassificationScope::Stream);
+      CHECK(streamCls.hardwareNotUnity == true);
+      CHECK(streamCls.softwareNotUnity == true);
+      CHECK(streamCls.maxSoftwareGain == 0.5F);
+      CHECK(streamCls.minSoftwareGain == 0.5F);
+      CHECK(streamCls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Mixed Channel Hardware / Scalar Unclassified")
+    {
+      auto const vols = std::array{0.25F, 0.25F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+
+      ::spa_pod_builder_prop(&b, SPA_PROP_volume, 0);
+      ::spa_pod_builder_float(&b, 0.5F);
+
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == true);
+      CHECK(cls.softwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == true);
+      CHECK(cls.maxUnclassifiedGain == 0.5F);
+      CHECK(cls.minUnclassifiedGain == 0.5F);
+
+      auto const streamCls = props.classifyVolume(SinkProps::VolumeClassificationScope::Stream);
+      CHECK(streamCls.hardwareNotUnity == true);
+      CHECK(streamCls.softwareNotUnity == true);
+      CHECK(streamCls.maxSoftwareGain == 0.5F);
+      CHECK(streamCls.minSoftwareGain == 0.5F);
+      CHECK(streamCls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Channel-only ambiguous attenuation records every channel")
+    {
+      auto const vols = std::array{1.0F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.unclassifiedNotUnity == true);
+      CHECK(cls.maxUnclassifiedGain == 1.0F);
+      CHECK(cls.minUnclassifiedGain == 0.5F);
+      CHECK(cls.maxSoftwareGain == 0.0F);
+      CHECK(cls.minSoftwareGain == 0.0F);
+    }
+
+    SECTION("SinkProps::classifyVolume - Scalar-only ambiguous attenuation")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_volume, 0);
+      ::spa_pod_builder_float(&b, 0.25F);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.unclassifiedNotUnity == true);
+      CHECK(cls.maxUnclassifiedGain == 0.25F);
+      CHECK(cls.minUnclassifiedGain == 0.25F);
+    }
+
+    SECTION("SinkProps::classifyVolume - Scalar and channel both ambiguous contribute")
+    {
+      auto const vols = std::array{0.5F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_volume, 0);
+      ::spa_pod_builder_float(&b, 0.25F);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == true);
+      CHECK(cls.maxUnclassifiedGain == 0.5F);
+      CHECK(cls.minUnclassifiedGain == 0.25F);
+
+      auto const streamCls = props.classifyVolume(SinkProps::VolumeClassificationScope::Stream);
+      CHECK(streamCls.softwareNotUnity == true);
+      CHECK(streamCls.maxSoftwareGain == 0.5F);
+      CHECK(streamCls.minSoftwareGain == 0.25F);
+      CHECK(streamCls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - All non-unity evidence hardware-flagged carries no range")
+    {
+      auto const vols = std::array{0.5F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_volume, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_float(&b, 0.25F);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      for (auto const scope :
+           {SinkProps::VolumeClassificationScope::Sink, SinkProps::VolumeClassificationScope::Stream})
+      {
+        auto const cls = props.classifyVolume(scope);
+        CHECK(cls.hardwareNotUnity == true);
+        CHECK(cls.softwareNotUnity == false);
+        CHECK(cls.unclassifiedNotUnity == false);
+        CHECK(cls.maxSoftwareGain == 0.0F);
+        CHECK(cls.minSoftwareGain == 0.0F);
+        CHECK(cls.maxUnclassifiedGain == 0.0F);
+        CHECK(cls.minUnclassifiedGain == 0.0F);
+      }
+    }
+
+    SECTION("SinkProps::classifyVolume - Ambiguous amplification keeps the above-unity factor")
+    {
+      auto const vols = std::array{0.5F, 1.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.unclassifiedNotUnity == true);
+      CHECK(cls.maxUnclassifiedGain == 1.5F);
+      CHECK(cls.minUnclassifiedGain == 0.5F);
+    }
+
+    SECTION("SinkProps::classifyVolume - Soft volumes keep ambiguous evidence out of the unclassified range")
+    {
+      auto const vols = std::array{0.25F, 0.25F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+
+      auto const softVols = std::array{0.5F, 0.5F};
+      ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.softwareNotUnity == true);
+      CHECK(cls.maxSoftwareGain == 0.5F);
+      CHECK(cls.minSoftwareGain == 0.5F);
+      CHECK(cls.unclassifiedNotUnity == false);
+      CHECK(cls.maxUnclassifiedGain == 0.0F);
+      CHECK(cls.minUnclassifiedGain == 0.0F);
     }
 
     SECTION("SinkProps::classifyVolume - Software-only")

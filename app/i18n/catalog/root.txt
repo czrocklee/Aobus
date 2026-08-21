@@ -192,7 +192,7 @@ root:table {
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Software volume attenuation: {gain}} other {Software volume attenuation}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {Software amplification: {gain} gain (clipping risk)} other {Software amplification (clipping risk)}}" }
     audio_finding_hardware_volume_modification { "Hardware volume control" }
-    audio_finding_unclassified_volume_modification { "Unclassified volume change" }
+    audio_finding_unclassified_volume_modification { "{hasGain, select, yes {Device volume: {gain} (source unverified)} other {Device volume change (source unverified)}}" }
     audio_finding_muted { "Muted" }
     audio_finding_resampling { "{hasFormats, select, yes {Resampling: {fromRate}Hz → {toRate}Hz} other {Resampling}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Channels: {fromChannels}ch → {toChannels}ch} other {Channel mapping}}" }

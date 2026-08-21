@@ -190,7 +190,7 @@ ja:table {
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {ソフトウェア音量減衰: {gain}} other {ソフトウェア音量減衰}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {ソフトウェア増幅: ゲイン {gain}（クリッピングのリスク）} other {ソフトウェア増幅（クリッピングのリスク）}}" }
     audio_finding_hardware_volume_modification { "ハードウェア音量調整" }
-    audio_finding_unclassified_volume_modification { "未分類の音量変更" }
+    audio_finding_unclassified_volume_modification { "{hasGain, select, yes {デバイス音量: {gain}（適用元未確認）} other {デバイス音量の変更（適用元未確認）}}" }
     audio_finding_muted { "ミュート" }
     audio_finding_resampling { "{hasFormats, select, yes {リサンプリング: {fromRate} Hz → {toRate} Hz} other {リサンプリング}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {チャンネルマッピング: {fromChannels} ch → {toChannels} ch} other {チャンネルマッピング}}" }

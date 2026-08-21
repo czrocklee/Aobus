@@ -50,7 +50,7 @@ The current analyzer does not produce `Clipped` from software-amplification meta
 | `SoftwareVolumeModification` | `LinearIntervention` | `gain` when positive | `Software volume attenuation` |
 | `SoftwareAmplification` | `LinearIntervention` | `gain` when positive | `Software amplification (clipping risk)` |
 | `HardwareVolumeModification` | `BitwisePerfect` | None | `Hardware volume control` |
-| `UnclassifiedVolumeModification` | `LinearIntervention` | None | `Unclassified volume change` |
+| `UnclassifiedVolumeModification` | `LinearIntervention` | `gain` when positive | `Device volume change (source unverified)` |
 | `Muted` | `LinearIntervention` | None | `Muted` |
 | `Resampling` | `LinearIntervention` | `optFromFormat`, `optToFormat` | `Resampling` |
 | `ChannelMapping` | `LinearIntervention` | `optFromFormat`, `optToFormat` | `Channel mapping` |
@@ -66,6 +66,7 @@ Dynamic finding labels refine the base text:
 |---|---|
 | Positive attenuation gain | `Software volume attenuation: {signed dB with one decimal}` |
 | Positive amplification gain | `Software amplification: {signed dB with one decimal} gain (clipping risk)` |
+| Positive unclassified volume gain | `Device volume: {signed dB with one decimal} (source unverified)` |
 | Resampling formats | `Resampling: {from Hz}Hz → {to Hz}Hz` |
 | Channel formats | `Channels: {from}ch → {to}ch` |
 | Float to integer truncation | `Float → integer quantization: {from precision} → {to precision}` |

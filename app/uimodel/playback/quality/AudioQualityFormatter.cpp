@@ -208,7 +208,7 @@ namespace ao::uimodel
       case audio::QualityFindingKind::HardwareVolumeModification:
         return requiredMessage(_catalog, MessageId::AudioFindingHardwareVolumeModification);
       case audio::QualityFindingKind::UnclassifiedVolumeModification:
-        return requiredMessage(_catalog, MessageId::AudioFindingUnclassifiedVolumeModification);
+        return gainFindingLabel(_catalog, MessageId::AudioFindingUnclassifiedVolumeModification, finding.gain);
       case audio::QualityFindingKind::Muted: return requiredMessage(_catalog, MessageId::AudioFindingMuted);
       case audio::QualityFindingKind::Resampling:
       {

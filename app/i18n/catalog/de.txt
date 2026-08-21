@@ -190,7 +190,7 @@ de:table {
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Software-Lautstärkeabsenkung: {gain}} other {Software-Lautstärkeabsenkung}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {Software-Verstärkung: {gain} Verstärkung (Übersteuerungsgefahr)} other {Software-Verstärkung (Übersteuerungsgefahr)}}" }
     audio_finding_hardware_volume_modification { "Hardware-Lautstärkeregelung" }
-    audio_finding_unclassified_volume_modification { "Nicht klassifizierte Lautstärkeänderung" }
+    audio_finding_unclassified_volume_modification { "{hasGain, select, yes {Gerätelautstärke: {gain} (Herkunft ungeklärt)} other {Gerätelautstärke geändert (Herkunft ungeklärt)}}" }
     audio_finding_muted { "Stummgeschaltet" }
     audio_finding_resampling { "{hasFormats, select, yes {Neuabtastung: {fromRate} Hz → {toRate} Hz} other {Neuabtastung}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Kanäle: {fromChannels} → {toChannels}} other {Kanalzuordnung}}" }

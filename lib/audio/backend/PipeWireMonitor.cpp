@@ -1202,6 +1202,8 @@ namespace ao::audio::backend
       node.maxSoftwareGain = volumeCls.maxSoftwareGain;
       node.minSoftwareGain = volumeCls.minSoftwareGain;
       node.unclassifiedVolumeNotUnity = volumeCls.unclassifiedNotUnity;
+      node.maxUnclassifiedGain = volumeCls.maxUnclassifiedGain;
+      node.minUnclassifiedGain = volumeCls.minUnclassifiedGain;
       node.isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
     }
 

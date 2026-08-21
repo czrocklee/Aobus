@@ -42,7 +42,8 @@ namespace ao::audio
    * Format transition findings (Resampling, ChannelMapping, LosslessPadding,
    * LosslessFloat, Truncation) carry the source and destination formats.
    * MixedSources findings carry the names of other applications sharing the node.
-   * Software volume findings carry gain when the backend reported a magnitude.
+   * Software and unclassified volume findings carry a representative reported gain when the
+   * backend supplied a magnitude.
    */
   struct QualityFinding final
   {

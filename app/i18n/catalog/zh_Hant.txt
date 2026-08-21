@@ -190,7 +190,7 @@ zh_Hant:table {
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {軟體音量衰減：{gain}} other {軟體音量衰減}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {軟體放大：增益 {gain}（有削波風險）} other {軟體放大（有削波風險）}}" }
     audio_finding_hardware_volume_modification { "硬體音量控制" }
-    audio_finding_unclassified_volume_modification { "未分類的音量更改" }
+    audio_finding_unclassified_volume_modification { "{hasGain, select, yes {裝置音量：{gain}（歸屬未明）} other {裝置音量已變更（歸屬未明）}}" }
     audio_finding_muted { "已靜音" }
     audio_finding_resampling { "{hasFormats, select, yes {重新取樣：{fromRate} Hz → {toRate} Hz} other {重新取樣}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {聲道對映：{fromChannels} 聲道 → {toChannels} 聲道} other {聲道對映}}" }

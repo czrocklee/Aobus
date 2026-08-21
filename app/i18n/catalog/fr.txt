@@ -190,7 +190,7 @@ fr:table {
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Atténuation logicielle du volume : {gain}} other {Atténuation logicielle du volume}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {Amplification logicielle : gain {gain} (risque d''écrêtage)} other {Amplification logicielle (risque d''écrêtage)}}" }
     audio_finding_hardware_volume_modification { "Contrôle matériel du volume" }
-    audio_finding_unclassified_volume_modification { "Modification de volume non classifiée" }
+    audio_finding_unclassified_volume_modification { "{hasGain, select, yes {Volume du périphérique : {gain} (provenance non vérifiée)} other {Modification du volume du périphérique (provenance non vérifiée)}}" }
     audio_finding_muted { "Muet" }
     audio_finding_resampling { "{hasFormats, select, yes {Rééchantillonnage : {fromRate} Hz → {toRate} Hz} other {Rééchantillonnage}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Canaux : {fromChannels} can. → {toChannels} can.} other {Mappage des canaux}}" }

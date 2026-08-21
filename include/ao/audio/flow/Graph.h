@@ -40,6 +40,8 @@ namespace ao::audio::flow
     float maxSoftwareGain = 0.0F;
     float minSoftwareGain = 0.0F;
     bool unclassifiedVolumeNotUnity = false;
+    float maxUnclassifiedGain = 0.0F;
+    float minUnclassifiedGain = 0.0F;
     bool isMuted = false;
     bool isLossySource = false;
     std::string objectPath{};

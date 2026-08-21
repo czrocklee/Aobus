@@ -74,7 +74,7 @@ The analyzer derives self-property findings from graph evidence:
 - non-unity software attenuation is a linear intervention and carries reported gain when available;
 - software gain above unity is a linear intervention with a distinct amplification finding used for clipping-risk presentation;
 - non-unity hardware volume is neutral to the digital-path rating;
-- non-unity volume whose hardware/software location is unknown is conservatively a linear intervention;
+- non-unity volume whose hardware/software location is unknown is conservatively a linear intervention and carries a representative reported gain when available;
 - mute is a linear intervention;
 - an external active input into a path node is mixed-source intervention, with sorted unique application names when the provider supplies them.
 

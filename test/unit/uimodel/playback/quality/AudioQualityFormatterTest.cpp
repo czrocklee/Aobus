@@ -13,9 +13,11 @@
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
+#include <string_view>
 
 namespace ao::uimodel::test
 {
@@ -134,6 +136,17 @@ namespace ao::uimodel::test
           "Software amplification: +3.5 dB gain (clipping risk)");
     CHECK(audioFindingLabel(audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareAmplification}) ==
           "Software amplification (clipping risk)");
+  }
+
+  TEST_CASE("AudioQualityFormatter - unclassified volume findings describe device gain magnitude",
+            "[uimodel][unit][playback][quality]")
+  {
+    CHECK(audioFindingLabel(audio::QualityFinding{.kind = audio::QualityFindingKind::UnclassifiedVolumeModification,
+                                                  .gain = 0.5F}) == "Device volume: -6.0 dB (source unverified)");
+    CHECK(audioFindingLabel(audio::QualityFinding{.kind = audio::QualityFindingKind::UnclassifiedVolumeModification,
+                                                  .gain = 1.5F}) == "Device volume: +3.5 dB (source unverified)");
+    CHECK(audioFindingLabel(audio::QualityFinding{.kind = audio::QualityFindingKind::UnclassifiedVolumeModification}) ==
+          "Device volume change (source unverified)");
   }
 
   TEST_CASE("AudioQualityFormatter - signal-preserved quality conclusions share one verdict",
@@ -375,6 +388,55 @@ namespace ao::uimodel::test
           }) == "Gemischt mit Dvořák, 誰か");
     CHECK(formatter.presentation(rt::QualityState{.overall = audio::Quality::Unknown}).headline ==
           "Audiokette unbekannt");
+  }
+
+  TEST_CASE("AudioQualityFormatter - unclassified volume copy keeps both selector branches in every locale",
+            "[uimodel][unit][quality][localization]")
+  {
+    // The catalog compiler validates argument names and kinds, not branch placement. A translation
+    // that drops the `yes` branch or moves `{gain}` into `other` still compiles, so assert the shape
+    // each maintained locale must produce.
+    static constexpr auto kMagnitude = std::string_view{"-6.0 dB"};
+    auto const gainFinding =
+      audio::QualityFinding{.kind = audio::QualityFindingKind::UnclassifiedVolumeModification, .gain = 0.5F};
+    auto const plainFinding = audio::QualityFinding{.kind = audio::QualityFindingKind::UnclassifiedVolumeModification};
+    auto const englishGainLabel = englishFormatter().findingLabel(gainFinding);
+
+    for (auto const* const locale : {"de-DE", "zh-CN", "zh-TW", "ja-JP", "es-ES", "fr-FR"})
+    {
+      INFO("locale: " << locale);
+      auto const catalog = ao::test::presentationTextCatalog(locale);
+      auto const& formatter = catalog.audioQualityFormatter();
+      auto const gainLabel = formatter.findingLabel(gainFinding);
+      auto const plainLabel = formatter.findingLabel(plainFinding);
+
+      // A locale that silently fell back to root would pass the shape checks against English copy.
+      CHECK(gainLabel != englishGainLabel);
+      REQUIRE(gainLabel.contains(kMagnitude));
+      CHECK_FALSE(plainLabel.contains("dB"));
+      CHECK_FALSE(plainLabel.contains("{"));
+
+      // Erasing the magnitude from the gain form must not reproduce the fallback form. A
+      // translation that keeps only an `other` branch renders the gain sentence with an empty
+      // slot, which the compiler's name-and-kind signature check cannot see.
+      auto strippedGainLabel = gainLabel;
+      strippedGainLabel.erase(gainLabel.find(kMagnitude), kMagnitude.size());
+      CHECK(strippedGainLabel != plainLabel);
+    }
+  }
+
+  TEST_CASE("AudioQualityFormatter - localized unclassified volume copy", "[uimodel][unit][quality][localization]")
+  {
+    auto const catalog = ao::test::presentationTextCatalog("de-DE");
+    auto const& formatter = catalog.audioQualityFormatter();
+
+    CHECK(formatter.findingLabel(audio::QualityFinding{
+            .kind = audio::QualityFindingKind::UnclassifiedVolumeModification,
+            .gain = 0.5F,
+          }) == "Gerätelautstärke: -6.0 dB (Herkunft ungeklärt)");
+    CHECK(formatter.findingLabel(audio::QualityFinding{
+            .kind = audio::QualityFindingKind::UnclassifiedVolumeModification,
+          }) == "Gerätelautstärke geändert (Herkunft ungeklärt)");
   }
 
   TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values", "[uimodel][unit][quality][localization]")

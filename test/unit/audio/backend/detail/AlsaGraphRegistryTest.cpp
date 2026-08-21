@@ -167,6 +167,14 @@ TEST_CASE("AlsaGraphRegistry - unavailable mode with non-unity volume emits uncl
   CHECK_FALSE(receivedGraph.nodes[1].softwareVolumeNotUnity);
   CHECK(receivedGraph.nodes[1].unclassifiedVolumeNotUnity);
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
+
+  // Unavailable mode can retain a cached requested volume while no PCM route is active, so the
+  // value is volume intent rather than evidence of an applied gain. It must not reach the user as
+  // a numeric magnitude.
+  REQUIRE(receivedGraph.connections.size() == 1);
+  CHECK_FALSE(receivedGraph.connections[0].isActive);
+  CHECK(receivedGraph.nodes[1].maxUnclassifiedGain == 0.0F);
+  CHECK(receivedGraph.nodes[1].minUnclassifiedGain == 0.0F);
 }
 
 TEST_CASE("AlsaGraphRegistry - clear emits empty graph", "[audio][unit][alsa]")

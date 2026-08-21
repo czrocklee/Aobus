@@ -155,10 +155,13 @@ namespace ao::audio::test
     SECTION("software amplification")
     {
       graph.nodes[2].softwareVolumeNotUnity = true;
+      graph.nodes[2].minSoftwareGain = 0.5F;
       graph.nodes[2].maxSoftwareGain = 1.5F;
 
       auto const result = analyzeAudioQuality(graph);
-      CHECK(hasFinding(findAssessment(result, "ao-engine"), QualityFindingKind::SoftwareAmplification));
+      auto const* finding = findFinding(findAssessment(result, "ao-engine"), QualityFindingKind::SoftwareAmplification);
+      REQUIRE(finding != nullptr);
+      CHECK(finding->gain == 1.5F);
       CHECK(result.pipelineQuality == Quality::LinearIntervention);
     }
 
@@ -169,6 +172,67 @@ namespace ao::audio::test
       auto const result = analyzeAudioQuality(graph);
       CHECK(hasFinding(findAssessment(result, "ao-engine"), QualityFindingKind::HardwareVolumeModification));
       CHECK(result.pipelineQuality == Quality::BitwisePerfect);
+    }
+
+    SECTION("unclassified attenuation carries the positive minimum gain")
+    {
+      graph.nodes[2].unclassifiedVolumeNotUnity = true;
+      graph.nodes[2].minUnclassifiedGain = 0.5F;
+      graph.nodes[2].maxUnclassifiedGain = 1.0F;
+
+      auto const result = analyzeAudioQuality(graph);
+      auto const* finding =
+        findFinding(findAssessment(result, "ao-engine"), QualityFindingKind::UnclassifiedVolumeModification);
+      REQUIRE(finding != nullptr);
+      CHECK(finding->gain == 0.5F);
+      CHECK(result.pipelineQuality == Quality::LinearIntervention);
+    }
+
+    SECTION("unclassified amplification keeps its kind and never becomes software amplification")
+    {
+      graph.nodes[2].unclassifiedVolumeNotUnity = true;
+      graph.nodes[2].minUnclassifiedGain = 0.5F;
+      graph.nodes[2].maxUnclassifiedGain = 1.5F;
+
+      auto const result = analyzeAudioQuality(graph);
+      auto const& assessment = findAssessment(result, "ao-engine");
+      auto const* finding = findFinding(assessment, QualityFindingKind::UnclassifiedVolumeModification);
+      REQUIRE(finding != nullptr);
+      CHECK(finding->gain == 1.5F);
+      CHECK_FALSE(hasFinding(assessment, QualityFindingKind::SoftwareAmplification));
+      CHECK(result.pipelineQuality == Quality::LinearIntervention);
+    }
+
+    SECTION("software and unclassified observations produce independent findings")
+    {
+      graph.nodes[2].softwareVolumeNotUnity = true;
+      graph.nodes[2].minSoftwareGain = 0.5F;
+      graph.nodes[2].maxSoftwareGain = 0.5F;
+      graph.nodes[2].unclassifiedVolumeNotUnity = true;
+      graph.nodes[2].minUnclassifiedGain = 0.5F;
+      graph.nodes[2].maxUnclassifiedGain = 1.5F;
+
+      auto const result = analyzeAudioQuality(graph);
+      auto const& assessment = findAssessment(result, "ao-engine");
+      auto const* softwareFinding = findFinding(assessment, QualityFindingKind::SoftwareVolumeModification);
+      auto const* unclassifiedFinding = findFinding(assessment, QualityFindingKind::UnclassifiedVolumeModification);
+      REQUIRE(softwareFinding != nullptr);
+      REQUIRE(unclassifiedFinding != nullptr);
+      CHECK(softwareFinding->gain == 0.5F);
+      CHECK(unclassifiedFinding->gain == 1.5F);
+      CHECK(result.pipelineQuality == Quality::LinearIntervention);
+    }
+
+    SECTION("unclassified observation without a range carries no gain")
+    {
+      graph.nodes[2].unclassifiedVolumeNotUnity = true;
+
+      auto const result = analyzeAudioQuality(graph);
+      auto const* finding =
+        findFinding(findAssessment(result, "ao-engine"), QualityFindingKind::UnclassifiedVolumeModification);
+      REQUIRE(finding != nullptr);
+      CHECK(finding->gain == 0.0F);
+      CHECK(result.pipelineQuality == Quality::LinearIntervention);
     }
 
     SECTION("mute")

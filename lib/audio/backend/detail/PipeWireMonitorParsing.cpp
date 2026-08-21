@@ -207,27 +207,30 @@ namespace ao::audio::backend::detail
   {
     static constexpr float kUnityEpsilon = 1e-4F;
     auto const isNotUnity = [](float val) { return std::abs(val - 1.0F) >= kUnityEpsilon; };
-    auto recordSoftwareGain = [](VolumeClassification& cls, float const gain)
+    auto recordGain = [](float& maxGain, float& minGain, bool& initialized, float const gain)
     {
-      if (cls.maxSoftwareGain == 0.0F || gain > cls.maxSoftwareGain)
+      if (!initialized)
       {
-        cls.maxSoftwareGain = gain;
+        maxGain = gain;
+        minGain = gain;
+        initialized = true;
+        return;
       }
 
-      if (cls.minSoftwareGain == 0.0F || gain < cls.minSoftwareGain)
-      {
-        cls.minSoftwareGain = gain;
-      }
+      maxGain = std::max(gain, maxGain);
+      minGain = std::min(gain, minGain);
     };
-    auto recordSoftwareGains = [&recordSoftwareGain](VolumeClassification& cls, std::vector<float> const& gains)
+    auto recordGains = [&recordGain](float& maxGain, float& minGain, bool& initialized, std::vector<float> const& gains)
     {
       for (auto const gain : gains)
       {
-        recordSoftwareGain(cls, gain);
+        recordGain(maxGain, minGain, initialized, gain);
       }
     };
 
     auto cls = VolumeClassification{};
+    bool softwareGainRecorded = false;
+    bool unclassifiedGainRecorded = false;
 
     bool const softNotUnity = hasSoftVolumes && std::ranges::any_of(softVolumes, isNotUnity);
 
@@ -238,38 +241,49 @@ namespace ao::audio::backend::detail
 
     if (hasSoftVolumes && !softVolumes.empty())
     {
-      recordSoftwareGains(cls, softVolumes);
+      recordGains(cls.maxSoftwareGain, cls.minSoftwareGain, softwareGainRecorded, softVolumes);
     }
 
     bool const channelNotUnity = hasChannelVolumes && std::ranges::any_of(channelVolumes, isNotUnity);
     bool const scalarNotUnity = hasVolume && isNotUnity(volume);
+    // The scalar volume and the per-channel volumes are independent properties carrying independent
+    // hardware flags, so each one decides its own provenance. A hardware-flagged property never
+    // contributes a magnitude to a software or unclassified range, even when the other property is
+    // ambiguous and makes the whole classification mixed.
+    bool const channelIsAmbiguous = channelNotUnity && !channelVolumesAreHardware;
+    bool const scalarIsAmbiguous = scalarNotUnity && !volumeIsHardware;
     bool const hardwareNotUnity =
       (channelNotUnity && channelVolumesAreHardware) || (scalarNotUnity && volumeIsHardware);
-    bool const ambiguousNotUnity =
-      (channelNotUnity && !channelVolumesAreHardware) || (scalarNotUnity && !volumeIsHardware);
+    bool const ambiguousNotUnity = channelIsAmbiguous || scalarIsAmbiguous;
 
     if (hardwareNotUnity)
     {
       cls.hardwareNotUnity = true;
     }
 
+    auto recordAmbiguousGains = [this, &recordGain, &recordGains, channelIsAmbiguous, scalarIsAmbiguous](
+                                  float& maxGain, float& minGain, bool& initialized)
+    {
+      if (channelIsAmbiguous)
+      {
+        recordGains(maxGain, minGain, initialized, channelVolumes);
+      }
+
+      if (scalarIsAmbiguous)
+      {
+        recordGain(maxGain, minGain, initialized, volume);
+      }
+    };
+
     if (scope == VolumeClassificationScope::Stream && ambiguousNotUnity)
     {
       cls.softwareNotUnity = true;
-
-      if (channelNotUnity)
-      {
-        recordSoftwareGains(cls, channelVolumes);
-      }
-
-      if (scalarNotUnity)
-      {
-        recordSoftwareGain(cls, volume);
-      }
+      recordAmbiguousGains(cls.maxSoftwareGain, cls.minSoftwareGain, softwareGainRecorded);
     }
     else if (ambiguousNotUnity && !softNotUnity)
     {
       cls.unclassifiedNotUnity = true;
+      recordAmbiguousGains(cls.maxUnclassifiedGain, cls.minUnclassifiedGain, unclassifiedGainRecorded);
     }
 
     return cls;
