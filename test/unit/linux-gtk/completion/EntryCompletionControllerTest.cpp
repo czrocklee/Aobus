@@ -10,12 +10,16 @@
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gdk/gdkenums.h>
+#include <gdk/gdkkeysyms.h>
+#include <gdkmm/enums.h>
 #include <giomm/listmodel.h>
 #include <glib-object.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/eventcontroller.h>
+#include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listview.h>
 #include <gtkmm/popover.h>
@@ -26,6 +30,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -42,6 +47,50 @@ namespace ao::gtk::test
     Gtk::Popover* findCompletionPopover(Gtk::Entry& entry)
     {
       return findWidget<Gtk::Popover>(entry);
+    }
+
+    bool emitCompletionKey(Gtk::Entry& entry, guint const keyval)
+    {
+      auto const keyControllerPtr = findControllerIf<Gtk::EventControllerKey>(
+        entry,
+        [](Gtk::EventControllerKey const& controller)
+        { return controller.get_propagation_phase() == Gtk::PropagationPhase::CAPTURE; });
+      REQUIRE(keyControllerPtr);
+
+      gboolean handled = FALSE;
+      ::g_signal_emit_by_name(keyControllerPtr->gobj(),
+                              "key-pressed",
+                              keyval,
+                              0U,
+                              static_cast<GdkModifierType>(Gdk::ModifierType{}),
+                              &handled);
+      return handled == TRUE;
+    }
+
+    rt::CompletionResult keyboardCompletionResult()
+    {
+      return rt::CompletionResult{
+        .replaceBegin = 0,
+        .replaceEnd = 2,
+        .items =
+          {
+            rt::CompletionItem{.displayText = "$artist", .insertText = "$artist", .detail = {}, .rank = 0},
+            rt::CompletionItem{.displayText = "$album", .insertText = "$album", .detail = {}, .rank = 1},
+          },
+      };
+    }
+
+    rt::CompletionResult pageCompletionResult()
+    {
+      auto items = std::vector<rt::CompletionItem>{};
+
+      for (std::size_t index = 0; index < 12; ++index)
+      {
+        auto text = std::string{"$item"} + std::to_string(index);
+        items.push_back(rt::CompletionItem{.displayText = text, .insertText = std::move(text)});
+      }
+
+      return rt::CompletionResult{.replaceBegin = 0, .replaceEnd = 2, .items = std::move(items)};
     }
   } // namespace
 
@@ -255,6 +304,139 @@ namespace ao::gtk::test
 
     CHECK(providerCalls == 2);
     CHECK(entry.get_text() == "$composer");
+  }
+
+  TEST_CASE("EntryCompletionController - keyboard navigation cycles and only Tab accepts a selection",
+            "[gtk][regression][completion]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    auto window = Gtk::Window{};
+    auto entry = Gtk::Entry{};
+    window.set_child(entry);
+    entry.set_text("$a");
+    entry.set_position(charCount("$a"));
+
+    auto controller = EntryCompletionController{entry,
+                                                ao::test::englishPresentationTextCatalog(),
+                                                [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+                                                { return keyboardCompletionResult(); }};
+    auto* const popover = findCompletionPopover(entry);
+    REQUIRE(popover != nullptr);
+
+    controller.update();
+    REQUIRE(popover->get_visible());
+
+    SECTION("Down after the final item returns to the first item")
+    {
+      CHECK(emitCompletionKey(entry, GDK_KEY_Down));
+      CHECK(popover->get_visible());
+      CHECK(emitCompletionKey(entry, GDK_KEY_Down));
+      CHECK(popover->get_visible());
+
+      controller.applySelected();
+      CHECK(entry.get_text() == "$artist");
+    }
+
+    SECTION("Up before the first item returns to the final item")
+    {
+      CHECK(emitCompletionKey(entry, GDK_KEY_Up));
+      CHECK(popover->get_visible());
+
+      controller.applySelected();
+      CHECK(entry.get_text() == "$album");
+    }
+
+    SECTION("Page Down moves forward and stops at the final item")
+    {
+      CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
+      CHECK(popover->get_visible());
+      CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
+      CHECK(popover->get_visible());
+
+      controller.applySelected();
+      CHECK(entry.get_text() == "$album");
+    }
+
+    SECTION("Page Up stops at the first item")
+    {
+      CHECK(emitCompletionKey(entry, GDK_KEY_Down));
+      CHECK(emitCompletionKey(entry, GDK_KEY_Page_Up));
+      CHECK(popover->get_visible());
+
+      controller.applySelected();
+      CHECK(entry.get_text() == "$artist");
+    }
+
+    SECTION("Tab accepts the selected item")
+    {
+      CHECK(emitCompletionKey(entry, GDK_KEY_Tab));
+      CHECK(entry.get_text() == "$artist");
+      CHECK_FALSE(popover->get_visible());
+    }
+
+    SECTION("Keypad Tab accepts the selected item")
+    {
+      CHECK(emitCompletionKey(entry, GDK_KEY_KP_Tab));
+      CHECK(entry.get_text() == "$artist");
+      CHECK_FALSE(popover->get_visible());
+    }
+
+    SECTION("Return dismisses without accepting the selected item")
+    {
+      CHECK_FALSE(emitCompletionKey(entry, GDK_KEY_Return));
+      CHECK(entry.get_text() == "$a");
+      CHECK_FALSE(popover->get_visible());
+
+      controller.applySelected();
+      CHECK(entry.get_text() == "$a");
+    }
+
+    SECTION("Keypad Enter dismisses without accepting the selected item")
+    {
+      CHECK_FALSE(emitCompletionKey(entry, GDK_KEY_KP_Enter));
+      CHECK(entry.get_text() == "$a");
+      CHECK_FALSE(popover->get_visible());
+
+      controller.applySelected();
+      CHECK(entry.get_text() == "$a");
+    }
+  }
+
+  TEST_CASE("EntryCompletionController - page navigation uses the visible viewport", "[gtk][unit][completion]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    auto window = Gtk::Window{};
+    auto entry = Gtk::Entry{};
+    window.set_child(entry);
+    entry.set_text("$a");
+    entry.set_position(charCount("$a"));
+
+    auto controller = EntryCompletionController{entry,
+                                                ao::test::englishPresentationTextCatalog(),
+                                                [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+                                                { return pageCompletionResult(); }};
+    auto* const popover = findCompletionPopover(entry);
+    REQUIRE(popover != nullptr);
+    auto* const scrolledWindow = dynamic_cast<Gtk::ScrolledWindow*>(popover->get_child());
+    REQUIRE(scrolledWindow != nullptr);
+
+    controller.update();
+    REQUIRE(popover->get_visible());
+
+    auto const adjustmentPtr = scrolledWindow->get_vadjustment();
+    REQUIRE(adjustmentPtr);
+    adjustmentPtr->set_upper(120.0);
+    adjustmentPtr->set_page_size(30.0);
+
+    CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
+    CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
+    CHECK(emitCompletionKey(entry, GDK_KEY_Page_Up));
+    CHECK(popover->get_visible());
+
+    controller.applySelected();
+    CHECK(entry.get_text() == "$item3");
   }
 
   TEST_CASE("EntryCompletionController - clears completion state when entry focus leaves", "[gtk][unit][completion]")

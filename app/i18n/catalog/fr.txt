@@ -384,6 +384,8 @@ fr:table {
     tui_shell_command_palette_title { "Palette de commandes" }
     tui_shell_command_palette_no_matches { "Aucune correspondance" }
     tui_shell_command_palette_footer { "{completeKey} compléter  {runKey} exécuter  {cancelKey} annuler" }
+    tui_shell_quick_filter_title { "Filtre rapide" }
+    tui_shell_quick_filter_footer { "{acceptKey} accepter  {completeKey} compléter  {keepKey} conserver la saisie" }
     tui_shell_workspace_list { "liste" }
     tui_shell_workspace_view { "vue" }
     tui_shell_overlay_tracks { "Morceaux" }
@@ -394,7 +396,6 @@ fr:table {
     tui_shell_overlay_views { "Vues" }
     tui_shell_overlay_notifications { "Notifications" }
     tui_shell_overlay_help { "Aide" }
-    tui_shell_hint_workspace { "{commandKey} commande  {listsKey} listes  {viewKey} vue  {notificationsKey} notif  {detailKey} détail  {pipelineKey} chaîne  {outputKey} sortie  {groupsKey} groupes  {currentKey} actuel  {quitKey} quitter" }
     tui_shell_hint_lists { "{toggleKey} basculer  {openKey} ouvrir  {closeKey} fermer" }
     tui_shell_hint_detail { "{toggleKey} basculer  {closeKey} fermer" }
     tui_shell_hint_pipeline { "{toggleKey} basculer  {closeKey} fermer" }
@@ -405,13 +406,9 @@ fr:table {
     tui_shell_status_command { "commande" }
     tui_shell_status_lists { "listes" }
     tui_shell_status_view { "vue" }
-    tui_shell_status_notifications { "notif" }
     tui_shell_status_detail { "détail" }
-    tui_shell_status_pipeline { "chaîne" }
-    tui_shell_status_output { "sortie" }
-    tui_shell_status_groups { "groupes" }
-    tui_shell_status_current { "actuel" }
-    tui_shell_status_quit { "quitter" }
+    tui_shell_status_clear_filter { "effacer le filtre" }
+    tui_shell_status_help { "aide" }
     tui_shell_filter_label { "Filtre" }
     tui_shell_category_library { "bibliothèque" }
     tui_shell_category_view { "vue" }
@@ -795,6 +792,7 @@ fr:table {
     tui_overlay_closed { "Volet fermé" }
     tui_help_opened { "Aide" }
     tui_section_unavailable { "La section n''est plus disponible" }
+    tui_unknown_command { "Commande inconnue : {command}" }
     tui_filter_failed { "Échec du filtre : {detail}" }
   }
 }

@@ -11,6 +11,7 @@
 #include "TuiTextCatalog.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
@@ -336,6 +337,7 @@ namespace ao::tui
     {
       _tracks.clear();
       _sections.clear();
+      _filterError.clear();
       _selectedTrack = 0;
       _currentListId = rt::kAllTracksListId;
       _activeViewId = rt::kInvalidViewId;
@@ -378,8 +380,12 @@ namespace ao::tui
 
     if (!filterRes)
     {
+      _filterError =
+        _textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", filterRes.error().message}});
       return std::unexpected{filterRes.error()};
     }
+
+    refreshFilterError();
 
     auto snapshot = loadTrackItemsFromView(_activeViewId);
     _tracks = std::move(snapshot.tracks);
@@ -426,6 +432,24 @@ namespace ao::tui
   {
     return makeTrackPresentationNavigation(
       _textCatalog, rt::builtinTrackPresentationPresets(), _runtime.workspace().customPresets());
+  }
+
+  void LibraryController::refreshFilterError()
+  {
+    _filterError.clear();
+
+    if (_activeViewId == rt::kInvalidViewId)
+    {
+      return;
+    }
+
+    auto const stateRes = _runtime.views().findTrackListState(_activeViewId);
+
+    if (stateRes && stateRes->optFilterError)
+    {
+      _filterError =
+        _textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", stateRes->optFilterError->message}});
+    }
   }
 
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItemsFromView(rt::ViewId const activeViewId)
@@ -501,10 +525,13 @@ namespace ao::tui
 
     if (!navigationRes)
     {
+      _filterError.clear();
       return {};
     }
 
     _activeViewId = *navigationRes;
-    return loadTrackItemsFromView(_activeViewId);
+    auto snapshot = loadTrackItemsFromView(_activeViewId);
+    refreshFilterError();
+    return snapshot;
   }
 } // namespace ao::tui

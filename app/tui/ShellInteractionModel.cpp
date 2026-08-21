@@ -212,26 +212,6 @@ namespace ao::tui
        .category = TuiTextId::CategoryApp},
     });
 
-    std::string trim(std::string_view value)
-    {
-      // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
-      auto begin = value.begin();
-      // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
-      auto end = value.end();
-
-      while (begin != end && utility::isAsciiWhitespace(*begin))
-      {
-        ++begin;
-      }
-
-      while (begin != end && utility::isAsciiWhitespace(*(end - 1)))
-      {
-        --end;
-      }
-
-      return {begin, end};
-    }
-
     std::string lower(std::string value)
     {
       std::ranges::transform(value, value.begin(), utility::toAsciiLower);
@@ -292,23 +272,31 @@ namespace ao::tui
     return kAliasCommands;
   }
 
-  Command parseCommand(std::string_view input)
+  std::optional<Command> parseCommand(std::string_view input)
   {
-    auto value = trim(input);
+    auto value = utility::trim(input);
 
-    if (!value.empty() && (value.front() == '/' || value.front() == ':'))
+    if (!value.empty() && value.front() == ':')
     {
-      value.erase(value.begin());
-      value = trim(value);
+      value.remove_prefix(1);
+      value = utility::trim(value);
     }
 
-    auto command = lower(value);
+    if (value.empty())
+    {
+      return std::nullopt;
+    }
+
+    auto command = lower(std::string{value});
 
     for (auto const& prefixCommand : kPrefixCommands)
     {
       if (command.starts_with(prefixCommand.prefix))
       {
-        return {.action = prefixCommand.action, .argument = trim(value.substr(prefixCommand.prefix.size()))};
+        return Command{
+          .action = prefixCommand.action,
+          .argument = std::string{utility::trim(value.substr(prefixCommand.prefix.size()))},
+        };
       }
     }
 
@@ -318,10 +306,10 @@ namespace ao::tui
 
     if (aliasIt != kAliasCommands.end())
     {
-      return {.action = aliasIt->action};
+      return Command{.action = aliasIt->action};
     }
 
-    return {.action = CommandAction::QuickFilter, .argument = value};
+    return std::nullopt;
   }
 
   std::string_view overlayLabel(TuiTextCatalog const& textCatalog, Overlay const overlay)
@@ -345,7 +333,7 @@ namespace ao::tui
   {
     switch (overlay)
     {
-      case Overlay::None: return textCatalog.text(TuiTextId::HintWorkspace);
+      case Overlay::None: return {};
       case Overlay::ListChooser: return textCatalog.text(TuiTextId::HintLists);
       case Overlay::DetailPanel: return textCatalog.text(TuiTextId::HintDetail);
       case Overlay::QualityPanel: return textCatalog.text(TuiTextId::HintPipeline);
@@ -355,17 +343,27 @@ namespace ao::tui
       case Overlay::Help: return textCatalog.text(TuiTextId::HintHelp);
     }
 
-    return textCatalog.text(TuiTextId::HintWorkspace);
+    return {};
   }
 
-  bool ShellInteractionModel::isCommandActive() const noexcept
+  bool ShellInteractionModel::isInputActive() const noexcept
   {
-    return _commandActive;
+    return _inputMode != ShellInputMode::None;
   }
 
-  std::string const& ShellInteractionModel::commandDraft() const noexcept
+  ShellInputMode ShellInteractionModel::inputMode() const noexcept
   {
-    return _commandDraft;
+    return _inputMode;
+  }
+
+  std::string const& ShellInteractionModel::inputDraft() const noexcept
+  {
+    return _inputDraft;
+  }
+
+  bool ShellInteractionModel::isInputTouched() const noexcept
+  {
+    return _inputTouched;
   }
 
   std::optional<rt::CompletionResult> const& ShellInteractionModel::commandCompletion() const noexcept
@@ -383,25 +381,38 @@ namespace ao::tui
     return _overlay;
   }
 
-  void ShellInteractionModel::beginCommand(std::string draft)
+  void ShellInteractionModel::beginInput(ShellInputMode const mode, std::string draft)
   {
-    _commandActive = true;
-    _commandDraft = std::move(draft);
+    _inputMode = mode;
+    _inputDraft = std::move(draft);
+    _inputTouched = !_inputDraft.empty();
     clearCommandCompletion();
   }
 
-  void ShellInteractionModel::appendCommandText(std::string_view text)
+  void ShellInteractionModel::appendInputText(std::string_view const text)
   {
-    _commandDraft.append(text);
+    if (text.empty())
+    {
+      return;
+    }
+
+    _inputDraft.append(text);
+    _inputTouched = true;
   }
 
-  void ShellInteractionModel::backspaceCommand()
+  void ShellInteractionModel::backspaceInput()
   {
-    auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_commandDraft);
+    if (_inputDraft.empty())
+    {
+      return;
+    }
+
+    _inputTouched = true;
+    auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_inputDraft);
 
     if (boundaryRes)
     {
-      _commandDraft.resize(*boundaryRes);
+      _inputDraft.resize(*boundaryRes);
       return;
     }
 
@@ -411,32 +422,24 @@ namespace ao::tui
     constexpr unsigned int kUtf8ContinuationMask = 0xC0U;
     constexpr unsigned int kUtf8ContinuationTag = 0x80U;
 
-    while (!_commandDraft.empty() &&
-           (static_cast<unsigned char>(_commandDraft.back()) & kUtf8ContinuationMask) == kUtf8ContinuationTag)
+    while (!_inputDraft.empty() &&
+           (static_cast<unsigned char>(_inputDraft.back()) & kUtf8ContinuationMask) == kUtf8ContinuationTag)
     {
-      _commandDraft.pop_back();
+      _inputDraft.pop_back();
     }
 
-    if (!_commandDraft.empty())
+    if (!_inputDraft.empty())
     {
-      _commandDraft.pop_back();
+      _inputDraft.pop_back();
     }
   }
 
-  void ShellInteractionModel::cancelCommand()
+  void ShellInteractionModel::closeInput()
   {
-    _commandActive = false;
-    _commandDraft.clear();
+    _inputMode = ShellInputMode::None;
+    _inputDraft.clear();
+    _inputTouched = false;
     clearCommandCompletion();
-  }
-
-  Command ShellInteractionModel::submitCommand()
-  {
-    auto command = parseCommand(_commandDraft);
-    _commandActive = false;
-    _commandDraft.clear();
-    clearCommandCompletion();
-    return command;
   }
 
   void ShellInteractionModel::setCommandCompletion(std::optional<rt::CompletionResult> optCompletion)
@@ -449,9 +452,20 @@ namespace ao::tui
     return _completion.moveSelection(delta);
   }
 
+  bool ShellInteractionModel::moveCommandCompletionByPage(std::int32_t const delta)
+  {
+    return _completion.moveSelectionByPage(delta);
+  }
+
   bool ShellInteractionModel::applyCommandCompletion()
   {
-    return _completion.applyTo(_commandDraft);
+    if (!_completion.applyTo(_inputDraft))
+    {
+      return false;
+    }
+
+    _inputTouched = true;
+    return true;
   }
 
   void ShellInteractionModel::clearCommandCompletion()

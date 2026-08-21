@@ -384,6 +384,8 @@ ja:table {
     tui_shell_command_palette_title { "コマンドパレット" }
     tui_shell_command_palette_no_matches { "一致なし" }
     tui_shell_command_palette_footer { "{completeKey} 補完  {runKey} 実行  {cancelKey} キャンセル" }
+    tui_shell_quick_filter_title { "クイックフィルター" }
+    tui_shell_quick_filter_footer { "{acceptKey} 確定  {completeKey} 補完  {keepKey} 入力を保持" }
     tui_shell_workspace_list { "リスト" }
     tui_shell_workspace_view { "表示" }
     tui_shell_overlay_tracks { "曲" }
@@ -394,7 +396,6 @@ ja:table {
     tui_shell_overlay_views { "表示" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "ヘルプ" }
-    tui_shell_hint_workspace { "{commandKey} コマンド  {listsKey} リスト  {viewKey} 表示  {notificationsKey} 通知  {detailKey} 詳細  {pipelineKey} パイプライン  {outputKey} 出力  {groupsKey} グループ  {currentKey} 現在  {quitKey} 終了" }
     tui_shell_hint_lists { "{toggleKey} 切り替え  {openKey} 開く  {closeKey} 閉じる" }
     tui_shell_hint_detail { "{toggleKey} 切り替え  {closeKey} 閉じる" }
     tui_shell_hint_pipeline { "{toggleKey} 切り替え  {closeKey} 閉じる" }
@@ -405,13 +406,9 @@ ja:table {
     tui_shell_status_command { "コマンド" }
     tui_shell_status_lists { "リスト" }
     tui_shell_status_view { "表示" }
-    tui_shell_status_notifications { "通知" }
     tui_shell_status_detail { "詳細" }
-    tui_shell_status_pipeline { "パイプライン" }
-    tui_shell_status_output { "出力" }
-    tui_shell_status_groups { "グループ" }
-    tui_shell_status_current { "現在" }
-    tui_shell_status_quit { "終了" }
+    tui_shell_status_clear_filter { "フィルターをクリア" }
+    tui_shell_status_help { "ヘルプ" }
     tui_shell_filter_label { "フィルター" }
     tui_shell_category_library { "ライブラリ" }
     tui_shell_category_view { "表示" }
@@ -795,6 +792,7 @@ ja:table {
     tui_overlay_closed { "オーバーレイが閉じられました" }
     tui_help_opened { "ヘルプ" }
     tui_section_unavailable { "セクションは利用できなくなりました" }
+    tui_unknown_command { "不明なコマンド: {command}" }
     tui_filter_failed { "フィルター失敗: {detail}" }
   }
 }

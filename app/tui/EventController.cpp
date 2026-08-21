@@ -15,6 +15,8 @@
 #include "TrackSection.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
@@ -39,6 +41,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -50,6 +53,7 @@ namespace ao::tui
   {
     constexpr std::int32_t kMouseWheelSelectionDelta = 3;
     constexpr auto kKeyboardSeekDelta = std::chrono::seconds{5};
+    constexpr auto kFilterDebounceInterval = std::chrono::milliseconds{200};
     constexpr float kKeyboardVolumeDelta = 0.05F;
 
     bool containsTrackColumnResizeEdge(TrackColumnResizeHandle const& handle,
@@ -183,6 +187,7 @@ namespace ao::tui
     : _screen{screen}
     , _shell{shell}
     , _library{library}
+    , _asyncRuntime{runtime.async()}
     , _playback{runtime.playback()}
     , _playbackCommands{_playback, [this] { playSelectedTrack(); }}
     , _seekViewModel{_playback, {}}
@@ -193,6 +198,7 @@ namespace ao::tui
     , _activityStatusViewModel{bindings.activityStatusViewModel}
     , _notifications{bindings.notifications}
     , _commandCompletionCallback{std::move(bindings.commandCompletionCallback)}
+    , _filterCompletionCallback{std::move(bindings.filterCompletionCallback)}
   {
   }
 
@@ -220,14 +226,25 @@ namespace ao::tui
     _library.reloadActiveList();
   }
 
-  void EventController::applyFilter()
+  void EventController::applyFilter(bool const reportError)
   {
     if (auto result = _library.applyFilter(); !result)
     {
       APP_LOG_ERROR("Failed to apply TUI filter: {}", result.error().message);
-      postActivityNotification(
-        rt::NotificationSeverity::Error,
-        _library.textCatalog().format(i18n::MessageId::TuiFilterFailed, {{"detail", result.error().message}}));
+
+      if (reportError)
+      {
+        postActivityNotification(
+          rt::NotificationSeverity::Error,
+          _library.textCatalog().format(i18n::MessageId::TuiFilterFailed, {{"detail", result.error().message}}));
+      }
+
+      return;
+    }
+
+    if (reportError && !_library.filterError().empty())
+    {
+      postActivityNotification(rt::NotificationSeverity::Warning, _library.filterError());
     }
   }
 
@@ -426,13 +443,85 @@ namespace ao::tui
 
   void EventController::refreshCommandCompletion()
   {
-    if (!_shell.isCommandActive() || !_commandCompletionCallback)
+    if (!_shell.isInputActive())
     {
       _shell.clearCommandCompletion();
       return;
     }
 
-    _shell.setCommandCompletion(_commandCompletionCallback(_shell.commandDraft()));
+    auto* callback =
+      _shell.inputMode() == ShellInputMode::QuickFilter ? &_filterCompletionCallback : &_commandCompletionCallback;
+
+    if (!*callback)
+    {
+      _shell.clearCommandCompletion();
+      return;
+    }
+
+    _shell.setCommandCompletion((*callback)(_shell.inputDraft()));
+  }
+
+  void EventController::scheduleFilterDebounce()
+  {
+    if (_shell.inputMode() != ShellInputMode::QuickFilter || !_shell.isInputTouched())
+    {
+      return;
+    }
+
+    cancelFilterDebounce();
+    auto const generation = _filterDebounceGeneration;
+    _filterDebounceTask = _asyncRuntime.spawnCancellable(
+      [runtime = &_asyncRuntime, owner = this, generation](std::stop_token const stopToken)
+      { return waitForFilterDebounce(runtime, owner, generation, stopToken); },
+      "TUI Quick-filter debounce");
+  }
+
+  void EventController::cancelFilterDebounce() noexcept
+  {
+    _filterDebounceTask.reset();
+    ++_filterDebounceGeneration;
+  }
+
+  async::Task<void> EventController::waitForFilterDebounce(async::Runtime* const runtime,
+                                                           EventController* const owner,
+                                                           std::uint64_t const generation,
+                                                           std::stop_token const stopToken)
+  {
+    co_await runtime->sleepFor(kFilterDebounceInterval, stopToken);
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    owner->applyPendingFilter(generation);
+  }
+
+  void EventController::applyPendingFilter(std::uint64_t const generation)
+  {
+    if (generation != _filterDebounceGeneration || _shell.inputMode() != ShellInputMode::QuickFilter ||
+        !_shell.isInputTouched())
+    {
+      return;
+    }
+
+    _library.setFilterDraft(_shell.inputDraft());
+    applyFilter(false);
+  }
+
+  void EventController::closeQuickFilter(bool const acceptCompletion)
+  {
+    cancelFilterDebounce();
+
+    if (!acceptCompletion && !_shell.isInputTouched())
+    {
+      _shell.closeInput();
+      return;
+    }
+
+    if (acceptCompletion)
+    {
+      _shell.applyCommandCompletion();
+    }
+
+    _library.setFilterDraft(_shell.inputDraft());
+    applyFilter();
+    _shell.closeInput();
   }
 
   bool EventController::selectTrackFromScrollbar(std::int32_t const row)
@@ -596,7 +685,7 @@ namespace ao::tui
         ? ButtonHitTestResult{}
         : _hitRegions->hitTestButton(mouse.x,
                                      mouse.y,
-                                     HitTestContext{.isCommandActive = _shell.isCommandActive(),
+                                     HitTestContext{.isTextInputActive = _shell.isInputActive(),
                                                     .isOverlayActive = isOverlayActive(_shell.overlay())});
     bool handled = false;
 
@@ -833,7 +922,7 @@ namespace ao::tui
 
   bool EventController::handleMouse(ftxui::Mouse const& mouse)
   {
-    auto const modalInputActive = _shell.isCommandActive() || isOverlayActive(_shell.overlay());
+    auto const modalInputActive = _shell.isInputActive() || isOverlayActive(_shell.overlay());
 
     if (modalInputActive && _optSeekRailDrag)
     {
@@ -841,7 +930,7 @@ namespace ao::tui
       return false;
     }
 
-    if (_shell.isCommandActive())
+    if (_shell.isInputActive())
     {
       _optTrackScrollbarDrag.reset();
       _optTrackColumnResizeDrag.reset();
@@ -904,13 +993,47 @@ namespace ao::tui
   {
     if (event == ftxui::Event::Escape)
     {
-      _shell.cancelCommand();
+      if (_shell.inputMode() == ShellInputMode::QuickFilter)
+      {
+        closeQuickFilter(false);
+      }
+      else
+      {
+        cancelFilterDebounce();
+        _shell.closeInput();
+      }
+
       return true;
     }
 
     if (event == ftxui::Event::Return)
     {
-      runCommand(_shell.submitCommand());
+      if (_shell.inputMode() == ShellInputMode::QuickFilter)
+      {
+        closeQuickFilter(true);
+        return true;
+      }
+
+      auto const optCommand = parseCommand(_shell.inputDraft());
+
+      if (!optCommand)
+      {
+        if (_shell.inputDraft().empty())
+        {
+          _shell.closeInput();
+        }
+        else
+        {
+          postActivityNotification(
+            rt::NotificationSeverity::Warning,
+            _library.textCatalog().format(i18n::MessageId::TuiUnknownCommand, {{"command", _shell.inputDraft()}}));
+        }
+
+        return true;
+      }
+
+      _shell.closeInput();
+      runCommand(*optCommand);
       return true;
     }
 
@@ -919,6 +1042,7 @@ namespace ao::tui
       if (_shell.applyCommandCompletion())
       {
         refreshCommandCompletion();
+        scheduleFilterDebounce();
       }
 
       return true;
@@ -936,17 +1060,25 @@ namespace ao::tui
       return true;
     }
 
+    if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
+    {
+      _shell.moveCommandCompletionByPage(listNavigationDecision(event).delta);
+      return true;
+    }
+
     if (event == ftxui::Event::Backspace)
     {
-      _shell.backspaceCommand();
+      _shell.backspaceInput();
       refreshCommandCompletion();
+      scheduleFilterDebounce();
       return true;
     }
 
     if (event.is_character())
     {
-      _shell.appendCommandText(event.character());
+      _shell.appendInputText(event.character());
       refreshCommandCompletion();
+      scheduleFilterDebounce();
     }
 
     return true;
@@ -1063,7 +1195,8 @@ namespace ao::tui
 
     if (event == ftxui::Event::Character("/") || event == ftxui::Event::Character(":"))
     {
-      _shell.beginCommand();
+      cancelSeekInteraction();
+      _shell.beginInput(event == ftxui::Event::Character("/") ? ShellInputMode::QuickFilter : ShellInputMode::Command);
       refreshCommandCompletion();
       return true;
     }
@@ -1115,16 +1248,16 @@ namespace ao::tui
       return handleMouse(mouseEvent.mouse());
     }
 
-    if (_shell.isCommandActive())
-    {
-      return handleCommandEvent(event);
-    }
-
     if (event == ftxui::Event::CtrlC)
     {
       _playback.commands().stop();
       _screen.ExitLoopClosure()();
       return true;
+    }
+
+    if (_shell.isInputActive())
+    {
+      return handleCommandEvent(event);
     }
 
     // Escape is answered before any overlay sees it, so whatever is open closes

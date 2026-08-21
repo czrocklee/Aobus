@@ -27,6 +27,13 @@ namespace ao::tui
     Help,
   };
 
+  enum class ShellInputMode : std::uint8_t
+  {
+    None,
+    QuickFilter,
+    Command,
+  };
+
   enum class CommandAction : std::uint8_t
   {
     QuickFilter,
@@ -63,7 +70,7 @@ namespace ao::tui
     /**
      * @brief The action whose key this entry advertises, when not its own.
      *
-     * `/view <name>` selects a track view outright while `v` opens the panel to
+     * `:view <name>` selects a track view outright while `v` opens the panel to
      * pick one, so they are different actions that reach the same place. Naming
      * the action rather than the key is what keeps the hint from drifting: a
      * rebound key moves the hint with it, and an unbound one shows nothing.
@@ -99,26 +106,28 @@ namespace ao::tui
 
   /// The first key that runs @p action, or empty when no key does.
   std::string_view shortcutFor(CommandAction action);
-  Command parseCommand(std::string_view input);
+  std::optional<Command> parseCommand(std::string_view input);
   std::string_view overlayLabel(TuiTextCatalog const& textCatalog, Overlay overlay);
   std::string_view overlayHint(TuiTextCatalog const& textCatalog, Overlay overlay);
 
   class ShellInteractionModel final
   {
   public:
-    bool isCommandActive() const noexcept;
-    std::string const& commandDraft() const noexcept;
+    bool isInputActive() const noexcept;
+    ShellInputMode inputMode() const noexcept;
+    std::string const& inputDraft() const noexcept;
+    bool isInputTouched() const noexcept;
     std::optional<rt::CompletionResult> const& commandCompletion() const noexcept;
     std::int32_t commandCompletionSelection() const noexcept;
     Overlay overlay() const noexcept;
 
-    void beginCommand(std::string draft = {});
-    void appendCommandText(std::string_view text);
-    void backspaceCommand();
-    void cancelCommand();
-    Command submitCommand();
+    void beginInput(ShellInputMode mode, std::string draft = {});
+    void appendInputText(std::string_view text);
+    void backspaceInput();
+    void closeInput();
     void setCommandCompletion(std::optional<rt::CompletionResult> optCompletion);
     bool moveCommandCompletion(std::int32_t delta);
+    bool moveCommandCompletionByPage(std::int32_t delta);
     bool applyCommandCompletion();
     void clearCommandCompletion();
 
@@ -126,8 +135,9 @@ namespace ao::tui
     void closeOverlay() noexcept;
 
   private:
-    bool _commandActive = false;
-    std::string _commandDraft{};
+    ShellInputMode _inputMode = ShellInputMode::None;
+    std::string _inputDraft{};
+    bool _inputTouched = false;
     CommandCompletionState _completion{};
     Overlay _overlay = Overlay::None;
   };

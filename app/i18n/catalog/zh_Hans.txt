@@ -385,6 +385,8 @@ zh_Hans:table {
     tui_shell_command_palette_title { "命令面板" }
     tui_shell_command_palette_no_matches { "无匹配项" }
     tui_shell_command_palette_footer { "{completeKey} 补全  {runKey} 运行  {cancelKey} 取消" }
+    tui_shell_quick_filter_title { "快速筛选" }
+    tui_shell_quick_filter_footer { "{acceptKey} 接受  {completeKey} 补全  {keepKey} 保留输入" }
     tui_shell_workspace_list { "列表" }
     tui_shell_workspace_view { "视图" }
     tui_shell_overlay_tracks { "曲目" }
@@ -395,7 +397,6 @@ zh_Hans:table {
     tui_shell_overlay_views { "视图" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "帮助" }
-    tui_shell_hint_workspace { "{commandKey} 命令  {listsKey} 列表  {viewKey} 视图  {notificationsKey} 通知  {detailKey} 详情  {pipelineKey} 链路  {outputKey} 输出  {groupsKey} 分组  {currentKey} 当前  {quitKey} 退出" }
     tui_shell_hint_lists { "{toggleKey} 切换  {openKey} 打开  {closeKey} 关闭" }
     tui_shell_hint_detail { "{toggleKey} 切换  {closeKey} 关闭" }
     tui_shell_hint_pipeline { "{toggleKey} 切换  {closeKey} 关闭" }
@@ -406,13 +407,9 @@ zh_Hans:table {
     tui_shell_status_command { "命令" }
     tui_shell_status_lists { "列表" }
     tui_shell_status_view { "视图" }
-    tui_shell_status_notifications { "通知" }
     tui_shell_status_detail { "详情" }
-    tui_shell_status_pipeline { "音频链路" }
-    tui_shell_status_output { "输出" }
-    tui_shell_status_groups { "分组" }
-    tui_shell_status_current { "当前" }
-    tui_shell_status_quit { "退出" }
+    tui_shell_status_clear_filter { "清除筛选" }
+    tui_shell_status_help { "帮助" }
     tui_shell_filter_label { "筛选" }
     tui_shell_category_library { "音乐库" }
     tui_shell_category_view { "视图" }
@@ -796,6 +793,7 @@ zh_Hans:table {
     tui_overlay_closed { "浮层已关闭" }
     tui_help_opened { "帮助" }
     tui_section_unavailable { "分节已不再可用" }
+    tui_unknown_command { "未知命令：{command}" }
     tui_filter_failed { "筛选失败：{detail}" }
   }
 }

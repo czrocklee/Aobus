@@ -27,7 +27,8 @@ namespace ao::tui
                               uimodel::PresentationTextCatalog textCatalog,
                               TuiTextCatalog const& tuiTextCatalog);
 
-    std::optional<rt::CompletionResult> complete(std::string_view draft);
+    std::optional<rt::CompletionResult> completeCommand(std::string_view draft);
+    std::optional<rt::CompletionResult> completeFilter(std::string_view draft);
 
   private:
     rt::WorkspaceService& _workspace;

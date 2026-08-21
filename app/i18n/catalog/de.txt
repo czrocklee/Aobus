@@ -384,6 +384,8 @@ de:table {
     tui_shell_command_palette_title { "Befehlspalette" }
     tui_shell_command_palette_no_matches { "Keine Treffer" }
     tui_shell_command_palette_footer { "{completeKey} ergänzen  {runKey} ausführen  {cancelKey} abbrechen" }
+    tui_shell_quick_filter_title { "Schnellfilter" }
+    tui_shell_quick_filter_footer { "{acceptKey} übernehmen  {completeKey} ergänzen  {keepKey} Eingabe behalten" }
     tui_shell_workspace_list { "Liste" }
     tui_shell_workspace_view { "Ansicht" }
     tui_shell_overlay_tracks { "Titel" }
@@ -394,7 +396,6 @@ de:table {
     tui_shell_overlay_views { "Ansichten" }
     tui_shell_overlay_notifications { "Benachrichtigungen" }
     tui_shell_overlay_help { "Hilfe" }
-    tui_shell_hint_workspace { "{commandKey} Befehl  {listsKey} Listen  {viewKey} Ansicht  {notificationsKey} Meldungen  {detailKey} Details  {pipelineKey} Audiokette  {outputKey} Ausgabe  {groupsKey} Gruppen  {currentKey} aktuell  {quitKey} beenden" }
     tui_shell_hint_lists { "{toggleKey} umschalten  {openKey} öffnen  {closeKey} schließen" }
     tui_shell_hint_detail { "{toggleKey} umschalten  {closeKey} schließen" }
     tui_shell_hint_pipeline { "{toggleKey} umschalten  {closeKey} schließen" }
@@ -405,13 +406,9 @@ de:table {
     tui_shell_status_command { "Befehl" }
     tui_shell_status_lists { "Listen" }
     tui_shell_status_view { "Ansicht" }
-    tui_shell_status_notifications { "Meldungen" }
     tui_shell_status_detail { "Details" }
-    tui_shell_status_pipeline { "Audiokette" }
-    tui_shell_status_output { "Ausgabe" }
-    tui_shell_status_groups { "Gruppen" }
-    tui_shell_status_current { "aktuell" }
-    tui_shell_status_quit { "beenden" }
+    tui_shell_status_clear_filter { "Filter löschen" }
+    tui_shell_status_help { "Hilfe" }
     tui_shell_filter_label { "Filter" }
     tui_shell_category_library { "Bibliothek" }
     tui_shell_category_view { "Ansicht" }
@@ -795,6 +792,7 @@ de:table {
     tui_overlay_closed { "Einblendung geschlossen" }
     tui_help_opened { "Hilfe" }
     tui_section_unavailable { "Abschnitt ist nicht mehr verfügbar" }
+    tui_unknown_command { "Unbekannter Befehl: {command}" }
     tui_filter_failed { "Filter fehlgeschlagen: {detail}" }
   }
 }

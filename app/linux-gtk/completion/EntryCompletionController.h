@@ -36,6 +36,7 @@ namespace ao::gtk
   {
     std::int32_t popoverWidth = layout::kCompletionPopoverWidth;
     std::int32_t popoverMaxHeight = layout::kCompletionPopoverMaxHeight;
+    bool acceptOnReturn = false;
   };
 
   class EntryCompletionController final
@@ -61,6 +62,7 @@ namespace ao::gtk
 
   private:
     bool handleKeyPressed(std::uint32_t keyval);
+    bool movePageSelection(std::int32_t direction);
     void clearCompletionState();
 
     Gtk::Entry& _entry;

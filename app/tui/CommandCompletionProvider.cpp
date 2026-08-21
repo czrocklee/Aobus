@@ -28,7 +28,7 @@ namespace ao::tui
   {
   }
 
-  std::optional<rt::CompletionResult> CommandCompletionProvider::complete(std::string_view const draft)
+  std::optional<rt::CompletionResult> CommandCompletionProvider::completeCommand(std::string_view const draft)
   {
     return completeCommandDraft(
       _textCatalog,
@@ -40,5 +40,10 @@ namespace ao::tui
         .filterCompleter = [this](std::string_view const text, std::size_t const cursor, std::size_t const limit)
           -> std::optional<rt::CompletionResult> { return _filterCompleter.complete(text, cursor, limit); },
       });
+  }
+
+  std::optional<rt::CompletionResult> CommandCompletionProvider::completeFilter(std::string_view const draft)
+  {
+    return _filterCompleter.complete(draft, draft.size(), kInputCompletionResultLimit);
   }
 } // namespace ao::tui

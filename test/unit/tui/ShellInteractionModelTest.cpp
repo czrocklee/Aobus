@@ -7,103 +7,122 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string_view>
+
 namespace ao::tui::test
 {
+  namespace
+  {
+    Command requiredCommand(std::string_view const input)
+    {
+      auto const optCommand = parseCommand(input);
+      REQUIRE(optCommand);
+      return *optCommand;
+    }
+  } // namespace
+
   TEST_CASE("ShellInteractionModel - command parser recognizes terminal app commands", "[tui][unit][shell]")
   {
-    CHECK(parseCommand("/lists").action == CommandAction::OpenLists);
-    CHECK(parseCommand(":detail").action == CommandAction::OpenDetail);
-    CHECK(parseCommand("/quality").action == CommandAction::OpenQuality);
-    CHECK(parseCommand("/pipeline").action == CommandAction::OpenQuality);
-    CHECK(parseCommand("/output").action == CommandAction::OpenOutputDevices);
-    CHECK(parseCommand("/devices").action == CommandAction::OpenOutputDevices);
-    CHECK(parseCommand("/views").action == CommandAction::OpenPresentationPanel);
-    CHECK(parseCommand("/v").action == CommandAction::OpenPresentationPanel);
-    CHECK(parseCommand("/notifications").action == CommandAction::OpenNotifications);
-    CHECK(parseCommand("/n").action == CommandAction::OpenNotifications);
-    CHECK(parseCommand("help").action == CommandAction::ShowHelp);
-    CHECK(parseCommand("/current").action == CommandAction::RevealCurrentTrack);
-    auto presentationCommand = parseCommand("/view albums");
+    CHECK(requiredCommand(":lists").action == CommandAction::OpenLists);
+    CHECK(requiredCommand(":detail").action == CommandAction::OpenDetail);
+    CHECK(requiredCommand(":quality").action == CommandAction::OpenQuality);
+    CHECK(requiredCommand(":pipeline").action == CommandAction::OpenQuality);
+    CHECK(requiredCommand(":output").action == CommandAction::OpenOutputDevices);
+    CHECK(requiredCommand(":devices").action == CommandAction::OpenOutputDevices);
+    CHECK(requiredCommand(":views").action == CommandAction::OpenPresentationPanel);
+    CHECK(requiredCommand(":v").action == CommandAction::OpenPresentationPanel);
+    CHECK(requiredCommand(":notifications").action == CommandAction::OpenNotifications);
+    CHECK(requiredCommand(":n").action == CommandAction::OpenNotifications);
+    CHECK(requiredCommand("help").action == CommandAction::ShowHelp);
+    CHECK(requiredCommand(":current").action == CommandAction::RevealCurrentTrack);
+    auto presentationCommand = requiredCommand(":view albums");
     CHECK(presentationCommand.action == CommandAction::SetPresentation);
     CHECK(presentationCommand.argument == "albums");
-    presentationCommand = parseCommand("/presentation tagging");
+    presentationCommand = requiredCommand(":presentation tagging");
     CHECK(presentationCommand.action == CommandAction::SetPresentation);
     CHECK(presentationCommand.argument == "tagging");
-    presentationCommand = parseCommand("/preset Albums");
+    presentationCommand = requiredCommand(":preset Albums");
     CHECK(presentationCommand.action == CommandAction::SetPresentation);
     CHECK(presentationCommand.argument == "Albums");
-    CHECK(parseCommand("now").action == CommandAction::RevealCurrentTrack);
-    CHECK(parseCommand("reveal").action == CommandAction::RevealCurrentTrack);
-    CHECK(parseCommand("clear").action == CommandAction::ClearFilter);
-    CHECK(parseCommand("reload").action == CommandAction::Reload);
-    CHECK(parseCommand("play").action == CommandAction::Play);
-    CHECK(parseCommand("pause").action == CommandAction::TogglePlayback);
-    CHECK(parseCommand("stop").action == CommandAction::Stop);
-    CHECK(parseCommand("quit").action == CommandAction::Quit);
-    CHECK(parseCommand("close").action == CommandAction::CloseOverlay);
+    CHECK(requiredCommand("now").action == CommandAction::RevealCurrentTrack);
+    CHECK(requiredCommand("reveal").action == CommandAction::RevealCurrentTrack);
+    CHECK(requiredCommand("clear").action == CommandAction::ClearFilter);
+    CHECK(requiredCommand("reload").action == CommandAction::Reload);
+    CHECK(requiredCommand("play").action == CommandAction::Play);
+    CHECK(requiredCommand("pause").action == CommandAction::TogglePlayback);
+    CHECK(requiredCommand("stop").action == CommandAction::Stop);
+    CHECK(requiredCommand("quit").action == CommandAction::Quit);
+    CHECK(requiredCommand("close").action == CommandAction::CloseOverlay);
   }
 
-  TEST_CASE("ShellInteractionModel - unknown commands become quick filters", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - only explicit filter commands become quick filters", "[tui][unit][shell]")
   {
-    auto command = parseCommand("/aimer midnight");
+    CHECK_FALSE(parseCommand("/aimer midnight"));
+    CHECK_FALSE(parseCommand("/lists"));
+    CHECK_FALSE(parseCommand("/filter live acoustic"));
+    CHECK_FALSE(parseCommand("unknown"));
+    CHECK_FALSE(parseCommand("  "));
 
-    CHECK(command.action == CommandAction::QuickFilter);
-    CHECK(command.argument == "aimer midnight");
-
-    command = parseCommand("/filter live acoustic");
-
+    auto command = requiredCommand(":filter live acoustic");
     CHECK(command.action == CommandAction::QuickFilter);
     CHECK(command.argument == "live acoustic");
 
-    command = parseCommand("  :filter   spaced query   ");
+    command = requiredCommand("  :filter   spaced query   ");
 
     CHECK(command.action == CommandAction::QuickFilter);
     CHECK(command.argument == "spaced query");
   }
 
-  TEST_CASE("ShellInteractionModel - command draft lifecycle submits and clears", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - input mode and touched state are explicit", "[tui][unit][shell]")
   {
     auto model = ShellInteractionModel{};
 
-    model.beginCommand();
-    model.appendCommandText("detail");
+    model.beginInput(ShellInputMode::QuickFilter);
 
-    CHECK(model.isCommandActive());
-    CHECK(model.commandDraft() == "detail");
+    CHECK(model.isInputActive());
+    CHECK(model.inputMode() == ShellInputMode::QuickFilter);
+    CHECK_FALSE(model.isInputTouched());
+    CHECK(model.inputDraft().empty());
 
-    auto command = model.submitCommand();
+    model.appendInputText("detail");
 
-    CHECK(command.action == CommandAction::OpenDetail);
-    CHECK_FALSE(model.isCommandActive());
-    CHECK(model.commandDraft().empty());
+    CHECK(model.isInputTouched());
+    CHECK(model.inputDraft() == "detail");
+
+    model.closeInput();
+
+    CHECK_FALSE(model.isInputActive());
+    CHECK(model.inputMode() == ShellInputMode::None);
+    CHECK_FALSE(model.isInputTouched());
+    CHECK(model.inputDraft().empty());
   }
 
-  TEST_CASE("ShellInteractionModel - cancelling command input clears the draft", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - closing command input clears the draft", "[tui][unit][shell]")
   {
     auto model = ShellInteractionModel{};
 
-    model.beginCommand("help");
-    model.cancelCommand();
+    model.beginInput(ShellInputMode::Command, "help");
+    model.closeInput();
 
-    CHECK_FALSE(model.isCommandActive());
-    CHECK(model.commandDraft().empty());
+    CHECK_FALSE(model.isInputActive());
+    CHECK(model.inputDraft().empty());
   }
 
   TEST_CASE("ShellInteractionModel - backspace removes one extended grapheme cluster", "[tui][unit][shell]")
   {
     auto model = ShellInteractionModel{};
 
-    model.beginCommand();
-    model.appendCommandText("a翼e\u0301👨‍👩‍👧‍👦");
-    model.backspaceCommand();
+    model.beginInput(ShellInputMode::Command);
+    model.appendInputText("a翼e\u0301👨‍👩‍👧‍👦");
+    model.backspaceInput();
 
-    CHECK(model.commandDraft() == "a翼e\u0301");
-    model.backspaceCommand();
+    CHECK(model.inputDraft() == "a翼e\u0301");
+    model.backspaceInput();
 
-    CHECK(model.commandDraft() == "a翼");
-    model.backspaceCommand();
+    CHECK(model.inputDraft() == "a翼");
+    model.backspaceInput();
 
-    CHECK(model.commandDraft() == "a");
+    CHECK(model.inputDraft() == "a");
   }
 
   TEST_CASE("ShellInteractionModel - overlay state is explicit", "[tui][unit][shell]")
@@ -133,8 +152,7 @@ namespace ao::tui::test
   TEST_CASE("ShellInteractionModel - overlay hints are stable", "[tui][unit][shell]")
   {
     auto const& textCatalog = englishTuiTextCatalog();
-    CHECK(overlayHint(textCatalog, Overlay::None) ==
-          "/ command  l lists  v view  n notif  d detail  a pipeline  o output  { } groups  Ctrl-L current  q quit");
+    CHECK(overlayHint(textCatalog, Overlay::None).empty());
     CHECK(overlayHint(textCatalog, Overlay::ListChooser) == "l toggle  Enter open  Esc close");
     CHECK(overlayHint(textCatalog, Overlay::DetailPanel) == "d toggle  Esc close");
     CHECK(overlayHint(textCatalog, Overlay::QualityPanel) == "a toggle  Esc close");

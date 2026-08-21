@@ -57,6 +57,14 @@ namespace ao::tui::test
         ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), shell, columns);
     }
 
+    ftxui::Element quickFilterCompletionPanel(ShellInteractionModel const& shell,
+                                              std::int32_t const columns = 0,
+                                              std::string_view const filterError = {})
+    {
+      return ao::tui::quickFilterCompletionPanel(
+        ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), shell, columns, filterError);
+    }
+
     ftxui::Element helpPane(std::int32_t const columns = 0)
     {
       return ao::tui::helpPane(englishTuiTextCatalog(), columns);
@@ -111,6 +119,8 @@ namespace ao::tui::test
   {
     auto const german = tuiTextCatalog("de-AT");
     CHECK(german.text(TuiTextId::CommandPaletteTitle) == "Befehlspalette");
+    CHECK(german.text(TuiTextId::QuickFilterTitle) == "Schnellfilter");
+    CHECK(german.text(TuiTextId::QuickFilterFooter).contains("Enter übernehmen"));
     CHECK(german.text(TuiTextId::OverlayViews) == "Ansichten");
     CHECK(german.text(TuiTextId::HintLists).contains("Enter öffnen"));
     CHECK(german.text(TuiTextId::LibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
@@ -119,15 +129,16 @@ namespace ao::tui::test
 
     auto const pseudo = tuiTextCatalog("qps-ploc");
     CHECK(pseudo.text(TuiTextId::CommandPaletteTitle) != "Command Palette");
+    CHECK(pseudo.text(TuiTextId::QuickFilterTitle) != "Quick Filter");
     CHECK(pseudo.text(TuiTextId::HintViews).contains("Enter"));
     CHECK(pseudo.text(TuiTextId::LibraryNoTracksFound) != "No tracks found. Run `aobus init` in this library first.");
     CHECK(pseudo.libraryOpenedList("Road Trip").contains("Road Trip"));
 
     auto shell = ShellInteractionModel{};
-    shell.beginCommand("view albums");
+    shell.beginInput(ShellInputMode::Command, "view albums");
     auto const narrow =
       renderElement(commandPalettePanel(ao::test::englishPresentationTextCatalog(), pseudo, shell, 32), 32, 8);
-    CHECK(narrow.text.contains("/view albums"));
+    CHECK(narrow.text.contains(":view albums"));
     CHECK_FALSE(narrow.text.empty());
   }
 
@@ -135,11 +146,11 @@ namespace ao::tui::test
   {
     auto const text = renderText(helpPane());
 
-    CHECK(text.contains("/current"));
-    CHECK(text.contains("/view <id>"));
-    CHECK(text.contains("/output"));
-    CHECK(text.contains("/views"));
-    CHECK(text.contains("/notifications"));
+    CHECK(text.contains(":current"));
+    CHECK(text.contains(":view <id>"));
+    CHECK(text.contains(":output"));
+    CHECK(text.contains(":views"));
+    CHECK(text.contains(":notifications"));
     CHECK(text.contains("{ / }"));
   }
 
@@ -304,28 +315,32 @@ namespace ao::tui::test
     CHECK(optPaddedBody->x_min == 2);
   }
 
-  TEST_CASE("Render - wide idle status bar reserves empty activity space without slot chrome", "[tui][unit][render]")
+  TEST_CASE("Render - expanded status bar advertises frequent workspace actions", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
     auto const rendered = renderElement(statusBar(StatusBarViewState{.shell = &shell}), 140, 1);
 
     CHECK_FALSE(rendered.text.contains("Ready"));
     CHECK_FALSE(rendered.text.contains("3 / 8 tracks"));
-    CHECK(lineIndexContaining(rendered.text, "/ command") == 0);
-    CHECK(rendered.text.contains("/ command"));
+    CHECK(lineIndexContaining(rendered.text, "/ Filter") == 0);
+    CHECK(rendered.text.contains("/ Filter"));
+    CHECK(rendered.text.contains(": command"));
     CHECK(rendered.text.contains("l lists"));
     CHECK(rendered.text.contains("v view"));
-    CHECK(rendered.text.contains("n notif"));
     CHECK(rendered.text.contains("d detail"));
-    CHECK(rendered.text.contains("a pipeline"));
-    CHECK(rendered.text.contains("o output"));
-    CHECK(rendered.text.contains("Ctrl-L current"));
-    CHECK(rendered.text.contains("q quit"));
+    CHECK(rendered.text.contains("? help"));
+    CHECK_FALSE(rendered.text.contains("n notif"));
+    CHECK_FALSE(rendered.text.contains("a pipeline"));
+    CHECK_FALSE(rendered.text.contains("o output"));
+    CHECK_FALSE(rendered.text.contains("groups"));
+    CHECK_FALSE(rendered.text.contains("Ctrl-L current"));
+    CHECK_FALSE(rendered.text.contains("q quit"));
+    CHECK_FALSE(rendered.text.contains("c clear filter"));
     CHECK_FALSE(rendered.text.contains("Mode:"));
     CHECK_FALSE(rendered.text.contains("Filter:"));
     CHECK_FALSE(rendered.text.contains("view:"));
 
-    auto const optShortcutBox = findTextCells(rendered.screen, "/ command");
+    auto const optShortcutBox = findTextCells(rendered.screen, "/ Filter");
     REQUIRE(optShortcutBox);
     CHECK(optShortcutBox->x_min > 0);
     CHECK_FALSE(rendered.text.contains("│"));
@@ -335,25 +350,31 @@ namespace ao::tui::test
     CHECK(shortcutPixel.bold);
   }
 
-  TEST_CASE("Render - narrow idle status bar collapses empty activity slot", "[tui][unit][render]")
+  TEST_CASE("Render - compact status bar keeps only input and help entry points", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    auto const rendered = renderElement(statusBar(StatusBarViewState{.terminalColumns = 80, .shell = &shell}), 140, 2);
+    auto const rendered = renderElement(statusBar(StatusBarViewState{.terminalColumns = 80, .shell = &shell}), 80, 1);
 
     CHECK_FALSE(rendered.text.contains("Ready"));
     CHECK_FALSE(rendered.text.contains("3 / 8 tracks"));
-    CHECK(lineIndexContaining(rendered.text, "/ command") == 0);
-    CHECK(rendered.text.contains("q quit"));
-    CHECK(rendered.screen.PixelAt(0, 0).character == "/");
+    CHECK(lineIndexContaining(rendered.text, "/ Filter") == 0);
+    CHECK(rendered.text.contains(": command"));
+    CHECK(rendered.text.contains("? help"));
+    CHECK_FALSE(rendered.text.contains("l lists"));
+    CHECK_FALSE(rendered.text.contains("v view"));
+    CHECK_FALSE(rendered.text.contains("d detail"));
+    CHECK_FALSE(rendered.text.contains("q quit"));
   }
 
   TEST_CASE("Render - status bar shows filter only when applied", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    auto const rendered = renderText(statusBar(StatusBarViewState{.filterDraft = "Aimer", .shell = &shell}));
+    auto const rendered = renderText(statusBar(StatusBarViewState{.filterDraft = "Aimer", .shell = &shell}), 140);
 
-    CHECK(rendered.contains("Filter: Aimer"));
-    CHECK_FALSE(rendered.contains("Filter: -"));
+    CHECK(rendered.contains("/ Aimer"));
+    CHECK(rendered.contains("c clear filter"));
+    CHECK_FALSE(rendered.contains("/ Filter"));
+    CHECK_FALSE(rendered.contains("Filter:"));
   }
 
   TEST_CASE("Render - status bar uses overlay-specific help for every overlay", "[tui][unit][render]")
@@ -487,17 +508,18 @@ namespace ao::tui::test
     CHECK(rowHitRegions.front().box.y_min > 0);
   }
 
-  TEST_CASE("Render - command mode leaves bottom status bar in workspace layout", "[tui][unit][render]")
+  TEST_CASE("Render - text input leaves bottom status bar in workspace layout", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    shell.beginCommand("view albums");
+    shell.beginInput(ShellInputMode::Command, "view albums");
 
     auto const rendered = renderText(statusBar(StatusBarViewState{.terminalColumns = 100, .shell = &shell}));
 
     CHECK_FALSE(rendered.contains("Command"));
-    CHECK_FALSE(rendered.contains("/view albums"));
+    CHECK_FALSE(rendered.contains(":view albums"));
     CHECK_FALSE(rendered.contains("Tab complete"));
-    CHECK(rendered.contains("/ command"));
+    CHECK(rendered.contains("/ Filter"));
+    CHECK(rendered.contains(": command"));
   }
 
   TEST_CASE("Render - command palette keeps ratio-sized dimensions stable across completion content",
@@ -515,7 +537,7 @@ namespace ao::tui::test
     CHECK(commandPalettePanelRows(8) == 8);
 
     auto shell = ShellInteractionModel{};
-    shell.beginCommand("a");
+    shell.beginInput(ShellInputMode::Command, "a");
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
       .replaceEnd = 1,
@@ -541,7 +563,7 @@ namespace ao::tui::test
         .displayText = value, .insertText = value, .detail = rt::CompletionDetail::makeResolvedText("item")});
     }
 
-    shell.beginCommand("o");
+    shell.beginInput(ShellInputMode::Command, "o");
     shell.setCommandCompletion(rt::CompletionResult{.replaceBegin = 0, .replaceEnd = 1, .items = std::move(items)});
 
     for (std::int32_t index = 0; index < 7; ++index)
@@ -556,10 +578,11 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("Tab complete"));
   }
 
-  TEST_CASE("Render - command palette shows input and inline completion suffix", "[tui][unit][render]")
+  TEST_CASE("Render - Quick Filter moves input to the status bar and keeps completions in its popup",
+            "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    shell.beginCommand("A");
+    shell.beginInput(ShellInputMode::QuickFilter, "A");
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
       .replaceEnd = 1,
@@ -567,23 +590,58 @@ namespace ao::tui::test
         .displayText = "Aimer", .insertText = "Aimer", .detail = rt::CompletionDetail::makeResolvedText("artist")}},
     });
 
-    auto const rendered = renderText(commandPalettePanel(shell));
+    auto const status = renderText(statusBar(StatusBarViewState{.shell = &shell}));
+    auto const popup = renderText(quickFilterCompletionPanel(shell));
 
-    CHECK(rendered.contains("Command Palette"));
-    CHECK(rendered.contains("/A"));
-    CHECK(rendered.contains("imer"));
-    CHECK(rendered.contains("Aimer"));
-    CHECK(rendered.contains("Tab complete"));
+    CHECK(status.contains("/ Aimer_"));
+    CHECK_FALSE(status.contains("/ Filter"));
+    CHECK_FALSE(status.contains(": command"));
+    CHECK(popup.contains("Quick Filter"));
+    CHECK(popup.contains("Aimer"));
+    CHECK(popup.contains("Enter accept"));
+    CHECK(popup.contains("Esc keep typed"));
+  }
+
+  TEST_CASE("Render - Quick Filter popup shows the current expression error", "[tui][unit][render][filter]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::QuickFilter, "$artist =");
+
+    auto const rendered = renderText(quickFilterCompletionPanel(shell, 56, "Filter error: expected value"));
+
+    CHECK(rendered.contains("Quick Filter"));
+    CHECK(rendered.contains("Filter error: expected value"));
+    CHECK(rendered.contains("Esc keep typed"));
+  }
+
+  TEST_CASE("Render - Quick Filter popup height follows results and leaves the status row visible",
+            "[tui][unit][render][filter]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::QuickFilter, "a");
+    shell.setCommandCompletion(rt::CompletionResult{
+      .replaceBegin = 0,
+      .replaceEnd = 1,
+      .items =
+        {
+          rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer"},
+          rt::CompletionItem{.displayText = "Adele", .insertText = "Adele"},
+        },
+    });
+
+    CHECK(quickFilterPanelRows(shell, false, 24) == 6);
+    CHECK(quickFilterPanelRows(shell, true, 24) == 8);
+    CHECK(quickFilterPanelRows(shell, true, 5) == 4);
   }
 
   TEST_CASE("Render - command palette renders without completion matches", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    shell.beginCommand("view albums");
+    shell.beginInput(ShellInputMode::Command, "view albums");
 
     auto const rendered = renderText(commandPalettePanel(shell));
 
-    CHECK(rendered.contains("/view albums"));
+    CHECK(rendered.contains(":view albums"));
     CHECK(rendered.contains("No matches"));
     CHECK(rendered.contains("Enter run"));
   }
@@ -591,30 +649,30 @@ namespace ao::tui::test
   TEST_CASE("Render - command palette keeps empty input separate from suggestions", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    shell.beginCommand();
+    shell.beginInput(ShellInputMode::Command);
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
       .replaceEnd = 0,
-      .items = {rt::CompletionItem{.displayText = "/output",
+      .items = {rt::CompletionItem{.displayText = ":output",
                                    .insertText = "output",
                                    .detail = rt::CompletionDetail::makeResolvedText("output device")}},
     });
 
     auto const rendered = renderText(commandPalettePanel(shell));
 
-    CHECK(rendered.contains("/_"));
-    CHECK(rendered.contains("/output"));
+    CHECK(rendered.contains(":_"));
+    CHECK(rendered.contains(":output"));
     CHECK(rendered.contains("Tab complete"));
   }
 
   TEST_CASE("Render - command palette renders completion metadata and fallback details", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    shell.beginCommand();
+    shell.beginInput(ShellInputMode::Command);
     shell.setCommandCompletion(rt::CompletionResult{
       .items =
         {
-          rt::CompletionItem{.displayText = "/view",
+          rt::CompletionItem{.displayText = ":view",
                              .insertText = "view ",
                              .detail = rt::CompletionDetail::makeResolvedText("track view")},
           rt::CompletionItem{
@@ -626,11 +684,11 @@ namespace ao::tui::test
     auto const rendered = renderElement(commandPalettePanel(shell, 48), 48, 8);
 
     CHECK(rendered.text.contains("Command Palette"));
-    CHECK(rendered.text.contains("/view"));
+    CHECK(rendered.text.contains(":view"));
 
     // A command reachable by key shows that key where its detail would go, so
     // the assertion has to be that the detail is gone. Checking for a 'v'
-    // instead passes on the word "/view" itself and would survive the hint
+    // instead passes on the word ":view" itself and would survive the hint
     // being dropped entirely.
     CHECK_FALSE(rendered.text.contains("track view"));
 
@@ -646,7 +704,7 @@ namespace ao::tui::test
   TEST_CASE("Render - command palette does not infer metadata for non-command items", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
-    shell.beginCommand();
+    shell.beginInput(ShellInputMode::Command);
     shell.setCommandCompletion(rt::CompletionResult{
       .items = {rt::CompletionItem{
         .displayText = "v", .insertText = "v", .detail = rt::CompletionDetail::makeResolvedText("artist")}},

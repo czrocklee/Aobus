@@ -386,6 +386,8 @@ root:table {
     tui_shell_command_palette_title { "Command Palette" }
     tui_shell_command_palette_no_matches { "No matches" }
     tui_shell_command_palette_footer { "{completeKey} complete  {runKey} run  {cancelKey} cancel" }
+    tui_shell_quick_filter_title { "Quick Filter" }
+    tui_shell_quick_filter_footer { "{acceptKey} accept  {completeKey} complete  {keepKey} keep typed" }
     tui_shell_workspace_list { "list" }
     tui_shell_workspace_view { "view" }
     tui_shell_overlay_tracks { "Tracks" }
@@ -396,7 +398,6 @@ root:table {
     tui_shell_overlay_views { "Views" }
     tui_shell_overlay_notifications { "Notifications" }
     tui_shell_overlay_help { "Help" }
-    tui_shell_hint_workspace { "{commandKey} command  {listsKey} lists  {viewKey} view  {notificationsKey} notif  {detailKey} detail  {pipelineKey} pipeline  {outputKey} output  {groupsKey} groups  {currentKey} current  {quitKey} quit" }
     tui_shell_hint_lists { "{toggleKey} toggle  {openKey} open  {closeKey} close" }
     tui_shell_hint_detail { "{toggleKey} toggle  {closeKey} close" }
     tui_shell_hint_pipeline { "{toggleKey} toggle  {closeKey} close" }
@@ -407,13 +408,9 @@ root:table {
     tui_shell_status_command { "command" }
     tui_shell_status_lists { "lists" }
     tui_shell_status_view { "view" }
-    tui_shell_status_notifications { "notif" }
     tui_shell_status_detail { "detail" }
-    tui_shell_status_pipeline { "pipeline" }
-    tui_shell_status_output { "output" }
-    tui_shell_status_groups { "groups" }
-    tui_shell_status_current { "current" }
-    tui_shell_status_quit { "quit" }
+    tui_shell_status_clear_filter { "clear filter" }
+    tui_shell_status_help { "help" }
     tui_shell_filter_label { "Filter" }
     tui_shell_category_library { "library" }
     tui_shell_category_view { "view" }
@@ -797,6 +794,7 @@ root:table {
     tui_overlay_closed { "Overlay closed" }
     tui_help_opened { "Help" }
     tui_section_unavailable { "Section is no longer available" }
+    tui_unknown_command { "Unknown command: {command}" }
     tui_filter_failed { "Filter failed: {detail}" }
   }
 }

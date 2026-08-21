@@ -19,6 +19,7 @@ namespace ao::tui
 
     void set(std::optional<rt::CompletionResult> optResult);
     bool moveSelection(std::int32_t delta);
+    bool moveSelectionByPage(std::int32_t delta);
     bool applyTo(std::string& draft);
     void clear();
 

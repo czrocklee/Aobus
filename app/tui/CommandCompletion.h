@@ -10,6 +10,7 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace ao::uimodel
@@ -20,6 +21,9 @@ namespace ao::uimodel
 namespace ao::tui
 {
   class TuiTextCatalog;
+  class ShellInteractionModel;
+  inline constexpr std::size_t kInputCompletionResultLimit = 8;
+
   struct CommandCompletionContext final
   {
     std::span<rt::TrackPresentationPreset const> builtinPresentations{};
@@ -32,5 +36,6 @@ namespace ao::tui
                                                            TuiTextCatalog const& tuiTextCatalog,
                                                            std::string_view draft,
                                                            CommandCompletionContext const& context,
-                                                           std::size_t limit = 8);
+                                                           std::size_t limit = kInputCompletionResultLimit);
+  std::string commandCompletionSuffix(ShellInteractionModel const& shell);
 } // namespace ao::tui

@@ -45,6 +45,18 @@ namespace ao::gtk
   {
     constexpr guint kInvalidListPosition = std::numeric_limits<guint>::max();
 
+    std::int32_t wrapSelection(std::int32_t const current, std::int32_t const delta, std::int32_t const itemCount)
+    {
+      auto next = (static_cast<std::int64_t>(current) + static_cast<std::int64_t>(delta)) % itemCount;
+
+      if (next < 0)
+      {
+        next += itemCount;
+      }
+
+      return static_cast<std::int32_t>(next);
+    }
+
     class CompletionListItem final : public Glib::Object
     {
     public:
@@ -259,10 +271,20 @@ namespace ao::gtk
     {
       case GDK_KEY_Up: return moveSelection(-1);
       case GDK_KEY_Down: return moveSelection(1);
+      case GDK_KEY_Page_Up: return movePageSelection(-1);
+      case GDK_KEY_Page_Down: return movePageSelection(1);
       case GDK_KEY_Tab:
-      case GDK_KEY_KP_Tab:
+      case GDK_KEY_KP_Tab: applySelected(); return true;
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter: applySelected(); return true;
+      case GDK_KEY_KP_Enter:
+        if (_options.acceptOnReturn)
+        {
+          applySelected();
+          return true;
+        }
+
+        hide();
+        return false;
       case GDK_KEY_Escape: hide(); return true;
       case GDK_KEY_Left:
       case GDK_KEY_Right:
@@ -389,8 +411,38 @@ namespace ao::gtk
     auto selected = _selectionPtr->get_selected();
     auto const itemCount = static_cast<std::int32_t>(_itemsPtr->get_n_items());
     auto const current = (selected == kInvalidListPosition) ? 0 : static_cast<std::int32_t>(selected);
-    auto const next = std::clamp(current + delta, 0, itemCount - 1);
+    auto const next = wrapSelection(current, delta, itemCount);
 
+    _selectionPtr->set_selected(static_cast<guint>(next));
+    _listView.scroll_to(static_cast<guint>(next));
+    return true;
+  }
+
+  bool EntryCompletionController::movePageSelection(std::int32_t const direction)
+  {
+    if (!_selectionPtr || !_itemsPtr || _itemsPtr->get_n_items() == 0)
+    {
+      return false;
+    }
+
+    auto const selected = _selectionPtr->get_selected();
+    auto const itemCount = static_cast<std::int32_t>(_itemsPtr->get_n_items());
+    auto const current = (selected == kInvalidListPosition) ? 0 : static_cast<std::int32_t>(selected);
+    std::int32_t pageItems = 1;
+
+    if (auto const adjustmentPtr = _scrolledWindow.get_vadjustment(); adjustmentPtr)
+    {
+      auto const contentHeight = adjustmentPtr->get_upper();
+
+      if (auto const viewportHeight = adjustmentPtr->get_page_size(); contentHeight > 0.0 && viewportHeight > 0.0)
+      {
+        pageItems = std::clamp(
+          static_cast<std::int32_t>(viewportHeight * static_cast<double>(itemCount) / contentHeight), 1, itemCount);
+      }
+    }
+
+    auto const next = static_cast<std::int32_t>(std::clamp<std::int64_t>(
+      static_cast<std::int64_t>(current) + (static_cast<std::int64_t>(direction) * pageItems), 0, itemCount - 1));
     _selectionPtr->set_selected(static_cast<guint>(next));
     _listView.scroll_to(static_cast<guint>(next));
     return true;

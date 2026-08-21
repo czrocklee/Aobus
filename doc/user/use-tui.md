@@ -27,16 +27,20 @@ Initialize and scan the root with the GTK application or CLI first.
 2. Move selection with Up/Down, PageUp/PageDown, Home, and End.
 3. Press Enter or `p` to play the selected track.
    Use Space for play/pause, `s` to stop, `[` and `]` to seek by five seconds, and `-`/`+` to change volume by five percentage points.
-4. Press `/` or `:` to enter command mode.
-   Submit ordinary text for a quick filter, or use a command such as:
+4. Press `/` to open Quick Filter in the bottom status bar, then type to filter the current view live; suggestions open directly above the input.
+   Up/Down selects a suggestion, Tab accepts it while you keep editing, and Enter accepts it and closes Quick Filter.
+   Escape keeps the text you typed instead of the selected suggestion.
+   To clear the current filter, press `c` in the workspace or press `/` followed immediately by Enter; `/` followed immediately by Escape preserves it.
+5. Press `:` to open the Command Palette, then enter a command such as:
 
    ```text
-   /filter $composer == "Bach"
-   /view classical-works
+   :filter $composer == "Bach"
+   :view classical-works
    ```
 
-5. Toggle panels with `l` for lists, `d` for detail, `a` for the quality pipeline, `o` for output devices, `v` for presentations, and `n` for notifications.
-6. Press `?` for help, Escape to close the current overlay or cancel command mode, and `q` or Ctrl+C to quit.
+   Tab accepts a highlighted command completion; Enter runs only a complete known command.
+6. Toggle panels with `l` for lists, `d` for detail, `a` for the quality pipeline, `o` for output devices, `v` for presentations, and `n` for notifications.
+7. Press `?` for help, Escape to close the current overlay or cancel active text input, and `q` or Ctrl+C to quit.
 
 The default workspace configuration is `<root>/.aobus/tui-workspace.yaml` unless `--config` selects another path.
 

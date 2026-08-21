@@ -9,14 +9,18 @@
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/tui/TuiTextCatalogTestSupport.h"
+#include "tui/LibraryNavigation.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -40,6 +44,12 @@ namespace ao::tui::test
       TrackId addTrack(library::test::TrackSpec const& spec) const
       {
         return rt::test::addRuntimeTrack(*runtimePtr, spec);
+      }
+
+      ListId addList(std::string name) const
+      {
+        return ao::test::requireValue(
+          runtimePtr->library().writer().createList(rt::LibraryWriter::ListDraft{.name = std::move(name)}));
       }
     };
 
@@ -102,6 +112,48 @@ namespace ao::tui::test
     CHECK(controller.tracks()[0].id == trackId);
   }
 
+  TEST_CASE("LibraryController - exposes and clears transient expression errors", "[tui][unit][library][filter]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Needle");
+
+    auto controller =
+      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    controller.setFilterDraft("$artist =");
+
+    REQUIRE(controller.applyFilter());
+    CHECK(controller.filterError().contains("Filter error:"));
+
+    controller.setFilterDraft("Needle");
+    REQUIRE(controller.applyFilter());
+    CHECK(controller.filterError().empty());
+  }
+
+  TEST_CASE("LibraryController - opening another list clears the previous view filter error",
+            "[tui][regression][library][filter]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Needle");
+    auto const cleanListId = fixture.addList("Clean");
+
+    auto controller =
+      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    controller.setFilterDraft("$artist =");
+    REQUIRE(controller.applyFilter());
+    REQUIRE(controller.filterError().contains("Filter error:"));
+
+    auto const listIt = std::ranges::find(controller.libraryEntries(), cleanListId, &LibraryNavEntry::id);
+    REQUIRE(listIt != controller.libraryEntries().end());
+    controller.moveFocusedSelection(true, static_cast<std::int32_t>(listIt - controller.libraryEntries().begin()));
+
+    auto const opened = controller.openSelectedList();
+
+    REQUIRE(opened.opened);
+    CHECK(controller.currentListId() == cleanListId);
+    CHECK(controller.filterDraft().empty());
+    CHECK(controller.filterError().empty());
+  }
+
   TEST_CASE("LibraryController - filter error preserves visible controller state", "[tui][regression][library]")
   {
     auto fixture = LibraryControllerFixture{};
@@ -120,6 +172,7 @@ namespace ao::tui::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
+    CHECK(controller.filterError().contains("Filter error:"));
     CHECK(controller.filterDraft() == "Needle");
     CHECK(controller.activeViewId() == activeViewId);
     CHECK(controller.selectedTrack() == selectedTrack);

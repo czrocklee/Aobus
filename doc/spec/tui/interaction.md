@@ -3,14 +3,14 @@ id: tui.interaction
 type: spec
 status: current
 domain: presentation
-summary: Defines TUI shell modes, panels, selection, mouse dispatch, playback dock, seek rail, command completion, notification, and rendering behavior.
+summary: Defines TUI text-input modes, panels, selection, mouse dispatch, playback dock, seek rail, completion, notification, and rendering behavior.
 ---
 # TUI interaction specification
 
 ## Scope
 
 This specification owns the terminal frontend's shell and interaction behavior.
-It defines workspace structure, modal command/overlay state, keyboard and mouse routing, panel mechanics, playback dock and seek rail, command completion, notifications, selection, and terminal styling.
+It defines workspace structure, modal text-input and overlay state, keyboard and mouse routing, panel mechanics, playback dock and seek rail, completion, notifications, selection, and terminal styling.
 Exact startup options, keys, commands, and aliases belong to the [TUI command reference](../../reference/tui/command.md).
 
 ## Code boundary
@@ -25,7 +25,9 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 
 ## Terminology
 
-- **Command mode** is the text-entry state entered by `/` or `:`.
+- **Quick Filter input** is the live filter editor entered by `/`.
+- **Command Palette input** is the command editor entered by `:`.
+- **Text input** means either of those mutually exclusive shell modes.
 - An **overlay** is one of list, detail, quality, output, presentation, notification, or help panels.
 - A **hit region** is a rendered FTXUI box retained for the next mouse-dispatch pass.
 - The **seek rail** is only the reflected timeline/thumb segment, excluding elapsed/duration text.
@@ -33,7 +35,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 
 ## Invariants
 
-- Command mode and overlays are modal: workspace-only input cannot mutate the track table beneath them.
+- Text input and overlays are modal: workspace-only input cannot mutate the track table beneath them.
 - Only one overlay is active at a time.
 - Render code writes hit regions into the one `TuiHitRegions` owner; input reads that same frame state.
 - Shared list navigation handles arrows, pages, home, and end before a panel-specific selection callback.
@@ -41,32 +43,52 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
 - The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
 - Soul/Space transport toggles and ordinary stop requests use `PlaybackCommandSurface`; explicit selected-track activation remains a distinct view-based sequence command.
-- Active seek drag is canceled when command mode or an overlay becomes active.
+- Active seek drag is canceled when text input or an overlay becomes active.
 - A zero-duration timeline rejects pointer and relative-keyboard seek.
 - Column drag changes only TUI session-local widths.
 - Ordinary terminal styling inherits the terminal background; semantic roles add accents without painting broad application backgrounds.
 
 ## State model
 
-`ShellInteractionModel` retains command-active state, UTF-8 draft text, completion result/selection, and active overlay.
+`ShellInteractionModel` retains an explicit `None`, Quick Filter, or Command Palette input mode, UTF-8 draft text, whether that draft has been edited, completion result/selection, and active overlay.
 `EventController` retains pointer drags for seek, scrollbar, and column resize plus hover state.
-`LibraryController` retains active runtime view, terminal row snapshot, selected track index, sections, filter draft, and presentation adaptation.
+It also retains one cancellable generation-checked Quick Filter debounce task; all shell and library access occurs after resumption on the callback executor.
+`LibraryController` retains active runtime view, terminal row snapshot, selected track index, sections, applied filter draft and error, and presentation adaptation.
 
-The command palette completion result carries a replacement range, ranked items, display text, insertion text, and detail.
-Filter drafts delegate to the shared UIModel track-filter completer, which selects live Quick-filter values or structured expression candidates according to the same boundary as GTK.
+Each input mode's completion result carries a replacement range, ranked items, display text, insertion text, and detail.
+Quick Filter drafts delegate directly to the shared UIModel track-filter completer, which selects live values or structured expression candidates according to the same boundary as GTK.
+Command Palette drafts complete commands and aliases; only the explicit `filter` command delegates its argument to the filter completer.
 Presentation contexts add built-in and custom preset ids.
 
 ## Commands and transitions
 
-### Command mode
+### Quick Filter input
 
-`/` or `:` opens command mode.
-Text appends as UTF-8, backspace removes one complete extended grapheme cluster, arrows move completion selection, Tab applies the selected completion, Return submits, and Escape cancels.
-Known prefixes/aliases produce typed actions; otherwise the submitted text becomes a quick filter.
-The palette completes command names and aliases, presentation ids, structured expression tokens, and live Quick-filter values from titles, the common search fields, and tags.
+`/` opens an empty Quick Filter draft without clearing or copying the currently applied filter.
+Until the user edits that draft, Escape closes the input without changing the applied filter, while Return confirms the empty draft and clears the filter.
+After an edit, the draft is applied after 200 milliseconds without another edit.
+Every further edit or accepted completion cancels and replaces that pending generation.
+
+Text appends as UTF-8, backspace removes one complete extended grapheme cluster, arrows cycle completion selection, and Page Up and Page Down move it by one bounded page.
+Tab applies the selected completion, keeps the input open, refreshes completion, and schedules the resulting draft for live filtering.
+Return first applies the selected completion when one exists, synchronously applies the resulting draft, and closes the input; confirming an untouched empty draft clears the filter.
+Escape ignores the selected completion, synchronously applies the literal edited draft, and closes the input; an untouched draft preserves the existing filter.
 Applying a live value replaces the active filter term with one safely quoted term.
 
-The palette is a centered bounded fraction of terminal width/height and renders category, command text, shortcut, and detail.
+### Command Palette input
+
+`:` opens an empty Command Palette draft.
+Text editing and completion navigation use the same grapheme, arrow, page, and Tab rules as Quick Filter input, but no debounce or live filtering occurs.
+Return executes a known command or explicit command prefix without applying the highlighted completion.
+An empty draft closes the palette; an unknown nonempty command remains open and reports a warning instead of changing the filter.
+Escape cancels the command draft and closes the palette.
+
+The modes intentionally assign different submission semantics to Return and Escape.
+Quick Filter is a live value editor, so Return accepts its highlighted value while Escape preserves the literal text already typed; Command Palette input is not live, so Return executes only the typed command and Escape cancels it without allowing a highlight to replace that command implicitly.
+
+The palette completes command names and aliases, presentation ids, and filter candidates only within an explicit `filter` argument.
+The Command Palette is a centered bounded fraction of terminal width and height and renders its title, prompt, footer, and completion detail.
+Quick Filter replaces the bottom status-bar content with its draft and inline completion suffix; its completion list, footer, and current expression error occupy a bounded popup anchored directly above that row.
 Runtime/query completions without TUI category metadata retain their core detail.
 
 ### Workspace and overlays
@@ -115,7 +137,10 @@ Unavailable actions post warning notifications rather than inventing terminal-on
 Stale section/output rows are rejected and reported.
 Submitting a filter calls the typed runtime view boundary before replacing terminal rows.
 On Error, `LibraryController` preserves the draft, active source/view, rows, sections, and selection; `EventController` logs the failure and posts an Error notification instead of reloading.
-Command/overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
+An invalid live expression remains visible in the Quick Filter panel without posting one notification per debounce tick.
+Return or Escape performs one immediate final application before the panel closes; a recoverable expression error posts one Warning, while a command-level failure posts one Error.
+Replacing, closing, or destroying Quick Filter input requests stop on the pending timer; a stopped or obsolete generation cannot mutate shell or library state.
+Text-input or overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
 
 Signal exit requests leave through the TUI's exit watcher and normal runtime teardown.
 Frame timers and executor callbacks cannot access the screen after their owning application lifetime ends.
@@ -123,7 +148,7 @@ Frame timers and executor callbacks cannot access the screen after their owning 
 ## Persistence and versioning
 
 TUI workspace config defaults to `<root>/.aobus/tui-workspace.yaml` and follows the workspace session contract.
-Column overrides, active overlay, command draft, hover, and pointer gestures are session-local and unversioned.
+Column overrides, active overlay, input draft/mode, hover, and pointer gestures are session-local and unversioned.
 Exact startup paths/options belong to the TUI reference.
 
 ## Frontend observations
@@ -137,17 +162,18 @@ The notification center can be opened explicitly even when compact status is not
 
 - [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, and lifetime.
 - [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp) owns asynchronous selected-resource delivery and stale-result suppression; [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp) owns bounded decode and terminal transforms.
-- [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns command and overlay state.
-- [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command, presentation, and shared filter-completion routing.
+- [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns text-input, command parsing, and overlay state.
+- [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command and presentation completion plus explicit filter-argument routing; [`CommandCompletionProvider.cpp`](../../../app/tui/CommandCompletionProvider.cpp) separates Command Palette and live Quick Filter providers.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch.
 - [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) flattens the shared list-tree projection into terminal rows.
-- [`Render.cpp`](../../../app/tui/Render.cpp), [`Style.cpp`](../../../app/tui/Style.cpp), and [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) own terminal output.
+- [`Render.cpp`](../../../app/tui/Render.cpp) and [`Style.cpp`](../../../app/tui/Style.cpp) own common terminal composition and styling; [`CommandPalettePanel.cpp`](../../../app/tui/CommandPalettePanel.cpp) owns command/filter completion panels, and [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) owns the Quick Filter input row.
+- [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) owns track-table output.
 - [`PlaybackPanel.cpp`](../../../app/tui/PlaybackPanel.cpp) and [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) own the dock.
 
 ## Test map
 
-- [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects command/overlay state and parsing.
-- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects key/mouse routing, modality, seek, overlays, and resizing.
+- [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, command/overlay state, and parsing.
+- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, overlays, and resizing.
 - [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) protects sections, viewport, widths, and selection.
 - [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects shared-tree preorder adaptation, indentation, icons, and details.
 - [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`TuiHitRegionsTest.cpp`](../../../test/unit/tui/TuiHitRegionsTest.cpp) protect rendering and hit geometry.

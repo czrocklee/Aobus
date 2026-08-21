@@ -15,9 +15,14 @@
 #include <ao/rt/WorkspaceService.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gdk/gdkenums.h>
+#include <gdk/gdkkeysyms.h>
+#include <gdkmm/enums.h>
 #include <giomm/listmodel.h>
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
+#include <gtkmm/eventcontroller.h>
+#include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/label.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/window.h>
@@ -26,6 +31,27 @@
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    bool emitCompletionKey(Gtk::Entry& entry, guint const keyval)
+    {
+      auto const keyControllerPtr = findControllerIf<Gtk::EventControllerKey>(
+        entry,
+        [](Gtk::EventControllerKey const& controller)
+        { return controller.get_propagation_phase() == Gtk::PropagationPhase::CAPTURE; });
+      REQUIRE(keyControllerPtr);
+
+      gboolean handled = FALSE;
+      ::g_signal_emit_by_name(keyControllerPtr->gobj(),
+                              "key-pressed",
+                              keyval,
+                              0U,
+                              static_cast<GdkModifierType>(Gdk::ModifierType{}),
+                              &handled);
+      return handled == TRUE;
+    }
+  } // namespace
+
   TEST_CASE("TrackQuickFilter - renders action buttons and follows focused view", "[gtk][unit][track][quick-filter]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -126,5 +152,9 @@ namespace ao::gtk::test
     auto* const title = findWidgetByClass<Gtk::Label>(*popover, "ao-query-completion-row-title");
     REQUIRE(title != nullptr);
     CHECK(title->get_text() == "Aimer");
+
+    CHECK(emitCompletionKey(filter.entry(), GDK_KEY_Return));
+    CHECK(filter.text() == "\"Aimer\"");
+    CHECK_FALSE(popover->get_visible());
   }
 } // namespace ao::gtk::test

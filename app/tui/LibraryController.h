@@ -57,6 +57,7 @@ namespace ao::tui
     std::int32_t selectedPresentation() const noexcept { return _selectedPresentation; }
     std::int32_t selectedTrack() const noexcept { return _selectedTrack; }
     std::string const& filterDraft() const noexcept { return _filterDraft; }
+    std::string const& filterError() const noexcept { return _filterError; }
     uimodel::PresentationTextCatalog const& textCatalog() const noexcept { return _textCatalog; }
 
     std::string currentListTitle() const;
@@ -86,6 +87,7 @@ namespace ao::tui
     void refreshPresentationNavigation();
     std::vector<LibraryNavEntry> loadLibraryNavigation();
     std::vector<TrackPresentationNavEntry> loadPresentationNavigation();
+    void refreshFilterError();
     struct TrackItemsSnapshot final
     {
       std::vector<TrackListEntry> tracks{};
@@ -109,6 +111,7 @@ namespace ao::tui
     std::int32_t _selectedPresentation = 0;
     std::int32_t _selectedTrack = 0;
     std::string _filterDraft{};
+    std::string _filterError{};
     async::Subscription _customPresetsSub;
     async::Subscription _libraryChangesSub;
   };

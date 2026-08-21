@@ -67,7 +67,8 @@ namespace ao::gtk
     , _completer{_runtime.completion()}
     , _completionController{_entry,
                             textCatalog,
-                            [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); }}
+                            [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); },
+                            EntryCompletionControllerOptions{.acceptOnReturn = true}}
     , _debounceScheduler{std::move(debounceScheduler)}
     , _textChangedConn{_entry.signal_changed().connect(
         sigc::mem_fun(*this, &TrackQuickFilter::handleFilterTextChanged))}

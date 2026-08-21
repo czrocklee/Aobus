@@ -384,6 +384,8 @@ es:table {
     tui_shell_command_palette_title { "Paleta de comandos" }
     tui_shell_command_palette_no_matches { "Sin coincidencias" }
     tui_shell_command_palette_footer { "{completeKey} autocompletar  {runKey} ejecutar  {cancelKey} cancelar" }
+    tui_shell_quick_filter_title { "Filtro rápido" }
+    tui_shell_quick_filter_footer { "{acceptKey} aceptar  {completeKey} autocompletar  {keepKey} conservar texto" }
     tui_shell_workspace_list { "lista" }
     tui_shell_workspace_view { "vista" }
     tui_shell_overlay_tracks { "Pistas" }
@@ -394,7 +396,6 @@ es:table {
     tui_shell_overlay_views { "Vistas" }
     tui_shell_overlay_notifications { "Notificaciones" }
     tui_shell_overlay_help { "Ayuda" }
-    tui_shell_hint_workspace { "{commandKey} comando  {listsKey} listas  {viewKey} vista  {notificationsKey} notif  {detailKey} detalle  {pipelineKey} cadena  {outputKey} salida  {groupsKey} grupos  {currentKey} actual  {quitKey} salir" }
     tui_shell_hint_lists { "{toggleKey} alternar  {openKey} abrir  {closeKey} cerrar" }
     tui_shell_hint_detail { "{toggleKey} alternar  {closeKey} cerrar" }
     tui_shell_hint_pipeline { "{toggleKey} alternar  {closeKey} cerrar" }
@@ -405,13 +406,9 @@ es:table {
     tui_shell_status_command { "comando" }
     tui_shell_status_lists { "listas" }
     tui_shell_status_view { "vista" }
-    tui_shell_status_notifications { "notif" }
     tui_shell_status_detail { "detalle" }
-    tui_shell_status_pipeline { "cadena" }
-    tui_shell_status_output { "salida" }
-    tui_shell_status_groups { "grupos" }
-    tui_shell_status_current { "actual" }
-    tui_shell_status_quit { "salir" }
+    tui_shell_status_clear_filter { "borrar filtro" }
+    tui_shell_status_help { "ayuda" }
     tui_shell_filter_label { "Filtro" }
     tui_shell_category_library { "biblioteca" }
     tui_shell_category_view { "vista" }
@@ -795,6 +792,7 @@ es:table {
     tui_overlay_closed { "Superposición cerrada" }
     tui_help_opened { "Ayuda" }
     tui_section_unavailable { "La sección ya no está disponible" }
+    tui_unknown_command { "Comando desconocido: {command}" }
     tui_filter_failed { "Error de filtro: {detail}" }
   }
 }

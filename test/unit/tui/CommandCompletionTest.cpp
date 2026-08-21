@@ -7,6 +7,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/tui/TuiTextCatalogTestSupport.h"
+#include "tui/ShellInteractionModel.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -58,7 +59,7 @@ namespace ao::tui::test
     CHECK(optResult->replaceBegin == 0);
     CHECK(optResult->replaceEnd == 2);
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"output", "outputs"});
-    CHECK(optResult->items[0].displayText == "/output");
+    CHECK(optResult->items[0].displayText == ":output");
     CHECK(ao::test::englishPresentationTextCatalog().completionDetail(optResult->items[0].detail) == "output device");
   }
 
@@ -103,7 +104,7 @@ namespace ao::tui::test
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"output"});
   }
 
-  TEST_CASE("CommandCompletion - delegates Quick and expression completion to the shared filter completer",
+  TEST_CASE("CommandCompletion - delegates explicit filter arguments to the shared filter completer",
             "[tui][unit][completion][filter]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
@@ -120,14 +121,7 @@ namespace ao::tui::test
         -> std::optional<rt::CompletionResult> { return completer.complete(text, cursor, limit); },
     };
 
-    auto optResult = completeCommandDraft(ao::test::englishPresentationTextCatalog(), "Aim", context);
-
-    REQUIRE(optResult);
-    CHECK(optResult->replaceBegin == 0);
-    CHECK(optResult->replaceEnd == 3);
-    CHECK(insertTexts(*optResult) == std::vector<std::string>{"\"Aimer\""});
-
-    optResult = completeCommandDraft(ao::test::englishPresentationTextCatalog(), "filter $ar", context);
+    auto optResult = completeCommandDraft(ao::test::englishPresentationTextCatalog(), "filter $ar", context);
 
     REQUIRE(optResult);
     CHECK(optResult->replaceBegin == 7);
@@ -142,5 +136,54 @@ namespace ao::tui::test
     CHECK(optResult->replaceEnd == 19);
     CHECK(optResult->items[0].displayText == "Aimer");
     CHECK(optResult->items[0].insertText == "\"Aimer\"");
+  }
+
+  TEST_CASE("commandCompletionSuffix returns only a trailing prefix suffix", "[tui][unit][completion]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::QuickFilter);
+
+    SECTION("Missing and empty completion results have no suffix")
+    {
+      CHECK(commandCompletionSuffix(shell).empty());
+      shell.setCommandCompletion(rt::CompletionResult{});
+      CHECK(commandCompletionSuffix(shell).empty());
+    }
+
+    SECTION("ASCII case differences preserve the candidate suffix")
+    {
+      shell.appendInputText("aim");
+      shell.setCommandCompletion(rt::CompletionResult{
+        .replaceBegin = 0,
+        .replaceEnd = 3,
+        .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer"}},
+      });
+
+      CHECK(commandCompletionSuffix(shell) == "er");
+    }
+
+    SECTION("Quoted candidates do not invent a suffix")
+    {
+      shell.appendInputText("aim");
+      shell.setCommandCompletion(rt::CompletionResult{
+        .replaceBegin = 0,
+        .replaceEnd = 3,
+        .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "\"Aimer\""}},
+      });
+
+      CHECK(commandCompletionSuffix(shell).empty());
+    }
+
+    SECTION("Replacement ranges before the draft end do not emit ghost text")
+    {
+      shell.appendInputText("aim suffix");
+      shell.setCommandCompletion(rt::CompletionResult{
+        .replaceBegin = 0,
+        .replaceEnd = 3,
+        .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer"}},
+      });
+
+      CHECK(commandCompletionSuffix(shell).empty());
+    }
   }
 } // namespace ao::tui::test

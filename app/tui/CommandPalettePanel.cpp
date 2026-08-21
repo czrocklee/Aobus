@@ -3,13 +3,14 @@
 
 #include "CommandPalettePanel.h"
 
+#include "CommandCompletion.h"
 #include "SelectableList.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
 #include "TuiTextCatalog.h"
 #include <ao/rt/completion/CompletionItem.h>
-#include <ao/rt/completion/CompletionText.h>
+#include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -36,6 +37,8 @@ namespace ao::tui
     constexpr double kCommandPaletteWidthRatio = 0.40;
     constexpr double kCommandPaletteHeightRatio = 0.35;
     constexpr std::size_t kCommandCompletionRowCellReserve = 6;
+    constexpr std::int32_t kQuickFilterPanelChromeRows = 4;
+    constexpr std::int32_t kQuickFilterErrorRows = 2;
 
     struct CommandPaletteEntryDescriptor final
     {
@@ -57,7 +60,7 @@ namespace ao::tui
         prefix.remove_suffix(1);
       }
 
-      return "/" + std::string{prefix};
+      return ":" + std::string{prefix};
     }
 
     std::optional<CommandPaletteEntryDescriptor> commandPaletteEntryDescriptor(TuiTextCatalog const& textCatalog,
@@ -76,7 +79,7 @@ namespace ao::tui
 
       for (auto const& spec : commandAliasSpecs())
       {
-        if (item.insertText == spec.alias && item.displayText == "/" + std::string{spec.alias})
+        if (item.insertText == spec.alias && item.displayText == ":" + std::string{spec.alias})
         {
           return CommandPaletteEntryDescriptor{
             .category = textCatalog.text(spec.category), .shortcut = shortcutFor(spec.action)};
@@ -97,31 +100,6 @@ namespace ao::tui
       }
 
       return textCatalog.completionDetail(item.detail);
-    }
-
-    std::string commandCompletionSuffix(ShellInteractionModel const& shell)
-    {
-      auto const& optCompletion = shell.commandCompletion();
-
-      if (!optCompletion || optCompletion->items.empty())
-      {
-        return {};
-      }
-
-      auto const selected = std::clamp<std::int32_t>(
-        shell.commandCompletionSelection(), 0, static_cast<std::int32_t>(optCompletion->items.size()) - 1);
-      auto const& item = optCompletion->items[static_cast<std::size_t>(selected)];
-      auto const replaceBegin = std::min(optCompletion->replaceBegin, shell.commandDraft().size());
-      auto const replaceEnd = std::min(optCompletion->replaceEnd, shell.commandDraft().size());
-      auto const current = std::string_view{shell.commandDraft()}.substr(replaceBegin, replaceEnd - replaceBegin);
-
-      if (!current.empty() && replaceEnd == shell.commandDraft().size() &&
-          rt::startsWithCompletionPrefixInsensitive(item.insertText, current))
-      {
-        return item.insertText.substr(current.size());
-      }
-
-      return {};
     }
 
     std::vector<SelectableListRow> commandCompletionRows(rt::CompletionResult const& completion,
@@ -186,6 +164,26 @@ namespace ao::tui
 
       return rows;
     }
+
+    ftxui::Element commandCompletionList(uimodel::PresentationTextCatalog const& textCatalog,
+                                         TuiTextCatalog const& tuiTextCatalog,
+                                         ShellInteractionModel const& shell,
+                                         std::int32_t const contentColumns)
+    {
+      if (auto const& optCompletion = shell.commandCompletion(); optCompletion && !optCompletion->items.empty())
+      {
+        return selectableList(
+          commandCompletionRows(
+            *optCompletion, textCatalog, tuiTextCatalog, shell.commandCompletionSelection(), contentColumns),
+          SelectableListOptions{.focusRow = shell.commandCompletionSelection(), .flex = true});
+      }
+
+      return selectableList(
+        {},
+        SelectableListOptions{.emptyText = std::string{tuiTextCatalog.text(TuiTextId::CommandPaletteNoMatches)},
+                              .flex = true,
+                              .centerEmpty = true});
+    }
   } // namespace
 
   std::int32_t commandPalettePanelColumns(std::int32_t const terminalColumns)
@@ -214,6 +212,24 @@ namespace ao::tui
     return std::min(desiredRows, terminalRows);
   }
 
+  std::int32_t quickFilterPanelRows(ShellInteractionModel const& shell,
+                                    bool const hasFilterError,
+                                    std::int32_t const terminalRows)
+  {
+    auto const completionRows = shell.commandCompletion() && !shell.commandCompletion()->items.empty()
+                                  ? static_cast<std::int32_t>(shell.commandCompletion()->items.size())
+                                  : 1;
+    auto const desiredRows =
+      completionRows + kQuickFilterPanelChromeRows + (hasFilterError ? kQuickFilterErrorRows : 0);
+
+    if (terminalRows <= 0)
+    {
+      return desiredRows;
+    }
+
+    return std::min(desiredRows, std::max(1, terminalRows - 1));
+  }
+
   ftxui::Element commandPalettePanel(uimodel::PresentationTextCatalog const& textCatalog,
                                      TuiTextCatalog const& tuiTextCatalog,
                                      ShellInteractionModel const& shell,
@@ -230,35 +246,50 @@ namespace ao::tui
     auto rows = Elements{};
     rows.push_back(hbox({
       text("> ") | style::accent() | bold,
-      text("/") | style::accent() | bold,
-      text(shell.commandDraft()) | bold,
+      text(":") | style::accent() | bold,
+      text(shell.inputDraft()) | bold,
       text(suffix) | dim,
       text("_") | style::accent() | bold,
     }));
     rows.push_back(separator());
 
     auto const contentColumns = style::popupPanelBodyColumns(columns);
-
-    if (auto const& optCompletion = shell.commandCompletion(); optCompletion && !optCompletion->items.empty())
-    {
-      rows.push_back(selectableList(
-        commandCompletionRows(
-          *optCompletion, textCatalog, tuiTextCatalog, shell.commandCompletionSelection(), contentColumns),
-        SelectableListOptions{.focusRow = shell.commandCompletionSelection(), .flex = true}));
-    }
-    else
-    {
-      rows.push_back(selectableList(
-        {},
-        SelectableListOptions{.emptyText = std::string{tuiTextCatalog.text(TuiTextId::CommandPaletteNoMatches)},
-                              .flex = true,
-                              .centerEmpty = true}));
-    }
+    rows.push_back(commandCompletionList(textCatalog, tuiTextCatalog, shell, contentColumns));
 
     rows.push_back(separator());
     rows.push_back(style::panelFooterHint(tuiTextCatalog.text(TuiTextId::CommandPaletteFooter)));
 
     return style::popupPanel(tuiTextCatalog.text(TuiTextId::CommandPaletteTitle), vbox(std::move(rows))) |
+           size(WIDTH, EQUAL, columns);
+  }
+
+  ftxui::Element quickFilterCompletionPanel(uimodel::PresentationTextCatalog const& textCatalog,
+                                            TuiTextCatalog const& tuiTextCatalog,
+                                            ShellInteractionModel const& shell,
+                                            std::int32_t columns,
+                                            std::string_view const filterError)
+  {
+    using namespace ftxui;
+
+    if (columns <= 0)
+    {
+      columns = commandPalettePanelColumns(0);
+    }
+
+    auto rows = Elements{};
+    auto const contentColumns = style::popupPanelBodyColumns(columns);
+
+    if (!filterError.empty())
+    {
+      rows.push_back(fixedText(filterError, contentColumns) | style::danger());
+      rows.push_back(separator());
+    }
+
+    rows.push_back(commandCompletionList(textCatalog, tuiTextCatalog, shell, contentColumns));
+    rows.push_back(separator());
+    rows.push_back(style::panelFooterHint(tuiTextCatalog.text(TuiTextId::QuickFilterFooter)));
+
+    return style::popupPanel(tuiTextCatalog.text(TuiTextId::QuickFilterTitle), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

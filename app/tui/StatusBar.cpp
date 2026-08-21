@@ -3,6 +3,7 @@
 
 #include "StatusBar.h"
 
+#include "CommandCompletion.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TuiTextCatalog.h"
@@ -15,7 +16,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -110,18 +110,11 @@ namespace ao::tui
   {
     using namespace ftxui;
 
-    constexpr std::int32_t kSingleLineStatusColumns = 120;
+    constexpr std::int32_t kExpandedWorkspaceHintColumns = 100;
 
     auto workspaceHintPtr = [&]
     {
       auto parts = Elements{};
-
-      if (!state.filterDraft.empty())
-      {
-        parts.push_back(text(std::string{textCatalog.text(TuiTextId::FilterLabel)} + ": ") | style::accent() | bold);
-        parts.push_back(text(state.filterDraft) | dim);
-        parts.push_back(text("  "));
-      }
 
       auto appendSeparator = [&]
       {
@@ -143,24 +136,50 @@ namespace ao::tui
       auto appendCommandChip = [&](CommandAction const action, std::string_view const label)
       { appendChip(shortcutFor(action), label); };
 
-      // Opening the command line and jumping between groups are not commands,
-      // so they are named here and nowhere else.
-      appendChip("/", textCatalog.text(TuiTextId::StatusCommand));
-      appendCommandChip(CommandAction::OpenLists, textCatalog.text(TuiTextId::StatusLists));
-      appendCommandChip(CommandAction::OpenPresentationPanel, textCatalog.text(TuiTextId::StatusView));
-      appendCommandChip(CommandAction::OpenNotifications, textCatalog.text(TuiTextId::StatusNotifications));
-      appendCommandChip(CommandAction::OpenDetail, textCatalog.text(TuiTextId::StatusDetail));
-      appendCommandChip(CommandAction::OpenQuality, textCatalog.text(TuiTextId::StatusPipeline));
-      appendCommandChip(CommandAction::OpenOutputDevices, textCatalog.text(TuiTextId::StatusOutput));
-      appendChip("{ }", textCatalog.text(TuiTextId::StatusGroups));
-      appendCommandChip(CommandAction::RevealCurrentTrack, textCatalog.text(TuiTextId::StatusCurrent));
-      appendCommandChip(CommandAction::Quit, textCatalog.text(TuiTextId::StatusQuit));
+      appendChip(
+        "/",
+        state.filterDraft.empty() ? textCatalog.text(TuiTextId::FilterLabel) : std::string_view{state.filterDraft});
+
+      if (!state.filterDraft.empty())
+      {
+        appendCommandChip(CommandAction::ClearFilter, textCatalog.text(TuiTextId::StatusClearFilter));
+      }
+
+      // Opening the text inputs is not a command, so it is named here rather
+      // than added to the key-binding declaration.
+      appendChip(":", textCatalog.text(TuiTextId::StatusCommand));
+
+      if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
+      {
+        appendCommandChip(CommandAction::OpenLists, textCatalog.text(TuiTextId::StatusLists));
+        appendCommandChip(CommandAction::OpenPresentationPanel, textCatalog.text(TuiTextId::StatusView));
+        appendCommandChip(CommandAction::OpenDetail, textCatalog.text(TuiTextId::StatusDetail));
+      }
+
+      appendCommandChip(CommandAction::ShowHelp, textCatalog.text(TuiTextId::StatusHelp));
       return hbox(std::move(parts));
     };
 
     auto const hasActivity = hasVisibleActivity(state.activityStatus);
     auto fallbackShell = ShellInteractionModel{};
     auto const& shell = state.shell == nullptr ? fallbackShell : *state.shell;
+
+    if (shell.inputMode() == ShellInputMode::QuickFilter)
+    {
+      if (state.activityStatusBox != nullptr)
+      {
+        *state.activityStatusBox = {};
+      }
+
+      return hbox({
+               text("/ ") | style::accent() | bold,
+               text(shell.inputDraft()) | bold,
+               text(commandCompletionSuffix(shell)) | dim,
+               text("_") | style::accent() | bold,
+               filler(),
+             }) |
+             clear_under;
+    }
 
     if (!hasActivity && state.activityStatusBox != nullptr)
     {
@@ -188,47 +207,24 @@ namespace ao::tui
 
     auto leftStatusAreaPtr = [&] { return hasActivity ? statusSlotPtr() | xflex : filler() | xflex; };
 
-    auto const overlay = shell.overlay();
-    auto const interactionHint = std::string{overlayHint(textCatalog, overlay)};
-    auto const contextLabel =
-      overlay == Overlay::None ? std::string{} : std::string{overlayLabel(textCatalog, overlay)};
-
-    auto hint = std::string{};
-
-    if (!state.filterDraft.empty())
+    if (auto const overlay = shell.overlay(); overlay != Overlay::None)
     {
-      hint = std::format("{}: {}  ", textCatalog.text(TuiTextId::FilterLabel), state.filterDraft);
-    }
+      auto const interactionHint = std::string{overlayHint(textCatalog, overlay)};
+      auto const contextLabel = std::string{overlayLabel(textCatalog, overlay)};
 
-    hint += interactionHint;
-
-    if (overlay != Overlay::None)
-    {
       return hbox({
         leftStatusAreaPtr(),
         text(" "),
         text(contextLabel) | style::accent() | bold,
         text("  "),
-        text(hint) | dim,
+        text(interactionHint) | dim,
       });
     }
 
-    if (state.terminalColumns >= kSingleLineStatusColumns)
-    {
-      return hbox({
-        leftStatusAreaPtr(),
-        text(" "),
-        workspaceHintPtr(),
-      });
-    }
-
-    return vbox({
-      hbox({
-        leftStatusAreaPtr(),
-      }),
-      hbox({
-        workspaceHintPtr() | flex,
-      }),
+    return hbox({
+      leftStatusAreaPtr(),
+      text(" "),
+      workspaceHintPtr(),
     });
   }
 } // namespace ao::tui

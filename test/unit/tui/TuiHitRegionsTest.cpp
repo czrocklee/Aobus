@@ -35,19 +35,19 @@ namespace ao::tui::test
     CHECK(regions.hitTestButton(60, 10).hoveredButton == HoveredButton::None);
   }
 
-  TEST_CASE("TuiHitRegions - command and overlay context applies modal hover policy", "[tui][unit][hit-region]")
+  TEST_CASE("TuiHitRegions - text-input and overlay context applies modal hover policy", "[tui][unit][hit-region]")
   {
     auto regions = TuiHitRegions{};
     regions.outputDeviceButtonBox = ftxui::Box{.x_min = 1, .x_max = 5, .y_min = 0, .y_max = 0};
     regions.soulButtonBox = ftxui::Box{.x_min = 6, .x_max = 8, .y_min = 0, .y_max = 0};
 
-    auto const commandHit =
-      regions.hitTestButton(2, 0, HitTestContext{.isCommandActive = true, .isOverlayActive = false});
-    CHECK(commandHit.hoveredButton == HoveredButton::None);
-    CHECK(commandHit.isQualityHoverVisible == false);
+    auto const inputHit =
+      regions.hitTestButton(2, 0, HitTestContext{.isTextInputActive = true, .isOverlayActive = false});
+    CHECK(inputHit.hoveredButton == HoveredButton::None);
+    CHECK(inputHit.isQualityHoverVisible == false);
 
     auto const overlaySoulHit =
-      regions.hitTestButton(7, 0, HitTestContext{.isCommandActive = false, .isOverlayActive = true});
+      regions.hitTestButton(7, 0, HitTestContext{.isTextInputActive = false, .isOverlayActive = true});
     CHECK(overlaySoulHit.hoveredButton == HoveredButton::Soul);
     CHECK(overlaySoulHit.isQualityHoverVisible == false);
   }

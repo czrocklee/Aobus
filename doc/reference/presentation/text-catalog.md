@@ -121,7 +121,7 @@ The completed frontend migration owns these families:
 | WinUI | generated MRT resources | shell menus/actions, playback/output, library, metadata, tooltips, accessibility, empty states, and recoverable native wrappers |
 
 TUI command strings and key names remain shell identity, not translated copy.
-Patterns receive values such as `/view <id>`, `Enter`, `Esc`, and `Ctrl-L` as named arguments, so a locale may reorder but cannot rewrite them.
+Patterns receive values such as `:view <id>`, `/`, `Enter`, `Esc`, and `Ctrl-L` as named arguments, so a locale may reorder but cannot rewrite them.
 GTK Gio action names and WinUI action/component identities likewise remain untranslated.
 Layout action labels and categories are display text selected from the catalog; their stable action ids remain the only binding identity.
 GTK Layout Editor component/property/enum labels follow the same rule: the serialized token remains the combo-row id, known built-ins receive localized display text, and unknown extension values display unchanged.

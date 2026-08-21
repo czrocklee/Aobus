@@ -10,6 +10,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace ao::tui::test
 {
@@ -30,6 +31,18 @@ namespace ao::tui::test
           },
       };
     }
+
+    rt::CompletionResult pageCompletionResult()
+    {
+      auto result = completionResult();
+
+      while (result.items.size() < 12)
+      {
+        result.items.push_back(rt::CompletionItem{.displayText = "item", .insertText = "item"});
+      }
+
+      return result;
+    }
   } // namespace
 
   TEST_CASE("CommandCompletionState - clears empty and missing completion results", "[tui][unit][completion]")
@@ -48,14 +61,14 @@ namespace ao::tui::test
     CHECK(state.selection() == 0);
   }
 
-  TEST_CASE("CommandCompletionState - clamps selection movement and resets on set", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletionState - wraps selection movement and resets on set", "[tui][unit][completion]")
   {
     auto state = CommandCompletionState{};
 
     state.set(completionResult());
-    CHECK(state.moveSelection(99));
+    CHECK(state.moveSelection(-1));
     CHECK(state.selection() == 1);
-    CHECK(state.moveSelection(-99));
+    CHECK(state.moveSelection(1));
     CHECK(state.selection() == 0);
 
     state.moveSelection(1);
@@ -74,6 +87,46 @@ namespace ao::tui::test
     CHECK(state.applyTo(draft));
     CHECK(draft == "view albums");
     CHECK_FALSE(state.result());
+    CHECK(state.selection() == 0);
+  }
+
+  TEST_CASE("CommandCompletionState - rejects invalid replacement ranges", "[tui][regression][completion]")
+  {
+    auto state = CommandCompletionState{};
+    auto draft = std::string{"view so"};
+    auto result = completionResult();
+
+    SECTION("reversed range")
+    {
+      result.replaceBegin = 7;
+      result.replaceEnd = 5;
+    }
+
+    SECTION("range past the draft")
+    {
+      result.replaceEnd = draft.size() + 1;
+    }
+
+    state.set(std::move(result));
+
+    CHECK_FALSE(state.applyTo(draft));
+    CHECK(draft == "view so");
+    CHECK_FALSE(state.result());
+    CHECK(state.selection() == 0);
+  }
+
+  TEST_CASE("CommandCompletionState - page movement stops at completion boundaries", "[tui][unit][completion]")
+  {
+    auto state = CommandCompletionState{};
+    state.set(pageCompletionResult());
+
+    CHECK(state.moveSelectionByPage(10));
+    CHECK(state.selection() == 10);
+    CHECK(state.moveSelectionByPage(10));
+    CHECK(state.selection() == 11);
+    CHECK(state.moveSelectionByPage(-10));
+    CHECK(state.selection() == 1);
+    CHECK(state.moveSelectionByPage(-10));
     CHECK(state.selection() == 0);
   }
 } // namespace ao::tui::test

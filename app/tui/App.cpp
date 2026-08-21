@@ -99,7 +99,7 @@ namespace ao::tui
                                          std::int32_t const terminalColumns,
                                          std::int32_t const terminalRows)
     {
-      if (!shell.isCommandActive())
+      if (shell.inputMode() != ShellInputMode::Command)
       {
         return {};
       }
@@ -110,6 +110,31 @@ namespace ao::tui
       return centerPopover(commandPalettePanel(textCatalog, tuiTextCatalog, shell, panelColumns) |
                            ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
                            ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, panelRows));
+    }
+
+    ftxui::Element quickFilterPopover(uimodel::PresentationTextCatalog const& textCatalog,
+                                      TuiTextCatalog const& tuiTextCatalog,
+                                      ShellInteractionModel const& shell,
+                                      std::string_view const filterError,
+                                      std::int32_t const terminalColumns,
+                                      std::int32_t const terminalRows)
+    {
+      if (shell.inputMode() != ShellInputMode::QuickFilter)
+      {
+        return {};
+      }
+
+      auto const panelColumns = commandPalettePanelColumns(terminalColumns);
+      auto const panelRows = quickFilterPanelRows(shell, !filterError.empty(), terminalRows);
+
+      return anchoredOverlay(quickFilterCompletionPanel(textCatalog, tuiTextCatalog, shell, panelColumns, filterError) |
+                               ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
+                               ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, panelRows),
+                             {},
+                             AnchoredOverlayPlacement::Above,
+                             AnchoredOverlaySize{.columns = panelColumns, .rows = panelRows},
+                             AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
+                             AnchoredOverlayOptions{.fallbackToBottom = true});
     }
 
     ftxui::Element presentationPopover(uimodel::PresentationTextCatalog const& textCatalog,
@@ -422,7 +447,7 @@ namespace ao::tui
         auto const terminalColumns = terminalSize.dimx;
         auto const terminalRows = terminalSize.dimy;
         auto const playbackRows = playbackBarRows(terminalRows);
-        auto const hoveredButton = shell.isCommandActive() ? HoveredButton::None : events.hoveredButton();
+        auto const hoveredButton = shell.isInputActive() ? HoveredButton::None : events.hoveredButton();
         auto tableElementPtr =
           trackTableView(textCatalog,
                          tuiTextCatalog,
@@ -534,7 +559,7 @@ namespace ao::tui
           }
         }
 
-        if (!shell.isCommandActive() && shell.overlay() == Overlay::None && popoverElementPtr == nullptr &&
+        if (!shell.isInputActive() && shell.overlay() == Overlay::None && popoverElementPtr == nullptr &&
             events.isQualityHoverVisible())
         {
           auto const panelColumns = qualityPanelColumns(tuiTextCatalog, textCatalog, state, terminalColumns);
@@ -572,6 +597,14 @@ namespace ao::tui
                                        .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus}),
         });
 
+        auto visibleFilterError = std::string_view{};
+
+        if (shell.inputMode() == ShellInputMode::QuickFilter && shell.isInputTouched() &&
+            shell.inputDraft() == library.filterDraft())
+        {
+          visibleFilterError = library.filterError();
+        }
+
         if (auto commandPopoverPtr =
               commandPalettePopover(textCatalog, tuiTextCatalog, shell, terminalColumns, terminalRows);
             commandPopoverPtr != nullptr)
@@ -579,6 +612,16 @@ namespace ao::tui
           return dbox({
             std::move(rootPtr),
             std::move(commandPopoverPtr),
+          });
+        }
+
+        if (auto quickFilterPopoverPtr =
+              quickFilterPopover(textCatalog, tuiTextCatalog, shell, visibleFilterError, terminalColumns, terminalRows);
+            quickFilterPopoverPtr != nullptr)
+        {
+          return dbox({
+            std::move(rootPtr),
+            std::move(quickFilterPopoverPtr),
           });
         }
 
@@ -834,7 +877,9 @@ namespace ao::tui
                                     .activityStatusViewModel = &activityStatusViewModel,
                                     .notifications = &runtime.notifications(),
                                     .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
-                                    { return commandCompletions.complete(draft); },
+                                    { return commandCompletions.completeCommand(draft); },
+                                    .filterCompletionCallback = [&commandCompletions](std::string_view const draft)
+                                    { return commandCompletions.completeFilter(draft); },
                                   }};
 
     auto frameTimer = FrameTimer{};

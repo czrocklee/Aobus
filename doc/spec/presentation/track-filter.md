@@ -154,11 +154,12 @@ The saved List retains the ordinary `~` expression and needs no hidden search-po
 
 ## Frontend observations
 
-GTK binds the shared track-filter completer to its entry, renders clear and Create List actions, and keeps Create disabled while the current expression is empty or erroneous.
+GTK binds the shared track-filter completer to its entry, lets Return accept the selected candidate for this host, renders clear and Create List actions, and keeps Create disabled while the current expression is empty or erroneous.
 The clear action submits empty text.
 The create action emits the resolved expression.
 
-TUI routes bare filter drafts and `/filter` arguments through the same completer and resolves submitted text through the same UIModel helper before calling `ViewService`.
+TUI routes the live `/` input and explicit `:filter` arguments through the same completer and resolves applied text through the same UIModel helper before calling `ViewService`.
+Its live input debounces edits, accepts a highlighted candidate on Return, and keeps the literal edited text when Escape is used instead; exact timing, keys, and the intentional distinction from Command Palette submission belong to the [TUI interaction specification](../tui/interaction.md).
 If that runtime call returns Error, TUI retains its draft, active source and view, rows, sections, and selection, and presents the Error through the shared notification surface.
 Frontend-specific debounce, focus styling, popover rendering, and command syntax remain adapter concerns.
 
@@ -169,7 +170,7 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 - [`TrackFilterViewModel`](../../../app/include/ao/uimodel/library/track/TrackFilterViewModel.h) owns frontend-neutral filter state.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns runtime view replacement and observations.
 - [`TrackSourceCache`](../../../app/include/ao/rt/source/TrackSourceCache.h) owns ad-hoc source acquisition.
-- [`TrackQuickFilter`](../../../app/linux-gtk/track/TrackQuickFilter.h) and [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h) are completion adapters; `LibraryController` applies submitted TUI filters.
+- [`TrackQuickFilter`](../../../app/linux-gtk/track/TrackQuickFilter.h) and [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h) are completion adapters; `EventController` owns live TUI timing and `LibraryController` applies TUI filters.
 
 ## Test map
 
@@ -178,7 +179,7 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 - [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, end-to-end caseless Quick-filter membership, synchronous failure handling, and single-render policy.
 - [`ViewServiceListFilterTest.cpp`](../../../test/unit/runtime/ViewServiceListFilterTest.cpp) protects runtime replacement, transient expression errors, and contextual stored-parent errors with empty projections.
 - Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source/) protect source membership and dependency propagation.
-- GTK quick-filter and TUI library-controller tests protect frontend adaptation.
+- GTK Quick Filter tests plus TUI event-controller and library-controller tests protect completion acceptance, debounce/cancellation, error presentation, and frontend adaptation.
 
 ## Related documents
 

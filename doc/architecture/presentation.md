@@ -162,11 +162,9 @@ TUI owns FTXUI components, terminal geometry, key/mouse routing, overlays, refre
 It constructs the same `AppRuntime`, uses shared runtime services and selected UIModel view models/policies, and builds terminal elements from their state.
 
 TUI-local interaction models may own transient shell/overlay state but cannot become authorities for runtime playback, source order, or persisted library data.
-Its output overlay consumes the same UIModel output-device view model as GTK
-and WinUI. Its list chooser consumes the shared UIModel list-tree projection,
-and its command palette consumes the same UIModel track-filter completer as
-GTK's Quick-filter entry, while retaining terminal-only rendering, command,
-and presentation routing.
+Its output overlay consumes the same UIModel output-device view model as GTK and WinUI.
+Its list chooser consumes the shared UIModel list-tree projection, and its live Quick Filter consumes the same UIModel track-filter completer as GTK's Quick-filter entry.
+Its separate Command Palette retains terminal-only command and presentation routing and delegates only explicit filter arguments to that completer.
 The process root retains one `PresentationTextCatalog` and one `TuiTextCatalog`; terminal renderers and completion adapters borrow them, while command, key, and presentation ids remain owned by the shell interaction model or runtime.
 
 ### WinUI

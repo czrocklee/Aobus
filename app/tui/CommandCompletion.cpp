@@ -10,6 +10,7 @@
 #include <ao/rt/completion/CompletionText.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -68,7 +69,7 @@ namespace ao::tui
         {
           if (!appendItem(items,
                           limit,
-                          "/" + std::string{text},
+                          ":" + std::string{text},
                           std::string{spec.prefix},
                           std::string{textCatalog.text(spec.detail)}))
           {
@@ -88,7 +89,7 @@ namespace ao::tui
         {
           if (!appendItem(items,
                           limit,
-                          "/" + std::string{spec.alias},
+                          ":" + std::string{spec.alias},
                           std::string{spec.alias},
                           std::string{textCatalog.text(spec.detail)}))
           {
@@ -215,6 +216,31 @@ namespace ao::tui
       }
     }
 
-    return completeFilter(context, draft, 0, limit);
+    return std::nullopt;
+  }
+
+  std::string commandCompletionSuffix(ShellInteractionModel const& shell)
+  {
+    auto const& optCompletion = shell.commandCompletion();
+
+    if (!optCompletion || optCompletion->items.empty())
+    {
+      return {};
+    }
+
+    auto const selected = std::clamp<std::int32_t>(
+      shell.commandCompletionSelection(), 0, static_cast<std::int32_t>(optCompletion->items.size()) - 1);
+    auto const& item = optCompletion->items[static_cast<std::size_t>(selected)];
+    auto const replaceBegin = std::min(optCompletion->replaceBegin, shell.inputDraft().size());
+    auto const replaceEnd = std::min(optCompletion->replaceEnd, shell.inputDraft().size());
+    auto const current = std::string_view{shell.inputDraft()}.substr(replaceBegin, replaceEnd - replaceBegin);
+
+    if (!current.empty() && replaceEnd == shell.inputDraft().size() &&
+        rt::startsWithCompletionPrefixInsensitive(item.insertText, current))
+    {
+      return item.insertText.substr(current.size());
+    }
+
+    return {};
   }
 } // namespace ao::tui

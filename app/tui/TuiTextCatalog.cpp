@@ -25,6 +25,8 @@ namespace ao::tui
       MessageId::TuiShellCommandPaletteTitle,
       MessageId::TuiShellCommandPaletteNoMatches,
       MessageId::TuiShellCommandPaletteFooter,
+      MessageId::TuiShellQuickFilterTitle,
+      MessageId::TuiShellQuickFilterFooter,
       MessageId::TuiShellWorkspaceList,
       MessageId::TuiShellWorkspaceView,
       MessageId::TuiShellOverlayTracks,
@@ -35,7 +37,6 @@ namespace ao::tui
       MessageId::TuiShellOverlayViews,
       MessageId::TuiShellOverlayNotifications,
       MessageId::TuiShellOverlayHelp,
-      MessageId::TuiShellHintWorkspace,
       MessageId::TuiShellHintLists,
       MessageId::TuiShellHintDetail,
       MessageId::TuiShellHintPipeline,
@@ -46,13 +47,9 @@ namespace ao::tui
       MessageId::TuiShellStatusCommand,
       MessageId::TuiShellStatusLists,
       MessageId::TuiShellStatusView,
-      MessageId::TuiShellStatusNotifications,
       MessageId::TuiShellStatusDetail,
-      MessageId::TuiShellStatusPipeline,
-      MessageId::TuiShellStatusOutput,
-      MessageId::TuiShellStatusGroups,
-      MessageId::TuiShellStatusCurrent,
-      MessageId::TuiShellStatusQuit,
+      MessageId::TuiShellStatusClearFilter,
+      MessageId::TuiShellStatusHelp,
       MessageId::TuiShellFilterLabel,
       MessageId::TuiShellCategoryLibrary,
       MessageId::TuiShellCategoryView,
@@ -159,19 +156,12 @@ namespace ao::tui
                                  {MessageArgument{"completeKey", "Tab"},
                                   MessageArgument{"runKey", "Enter"},
                                   MessageArgument{"cancelKey", "Esc"}});
-        case TuiTextId::HintWorkspace:
+        case TuiTextId::QuickFilterFooter:
           return requiredMessage(catalog,
                                  messageId,
-                                 {MessageArgument{"commandKey", "/"},
-                                  MessageArgument{"listsKey", "l"},
-                                  MessageArgument{"viewKey", "v"},
-                                  MessageArgument{"notificationsKey", "n"},
-                                  MessageArgument{"detailKey", "d"},
-                                  MessageArgument{"pipelineKey", "a"},
-                                  MessageArgument{"outputKey", "o"},
-                                  MessageArgument{"groupsKey", "{ }"},
-                                  MessageArgument{"currentKey", "Ctrl-L"},
-                                  MessageArgument{"quitKey", "q"}});
+                                 {MessageArgument{"acceptKey", "Enter"},
+                                  MessageArgument{"completeKey", "Tab"},
+                                  MessageArgument{"keepKey", "Esc"}});
         case TuiTextId::HintLists:
           return requiredMessage(catalog,
                                  messageId,
@@ -203,19 +193,19 @@ namespace ao::tui
             {MessageArgument{"toggleKey", "n"}, MessageArgument{"hideKey", "x"}, MessageArgument{"closeKey", "Esc"}});
         case TuiTextId::HintHelp: return requiredMessage(catalog, messageId, {MessageArgument{"closeKey", "Esc"}});
         case TuiTextId::HelpQuickFilter: return commandHelp(catalog, messageId, "/text");
-        case TuiTextId::HelpChooseList: return commandAliasHelp(catalog, messageId, "/lists", "/l");
-        case TuiTextId::HelpTrackDetail: return commandAliasHelp(catalog, messageId, "/detail", "/d");
-        case TuiTextId::HelpAudioPipeline: return commandAliasHelp(catalog, messageId, "/pipeline", "/a");
-        case TuiTextId::HelpOutputDevice: return commandAliasHelp(catalog, messageId, "/output", "/o");
-        case TuiTextId::HelpChooseView: return commandAliasHelp(catalog, messageId, "/views", "/v");
-        case TuiTextId::HelpNotifications: return commandAliasHelp(catalog, messageId, "/notifications", "/n");
-        case TuiTextId::HelpCurrentTrack: return commandHelp(catalog, messageId, "/current");
-        case TuiTextId::HelpSwitchPresentation: return commandHelp(catalog, messageId, "/view <id>");
+        case TuiTextId::HelpChooseList: return commandAliasHelp(catalog, messageId, ":lists", ":l");
+        case TuiTextId::HelpTrackDetail: return commandAliasHelp(catalog, messageId, ":detail", ":d");
+        case TuiTextId::HelpAudioPipeline: return commandAliasHelp(catalog, messageId, ":pipeline", ":a");
+        case TuiTextId::HelpOutputDevice: return commandAliasHelp(catalog, messageId, ":output", ":o");
+        case TuiTextId::HelpChooseView: return commandAliasHelp(catalog, messageId, ":views", ":v");
+        case TuiTextId::HelpNotifications: return commandAliasHelp(catalog, messageId, ":notifications", ":n");
+        case TuiTextId::HelpCurrentTrack: return commandHelp(catalog, messageId, ":current");
+        case TuiTextId::HelpSwitchPresentation: return commandHelp(catalog, messageId, ":view <id>");
         case TuiTextId::HelpPreviousNextGroup: return commandHelp(catalog, messageId, "{ / }");
-        case TuiTextId::HelpClearFilter: return commandHelp(catalog, messageId, "/clear");
-        case TuiTextId::HelpReloadList: return commandHelp(catalog, messageId, "/reload");
-        case TuiTextId::HelpPlayback: return commandHelp(catalog, messageId, "/play /pause /stop");
-        case TuiTextId::HelpQuit: return commandHelp(catalog, messageId, "/quit");
+        case TuiTextId::HelpClearFilter: return commandHelp(catalog, messageId, ":clear");
+        case TuiTextId::HelpReloadList: return commandHelp(catalog, messageId, ":reload");
+        case TuiTextId::HelpPlayback: return commandHelp(catalog, messageId, ":play :pause :stop");
+        case TuiTextId::HelpQuit: return commandHelp(catalog, messageId, ":quit");
         case TuiTextId::HelpFooter:
           return requiredMessage(
             catalog, messageId, {MessageArgument{"closeKey", "Esc"}, MessageArgument{"runKey", "Enter"}});

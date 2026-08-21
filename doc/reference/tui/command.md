@@ -15,9 +15,9 @@ The surface is unversioned; modal and rendering behavior belongs to the [TUI int
 ## Code boundary
 
 Startup option authority is `app/tui/Main.cpp`.
-Command, alias, and key-binding authority is `ShellInteractionModel.cpp`: a key that runs a command is declared once there and read by the dispatcher, the overlay handler that closes on the same key, the status bar, and the command palette alike.
+Command, alias, and key-binding authority is `ShellInteractionModel.cpp`: a key that runs a command is declared once there and read by the dispatcher, the overlay handler that closes on the same key, the status bar, and the Command Palette alike.
 Key and mouse dispatch is `EventController.cpp`, which also owns the one translation from a declared key's written form to a terminal event.
-Keys that run no command - the command line, seeking, group jumps, volume - are answered where they are pressed and are named nowhere else.
+Keys that run no command - text-input entry, seeking, group jumps, volume - are answered where they are pressed and are named nowhere else.
 
 ## Surface
 
@@ -34,7 +34,8 @@ Keys that run no command - the command line, seeking, group jumps, volume - are 
 
 ### Command prefixes
 
-Commands accept an optional leading `/` or `:` and are case-insensitive after trimming.
+Commands are entered through `:` and are case-insensitive after trimming.
+The parser accepts the Command Palette draft with or without its leading `:`; `/` is reserved for live Quick Filter input and is never a command prefix.
 
 | Prefix | Action |
 | --- | --- |
@@ -43,7 +44,7 @@ Commands accept an optional leading `/` or `:` and are case-insensitive after tr
 | `preset <id>` | set track presentation |
 | `view <id>` | set track presentation |
 
-Any submitted text that is not a known prefix or exact alias becomes a quick filter.
+Text that is not a known prefix or exact alias is an unknown command and does not change the filter.
 
 ### Command aliases
 
@@ -84,20 +85,42 @@ Any submitted text that is not a known prefix or exact alias becomes a quick fil
 | `Ctrl-L` | reveal current track |
 | `c` | clear filter |
 | `r` | reload active list |
-| `/` / `:` | enter command mode |
+| `/` | open an empty live Quick Filter input |
+| `:` | open an empty Command Palette input |
 | `q` / `Ctrl-C` | quit |
-| `Esc` | close overlay or cancel command mode |
+| `Esc` | close overlay or cancel active text input according to its mode |
 
-### Command-mode keys
+### Quick Filter keys
 
 | Key | Action |
 | --- | --- |
 | printable UTF-8 | append to draft |
-| `Backspace` | remove one UTF-8 code point |
-| `Up`, `Down` | move completion selection |
-| `Tab` | apply selected completion |
-| `Return` | submit |
-| `Esc` | cancel |
+| `Backspace` | remove one extended grapheme cluster |
+| `Up`, `Down` | cycle completion selection |
+| `PageUp`, `PageDown` | move selection by one bounded completion page |
+| `Tab` | apply selected completion and keep editing |
+| `Return` | apply selected completion, apply the filter immediately, and close; an untouched empty draft clears the filter |
+| `Esc` | ignore selected completion, apply the literal edited draft immediately, and close; an untouched draft preserves the existing filter |
+
+Opening `/` does not copy or clear the current filter.
+Confirming that untouched empty input with Return clears the filter, while closing it with Escape leaves the current filter unchanged.
+After an edit, the draft also applies live following a 200-millisecond quiet interval.
+The active draft replaces the bottom status bar, and its completion popup opens directly above it; the separate `:` Command Palette remains centered.
+
+Return and Escape intentionally differ between the two input modes.
+Quick Filter edits are live, so Return accepts the highlighted value and Escape keeps the literal draft; Command Palette input has no live effect, so Return executes only the typed command and Escape cancels it.
+
+### Command Palette keys
+
+| Key | Action |
+| --- | --- |
+| printable UTF-8 | append to draft |
+| `Backspace` | remove one extended grapheme cluster |
+| `Up`, `Down` | cycle completion selection |
+| `PageUp`, `PageDown` | move selection by one bounded completion page |
+| `Tab` | apply selected completion and keep editing |
+| `Return` | run a known command without implicitly applying the selected completion |
+| `Esc` | discard the command draft and close |
 
 ### Overlay-specific keys
 
@@ -127,12 +150,12 @@ Any submitted text that is not a known prefix or exact alias becomes a quick fil
 
 ## Validation rules
 
-- Command prefixes match before aliases; unknown input is quick-filter text.
-- Bare filter drafts and `/filter` arguments use the shared UIModel track-filter completer.
+- Command prefixes match before aliases; unknown command input remains open and reports a warning.
+- Live Quick Filter drafts and explicit `:filter` arguments use the shared UIModel track-filter completer.
 - An explicit leading query variable produces structured query suggestions; otherwise a non-empty active term produces frequency-ranked live Quick-filter value suggestions.
 - Presentation completion includes built-in and custom preset ids.
 - Quick-filter values come from live titles, artist, album, album artist, genre, composer, work, and tags; list names and other fields are excluded.
-- Command mode and overlays disable workspace seek/table gestures.
+- Both text-input modes and overlays disable workspace seek/table gestures.
 - A duration-zero seek rail is inert.
 
 ## Compatibility and versioning
@@ -143,9 +166,9 @@ Changing a key, alias, option, or default path requires updating this reference 
 ## Examples
 
 ```text
-/filter $composer == "Bach"
-/view classical-works
-/notifications
+:filter $composer == "Bach"
+:view classical-works
+:notifications
 ```
 
 ## Implementation authority

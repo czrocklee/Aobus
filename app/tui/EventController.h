@@ -8,6 +8,8 @@
 #include "ShellInteractionModel.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -26,6 +28,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,7 +42,7 @@ namespace ao::rt
 
 namespace ao::tui
 {
-  using CommandCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
+  using InputCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
 
   struct EventControllerBindings final
   {
@@ -48,7 +51,8 @@ namespace ao::tui
     std::vector<TrackColumnWidthOverride>* trackColumnWidthOverrides = nullptr;
     uimodel::ActivityStatusViewModel* activityStatusViewModel = nullptr;
     rt::NotificationService* notifications = nullptr;
-    CommandCompletionCallback commandCompletionCallback{};
+    InputCompletionCallback commandCompletionCallback{};
+    InputCompletionCallback filterCompletionCallback{};
   };
 
   class EventController final
@@ -67,7 +71,7 @@ namespace ao::tui
   private:
     void openSelectedList();
     void reloadActiveList();
-    void applyFilter();
+    void applyFilter(bool reportError = true);
     void toggleListChooser();
     void toggleDetailPanel();
     void toggleQualityPanel();
@@ -82,6 +86,14 @@ namespace ao::tui
     void runCommand(Command const& command);
     void postActivityNotification(rt::NotificationSeverity severity, std::string message);
     void refreshCommandCompletion();
+    void scheduleFilterDebounce();
+    void cancelFilterDebounce() noexcept;
+    void applyPendingFilter(std::uint64_t generation);
+    void closeQuickFilter(bool acceptCompletion);
+    static async::Task<void> waitForFilterDebounce(async::Runtime* runtime,
+                                                   EventController* owner,
+                                                   std::uint64_t generation,
+                                                   std::stop_token stopToken);
     bool handleMouse(ftxui::Mouse const& mouse);
     std::optional<bool> handleActiveMouseDrag(ftxui::Mouse const& mouse);
     std::optional<bool> handleMouseWheel(ftxui::Mouse const& mouse);
@@ -117,6 +129,7 @@ namespace ao::tui
     ftxui::ScreenInteractive& _screen;
     ShellInteractionModel& _shell;
     LibraryController& _library;
+    async::Runtime& _asyncRuntime;
     rt::PlaybackService& _playback;
     uimodel::PlaybackCommandSurface _playbackCommands;
     uimodel::PlaybackPositionViewModel _seekViewModel;
@@ -130,8 +143,12 @@ namespace ao::tui
     uimodel::SeekSliderInteractionModel _seekSlider{};
     uimodel::ActivityStatusViewModel* _activityStatusViewModel = nullptr;
     rt::NotificationService* _notifications = nullptr;
-    CommandCompletionCallback _commandCompletionCallback{};
+    InputCompletionCallback _commandCompletionCallback{};
+    InputCompletionCallback _filterCompletionCallback{};
     bool _qualityHoverVisible = false;
     HoveredButton _hoveredButton = HoveredButton::None;
+    std::uint64_t _filterDebounceGeneration = 0;
+    // Declared last so teardown requests stop before any callback target is destroyed.
+    async::TaskHandle _filterDebounceTask{};
   };
 } // namespace ao::tui

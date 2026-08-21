@@ -27,7 +27,7 @@ namespace ao::tui
 
   struct HitTestContext final
   {
-    bool isCommandActive = false;
+    bool isTextInputActive = false;
     bool isOverlayActive = false;
   };
 

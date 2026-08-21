@@ -8,6 +8,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
@@ -76,12 +77,18 @@ namespace ao::tui::test
     struct EventControllerFixture final
     {
       ao::test::TempDir tempDir{};
+      std::unique_ptr<rt::test::ControlledSleeper> sleeperPtr{};
       rt::test::QueuedExecutor* executor = nullptr;
-      std::unique_ptr<rt::AppRuntime> runtimePtr{rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor))};
+      std::unique_ptr<rt::AppRuntime> runtimePtr;
       ftxui::ScreenInteractive screen{ftxui::ScreenInteractive::FixedSize(80, 24)};
       ShellInteractionModel shell{};
 
-      EventControllerFixture()
+      explicit EventControllerFixture(bool const useControlledSleeper = false)
+        : sleeperPtr{useControlledSleeper ? std::make_unique<rt::test::ControlledSleeper>() : nullptr}
+        , runtimePtr{rt::test::makeRuntime(tempDir,
+                                           makeQueuedExecutor(executor),
+                                           nullptr,
+                                           sleeperPtr == nullptr ? nullptr : sleeperPtr.get())}
       {
         auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
         addTrack(library::test::TrackSpec{.title = "First", .uri = fixturePath});
@@ -148,6 +155,18 @@ namespace ao::tui::test
 
     void enterCommand(EventController& controller, std::string_view text)
     {
+      CHECK(controller.handleEvent(ftxui::Event::Character(":")));
+
+      for (char const ch : text)
+      {
+        CHECK(controller.handleEvent(ftxui::Event::Character(std::string{ch})));
+      }
+
+      CHECK(controller.handleEvent(ftxui::Event::Return));
+    }
+
+    void enterQuickFilter(EventController& controller, std::string_view text)
+    {
       CHECK(controller.handleEvent(ftxui::Event::Character("/")));
 
       for (char const ch : text)
@@ -157,9 +176,23 @@ namespace ao::tui::test
 
       CHECK(controller.handleEvent(ftxui::Event::Return));
     }
+
+    std::optional<rt::CompletionResult> completeYuduo(std::string_view const draft)
+    {
+      if (draft != "yuduo")
+      {
+        return std::nullopt;
+      }
+
+      return rt::CompletionResult{
+        .replaceBegin = 0,
+        .replaceEnd = draft.size(),
+        .items = {rt::CompletionItem{.displayText = "宇多田光", .insertText = "\"宇多田光\""}},
+      };
+    }
   } // namespace
 
-  TEST_CASE("EventController - command input is modal for navigation keys", "[tui][regression][event]")
+  TEST_CASE("EventController - text input is modal for navigation keys", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -170,11 +203,249 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Character("/")));
     CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
 
-    CHECK(fixture.shell.isCommandActive());
+    CHECK(fixture.shell.isInputActive());
     CHECK(library.selectedTrack() == 0);
   }
 
-  TEST_CASE("EventController - tab applies command completion without leaving command mode", "[tui][unit][event]")
+  TEST_CASE("EventController - Ctrl-C reaches global exit handling from every text input mode",
+            "[tui][regression][event]")
+  {
+    auto requireExitHandlingFromInput = [](std::string const& opener)
+    {
+      auto fixture = EventControllerFixture{};
+      auto library = fixture.makeLibrary();
+      prepareSeekablePlayback(fixture, library);
+      auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+      REQUIRE(currentPlayback(fixture).transport.nowPlaying.trackId != kInvalidTrackId);
+      REQUIRE(controller.handleEvent(ftxui::Event::Character(opener)));
+      REQUIRE(fixture.shell.isInputActive());
+
+      CHECK(controller.handleEvent(ftxui::Event::CtrlC));
+      CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    };
+
+    SECTION("Quick Filter")
+    {
+      requireExitHandlingFromInput("/");
+    }
+
+    SECTION("Command Palette")
+    {
+      requireExitHandlingFromInput(":");
+    }
+  }
+
+  TEST_CASE("EventController - cancelling untouched Quick Filter preserves the active filter",
+            "[tui][regression][event][filter]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    library.setFilterDraft("First");
+    REQUIRE(library.applyFilter());
+    REQUIRE(library.tracks().size() == 1);
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(fixture.shell.inputMode() == ShellInputMode::QuickFilter);
+    CHECK(fixture.shell.inputDraft().empty());
+    CHECK_FALSE(fixture.shell.isInputTouched());
+    CHECK(library.filterDraft() == "First");
+
+    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(library.filterDraft() == "First");
+    CHECK(library.tracks().size() == 1);
+  }
+
+  TEST_CASE("EventController - confirming untouched Quick Filter clears the active filter",
+            "[tui][regression][event][filter]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    library.setFilterDraft("First");
+    REQUIRE(library.applyFilter());
+    REQUIRE(library.tracks().size() == 1);
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK_FALSE(fixture.shell.isInputTouched());
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(library.filterDraft().empty());
+    CHECK(library.tracks().size() == 2);
+  }
+
+  TEST_CASE("EventController - Quick Filter applies edited text after the debounce interval",
+            "[tui][unit][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("Second")));
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    CHECK(fixture.sleeperPtr->call(0).delay == std::chrono::milliseconds{200});
+    CHECK(library.filterDraft().empty());
+
+    REQUIRE(fixture.sleeperPtr->fire(0));
+    REQUIRE(fixture.executor->drainUntil([&library] { return library.filterDraft() == "Second"; }));
+    REQUIRE(library.tracks().size() == 1);
+    CHECK(library.selectedTrackView().track->row.title == "Second");
+    CHECK(fixture.shell.isInputActive());
+  }
+
+  TEST_CASE("EventController - backspacing Quick Filter to empty restores all tracks after debounce",
+            "[tui][regression][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("F")));
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    REQUIRE(fixture.sleeperPtr->fire(0));
+    REQUIRE(fixture.executor->drainUntil([&library] { return library.filterDraft() == "F"; }));
+    REQUIRE(library.tracks().size() == 1);
+    CHECK(library.selectedTrackView().track->row.title == "First");
+
+    CHECK(controller.handleEvent(ftxui::Event::Backspace));
+    CHECK(fixture.shell.inputDraft().empty());
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(2));
+    REQUIRE(fixture.sleeperPtr->fire(1));
+    REQUIRE(fixture.executor->drainUntil([&library] { return library.filterDraft().empty(); }));
+
+    CHECK(library.tracks().size() == 2);
+    CHECK(fixture.shell.isInputActive());
+  }
+
+  TEST_CASE("EventController - Quick Filter Enter accepts completion and cancels pending debounce",
+            "[tui][regression][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    fixture.addTrack(library::test::TrackSpec{.title = "First Love", .artist = "宇多田光"});
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen,
+                                      fixture.shell,
+                                      library,
+                                      *fixture.runtimePtr,
+                                      EventControllerBindings{.filterCompletionCallback = completeYuduo}};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("yuduo")));
+    REQUIRE(fixture.shell.commandCompletion());
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(library.filterDraft() == "\"宇多田光\"");
+    REQUIRE(library.tracks().size() == 1);
+    CHECK(library.selectedTrackView().track->row.artist == "宇多田光");
+    CHECK(fixture.sleeperPtr->waitForCancellation(0));
+    CHECK_FALSE(fixture.sleeperPtr->fire(0));
+  }
+
+  TEST_CASE("EventController - Quick Filter Escape applies literal text instead of the selected completion",
+            "[tui][unit][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen,
+                                      fixture.shell,
+                                      library,
+                                      *fixture.runtimePtr,
+                                      EventControllerBindings{.filterCompletionCallback = completeYuduo}};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("yuduo")));
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+
+    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(library.filterDraft() == "yuduo");
+    CHECK(fixture.sleeperPtr->waitForCancellation(0));
+  }
+
+  TEST_CASE("EventController - Quick Filter Tab accepts completion and stays live", "[tui][unit][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    fixture.addTrack(library::test::TrackSpec{.title = "First Love", .artist = "宇多田光"});
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen,
+                                      fixture.shell,
+                                      library,
+                                      *fixture.runtimePtr,
+                                      EventControllerBindings{.filterCompletionCallback = completeYuduo}};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("yuduo")));
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+
+    CHECK(controller.handleEvent(ftxui::Event::Tab));
+    CHECK(fixture.shell.isInputActive());
+    CHECK(fixture.shell.inputDraft() == "\"宇多田光\"");
+    REQUIRE(fixture.sleeperPtr->waitForCancellation(0));
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(2));
+
+    REQUIRE(fixture.sleeperPtr->fire(1));
+    REQUIRE(fixture.executor->drainUntil([&library] { return library.filterDraft() == "\"宇多田光\""; }));
+    REQUIRE(library.tracks().size() == 1);
+    CHECK(library.selectedTrackView().track->row.artist == "宇多田光");
+    CHECK(fixture.shell.isInputActive());
+  }
+
+  TEST_CASE("EventController - Quick Filter shows transient expression errors without posting notifications",
+            "[tui][regression][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{.notifications = &fixture.runtimePtr->notifications()},
+    };
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("$artist =")));
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    REQUIRE(fixture.sleeperPtr->fire(0));
+    REQUIRE(fixture.executor->drainUntil([&library] { return library.filterDraft() == "$artist ="; }));
+
+    CHECK(fixture.shell.isInputActive());
+    CHECK(library.filterError().contains("Filter error:"));
+    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+    CHECK_FALSE(fixture.shell.isInputActive());
+
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
+    CHECK(std::get<std::string>(feed.entries.back().message).contains("Filter error:"));
+  }
+
+  TEST_CASE("EventController - destruction cancels a pending Quick Filter debounce", "[tui][unit][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+
+    {
+      auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+      CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+      CHECK(controller.handleEvent(ftxui::Event::Character("First")));
+      REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    }
+
+    CHECK(fixture.sleeperPtr->waitForCancellation(0));
+    CHECK(library.filterDraft().empty());
+  }
+
+  TEST_CASE("EventController - completion keys distinguish acceptance from submission", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -184,6 +455,7 @@ namespace ao::tui::test
       library,
       *fixture.runtimePtr,
       EventControllerBindings{
+        .notifications = &fixture.runtimePtr->notifications(),
         .commandCompletionCallback = [](std::string_view const draft) -> std::optional<rt::CompletionResult>
         {
           if (draft != "de")
@@ -194,25 +466,69 @@ namespace ao::tui::test
           return rt::CompletionResult{
             .replaceBegin = 0,
             .replaceEnd = 2,
-            .items = {rt::CompletionItem{.displayText = "/detail",
-                                         .insertText = "detail",
-                                         .detail = rt::CompletionDetail::makeResolvedText("track detail")}},
+            .items =
+              {
+                rt::CompletionItem{.displayText = ":detail",
+                                   .insertText = "detail",
+                                   .detail = rt::CompletionDetail::makeResolvedText("track detail")},
+                rt::CompletionItem{.displayText = ":devices",
+                                   .insertText = "devices",
+                                   .detail = rt::CompletionDetail::makeResolvedText("output devices")},
+              },
           };
         }}};
 
-    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character(":")));
     CHECK(controller.handleEvent(ftxui::Event::Character("d")));
     CHECK(controller.handleEvent(ftxui::Event::Character("e")));
     REQUIRE(fixture.shell.commandCompletion());
 
-    CHECK(controller.handleEvent(ftxui::Event::Tab));
-    CHECK(fixture.shell.isCommandActive());
-    CHECK(fixture.shell.commandDraft() == "detail");
-    CHECK_FALSE(fixture.shell.commandCompletion());
+    SECTION("Tab accepts the selection and keeps the Command Palette active")
+    {
+      CHECK(controller.handleEvent(ftxui::Event::Tab));
+      CHECK(fixture.shell.isInputActive());
+      CHECK(fixture.shell.inputDraft() == "detail");
+      CHECK_FALSE(fixture.shell.commandCompletion());
 
-    CHECK(controller.handleEvent(ftxui::Event::Return));
-    CHECK_FALSE(fixture.shell.isCommandActive());
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+      CHECK(controller.handleEvent(ftxui::Event::Return));
+      CHECK_FALSE(fixture.shell.isInputActive());
+      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    }
+
+    SECTION("Return rejects an unknown command without accepting the selection")
+    {
+      CHECK(controller.handleEvent(ftxui::Event::Return));
+      CHECK(fixture.shell.isInputActive());
+      CHECK(fixture.shell.inputDraft() == "de");
+      CHECK(library.filterDraft().empty());
+      CHECK(fixture.shell.overlay() == Overlay::None);
+      auto const feed = fixture.runtimePtr->notifications().feed();
+      REQUIRE(feed.entries.size() == 1);
+      CHECK(feed.entries.front().severity == rt::NotificationSeverity::Warning);
+      CHECK(std::get<std::string>(feed.entries.front().message) == "Unknown command: de");
+    }
+
+    SECTION("Page keys move by the bounded list page")
+    {
+      CHECK(controller.handleEvent(ftxui::Event::PageDown));
+      CHECK(fixture.shell.commandCompletionSelection() == 1);
+      CHECK(controller.handleEvent(ftxui::Event::PageDown));
+      CHECK(fixture.shell.commandCompletionSelection() == 1);
+      CHECK(controller.handleEvent(ftxui::Event::PageUp));
+      CHECK(fixture.shell.commandCompletionSelection() == 0);
+      CHECK(fixture.shell.isInputActive());
+    }
+
+    SECTION("Arrow keys cycle through completion items")
+    {
+      CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
+      CHECK(fixture.shell.commandCompletionSelection() == 1);
+      CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
+      CHECK(fixture.shell.commandCompletionSelection() == 0);
+      CHECK(controller.handleEvent(ftxui::Event::ArrowUp));
+      CHECK(fixture.shell.commandCompletionSelection() == 1);
+      CHECK(fixture.shell.isInputActive());
+    }
   }
 
   TEST_CASE("EventController - command input escape cancels the draft", "[tui][unit][event]")
@@ -223,12 +539,12 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character(":")));
     CHECK(controller.handleEvent(ftxui::Event::Character("h")));
-    CHECK(fixture.shell.isCommandActive());
-    CHECK(fixture.shell.commandDraft() == "h");
+    CHECK(fixture.shell.isInputActive());
+    CHECK(fixture.shell.inputDraft() == "h");
 
     CHECK(controller.handleEvent(ftxui::Event::Escape));
-    CHECK_FALSE(fixture.shell.isCommandActive());
-    CHECK(fixture.shell.commandDraft().empty());
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(fixture.shell.inputDraft().empty());
   }
 
   TEST_CASE("EventController - every declared key binding is answered", "[tui][unit][event]")
@@ -502,8 +818,8 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
 
-    enterCommand(controller, "First");
-    CHECK_FALSE(fixture.shell.isCommandActive());
+    enterQuickFilter(controller, "First");
+    CHECK_FALSE(fixture.shell.isInputActive());
     CHECK(library.filterDraft() == "First");
     CHECK(library.tracks().size() == 1);
     REQUIRE(library.selectedTrackView().track != nullptr);
@@ -529,7 +845,7 @@ namespace ao::tui::test
       EventControllerBindings{.notifications = &fixture.runtimePtr->notifications()},
     };
 
-    enterCommand(controller, "First");
+    enterQuickFilter(controller, "First");
 
     CHECK(library.filterDraft() == "First");
     CHECK(library.activeViewId() == activeViewId);
@@ -1139,7 +1455,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
-    enterCommand(controller, "missing");
+    enterQuickFilter(controller, "missing");
     REQUIRE(library.tracks().empty());
 
     auto hitRegions = TuiHitRegions{};
@@ -1386,7 +1702,7 @@ namespace ao::tui::test
     CHECK(seekPreviews.empty());
   }
 
-  TEST_CASE("EventController - command mode blocks seek rail mouse clicks", "[tui][regression][event]")
+  TEST_CASE("EventController - text input blocks seek rail mouse clicks", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1406,7 +1722,7 @@ namespace ao::tui::test
     CHECK(seekPreviews.empty());
   }
 
-  TEST_CASE("EventController - command mode blocks workspace mouse controls", "[tui][regression][event]")
+  TEST_CASE("EventController - text input blocks workspace mouse controls", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -1439,7 +1755,7 @@ namespace ao::tui::test
 
     REQUIRE(library.selectedTrack() == 0);
     CHECK(controller.handleEvent(ftxui::Event::Character("/")));
-    REQUIRE(fixture.shell.isCommandActive());
+    REQUIRE(fixture.shell.isInputActive());
 
     auto clickSoul = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 1, .y = 0};
     auto clickOutput = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 6, .y = 0};
@@ -1457,7 +1773,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", pressScrollbar)));
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", clickSection)));
 
-    CHECK(fixture.shell.isCommandActive());
+    CHECK(fixture.shell.isInputActive());
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(library.selectedTrack() == 0);
     CHECK(widthOverrides.empty());

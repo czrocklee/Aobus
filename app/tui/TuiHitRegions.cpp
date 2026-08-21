@@ -33,7 +33,7 @@ namespace ao::tui
                                                    std::int32_t const row,
                                                    HitTestContext const context) const
   {
-    if (context.isCommandActive)
+    if (context.isTextInputActive)
     {
       return {};
     }
