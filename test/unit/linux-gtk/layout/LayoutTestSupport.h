@@ -27,6 +27,7 @@ namespace ao::library
 namespace ao::rt
 {
   class AppRuntime;
+  class TextOrderingPolicy;
 }
 
 namespace ao::uimodel
@@ -81,7 +82,8 @@ namespace ao::gtk::layout::test
   public:
     explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test",
                                   std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {},
-                                  std::string_view locale = "en");
+                                  std::string_view locale = "en",
+                                  rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~LayoutRuntimeFixture() noexcept;
 
     LayoutRuntimeFixture(LayoutRuntimeFixture const&) = delete;

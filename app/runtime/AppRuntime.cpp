@@ -50,7 +50,8 @@ namespace ao::rt
       : viewService{runtime.async().callbackExecutor(),
                     runtime.musicLibrary(),
                     runtime.sources(),
-                    runtime.library().changes()}
+                    runtime.library().changes(),
+                    runtime.textOrderingPolicy()}
       , playbackTransport{runtime.async().callbackExecutor(),
                           runtime.musicLibrary(),
                           runtime.notifications(),
@@ -61,7 +62,8 @@ namespace ao::rt
                            runtime.musicLibrary(),
                            playbackTransport,
                            runtime.notifications(),
-                           runtime.async()}
+                           runtime.async(),
+                           runtime.textOrderingPolicy()}
       , playbackBootstrap{playbackTransport}
       , playbackPtr{playbackBootstrap.createPlaybackService(runtime.async().callbackExecutor(), playbackSuccession)}
       , workspaceService{runtime.async().callbackExecutor(), viewService, runtime.library().changes()}
@@ -117,7 +119,8 @@ namespace ao::rt
                                                 std::move(dependencies.databasePath),
                                                 std::move(dependencies.cacheDirectory),
                                                 dependencies.musicLibraryPinnedMapBytes,
-                                                dependencies.sleeper);
+                                                dependencies.sleeper,
+                                                dependencies.textOrderingPolicy);
 
     if (!initializeRes)
     {

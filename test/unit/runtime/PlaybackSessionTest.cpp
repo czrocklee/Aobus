@@ -27,6 +27,7 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/rt/AppRuntime.h>
@@ -42,6 +43,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -151,11 +153,12 @@ namespace ao::rt::test
     auto makePlaybackSessionRuntime(ao::test::TempDir const& tempDir,
                                     QueuedExecutor*& executor,
                                     ConfigStore* playbackSessionConfigStore = nullptr,
-                                    async::Sleeper* sleeper = nullptr)
+                                    async::Sleeper* sleeper = nullptr,
+                                    TextOrderingPolicy const* textOrderingPolicy = nullptr)
     {
       auto executorPtr = std::make_unique<QueuedExecutor>();
       executor = executorPtr.get();
-      return makeRuntime(tempDir, std::move(executorPtr), playbackSessionConfigStore, sleeper);
+      return makeRuntime(tempDir, std::move(executorPtr), playbackSessionConfigStore, sleeper, textOrderingPolicy);
     }
 
     template<typename ExecutorT>
@@ -273,15 +276,16 @@ namespace ao::rt::test
       auto launchSpec = ao::test::requireValue(runtime.views().capturePlaybackLaunchSpec(viewId));
       auto const viewProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
       REQUIRE(viewProjectionPtr->size() > 0);
-      auto sessionPtr = ao::test::requireValue(
-        PlaybackCursorSession::create(std::move(launchSpec),
-                                      viewProjectionPtr->trackIdAt(0),
-                                      runtime.sources(),
-                                      runtime.musicLibrary(),
-                                      RepeatMode::Off,
-                                      ShuffleMode::Off,
-                                      [](std::span<TrackId const> const candidates)
-                                      { return candidates.empty() ? kInvalidTrackId : candidates.front(); }));
+      auto sessionPtr = ao::test::requireValue(PlaybackCursorSession::create(
+        std::move(launchSpec),
+        viewProjectionPtr->trackIdAt(0),
+        runtime.sources(),
+        runtime.musicLibrary(),
+        RepeatMode::Off,
+        ShuffleMode::Off,
+        [](std::span<TrackId const> const candidates)
+        { return candidates.empty() ? kInvalidTrackId : candidates.front(); },
+        runtime.textOrderingPolicy()));
 
       auto trackIds = std::vector<TrackId>{};
       trackIds.reserve(sessionPtr->projectionSize());
@@ -1518,6 +1522,29 @@ namespace ao::rt::test
     auto const titleOrder = std::vector{alpha, bravo, charlie};
     CHECK(projectionTrackIds(*viewProjectionPtr) == titleOrder);
     CHECK(playbackProjectionTrackIds(*runtimePtr, orderedList.viewId) == titleOrder);
+  }
+
+  TEST_CASE("PlaybackSession - view and playback reconstruction share locale order",
+            "[runtime][regression][playback-session][collation]")
+  {
+    auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    REQUIRE(policyRes);
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor, nullptr, nullptr, policyRes->get());
+    addReadyAudioProvider(*runtimePtr);
+    auto const zed = addPlayableTrack(*runtimePtr, *executor, "z");
+    auto const umlaut = addPlayableTrack(*runtimePtr, *executor, "ä");
+    auto const titleSort = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = true}};
+    auto const viewId = createView(*runtimePtr, {}, titleSort);
+    auto const viewProjectionPtr = ao::test::requireValue(runtimePtr->views().findTrackListProjection(viewId));
+
+    CHECK(projectionTrackIds(*viewProjectionPtr) == std::vector{umlaut, zed});
+    CHECK(playbackProjectionTrackIds(*runtimePtr, viewId) == std::vector{umlaut, zed});
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, umlaut));
+    REQUIRE(runtimePtr->playback().snapshot().succession.hasNext);
+    runtimePtr->playback().commands().next();
+    CHECK(runtimePtr->playback().snapshot().succession.currentTrackId == zed);
   }
 
   TEST_CASE("PlaybackSession - sorted List Gap ignores stored order changes with identical projected order",

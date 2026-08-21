@@ -40,7 +40,8 @@ namespace ao::rt
       library::MusicLibrary const& library,
       RepeatMode const repeatMode,
       ShuffleMode const shuffleMode,
-      ShuffleHistory::CandidateChooser candidateChooser)
+      ShuffleHistory::CandidateChooser candidateChooser,
+      TextOrderingPolicy const* textOrderingPolicy)
     {
       if (launchSpec.sourceListId == kInvalidListId || currentTrackId == kInvalidTrackId)
       {
@@ -80,8 +81,8 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "Playback source was invalidated during launch");
       }
 
-      auto projectionPtr =
-        std::make_unique<TrackListProjection>(kInvalidViewId, projectionSourceLease, library, launchSpec.order);
+      auto projectionPtr = std::make_unique<TrackListProjection>(
+        kInvalidViewId, projectionSourceLease, library, launchSpec.order, textOrderingPolicy);
       auto const optCurrentIndex = projectionPtr->indexOf(currentTrackId);
 
       if (optRequiredCurrentIndex && !optCurrentIndex)
@@ -111,7 +112,8 @@ namespace ao::rt
     library::MusicLibrary const& library,
     RepeatMode const repeatMode,
     ShuffleMode const shuffleMode,
-    ShuffleHistory::CandidateChooser candidateChooser)
+    ShuffleHistory::CandidateChooser candidateChooser,
+    TextOrderingPolicy const* textOrderingPolicy)
   {
     return buildSession(std::move(launchSpec),
                         startTrackId,
@@ -121,7 +123,8 @@ namespace ao::rt
                         library,
                         repeatMode,
                         shuffleMode,
-                        std::move(candidateChooser));
+                        std::move(candidateChooser),
+                        textOrderingPolicy);
   }
 
   Result<std::unique_ptr<PlaybackCursorSession>> PlaybackCursorSession::createForRestore(
@@ -132,7 +135,8 @@ namespace ao::rt
     library::MusicLibrary const& library,
     RepeatMode const repeatMode,
     ShuffleMode const shuffleMode,
-    ShuffleHistory::CandidateChooser candidateChooser)
+    ShuffleHistory::CandidateChooser candidateChooser,
+    TextOrderingPolicy const* textOrderingPolicy)
   {
     return buildSession(std::move(launchSpec),
                         currentTrackId,
@@ -142,7 +146,8 @@ namespace ao::rt
                         library,
                         repeatMode,
                         shuffleMode,
-                        std::move(candidateChooser));
+                        std::move(candidateChooser),
+                        textOrderingPolicy);
   }
 
   PlaybackCursorSession::PlaybackCursorSession(PlaybackLaunchSpec launchSpec,

@@ -33,6 +33,8 @@ namespace ao::async
 
 namespace ao::rt
 {
+  class TextOrderingPolicy;
+
   class TrackSourceCache;
   class TrackSource;
   enum class TrackSourceState : std::uint8_t;
@@ -74,7 +76,8 @@ namespace ao::rt
     ViewService(async::Executor& executor,
                 library::MusicLibrary const& library,
                 TrackSourceCache& sources,
-                LibraryChanges const& changes);
+                LibraryChanges const& changes,
+                TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;

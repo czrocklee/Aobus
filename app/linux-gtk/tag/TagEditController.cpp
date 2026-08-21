@@ -167,7 +167,8 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), _textCatalog, selection.selectedIds);
+    _tagPopoverPtr = std::make_unique<TagPopover>(
+      _runtime.library(), _textCatalog, selection.selectedIds, _runtime.textOrderingPolicy());
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -278,7 +279,7 @@ namespace ao::gtk
               });
 
     auto const lists = _runtime.library().reader().lists();
-    auto const targets = uimodel::writableTagListTargets(lists);
+    auto const targets = uimodel::writableTagListTargets(lists, _runtime.textOrderingPolicy());
     auto addToListMenuPtr = Gio::Menu::create();
     std::size_t addTargetCount = 0;
     auto const activeListId = _optActiveSelection ? _optActiveSelection->listId : rt::kAllTracksListId;
@@ -502,7 +503,8 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), _textCatalog, selectedIds);
+    _tagPopoverPtr =
+      std::make_unique<TagPopover>(_runtime.library(), _textCatalog, selectedIds, _runtime.textOrderingPolicy());
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)

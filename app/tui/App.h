@@ -14,6 +14,11 @@ namespace ao::uimodel
   class PresentationTextCatalog;
 }
 
+namespace ao::rt
+{
+  class TextOrderingPolicy;
+}
+
 namespace ao::tui
 {
   class TuiTextCatalog;
@@ -28,5 +33,6 @@ namespace ao::tui
 
   std::int32_t run(AppOptions const& options,
                    uimodel::PresentationTextCatalog const& textCatalog,
-                   TuiTextCatalog const& tuiTextCatalog);
+                   TuiTextCatalog const& tuiTextCatalog,
+                   rt::TextOrderingPolicy const& textOrderingPolicy);
 } // namespace ao::tui

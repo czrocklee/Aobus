@@ -12,6 +12,7 @@ from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import build as build_command
 from ao.command import check as check_command
 from ao.command import coverage as coverage_command
+from ao.command import perf as perf_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
 from ao.command import tidy as tidy_command
@@ -145,6 +146,7 @@ class CliParseTest(unittest.TestCase):
             "analyze",
             "format",
             "hygiene",
+            "perf",
             "run",
         ):
             self.assertIn(command, buffer.getvalue())
@@ -156,6 +158,168 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.flavor, "release")
         self.assertTrue(args.clang)
         self.assertEqual(args.target, ["aobus-gtk"])
+
+    def test_perf_arguments_default_to_release_review_sampling(self):
+        args = self.parse(["perf"])
+
+        self.assertEqual(args.flavor, "release")
+        self.assertEqual(args.samples, 20)
+        self.assertEqual(args.warmups, 1)
+        self.assertEqual(args.filter, "[perf][review]")
+        self.assertIsNone(args.library_root)
+        self.assertEqual(args.library_locale, "en-US")
+
+        buffer = io.StringIO()
+        with self.assertRaises(SystemExit), contextlib.redirect_stdout(buffer):
+            self.parse(["perf", "--help"])
+        self.assertIn("build flavor (default: release)", buffer.getvalue())
+
+    def test_perf_rejects_invalid_sampling_counts(self):
+        for arguments in (["perf", "--samples", "0"], ["perf", "--warmups", "-1"]):
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(SystemExit):
+                    self.parse(arguments)
+
+    def test_perf_rejects_missing_library_root_before_build(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            missing = Path(temp_dir) / "missing"
+            args = self.parse(["perf", "--library-root", str(missing)])
+
+            with self.assertRaises(SystemExit):
+                perf_command.run_command(args)
+
+    def test_perf_builds_and_runs_the_standalone_target(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "review.json"
+            executable = Path(temp_dir) / "test" / "ao_perf_baseline"
+            executable.parent.mkdir()
+            executable.touch()
+            args = self.parse(
+                [
+                    "perf",
+                    "-p",
+                    temp_dir,
+                    "--samples",
+                    "24",
+                    "--warmups",
+                    "2",
+                    "--library-root",
+                    temp_dir,
+                    "--library-locale",
+                    "de-DE",
+                    "--output",
+                    str(output),
+                ]
+            )
+            build_result = BuildResult(
+                build_dir=Path(temp_dir),
+                log=Path(temp_dir) / "build.log",
+                compiler="gcc",
+                preset="linux-release",
+            )
+
+            def write_report(_argv, *, env, **_kwargs):
+                Path(env["AOBUS_PERF_REPORT_JSON"]).write_text(
+                    json.dumps(
+                        {
+                            "schema": "aobus-performance-review/v1",
+                            "metadata": {
+                                "platform": "linux",
+                                "build_mode": "release",
+                                "compiler": "gcc",
+                                "icu_version": "78.3",
+                            },
+                            "measurements": [],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return 0
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+                with mock.patch.object(perf_command.build, "do_build", return_value=build_result) as do_build:
+                    with mock.patch.object(perf_command, "_revision", return_value="abc123"):
+                        with mock.patch.object(perf_command, "run", side_effect=write_report) as run:
+                            self.assertEqual(perf_command.run_command(args), 0)
+
+        do_build.assert_called_once_with(args, ["ao_perf_baseline"])
+        command = run.call_args.args[0]
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(command, [str(executable), "[perf][review]"])
+        self.assertEqual(environment["AOBUS_PERF_SAMPLES"], "24")
+        self.assertEqual(environment["AOBUS_PERF_WARMUPS"], "2")
+        self.assertEqual(environment["AOBUS_PERF_REVISION"], "abc123")
+        self.assertEqual(environment["AOBUS_PERF_BUILD_MODE"], "release")
+        self.assertEqual(environment["AOBUS_PERF_LIBRARY_ROOT"], temp_dir)
+        self.assertEqual(environment["AOBUS_PERF_LIBRARY_LOCALE"], "de-DE")
+
+    def test_perf_rejects_a_stale_report_when_the_workload_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "review.json"
+            output.write_text("stale report", encoding="utf-8")
+            executable = Path(temp_dir) / "test" / "ao_perf_baseline"
+            executable.parent.mkdir()
+            executable.touch()
+            args = self.parse(
+                [
+                    "perf",
+                    "--no-build",
+                    "-p",
+                    temp_dir,
+                    "--filter",
+                    "[perf][unit][baseline][unicode]",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            def succeed_without_report(_argv, *, env, **_kwargs):
+                self.assertFalse(Path(env["AOBUS_PERF_REPORT_JSON"]).exists())
+                return 0
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+                with mock.patch.object(perf_command, "_revision", return_value="abc123"):
+                    with mock.patch.object(perf_command, "run", side_effect=succeed_without_report):
+                        with self.assertRaises(SystemExit):
+                            perf_command.run_command(args)
+
+            self.assertFalse(output.exists())
+
+    def test_perf_summary_distinguishes_measurement_locales(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "review.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "aobus-performance-review/v1",
+                        "metadata": {
+                            "platform": "linux",
+                            "build_mode": "release",
+                            "compiler": "gcc",
+                            "icu_version": "78.3",
+                        },
+                        "measurements": [
+                            {
+                                "policy": "icu-secondary",
+                                "scenario": "construction",
+                                "locale": "de-DE",
+                                "dataset": "none",
+                                "track_count": 0,
+                                "median_ns": 125_000,
+                                "p95_ns": 250_000,
+                                "generated_key_bytes": 0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                perf_command._print_report(report_path)
+
+        self.assertIn("icu-secondary/construction/de-DE/none-0", output.getvalue())
 
     def test_removed_optimization_flavors_are_rejected(self):
         commands = (
@@ -483,7 +647,7 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_not_called()
 
-    def test_release_check_runs_the_same_all_suite_group(self):
+    def test_release_check_builds_the_default_graph_and_performance_target(self):
         args = self.parse(["check", "release"])
         result = BuildResult(
             build_dir=Path("/tmp/aobus-release-build"),
@@ -499,7 +663,7 @@ class CliParseTest(unittest.TestCase):
                         with mock.patch.object(check_command.build, "print_summary"):
                             self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=[])
+        do_build.assert_called_once_with(args, targets=["all", "ao_perf_baseline"])
         verify.assert_called_once_with(result.build_dir)
         run_suites.assert_called_once_with(
             test_command.SUITE_GROUPS["all"],
@@ -591,7 +755,7 @@ class CliParseTest(unittest.TestCase):
 
         self.assertEqual(
             do_build.call_args_list,
-            [mock.call(args, targets=[]), mock.call(mock.ANY, targets=["winui"])],
+            [mock.call(args, targets=["all", "ao_perf_baseline"]), mock.call(mock.ANY, targets=["winui"])],
         )
         self.assertEqual(
             verify.call_args_list,

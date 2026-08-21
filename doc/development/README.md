@@ -39,6 +39,7 @@ Use the [development guide template](../template/development.md) for a new contr
 - [Coverage workflow](test/coverage-workflow.md) defines measurement, analysis, test selection, and verification.
 - [Validation and review](test/validation-and-review.md) defines file integration, regression expectations, gates, smells, and review checks.
 - [Test suites](test/test-suite.md) enumerates the `./ao test` suites and suite groups.
+- [Performance review](test/performance.md) defines the standalone sampled benchmark and structured evidence workflow.
 
 ## Application layers
 

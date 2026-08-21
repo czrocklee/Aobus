@@ -6,6 +6,7 @@
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -84,7 +85,10 @@ namespace ao::rt::test
 
     auto sourcePtr = makeMutableTrackSource(trackIds);
     auto const presentation = groupedPresentation();
-    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    REQUIRE(policyRes);
+    auto projection =
+      TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library(), policyRes->get()};
     projection.setPresentation(presentation);
     auto const before = projection.operationCounts();
     auto random = std::mt19937{0xA0B05U}; // NOLINT(bugprone-random-generator-seed) -- deterministic replay.
@@ -154,7 +158,8 @@ namespace ao::rt::test
         }
       }
 
-      auto oracle = TrackListProjection{ViewId{2}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+      auto oracle =
+        TrackListProjection{ViewId{2}, TrackSourceLease{sourcePtr}, libraryFixture.library(), policyRes->get()};
       oracle.setPresentation(presentation);
       checkProjectionMatches(projection, oracle);
     }

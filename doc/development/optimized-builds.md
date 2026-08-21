@@ -113,6 +113,7 @@ The Release check builds and tests the native Release graph with IPO and builds 
 Smoke each affected executable from its Release tree or configuration.
 
 For a change justified by runtime performance, measure the same stable workload in the normal `release` flavor before and after the change.
+Use the [performance-review workflow](test/performance.md) when the workload is covered by the standalone review target.
 Record benchmark output together with binary size, clean-build cost, one-file relink cost, and peak link memory when those measurements inform a design or tooling decision.
 Machine-dependent build metrics are review evidence rather than fixed cross-host thresholds.
 

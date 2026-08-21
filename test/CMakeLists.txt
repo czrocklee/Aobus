@@ -208,6 +208,7 @@ add_executable(ao_core_test
 
     # localization foundation tests
     unit/i18n/CatalogPatternTest.cpp
+    unit/i18n/IcuTextOrderingTest.cpp
     unit/i18n/MessageCatalogTest.cpp
 
     # query tests
@@ -610,6 +611,7 @@ target_link_libraries(ao_core_test PRIVATE
     ao_app_desktop
     ao_app_uimodel
     ao_app_i18n
+    ao_app_i18n_ordering
     ao_catalog_pattern
     ao_unicode_text
     ao_test_support_presentation
@@ -892,6 +894,7 @@ add_executable(ao_gtk_test
 
 target_link_libraries(ao_gtk_test PRIVATE
     aobus-gtk-lib
+    ao_app_i18n_ordering
     ao_fatal_probe_support
     ao_test_support_gtk
     ao_test_support_runtime
@@ -908,13 +911,15 @@ add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
 endif()
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
-add_executable(ao_perf_baseline
+add_executable(ao_perf_baseline EXCLUDE_FROM_ALL
     perf/CompletionVocabularyBaselineTest.cpp
+    perf/OrderingPerformanceReviewTest.cpp
     perf/PerformanceBaselineTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_perf_baseline)
 
 target_link_libraries(ao_perf_baseline PRIVATE
+    ao_app_i18n_ordering
     ao_app_uimodel
     ao_test_support_runtime
     ao_test_options

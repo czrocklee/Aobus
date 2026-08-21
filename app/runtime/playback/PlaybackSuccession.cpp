@@ -91,13 +91,15 @@ namespace ao::rt
          library::MusicLibrary const& library,
          PlaybackTransport& transport,
          NotificationService& notifications,
-         async::Runtime& asyncRuntime)
+         async::Runtime& asyncRuntime,
+         TextOrderingPolicy const* orderingPolicy)
       : executor{executor}
       , views{views}
       , sources{sources}
       , library{library}
       , transport{transport}
       , notifications{notifications}
+      , textOrderingPolicy{orderingPolicy}
       , restartDeadline{asyncRuntime,
                         [this] { return this->transport.elapsed(); },
                         [this](bool const available) { handleRestartAvailabilityChanged(available); }}
@@ -1024,6 +1026,7 @@ namespace ao::rt
     library::MusicLibrary const& library;
     PlaybackTransport& transport;
     NotificationService& notifications;
+    TextOrderingPolicy const* textOrderingPolicy = nullptr;
     PlaybackSuccessionState state{};
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
@@ -1063,8 +1066,10 @@ namespace ao::rt
                                          library::MusicLibrary const& library,
                                          PlaybackTransport& transport,
                                          NotificationService& notifications,
-                                         async::Runtime& asyncRuntime)
-    : _implPtr{std::make_unique<Impl>(executor, views, sources, library, transport, notifications, asyncRuntime)}
+                                         async::Runtime& asyncRuntime,
+                                         TextOrderingPolicy const* textOrderingPolicy)
+    : _implPtr{std::make_unique<
+        Impl>(executor, views, sources, library, transport, notifications, asyncRuntime, textOrderingPolicy)}
   {
     _implPtr->start();
   }
@@ -1090,7 +1095,8 @@ namespace ao::rt
                                                              impl->library,
                                                              impl->repeatMode,
                                                              impl->shuffleMode,
-                                                             impl->makeCandidateChooser());
+                                                             impl->makeCandidateChooser(),
+                                                             impl->textOrderingPolicy);
 
     if (!candidateSessionRes)
     {
@@ -1308,7 +1314,8 @@ namespace ao::rt
                                                    impl->library,
                                                    restoredRepeatMode,
                                                    restoredShuffleMode,
-                                                   impl->makeCandidateChooser());
+                                                   impl->makeCandidateChooser(),
+                                                   impl->textOrderingPolicy);
   }
 
   // Every accepted restore step is part of this noexcept commit.

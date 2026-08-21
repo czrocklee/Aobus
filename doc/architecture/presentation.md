@@ -69,10 +69,25 @@ Borrowed catalog views point into shared immutable storage retained by `Presenta
 
 Interactive process roots also own one leaf `MessageCatalog` selected from the operating-system locale before frontend construction.
 That facade is the governed ICU localization and formatting boundary; it backs the shared UIModel semantic surface and each frontend-local slice as migration proceeds.
-The implementation depends on ICU i18n without moving that dependency into runtime, UIModel, Core, or CLI.
 GTK, TUI, and WinUI retain the catalog for their process lifetime; there is no mutable process-global locale service.
 Frontend-specific vocabulary stays at the leaves: GTK and TUI eagerly derive immutable typed catalogs for dense closed surfaces and use canonical typed ids through the injected shared resolver for one-to-one messages, while WinUI uses generated MRT resources selected by the same canonical locale.
 Stable action names, command syntax, and shortcut tokens remain untranslated identities and enter localized patterns only as arguments.
+
+Those roots also construct one locale-aware text-ordering policy from the
+catalog's canonical requested locale. Runtime and UIModel consumers receive an
+ICU-free `TextOrderingPolicy` interface; the concrete adapter remains in the
+leaf `ao_app_i18n_ordering` target beside, but independent of, the message
+catalog capability. Display text, locale-independent group identity, and
+locale-dependent ordering keys remain separate values. Ordering keys are
+transient binary data owned by the consuming projection or vocabulary
+operation and never become library or session state. GTK, TUI, and WinUI retain
+the policy for the lifetime of every runtime that borrows it.
+
+The CLI constructs neither an interactive catalog nor an ordering policy. Its
+target graph excludes both leaf implementations and ICU i18n, while consumers
+retain their deterministic non-locale fallback when no policy is supplied. This keeps the
+dependency boundary structural without moving ICU types into runtime, UIModel,
+Core, or CLI.
 
 Runtime track-group snapshots retain raw text, numeric years, empty slots, and typed missing-value kinds until UIModel resolves the three heading slots.
 Runtime completion items retain query syntax, rank, and typed detail roles or frequency counts.
@@ -196,6 +211,9 @@ Its structured automation DTOs are unversioned source-level contracts; field cha
 - Core and runtime expose machine identities, structured absence, typed report/progress intent, and raw external data; shared authored copy resolves only after crossing into UIModel.
 - Query syntax, persisted ids, user-authored names, metadata, paths, operating-system device descriptions, diagnostics, and command-scoped CLI output remain source data rather than catalog copy.
 - Interactive localization is a leaf capability linked by GTK, TUI, and WinUI only; CLI source and final link closure exclude the catalog implementation and ICU i18n.
+- Interactive locale ordering is a separate leaf capability linked by GTK,
+  TUI, and WinUI only; consumers depend on the runtime policy interface and
+  retain transient keys rather than locale services or ICU objects.
 - Equivalent cross-frontend behavior uses the same runtime/UIModel authority instead of parallel frontend policy.
 - Shared reporting presentation consumes the canonical runtime feed-update stream; GTK and TUI do not reconstruct mutation ordering from independent event types.
 - List-navigation effective parents and sibling order come from one UIModel projection; GTK and TUI only adapt that tree to their native row models.

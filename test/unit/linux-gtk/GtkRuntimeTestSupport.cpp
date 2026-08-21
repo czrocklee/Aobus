@@ -44,7 +44,8 @@ namespace ao::gtk::test
 
   struct GtkRuntimeFixture::State final
   {
-    explicit State(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
+    explicit State(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                   rt::TextOrderingPolicy const* const textOrderingPolicy)
     {
       auto const musicRoot = tempDir.path() / "music";
       auto const databasePath = tempDir.path() / "db";
@@ -68,6 +69,7 @@ namespace ao::gtk::test
         .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
         .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::move(configStorePtr),
+        .textOrderingPolicy = textOrderingPolicy,
       }));
     }
 
@@ -75,8 +77,9 @@ namespace ao::gtk::test
     std::unique_ptr<rt::AppRuntime> runtimePtr;
   };
 
-  GtkRuntimeFixture::GtkRuntimeFixture(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
-    : _statePtr{std::make_unique<State>(std::move(initializeLibrary))}
+  GtkRuntimeFixture::GtkRuntimeFixture(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                                       rt::TextOrderingPolicy const* const textOrderingPolicy)
+    : _statePtr{std::make_unique<State>(std::move(initializeLibrary), textOrderingPolicy)}
   {
   }
 
@@ -98,7 +101,8 @@ namespace ao::gtk::test
   }
 
   std::unique_ptr<rt::AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
-                                              std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
+                                              std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                                              rt::TextOrderingPolicy const* const textOrderingPolicy)
   {
     auto const databasePath = rt::LibraryPaths{tempDir.path()}.databasePath();
 
@@ -116,6 +120,7 @@ namespace ao::gtk::test
       .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
+      .textOrderingPolicy = textOrderingPolicy,
     }));
   }
 

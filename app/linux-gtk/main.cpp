@@ -22,6 +22,7 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/ConfigStore.h>
@@ -520,6 +521,7 @@ namespace
                          std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr,
                          uimodel::PresentationTextCatalog const& textCatalog,
                          GtkTextCatalog const& gtkTextCatalog,
+                         rt::TextOrderingPolicy const& textOrderingPolicy,
                          GtkStartupPlan const& startupPlan,
                          std::optional<LibraryRestartRequest>& optRestartRequest,
                          std::optional<std::string>& optDiagnosticMessage,
@@ -555,7 +557,8 @@ namespace
                            shellLayoutStorePtr,
                            componentStateStorePtr,
                            textCatalog,
-                           gtkTextCatalog);
+                           gtkTextCatalog,
+                           &textOrderingPolicy);
 
     if (!windowRes)
     {
@@ -629,7 +632,8 @@ namespace
   RunAppResult runApp(std::span<char*> args,
                       ProcessSignalHandlers& processSignalHandlers,
                       uimodel::PresentationTextCatalog const& textCatalog,
-                      GtkTextCatalog const& gtkTextCatalog)
+                      GtkTextCatalog const& gtkTextCatalog,
+                      rt::TextOrderingPolicy const& textOrderingPolicy)
   {
     auto argumentViews = std::vector<std::string_view>{};
     argumentViews.reserve(args.size());
@@ -764,6 +768,7 @@ namespace
        componentStateStorePtr,
        &textCatalog,
        &gtkTextCatalog,
+       &textOrderingPolicy,
        &startupPlan,
        &optRestartRequest,
        &optDiagnosticMessage,
@@ -778,6 +783,7 @@ namespace
                           componentStateStorePtr,
                           textCatalog,
                           gtkTextCatalog,
+                          textOrderingPolicy,
                           startupPlan,
                           optRestartRequest,
                           optDiagnosticMessage,
@@ -860,9 +866,21 @@ int main(int argc, char* argv[])
     }
 
     auto catalog = std::move(*catalogRes);
+    auto textOrderingPolicyRes = i18n::createIcuTextOrderingPolicy(catalog.requestedLocale());
+
+    if (!textOrderingPolicyRes)
+    {
+      AO_FATAL("Could not initialize GTK text ordering: {}", textOrderingPolicyRes.error().message);
+    }
+
+    auto textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
     auto const textCatalog = uimodel::PresentationTextCatalog{catalog};
     auto const gtkTextCatalog = GtkTextCatalog{catalog};
-    auto result = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers, textCatalog, gtkTextCatalog);
+    auto result = runApp({argv, static_cast<std::size_t>(argc)},
+                         processSignalHandlers,
+                         textCatalog,
+                         gtkTextCatalog,
+                         *textOrderingPolicyPtr);
     processSignalHandlers.uninstall();
 
     if (result.optRestartRequest)

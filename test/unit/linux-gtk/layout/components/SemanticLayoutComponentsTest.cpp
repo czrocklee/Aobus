@@ -28,6 +28,7 @@
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
@@ -83,6 +84,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
   using ao::gtk::test::collectAll;
+  using ao::gtk::test::directChildLabelTextsByClass;
   using ao::gtk::test::drainGtkEvents;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findButtonByLabel;
@@ -476,6 +478,35 @@ namespace ao::gtk::layout::test
 
     CHECK(scope.snapshot().trackIds == snapshot.trackIds);
     CHECK(componentPtr->widget().get_visible());
+  }
+
+  TEST_CASE("TrackTagEditorComponent - forwards runtime text order to tag suggestions",
+            "[gtk][unit][layout-component][collation]")
+  {
+    auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    REQUIRE(policyRes);
+    auto policyPtr = std::move(*policyRes);
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.tag_editor_collation_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      {
+        trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Tag Target"});
+        library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Zulu Tag Source", .tags = {"z"}});
+        library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Umlaut Tag Source", .tags = {"ä"}});
+      },
+      "de",
+      policyPtr.get()};
+    auto snapshot = rt::TrackDetailSnapshot{};
+    snapshot.selectionKind = rt::SelectionKind::Single;
+    snapshot.trackIds = {trackId};
+    fixture.attachTrackDetailScope(std::move(snapshot));
+
+    auto const componentPtr = fixture.create(LayoutNode{.type = "track.tagEditor"});
+    REQUIRE(componentPtr != nullptr);
+    auto* const editor = dynamic_cast<TagEditor*>(&componentPtr->widget());
+    REQUIRE(editor != nullptr);
+    CHECK(directChildLabelTextsByClass(*editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ä", "z"});
   }
 
   TEST_CASE("TrackTagEditorComponent - fallback reports a stale tag submission",

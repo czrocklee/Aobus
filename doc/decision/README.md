@@ -29,6 +29,7 @@ Use the [decision template](../template/decision.md).
 - [Decision 0010: never write to an audio file](0010-never-write-to-audio-files.md)
 - [Decision 0011: adopt ICU for Unicode text](0011-adopt-icu-for-unicode-text.md)
 - [Decision 0012: adopt ICU resource catalogs](0012-adopt-icu-resource-catalogs.md)
+- [Decision 0013: adopt ICU collation](0013-adopt-icu-collation.md)
 
 ## Superseded decisions
 

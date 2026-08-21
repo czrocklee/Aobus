@@ -110,7 +110,8 @@ namespace ao::rt
                                                        std::string const& filterExpression,
                                                        TrackPresentationSpec const& presentation,
                                                        library::MusicLibrary const& library,
-                                                       TrackSourceCache& sources)
+                                                       TrackSourceCache& sources,
+                                                       TextOrderingPolicy const* textOrderingPolicy)
     {
       auto activeSourceLease = baseSourceLease;
       auto optFilterError = sources.sourceError(baseSourceLease);
@@ -132,7 +133,8 @@ namespace ao::rt
         }
       }
 
-      auto projectionPtr = std::make_shared<TrackListProjection>(viewId, activeSourceLease, library);
+      auto projectionPtr =
+        std::make_shared<TrackListProjection>(viewId, activeSourceLease, library, textOrderingPolicy);
       projectionPtr->setPresentation(presentation);
 
       return PreparedViewResources{
@@ -188,12 +190,14 @@ namespace ao::rt
     async::Executor& executor;
     library::MusicLibrary const& library;
     TrackSourceCache& sources;
+    TextOrderingPolicy const* textOrderingPolicy = nullptr;
 
     Impl(async::Executor& exec,
          library::MusicLibrary const& lib,
          TrackSourceCache& sourceCache,
-         LibraryChanges const& changes)
-      : executor{exec}, library{lib}, sources{sourceCache}
+         LibraryChanges const& changes,
+         TextOrderingPolicy const* orderingPolicy)
+      : executor{exec}, library{lib}, sources{sourceCache}, textOrderingPolicy{orderingPolicy}
     {
       libraryChangesSubscription = changes.onChanged([this](LibraryChangeSet const&) { refreshFilterErrors(); });
     }
@@ -233,8 +237,9 @@ namespace ao::rt
   ViewService::ViewService(async::Executor& executor,
                            library::MusicLibrary const& library,
                            TrackSourceCache& sources,
-                           LibraryChanges const& changes)
-    : _implPtr{std::make_unique<Impl>(executor, library, sources, changes)}
+                           LibraryChanges const& changes,
+                           TextOrderingPolicy const* textOrderingPolicy)
+    : _implPtr{std::make_unique<Impl>(executor, library, sources, changes, textOrderingPolicy)}
   {
   }
 
@@ -285,7 +290,8 @@ namespace ao::rt
                                              initial.filterExpression,
                                              presentation,
                                              _implPtr->library,
-                                             _implPtr->sources);
+                                             _implPtr->sources,
+                                             _implPtr->textOrderingPolicy);
 
     if (!resourcesRes)
     {
@@ -344,7 +350,8 @@ namespace ao::rt
                                              filterExpression,
                                              entry.state.presentation,
                                              _implPtr->library,
-                                             _implPtr->sources);
+                                             _implPtr->sources,
+                                             _implPtr->textOrderingPolicy);
 
     if (!resourcesRes)
     {

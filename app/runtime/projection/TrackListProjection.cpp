@@ -17,12 +17,14 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/rt/projection/TrackProjectionEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/String.h>
 #include <ao/utility/StringArena.h>
+#include <ao/utility/UnicodeText.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
@@ -56,6 +58,7 @@ namespace ao::rt
     constexpr std::size_t kMinimumArenaRebaseBytes = std::size_t{64} * 1024U;
     constexpr std::size_t kMinimumRowsBetweenRebases = 256;
     constexpr std::size_t kRebaseChurnDivisor = 4;
+    constexpr unsigned char kAsciiMax = 0x7fU;
 
     struct SortKeys final
     {
@@ -163,8 +166,6 @@ namespace ao::rt
       return text;
     }
 
-    // Fold ASCII into caller-owned scratch storage. UTF-8 bytes remain unchanged;
-    // full Unicode case folding belongs to the later Unicode text facade.
     void foldAsciiInto(std::string& out, std::string_view text)
     {
       out.clear();
@@ -176,11 +177,42 @@ namespace ao::rt
       }
     }
 
+    bool isAsciiText(std::string_view const text)
+    {
+      return std::ranges::all_of(text, [](char const ch) { return static_cast<unsigned char>(ch) <= kAsciiMax; });
+    }
+
+    void makeGroupIdentityKeyInto(std::string& out, std::string_view const text)
+    {
+      if (isAsciiText(text))
+      {
+        foldAsciiInto(out, text);
+        return;
+      }
+
+      auto keyRes = utility::makeUtf8CaselessKey(text);
+      AO_INVARIANT(
+        keyRes.has_value(), "Admitted projection text failed Unicode identity folding: {}", keyRes.error().message);
+      out = std::move(*keyRes);
+    }
+
     // Article removal is ordering policy only. Group identity is built from the
     // unstripped text so values such as "The Doors" and "Doors" remain distinct.
-    void makeSortKeyInto(std::string& out, std::string_view text)
+    void makeOrderingKeyInto(std::string& out,
+                             std::string_view const text,
+                             TextOrderingPolicy const* const textOrderingPolicy)
     {
-      foldAsciiInto(out, stripLeadingArticle(text));
+      auto const orderingText = stripLeadingArticle(text);
+
+      if (textOrderingPolicy == nullptr)
+      {
+        makeGroupIdentityKeyInto(out, orderingText);
+        return;
+      }
+
+      auto const keyRes = textOrderingPolicy->makeSortKeyInto(out, orderingText);
+      AO_INVARIANT(
+        keyRes.has_value(), "Admitted projection text failed locale sort-key derivation: {}", keyRes.error().message);
     }
 
     bool isColdDataRequiredForSortField(TrackSortField field)
@@ -446,7 +478,8 @@ namespace ao::rt
                                               utility::StringArena& arena,
                                               std::string& scratch,
                                               library::DictionaryStore const& dictionary,
-                                              DictionaryId id)
+                                              DictionaryId id,
+                                              TextOrderingPolicy const* textOrderingPolicy)
     {
       if (auto const it = textCache.find(id); it != textCache.end())
       {
@@ -454,14 +487,14 @@ namespace ao::rt
       }
 
       auto const raw = dictionary.getOrDefault(id);
-      foldAsciiInto(scratch, raw);
+      makeGroupIdentityKeyInto(scratch, raw);
       auto const identityKey = arena.intern(scratch);
       auto const sortText = stripLeadingArticle(raw);
       auto sortKey = identityKey;
 
-      if (sortText.size() != raw.size())
+      if (textOrderingPolicy != nullptr || sortText.size() != raw.size())
       {
-        foldAsciiInto(scratch, sortText);
+        makeOrderingKeyInto(scratch, raw, textOrderingPolicy);
         sortKey = arena.intern(scratch);
       }
 
@@ -481,10 +514,11 @@ namespace ao::rt
                      TrackSortField const field,
                      DictionaryTextCache& textCache,
                      utility::StringArena& arena,
-                     std::string& scratch)
+                     std::string& scratch,
+                     TextOrderingPolicy const* textOrderingPolicy)
     {
       auto const sortText = [&](DictionaryId id) -> std::string_view
-      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id).sortKey; };
+      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id, textOrderingPolicy).sortKey; };
 
       switch (field)
       {
@@ -494,7 +528,7 @@ namespace ao::rt
         case TrackSortField::Movement: keys.movementNumber = view.classical().movementNumber(); break;
         case TrackSortField::Duration: keys.duration = view.property().duration(); break;
         case TrackSortField::Title:
-          makeSortKeyInto(scratch, view.metadata().title());
+          makeOrderingKeyInto(scratch, view.metadata().title(), textOrderingPolicy);
           keys.titleKey = arena.intern(scratch);
           break;
         case TrackSortField::Artist: keys.artistKey = sortText(view.metadata().artistId()); break;
@@ -516,18 +550,19 @@ namespace ao::rt
                       TrackGroupKey const groupBy,
                       DictionaryTextCache& textCache,
                       utility::StringArena& arena,
-                      std::string& scratch)
+                      std::string& scratch,
+                      TextOrderingPolicy const* textOrderingPolicy)
     {
       for (auto const& term : sortBy)
       {
-        fillSortKey(keys, view, dictionary, term.field, textCache, arena, scratch);
+        fillSortKey(keys, view, dictionary, term.field, textCache, arena, scratch, textOrderingPolicy);
       }
 
       for (auto const field : groupSortFields(groupBy))
       {
         if (!std::ranges::contains(sortBy, field, &TrackSortTerm::field))
         {
-          fillSortKey(keys, view, dictionary, field, textCache, arena, scratch);
+          fillSortKey(keys, view, dictionary, field, textCache, arena, scratch, textOrderingPolicy);
         }
       }
     }
@@ -545,10 +580,11 @@ namespace ao::rt
                            TrackGroupKey groupBy,
                            DictionaryTextCache& textCache,
                            utility::StringArena& arena,
-                           std::string& scratch)
+                           std::string& scratch,
+                           TextOrderingPolicy const* textOrderingPolicy)
     {
       auto const dictionaryText = [&](DictionaryId id)
-      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id); };
+      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id, textOrderingPolicy); };
 
       switch (groupBy)
       {
@@ -689,6 +725,7 @@ namespace ao::rt
     ViewId viewId;
     TrackSourceLease sourceLease;
     library::MusicLibrary const& library;
+    TextOrderingPolicy const* textOrderingPolicy = nullptr;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
     std::string presentationId = std::string{kDefaultTrackPresentationId};
@@ -722,11 +759,20 @@ namespace ao::rt
     OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore const& dictionary)
     {
       auto entry = OrderEntry{.trackId = id};
-      fillSortKeys(entry.keys, view, dictionary, sortBy, groupBy, dictionaryTextCache, stringArena, normScratch);
+      fillSortKeys(entry.keys,
+                   view,
+                   dictionary,
+                   sortBy,
+                   groupBy,
+                   dictionaryTextCache,
+                   stringArena,
+                   normScratch,
+                   textOrderingPolicy);
 
       if (groupBy != TrackGroupKey::None)
       {
-        fillGroupMetadata(entry, view, dictionary, groupBy, dictionaryTextCache, stringArena, normScratch);
+        fillGroupMetadata(
+          entry, view, dictionary, groupBy, dictionaryTextCache, stringArena, normScratch, textOrderingPolicy);
       }
 
       return entry;
@@ -735,10 +781,12 @@ namespace ao::rt
     Impl(ViewId vid,
          TrackSourceLease trackSourceLease,
          library::MusicLibrary const& lib,
-         std::vector<TrackSortTerm> initialSort = {})
+         std::vector<TrackSortTerm> initialSort,
+         TextOrderingPolicy const* orderingPolicy)
       : viewId{vid}
       , sourceLease{std::move(trackSourceLease)}
       , library{lib}
+      , textOrderingPolicy{orderingPolicy}
       , sortBy{std::move(initialSort)}
       , comparator{buildComparator(sortBy, groupBy)}
       , loadMode{computeLoadMode(sortBy, groupBy)}
@@ -1444,8 +1492,13 @@ namespace ao::rt
 
   TrackListProjection::TrackListProjection(ViewId viewId,
                                            TrackSourceLease sourceLease,
-                                           library::MusicLibrary const& library)
-    : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library)}
+                                           library::MusicLibrary const& library,
+                                           TextOrderingPolicy const* textOrderingPolicy)
+    : _implPtr{std::make_unique<Impl>(viewId,
+                                      std::move(sourceLease),
+                                      library,
+                                      std::vector<TrackSortTerm>{},
+                                      textOrderingPolicy)}
   {
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
       [impl = _implPtr.get()](TrackSourceDelta const& batch) { impl->handleSourceBatch(batch); });
@@ -1454,8 +1507,9 @@ namespace ao::rt
   TrackListProjection::TrackListProjection(ViewId viewId,
                                            TrackSourceLease sourceLease,
                                            library::MusicLibrary const& library,
-                                           TrackOrderSpec const& order)
-    : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library, order.sortBy)}
+                                           TrackOrderSpec const& order,
+                                           TextOrderingPolicy const* textOrderingPolicy)
+    : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library, order.sortBy, textOrderingPolicy)}
   {
     AO_EXPECTS(viewId == kInvalidViewId, "Detached track-list projection requires an invalid view id");
 

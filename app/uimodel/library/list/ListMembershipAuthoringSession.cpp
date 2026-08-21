@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/query/Expression.h>
@@ -12,6 +13,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
@@ -33,7 +35,8 @@ namespace ao::uimodel
     }
   } // namespace
 
-  std::vector<WritableTagListTarget> writableTagListTargets(std::span<rt::ListNode const> const lists)
+  std::vector<WritableTagListTarget> writableTagListTargets(std::span<rt::ListNode const> const lists,
+                                                            rt::TextOrderingPolicy const* const textOrderingPolicy)
   {
     auto result = std::vector<WritableTagListTarget>{};
 
@@ -49,16 +52,57 @@ namespace ao::uimodel
       }
     }
 
-    std::ranges::sort(result,
-                      [](WritableTagListTarget const& lhs, WritableTagListTarget const& rhs)
-                      {
-                        if (lhs.name != rhs.name)
+    if (textOrderingPolicy == nullptr)
+    {
+      std::ranges::sort(result,
+                        [](WritableTagListTarget const& lhs, WritableTagListTarget const& rhs)
                         {
-                          return lhs.name < rhs.name;
+                          if (lhs.name != rhs.name)
+                          {
+                            return lhs.name < rhs.name;
+                          }
+
+                          return lhs.listId < rhs.listId;
+                        });
+      return result;
+    }
+
+    struct OrderedTarget final
+    {
+      WritableTagListTarget target;
+      std::string sortKey;
+    };
+
+    auto ordered = std::vector<OrderedTarget>{};
+    ordered.reserve(result.size());
+
+    for (auto& target : result)
+    {
+      auto sortKey = std::string{};
+      auto const keyRes = textOrderingPolicy->makeSortKeyInto(sortKey, target.name);
+      AO_INVARIANT(
+        keyRes.has_value(), "Admitted List name failed locale sort-key derivation: {}", keyRes.error().message);
+      ordered.push_back(OrderedTarget{.target = std::move(target), .sortKey = std::move(sortKey)});
+    }
+
+    std::ranges::sort(ordered,
+                      [](OrderedTarget const& lhs, OrderedTarget const& rhs)
+                      {
+                        if (auto const sortKeyOrder = lhs.sortKey.compare(rhs.sortKey); sortKeyOrder != 0)
+                        {
+                          return sortKeyOrder < 0;
                         }
 
-                        return lhs.listId < rhs.listId;
+                        return lhs.target.listId < rhs.target.listId;
                       });
+
+    result.clear();
+
+    for (auto& target : ordered)
+    {
+      result.push_back(std::move(target.target));
+    }
+
     return result;
   }
 

@@ -28,6 +28,7 @@ namespace ao::test
 namespace ao::rt
 {
   class AppRuntime;
+  class TextOrderingPolicy;
 }
 
 namespace ao::gtk::test
@@ -40,7 +41,8 @@ namespace ao::gtk::test
   class GtkRuntimeFixture final
   {
   public:
-    explicit GtkRuntimeFixture(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {});
+    explicit GtkRuntimeFixture(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {},
+                               rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~GtkRuntimeFixture();
 
     GtkRuntimeFixture(GtkRuntimeFixture const&) = delete;
@@ -66,7 +68,8 @@ namespace ao::gtk::test
 
   std::unique_ptr<rt::AppRuntime> makeRuntime(
     ao::test::TempDir const& tempDir,
-    std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {});
+    std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {},
+    rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
   bool waitForPlaybackSettlement(rt::AppRuntime& runtime,
                                  TrackId trackId,

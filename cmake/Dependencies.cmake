@@ -480,6 +480,8 @@ string(JSON AOBUS_ICU_CAPABILITIES SET
   "${AOBUS_ICU_CAPABILITIES}" resource-bundles true)
 string(JSON AOBUS_ICU_CAPABILITIES SET
   "${AOBUS_ICU_CAPABILITIES}" classic-message-format true)
+string(JSON AOBUS_ICU_CAPABILITIES SET
+  "${AOBUS_ICU_CAPABILITIES}" locale-collation true)
 
 aobus_dependency_report_entry(AOBUS_BOOST_REPORT boost
   "${AOBUS_BOOST_REQUESTED_VERSION}" "${AOBUS_BOOST_RESOLVED_VERSION}"

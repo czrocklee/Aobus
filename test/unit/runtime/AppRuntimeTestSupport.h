@@ -23,6 +23,7 @@ namespace ao::rt
 {
   class ConfigStore;
   class PlaybackTransport;
+  class TextOrderingPolicy;
 }
 
 namespace ao::rt::test
@@ -40,7 +41,8 @@ namespace ao::rt::test
   std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
                                           std::unique_ptr<async::Executor> executorPtr,
                                           ConfigStore* playbackSessionConfigStore = nullptr,
-                                          async::Sleeper* sleeper = nullptr);
+                                          async::Sleeper* sleeper = nullptr,
+                                          TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
   // State-only helper. Tests that can produce asynchronous callbacks must use
   // makeRuntime and provide an executor with the required scheduling model.

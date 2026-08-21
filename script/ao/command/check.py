@@ -5,7 +5,7 @@ import copy
 
 from ..core import builddir, dependency_policy
 from ..core.proc import die
-from . import build, test
+from . import build, perf, test
 
 HELP = "Build everything and run every suite enabled by the native profile"
 NAME = "check"
@@ -37,7 +37,11 @@ def run_command(args: argparse.Namespace) -> int:
         return build.run_command(args)
 
     suites = test.suites_for("all", tsan=args.tsan)
-    targets = [target for suite in suites if (target := test.SUITES[suite].target) is not None] if args.tsan else []
+    targets = (
+        [target for suite in suites if (target := test.SUITES[suite].target) is not None]
+        if args.tsan
+        else ["all", perf.TARGET]
+    )
     result = build.do_build(args, targets=targets)
 
     print("Verifying dependency resolution...")

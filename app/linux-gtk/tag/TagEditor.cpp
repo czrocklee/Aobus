@@ -7,10 +7,12 @@
 #include "common/DismissController.h"
 #include "common/WidgetMeasure.h"
 #include "layout/LayoutConstants.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/String.h>
 
@@ -32,6 +34,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -364,8 +367,8 @@ namespace ao::gtk
     DismissController _dismissController;
   };
 
-  TagEditor::TagEditor(uimodel::PresentationTextCatalog textCatalog)
-    : _textCatalog{std::move(textCatalog)}
+  TagEditor::TagEditor(uimodel::PresentationTextCatalog textCatalog, rt::TextOrderingPolicy const* textOrderingPolicy)
+    : _textCatalog{std::move(textCatalog)}, _textOrderingPolicy{textOrderingPolicy}
   {
     set_overflow(Gtk::Overflow::HIDDEN);
     buildUi();
@@ -469,12 +472,57 @@ namespace ao::gtk
 
     for (auto const& tag : scope.allTagsByFrequency())
     {
-      if (_availableTagsByFrequency.size() >= kMaxAvailableTags)
+      if (_textOrderingPolicy == nullptr && _availableTagsByFrequency.size() >= kMaxAvailableTags)
       {
         break;
       }
 
       _availableTagsByFrequency.push_back(tag);
+    }
+
+    if (_textOrderingPolicy != nullptr)
+    {
+      struct OrderedTag final
+      {
+        std::pair<std::string, std::size_t> tag;
+        std::string sortKey;
+      };
+
+      auto ordered = std::vector<OrderedTag>{};
+      ordered.reserve(_availableTagsByFrequency.size());
+
+      for (auto& tag : _availableTagsByFrequency)
+      {
+        auto sortKey = std::string{};
+        auto const keyRes = _textOrderingPolicy->makeSortKeyInto(sortKey, tag.first);
+        AO_INVARIANT(keyRes.has_value(), "Admitted tag failed locale sort-key derivation: {}", keyRes.error().message);
+        ordered.push_back(OrderedTag{.tag = std::move(tag), .sortKey = std::move(sortKey)});
+      }
+
+      std::ranges::sort(ordered,
+                        [](OrderedTag const& lhs, OrderedTag const& rhs)
+                        {
+                          if (lhs.tag.second != rhs.tag.second)
+                          {
+                            return lhs.tag.second > rhs.tag.second;
+                          }
+
+                          if (auto const sortKeyOrder = lhs.sortKey.compare(rhs.sortKey); sortKeyOrder != 0)
+                          {
+                            return sortKeyOrder < 0;
+                          }
+
+                          return lhs.tag.first < rhs.tag.first;
+                        });
+
+      _availableTagsByFrequency.clear();
+      auto const resultSize = std::min(kMaxAvailableTags, ordered.size());
+      _availableTagsByFrequency.reserve(resultSize);
+
+      for (auto& entry : ordered | std::views::take(resultSize))
+      {
+        _availableTagsByFrequency.push_back(std::move(entry.tag));
+      }
     }
   }
 

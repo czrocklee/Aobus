@@ -19,6 +19,7 @@
 namespace ao::rt
 {
   class Library;
+  class TextOrderingPolicy;
 }
 
 namespace ao::gtk
@@ -40,7 +41,8 @@ namespace ao::gtk
   public:
     using TagsChangedSignal = sigc::signal<void(std::span<std::string const>, std::span<std::string const>)>;
 
-    explicit TagEditor(uimodel::PresentationTextCatalog textCatalog);
+    explicit TagEditor(uimodel::PresentationTextCatalog textCatalog,
+                       rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~TagEditor() override;
 
     TagEditor(TagEditor const&) = delete;
@@ -78,6 +80,7 @@ namespace ao::gtk
     void applyFilter();
 
     uimodel::PresentationTextCatalog _textCatalog;
+    rt::TextOrderingPolicy const* _textOrderingPolicy = nullptr;
     rt::Library const* _reads = nullptr;
     std::vector<TrackId> _selectedTrackIds;
 

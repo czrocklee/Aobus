@@ -101,10 +101,11 @@ namespace ao::winui
     std::filesystem::path stateRoot,
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
     uimodel::PresentationTextCatalog textCatalog,
+    rt::TextOrderingPolicy const& textOrderingPolicy,
     std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
   {
     auto sessionPtr = std::unique_ptr<LibrarySession>{
-      new LibrarySession{std::move(stateRoot), std::move(dispatcher), std::move(textCatalog)}};
+      new LibrarySession{std::move(stateRoot), std::move(dispatcher), std::move(textCatalog), textOrderingPolicy}};
 
     if (auto initializedRes = sessionPtr->initialize(std::move(optSuccessorRequest)); !initializedRes)
     {
@@ -116,10 +117,12 @@ namespace ao::winui
 
   LibrarySession::LibrarySession(std::filesystem::path stateRoot,
                                  winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                                 uimodel::PresentationTextCatalog textCatalog)
+                                 uimodel::PresentationTextCatalog textCatalog,
+                                 rt::TextOrderingPolicy const& textOrderingPolicy)
     : _stateRoot{std::move(stateRoot)}
     , _dispatcher{std::move(dispatcher)}
     , _textCatalog{std::move(textCatalog)}
+    , _textOrderingPolicy{textOrderingPolicy}
     , _settingsStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-settings.yaml")}
     , _playbackStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-playback.yaml")}
   {
@@ -418,7 +421,8 @@ namespace ao::winui
                                  .databasePath = paths.databasePath(),
                                  .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
                                  .workspaceConfigStorePtr = std::move(workspaceStorePtr),
-                                 .playbackSessionConfigStore = _playbackStorePtr.get()});
+                                 .playbackSessionConfigStore = _playbackStorePtr.get(),
+                                 .textOrderingPolicy = &_textOrderingPolicy});
 
     if (!runtimeRes)
     {

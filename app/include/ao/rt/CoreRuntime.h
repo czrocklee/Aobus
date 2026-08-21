@@ -27,6 +27,7 @@ namespace ao::rt
   class Library;
   class TrackSourceCache;
   class NotificationService;
+  class TextOrderingPolicy;
 
   /**
    * The core application environment, containing frontend-neutral services
@@ -68,6 +69,7 @@ namespace ao::rt
     CompletionService& completion() noexcept;
     TrackSourceCache& sources() noexcept;
     NotificationService& notifications() noexcept;
+    TextOrderingPolicy const* textOrderingPolicy() const noexcept;
 
     async::Runtime& async() noexcept;
 
@@ -79,7 +81,8 @@ namespace ao::rt
                         std::filesystem::path databasePath,
                         std::filesystem::path cacheDirectory,
                         std::uint64_t musicLibraryPinnedMapBytes,
-                        async::Sleeper* sleeper);
+                        async::Sleeper* sleeper,
+                        TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
   private:
     struct Impl;

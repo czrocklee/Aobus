@@ -14,8 +14,9 @@ namespace ao::gtk
 {
   TagPopover::TagPopover(rt::Library const& reads,
                          uimodel::PresentationTextCatalog const& textCatalog,
-                         std::vector<TrackId> selectedTrackIds)
-    : _tagEditor{textCatalog}
+                         std::vector<TrackId> selectedTrackIds,
+                         rt::TextOrderingPolicy const* textOrderingPolicy)
+    : _tagEditor{textCatalog, textOrderingPolicy}
   {
     set_autohide(true);
     set_has_arrow(false);
@@ -24,5 +25,8 @@ namespace ao::gtk
     set_child(_tagEditor);
   }
 
-  TagPopover::~TagPopover() = default;
+  TagPopover::~TagPopover()
+  {
+    unset_child();
+  }
 } // namespace ao::gtk

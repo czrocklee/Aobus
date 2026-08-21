@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -35,6 +36,26 @@ namespace ao::gtk::test
     }
 
     return nullptr;
+  }
+
+  std::vector<std::string> directChildLabelTextsByClass(Gtk::Widget& container, std::string_view const cssClass)
+  {
+    auto result = std::vector<std::string>{};
+
+    for (auto* child = container.get_first_child(); child != nullptr; child = child->get_next_sibling())
+    {
+      if (!hasCssClass(*child, cssClass))
+      {
+        continue;
+      }
+
+      for (auto const* label : collectAll<Gtk::Label>(*child))
+      {
+        result.push_back(label->get_text().raw());
+      }
+    }
+
+    return result;
   }
 
   Gtk::Button* findButtonByLabel(Gtk::Widget& root, std::string const& labelText)

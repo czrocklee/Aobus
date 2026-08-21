@@ -94,6 +94,18 @@ Any intervening effective commit makes undo stale instead of overwriting newer w
 Its result reuses `TrackAuthoringStatus` and carries display text only when the frontend has something to report.
 Suggested tags are a presentation aid; only the final add/remove command is authoritative.
 
+GTK adapts the shared tag-frequency result before applying its visible limit:
+frequency remains descending, equal-frequency values use the startup-locale
+ordering key, and raw NFC bytes break equal locale keys. The shared library
+reader remains byte ordered because the CLI consumes that same storage-facing
+result without an interactive locale.
+
+The tag editor's writable saved-List chooser orders eligible List names by the
+interactive locale key and uses `ListId` for equal keys. This changes only the
+chooser presentation; eligibility, List identity, tag expression, and the
+submitted membership command are unchanged. Without an interactive ordering
+policy, the UIModel helper retains name-byte order followed by `ListId`.
+
 ## Failure and cancellation
 
 Runtime mutation failure rejects the edit and exposes the recoverable diagnostic to the frontend workflow.
@@ -121,6 +133,8 @@ A frontend may distinguish no selection, mixed values, partial custom-key presen
 It may choose inline, form, or command interaction while using the same schema, codec, validation, and runtime writer authority.
 
 Custom keys are queryable through the custom-variable syntax in the predicate language; presentation does not reinterpret or restrict that grammar.
+Locale ordering affects only suggestion and chooser position. It never changes
+tag equality, matching, stored tag bytes, or mutation semantics.
 
 ## Implementation map
 

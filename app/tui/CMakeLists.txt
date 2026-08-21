@@ -58,6 +58,7 @@ aobus_enable_windows_utf8_manifest(aobus-tui)
 
 target_link_libraries(aobus-tui PRIVATE
     aobus-tui-lib
+    ao_app_i18n_ordering
     ao_app_i18n
     ao_app_uimodel
     ao_app_runtime

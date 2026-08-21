@@ -31,6 +31,7 @@ namespace ao::rt
 {
   class TrackListProjection;
   class TrackSourceCache;
+  class TextOrderingPolicy;
   struct TrackListProjectionDeltaBatch;
 
   /** Owns one bounded live-list playback source/projection conversation. */
@@ -40,13 +41,15 @@ namespace ao::rt
     using ProjectionBatchHandler =
       std::move_only_function<void(PlaybackCursor::Changes changes, bool sourceInvalidated)>;
 
-    static Result<std::unique_ptr<PlaybackCursorSession>> create(PlaybackLaunchSpec launchSpec,
-                                                                 TrackId startTrackId,
-                                                                 TrackSourceCache& sources,
-                                                                 library::MusicLibrary const& library,
-                                                                 RepeatMode repeatMode,
-                                                                 ShuffleMode shuffleMode,
-                                                                 ShuffleHistory::CandidateChooser candidateChooser);
+    static Result<std::unique_ptr<PlaybackCursorSession>> create(
+      PlaybackLaunchSpec launchSpec,
+      TrackId startTrackId,
+      TrackSourceCache& sources,
+      library::MusicLibrary const& library,
+      RepeatMode repeatMode,
+      ShuffleMode shuffleMode,
+      ShuffleHistory::CandidateChooser candidateChooser,
+      TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
     /** Builds a non-playing restore candidate, allowing the saved current track to be a projection gap. */
     static Result<std::unique_ptr<PlaybackCursorSession>> createForRestore(
@@ -57,7 +60,8 @@ namespace ao::rt
       library::MusicLibrary const& library,
       RepeatMode repeatMode,
       ShuffleMode shuffleMode,
-      ShuffleHistory::CandidateChooser candidateChooser);
+      ShuffleHistory::CandidateChooser candidateChooser,
+      TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
     ~PlaybackCursorSession() override;
 

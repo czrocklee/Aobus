@@ -160,7 +160,8 @@ namespace ao::rt::test
   std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
                                           std::unique_ptr<async::Executor> executorPtr,
                                           ConfigStore* const playbackSessionConfigStore,
-                                          async::Sleeper* const sleeper)
+                                          async::Sleeper* const sleeper,
+                                          TextOrderingPolicy const* const textOrderingPolicy)
   {
     return ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
@@ -171,6 +172,7 @@ namespace ao::rt::test
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
       .playbackSessionConfigStore = playbackSessionConfigStore,
       .sleeper = sleeper,
+      .textOrderingPolicy = textOrderingPolicy,
     }));
   }
 

@@ -4,6 +4,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -247,6 +248,75 @@ namespace ao::rt::test
     REQUIRE(proj.groupCount() == 2);
     CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "The Beatles");
     CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Coldplay");
+  }
+
+  TEST_CASE("TrackListProjection - Unicode caseless artist identities select the first ordered raw headings",
+            "[runtime][regression][projection][unicode]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const upper = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Zulu", .artist = "MÉTAL"});
+    auto const lower = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .artist = "métal"});
+    auto const sharpLower = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Bravo", .artist = "Straße"});
+    auto const sharpUpper =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Charlie", .artist = "STRASSE"});
+    env.setupFiltered({{upper, sharpUpper, lower, sharpLower}});
+
+    auto projection = env.createProjection(ViewId{1});
+    auto subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    projection.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy =
+        {
+          TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+          TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+        },
+    });
+
+    CHECK(projection.trackIdAt(0) == lower);
+    CHECK(projection.trackIdAt(1) == upper);
+    CHECK(projection.trackIdAt(2) == sharpLower);
+    CHECK(projection.trackIdAt(3) == sharpUpper);
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(projection.groupAt(0).rows.start == 0);
+    CHECK(projection.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(projection.groupAt(0).heading.primary) == "métal");
+    CHECK(projection.groupAt(1).rows.start == 2);
+    CHECK(projection.groupAt(1).rows.count == 2);
+    CHECK(trackGroupHeadingText(projection.groupAt(1).heading.primary) == "Straße");
+  }
+
+  TEST_CASE("TrackListProjection - equal locale group keys retain distinct contiguous identities",
+            "[runtime][regression][projection][collation]")
+  {
+    auto policyRes = i18n::createIcuTextOrderingPolicy("en-US");
+    REQUIRE(policyRes);
+    auto env = TrackListProjectionFixture{};
+    auto const asciiFirst = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .artist = "ABC"});
+    auto const wideFirst = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Bravo", .artist = "ＡＢＣ"});
+    auto const asciiSecond = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Charlie", .artist = "ABC"});
+    auto const wideSecond = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Delta", .artist = "ＡＢＣ"});
+    env.setupFiltered({{wideSecond, asciiSecond, wideFirst, asciiFirst}});
+
+    auto projection = env.createProjection(ViewId{1}, policyRes->get());
+    auto subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    projection.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy =
+        {
+          TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+          TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+        },
+    });
+
+    CHECK(projection.trackIdAt(0) == asciiFirst);
+    CHECK(projection.trackIdAt(1) == asciiSecond);
+    CHECK(projection.trackIdAt(2) == wideFirst);
+    CHECK(projection.trackIdAt(3) == wideSecond);
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(projection.groupAt(0).rows.start == 0);
+    CHECK(projection.groupAt(0).rows.count == 2);
+    CHECK(projection.groupAt(1).rows.start == 2);
+    CHECK(projection.groupAt(1).rows.count == 2);
   }
 
   TEST_CASE("TrackListProjection - article-insensitive artist order keeps distinct contiguous identities",

@@ -43,13 +43,15 @@ namespace ao::rt
     CompletionService completionService;
     TrackSourceCache trackSourceCache;
     NotificationService notificationService;
+    TextOrderingPolicy const* textOrderingPolicy = nullptr;
     bool stopped = false;
 
     Impl(std::unique_ptr<async::Executor> execPtr,
          std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
          std::unique_ptr<library::MusicLibrary> libraryPtr,
-         async::Sleeper* sleeper)
+         async::Sleeper* sleeper,
+         TextOrderingPolicy const* orderingPolicy)
       : executorPtr{std::move(execPtr)}
       , asyncRuntime{*executorPtr, sleeper}
       , musicRoot{std::move(musicRoot)}
@@ -58,9 +60,10 @@ namespace ao::rt
       , libraryChanges{*executorPtr,
                        currentLibraryRevision(*musicLibraryPtr),
                        utility::pathToUtf8(musicLibraryPtr->databasePath())}
-      , completionService{*musicLibraryPtr, libraryChanges}
+      , completionService{*musicLibraryPtr, libraryChanges, orderingPolicy}
       , trackSourceCache{*musicLibraryPtr, libraryChanges}
       , notificationService{asyncRuntime}
+      , textOrderingPolicy{orderingPolicy}
     {
     }
 
@@ -106,7 +109,8 @@ namespace ao::rt
                                          std::move(databasePath),
                                          std::move(cacheDirectory),
                                          musicLibraryPinnedMapBytes,
-                                         sleeper);
+                                         sleeper,
+                                         nullptr);
 
     if (!result)
     {
@@ -121,7 +125,8 @@ namespace ao::rt
                                    std::filesystem::path databasePath,
                                    std::filesystem::path cacheDirectory,
                                    std::uint64_t const musicLibraryPinnedMapBytes,
-                                   async::Sleeper* const sleeper)
+                                   async::Sleeper* const sleeper,
+                                   TextOrderingPolicy const* const textOrderingPolicy)
   {
     if (executorPtr == nullptr)
     {
@@ -137,8 +142,12 @@ namespace ao::rt
     }
 
     auto storagePtr = std::make_unique<library::MusicLibrary>(std::move(*storageRes));
-    auto implPtr = std::make_unique<Impl>(
-      std::move(executorPtr), std::move(musicRoot), std::move(databasePath), std::move(storagePtr), sleeper);
+    auto implPtr = std::make_unique<Impl>(std::move(executorPtr),
+                                          std::move(musicRoot),
+                                          std::move(databasePath),
+                                          std::move(storagePtr),
+                                          sleeper,
+                                          textOrderingPolicy);
     auto libraryRes = Library::create(
       implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges, std::move(cacheDirectory));
 
@@ -202,6 +211,11 @@ namespace ao::rt
   NotificationService& CoreRuntime::notifications() noexcept
   {
     return _implPtr->notificationService;
+  }
+
+  TextOrderingPolicy const* CoreRuntime::textOrderingPolicy() const noexcept
+  {
+    return _implPtr->textOrderingPolicy;
   }
 
   async::Runtime& CoreRuntime::async() noexcept

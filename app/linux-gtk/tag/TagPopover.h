@@ -14,6 +14,7 @@
 namespace ao::rt
 {
   class Library;
+  class TextOrderingPolicy;
 }
 
 namespace ao::gtk
@@ -23,7 +24,8 @@ namespace ao::gtk
   public:
     TagPopover(rt::Library const& reads,
                uimodel::PresentationTextCatalog const& textCatalog,
-               std::vector<TrackId> selectedTrackIds);
+               std::vector<TrackId> selectedTrackIds,
+               rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~TagPopover() override;
 
     // Not copyable or movable

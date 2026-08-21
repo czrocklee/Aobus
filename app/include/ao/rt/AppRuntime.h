@@ -26,6 +26,7 @@ namespace ao::rt
 {
   class ConfigStore;
   class PlaybackService;
+  class TextOrderingPolicy;
   class WorkspaceService;
   class ViewService;
 
@@ -44,6 +45,8 @@ namespace ao::rt
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
     ConfigStore* playbackSessionConfigStore = nullptr;
     async::Sleeper* sleeper = nullptr;
+    /// Optional interactive text order selected and owned by the composition root.
+    TextOrderingPolicy const* textOrderingPolicy = nullptr;
   };
 
   struct PlaybackSessionRestoreResult final

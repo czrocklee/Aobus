@@ -12,6 +12,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
@@ -51,6 +52,45 @@ namespace ao::rt::test
       return result;
     }
   } // namespace
+
+  TEST_CASE("CompletionService - locale policy orders equal-frequency vocabulary ties",
+            "[runtime][unit][completion][collation]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "ä"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Two", .artist = "z"});
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto germanPolicyRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    auto swedishPolicyRes = i18n::createIcuTextOrderingPolicy("sv-SE");
+    REQUIRE(germanPolicyRes);
+    REQUIRE(swedishPolicyRes);
+
+    auto german = CompletionService{libraryFixture.library(), changes, germanPolicyRes->get()};
+    auto swedish = CompletionService{libraryFixture.library(), changes, swedishPolicyRes->get()};
+
+    CHECK(pairs(german.valuesFor(TrackField::Artist)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"ä", 1}, {"z", 1}});
+    CHECK(pairs(swedish.valuesFor(TrackField::Artist)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"z", 1}, {"ä", 1}});
+  }
+
+  TEST_CASE("CompletionService - equal locale keys fall back to raw NFC bytes",
+            "[runtime][unit][completion][collation]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .tags = {"ＡＢＣ"}});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Two", .tags = {"ABC"}});
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto policyRes = i18n::createIcuTextOrderingPolicy("en-US");
+    REQUIRE(policyRes);
+    auto service = CompletionService{libraryFixture.library(), changes, policyRes->get()};
+
+    CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"ABC", 1}, {"ＡＢＣ", 1}});
+  }
 
   TEST_CASE("CompletionService - builds tag and custom-key vocabularies", "[runtime][unit][completion][vocabulary]")
   {

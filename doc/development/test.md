@@ -29,6 +29,7 @@ samples), see the focused documents under `doc/development/test/`.
 | [`test/coverage-workflow.md`](test/coverage-workflow.md) | Coverage reports and the measure-analyze-test-verify loop |
 | [`test/validation-and-review.md`](test/validation-and-review.md) | New files, regression tests, validation, smells, and review checklist |
 | [`test/test-suite.md`](test/test-suite.md) | `./ao test` suite organization |
+| [`test/performance.md`](test/performance.md) | Standalone optimized performance sampling and report evidence |
 
 ## Layer selection
 

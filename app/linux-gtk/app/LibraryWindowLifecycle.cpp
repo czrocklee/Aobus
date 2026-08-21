@@ -32,7 +32,8 @@ namespace ao::gtk
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
     uimodel::PresentationTextCatalog const& textCatalog,
-    GtkTextCatalog const& gtkTextCatalog)
+    GtkTextCatalog const& gtkTextCatalog,
+    rt::TextOrderingPolicy const* textOrderingPolicy)
   {
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
 
@@ -55,7 +56,8 @@ namespace ao::gtk
                                  .databasePath = std::move(paths.databasePath),
                                  .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr),
-                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore()});
+                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore(),
+                                 .textOrderingPolicy = textOrderingPolicy});
 
     if (!runtimeRes)
     {

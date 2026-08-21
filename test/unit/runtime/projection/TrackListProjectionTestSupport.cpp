@@ -51,14 +51,17 @@ namespace ao::rt::test
   {
   }
 
-  TrackListProjection TrackListProjectionFixture::createProjection(ViewId const viewId)
+  TrackListProjection TrackListProjectionFixture::createProjection(ViewId const viewId,
+                                                                   TextOrderingPolicy const* const textOrderingPolicy)
   {
-    return TrackListProjection{viewId, TrackSourceLease{filteredPtr}, libraryFixture.library()};
+    return TrackListProjection{viewId, TrackSourceLease{filteredPtr}, libraryFixture.library(), textOrderingPolicy};
   }
 
-  TrackListProjection TrackListProjectionFixture::createUnfilteredProjection(ViewId const viewId)
+  TrackListProjection TrackListProjectionFixture::createUnfilteredProjection(
+    ViewId const viewId,
+    TextOrderingPolicy const* const textOrderingPolicy)
   {
-    return TrackListProjection{viewId, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    return TrackListProjection{viewId, TrackSourceLease{sourcePtr}, libraryFixture.library(), textOrderingPolicy};
   }
 
   void TrackListProjectionFixture::setupFiltered(std::span<TrackId const> const ids)

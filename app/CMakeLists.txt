@@ -125,6 +125,19 @@ target_include_directories(ao_app_i18n
 target_link_libraries(ao_app_i18n
     PRIVATE ao_catalog_pattern ao_unicode_text ICU::i18n ICU::uc ICU::data)
 
+# Locale collation stays in an interactive leaf. The policy interface itself
+# contains no ICU types, so runtime/UIModel consumers do not inherit ICU::i18n.
+add_library(ao_app_i18n_ordering STATIC
+    i18n/IcuTextOrdering.cpp
+)
+target_include_directories(ao_app_i18n_ordering
+    PUBLIC
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+      "${CMAKE_SOURCE_DIR}/include"
+    PRIVATE "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_app_i18n_ordering
+    PRIVATE ao_unicode_text ICU::i18n ICU::uc ICU::data)
+
 # Prepared-next contract diagnostics are compiled once and shared with the
 # minimal fatal probe so source-location coverage does not duplicate a source
 # file across targets with incompatible compile commands.
@@ -798,7 +811,7 @@ if(AOBUS_BUILD_CLI)
           continue()
         endif()
         foreach(_link IN LISTS _links)
-          if(_link MATCHES "ao_app_i18n|ao_catalog_pattern|ICU::i18n")
+          if(_link MATCHES "ao_app_i18n(_ordering)?|ao_catalog_pattern|ICU::i18n")
             message(FATAL_ERROR
               "CLI target '${root_target}' reaches forbidden localization dependency "
               "'${_link}' through '${_target}'.")

@@ -394,7 +394,8 @@ namespace ao::gtk
         auto projPtr = std::make_shared<rt::TrackListProjection>(rt::kInvalidViewId,
                                                                  rt::TrackSourceLease{_previewFilteredListPtr},
                                                                  _runtime.musicLibrary(),
-                                                                 rt::TrackOrderSpec{});
+                                                                 rt::TrackOrderSpec{},
+                                                                 _runtime.textOrderingPolicy());
 
         _previewModelPtr = TrackListModel::create(_trackRowCache);
         _previewModelPtr->bindProjection(std::move(projPtr));

@@ -17,6 +17,7 @@
 namespace ao::rt
 {
   class Library;
+  class TextOrderingPolicy;
 }
 
 namespace ao::uimodel
@@ -32,7 +33,8 @@ namespace ao::uimodel
     bool operator==(WritableTagListTarget const&) const = default;
   };
 
-  std::vector<WritableTagListTarget> writableTagListTargets(std::span<rt::ListNode const> lists);
+  std::vector<WritableTagListTarget> writableTagListTargets(std::span<rt::ListNode const> lists,
+                                                            rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
   struct ListMembershipEditResult final
   {

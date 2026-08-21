@@ -14,6 +14,7 @@ from . import (
     doctor,
     hygiene,
     name_audit,
+    perf,
     run,
     setup,
     test,
@@ -37,5 +38,6 @@ COMMAND_MODULES = (
     analyze,
     format_command,
     hygiene,
+    perf,
     run,
 )

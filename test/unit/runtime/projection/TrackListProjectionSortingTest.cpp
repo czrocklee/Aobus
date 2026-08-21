@@ -4,6 +4,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -15,12 +16,65 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace ao::rt::test
 {
   using ao::library::TrackStore;
+
+  TEST_CASE("TrackListProjection - locale policy changes textual order", "[runtime][unit][projection][collation]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const umlaut = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ä"});
+    auto const zed = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "z"});
+    env.setupFiltered({{zed, umlaut}});
+
+    auto germanRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    auto swedishRes = i18n::createIcuTextOrderingPolicy("sv-SE");
+    REQUIRE(germanRes);
+    REQUIRE(swedishRes);
+
+    auto const presentation = TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}},
+    };
+    auto german = env.createProjection(ViewId{1}, germanRes->get());
+    auto germanSub = german.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    german.setPresentation(presentation);
+    auto swedish = env.createProjection(ViewId{2}, swedishRes->get());
+    auto swedishSub = swedish.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    swedish.setPresentation(presentation);
+
+    CHECK(german.trackIdAt(0) == umlaut);
+    CHECK(german.trackIdAt(1) == zed);
+    CHECK(swedish.trackIdAt(0) == zed);
+    CHECK(swedish.trackIdAt(1) == umlaut);
+  }
+
+  TEST_CASE("TrackListProjection - non-locale artist order is stable across flat and grouped presentations",
+            "[runtime][regression][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const elan = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Élan"});
+    auto const echo = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .artist = "écho"});
+    env.setupFiltered({{elan, echo}});
+
+    auto projection = env.createProjection(ViewId{1});
+    auto const subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    auto const artistSort = std::vector{TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}};
+
+    projection.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = artistSort});
+    REQUIRE(projection.size() == 2);
+    CHECK(projection.trackIdAt(0) == echo);
+    CHECK(projection.trackIdAt(1) == elan);
+
+    projection.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist, .sortBy = artistSort});
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(projection.trackIdAt(0) == echo);
+    CHECK(projection.trackIdAt(1) == elan);
+  }
 
   TEST_CASE("TrackListProjection - title sort ignores leading articles", "[runtime][unit][projection]")
   {

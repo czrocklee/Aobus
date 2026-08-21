@@ -5,6 +5,7 @@
 #include "TuiTextCatalog.h"
 #include <ao/AppVersion.h>
 #include <ao/Contract.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -105,9 +106,18 @@ int main(int argc, char* argv[])
     }
 
     auto catalog = std::move(*catalogRes);
+    auto textOrderingPolicyRes = ao::i18n::createIcuTextOrderingPolicy(catalog.requestedLocale());
+
+    if (!textOrderingPolicyRes)
+    {
+      AO_FATAL("Could not initialize TUI text ordering: {}", textOrderingPolicyRes.error().message);
+    }
+
+    auto textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
     auto const textCatalog = ao::uimodel::PresentationTextCatalog{catalog};
     auto const tuiTextCatalog = ao::tui::TuiTextCatalog{catalog};
-    return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}), textCatalog, tuiTextCatalog);
+    return ao::tui::run(
+      parseOptions({argv, static_cast<std::size_t>(argc)}), textCatalog, tuiTextCatalog, *textOrderingPolicyPtr);
   }
   catch (...)
   {

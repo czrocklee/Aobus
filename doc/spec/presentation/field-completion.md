@@ -35,7 +35,9 @@ This contract belongs primarily to the **application runtime** and frontend adap
 - Every field carrying the value-completion flag has a resolvable typed query-field bridge to a dictionary-backed field; the completion service enforces that contract and derives value extraction from the bridge.
 - After one invalidation, every live vocabulary is derived from one shared snapshot until the next qualifying library change.
 - Vocabulary values are distinct and non-empty.
-- Tag, custom-key, and individual-field entries sort by descending frequency and then ascending value.
+- Tag, custom-key, and individual-field entries sort by descending frequency.
+  Interactive runtimes break equal-frequency ties by startup-locale key and
+  then raw NFC bytes; runtimes without an ordering policy use raw NFC bytes.
 - Aggregate entries are intentionally unordered; their consumer selects and ranks only the matching top results.
 - Prefix matching is ASCII-case-insensitive.
 - Metadata value completion is unavailable for fields without the capability flag.
@@ -62,6 +64,10 @@ That traversal counts:
 The service compresses dictionary-id counts by source and discards the traversal working storage.
 No tag, custom-key, field, or aggregate access scans track storage again until another qualifying library change invalidates the snapshot.
 Individual result vectors remain lazy: tags, custom keys, and requested fields resolve their retained ids and sort in memory only when consumed.
+Locale keys are materialized once per value before that sort; comparators never
+invoke the ordering policy. Equal locale keys retain a raw NFC byte fallback so
+width, kana, or other secondary-strength ties remain deterministic without
+merging vocabulary entries.
 
 The aggregate cache retains only the most recently requested specification and copies its field identities rather than borrowing the caller's span.
 Changing that specification replaces only the materialized aggregate, not the shared frequency snapshot.
@@ -88,6 +94,8 @@ The service does not decide which fields form a product search surface or how ag
 
 Completion is synchronous and has no cancellation point.
 The shared rebuild uses one active library read transaction; expected storage failures follow the runtime library error policy rather than becoming a second frontend storage path.
+Failure to derive a key from already-admitted library text is an invariant
+failure; one result never falls back midway and mixes locale and byte keys.
 
 The caches contain no synchronization.
 Construction records the owner thread, and every cache access, dirty notification, and lazy rebuild asserts that same thread.

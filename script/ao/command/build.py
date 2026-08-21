@@ -37,9 +37,13 @@ examples:
 WINUI_TARGETS = frozenset({"winui", "aobus-winui"})
 
 
-def add_build_arguments(parser: argparse.ArgumentParser) -> None:
+def add_build_arguments(parser: argparse.ArgumentParser, *, default_flavor: str = "debug") -> None:
     parser.add_argument(
-        "flavor", nargs="?", default="debug", choices=builddir.flavors(), help="build flavor (default: debug)"
+        "flavor",
+        nargs="?",
+        default=default_flavor,
+        choices=builddir.flavors(),
+        help=f"build flavor (default: {default_flavor})",
     )
     parser.add_argument("--clean", action="store_true", help="remove the build directory first")
     parser.add_argument("--clang", action="store_true", help="build with clang in a dedicated build tree")

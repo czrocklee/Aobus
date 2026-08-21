@@ -40,12 +40,30 @@ Every grouping populates the primary slot with raw text, a numeric year, or a ty
 Unknown group values remain distinct semantic keys rather than merging with an unrelated concrete value or becoming English inside runtime.
 UIModel resolves the slots through `PresentationTextCatalog`, and frontend adapters own only markup and geometry.
 
-Text display, group identity, and ordering use separate keys. The dependency-free
-implementation ASCII-folds group identity without removing a leading `the`,
-`a`, or `an`; ordering applies the same fold after removing that article. Thus
-`The Doors` and `Doors` sort together but remain separate groups. Full Unicode
-case folding and locale collation are separate later policies rather than
-implicit byte transformations.
+Text display, group identity, and ordering use separate keys:
+
+```text
+display text   = admitted NFC text
+group identity = NFC(Default_Case_Folding(unstripped text))
+ordering input = NFC(Default_Case_Folding(article-stripped text))
+interactive ordering key = ICU(startup locale, fixed attributes).sortKey(ordering input)
+non-locale ordering key  = ordering input bytes
+```
+
+Group identity is locale-independent. It merges Unicode-caseless spellings
+such as `MÉTAL`/`métal` and `Straße`/`STRASSE`, while the first row in final
+projection order supplies the raw visible heading. Leading `the`, `a`, and
+`an` are removed only from ordering input, so `The Doors` and `Doors` sort
+together but remain separate groups.
+
+GTK, TUI, and WinUI use their canonical startup locale for textual ordering.
+The collator uses secondary strength, non-ignorable punctuation, case level
+off, and numeric collation off. Secondary-only ties such as `ABC`/`ＡＢＣ` or
+some width and kana variants remain distinct identities; the complete identity
+stage places them deterministically and keeps each group contiguous. A runtime
+without an interactive policy compares the same default-folded ordering input
+as deterministic UTF-8 bytes; group identity uses the same locale-independent
+fold over the unstripped value.
 
 Grouped comparison orders the grouping components first, then the complete
 unstripped identity, then the configured row sort terms. Configured grouping
@@ -53,6 +71,10 @@ terms retain their authored order and direction; missing compound components
 are supplied in the direction of the first authored grouping term, or ascending
 when none is authored. This keeps Album `(album artist, album)` and Work
 `(composer, work)` identities contiguous even for custom presentation shapes.
+
+Textual numeric characters remain lexical. Numeric track fields, including
+movement number, retain their typed numeric comparators and never enter locale
+collation.
 
 Only `TrackSortField` values resident in projection snapshots are sortable.
 Manifest-backed file size and modified time remain display-only.

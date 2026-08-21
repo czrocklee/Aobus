@@ -80,9 +80,10 @@ namespace ao::gtk::layout::test
   {
     explicit State(std::string_view applicationId,
                    std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
-                   std::string_view locale)
+                   std::string_view locale,
+                   rt::TextOrderingPolicy const* const textOrderingPolicy)
       : appPtr{Gtk::Application::create(std::string{applicationId})}
-      , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary))}
+      , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary), textOrderingPolicy)}
       , messageCatalog{ao::test::messageCatalog(locale)}
       , textCatalog{messageCatalog}
       , gtkTextCatalog{messageCatalog}
@@ -142,8 +143,9 @@ namespace ao::gtk::layout::test
 
   LayoutRuntimeFixture::LayoutRuntimeFixture(std::string_view const applicationId,
                                              std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
-                                             std::string_view const locale)
-    : _statePtr{std::make_unique<State>(applicationId, std::move(initializeLibrary), locale)}
+                                             std::string_view const locale,
+                                             rt::TextOrderingPolicy const* const textOrderingPolicy)
+    : _statePtr{std::make_unique<State>(applicationId, std::move(initializeLibrary), locale, textOrderingPolicy)}
   {
   }
 

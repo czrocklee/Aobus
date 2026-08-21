@@ -8,7 +8,9 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
@@ -21,6 +23,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -82,7 +85,57 @@ namespace ao::gtk::test
 
       return nullptr;
     }
+
+    class TestTextOrderingPolicy final : public rt::TextOrderingPolicy
+    {
+    public:
+      Result<> makeSortKeyInto(std::string& output, std::string_view const text) const override
+      {
+        output = text == "ä" || text == "ABC" || text == "ＡＢＣ" ? "a" : std::string{text};
+        return {};
+      }
+    };
   } // namespace
+
+  TEST_CASE("TagEditor - locale adapter orders only equal-frequency tag suggestions", "[gtk][unit][tag][collation]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const selectedTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{});
+    auto policy = TestTextOrderingPolicy{};
+
+    SECTION("Equal frequencies use locale keys")
+    {
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ä"}});
+      auto editor = TagEditor{ao::test::englishPresentationTextCatalog(), &policy};
+      editor.setup(runtime.library(), {selectedTrackId});
+
+      CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ä", "z"});
+    }
+
+    SECTION("Frequency rank remains primary")
+    {
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ä"}});
+      auto editor = TagEditor{ao::test::englishPresentationTextCatalog(), &policy};
+      editor.setup(runtime.library(), {selectedTrackId});
+
+      CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-suggested") == std::vector<std::string>{"z", "ä"});
+    }
+
+    SECTION("Equal locale keys use raw NFC bytes")
+    {
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ＡＢＣ"}});
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ABC"}});
+      auto editor = TagEditor{ao::test::englishPresentationTextCatalog(), &policy};
+      editor.setup(runtime.library(), {selectedTrackId});
+
+      CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ABC", "ＡＢＣ"});
+    }
+  }
 
   TEST_CASE("TagEditor - lays out tag chips and routes chip interactions", "[gtk][unit][tag][geometry]")
   {

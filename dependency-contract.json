@@ -97,7 +97,8 @@
       "capabilities": [
         "unicode-17.0",
         "resource-bundles",
-        "classic-message-format"
+        "classic-message-format",
+        "locale-collation"
       ]
     },
     "spdlog": {

@@ -35,6 +35,7 @@ namespace ao::rt
 {
   class AppRuntime;
   class ConfigStore;
+  class TextOrderingPolicy;
 }
 
 namespace ao::uimodel
@@ -59,6 +60,7 @@ namespace ao::winui
       std::filesystem::path stateRoot,
       winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
       uimodel::PresentationTextCatalog textCatalog,
+      rt::TextOrderingPolicy const& textOrderingPolicy,
       std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
     ~LibrarySession();
 
@@ -101,7 +103,8 @@ namespace ao::winui
   private:
     LibrarySession(std::filesystem::path stateRoot,
                    winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                   uimodel::PresentationTextCatalog textCatalog);
+                   uimodel::PresentationTextCatalog textCatalog,
+                   rt::TextOrderingPolicy const& textOrderingPolicy);
 
     struct CallbackLifetime final
     {};
@@ -133,6 +136,7 @@ namespace ao::winui
     std::filesystem::path _stateRoot;
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     uimodel::PresentationTextCatalog _textCatalog;
+    rt::TextOrderingPolicy const& _textOrderingPolicy;
     std::unique_ptr<rt::ConfigStore> _settingsStorePtr;
     std::unique_ptr<rt::ConfigStore> _playbackStorePtr;
     DesktopSettings _settings{};

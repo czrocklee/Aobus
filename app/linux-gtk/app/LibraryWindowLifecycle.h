@@ -21,6 +21,11 @@ namespace ao::uimodel
   class PresentationTextCatalog;
 }
 
+namespace ao::rt
+{
+  class TextOrderingPolicy;
+}
+
 namespace ao::gtk
 {
   class AppConfigStore;
@@ -40,7 +45,8 @@ namespace ao::gtk
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
     uimodel::PresentationTextCatalog const& textCatalog,
-    GtkTextCatalog const& gtkTextCatalog);
+    GtkTextCatalog const& gtkTextCatalog,
+    rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
   Result<> activateLibraryWindow(Gtk::Application& app,
                                  Glib::RefPtr<MainWindow> const& windowPtr,

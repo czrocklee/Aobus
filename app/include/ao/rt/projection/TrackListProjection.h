@@ -27,6 +27,8 @@ namespace ao::library
 
 namespace ao::rt
 {
+  class TextOrderingPolicy;
+
   struct TrackListProjectionOperationCounts final
   {
     std::uint64_t fullProjectionRebuilds = 0;
@@ -119,11 +121,15 @@ namespace ao::rt
   class TrackListProjection final
   {
   public:
-    TrackListProjection(ViewId viewId, TrackSourceLease sourceLease, library::MusicLibrary const& library);
     TrackListProjection(ViewId viewId,
                         TrackSourceLease sourceLease,
                         library::MusicLibrary const& library,
-                        TrackOrderSpec const& order);
+                        TextOrderingPolicy const* textOrderingPolicy = nullptr);
+    TrackListProjection(ViewId viewId,
+                        TrackSourceLease sourceLease,
+                        library::MusicLibrary const& library,
+                        TrackOrderSpec const& order,
+                        TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~TrackListProjection();
 
     TrackListProjection(TrackListProjection const&) = delete;

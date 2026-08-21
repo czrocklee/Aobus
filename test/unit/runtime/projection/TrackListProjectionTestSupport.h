@@ -17,6 +17,11 @@
 #include <span>
 #include <string_view>
 
+namespace ao::rt
+{
+  class TextOrderingPolicy;
+}
+
 namespace ao::rt::test
 {
   std::string_view trackGroupHeadingText(TrackGroupHeadingValue const& value);
@@ -35,9 +40,10 @@ namespace ao::rt::test
 
     TrackListProjectionFixture();
 
-    TrackListProjection createProjection(ViewId viewId);
+    TrackListProjection createProjection(ViewId viewId, TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
-    TrackListProjection createUnfilteredProjection(ViewId viewId);
+    TrackListProjection createUnfilteredProjection(ViewId viewId,
+                                                   TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
     void setupFiltered(std::span<TrackId const> ids);
   };

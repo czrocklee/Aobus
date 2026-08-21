@@ -26,6 +26,11 @@ namespace ao::uimodel
   class PresentationTextCatalog;
 }
 
+namespace ao::rt
+{
+  class TextOrderingPolicy;
+}
+
 namespace winrt::Aobus::implementation
 {
   struct App : AppT<App>
@@ -58,6 +63,7 @@ namespace winrt::Aobus::implementation
     Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     std::unique_ptr<ao::i18n::MessageCatalog> _messageCatalogPtr;
     std::unique_ptr<ao::uimodel::PresentationTextCatalog> _presentationTextCatalogPtr;
+    std::unique_ptr<ao::rt::TextOrderingPolicy> _textOrderingPolicyPtr;
     std::unique_ptr<ao::winui::LibraryWindowSession> _windowSessionPtr;
     ProcessPhase _processPhase = ProcessPhase::Starting;
   };

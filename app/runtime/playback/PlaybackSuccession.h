@@ -36,6 +36,7 @@ namespace ao::rt
 {
   class NotificationService;
   class PlaybackCursorSession;
+  class TextOrderingPolicy;
   class PlaybackSessionPersistence;
   class PlaybackTransport;
   struct PlaybackLaunchSpec;
@@ -83,7 +84,8 @@ namespace ao::rt
                        library::MusicLibrary const& library,
                        PlaybackTransport& transport,
                        NotificationService& notifications,
-                       async::Runtime& asyncRuntime);
+                       async::Runtime& asyncRuntime,
+                       TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~PlaybackSuccession();
 
     PlaybackSuccession(PlaybackSuccession const&) = delete;

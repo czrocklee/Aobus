@@ -180,6 +180,7 @@ target_link_libraries(aobus-winui-lib
     ao_windows_platform
     PkgRapidYaml
   PRIVATE
+    ao_app_i18n_ordering
     ao_app_i18n
     runtimeobject.lib
     shell32.lib)

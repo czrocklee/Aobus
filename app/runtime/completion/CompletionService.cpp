@@ -12,6 +12,7 @@
 #include <ao/query/Field.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -68,8 +69,55 @@ namespace ao::rt
       }
     }
 
-    void sortVocabulary(std::vector<VocabularyEntry>& entries)
+    void sortVocabulary(std::vector<VocabularyEntry>& entries, TextOrderingPolicy const* const textOrderingPolicy)
     {
+      if (textOrderingPolicy != nullptr)
+      {
+        struct OrderedEntry final
+        {
+          VocabularyEntry entry;
+          std::string sortKey;
+        };
+
+        auto ordered = std::vector<OrderedEntry>{};
+        ordered.reserve(entries.size());
+
+        for (auto& entry : entries)
+        {
+          auto sortKey = std::string{};
+          auto const keyRes = textOrderingPolicy->makeSortKeyInto(sortKey, entry.value);
+          AO_INVARIANT(keyRes.has_value(),
+                       "Admitted completion text failed locale sort-key derivation: {}",
+                       keyRes.error().message);
+          ordered.push_back(OrderedEntry{.entry = std::move(entry), .sortKey = std::move(sortKey)});
+        }
+
+        std::ranges::sort(ordered,
+                          [](OrderedEntry const& lhs, OrderedEntry const& rhs)
+                          {
+                            if (lhs.entry.frequency != rhs.entry.frequency)
+                            {
+                              return lhs.entry.frequency > rhs.entry.frequency;
+                            }
+
+                            if (auto const sortKeyOrder = lhs.sortKey.compare(rhs.sortKey); sortKeyOrder != 0)
+                            {
+                              return sortKeyOrder < 0;
+                            }
+
+                            return lhs.entry.value < rhs.entry.value;
+                          });
+
+        entries.clear();
+
+        for (auto& entry : ordered)
+        {
+          entries.push_back(std::move(entry.entry));
+        }
+
+        return;
+      }
+
       std::ranges::sort(
         entries,
         [](VocabularyEntry const& lhs, VocabularyEntry const& rhs)
@@ -78,7 +126,8 @@ namespace ao::rt
 
     template<typename Frequencies>
     std::vector<VocabularyEntry> sortedDictionaryVocabulary(Frequencies const& frequencies,
-                                                            library::DictionaryStore const& dictionary)
+                                                            library::DictionaryStore const& dictionary,
+                                                            TextOrderingPolicy const* textOrderingPolicy)
     {
       auto entries = std::vector<VocabularyEntry>{};
       entries.reserve(frequencies.size());
@@ -91,7 +140,7 @@ namespace ao::rt
         }
       }
 
-      sortVocabulary(entries);
+      sortVocabulary(entries, textOrderingPolicy);
       return entries;
     }
 
@@ -108,8 +157,11 @@ namespace ao::rt
     }
   } // namespace
 
-  CompletionService::CompletionService(library::MusicLibrary const& library, LibraryChanges const& changes)
+  CompletionService::CompletionService(library::MusicLibrary const& library,
+                                       LibraryChanges const& changes,
+                                       TextOrderingPolicy const* textOrderingPolicy)
     : _library{library}
+    , _textOrderingPolicy{textOrderingPolicy}
     , _ownerThread{std::this_thread::get_id()}
     , _libraryChangeSubscription{changes.onChanged(
         [this](LibraryChangeSet const& changeSet)
@@ -336,20 +388,20 @@ namespace ao::rt
 
   void CompletionService::materializeTags()
   {
-    _tags = sortedDictionaryVocabulary(_tagFrequencies, _library.dictionary());
+    _tags = sortedDictionaryVocabulary(_tagFrequencies, _library.dictionary(), _textOrderingPolicy);
     _tagsReady = true;
   }
 
   void CompletionService::materializeCustomKeys()
   {
-    _customKeys = sortedDictionaryVocabulary(_customKeyFrequencies, _library.dictionary());
+    _customKeys = sortedDictionaryVocabulary(_customKeyFrequencies, _library.dictionary(), _textOrderingPolicy);
     _customKeysReady = true;
   }
 
   void CompletionService::materializeValues(TrackField field)
   {
-    trackFieldArrayAt(_values, field) =
-      sortedDictionaryVocabulary(trackFieldArrayAt(_valueFrequencies, field), _library.dictionary());
+    trackFieldArrayAt(_values, field) = sortedDictionaryVocabulary(
+      trackFieldArrayAt(_valueFrequencies, field), _library.dictionary(), _textOrderingPolicy);
     trackFieldArrayAt(_valuesReady, field) = true;
   }
 

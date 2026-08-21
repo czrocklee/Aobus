@@ -9,6 +9,7 @@
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
@@ -87,6 +88,14 @@ namespace winrt::Aobus::implementation
 
     _messageCatalogPtr = std::make_unique<ao::i18n::MessageCatalog>(std::move(*catalogRes));
     _presentationTextCatalogPtr = std::make_unique<ao::uimodel::PresentationTextCatalog>(*_messageCatalogPtr);
+    auto textOrderingPolicyRes = ao::i18n::createIcuTextOrderingPolicy(_messageCatalogPtr->requestedLocale());
+
+    if (!textOrderingPolicyRes)
+    {
+      AO_FATAL("Could not initialize WinUI text ordering: {}", textOrderingPolicyRes.error().message);
+    }
+
+    _textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
 
     auto resourceLanguageRes = ao::winui::configureResourceLanguage(_messageCatalogPtr->requestedLocale());
 
@@ -105,6 +114,7 @@ namespace winrt::Aobus::implementation
     try
     {
       ao::winui::resetResourceLanguage();
+      _textOrderingPolicyPtr.reset();
       _presentationTextCatalogPtr.reset();
       _messageCatalogPtr.reset();
     }
@@ -280,8 +290,8 @@ namespace winrt::Aobus::implementation
         return;
       }
 
-      _windowSessionPtr =
-        std::make_unique<ao::winui::LibraryWindowSession>(appStateRoot, _dispatcher, *_presentationTextCatalogPtr);
+      _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(
+        appStateRoot, _dispatcher, *_presentationTextCatalogPtr, *_textOrderingPolicyPtr);
       auto const weak = get_weak();
       auto startedRes = _windowSessionPtr->start(
         std::move(*startupRequestRes),

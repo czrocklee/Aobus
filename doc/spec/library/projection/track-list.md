@@ -24,6 +24,8 @@ Its public boundary is `app/include/ao/rt/projection/`, its implementation is `a
 - **Regular batch** contains sequential insert, remove, and update row ranges.
 - **Reset** announces a complete replacement snapshot.
 - **Source invalidation** is the terminal outcome of the leased source identity.
+- **Text-ordering policy** is an optional borrowed runtime interface that
+  derives one transient locale key without exposing ICU types.
 
 ## Invariants
 
@@ -33,6 +35,28 @@ Its public boundary is `app/include/ao/rt/projection/`, its implementation is `a
 - Reset and source invalidation are valid only as singleton batches.
 - Empty presentation sort preserves source order exactly.
 - Equal sort keys retain stable relative order.
+- Incremental and complete rebuilds use the same group-identity and ordering-key
+  derivation and therefore publish the same final row and section order.
+
+## Derived text keys
+
+Grouped text has a locale-independent Unicode-caseless identity key, an
+article-adjusted group-order key, and, when configured, a locale ordering key.
+Ordinary authored textual sort terms receive a locale ordering key only when an
+interactive policy is present; otherwise they compare the same Unicode
+default-folded ordering input as deterministic UTF-8 bytes. Missing values and
+typed numeric fields retain their existing comparators.
+
+The policy writes into caller-owned reusable storage. The projection
+materializes and interns each key before sorting; comparators perform only
+length-aware binary comparisons and never call ICU. A flat presentation with
+no sort does not manufacture ordering keys. A policy failure after library text
+admission is an invariant failure rather than permission to mix locale and byte
+keys in one projection.
+
+The active view and any detached playback projection receive the same borrowed
+policy from their composition-owned runtime. Reconstructing playback therefore
+cannot silently change successor order relative to the visible view.
 
 ## Incremental update
 
@@ -58,7 +82,8 @@ Source invalidation clears rows, lookup indexes, group sections, and arena-backe
 
 ## Arena rebasing
 
-Sort and group strings are immutable views in a `StringArena`.
+Sort, group-identity, and locale-order strings are immutable length-aware views
+in a `StringArena`.
 Incremental updates schedule a full rebase when allocated arena bytes reach twice the post-rebuild baseline with a 64 KiB floor, or touched-row churn reaches 25 percent with a 256-row floor.
 The rebase releases all old view holders before discarding the arena and rebuilding.
 

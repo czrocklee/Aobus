@@ -22,6 +22,7 @@ namespace ao::library
 namespace ao::rt
 {
   class LibraryChanges;
+  class TextOrderingPolicy;
 
   struct VocabularyEntry final
   {
@@ -38,7 +39,9 @@ namespace ao::rt
   class CompletionService final
   {
   public:
-    CompletionService(library::MusicLibrary const& library, LibraryChanges const& changes);
+    CompletionService(library::MusicLibrary const& library,
+                      LibraryChanges const& changes,
+                      TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~CompletionService();
 
     CompletionService(CompletionService const&) = delete;
@@ -73,6 +76,7 @@ namespace ao::rt
     void materializeAggregateValues();
 
     library::MusicLibrary const& _library;
+    TextOrderingPolicy const* _textOrderingPolicy = nullptr;
     std::thread::id _ownerThread;
     async::Subscription _libraryChangeSubscription;
 

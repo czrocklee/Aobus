@@ -6,6 +6,7 @@
 #include "app/ThemeCoordinator.h"
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
+#include "tag/TagEditor.h"
 #include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -17,6 +18,7 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackPresentation.h>
@@ -48,6 +50,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -205,13 +208,21 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("TagEditController - Edit Tags survives context popover close-before-action ordering",
-            "[gtk][regression][tag]")
+            "[gtk][regression][tag][collation]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    REQUIRE(policyRes);
+    auto policyPtr = std::move(*policyRes);
     auto trackId = kInvalidTrackId;
     auto fixture = GtkRuntimeFixture{
       [&](library::MusicLibrary& library)
-      { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
+      {
+        trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"});
+        library::test::addTrackWithUniqueFixtureUri(library, {.title = "Zulu Tag Source", .tags = {"z"}});
+        library::test::addTrackWithUniqueFixtureUri(library, {.title = "Umlaut Tag Source", .tags = {"ä"}});
+      },
+      policyPtr.get()};
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto imageCache = ImageCache{200};
@@ -246,6 +257,9 @@ namespace ao::gtk::test
     auto const popovers = collectAll<Gtk::Popover>(page);
     REQUIRE(popovers.size() == 1);
     CHECK(dynamic_cast<Gtk::PopoverMenu*>(popovers.front()) == nullptr);
+    auto* const editor = findWidget<TagEditor>(*popovers.front());
+    REQUIRE(editor != nullptr);
+    CHECK(directChildLabelTextsByClass(*editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ä", "z"});
   }
 
   TEST_CASE("TagEditController - empty Add to Playlist menu links to Playlist creation", "[gtk][unit][tag][playlist]")

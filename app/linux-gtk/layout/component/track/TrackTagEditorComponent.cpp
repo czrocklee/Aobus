@@ -41,7 +41,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackTagEditorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _tagEditor{ctx.dependencies.textCatalog}
+        : _tagEditor{ctx.dependencies.textCatalog, ctx.runtime.textOrderingPolicy()}
         , _textCatalog{ctx.dependencies.textCatalog}
         , _library{ctx.runtime.library()}
         , _notifications{ctx.runtime.notifications()}

@@ -40,8 +40,12 @@ namespace ao::winui
 
   LibraryWindowSession::LibraryWindowSession(std::filesystem::path stateRoot,
                                              winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                                             uimodel::PresentationTextCatalog textCatalog)
-    : _stateRoot{std::move(stateRoot)}, _dispatcher{std::move(dispatcher)}, _textCatalog{std::move(textCatalog)}
+                                             uimodel::PresentationTextCatalog textCatalog,
+                                             rt::TextOrderingPolicy const& textOrderingPolicy)
+    : _stateRoot{std::move(stateRoot)}
+    , _dispatcher{std::move(dispatcher)}
+    , _textCatalog{std::move(textCatalog)}
+    , _textOrderingPolicy{textOrderingPolicy}
   {
   }
 
@@ -72,7 +76,8 @@ namespace ao::winui
 
     try
     {
-      auto sessionRes = LibrarySession::create(_stateRoot, _dispatcher, _textCatalog, std::move(optSuccessorRequest));
+      auto sessionRes = LibrarySession::create(
+        _stateRoot, _dispatcher, _textCatalog, _textOrderingPolicy, std::move(optSuccessorRequest));
 
       if (!sessionRes)
       {
