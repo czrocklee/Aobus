@@ -13,7 +13,9 @@
 namespace ao::winui
 {
   OutputDeviceControl::OutputDeviceControl(OutputDeviceControlConfig config)
-    : _presenter{std::move(config.presenter)}, _intent{std::move(config.intent)}
+    : _presenter{std::move(config.presenter)}
+    , _intent{std::move(config.intent)}
+    , _textCatalog{std::move(config.textCatalog)}
   {
     if (_presenter)
     {
@@ -34,7 +36,7 @@ namespace ao::winui
     unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(
-      playback, [this](uimodel::OutputDeviceViewState const& state) { applyState(state); }, _intent);
+      playback, _textCatalog, [this](uimodel::OutputDeviceViewState const& state) { applyState(state); }, _intent);
     _viewModelPtr->refresh();
   }
 
@@ -51,7 +53,7 @@ namespace ao::winui
     {
       _presenter.Content(winrt::box_value(L"--"));
       winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-        _presenter, winrt::box_value(resourceHstring(L"OutputDeviceTooltip")));
+        _presenter, winrt::box_value(resourceHstring(L"winui_playback_output_device")));
     }
   }
 
@@ -65,7 +67,8 @@ namespace ao::winui
     }
 
     _presenter.Content(winrt::box_value(winrt::to_hstring(state.outputBackendSummary)));
-    auto tooltip = winrt::Windows::Foundation::IInspectable{winrt::box_value(resourceHstring(L"OutputDeviceTooltip"))};
+    auto tooltip =
+      winrt::Windows::Foundation::IInspectable{winrt::box_value(resourceHstring(L"winui_playback_output_device"))};
 
     if (!state.outputDeviceStatus.empty())
     {
@@ -115,7 +118,7 @@ namespace ao::winui
     if (_state.rows.empty())
     {
       auto item = winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
-      item.Text(resourceHstring(L"NoOutputDevices"));
+      item.Text(resourceHstring(L"winui_playback_no_output_devices"));
       item.IsEnabled(false);
       _flyout.Items().Append(item);
     }

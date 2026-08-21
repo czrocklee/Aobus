@@ -26,6 +26,7 @@ namespace ao::winui
     : _input{std::move(config.input)}
     , _debounceTimer{_input.DispatcherQueue().CreateTimer()}
     , _onError{std::move(config.onError)}
+    , _textCatalog{std::move(config.textCatalog)}
   {
     _debounceTimer.Interval(kFilterDebounceInterval);
     _debounceTimer.IsRepeating(false);
@@ -50,7 +51,7 @@ namespace ao::winui
     unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::TrackFilterViewModel>(
-      views, workspace, [this](uimodel::TrackFilterViewState const& state) { applyState(state); });
+      views, workspace, _textCatalog, [this](uimodel::TrackFilterViewState const& state) { applyState(state); });
   }
 
   void TrackQuickFilterControl::unbind() noexcept

@@ -9,7 +9,6 @@
 #include "layout/runtime/ResourceLookup.h"
 #include "layout/runtime/UiSubscription.h"
 #include "pch.h"
-#include "platform/StringResources.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -109,7 +108,7 @@ namespace ao::winui::layout
         _root.Children().Append(coverFrame);
         _root.Children().Append(text);
 
-        follow(ctx.asyncRuntime, ctx.playback);
+        follow(ctx.asyncRuntime, ctx.playback, ctx.textCatalog);
         applyShellState(ctx.shellState);
         _shellStateSub = subscribeUiUpdate(
           ctx.shellStateChanged, "NowPlayingInfoComponent", [this](ShellState const state) { applyShellState(state); });
@@ -132,20 +131,19 @@ namespace ao::winui::layout
                                                                      : winrt::Microsoft::UI::Xaml::Visibility::Visible);
       }
 
-      void follow(async::Runtime& asyncRuntime, rt::PlaybackService& playback)
+      void follow(async::Runtime& asyncRuntime,
+                  rt::PlaybackService& playback,
+                  uimodel::PresentationTextCatalog const& textCatalog)
       {
         _coverArt.bind(asyncRuntime);
         _viewModelPtr = std::make_unique<uimodel::NowPlayingViewModel>(
-          playback, [this](uimodel::NowPlayingViewState const& state) { applyState(state); });
+          playback, textCatalog, [this](uimodel::NowPlayingViewState const& state) { applyState(state); });
       }
 
       void applyState(uimodel::NowPlayingViewState const& state)
       {
-        _title.Text(state.isActive ? winrt::to_hstring(state.title) : resourceHstring(L"NotPlaying"));
-        // The runtime reports the untranslated placeholder, which the shell
-        // shows in the user's language.
-        _artist.Text(state.artist == "Unknown Artist" ? resourceHstring(L"UnknownArtist")
-                                                      : winrt::to_hstring(state.artist));
+        _title.Text(winrt::to_hstring(state.title));
+        _artist.Text(winrt::to_hstring(state.artist));
         _coverArt.select(state.coverArtId, state.coverArtPlaceholderIdentity, true);
       }
 

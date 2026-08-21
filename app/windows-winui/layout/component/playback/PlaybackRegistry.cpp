@@ -87,7 +87,8 @@ namespace ao::winui::layout
     {
     public:
       TransportButtonComponent(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-        : _transport{TransportButtonConfig{.button = _button, .command = commandOf(node)}}
+        : _transport{
+            TransportButtonConfig{.button = _button, .textCatalog = ctx.textCatalog, .command = commandOf(node)}}
       {
         _transport.bind(ctx.playback, ctx.playbackCommands);
       }
@@ -192,12 +193,12 @@ namespace ao::winui::layout
     {
     public:
       VolumeControlComponent(LayoutBuildContext& ctx, bool const flyout)
-        : _volume{VolumeControlConfig{.slider = configuredSlider(_slider)}}
+        : _volume{VolumeControlConfig{.slider = configuredSlider(_slider), .textCatalog = ctx.textCatalog}}
       {
         if (flyout)
         {
           auto heading = TextBlock{};
-          heading.Text(winrt::to_hstring(resourceString("VolumeHeadingLabel")));
+          heading.Text(winrt::to_hstring(resourceString("winui_playback_volume")));
           heading.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
 
           auto content = StackPanel{};
@@ -214,7 +215,7 @@ namespace ao::winui::layout
           _button = Button{};
           _button.Content(SymbolIcon{Symbol::Volume});
           _button.Flyout(popup);
-          ToolTipService::SetToolTip(_button, winrt::box_value(resourceHstring(L"VolumeTooltip")));
+          ToolTipService::SetToolTip(_button, winrt::box_value(resourceHstring(L"winui_playback_volume")));
         }
 
         _volume.bind(ctx.playback);
@@ -247,6 +248,7 @@ namespace ao::winui::layout
         : _outputDevice{OutputDeviceControlConfig{
             .presenter = _button,
             .intent = ctx.outputDeviceIntent,
+            .textCatalog = ctx.textCatalog,
           }}
       {
         _outputDevice.bind(ctx.playback);

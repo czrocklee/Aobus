@@ -201,6 +201,15 @@ invocations and Visual Studio are unnecessary.
 
 The WinUI graph has one Windows-only static frontend library, `aobus-winui-lib`, which owns all compiled C++, XAML, IDL, and generated C++/WinRT implementation.
 The thin `aobus-winui` executable owns the final link, manifest, string resources, and deployed assets.
+Canonical ICU catalog sources generate neutral `en`, `de`, and `qps-ploc`
+`.resw` inputs in the build tree. MakePri compiles them into the unpackaged
+application PRI with `en` as the default language. The neutral English output
+also contains the checked-in WinUI-only definitions for native strings that have
+not migrated; one `en/Resources.resw` therefore owns each neutral resource id.
+The application binds C++ lookup to its startup locale through an explicit MRT
+resource context. A small native post-link probe compares MRT and ICU fallback
+for English, German regional requests, unsupported locales, and pseudo-locales;
+a WinUI build fails if the two adapters diverge.
 WinUI-owned rules that need native types — XAML elements, C++/WinRT projections, resource dictionaries — are included in `ao_core_test` only by the normal native Windows profile.
 WinUI-owned rules that name no platform API are compiled into `ao_core_test` on every host instead, so the settings schema, output-preference resolution, root-commit transaction, restart sequencing, and shell-state vocabulary are gated by the Linux run as well.
 Neither case exports a second cross-platform WinUI model library: the sources stay Windows-owned in `aobus-winui-lib`, and the test executable compiles them directly.

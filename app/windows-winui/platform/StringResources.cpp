@@ -3,22 +3,64 @@
 
 #include "platform/StringResources.h"
 
-#include <winrt/Microsoft.Windows.ApplicationModel.Resources.h>
+#include <ao/Error.h>
+#include <ao/utility/String.h>
 
-#include <cctype>
+#include <winrt/Microsoft.Windows.ApplicationModel.Resources.h>
+#include <winrt/Windows.Foundation.Collections.h>
+
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::winui
 {
   namespace
   {
+    namespace resources = winrt::Microsoft::Windows::ApplicationModel::Resources;
+
+    struct ResourceLookupState final
+    {
+      std::string localeTag;
+      resources::ResourceManager manager;
+      resources::ResourceContext context;
+      resources::ResourceMap map;
+    };
+
+    struct ResourceLookupHolder final
+    {
+      std::mutex mutex;
+      std::shared_ptr<ResourceLookupState const> statePtr;
+    };
+
+    ResourceLookupHolder& resourceLookupHolder()
+    {
+      static auto holder = ResourceLookupHolder{};
+      return holder;
+    }
+
+    std::shared_ptr<ResourceLookupState const> configuredState()
+    {
+      auto& holder = resourceLookupHolder();
+      auto lock = std::scoped_lock{holder.mutex};
+      return holder.statePtr;
+    }
+
     winrt::hstring lookup(std::wstring_view const resourceId)
     {
       try
       {
-        auto const loader = winrt::Microsoft::Windows::ApplicationModel::Resources::ResourceLoader{};
-        return loader.GetString(winrt::hstring{resourceId});
+        auto const statePtr = configuredState();
+
+        if (!statePtr)
+        {
+          return {};
+        }
+
+        auto const candidate = statePtr->map.TryGetValue(winrt::hstring{resourceId}, statePtr->context);
+        return candidate ? candidate.ValueAsString() : winrt::hstring{};
       }
       catch (winrt::hresult_error const&)
       {
@@ -26,6 +68,57 @@ namespace ao::winui
       }
     }
   } // namespace
+
+  Result<> configureResourceLanguage(std::string_view const localeTag)
+  {
+    try
+    {
+      auto manager = resources::ResourceManager{};
+      auto context = manager.CreateResourceContext();
+      context.QualifierValues().Insert(L"Language", winrt::to_hstring(localeTag));
+      auto map = manager.MainResourceMap().GetSubtree(L"Resources");
+
+      if (!map)
+      {
+        return makeError(Error::Code::InitFailed, "WinUI resources contain no Resources subtree");
+      }
+
+      auto candidatePtr = std::make_shared<ResourceLookupState>(ResourceLookupState{
+        .localeTag = std::string{localeTag},
+        .manager = std::move(manager),
+        .context = std::move(context),
+        .map = std::move(map),
+      });
+
+      auto& holder = resourceLookupHolder();
+      auto lock = std::scoped_lock{holder.mutex};
+
+      if (holder.statePtr)
+      {
+        if (holder.statePtr->localeTag == localeTag)
+        {
+          return {};
+        }
+
+        return makeError(Error::Code::Conflict, "WinUI resource language was already configured");
+      }
+
+      holder.statePtr = std::move(candidatePtr);
+      return {};
+    }
+    catch (winrt::hresult_error const& error)
+    {
+      return makeError(Error::Code::InitFailed,
+                       "Could not configure the WinUI resource language: " + winrt::to_string(error.message()));
+    }
+  }
+
+  void resetResourceLanguage()
+  {
+    auto& holder = resourceLookupHolder();
+    auto lock = std::scoped_lock{holder.mutex};
+    holder.statePtr.reset();
+  }
 
   winrt::hstring resourceHstring(std::wstring_view const resourceId)
   {
@@ -53,8 +146,7 @@ namespace ao::winui
 
     for (auto const character : stableId)
     {
-      auto const byte = static_cast<unsigned char>(character);
-      key.push_back(std::isalnum(byte) != 0 ? character : '_');
+      key.push_back(utility::isAsciiAlphaNumeric(character) ? character : '_');
     }
 
     return resourceStringOr(key, fallback);

@@ -278,7 +278,7 @@ namespace ao::winui::test
     CHECK(contains(actions, "shell.toggleInspector"));
 
     auto const builder = readShellBuilderSource();
-    CHECK(builder.contains("\"TrackDetailsMenuItem\""));
+    CHECK(builder.contains("\"winui_shell_track_details\""));
     CHECK(builder.contains("commands.toggleInspector"));
   }
 

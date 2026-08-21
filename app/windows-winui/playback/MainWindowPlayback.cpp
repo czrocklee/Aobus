@@ -94,9 +94,9 @@ namespace winrt::Aobus::implementation
     // document, so the frame keeps a view model for each rather than reaching
     // into whichever transport the live generation happens to have built.
     _playPausePtr = std::make_unique<ao::uimodel::TransportViewModel>(
-      playback, commands, ao::uimodel::PlaybackCommand::PlayPause, false, [](auto const&) {});
+      playback, commands, _session->textCatalog(), ao::uimodel::PlaybackCommand::PlayPause, false, [](auto const&) {});
     _stopPtr = std::make_unique<ao::uimodel::TransportViewModel>(
-      playback, commands, ao::uimodel::PlaybackCommand::Stop, false, [](auto const&) {});
+      playback, commands, _session->textCatalog(), ao::uimodel::PlaybackCommand::Stop, false, [](auto const&) {});
 
     if (_fullscreenSoul)
     {
@@ -111,7 +111,7 @@ namespace winrt::Aobus::implementation
     }
     catch (hresult_error const& error)
     {
-      updateStatus(ao::winui::formatResource("SmtcUnavailableFormat", to_string(error.message())));
+      updateStatus(ao::winui::formatResource("winui_smtc_unavailable", to_string(error.message())));
     }
   }
 

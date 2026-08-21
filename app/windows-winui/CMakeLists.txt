@@ -180,6 +180,7 @@ target_link_libraries(aobus-winui-lib
     ao_windows_platform
     PkgRapidYaml
   PRIVATE
+    ao_app_i18n
     runtimeobject.lib
     shell32.lib)
 add_dependencies(aobus-winui-lib
@@ -192,9 +193,27 @@ add_dependencies(aobus-winui-lib
 add_executable(aobus-winui WIN32
   ${AOBUS_NO_COVER_ASSETS}
   ${AOBUS_SHELL_LAYOUT_ASSETS}
-  Resources/en-US/Resources.resw
+  ${AOBUS_CATALOG_EN_RESW}
+  ${AOBUS_CATALOG_DE_RESW}
+  ${AOBUS_CATALOG_PSEUDO_RESW}
   app.manifest
 )
+
+add_executable(ao_winui_localization_probe EXCLUDE_FROM_ALL
+  ${CMAKE_SOURCE_DIR}/test/helper/WinUiLocalizationProbe.cpp
+  platform/StringResources.cpp
+  ${AOBUS_CATALOG_EN_RESW}
+  ${AOBUS_CATALOG_DE_RESW}
+  ${AOBUS_CATALOG_PSEUDO_RESW}
+)
+aobus_enable_windows_utf8_manifest(ao_winui_localization_probe)
+target_include_directories(ao_winui_localization_probe PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(ao_winui_localization_probe PRIVATE
+  ao_app_i18n
+  runtimeobject.lib)
+
 aobus_verify_windows_utf8_manifest(aobus-winui)
 target_include_directories(aobus-winui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-winui PRIVATE
@@ -205,11 +224,19 @@ target_link_libraries(aobus-winui PRIVATE
 # entry explicitly so the linker extracts that object without /WHOLEARCHIVE,
 # which would also extract and duplicate generated XAML metadata providers.
 target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
+add_dependencies(aobus-winui ao_winui_localization_probe)
+add_custom_command(TARGET aobus-winui POST_BUILD
+  COMMAND $<TARGET_FILE:ao_winui_localization_probe>
+  COMMENT "Verifying WinUI and ICU localization fallback parity"
+  VERBATIM)
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
   ${AOBUS_WINUI_LIBRARY_SOURCES}
-  Resources/en-US/Resources.resw
   app.manifest)
+source_group("Generated Localization" FILES
+  ${AOBUS_CATALOG_EN_RESW}
+  ${AOBUS_CATALOG_DE_RESW}
+  ${AOBUS_CATALOG_PSEUDO_RESW})
 source_group("Asset" FILES ${AOBUS_NO_COVER_ASSETS} ${AOBUS_SHELL_LAYOUT_ASSETS})
 
 set_source_files_properties(App.xaml PROPERTIES
@@ -221,8 +248,18 @@ set_source_files_properties(MainWindow.xaml PROPERTIES
 set_source_files_properties(Project.idl PROPERTIES
   VS_TOOL_OVERRIDE Midl
   VS_SETTINGS "SubType=Code;OutputDirectory=$(ProjectDir)")
-set_source_files_properties(Resources/en-US/Resources.resw PROPERTIES
-  VS_TOOL_OVERRIDE PRIResource)
+set_source_files_properties(${AOBUS_CATALOG_EN_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\en\\Resources.resw")
+set_source_files_properties(${AOBUS_CATALOG_DE_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\de\\Resources.resw")
+set_source_files_properties(${AOBUS_CATALOG_PSEUDO_RESW} PROPERTIES
+  GENERATED TRUE
+  VS_TOOL_OVERRIDE PRIResource
+  VS_SETTINGS "Link=Resources\\qps-ploc\\Resources.resw")
 set_source_files_properties(app.manifest PROPERTIES
   VS_TOOL_OVERRIDE Manifest)
 set_source_files_properties(${AOBUS_NO_COVER_NOTE_ASSET} PROPERTIES
@@ -273,11 +310,22 @@ set_target_properties(aobus-winui PROPERTIES
   VS_GLOBAL_AppContainerApplication false
   VS_GLOBAL_ApplicationType "Windows Store"
   VS_GLOBAL_ApplicationTypeRevision 10.0
-  VS_GLOBAL_DefaultLanguage en-US
+  VS_GLOBAL_DefaultLanguage en
   VS_GLOBAL_DesktopCompatible true
   VS_GLOBAL_MinimumVisualStudioVersion 18.0
   VS_GLOBAL_RootNamespace Aobus
   VS_GLOBAL_TargetName Aobus
+  VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
+  WindowsTargetPlatformVersion 10.0.26100.0)
+set_target_properties(ao_winui_localization_probe PROPERTIES
+  VS_GLOBAL_AppContainerApplication false
+  VS_GLOBAL_ApplicationType "Windows Store"
+  VS_GLOBAL_ApplicationTypeRevision 10.0
+  VS_GLOBAL_DefaultLanguage en
+  VS_GLOBAL_DesktopCompatible true
+  VS_GLOBAL_MinimumVisualStudioVersion 18.0
+  VS_GLOBAL_RootNamespace AobusLocalizationProbe
+  VS_GLOBAL_TargetName AobusLocalizationProbe
   VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
   WindowsTargetPlatformVersion 10.0.26100.0)
 set_target_properties(aobus-winui-lib PROPERTIES
@@ -292,3 +340,4 @@ set_target_properties(aobus-winui-lib PROPERTIES
 
 aobus_enable_windows_app_sdk(aobus-winui-lib STATIC_LIBRARY)
 aobus_enable_windows_app_sdk(aobus-winui APPLICATION)
+aobus_enable_windows_app_sdk(ao_winui_localization_probe APPLICATION)

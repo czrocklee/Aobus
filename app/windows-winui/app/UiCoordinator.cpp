@@ -20,7 +20,10 @@ namespace ao::winui
   struct UiCoordinator::Impl final
   {
     Impl(LibrarySession& sessionValue, UiCoordinatorCallbacks callbacksValue)
-      : session{sessionValue}, callbacks{std::move(callbacksValue)}, theme{session.stateRoot() / "windows-theme.yaml"}
+      : session{sessionValue}
+      , callbacks{std::move(callbacksValue)}
+      , trackList{sessionValue.textCatalog()}
+      , theme{session.stateRoot() / "windows-theme.yaml"}
     {
       bindRuntime();
       session.setCallbacks({.onStatus =

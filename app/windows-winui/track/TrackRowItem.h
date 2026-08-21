@@ -22,6 +22,11 @@ namespace ao::winui
   };
 } // namespace ao::winui
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace winrt::Aobus::implementation
 {
   // C++/WinRT generates the projected virtual metadata plumbing in this CRTP base.
@@ -38,11 +43,12 @@ namespace winrt::Aobus::implementation
     TrackRowItem(std::uint32_t displayIndex,
                  std::uint32_t sourceIndex,
                  ao::rt::TrackRow const& row,
+                 ao::uimodel::PresentationTextCatalog const& textCatalog,
                  std::span<ao::winui::TrackColumnCellSpec const> columns);
     TrackRowItem(std::uint32_t displayIndex,
                  std::uint32_t sourceIndex,
                  std::uint32_t coverArtId,
-                 std::uint32_t groupCount,
+                 std::string groupCountText,
                  std::string primary,
                  std::string secondary,
                  std::string tertiary,
@@ -57,7 +63,7 @@ namespace winrt::Aobus::implementation
     bool IsGroupHeader() const noexcept { return _isGroupHeader; }
     double RowHeight() const noexcept { return _isGroupHeader ? 0.0 : kTrackRowHeight; }
     double GroupHeight() const noexcept { return _isGroupHeader ? kGroupHeadingHeight : 0.0; }
-    std::uint32_t GroupCount() const noexcept { return _groupCount; }
+    hstring GroupCountText() const noexcept { return _groupCountText; }
     hstring Title() const noexcept { return _title; }
     hstring Artist() const noexcept { return _artist; }
     hstring Album() const noexcept { return _album; }
@@ -76,11 +82,11 @@ namespace winrt::Aobus::implementation
     std::uint32_t _index = 0;
     std::uint32_t _trackId = 0;
     std::uint32_t _coverArtId = 0;
-    std::uint32_t _groupCount = 0;
     bool _isGroupHeader = false;
     hstring _title;
     hstring _artist;
     hstring _album;
+    hstring _groupCountText;
     hstring _coverArtMonogram;
     Windows::Foundation::Collections::IVector<Windows::Foundation::IInspectable> _cells{
       single_threaded_vector<Windows::Foundation::IInspectable>()};

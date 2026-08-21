@@ -14,6 +14,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <concepts>
@@ -49,10 +50,12 @@ namespace winrt::Aobus::implementation
         return ao::utility::pathToUtf8(row.optUriPath->filename());
       }
 
-      return ao::winui::formatResource("TrackFallbackFormat", row.id.raw());
+      return ao::winui::formatResource("track_fallback", row.id.raw());
     }
 
-    std::string cellText(ao::rt::TrackRow const& row, ao::rt::TrackField const field)
+    std::string cellText(ao::uimodel::PresentationTextCatalog const& textCatalog,
+                         ao::rt::TrackRow const& row,
+                         ao::rt::TrackField const field)
     {
       using F = ao::rt::TrackField;
       using namespace ao::uimodel;
@@ -82,7 +85,7 @@ namespace winrt::Aobus::implementation
         case F::FilePath: return row.optUriPath ? ao::utility::pathToGenericUtf8(*row.optUriPath) : std::string{};
         case F::Codec: return formatCodec(row.codec);
         case F::SampleRate: return formatSampleRate(row.sampleRate);
-        case F::Channels: return formatChannels(row.channels);
+        case F::Channels: return formatChannels(textCatalog, row.channels);
         case F::BitDepth: return formatBitDepth(row.bitDepth);
         case F::Bitrate: return formatBitrate(row.bitrate);
         case F::FileSize: return formatFileSize(row.fileSize);
@@ -129,6 +132,7 @@ namespace winrt::Aobus::implementation
   TrackRowItem::TrackRowItem(std::uint32_t const displayIndex,
                              std::uint32_t const sourceIndex,
                              ao::rt::TrackRow const& row,
+                             ao::uimodel::PresentationTextCatalog const& textCatalog,
                              std::span<ao::winui::TrackColumnCellSpec const> const columns)
     : _displayIndex{displayIndex}
     , _index{sourceIndex}
@@ -142,7 +146,7 @@ namespace winrt::Aobus::implementation
     {
       auto const* definition = ao::rt::trackFieldDefinition(column.field);
       appendCell(_cells,
-                 to_hstring(cellText(row, column.field)),
+                 to_hstring(cellText(textCatalog, row, column.field)),
                  ao::rt::trackFieldId(column.field),
                  column.width,
                  definition != nullptr && definition->optSortField);
@@ -152,7 +156,7 @@ namespace winrt::Aobus::implementation
   TrackRowItem::TrackRowItem(std::uint32_t const displayIndex,
                              std::uint32_t const sourceIndex,
                              std::uint32_t const coverArtId,
-                             std::uint32_t const groupCount,
+                             std::string groupCountText,
                              std::string primary,
                              std::string secondary,
                              std::string tertiary,
@@ -160,11 +164,11 @@ namespace winrt::Aobus::implementation
     : _displayIndex{displayIndex}
     , _index{sourceIndex}
     , _coverArtId{coverArtId}
-    , _groupCount{groupCount}
     , _isGroupHeader{true}
     , _title{winrt::to_hstring(primary)}
     , _artist{winrt::to_hstring(secondary)}
     , _album{winrt::to_hstring(tertiary)}
+    , _groupCountText{winrt::to_hstring(groupCountText)}
     , _coverArtMonogram{winrt::to_hstring(coverArtMonogram)}
   {
   }

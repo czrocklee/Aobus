@@ -86,7 +86,8 @@ Renaming an action requires an explicit override migration or deliberate rejecti
 
 ## Frontend observations
 
-The GTK preferences page groups actions by catalog category, shows effective chords, captures a complete non-modifier key combination, surfaces conflicts, and applies accepted changes live.
+The GTK preferences page groups actions by locale-selected catalog category, shows effective chords, captures a complete non-modifier key combination, surfaces localized conflict and editing copy, and applies accepted changes live.
+Action ids and neutral chord strings remain the untranslated identities; localized descriptor labels and categories are presentation only.
 Standalone modifier presses do not complete capture.
 
 App-scoped `Ctrl+,` and context-sensitive bindings such as bare Space are outside the current layout-action keymap.
@@ -104,7 +105,7 @@ They remain GTK-owned until a shared scoped-shortcut contract is defined.
 
 - [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp), [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp), and [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect neutral behavior.
 - [`KeymapApplicatorTest.cpp`](../../../test/unit/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
-- [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, and teardown.
+- [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, localized chrome, and teardown.
 
 ## Related documents
 

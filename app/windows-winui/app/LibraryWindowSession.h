@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -33,7 +34,8 @@ namespace ao::winui
     using ClosedCallback = std::move_only_function<void()>;
 
     LibraryWindowSession(std::filesystem::path stateRoot,
-                         winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher);
+                         winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+                         uimodel::PresentationTextCatalog textCatalog);
     ~LibraryWindowSession();
 
     LibraryWindowSession(LibraryWindowSession const&) = delete;
@@ -64,6 +66,7 @@ namespace ao::winui
 
     std::filesystem::path _stateRoot;
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
+    uimodel::PresentationTextCatalog _textCatalog;
     // Declared before the window so fallback member destruction releases the
     // window first. Explicit retirement preserves the same order.
     std::unique_ptr<LibrarySession> _sessionPtr;

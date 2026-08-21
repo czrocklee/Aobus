@@ -138,9 +138,7 @@ namespace ao::winui
       icon.Glyph(winrt::hstring{kDismissGlyph});
       icon.FontSize(kDetailDismissIconSize);
       button.Content(icon);
-      ToolTipService::SetToolTip(button,
-                                 winrt::box_value(winrt::to_hstring(resourceStringOr(
-                                   "ActivityStatusHideNotificationTooltip", "Hide notification from status"))));
+      ToolTipService::SetToolTip(button, winrt::box_value(resourceHstring(L"winui_activity_hide_notification")));
       return button;
     }
   } // namespace
@@ -156,6 +154,7 @@ namespace ao::winui
     , _detailFlyout{Flyout{}}
     , _detailRows{StackPanel{}}
     , _autoDismissTimer{_root.DispatcherQueue().CreateTimer()}
+    , _textCatalog{std::move(config.textCatalog)}
     , _reserveIdle{config.reserveIdle}
   {
     _detailRows.Spacing(kDetailRowSpacing);
@@ -204,6 +203,7 @@ namespace ao::winui
     {
       _viewModelPtr = std::make_unique<uimodel::ActivityStatusViewModel>(
         notifications,
+        _textCatalog,
         [this](uimodel::ActivityStatusViewState const& state) { render(state); },
         uimodel::ActivityStatusViewModelOptions{
           .libraryTasks = &libraryTasks,
@@ -248,7 +248,7 @@ namespace ao::winui
     bool const reserveIdle = idle && _reserveIdle;
     bool const processing = compact.kind == uimodel::ActivityStatusKind::Processing;
     auto const glyph = reserveIdle ? kNotificationGlyph : statusGlyph(compact.kind);
-    auto const idleLabel = resourceStringOr("ActivityStatusIdleTooltip", "Notifications");
+    auto const idleLabel = resourceString("winui_activity_notifications");
 
     _root.Visibility(idle && !reserveIdle ? Visibility::Collapsed : Visibility::Visible);
     _spinner.Visibility(processing ? Visibility::Visible : Visibility::Collapsed);
@@ -276,8 +276,7 @@ namespace ao::winui
 
     if (openable)
     {
-      detailToolTip =
-        winrt::box_value(winrt::to_hstring(resourceStringOr("ActivityStatusDetailsTooltip", "View activity details")));
+      detailToolTip = winrt::box_value(resourceHstring(L"winui_activity_details"));
     }
     else if (reserveIdle)
     {
@@ -329,7 +328,7 @@ namespace ao::winui
   {
     auto row = StackPanel{};
     row.Spacing(kTaskRowSpacing);
-    row.Children().Append(detailText(resourceStringOr("ActivityStatusLibraryTask", "Library task"), true));
+    row.Children().Append(detailText(resourceString("library_task_label"), true));
     row.Children().Append(detailText(task.message));
 
     auto progress = ProgressBar{};

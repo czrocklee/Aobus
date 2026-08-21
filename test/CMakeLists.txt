@@ -658,8 +658,7 @@ if(WIN32)
     unit/winui/WinUiErrorBoundaryTest.cpp
   )
   target_compile_definitions(ao_core_test PRIVATE
-    AOBUS_WINDOWS_FRAME_XAML="${CMAKE_SOURCE_DIR}/app/windows-winui/MainWindow.xaml"
-    AOBUS_WINDOWS_RESW="${CMAKE_SOURCE_DIR}/app/windows-winui/Resources/en-US/Resources.resw")
+    AOBUS_WINDOWS_FRAME_XAML="${CMAKE_SOURCE_DIR}/app/windows-winui/MainWindow.xaml")
   target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()
 add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_probe)

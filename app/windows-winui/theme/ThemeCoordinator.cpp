@@ -31,7 +31,7 @@ namespace ao::winui
     if (!std::filesystem::exists(_themePath))
     {
       return makeError(
-        Error::Code::NotFound, formatResource("ThemeFileNotFoundFormat", utility::pathToUtf8(_themePath)));
+        Error::Code::NotFound, formatResource("winui_theme_file_not_found", utility::pathToUtf8(_themePath)));
     }
 
     auto bufferRes = yaml::readFileResult(_themePath, kMaximumThemeBytes);
@@ -46,7 +46,8 @@ namespace ao::winui
 
     if (auto const parsedRes = yaml::parseInPlace(tree, *bufferRes, errorState); !parsedRes)
     {
-      return makeError(Error::Code::FormatRejected, formatResource("ThemeLoadFailedFormat", parsedRes.error().message));
+      return makeError(
+        Error::Code::FormatRejected, formatResource("winui_theme_load_failed", parsedRes.error().message));
     }
 
     if (auto const reloadedRes = _session.reload(tree.rootref()); !reloadedRes)

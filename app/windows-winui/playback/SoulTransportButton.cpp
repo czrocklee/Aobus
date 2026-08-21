@@ -3,7 +3,6 @@
 
 #include "playback/SoulTransportButton.h"
 
-#include "platform/StringResources.h"
 #include "playback/AobusSoulControl.h"
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -17,6 +16,7 @@ namespace ao::winui
   SoulTransportButton::SoulTransportButton(SoulTransportButtonConfig config)
     : _button{std::move(config.button)}
     , _soul{std::move(config.soul)}
+    , _textCatalog{std::move(config.textCatalog)}
     , _hasComplexTooltip{config.hasComplexTooltip}
     , _showGlyph{config.showGlyph}
     , _activatesOnClick{config.activatesOnClick}
@@ -42,6 +42,7 @@ namespace ao::winui
     winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->bind(playback);
     _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,
                                                                   commands,
+                                                                  _textCatalog,
                                                                   uimodel::PlaybackCommand::PlayPause,
                                                                   false,
                                                                   [this](uimodel::TransportViewState const& state)
@@ -86,9 +87,7 @@ namespace ao::winui
       if (!_hasComplexTooltip)
       {
         winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-          _button,
-          winrt::box_value(
-            resourceHstring(state.icon == uimodel::TransportIcon::Pause ? L"PauseTooltip" : L"PlayTooltip")));
+          _button, winrt::box_value(winrt::to_hstring(state.tooltip)));
       }
     }
 

@@ -16,6 +16,16 @@ namespace ao::winui
   class LibraryWindowSession;
 }
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace winrt::Aobus::implementation
 {
   struct App : AppT<App>
@@ -46,6 +56,8 @@ namespace winrt::Aobus::implementation
     void exitApplication() noexcept;
 
     Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
+    std::unique_ptr<ao::i18n::MessageCatalog> _messageCatalogPtr;
+    std::unique_ptr<ao::uimodel::PresentationTextCatalog> _presentationTextCatalogPtr;
     std::unique_ptr<ao::winui::LibraryWindowSession> _windowSessionPtr;
     ProcessPhase _processPhase = ProcessPhase::Starting;
   };

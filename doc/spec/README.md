@@ -71,6 +71,7 @@ Use the [specification template](../template/spec.md).
 
 ## Presentation
 
+- [Interactive localization](presentation/localization.md) defines startup locale admission, explicit fallback, immutable message formatting, pseudo-localization, WinUI MRT parity, and CLI isolation.
 - [Activity status](presentation/activity-status.md) defines notification and library-task projection, priority, detail eligibility, timeout, and local suppression.
 - [Track filtering](presentation/track-filter.md) defines quick-search resolution, runtime view filtering, status, and saved-List derivation.
 - [List-navigation tree](presentation/list-tree.md) defines the shared virtual root, effective-parent recovery, stable hierarchy, and frontend adaptation.

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "i18n/MessageIds.h"
+#include "i18n/WinUiResourceProjection.h"
+
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -36,6 +39,8 @@ namespace ao::winui::test
       std::set<std::string> prefixes;
       /// `x:Uid` names, each of which claims every `<uid>.<property>` entry.
       std::set<std::string> uids;
+      /// Resource ids passed through native positional formatting.
+      std::set<std::string> formattedIds;
     };
 
     std::string readFile(std::filesystem::path const& path)
@@ -157,6 +162,7 @@ namespace ao::winui::test
             collectCallLiterals(source, lookup, references.ids);
           }
 
+          collectCallLiterals(source, "formatResource(", references.formattedIds);
           collectCallLiterals(source, "stableResourceString(", references.prefixes);
           collectStringLiterals(source, references.mentions);
           continue;
@@ -180,25 +186,30 @@ namespace ao::winui::test
       return references;
     }
 
-    std::set<std::string> declaredResourceNames()
+    std::set<std::string> englishOnlyResourceNames()
     {
-      auto const resw = readFile(std::filesystem::path{AOBUS_WINDOWS_RESW});
       auto names = std::set<std::string>{};
-      constexpr auto kMarker = std::string_view{"<data name=\""};
-      std::size_t position = 0;
 
-      while ((position = resw.find(kMarker, position)) != std::string::npos)
+      for (auto const& resource : i18n::detail::kWinUiEnglishResources)
       {
-        position += kMarker.size();
-        auto const end = resw.find('"', position);
+        names.emplace(resource.resourceId);
+      }
 
-        if (end == std::string::npos)
-        {
-          break;
-        }
+      return names;
+    }
 
-        names.emplace(resw.substr(position, end - position));
-        position = end;
+    std::set<std::string> resolvableResourceNames()
+    {
+      auto names = englishOnlyResourceNames();
+
+      for (auto const& definition : i18n::detail::kMessageDefinitions)
+      {
+        names.emplace(definition.key);
+      }
+
+      for (auto const& alias : i18n::detail::kWinUiResourceAliases)
+      {
+        names.emplace(alias.resourceId);
       }
 
       return names;
@@ -233,7 +244,7 @@ namespace ao::winui::test
      */
     auto const references = frontendReferences();
     CHECK(references.ids.size() > 30);
-    auto const declared = declaredResourceNames();
+    auto const declared = resolvableResourceNames();
 
     for (auto const& id : references.ids)
     {
@@ -253,10 +264,66 @@ namespace ao::winui::test
      */
     auto const references = frontendReferences();
 
-    for (auto const& name : declaredResourceNames())
+    for (auto const& name : englishOnlyResourceNames())
     {
       INFO("declared resource " << name);
       CHECK(isReachable(references, name));
+    }
+  }
+
+  TEST_CASE("StringResource - generated native aliases connect canonical messages to reachable WinUI ids",
+            "[winui][unit][layout][localization]")
+  {
+    auto const references = frontendReferences();
+    auto canonicalIds = std::set<std::string_view>{};
+
+    for (auto const& definition : i18n::detail::kMessageDefinitions)
+    {
+      canonicalIds.emplace(definition.key);
+    }
+
+    for (auto const& alias : i18n::detail::kWinUiResourceAliases)
+    {
+      INFO("resource alias " << alias.resourceId);
+      CHECK(canonicalIds.contains(alias.messageId));
+      CHECK(isReachable(references, std::string{alias.resourceId}));
+    }
+  }
+
+  TEST_CASE("StringResource - generated positional projections retain canonical reachable ids",
+            "[winui][unit][layout][localization]")
+  {
+    auto const references = frontendReferences();
+    auto canonicalIds = std::set<std::string_view>{};
+
+    for (auto const& definition : i18n::detail::kMessageDefinitions)
+    {
+      canonicalIds.emplace(definition.key);
+    }
+
+    for (auto const& positional : i18n::detail::kWinUiPositionalResources)
+    {
+      INFO("positional resource " << positional.messageId);
+      CHECK(canonicalIds.contains(positional.messageId));
+      CHECK(isReachable(references, std::string{positional.messageId}));
+    }
+  }
+
+  TEST_CASE("StringResource - native formatting uses only governed positional resources",
+            "[winui][unit][layout][localization]")
+  {
+    auto const references = frontendReferences();
+    auto governed = std::set<std::string_view>{"StartupHresultDetailFormat", "UnknownPresentationFormat"};
+
+    for (auto const& positional : i18n::detail::kWinUiPositionalResources)
+    {
+      governed.emplace(positional.messageId);
+    }
+
+    for (auto const& id : references.formattedIds)
+    {
+      INFO("formatted resource " << id);
+      CHECK(governed.contains(id));
     }
   }
 } // namespace ao::winui::test

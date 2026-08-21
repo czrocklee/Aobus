@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -29,6 +31,7 @@ namespace ao::winui
   {
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox input{nullptr};
     std::function<void(std::string)> onError;
+    uimodel::PresentationTextCatalog textCatalog;
   };
 
   class TrackQuickFilterControl final
@@ -56,6 +59,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox _input{nullptr};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _debounceTimer{nullptr};
     std::function<void(std::string)> _onError;
+    uimodel::PresentationTextCatalog _textCatalog;
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox::TextChanged_revoker _textChangedRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _debounceTickRevoker{};
     std::unique_ptr<uimodel::TrackFilterViewModel> _viewModelPtr;

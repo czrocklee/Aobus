@@ -65,7 +65,7 @@ namespace winrt::Aobus::implementation
       if (auto const selectedRes = _trackListPtr->selectPresentation(_session->presentationForList(listId));
           !selectedRes)
       {
-        updateStatus(ao::winui::formatResource("PresentationFailedFormat", selectedRes.error().message));
+        updateStatus(ao::winui::formatResource("winui_presentation_failed", selectedRes.error().message));
       }
     }
   }
@@ -214,13 +214,13 @@ namespace winrt::Aobus::implementation
 
     if (auto resizedRes = _trackListPtr->resizeColumn(fieldId, args.HorizontalChange()); !resizedRes)
     {
-      updateStatus(ao::winui::formatResource("ColumnResizeFailedFormat", resizedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_column_resize_failed", resizedRes.error().message));
       return;
     }
 
     if (auto savedRes = _session->saveSettings(); !savedRes)
     {
-      updateStatus(ao::winui::formatResource("ColumnSettingsFailedFormat", savedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
     }
   }
 
@@ -247,13 +247,13 @@ namespace winrt::Aobus::implementation
 
     if (auto movedRes = _trackListPtr->moveColumn(fieldId, offset); !movedRes)
     {
-      updateStatus(ao::winui::formatResource("ColumnMoveFailedFormat", movedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_column_move_failed", movedRes.error().message));
       return;
     }
 
     if (auto savedRes = _session->saveSettings(); !savedRes)
     {
-      updateStatus(ao::winui::formatResource("ColumnSettingsFailedFormat", savedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
     }
   }
 
@@ -265,7 +265,7 @@ namespace winrt::Aobus::implementation
     }
 
     auto flyout = Microsoft::UI::Xaml::Controls::MenuFlyout{};
-    auto const text = ao::uimodel::PresentationTextCatalog{};
+    auto const& text = _session->textCatalog();
     auto weak = get_weak();
 
     for (auto const& choice : _trackListPtr->columnChoices())
@@ -273,7 +273,7 @@ namespace winrt::Aobus::implementation
       auto item = Microsoft::UI::Xaml::Controls::ToggleMenuFlyoutItem{};
       auto const fieldId = ao::rt::trackFieldId(choice.field);
       item.Text(
-        to_hstring(ao::winui::stableResourceString("TrackField_", fieldId, text.trackFieldLabel(choice.field))));
+        to_hstring(ao::winui::stableResourceString("track_field_", fieldId, text.trackFieldLabel(choice.field))));
       item.IsChecked(choice.visible);
       item.Tag(box_value(to_hstring(std::string{fieldId})));
       item.Click(
@@ -293,7 +293,7 @@ namespace winrt::Aobus::implementation
           if (!changedRes)
           {
             toggle.IsChecked(!toggle.IsChecked());
-            self->updateStatus(ao::winui::formatResource("ColumnVisibilityFailedFormat", changedRes.error().message));
+            self->updateStatus(ao::winui::formatResource("winui_column_visibility_failed", changedRes.error().message));
             return;
           }
 
@@ -301,7 +301,7 @@ namespace winrt::Aobus::implementation
           {
             if (auto savedRes = self->_session->saveSettings(); !savedRes)
             {
-              self->updateStatus(ao::winui::formatResource("ColumnSettingsFailedFormat", savedRes.error().message));
+              self->updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
             }
           }
         });
@@ -325,7 +325,7 @@ namespace winrt::Aobus::implementation
 
     if (definition == nullptr || !definition->optSortField)
     {
-      updateStatus(ao::winui::formatResource("ColumnNotSortableFormat", columnId));
+      updateStatus(ao::winui::formatResource("winui_column_not_sortable", columnId));
       return;
     }
 
@@ -333,13 +333,13 @@ namespace winrt::Aobus::implementation
 
     if (!sortedRes)
     {
-      updateStatus(ao::winui::formatResource("SortFailedFormat", sortedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_sort_failed", sortedRes.error().message));
       return;
     }
 
     if (auto savedRes = _session->saveSettings(); !savedRes)
     {
-      updateStatus(ao::winui::formatResource("ColumnSettingsFailedFormat", savedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
     }
   }
 } // namespace winrt::Aobus::implementation

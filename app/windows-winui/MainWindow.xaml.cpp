@@ -106,7 +106,7 @@ namespace winrt::Aobus::implementation
       {
         if (auto self = weak.get(); self)
         {
-          self->updateStatus(ao::winui::formatResource("ErrorFormat", error.message));
+          self->updateStatus(ao::winui::formatResource("winui_error", error.message));
         }
       },
     };
@@ -126,7 +126,7 @@ namespace winrt::Aobus::implementation
     reconcileLibrary();
     restoreWindowPlacement();
     applyShellState(RootGrid().ActualWidth());
-    updateStatus(ao::winui::resourceString("Ready"));
+    updateStatus(ao::winui::resourceString("winui_library_ready"));
     _sessionPhase = SessionPhase::Prepared;
   }
 
@@ -168,6 +168,7 @@ namespace winrt::Aobus::implementation
             self->_session->setPreferredOutputSelection(selection);
           }
         }),
+      .textCatalog = _session->textCatalog(),
     });
 
     auto const command = [weak](void (MainWindow::*method)())
@@ -281,7 +282,7 @@ namespace winrt::Aobus::implementation
 
     if (!retiredRes)
     {
-      updateStatus(ao::winui::formatResource("LibrarySwitchFailedFormat", retiredRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_library_switch_failed", retiredRes.error().message));
     }
 
     return retiredRes;

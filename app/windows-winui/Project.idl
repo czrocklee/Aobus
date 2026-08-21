@@ -20,7 +20,7 @@ namespace Aobus
         Boolean IsGroupHeader{ get; };
         Double RowHeight{ get; };
         Double GroupHeight{ get; };
-        UInt32 GroupCount{ get; };
+        String GroupCountText{ get; };
         String Title{ get; };
         String Artist{ get; };
         String Album{ get; };

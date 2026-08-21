@@ -10,6 +10,7 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/Log.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <winrt/Microsoft.UI.Xaml.h>
 
@@ -38,8 +39,9 @@ namespace ao::winui
   } // namespace
 
   LibraryWindowSession::LibraryWindowSession(std::filesystem::path stateRoot,
-                                             winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher)
-    : _stateRoot{std::move(stateRoot)}, _dispatcher{std::move(dispatcher)}
+                                             winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+                                             uimodel::PresentationTextCatalog textCatalog)
+    : _stateRoot{std::move(stateRoot)}, _dispatcher{std::move(dispatcher)}, _textCatalog{std::move(textCatalog)}
   {
   }
 
@@ -70,7 +72,7 @@ namespace ao::winui
 
     try
     {
-      auto sessionRes = LibrarySession::create(_stateRoot, _dispatcher, std::move(optSuccessorRequest));
+      auto sessionRes = LibrarySession::create(_stateRoot, _dispatcher, _textCatalog, std::move(optSuccessorRequest));
 
       if (!sessionRes)
       {

@@ -3,14 +3,12 @@
 
 #include "playback/TransportButton.h"
 
-#include "platform/StringResources.h"
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 #include <memory>
-#include <string_view>
 #include <utility>
 
 namespace ao::winui
@@ -37,30 +35,13 @@ namespace ao::winui
 
       return Symbol::Play;
     }
-
-    std::wstring_view tooltipResource(uimodel::TransportIcon const icon) noexcept
-    {
-      using Icon = uimodel::TransportIcon;
-
-      switch (icon)
-      {
-        case Icon::Play: return L"PlayTooltip";
-        case Icon::Pause: return L"PauseTooltip";
-        case Icon::Stop: return L"StopTooltip";
-        case Icon::Next: return L"NextTooltip";
-        case Icon::Previous: return L"PreviousTooltip";
-        case Icon::Shuffle: return L"ShuffleTooltip";
-        case Icon::Repeat:
-        case Icon::RepeatOne: return L"RepeatTooltip";
-        case Icon::None: return {};
-      }
-
-      return {};
-    }
   } // namespace
 
   TransportButton::TransportButton(TransportButtonConfig config)
-    : _button{std::move(config.button)}, _command{config.command}, _showLabel{config.showLabel}
+    : _button{std::move(config.button)}
+    , _textCatalog{std::move(config.textCatalog)}
+    , _command{config.command}
+    , _showLabel{config.showLabel}
   {
     _clickRevoker = _button.Click(winrt::auto_revoke,
                                   [this](winrt::Windows::Foundation::IInspectable const&,
@@ -78,6 +59,7 @@ namespace ao::winui
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,
                                                                   commands,
+                                                                  _textCatalog,
                                                                   _command,
                                                                   _showLabel,
                                                                   [this](uimodel::TransportViewState const& state)
@@ -110,8 +92,7 @@ namespace ao::winui
     _button.IsEnabled(state.enabled);
     _button.Content(winrt::Microsoft::UI::Xaml::Controls::SymbolIcon{symbolForTransport(state.icon)});
 
-    auto const resourceId = tooltipResource(state.icon);
     winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-      _button, winrt::box_value(resourceId.empty() ? winrt::to_hstring(state.tooltip) : resourceHstring(resourceId)));
+      _button, winrt::box_value(winrt::to_hstring(state.tooltip)));
   }
 } // namespace ao::winui

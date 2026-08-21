@@ -16,6 +16,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -57,6 +58,7 @@ namespace ao::winui
     static Result<std::unique_ptr<LibrarySession>> create(
       std::filesystem::path stateRoot,
       winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+      uimodel::PresentationTextCatalog textCatalog,
       std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
     ~LibrarySession();
 
@@ -70,6 +72,7 @@ namespace ao::winui
     bool scanAfterOpen() const noexcept { return _scanAfterOpen; }
     bool operationActive() const noexcept { return _operationActive; }
     uimodel::PlaybackCommandSurface& playbackCommands() const noexcept;
+    uimodel::PresentationTextCatalog const& textCatalog() const noexcept { return _textCatalog; }
 
     DesktopSettings const& settings() const noexcept { return _settings; }
     DesktopSettings& settings() noexcept { return _settings; }
@@ -96,7 +99,9 @@ namespace ao::winui
     Result<> playTrack(rt::ViewId viewId, TrackId trackId);
 
   private:
-    LibrarySession(std::filesystem::path stateRoot, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher);
+    LibrarySession(std::filesystem::path stateRoot,
+                   winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+                   uimodel::PresentationTextCatalog textCatalog);
 
     struct CallbackLifetime final
     {};
@@ -127,6 +132,7 @@ namespace ao::winui
 
     std::filesystem::path _stateRoot;
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
+    uimodel::PresentationTextCatalog _textCatalog;
     std::unique_ptr<rt::ConfigStore> _settingsStorePtr;
     std::unique_ptr<rt::ConfigStore> _playbackStorePtr;
     DesktopSettings _settings{};

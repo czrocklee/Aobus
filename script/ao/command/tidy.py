@@ -400,7 +400,6 @@ def prepare_toolchain(
             tool_build = subprocess.run(
                 ["cmake", "--build", str(build_dir), "--target", target, *build.parallel_build_arguments()],
                 cwd=PROJECT_ROOT,
-                stdout=subprocess.DEVNULL,
             )
         if tool_build.returncode != 0:
             raise die(f"failed to build {target}.")
@@ -484,6 +483,11 @@ def is_winui_path(path: Path) -> bool:
     return True
 
 
+def requires_winui_compile_context(path: Path) -> bool:
+    """Return whether a file is compiled only by the native WinUI project graph."""
+    return is_winui_path(path) or winuitidy.requires_winui_compile_context(path)
+
+
 def winui_build_directory(tidy_build_dir: Path, *, path_was_explicit: bool) -> Path:
     """Keep VS-generated WinUI state separate from the Ninja tidy tree."""
     return builddir.winui_companion_build_dir(
@@ -518,12 +522,14 @@ def prepare_winui_compile_commands(
     selected: list[Path],
 ) -> list[dict[str, object]]:
     """Build/query the native WinUI project only when the selected scope needs it."""
-    if toolchain.resource_dir is None or not any(is_winui_path(path) for path in selected):
+    if toolchain.resource_dir is None or not any(requires_winui_compile_context(path) for path in selected):
         return []
 
     winui_dir = winui_build_directory(tidy_build_dir, path_was_explicit=args.path is not None)
     required = tuple(
-        path for path in selected if is_winui_path(path) and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx"}
+        path
+        for path in selected
+        if requires_winui_compile_context(path) and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx"}
     )
     clang_cl = Path(tidyengine.clang_tool(tidy_build_dir, "clang-cl"))
     with buildlock.build_tree_lock(winui_dir):
@@ -929,7 +935,7 @@ def run_command(args: argparse.Namespace) -> int:
                 # elements. clang-tidy does not link or execute the TU, so disabling
                 # that optional STL implementation path preserves the analyzed API.
                 extra.append("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0")
-                if is_winui_path(invocation.compile_command_source):
+                if requires_winui_compile_context(invocation.compile_command_source):
                     # Generated C++/WinRT headers preserve schema spelling while
                     # Windows resolves include paths case-insensitively.
                     extra.append("--extra-arg-before=-Wno-nonportable-include-path")

@@ -35,6 +35,7 @@ namespace ao::uimodel
 {
   class LayoutComponentCatalog;
   class PlaybackCommandSurface;
+  class PresentationTextCatalog;
   class ShellGenerationGate;
   struct LayoutRuntimeState;
 } // namespace ao::uimodel
@@ -113,6 +114,7 @@ namespace ao::winui::layout
     rt::NotificationService& notifications;
     rt::LibraryTaskService& libraryTasks;
     uimodel::PlaybackCommandSurface& playbackCommands;
+    uimodel::PresentationTextCatalog const& textCatalog;
     TrackListController& trackList;
     rt::ResourceByteLoader& resourceBytes;
     ThemeCoordinator& theme;

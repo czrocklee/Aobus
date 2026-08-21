@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 #include <memory>
@@ -23,6 +25,7 @@ namespace ao::winui
   struct AudioPipelineToolTipConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::Button anchor{nullptr};
+    uimodel::PresentationTextCatalog textCatalog;
   };
 
   /**
@@ -53,6 +56,7 @@ namespace ao::winui
     void apply(uimodel::AudioPipelineViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Button _anchor{nullptr};
+    uimodel::PresentationTextCatalog _textCatalog;
     winrt::Microsoft::UI::Xaml::Controls::ToolTip _toolTip{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock _text{nullptr};
     std::unique_ptr<uimodel::NowPlayingViewModel> _viewModelPtr;

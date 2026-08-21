@@ -9,6 +9,7 @@
 #include "track/TrackRowItem.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -59,18 +60,18 @@ namespace ao::winui
     constexpr std::int32_t kMaximumColumnViewportWidth = 4096;
     constexpr std::int32_t kViewportResizeThreshold = 16;
 
-    auto const kHeadingText = uimodel::PresentationTextCatalog{};
-
     class TrackItemMaterializer final
     {
     public:
       TrackItemMaterializer(rt::AppRuntime& inputRuntime,
                             rt::TrackListProjection& inputProjection,
+                            uimodel::PresentationTextCatalog textCatalog,
                             uimodel::TrackDisplayIndex displayIndex,
                             std::vector<TrackColumnCellSpec> columns,
                             std::weak_ptr<void> lifetimePtr)
         : _runtime{&inputRuntime}
         , _projection{&inputProjection}
+        , _textCatalog{std::move(textCatalog)}
         , _displayIndex{std::move(displayIndex)}
         , _columns{std::move(columns)}
         , _lifetimePtr{std::move(lifetimePtr)}
@@ -109,13 +110,13 @@ namespace ao::winui
         if (optItem->kind == uimodel::TrackDisplayItemKind::GroupHeader)
         {
           auto const group = _projection->groupAt(optItem->groupIndex);
-          auto heading = uimodel::formatTrackGroupHeading(kHeadingText, group.heading);
+          auto heading = uimodel::formatTrackGroupHeading(_textCatalog, group.heading);
           auto optMonogram = uimodel::trackGroupCoverArtMonogram(group.heading);
           return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
             static_cast<std::uint32_t>(displayIndex),
             static_cast<std::uint32_t>(optItem->sourceIndex),
             group.imageId.raw(),
-            static_cast<std::uint32_t>(group.rows.count),
+            _textCatalog.format(i18n::MessageId::TrackCount, {{"count", group.rows.count}}),
             std::move(heading.primaryText),
             std::move(heading.secondaryText),
             std::move(heading.tertiaryText),
@@ -127,16 +128,20 @@ namespace ao::winui
         if (row == nullptr)
         {
           return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
-            static_cast<std::uint32_t>(displayIndex), 0, 0, resourceHstring(L"UnavailableTrack"), L"", L"", L"");
+            static_cast<std::uint32_t>(displayIndex), 0, 0, resourceHstring(L"winui_unavailable_track"), L"", L"", L"");
         }
 
-        return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
-          static_cast<std::uint32_t>(displayIndex), static_cast<std::uint32_t>(optItem->sourceIndex), *row, _columns);
+        return winrt::make<winrt::Aobus::implementation::TrackRowItem>(static_cast<std::uint32_t>(displayIndex),
+                                                                       static_cast<std::uint32_t>(optItem->sourceIndex),
+                                                                       *row,
+                                                                       _textCatalog,
+                                                                       _columns);
       }
 
     private:
       rt::AppRuntime* _runtime = nullptr;
       rt::TrackListProjection* _projection = nullptr;
+      uimodel::PresentationTextCatalog _textCatalog;
       uimodel::TrackDisplayIndex _displayIndex;
       std::vector<TrackColumnCellSpec> _columns;
       uimodel::IndexedTrackRowCache _rows;
@@ -191,8 +196,9 @@ namespace ao::winui
     }
   } // namespace
 
-  TrackListController::TrackListController()
-    : _items{makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries)}
+  TrackListController::TrackListController(uimodel::PresentationTextCatalog textCatalog)
+    : _textCatalog{std::move(textCatalog)}
+    , _items{makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries)}
     , _headers{winrt::single_threaded_observable_vector<winrt::Windows::Foundation::IInspectable>()}
   {
   }
@@ -373,8 +379,12 @@ namespace ao::winui
     }
 
     auto const displayCount = displayIndex.displayCount();
-    auto materializerPtr = std::make_shared<TrackItemMaterializer>(
-      *_runtime, *_projectionPtr, std::move(displayIndex), _columns, std::weak_ptr<void>{_bindingLifetimePtr});
+    auto materializerPtr = std::make_shared<TrackItemMaterializer>(*_runtime,
+                                                                   *_projectionPtr,
+                                                                   _textCatalog,
+                                                                   std::move(displayIndex),
+                                                                   _columns,
+                                                                   std::weak_ptr<void>{_bindingLifetimePtr});
     _items = makeTrackItemView(
       displayCount,
       [materializerPtr = std::move(materializerPtr)](std::size_t const index)
@@ -412,8 +422,6 @@ namespace ao::winui
     auto const fields = uimodel::visibleTrackFieldsInStoredLayout(state.presentation.visibleFields, storedLayout);
     auto const specs = uimodel::pixelTrackColumnSpecs(fields, storedLayout);
     auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
-    auto const text = uimodel::PresentationTextCatalog{};
-
     _columns.reserve(fields.size());
 
     for (std::size_t index = 0; index < fields.size(); ++index)
@@ -425,7 +433,7 @@ namespace ao::winui
 
       auto const* definition = rt::trackFieldDefinition(field);
       auto const fieldId = rt::trackFieldId(field);
-      auto label = stableResourceString("TrackField_", fieldId, text.trackFieldLabel(field));
+      auto label = stableResourceString("track_field_", fieldId, _textCatalog.trackFieldLabel(field));
 
       if (definition != nullptr && definition->optSortField && !state.presentation.sortBy.empty() &&
           state.presentation.sortBy.front().field == *definition->optSortField)
@@ -722,7 +730,7 @@ namespace ao::winui
       presentationId = rt::kDefaultTrackPresentationId;
     }
 
-    auto const eligibility = uimodel::trackPresentationEligibility(activeListId(), presentationId);
+    auto const eligibility = uimodel::trackPresentationEligibility(_textCatalog, activeListId(), presentationId);
 
     if (!eligibility.enabled)
     {
@@ -746,7 +754,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoTrackViewActive"));
     }
 
-    auto const eligibility = uimodel::trackPresentationEligibility(activeListId(), presentation.id);
+    auto const eligibility = uimodel::trackPresentationEligibility(_textCatalog, activeListId(), presentation.id);
 
     if (!eligibility.enabled)
     {

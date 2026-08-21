@@ -74,8 +74,12 @@ namespace ao::winui::layout
       auto* const session = &sessionValue;
       return ShellLibraryAccess{
         .libraryRoot = session->runtime().musicRoot(),
-        .listTreeProjection = [session]
-        { return uimodel::buildListTreeProjection(session->runtime().library().reader().lists()); },
+        .listTreeProjection =
+          [session]
+        {
+          return uimodel::buildListTreeProjection(
+            session->textCatalog(), session->runtime().library().reader().lists());
+        },
         .preferredPresentation = [session](ListId const listId) -> std::optional<rt::TrackPresentationSpec>
         {
           if (!session->presentationPreferences().presentations.contains(listId))
@@ -201,12 +205,12 @@ namespace ao::winui::layout
   {
     auto flyout = MenuFlyout{};
     auto const items = flyout.Items();
-    appendItem(items, "ModernOpenLibraryMenuItem", _config.commands.openLibrary);
-    appendItem(items, "ModernRescanMenuItem", _config.commands.rescanLibrary);
+    appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
+    appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
     appendSeparator(items);
-    appendItem(items, "ModernColumnsMenuItem", _config.commands.chooseColumns);
-    appendItem(items, "ClassicModeMenuItem", _config.commands.toggleShellMode);
-    appendItem(items, "ModernReloadThemeMenuItem", _config.commands.reloadTheme);
+    appendItem(items, "winui_shell_columns", _config.commands.chooseColumns);
+    appendItem(items, "winui_shell_classic_mode", _config.commands.toggleShellMode);
+    appendItem(items, "winui_shell_reload_theme", _config.commands.reloadTheme);
     return flyout;
   }
 
@@ -214,11 +218,11 @@ namespace ao::winui::layout
   {
     auto flyout = MenuFlyout{};
     auto const items = flyout.Items();
-    appendItem(items, "NowPlayingStopMenuItem", _config.commands.stop);
-    appendItem(items, "NowPlayingOpenLibraryMenuItem", _config.commands.openLibrary);
-    appendItem(items, "NowPlayingRescanMenuItem", _config.commands.rescanLibrary);
+    appendItem(items, "winui_shell_stop", _config.commands.stop);
+    appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
+    appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
     appendSeparator(items);
-    appendItem(items, "NowPlayingClassicModeMenuItem", _config.commands.toggleShellMode);
+    appendItem(items, "winui_shell_classic_mode", _config.commands.toggleShellMode);
     return flyout;
   }
 
@@ -237,28 +241,28 @@ namespace ao::winui::layout
       }
     };
 
-    appendMenu("FileMenuTitle",
+    appendMenu("winui_shell_menu_file",
                [this](auto const& items)
                {
-                 appendItem(items, "OpenLibraryMenuItem", _config.commands.openLibrary);
-                 appendItem(items, "RescanMenuItem", _config.commands.rescanLibrary);
+                 appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
+                 appendItem(items, "winui_shell_rescan", _config.commands.rescanLibrary);
                });
-    appendMenu("ViewMenuTitle",
+    appendMenu("winui_shell_menu_view",
                [this](auto const& items)
                {
-                 appendItem(items, "ClassicColumnsMenuItem", _config.commands.chooseColumns);
+                 appendItem(items, "winui_shell_columns", _config.commands.chooseColumns);
                  // Classic authors no inspector toggle of its own, so the menu
                  // is the only place the overlay can be asked for at the widths
                  // that do not seat the inspector inline.
-                 appendItem(items, "TrackDetailsMenuItem", _config.commands.toggleInspector);
-                 appendItem(items, "ModernModeMenuItem", _config.commands.toggleShellMode);
-                 appendItem(items, "ReloadThemeMenuItem", _config.commands.reloadTheme);
+                 appendItem(items, "winui_shell_track_details", _config.commands.toggleInspector);
+                 appendItem(items, "winui_shell_modern_mode", _config.commands.toggleShellMode);
+                 appendItem(items, "winui_shell_reload_theme", _config.commands.reloadTheme);
                });
-    appendMenu("PlaybackMenuTitle",
+    appendMenu("winui_shell_menu_playback",
                [this](auto const& items)
                {
-                 appendItem(items, "PlayPauseMenuItem", _config.commands.playPause);
-                 appendItem(items, "StopMenuItem", _config.commands.stop);
+                 appendItem(items, "winui_shell_play_pause", _config.commands.playPause);
+                 appendItem(items, "winui_shell_stop", _config.commands.stop);
                });
   }
 
@@ -310,6 +314,7 @@ namespace ao::winui::layout
         .notifications = runtime.notifications(),
         .libraryTasks = runtime.library().taskService(),
         .playbackCommands = _session.playbackCommands(),
+        .textCatalog = _session.textCatalog(),
         .trackList = _config.trackList,
         .resourceBytes = _config.resourceBytes,
         .theme = _config.theme,
@@ -454,7 +459,7 @@ namespace ao::winui::layout
     }
 
     auto text = TextBlock{};
-    text.Text(winrt::to_hstring(formatResource("ShellLayoutFailedFormat", error.message)));
+    text.Text(winrt::to_hstring(formatResource("winui_shell_layout_failed", error.message)));
     text.TextWrapping(TextWrapping::Wrap);
     text.Margin(Thickness{.Left = kFatalLayoutErrorPadding,
                           .Top = kFatalLayoutErrorPadding,

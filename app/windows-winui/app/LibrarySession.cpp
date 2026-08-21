@@ -100,9 +100,11 @@ namespace ao::winui
   Result<std::unique_ptr<LibrarySession>> LibrarySession::create(
     std::filesystem::path stateRoot,
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+    uimodel::PresentationTextCatalog textCatalog,
     std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
   {
-    auto sessionPtr = std::unique_ptr<LibrarySession>{new LibrarySession{std::move(stateRoot), std::move(dispatcher)}};
+    auto sessionPtr = std::unique_ptr<LibrarySession>{
+      new LibrarySession{std::move(stateRoot), std::move(dispatcher), std::move(textCatalog)}};
 
     if (auto initializedRes = sessionPtr->initialize(std::move(optSuccessorRequest)); !initializedRes)
     {
@@ -113,9 +115,11 @@ namespace ao::winui
   }
 
   LibrarySession::LibrarySession(std::filesystem::path stateRoot,
-                                 winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher)
+                                 winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+                                 uimodel::PresentationTextCatalog textCatalog)
     : _stateRoot{std::move(stateRoot)}
     , _dispatcher{std::move(dispatcher)}
+    , _textCatalog{std::move(textCatalog)}
     , _settingsStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-settings.yaml")}
     , _playbackStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-playback.yaml")}
   {
@@ -444,7 +448,8 @@ namespace ao::winui
     _playbackCommandsPtr.reset();
     _presentationPreferenceLifecyclePtr.reset();
     _presentationCatalogPtr.reset();
-    _presentationCatalogPtr = std::make_unique<uimodel::TrackPresentationCatalog>(_runtimePtr->workspace());
+    _presentationCatalogPtr =
+      std::make_unique<uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), _textCatalog);
     _presentationPreferenceLifecyclePtr = std::make_unique<uimodel::ListPresentationPreferenceLifecycle>(
       _presentationPreferences.presentations,
       _runtimePtr->library().changes(),
@@ -479,7 +484,7 @@ namespace ao::winui
       }
 
       _operationActive = true;
-      _operationStatusKey = "RescanningLibrary";
+      _operationStatusKey = "winui_library_rescanning";
       reportBusy();
 
       startActiveScan();
@@ -525,7 +530,7 @@ namespace ao::winui
     // reporting a plain ready library.
     auto const outcome = uimodel::decideLibraryScanOutcome(result);
     auto const severity = uimodel::libraryScanSeverity(outcome.verdict);
-    auto message = uimodel::PresentationTextCatalog{}.libraryScanMessage(outcome);
+    auto message = _textCatalog.libraryScanMessage(outcome);
 
     _runtimePtr->notifications().post(severity, message, uimodel::libraryScanLifetime(outcome.verdict));
 
@@ -579,7 +584,7 @@ namespace ao::winui
 
   void LibrarySession::reportReady(std::filesystem::path const& root)
   {
-    reportStatus(formatResource("LibraryReadyFormat", utility::pathToUtf8(root)));
+    reportStatus(formatResource("winui_library_ready_at", utility::pathToUtf8(root)));
   }
 
   void LibrarySession::requestPlaySelection()

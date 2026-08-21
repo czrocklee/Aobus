@@ -108,7 +108,7 @@ root:
                     - id: modern-inspector-toggle
                       type: actionButton
                       props:
-                        textResourceKey: InspectorToggleTooltip
+                        textResourceKey: winui_shell_track_details
                         glyph: ""
                         primaryAction: shell.toggleInspector
                       layout:
@@ -118,7 +118,7 @@ root:
                       type: menuButton
                       props:
                         menuId: modernOverflow
-                        textResourceKey: MoreMenuTooltip
+                        textResourceKey: winui_more_menu
                         glyph: ""
                       layout:
                         valign: center
@@ -286,7 +286,7 @@ root:
                   type: menuButton
                   props:
                     menuId: nowPlayingOverflow
-                    textResourceKey: MoreMenuTooltip
+                    textResourceKey: winui_more_menu
                     glyph: ""
                   layout:
                     valign: center

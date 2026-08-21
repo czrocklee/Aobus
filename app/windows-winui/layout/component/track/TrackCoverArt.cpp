@@ -17,6 +17,7 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
@@ -64,7 +65,9 @@ namespace ao::winui::layout
     {
     public:
       TrackCoverArtComponent(LayoutBuildContext& ctx, uimodel::CoverArtPlaceholderStyle const style)
-        : _coverArt{_image, _placeholder, ctx.resourceBytes, ctx.theme, style}, _focusedDetailPtr{ctx.focusedDetailPtr}
+        : _textCatalog{ctx.textCatalog}
+        , _coverArt{_image, _placeholder, ctx.resourceBytes, ctx.theme, style}
+        , _focusedDetailPtr{ctx.focusedDetailPtr}
       {
         // Uniform rather than UniformToFill: the inspector shows the whole
         // cover, including one that is not square.
@@ -107,16 +110,21 @@ namespace ao::winui::layout
 
       void applySnapshot(rt::TrackDetailSnapshot const& snapshot)
       {
-        auto const album = uimodel::formatTrackFieldDisplayText(rt::TrackField::Album, snapshot, "", false);
-        auto const albumArtist = uimodel::formatTrackFieldDisplayText(rt::TrackField::AlbumArtist, snapshot, "", false);
-        auto const artist = uimodel::formatTrackFieldDisplayText(rt::TrackField::Artist, snapshot, "", false);
-        auto const title = uimodel::formatTrackFieldDisplayText(rt::TrackField::Title, snapshot, "", false);
+        auto const album =
+          uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::Album, snapshot, "", false);
+        auto const albumArtist =
+          uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::AlbumArtist, snapshot, "", false);
+        auto const artist =
+          uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::Artist, snapshot, "", false);
+        auto const title =
+          uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::Title, snapshot, "", false);
         auto const candidates = std::array<std::string_view, 4>{album, albumArtist, artist, title};
         _coverArt.select(snapshot.singleCoverArtId,
                          uimodel::makeCoverArtPlaceholderIdentity(candidates),
                          snapshot.selectionKind != rt::SelectionKind::None);
       }
 
+      uimodel::PresentationTextCatalog _textCatalog;
       Border _root{};
       Image _image{};
       Grid _placeholder{};

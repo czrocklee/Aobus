@@ -60,10 +60,19 @@ UIModel owns deterministic platform-neutral presentation behavior.
 Its feature capsules contain view models, editor/form models, interaction models, policies, projections, formatters, catalogs, resolvers, and UI-local stores.
 
 Shared authored copy is owned by the immutable `PresentationTextCatalog`.
-The first implementation is a zero-state English value: it establishes a typed ownership seam without selecting a locale service or localization-file format.
+It is a required-message resolver over the startup-selected `MessageCatalog` and is injected from each interactive composition root.
+Fixed and caller-parameterized copy uses the canonical typed `MessageId` directly; named methods remain where UIModel maps a domain value, derives selectors, or owns an open-id fallback.
 Closed inputs such as track fields, missing-value kinds, completion roles, progress kinds, and report templates resolve exhaustively.
 Open backend/profile ids use their stable id as the documented fallback.
 Catalog output is never persisted or parsed for recovery, ordering, grouping, aggregation, or navigation.
+Borrowed catalog views point into shared immutable storage retained by `PresentationTextCatalog` copies; state crossing that lifetime owns its text.
+
+Interactive process roots also own one leaf `MessageCatalog` selected from the operating-system locale before frontend construction.
+That facade is the governed ICU localization and formatting boundary; it backs the shared UIModel semantic surface and each frontend-local slice as migration proceeds.
+The implementation depends on ICU i18n without moving that dependency into runtime, UIModel, Core, or CLI.
+GTK, TUI, and WinUI retain the catalog for their process lifetime; there is no mutable process-global locale service.
+Frontend-specific vocabulary stays at the leaves: GTK and TUI eagerly derive immutable typed catalogs for dense closed surfaces and use canonical typed ids through the injected shared resolver for one-to-one messages, while WinUI uses generated MRT resources selected by the same canonical locale.
+Stable action names, command syntax, and shortcut tokens remain untranslated identities and enter localized patterns only as arguments.
 
 Runtime track-group snapshots retain raw text, numeric years, empty slots, and typed missing-value kinds until UIModel resolves the three heading slots.
 Runtime completion items retain query syntax, rank, and typed detail roles or frequency counts.
@@ -126,6 +135,8 @@ Presentation owns the semantic state that those shell components adapt and rende
 
 `MainWindow` owns the visible window composition.
 `MainWindowCoordinator` binds runtime/UIModel collaborators to that composition.
+It also retains the shared resolver and GTK shell catalog used by menus, preferences, shortcut and presentation editors, action descriptors, and layout-component accessibility fallbacks.
+Metadata/property surfaces and the Layout Editor consume that same injected resolver; stable document tokens remain identities while the GTK leaf maps built-in descriptor and enum values to localized display text.
 The List preview dialog may compose read-only runtime evaluators against the const library view, but GTK cannot name committing transaction authority or call `LibraryWriter` directly.
 GTK owns generation-local drag handles, drop targets, indicators, autoscroll, and native shortcut dispatch.
 Rebuilding a track view destroys those gesture objects before their widgets; runtime revision and view/source generation changes invalidate retained order sessions rather than retargeting them.
@@ -141,6 +152,7 @@ and WinUI. Its list chooser consumes the shared UIModel list-tree projection,
 and its command palette consumes the same UIModel track-filter completer as
 GTK's Quick-filter entry, while retaining terminal-only rendering, command,
 and presentation routing.
+The process root retains one `PresentationTextCatalog` and one `TuiTextCatalog`; terminal renderers and completion adapters borrow them, while command, key, and presentation ids remain owned by the shell interaction model or runtime.
 
 ### WinUI
 
@@ -160,6 +172,11 @@ construction where useful, but only the native Windows suite compiles their
 frontend-specific tests; naming a frontend is what keeps them out of the shared
 model, not what they include.
 
+Canonical ICU catalog sources generate WinUI's migrated shared resources as neutral `en`, `de`, and `qps-ploc` PRI candidates.
+The WinUI composition root binds one explicit MRT `ResourceContext` to the same canonical tag held by `MessageCatalog` before XAML initialization, so MRT cannot independently select another UI language.
+Generated C++ lookups retain canonical message keys. The build projection changes a governed single named argument to `{0}` only for native formatting and emits property-qualified aliases only for XAML `x:Uid` consumers.
+Checked-in WinUI-only English resource definitions remain authority only for product names, symbolic suffixes, and internal diagnostic/protocol text. The catalog compiler merges them into the single generated neutral `en` PRI input; shared and user-facing frontend copy is generated from the canonical catalog and is not duplicated there.
+
 ### CLI
 
 CLI is an application adapter rather than an interactive presentation layer.
@@ -178,6 +195,7 @@ Its structured automation DTOs are unversioned source-level contracts; field cha
 - UIModel exposes semantic presentation kinds; GTK maps those kinds to CSS classes and native icon names at its adapter boundary.
 - Core and runtime expose machine identities, structured absence, typed report/progress intent, and raw external data; shared authored copy resolves only after crossing into UIModel.
 - Query syntax, persisted ids, user-authored names, metadata, paths, operating-system device descriptions, diagnostics, and command-scoped CLI output remain source data rather than catalog copy.
+- Interactive localization is a leaf capability linked by GTK, TUI, and WinUI only; CLI source and final link closure exclude the catalog implementation and ICU i18n.
 - Equivalent cross-frontend behavior uses the same runtime/UIModel authority instead of parallel frontend policy.
 - Shared reporting presentation consumes the canonical runtime feed-update stream; GTK and TUI do not reconstruct mutation ordering from independent event types.
 - List-navigation effective parents and sibling order come from one UIModel projection; GTK and TUI only adapt that tree to their native row models.
@@ -292,6 +310,8 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, and rendering.
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
 - [`aobus-winui-lib`](../../app/windows-winui/CMakeLists.txt), [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`StringResources`](../../app/windows-winui/platform/StringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
+- [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h), its [`ICU implementation`](../../app/i18n/MessageCatalog.cpp), and the canonical [`catalog assets`](../../app/i18n/catalog/root.txt) define the interactive localization leaf.
+- [`GtkTextCatalog`](../../app/linux-gtk/i18n/GtkTextCatalog.h), [`TuiTextCatalog`](../../app/tui/TuiTextCatalog.h), direct typed-id call sites, and [`WinUiResourceProjection`](../../app/i18n/WinUiResourceProjection.h) define frontend-owned copy and native projection boundaries without adding forwarding getters or frontend enums for one-to-one messages.
 - [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) and [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) enforce organization, dependency, and platform-vocabulary constraints.
 
 ## Test map
@@ -300,6 +320,8 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
 - [`PresentationTextCatalogTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
+- [`MessageCatalogTest.cpp`](../../test/unit/i18n/MessageCatalogTest.cpp), [`CatalogPatternTest.cpp`](../../test/unit/i18n/CatalogPatternTest.cpp), and the native [`WinUiLocalizationProbe.cpp`](../../test/helper/WinUiLocalizationProbe.cpp) protect explicit fallback, format signatures, immutable concurrent use, deterministic generation, and ICU/MRT parity.
+- [`MenuControllerTest.cpp`](../../test/unit/linux-gtk/app/MenuControllerTest.cpp), [`PreferencesWindowTest.cpp`](../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), [`TrackCustomViewDialogTest.cpp`](../../test/unit/linux-gtk/track/TrackCustomViewDialogTest.cpp), [`LayoutEditorTextTest.cpp`](../../test/unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp), and [`RenderTest.cpp`](../../test/unit/tui/RenderTest.cpp) protect the migrated GTK/TUI surface, localized built-in layout vocabulary, and preservation of command/key/document identities.
 - [`OutputDeviceIntentTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceIntentTest.cpp) protects the undecided-destination compile barrier and recorder dispatch.
 - [`OutputDeviceViewModelTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp)
   and [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
@@ -329,6 +351,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Activity-status specification](../spec/presentation/activity-status.md) and [surface reference](../reference/presentation/activity-status.md)
 - [Presentation text catalog reference](../reference/presentation/text-catalog.md)
+- [Interactive localization specification](../spec/presentation/localization.md)
 - [Track-list presentation](../spec/presentation/track-presentation.md)
 - [List-navigation tree](../spec/presentation/list-tree.md)
 - [Track-column layout](../spec/presentation/track-column-layout.md)

@@ -76,7 +76,7 @@ namespace ao::winui::layout
 
     winrt::hstring navigationLabel(uimodel::ListTreeProjectionRow const& row)
     {
-      return row.id == rt::kAllTracksListId ? resourceHstring(L"AllTracks") : winrt::to_hstring(row.name);
+      return winrt::to_hstring(row.name);
     }
 
     /**
@@ -153,7 +153,7 @@ namespace ao::winui::layout
 
         if (auto const navigatedRes = _trackList.navigateTo(listId); !navigatedRes)
         {
-          report(formatResource("NavigationFailedFormat", navigatedRes.error().message));
+          report(formatResource("winui_navigation_failed", navigatedRes.error().message));
           return;
         }
 
@@ -161,12 +161,12 @@ namespace ao::winui::layout
         {
           if (auto const selectedRes = _trackList.selectPresentation(*optPresentation); !selectedRes)
           {
-            report(formatResource("PresentationFailedFormat", selectedRes.error().message));
+            report(formatResource("winui_presentation_failed", selectedRes.error().message));
             return;
           }
         }
 
-        report(formatResource("ListStatusFormat", label));
+        report(formatResource("winui_list_status", label));
       }
 
     private:
@@ -246,7 +246,7 @@ namespace ao::winui::layout
       {
         _view.IsBackButtonVisible(NavigationViewBackButtonVisible::Collapsed);
         _view.IsSettingsVisible(false);
-        _view.PaneTitle(winrt::to_hstring(resourceString("NavigationPaneTitle")));
+        _view.PaneTitle(winrt::to_hstring(resourceString("winui_library_navigation_pane_title")));
         _view.CompactPaneLength(kCompactPaneLength);
         _selectionChangedRevoker =
           _view.SelectionChanged(winrt::auto_revoke, {this, &NavigationViewPaneComponent::onSelectionChanged});

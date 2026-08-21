@@ -4,6 +4,7 @@
 #include "track/TrackDetailControl.h"
 
 #include "platform/StringResources.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
@@ -23,6 +24,7 @@
 
 namespace ao::winui
 {
+  using i18n::MessageId;
   namespace
   {
     using winrt::Microsoft::UI::Xaml::GridLength;
@@ -51,48 +53,54 @@ namespace ao::winui
     constexpr std::wstring_view kChevronDownGlyph = L"\uE70D";
     constexpr std::wstring_view kChevronRightGlyph = L"\uE76C";
 
-    std::string metadataHeading()
+    std::string metadataHeading(uimodel::PresentationTextCatalog const& textCatalog)
     {
-      return resourceStringOr("InspectorMetadataHeading", "Metadata");
+      return std::string{textCatalog.text(MessageId::TrackMetadataHeading)};
     }
 
-    std::string technicalHeading()
+    std::string technicalHeading(uimodel::PresentationTextCatalog const& textCatalog)
     {
-      return resourceStringOr("InspectorTechnicalHeading", "Audio Properties");
+      return std::string{textCatalog.text(MessageId::TrackAudioPropertiesHeading)};
     }
 
-    std::string fieldLabel(rt::TrackField const field)
+    std::string fieldLabel(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackField const field)
     {
-      return stableResourceString(
-        "TrackField_", rt::trackFieldId(field), uimodel::PresentationTextCatalog{}.trackFieldLabel(field));
+      return stableResourceString("track_field_", rt::trackFieldId(field), textCatalog.trackFieldLabel(field));
     }
 
-    std::string metadataHeaderText(bool const expanded, rt::TrackDetailSnapshot const& snapshot)
+    std::string metadataHeaderText(uimodel::PresentationTextCatalog const& textCatalog,
+                                   bool const expanded,
+                                   rt::TrackDetailSnapshot const& snapshot)
     {
       if (expanded)
       {
-        return metadataHeading();
+        return metadataHeading(textCatalog);
       }
 
-      auto const title =
-        uimodel::formatTrackFieldDisplayText(rt::TrackField::Title, snapshot, uimodel::kMultipleTrackValuesText, true);
-      auto const artist =
-        uimodel::formatTrackFieldDisplayText(rt::TrackField::Artist, snapshot, uimodel::kMultipleTrackValuesText, true);
-      return title.empty() && artist.empty() ? metadataHeading() : uimodel::formatMetadataHeader(title, artist);
+      auto const title = uimodel::formatTrackFieldDisplayText(
+        textCatalog, rt::TrackField::Title, snapshot, textCatalog.text(MessageId::TrackMultipleValues), true);
+      auto const artist = uimodel::formatTrackFieldDisplayText(
+        textCatalog, rt::TrackField::Artist, snapshot, textCatalog.text(MessageId::TrackMultipleValues), true);
+      return title.empty() && artist.empty() ? metadataHeading(textCatalog)
+                                             : uimodel::formatMetadataHeader(title, artist);
     }
 
-    std::string technicalHeaderText(bool const expanded, rt::TrackDetailSnapshot const& snapshot)
+    std::string technicalHeaderText(uimodel::PresentationTextCatalog const& textCatalog,
+                                    bool const expanded,
+                                    rt::TrackDetailSnapshot const& snapshot)
     {
       if (expanded)
       {
-        return technicalHeading();
+        return technicalHeading(textCatalog);
       }
 
-      auto const codec = uimodel::formatTrackFieldDisplayText(rt::TrackField::Codec, snapshot, {}, false);
-      auto const sampleRate = uimodel::formatTrackFieldDisplayText(rt::TrackField::SampleRate, snapshot, {}, false);
-      auto const bitDepth = uimodel::formatTrackFieldDisplayText(rt::TrackField::BitDepth, snapshot, {}, false);
+      auto const codec = uimodel::formatTrackFieldDisplayText(textCatalog, rt::TrackField::Codec, snapshot, {}, false);
+      auto const sampleRate =
+        uimodel::formatTrackFieldDisplayText(textCatalog, rt::TrackField::SampleRate, snapshot, {}, false);
+      auto const bitDepth =
+        uimodel::formatTrackFieldDisplayText(textCatalog, rt::TrackField::BitDepth, snapshot, {}, false);
       return codec.empty() && sampleRate.empty() && bitDepth.empty()
-               ? technicalHeading()
+               ? technicalHeading(textCatalog)
                : uimodel::formatTechnicalHeader(codec, sampleRate, bitDepth);
     }
 
@@ -127,7 +135,8 @@ namespace ao::winui
     Grid makeFieldRow(std::string_view const label,
                       std::string_view const value,
                       bool const technical = false,
-                      bool const partial = false)
+                      bool const partial = false,
+                      std::string_view const missingText = {})
     {
       auto row = Grid{};
       row.MinHeight(kFieldRowMinimumHeight);
@@ -147,9 +156,7 @@ namespace ao::winui
 
       if (partial)
       {
-        ToolTipService::SetToolTip(
-          labelBlock,
-          winrt::box_value(winrt::to_hstring(resourceStringOr("MissingOnSomeTracks", "Missing on some tracks"))));
+        ToolTipService::SetToolTip(labelBlock, winrt::box_value(winrt::to_hstring(missingText)));
       }
 
       row.Children().Append(labelBlock);
@@ -172,9 +179,7 @@ namespace ao::winui
         });
         warning.Opacity(kWarningIconOpacity);
         warning.VerticalAlignment(VerticalAlignment::Center);
-        ToolTipService::SetToolTip(
-          warning,
-          winrt::box_value(winrt::to_hstring(resourceStringOr("MissingOnSomeTracks", "Missing on some tracks"))));
+        ToolTipService::SetToolTip(warning, winrt::box_value(winrt::to_hstring(missingText)));
         Grid::SetColumn(warning, 2);
         row.Children().Append(warning);
       }
@@ -194,9 +199,10 @@ namespace ao::winui
                    std::string_view const label,
                    std::string_view const value,
                    bool const technical = false,
-                   bool const partial = false)
+                   bool const partial = false,
+                   std::string_view const missingText = {})
     {
-      panel.Children().Append(makeFieldRow(label, value, technical, partial));
+      panel.Children().Append(makeFieldRow(label, value, technical, partial, missingText));
     }
 
     bool hasSelection(rt::TrackDetailSnapshot const& snapshot) noexcept
@@ -217,6 +223,7 @@ namespace ao::winui
     , _technicalHeader{std::move(config.technicalHeader)}
     , _technicalChevron{std::move(config.technicalChevron)}
     , _technicalRows{std::move(config.technicalRows)}
+    , _textCatalog{std::move(config.textCatalog)}
     , _schema{uimodel::buildTrackFieldGridSchema()}
   {
     if (_metadataHeaderButton)
@@ -340,7 +347,8 @@ namespace ao::winui
 
     for (auto const field : _schema.metadataFields)
     {
-      auto const text = uimodel::formatTrackFieldDisplayText(field, _snapshot, uimodel::kMultipleTrackValuesText, true);
+      auto const text = uimodel::formatTrackFieldDisplayText(
+        _textCatalog, field, _snapshot, _textCatalog.text(MessageId::TrackMultipleValues), true);
       auto const visible =
         uimodel::shouldShowTrackFieldGridMetadataFieldRow(uimodel::TrackFieldGridMetadataFieldVisibility{
           .metadataExpanded = expanded,
@@ -351,16 +359,16 @@ namespace ao::winui
 
       if (visible)
       {
-        appendRow(rows, fieldLabel(field), text);
+        appendRow(rows, fieldLabel(_textCatalog, field), text);
       }
     }
 
     for (auto const& fields : _schema.compositeMetadataFields)
     {
-      auto const primaryText =
-        uimodel::formatTrackFieldDisplayText(fields.primaryField, _snapshot, uimodel::kCompositeMixedTrackText, false);
+      auto const primaryText = uimodel::formatTrackFieldDisplayText(
+        _textCatalog, fields.primaryField, _snapshot, uimodel::kCompositeMixedTrackText, false);
       auto const secondaryText = uimodel::formatTrackFieldDisplayText(
-        fields.secondaryField, _snapshot, uimodel::kCompositeMixedTrackText, false);
+        _textCatalog, fields.secondaryField, _snapshot, uimodel::kCompositeMixedTrackText, false);
       auto const visible = uimodel::shouldShowCompositeMetadataRow(uimodel::CompositeMetadataVisibility{
         .metadataExpanded = expanded,
         .showEmptyMetadata = showEmpty,
@@ -372,13 +380,14 @@ namespace ao::winui
 
       if (visible)
       {
-        appendRow(rows, fieldLabel(fields.primaryField), compositeValue(primaryText, secondaryText));
+        appendRow(rows, fieldLabel(_textCatalog, fields.primaryField), compositeValue(primaryText, secondaryText));
       }
     }
 
     for (auto const& item : _snapshot.customMetadata)
     {
-      auto const text = uimodel::formatTrackCustomMetadataDisplayText(item);
+      auto const text =
+        uimodel::formatTrackCustomMetadataDisplayText(item, _textCatalog.text(MessageId::TrackMultipleValues));
       auto const visible =
         uimodel::shouldShowTrackFieldGridMetadataFieldRow(uimodel::TrackFieldGridMetadataFieldVisibility{
           .metadataExpanded = expanded,
@@ -389,7 +398,7 @@ namespace ao::winui
 
       if (visible)
       {
-        appendRow(rows, item.key, text, false, !item.presentOnAll);
+        appendRow(rows, item.key, text, false, !item.presentOnAll, _textCatalog.text(MessageId::TrackMissingOnSome));
       }
     }
   }
@@ -406,8 +415,9 @@ namespace ao::winui
     for (auto const field : _schema.technicalFields)
     {
       appendRow(rows,
-                fieldLabel(field),
-                uimodel::formatTrackFieldDisplayText(field, _snapshot, uimodel::kMultipleTrackValuesText, true),
+                fieldLabel(_textCatalog, field),
+                uimodel::formatTrackFieldDisplayText(
+                  _textCatalog, field, _snapshot, _textCatalog.text(MessageId::TrackMultipleValues), true),
                 true);
     }
   }
@@ -442,9 +452,8 @@ namespace ao::winui
     {
       _showEmptyButton.Visibility(renderMetadataSection && _metadataExpanded ? Visibility::Visible
                                                                              : Visibility::Collapsed);
-      _showEmptyButton.Content(winrt::box_value(
-        winrt::to_hstring(_showEmptyMetadata ? resourceStringOr("HideEmptyFields", "Hide empty fields")
-                                             : resourceStringOr("ShowEmptyFields", "Show empty fields"))));
+      _showEmptyButton.Content(winrt::box_value(winrt::to_hstring(
+        _textCatalog.text(_showEmptyMetadata ? MessageId::TrackHideEmptyFields : MessageId::TrackShowEmptyFields))));
     }
 
     if (_metadataChevron)
@@ -454,7 +463,7 @@ namespace ao::winui
 
     if (_metadataHeader)
     {
-      _metadataHeader.Text(winrt::to_hstring(metadataHeaderText(_metadataExpanded, _snapshot)));
+      _metadataHeader.Text(winrt::to_hstring(metadataHeaderText(_textCatalog, _metadataExpanded, _snapshot)));
     }
 
     if (_technicalHeaderButton)
@@ -475,7 +484,7 @@ namespace ao::winui
 
     if (_technicalHeader)
     {
-      _technicalHeader.Text(winrt::to_hstring(technicalHeaderText(_technicalExpanded, _snapshot)));
+      _technicalHeader.Text(winrt::to_hstring(technicalHeaderText(_textCatalog, _technicalExpanded, _snapshot)));
     }
   }
 

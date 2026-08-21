@@ -9,7 +9,9 @@
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/PlatformDirectories.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>
@@ -59,7 +61,7 @@ namespace winrt::Aobus::implementation
     {
       try
       {
-        auto const message = ao::winui::formatResource("StartupFailureFormat", detail);
+        auto const message = ao::winui::formatResource("winui_startup_failure", detail);
         auto const messageText = to_hstring(message);
         auto const title = ao::winui::resourceHstring(L"AppTitleValue");
         ::MessageBoxW(nullptr, messageText.c_str(), title.c_str(), kErrorDialogFlags);
@@ -75,12 +77,42 @@ namespace winrt::Aobus::implementation
   App::App()
   {
     std::ignore = std::set_terminate(&reportTerminate);
+
+    auto catalogRes = ao::i18n::MessageCatalog::createForSystemLocale();
+
+    if (!catalogRes)
+    {
+      AO_FATAL("Could not initialize WinUI localization: {}", catalogRes.error().message);
+    }
+
+    _messageCatalogPtr = std::make_unique<ao::i18n::MessageCatalog>(std::move(*catalogRes));
+    _presentationTextCatalogPtr = std::make_unique<ao::uimodel::PresentationTextCatalog>(*_messageCatalogPtr);
+
+    auto resourceLanguageRes = ao::winui::configureResourceLanguage(_messageCatalogPtr->requestedLocale());
+
+    if (!resourceLanguageRes)
+    {
+      AO_FATAL("Could not bind WinUI resources to the application locale: {}", resourceLanguageRes.error().message);
+    }
+
     InitializeComponent();
   }
 
   App::~App()
   {
     _windowSessionPtr.reset();
+
+    try
+    {
+      ao::winui::resetResourceLanguage();
+      _presentationTextCatalogPtr.reset();
+      _messageCatalogPtr.reset();
+    }
+    catch (...)
+    {
+      AO_AUDITED_CATCH(SafeCleanup);
+      ::OutputDebugStringA("Aobus could not release WinUI localization cleanly.\n");
+    }
 
     try
     {
@@ -248,7 +280,8 @@ namespace winrt::Aobus::implementation
         return;
       }
 
-      _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(appStateRoot, _dispatcher);
+      _windowSessionPtr =
+        std::make_unique<ao::winui::LibraryWindowSession>(appStateRoot, _dispatcher, *_presentationTextCatalogPtr);
       auto const weak = get_weak();
       auto startedRes = _windowSessionPtr->start(
         std::move(*startupRequestRes),

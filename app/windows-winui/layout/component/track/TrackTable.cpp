@@ -217,7 +217,7 @@ namespace ao::winui::layout
 
         if (!playedRes && _reportStatus)
         {
-          _reportStatus(formatResource("PlaybackFailedFormat", playedRes.error().message));
+          _reportStatus(formatResource("winui_playback_failed", playedRes.error().message));
         }
       }
 

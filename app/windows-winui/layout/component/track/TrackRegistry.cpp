@@ -53,7 +53,7 @@ namespace ao::winui::layout
                                   std::string_view const presentationId)
     {
       auto const optText = textCatalog.builtinTrackPresentation(presentationId);
-      return stableResourceString("Presentation_", presentationId, optText ? optText->label : presentationId);
+      return stableResourceString("track_presentation_", presentationId, optText ? optText->label : presentationId);
     }
 
     /**
@@ -68,10 +68,14 @@ namespace ao::winui::layout
     {
     public:
       explicit QuickFilterComponent(LayoutBuildContext& ctx)
-        : _control{TrackQuickFilterControlConfig{.input = _input, .onError = ctx.reportStatus}}
+        : _control{TrackQuickFilterControlConfig{
+            .input = _input,
+            .onError = ctx.reportStatus,
+            .textCatalog = ctx.textCatalog,
+          }}
       {
         _input.QueryIcon(SymbolIcon{winrt::Microsoft::UI::Xaml::Controls::Symbol::Find});
-        _input.PlaceholderText(winrt::to_hstring(resourceString("QuickFilterPlaceholder")));
+        _input.PlaceholderText(winrt::to_hstring(resourceString("winui_library_quick_filter_placeholder")));
         _control.bind(ctx.views, ctx.workspace);
       }
 
@@ -98,6 +102,7 @@ namespace ao::winui::layout
         , _rememberPresentation{ctx.library.rememberPresentation}
         , _gatePtr{ctx.gatePtr}
         , _reportStatus{ctx.reportStatus}
+        , _textCatalog{ctx.textCatalog}
       {
         _button.HorizontalContentAlignment(compact ? HorizontalAlignment::Center : HorizontalAlignment::Left);
         _buttonClickRevoker = _button.Click(winrt::auto_revoke, {this, &PresentationButtonComponent::onClicked});
@@ -139,7 +144,7 @@ namespace ao::winui::layout
 
         for (auto const& preset : rt::builtinTrackPresentationPresets())
         {
-          auto const eligibility = uimodel::trackPresentationEligibility(activeListId, preset.spec.id);
+          auto const eligibility = uimodel::trackPresentationEligibility(_textCatalog, activeListId, preset.spec.id);
           auto item = MenuFlyoutItem{};
           item.Text(winrt::to_hstring(presentationLabel(_textCatalog, preset.spec.id)));
           item.IsEnabled(eligibility.enabled);
@@ -185,7 +190,7 @@ namespace ao::winui::layout
         {
           if (_reportStatus)
           {
-            _reportStatus(formatResource("PresentationFailedFormat", selectedRes.error().message));
+            _reportStatus(formatResource("winui_presentation_failed", selectedRes.error().message));
           }
 
           return;

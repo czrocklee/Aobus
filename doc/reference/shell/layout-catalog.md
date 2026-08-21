@@ -77,6 +77,7 @@ Unknown authored values fall back to the component default.
 An action descriptor contains `id`, `label`, `category`, and a capability mask.
 Capability values are `RequiresAnchor` and `PresentsMenu`.
 The live registry additionally owns one handler and optional availability provider per descriptor.
+`id` is the stable binding identity. `label` and `category` are locale-selected display text; the table lists the English-root category baseline.
 
 | Action id | Category | Capabilities |
 |---|---|---|

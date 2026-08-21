@@ -12,6 +12,7 @@
 #include "track/TrackListController.h"
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewService.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -99,6 +100,7 @@ namespace ao::winui::layout
             // The strip is the only place notifications can be reached from, so
             // it keeps an affordance even when nothing is running.
             .reserveIdle = true,
+            .textCatalog = ctx.textCatalog,
           }}
       {
         for (std::int32_t index = 0; index < 2; ++index)
@@ -148,7 +150,7 @@ namespace ao::winui::layout
         _dismissButton.Content(dismissGlyph);
         _dismissButton.Visibility(Visibility::Collapsed);
         ToolTipService::SetToolTip(
-          _dismissButton, winrt::box_value(resourceHstring(L"ActivityStatusHideNotificationTooltip")));
+          _dismissButton, winrt::box_value(resourceHstring(L"winui_activity_hide_notification")));
         Grid::SetColumn(_dismissButton, 1);
 
         _root.Children().Append(_detailButton);
@@ -192,7 +194,7 @@ namespace ao::winui::layout
     {
     public:
       TrackCountComponent(LayoutBuildContext& ctx, bool const summary)
-        : _trackList{ctx.trackList}, _summary{summary}
+        : _trackList{ctx.trackList}, _textCatalog{ctx.textCatalog}, _summary{summary}
       {
         refreshTrackCount();
         applyShellState(ctx.shellState);
@@ -216,12 +218,12 @@ namespace ao::winui::layout
       void refreshTrackCount()
       {
         auto const count = _trackList.rowCount();
-        _text.Text(winrt::to_hstring(count == 1 ? resourceString("TrackCountOne")
-                                                : formatResource("TrackCountManyFormat", count)));
+        _text.Text(winrt::to_hstring(_textCatalog.format(i18n::MessageId::TrackCount, {{"count", count}})));
       }
 
       TextBlock _text{};
       TrackListController& _trackList;
+      uimodel::PresentationTextCatalog _textCatalog;
       bool _summary = false;
       async::Subscription _shellStateSub;
       async::Subscription _trackListChangedSub;
@@ -238,7 +240,7 @@ namespace ao::winui::layout
     {
     public:
       SelectionInfoComponent(LayoutBuildContext& ctx, bool const summary)
-        : _trackList{ctx.trackList}, _summary{summary}
+        : _trackList{ctx.trackList}, _textCatalog{ctx.textCatalog}, _summary{summary}
       {
         follow(ctx.views);
         applyShellState(ctx.shellState);
@@ -272,22 +274,14 @@ namespace ao::winui::layout
 
       void apply(std::size_t const count)
       {
-        auto summary = resourceString("NoSelection");
-
-        if (count == 1)
-        {
-          summary = resourceString("ItemSelectedOne");
-        }
-        else if (count > 1)
-        {
-          summary = formatResource("ItemsSelectedFormat", count);
-        }
-
+        auto summary =
+          count == 0 ? resourceString("winui_library_no_selection") : _textCatalog.trackSelectionSummary(count);
         _text.Text(winrt::to_hstring(summary));
       }
 
       TextBlock _text{};
       TrackListController& _trackList;
+      uimodel::PresentationTextCatalog _textCatalog;
       bool _summary = false;
       // Destroyed first, so handlers cannot run against a half-torn component.
       async::Subscription _selectionSub;

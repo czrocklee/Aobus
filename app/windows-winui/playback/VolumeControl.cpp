@@ -7,6 +7,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
@@ -16,7 +17,7 @@
 namespace ao::winui
 {
   VolumeControl::VolumeControl(VolumeControlConfig config)
-    : _slider{std::move(config.slider)}
+    : _slider{std::move(config.slider)}, _textCatalog{std::move(config.textCatalog)}
   {
     _valueChangedRevoker = _slider.ValueChanged(
       winrt::auto_revoke,
@@ -40,7 +41,7 @@ namespace ao::winui
     unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::VolumeViewModel>(
-      playback, [this](uimodel::VolumeViewState const& state) { applyState(state); });
+      playback, _textCatalog, [this](uimodel::VolumeViewState const& state) { applyState(state); });
   }
 
   void VolumeControl::unbind() noexcept
@@ -53,6 +54,8 @@ namespace ao::winui
     if (_slider)
     {
       _slider.IsEnabled(false);
+      winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_slider, nullptr);
+      winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(_slider, L"");
     }
   }
 
@@ -63,5 +66,8 @@ namespace ao::winui
     _slider.Visibility(state.visible ? winrt::Microsoft::UI::Xaml::Visibility::Visible
                                      : winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
     _slider.IsEnabled(state.visible);
+    auto const tooltip = winrt::to_hstring(state.tooltip);
+    winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_slider, winrt::box_value(tooltip));
+    winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(_slider, tooltip);
   }
 } // namespace ao::winui

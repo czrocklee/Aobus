@@ -375,6 +375,7 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
             or parts[:3] == ("test", "unit", "winui")
             or "wasapi" in joined
             or "win32" in joined
+            or "winui" in joined
             or stem.endswith("windows")
             or joined == "tool/lint/aobusclangtidymain.cpp"
         )

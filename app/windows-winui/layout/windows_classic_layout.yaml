@@ -90,14 +90,14 @@ root:
         - id: classic-open-library
           type: actionButton
           props:
-            textResourceKey: LibraryOpenLabel
+            textResourceKey: winui_library_open_label
             primaryAction: library.open
           layout:
             valign: center
         - id: classic-rescan
           type: actionButton
           props:
-            textResourceKey: LibraryRescanLabel
+            textResourceKey: winui_library_rescan_label
             primaryAction: library.rescan
           layout:
             valign: center

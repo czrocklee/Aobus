@@ -22,7 +22,7 @@ namespace ao::winui
   }
 
   AudioPipelineToolTip::AudioPipelineToolTip(AudioPipelineToolTipConfig config)
-    : _anchor{std::move(config.anchor)}
+    : _anchor{std::move(config.anchor)}, _textCatalog{std::move(config.textCatalog)}
   {
     using winrt::Microsoft::UI::Xaml::TextWrapping;
     using winrt::Microsoft::UI::Xaml::Controls::TextBlock;
@@ -63,7 +63,7 @@ namespace ao::winui
     unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::NowPlayingViewModel>(
-      playback, [this](uimodel::NowPlayingViewState const& state) { apply(state.audioPipeline); });
+      playback, _textCatalog, [this](uimodel::NowPlayingViewState const& state) { apply(state.audioPipeline); });
   }
 
   void AudioPipelineToolTip::unbind() noexcept

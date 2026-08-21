@@ -188,6 +188,7 @@ namespace ao::winui::layout
           .technicalHeader = _technical.label,
           .technicalChevron = _technical.chevron,
           .technicalRows = _technical.rows,
+          .textCatalog = ctx.textCatalog,
         });
         follow(ctx.workspace);
       }

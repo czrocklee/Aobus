@@ -120,7 +120,7 @@ namespace winrt::Aobus::implementation
     {
       // The generation that was already live stays live, which is the whole
       // point of building the candidate before publishing it.
-      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", appliedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_shell_layout_failed", appliedRes.error().message));
       return;
     }
 
@@ -189,7 +189,7 @@ namespace winrt::Aobus::implementation
 
       if (auto const savedRes = _session->saveSettings(); !savedRes)
       {
-        updateStatus(ao::winui::formatResource("SaveSettingsFailedFormat", savedRes.error().message));
+        updateStatus(ao::winui::formatResource("winui_save_settings_failed", savedRes.error().message));
       }
     }
     catch (...)
@@ -206,7 +206,7 @@ namespace winrt::Aobus::implementation
     {
       auto picker = Microsoft::Windows::Storage::Pickers::FolderPicker{AppWindow().Id()};
       picker.SuggestedStartLocation(Microsoft::Windows::Storage::Pickers::PickerLocationId::MusicLibrary);
-      picker.CommitButtonText(ao::winui::resourceHstring(L"OpenLibraryPickerButton"));
+      picker.CommitButtonText(ao::winui::resourceHstring(L"winui_open_library_picker"));
 
       if (auto result = co_await picker.PickSingleFolderAsync();
           result && !result.Path().empty() && _session != nullptr &&
@@ -216,13 +216,13 @@ namespace winrt::Aobus::implementation
         // runs after this coroutine returns and releases its strong window ref.
         if (auto const requestedRes = _requestRestart(std::filesystem::path{result.Path().c_str()}); !requestedRes)
         {
-          updateStatus(ao::winui::formatResource("ErrorFormat", requestedRes.error().message));
+          updateStatus(ao::winui::formatResource("winui_error", requestedRes.error().message));
         }
       }
     }
     catch (hresult_error const& error)
     {
-      updateStatus(ao::winui::formatResource("FolderPickerFailedFormat", to_string(error.message())));
+      updateStatus(ao::winui::formatResource("winui_folder_picker_failed", to_string(error.message())));
     }
   }
 
@@ -262,16 +262,16 @@ namespace winrt::Aobus::implementation
       if (reloadedRes.error().code == ao::Error::Code::NotFound)
       {
         applySystemTheme();
-        updateStatus(ao::winui::resourceString("ThemeOverrideRemoved"));
+        updateStatus(ao::winui::resourceString("winui_theme_override_removed"));
         return;
       }
 
-      updateStatus(ao::winui::formatResource("ThemeReloadFailedFormat", reloadedRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_theme_reload_failed", reloadedRes.error().message));
       return;
     }
 
     applyTheme(*reloadedRes);
-    updateStatus(ao::winui::formatResource("ThemeReloadedFormat", ao::utility::pathToUtf8(_themePtr->path())));
+    updateStatus(ao::winui::formatResource("winui_theme_reloaded", ao::utility::pathToUtf8(_themePtr->path())));
   }
 
   /**
@@ -291,7 +291,7 @@ namespace winrt::Aobus::implementation
 
     if (auto rebuiltRes = _shellBuilderPtr->rebuild(); !rebuiltRes)
     {
-      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", rebuiltRes.error().message));
+      updateStatus(ao::winui::formatResource("winui_shell_layout_failed", rebuiltRes.error().message));
     }
   }
 

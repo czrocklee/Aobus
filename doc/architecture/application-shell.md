@@ -66,6 +66,9 @@ UIModel owns `LayoutDocument`, `LayoutNode`, `LayoutValue`, shell-owned preparat
 It also owns the build-time vocabulary a frontend needs to drive those values: `LayoutSurface` and its descriptor capability mask, the shell-lifetime `LayoutRuntimeState` carrier, the `LayoutBuildStateView` over live or candidate state, the `StatefulComponentState` persistence ritual, and action-slot resolution (`isActionSlotBound`, `boundActionSlots`, `hasBoundActionSlot`).
 
 These values describe structure, stable command identity, validation metadata, and UI-local state without naming GTK widget classes, GDK key symbols, or runtime storage objects beyond narrow managed-state adapters.
+Stable action, component, command, and shortcut identities are never localized.
+Frontend composition supplies localized shell labels at the leaf: GTK and TUI use their process-lifetime typed text catalogs, while WinUI shell construction resolves generated MRT resources from its explicit locale context.
+The GTK Layout Editor likewise retains component types, property names, enum values, action ids, and node ids as document identity while its adapter resolves built-in display names, field labels, and enum choices from the injected catalog; unknown extension vocabulary remains visible unchanged.
 
 ### Windows shell composition contracts
 

@@ -73,6 +73,7 @@ namespace ao::winui::layout
         _transportPtr = std::make_unique<SoulTransportButton>(SoulTransportButtonConfig{
           .button = _button,
           .soul = _soul.as<winrt::Microsoft::UI::Xaml::Controls::ContentControl>(),
+          .textCatalog = ctx.textCatalog,
           // The pipeline explanation occupies the tooltip in every shell, so the
           // transport never writes its own.
           .hasComplexTooltip = true,
@@ -81,7 +82,8 @@ namespace ao::winui::layout
           .showGlyph = node.propertyOr<bool>("showGlyph", true),
           .activatesOnClick = activatesOnClick,
         });
-        _toolTipPtr = std::make_unique<AudioPipelineToolTip>(AudioPipelineToolTipConfig{.anchor = _button});
+        _toolTipPtr = std::make_unique<AudioPipelineToolTip>(
+          AudioPipelineToolTipConfig{.anchor = _button, .textCatalog = ctx.textCatalog});
 
         _transportPtr->bind(ctx.playback, ctx.playbackCommands);
         _toolTipPtr->bind(ctx.playback);

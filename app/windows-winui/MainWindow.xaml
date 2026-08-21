@@ -222,13 +222,11 @@
                         <Button.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem
-                                    x:Uid="MoveColumnLeftMenuItem"
-                                    Text="Move left"
+                                    x:Uid="winui_track_move_column_left_button"
                                     Tag="{x:Bind FieldId}"
                                     Click="OnColumnMoveLeftClicked" />
                                 <MenuFlyoutItem
-                                    x:Uid="MoveColumnRightMenuItem"
-                                    Text="Move right"
+                                    x:Uid="winui_track_move_column_right_button"
                                     Tag="{x:Bind FieldId}"
                                     Click="OnColumnMoveRightClicked" />
                             </MenuFlyout>
@@ -280,10 +278,11 @@
                             <TextBlock Text="{x:Bind Artist}" FontSize="12" Opacity="0.72" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{x:Bind Album}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Opacity="0.55">
-                            <TextBlock Text="{x:Bind GroupCount}" />
-                            <TextBlock x:Uid="GroupTracksSuffix" Text="tracks" />
-                        </StackPanel>
+                        <TextBlock
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Opacity="0.55"
+                            Text="{x:Bind GroupCountText}" />
                     </Grid>
                     <ItemsControl
                         Height="{x:Bind RowHeight}"

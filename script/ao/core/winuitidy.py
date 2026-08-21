@@ -10,6 +10,9 @@ from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
 _WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
+_AUXILIARY_SOURCE_PROJECTS = {
+    "test/helper/WinUiLocalizationProbe.cpp": "app/windows-winui/ao_winui_localization_probe.vcxproj",
+}
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx"))
 _INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^">]+)[">]', re.MULTILINE)
 
@@ -17,6 +20,22 @@ _INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^">]+)[">]', re.M
 def _path_key(path: Path) -> str:
     """Return a platform-neutral key for comparing repository paths."""
     return str(path).replace("\\", "/").casefold()
+
+
+def requires_winui_compile_context(path: Path) -> bool:
+    """Return whether a repository file needs the native WinUI compile database."""
+    resolved = absolute_path(path)
+    try:
+        resolved.relative_to(absolute_path(_WINUI_ROOT))
+        return True
+    except ValueError:
+        pass
+
+    try:
+        relative = resolved.relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+    except ValueError:
+        return False
+    return relative in _AUXILIARY_SOURCE_PROJECTS
 
 
 def _resolve_include(
@@ -133,78 +152,94 @@ def compile_commands(
     if not generator_instance:
         raise die(f"WinUI build tree has no CMAKE_GENERATOR_INSTANCE: {build_dir}")
     msbuild = Path(generator_instance) / "MSBuild" / "Current" / "Bin" / "MSBuild.exe"
-    project = build_dir / "app" / "windows-winui" / "aobus-winui-lib.vcxproj"
     if not msbuild.is_file():
         raise die(f"MSBuild.exe not found for the configured WinUI generator: {msbuild}")
-    if not project.is_file():
-        raise die(f"WinUI MSBuild project not found: {project}")
     if not clang_cl.is_file():
         raise die(f"pinned clang-cl.exe not found: {clang_cl}")
-
-    command = [
-        str(msbuild),
-        str(project),
-        "/nologo",
-        "/v:quiet",
-        "/p:Configuration=Release",
-        "/p:Platform=x64",
-        "-getTargetResult:GetCompileCommands",
-    ]
-    result = subprocess.run(
-        command,
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise die(f"MSBuild GetCompileCommands failed (exit {result.returncode}):\n{result.stdout}")
 
     commands: list[dict[str, object]] = []
     seen: set[str] = set()
     root = absolute_path(_WINUI_ROOT)
-    for item in _target_items(_parse_msbuild_json(result.stdout)):
-        identity = item.get("Identity")
-        working_directory = item.get("WorkingDirectory")
-        files = item.get("Files")
-        if (
-            not isinstance(identity, str)
-            or not identity
-            or not isinstance(working_directory, str)
-            or not working_directory
-            or not isinstance(files, str)
-            or not files
-        ):
-            raise die("MSBuild compile-command item is missing Identity, WorkingDirectory, or Files.")
-        directory = Path(working_directory)
-        for spelling in files.split(";"):
-            if not spelling:
-                continue
-            path = Path(spelling)
-            if not path.is_absolute():
-                path = directory / path
-            path = absolute_path(path)
-            try:
-                path.relative_to(root)
-            except ValueError:
-                continue
-            if path.suffix.lower() not in _TRANSLATION_UNIT_SUFFIXES or not path.is_file():
-                continue
-            key = str(path).casefold()
-            if key in seen:
-                raise die(f"MSBuild returned duplicate WinUI compile commands for {path}.")
-            seen.add(key)
-            commands.append(
-                {
-                    "directory": str(directory),
-                    "command": f'"{clang_cl}" {identity} "{path}"',
-                    "file": str(path),
-                }
-            )
+    required_by_project: dict[Path, set[str]] = {}
+    for required in required_translation_units:
+        try:
+            relative = absolute_path(required).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+        except ValueError:
+            continue
+        if project_relative := _AUXILIARY_SOURCE_PROJECTS.get(relative):
+            required_by_project.setdefault(build_dir / project_relative, set()).add(_path_key(required))
+
+    projects: list[tuple[Path, set[str] | None]] = [
+        (build_dir / "app" / "windows-winui" / "aobus-winui-lib.vcxproj", None)
+    ]
+    projects.extend(sorted(required_by_project.items(), key=lambda item: _path_key(item[0])))
+    for project, accepted_keys in projects:
+        if not project.is_file():
+            raise die(f"WinUI MSBuild project not found: {project}")
+        command = [
+            str(msbuild),
+            str(project),
+            "/nologo",
+            "/v:quiet",
+            "/p:Configuration=Release",
+            "/p:Platform=x64",
+            "-getTargetResult:GetCompileCommands",
+        ]
+        result = subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise die(f"MSBuild GetCompileCommands failed (exit {result.returncode}):\n{result.stdout}")
+
+        for item in _target_items(_parse_msbuild_json(result.stdout)):
+            identity = item.get("Identity")
+            working_directory = item.get("WorkingDirectory")
+            files = item.get("Files")
+            if (
+                not isinstance(identity, str)
+                or not identity
+                or not isinstance(working_directory, str)
+                or not working_directory
+                or not isinstance(files, str)
+                or not files
+            ):
+                raise die("MSBuild compile-command item is missing Identity, WorkingDirectory, or Files.")
+            directory = Path(working_directory)
+            for spelling in files.split(";"):
+                if not spelling:
+                    continue
+                path = Path(spelling)
+                if not path.is_absolute():
+                    path = directory / path
+                path = absolute_path(path)
+                key = _path_key(path)
+                if accepted_keys is None:
+                    try:
+                        path.relative_to(root)
+                    except ValueError:
+                        continue
+                elif key not in accepted_keys:
+                    continue
+                if path.suffix.lower() not in _TRANSLATION_UNIT_SUFFIXES or not path.is_file():
+                    continue
+                if key in seen:
+                    raise die(f"MSBuild returned duplicate WinUI compile commands for {path}.")
+                seen.add(key)
+                commands.append(
+                    {
+                        "directory": str(directory),
+                        "command": f'"{clang_cl}" {identity} "{path}"',
+                        "file": str(path),
+                    }
+                )
 
     if not commands:
         raise die("MSBuild returned no repository-owned WinUI translation units.")
-    missing = [path for path in required_translation_units if str(absolute_path(path)).casefold() not in seen]
+    missing = [path for path in required_translation_units if _path_key(path) not in seen]
     if missing:
         details = "\n".join(f"  {path}" for path in missing)
         raise die(f"MSBuild returned no WinUI compile command for:\n{details}")

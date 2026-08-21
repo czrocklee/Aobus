@@ -12,6 +12,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -42,7 +43,7 @@ namespace ao::winui
   class TrackListController final
   {
   public:
-    TrackListController();
+    explicit TrackListController(uimodel::PresentationTextCatalog textCatalog);
     ~TrackListController();
 
     TrackListController(TrackListController const&) = delete;
@@ -94,6 +95,7 @@ namespace ao::winui
     void refreshColumns();
     Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
+    uimodel::PresentationTextCatalog _textCatalog;
     rt::AppRuntime* _runtime = nullptr;
     uimodel::TrackColumnLayoutState* _columnLayouts = nullptr;
     rt::ViewId _viewId{rt::kInvalidViewId};
