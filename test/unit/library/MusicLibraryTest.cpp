@@ -409,7 +409,7 @@ namespace ao::library::test
     requireCorruptLibrary(temp.path());
   }
 
-  TEST_CASE("MusicLibrary - rejects non-NFC dictionary rows", "[library][unit][music-library][integrity][unicode]")
+  TEST_CASE("MusicLibrary - rejects non-NFC dictionary rows", "[library][unit][music-library][unicode]")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());

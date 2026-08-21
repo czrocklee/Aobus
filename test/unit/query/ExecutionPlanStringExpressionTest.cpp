@@ -7,14 +7,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <string>
 #include <tuple>
 #include <vector>
 
 namespace ao::query::test
 {
   TEST_CASE("ExecutionPlan - compiles text substring operators as Unicode caseless",
-            "[query][unit][execution-plan][string][unicode]")
+            "[query][unit][execution-plan][unicode]")
   {
     auto expr = parseOk("$title ~ Love");
     auto plan = compileOk(expr);
@@ -23,8 +22,7 @@ namespace ao::query::test
       plan.instructions, [](Instruction const& instruction) { return instruction.op == OpCode::Like; }));
   }
 
-  TEST_CASE("ExecutionPlan - compiles Unicode caseless substring keys",
-            "[query][unit][execution-plan][string][unicode]")
+  TEST_CASE("ExecutionPlan - compiles Unicode caseless substring keys", "[query][unit][execution-plan][unicode]")
   {
     auto const plan = compileOk(parseOk("$title ~ 'STRASSE Cafe\u0301'"));
 
@@ -34,7 +32,7 @@ namespace ao::query::test
       plan.instructions, [](Instruction const& instruction) { return instruction.op == OpCode::Like; }));
   }
 
-  TEST_CASE("ExecutionPlan - validates substring operands", "[query][unit][execution-plan][string][unicode]")
+  TEST_CASE("ExecutionPlan - validates substring operands", "[query][unit][execution-plan][unicode]")
   {
     CHECK(compileError(parseOk("$title ~ 123")).code == Error::Code::FormatRejected);
     CHECK(compileError(parseOk("@duration ~ 'three minutes'")).code == Error::Code::FormatRejected);

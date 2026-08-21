@@ -107,3 +107,20 @@ namespace ao::sub
     using BaseException::BaseException;
   };
 }
+
+namespace ao::tui
+{
+  void complete(int value);
+
+  namespace test
+  {
+    namespace
+    {
+      void complete(double value)
+      {
+        // NEGATIVE
+        ao::tui::complete(1);
+      }
+    }
+  }
+}

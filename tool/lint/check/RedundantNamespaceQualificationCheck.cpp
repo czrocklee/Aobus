@@ -78,19 +78,52 @@ namespace clang::tidy::readability
       return false;
     }
 
-    bool isNamespaceRedundant(NestedNameSpecifierLoc const& specLocItem, DeclContext const* currentContext)
+    NamespaceDecl const* namespaceDecl(NestedNameSpecifierLoc const& specLocItem)
     {
       auto const spec = specLocItem.getNestedNameSpecifier();
 
       if (!spec || spec.getKind() != NestedNameSpecifier::Kind::Namespace)
       {
-        return false;
+        return nullptr;
       }
 
       auto const* namespaceBase = spec.getAsNamespaceAndPrefix().Namespace;
-      auto const* ns = namespaceBase != nullptr ? namespaceBase->getNamespace() : nullptr;
+      return namespaceBase != nullptr ? namespaceBase->getNamespace() : nullptr;
+    }
 
+    bool isNamespaceRedundant(NestedNameSpecifierLoc const& specLocItem, DeclContext const* currentContext)
+    {
+      auto const* ns = namespaceDecl(specLocItem);
       return ns != nullptr && isAncestor(ns, currentContext);
+    }
+
+    bool isShadowedByCloserDeclaration(DeclRefExpr const& declRef,
+                                       NestedNameSpecifierLoc const& lastRedundant,
+                                       DeclContext const* currentContext)
+    {
+      auto const name = declRef.getDecl()->getDeclName();
+      auto const* redundantNamespace = namespaceDecl(lastRedundant);
+
+      if (name.isEmpty() || redundantNamespace == nullptr)
+      {
+        return false;
+      }
+
+      for (auto const* context = currentContext; context != nullptr && context != redundantNamespace;
+           context = context->getParent())
+      {
+        if (std::ranges::any_of(context->decls(),
+                                [name](auto const* declaration)
+                                {
+                                  auto const* named = dyn_cast<NamedDecl>(declaration);
+                                  return named != nullptr && named->getDeclName() == name;
+                                }))
+        {
+          return true;
+        }
+      }
+
+      return false;
     }
 
     bool declaresNamespaceNamed(DeclContext const* context, DeclarationName name)
@@ -307,6 +340,12 @@ namespace clang::tidy::readability
     }
 
     if (isShadowedByIntermediateNamespace(lastRedundant, chain, currentContext))
+    {
+      return;
+    }
+
+    if (auto const* declRef = result.Nodes.getNodeAs<DeclRefExpr>("declRef");
+        declRef != nullptr && isShadowedByCloserDeclaration(*declRef, lastRedundant, currentContext))
     {
       return;
     }

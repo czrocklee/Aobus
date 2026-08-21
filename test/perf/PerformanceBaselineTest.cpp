@@ -1336,7 +1336,7 @@ namespace ao::rt::test
 
       auto measure = [&](query::PlanBinding const& binding)
       {
-        auto matches = std::size_t{0};
+        std::size_t matches = 0;
         auto const start = std::chrono::steady_clock::now();
 
         for (auto const id : bench.ids)
@@ -1806,6 +1806,40 @@ namespace ao::rt::test
                        metric("callbacks_p95", callbackP95, "us"),
                      });
     }
+
+    constexpr std::size_t kUnicodeTextAdmissionIterations = 100'000;
+
+    std::chrono::nanoseconds measureTextPreflightDuration(std::string_view const text)
+    {
+      std::size_t checksum = 0;
+      auto const start = std::chrono::steady_clock::now();
+
+      for (std::size_t index = 0; index < kUnicodeTextAdmissionIterations; ++index)
+      {
+        auto const sizeRes = library::detail::normalizedLibraryTextSize(text, "Performance text");
+        checksum += sizeRes.value();
+      }
+
+      auto const end = std::chrono::steady_clock::now();
+      CHECK(checksum != 0);
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    }
+
+    std::chrono::nanoseconds measureTextNormalizationDuration(std::string_view const text)
+    {
+      std::size_t checksum = 0;
+      auto const start = std::chrono::steady_clock::now();
+
+      for (std::size_t index = 0; index < kUnicodeTextAdmissionIterations; ++index)
+      {
+        auto normalizedRes = library::detail::normalizeLibraryText(text, "Performance text");
+        checksum += normalizedRes.value().size();
+      }
+
+      auto const end = std::chrono::steady_clock::now();
+      CHECK(checksum != 0);
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    }
   } // namespace
 
   TEST_CASE("PerformanceBaseline - empty List rank overlay forwards a 50k parent move",
@@ -1937,39 +1971,6 @@ namespace ao::rt::test
   TEST_CASE("PerformanceBaseline - Unicode library text admission", "[perf][unit][baseline][unicode]")
   {
     Log::initialize(LogLevel::Info);
-    constexpr std::size_t kIterations = 100'000;
-
-    auto const measurePreflight = [](std::string_view const text)
-    {
-      std::size_t checksum = 0;
-      auto const start = std::chrono::steady_clock::now();
-
-      for (std::size_t index = 0; index < kIterations; ++index)
-      {
-        auto const sizeRes = library::detail::normalizedLibraryTextSize(text, "Performance text");
-        checksum += sizeRes.value();
-      }
-
-      auto const end = std::chrono::steady_clock::now();
-      CHECK(checksum != 0);
-      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-    };
-
-    auto const measureNormalization = [](std::string_view const text)
-    {
-      std::size_t checksum = 0;
-      auto const start = std::chrono::steady_clock::now();
-
-      for (std::size_t index = 0; index < kIterations; ++index)
-      {
-        auto normalizedRes = library::detail::normalizeLibraryText(text, "Performance text");
-        checksum += normalizedRes.value().size();
-      }
-
-      auto const end = std::chrono::steady_clock::now();
-      CHECK(checksum != 0);
-      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-    };
 
     auto const ascii = std::string_view{"Cafe Cafe Cafe Cafe Cafe Cafe"};
     auto const nfc = std::string_view{"Café Café Café Café Café Café"};
@@ -1979,38 +1980,38 @@ namespace ao::rt::test
     REQUIRE(library::detail::normalizedLibraryTextSize(ascii, "Performance warmup"));
     REQUIRE(library::detail::normalizeLibraryText(nfd, "Performance warmup"));
 
-    auto const asciiPreflight = measurePreflight(ascii);
-    auto const nfcPreflight = measurePreflight(nfc);
-    auto const nfdPreflight = measurePreflight(nfd);
-    auto const asciiNormalize = measureNormalization(ascii);
-    auto const nfcNormalize = measureNormalization(nfc);
-    auto const nfdNormalize = measureNormalization(nfd);
+    auto const asciiPreflightDuration = measureTextPreflightDuration(ascii);
+    auto const nfcPreflightDuration = measureTextPreflightDuration(nfc);
+    auto const nfdPreflightDuration = measureTextPreflightDuration(nfd);
+    auto const asciiNormalizationDuration = measureTextNormalizationDuration(ascii);
+    auto const nfcNormalizationDuration = measureTextNormalizationDuration(nfc);
+    auto const nfdNormalizationDuration = measureTextNormalizationDuration(nfd);
 
     auto const nsPerOperation = [](std::chrono::nanoseconds const duration)
-    { return duration.count() / static_cast<std::int64_t>(kIterations); };
+    { return duration.count() / static_cast<std::int64_t>(kUnicodeTextAdmissionIterations); };
 
-    APP_LOG_INFO("=== Unicode library text admission: {} iterations per input ===", kIterations);
+    APP_LOG_INFO("=== Unicode library text admission: {} iterations per input ===", kUnicodeTextAdmissionIterations);
     APP_LOG_INFO("  preflight ASCII/NFC/NFD: {} / {} / {} ns/op",
-                 nsPerOperation(asciiPreflight),
-                 nsPerOperation(nfcPreflight),
-                 nsPerOperation(nfdPreflight));
+                 nsPerOperation(asciiPreflightDuration),
+                 nsPerOperation(nfcPreflightDuration),
+                 nsPerOperation(nfdPreflightDuration));
     APP_LOG_INFO("  normalize ASCII/NFC/NFD: {} / {} / {} ns/op",
-                 nsPerOperation(asciiNormalize),
-                 nsPerOperation(nfcNormalize),
-                 nsPerOperation(nfdNormalize));
+                 nsPerOperation(asciiNormalizationDuration),
+                 nsPerOperation(nfcNormalizationDuration),
+                 nsPerOperation(nfdNormalizationDuration));
     recordBaseline("unicode-library-text-admission",
                    {
-                     metric("iterations", kIterations, "count"),
-                     metric("preflight_ascii", nsPerOperation(asciiPreflight), "ns/op"),
-                     metric("preflight_nfc", nsPerOperation(nfcPreflight), "ns/op"),
-                     metric("preflight_nfd", nsPerOperation(nfdPreflight), "ns/op"),
-                     metric("normalize_ascii", nsPerOperation(asciiNormalize), "ns/op"),
-                     metric("normalize_nfc", nsPerOperation(nfcNormalize), "ns/op"),
-                     metric("normalize_nfd", nsPerOperation(nfdNormalize), "ns/op"),
+                     metric("iterations", kUnicodeTextAdmissionIterations, "count"),
+                     metric("preflight_ascii", nsPerOperation(asciiPreflightDuration), "ns/op"),
+                     metric("preflight_nfc", nsPerOperation(nfcPreflightDuration), "ns/op"),
+                     metric("preflight_nfd", nsPerOperation(nfdPreflightDuration), "ns/op"),
+                     metric("normalize_ascii", nsPerOperation(asciiNormalizationDuration), "ns/op"),
+                     metric("normalize_nfc", nsPerOperation(nfcNormalizationDuration), "ns/op"),
+                     metric("normalize_nfd", nsPerOperation(nfdNormalizationDuration), "ns/op"),
                    });
   }
 
-  TEST_CASE("PerformanceBaseline - Unicode caseless Quick Filter", "[perf][unit][baseline][unicode][query]")
+  TEST_CASE("PerformanceBaseline - Unicode caseless Quick Filter", "[perf][unit][baseline][unicode]")
   {
     Log::initialize(LogLevel::Info);
     constexpr std::int32_t kTrackCount = 10'000;

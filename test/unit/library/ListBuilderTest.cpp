@@ -57,10 +57,12 @@ namespace ao::library::test
       auto result = std::vector<std::byte>{};
       result.insert_range(result.end(), utility::bytes::view(header));
       result.insert_range(result.end(), utility::bytes::view(name));
+
       while (result.size() % kListHeaderAlignment != 0)
       {
         result.push_back(std::byte{0});
       }
+
       return result;
     }
   } // namespace
@@ -106,10 +108,10 @@ namespace ao::library::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.find("List name") != std::string::npos);
+    CHECK(result.error().message.contains("List name"));
   }
 
-  TEST_CASE("List validation rejects persisted non-NFC text", "[library][unit][list][unicode]")
+  TEST_CASE("ListBuilder - validation rejects persisted non-NFC text", "[library][unit][list][unicode]")
   {
     auto const payload = rawNamePayload("Cafe\u0301");
     auto const view = ListView{payload};
@@ -118,7 +120,7 @@ namespace ao::library::test
     REQUIRE(view.isValid());
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::CorruptData);
-    CHECK(result.error().message.find("List name") != std::string::npos);
+    CHECK(result.error().message.contains("List name"));
   }
 
   TEST_CASE("ListBuilder - zeroes every alignment padding byte", "[library][regression][list]")

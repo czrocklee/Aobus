@@ -73,7 +73,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryWriter - editTags uses canonical Unicode identity", "[runtime][unit][library][tag][unicode]")
+  TEST_CASE("LibraryWriter - editTags uses canonical Unicode identity", "[runtime][unit][library][unicode]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");

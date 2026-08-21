@@ -104,8 +104,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryWriter - updateMetadata compares canonical Unicode identity",
-            "[runtime][unit][library][mutation][unicode]")
+  TEST_CASE("LibraryWriter - updateMetadata compares canonical Unicode identity", "[runtime][unit][library][unicode]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Café");
@@ -212,7 +211,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryWriter - custom metadata uses canonical key and value identity",
-            "[runtime][unit][library][mutation][unicode]")
+            "[runtime][unit][library][unicode]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -328,7 +327,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryWriter - List display identity is NFC while filter bytes remain opaque",
-            "[runtime][unit][library][list][unicode]")
+            "[runtime][unit][library][unicode]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());

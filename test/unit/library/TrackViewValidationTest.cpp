@@ -84,6 +84,7 @@ namespace ao::library::test
     std::vector<std::byte> makeHotRecord(std::span<DictionaryId const> const tags)
     {
       std::uint32_t bloom = 0;
+
       for (auto const id : tags)
       {
         bloom |= std::uint32_t{1} << (id.raw() & 31U);
@@ -190,7 +191,7 @@ namespace ao::library::test
     CHECK(view.isHotValid() == true);
   }
 
-  TEST_CASE("Track validation rejects duplicate persisted tag IDs", "[library][unit][track][validation][unicode]")
+  TEST_CASE("TrackView - validation rejects duplicate persisted tag IDs", "[library][unit][track][unicode]")
   {
     auto const tagIds = std::array{DictionaryId{7}, DictionaryId{7}};
     auto const data = makeHotRecord(tagIds);

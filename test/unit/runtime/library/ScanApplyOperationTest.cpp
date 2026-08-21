@@ -43,8 +43,10 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <optional>
+#include <ranges>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -188,13 +190,13 @@ namespace ao::rt::test
     {
       auto bytes = audio::test::readFileBytes(source);
       auto const frameId = std::string_view{"TIT2"};
-      auto const frame = std::search(bytes.begin(), bytes.end(), frameId.begin(), frameId.end());
+      auto const frame = std::ranges::search(bytes, frameId);
 
       REQUIRE(bytes.size() >= 10);
       REQUIRE(std::string_view{reinterpret_cast<char const*>(bytes.data()), 3} == "ID3");
-      REQUIRE(frame != bytes.end());
+      REQUIRE(!frame.empty());
 
-      auto const frameOffset = static_cast<std::size_t>(std::distance(bytes.begin(), frame));
+      auto const frameOffset = static_cast<std::size_t>(std::distance(bytes.begin(), frame.begin()));
       constexpr std::size_t kFrameHeaderSize = 10;
       REQUIRE(frameOffset + kFrameHeaderSize + 3 <= bytes.size());
 
@@ -279,7 +281,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - rejects malformed declared UTF-8 metadata without replacing it",
-            "[runtime][unit][library][scan][unicode]")
+            "[runtime][unit][library][unicode]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -304,7 +306,7 @@ namespace ao::rt::test
     CHECK(runRes->failureCount == 1);
     CHECK(failures.failed == 1);
     CHECK(failures.lastStage == "serialize");
-    CHECK(failures.lastMessage.find("Track title") != std::string::npos);
+    CHECK(failures.lastMessage.contains("Track title"));
 
     auto transaction = ml.readTransaction();
     CHECK(ml.tracks().reader(transaction).entryCount() == 0);

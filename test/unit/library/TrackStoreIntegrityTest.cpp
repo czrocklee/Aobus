@@ -45,7 +45,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("MusicLibrary - open rejects a non-NFC persisted Track title",
-            "[library][regression][track-store][track-integrity][unicode]")
+            "[library][regression][track-store][unicode]")
   {
     auto const temp = ao::test::TempDir{};
     auto const hot = makeHotData({}, "Cafe\u0301");

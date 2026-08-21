@@ -192,7 +192,7 @@ namespace ao::library::test
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.find("Track title") != std::string::npos);
+      CHECK(result.error().message.contains("Track title"));
     }
 
     SECTION("custom metadata value")
@@ -204,7 +204,7 @@ namespace ao::library::test
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.find("Custom metadata value") != std::string::npos);
+      CHECK(result.error().message.contains("Custom metadata value"));
     }
   }
 
@@ -220,7 +220,7 @@ namespace ao::library::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.find("unique after NFC normalization") != std::string::npos);
+    CHECK(result.error().message.contains("unique after NFC normalization"));
     CHECK(context.dictionary().size() == 0);
   }
 
@@ -471,8 +471,7 @@ namespace ao::library::test
     CHECK(view.classical().soloistId() == requireDictionaryId(context.dictionary(), "Soloist"));
   }
 
-  TEST_CASE("TrackBuilder - canonical tag identity is serialized as a set",
-            "[library][unit][track-builder][serialization][unicode]")
+  TEST_CASE("TrackBuilder - canonical tag identity is serialized as a set", "[library][unit][track-builder][unicode]")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
