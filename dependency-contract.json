@@ -136,7 +136,7 @@
       ],
       "policy": {
         "kind": "exact",
-        "version": "2.3.1"
+        "version": "2.4.0"
       },
       "nuget": {
         "package": "Microsoft.WindowsAppSDK",
@@ -147,10 +147,10 @@
       },
       "runtime": {
         "packageName": "Microsoft.WindowsAppRuntime.2",
-        "version": "2.3.1.0",
+        "version": "2.4.0.0",
         "architecture": "x64",
-        "installerUrl": "https://aka.ms/windowsappsdk/2.3/2.3.1/windowsappruntimeinstall-x64.exe",
-        "sha256": "4011748ddf472b7e856d909fdfb4e9b19c3d23fcd8121039ac91f99d5ffa65db"
+        "installerUrl": "https://aka.ms/windowsappsdk/2.4/2.4.0/windowsappruntimeinstall-x64.exe",
+        "sha256": "851c35b0b0a59ce4c55f9171f601193322fc3413143b0dc3390ea11e14cfa7fc"
       }
     },
     "cppwinrt": {

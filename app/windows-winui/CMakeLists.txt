@@ -226,9 +226,19 @@ target_link_libraries(aobus-winui PRIVATE
 # which would also extract and duplicate generated XAML metadata providers.
 target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
 add_dependencies(aobus-winui ao_winui_localization_probe)
+# The static-library project emits the XBF files at its output root, while
+# MSBuild's project-reference copy namespaces them under Aobus. The merged
+# application PRI retains the root-relative XBF paths, so deploy those exact
+# candidates beside the executable when the projects use separate outputs.
 add_custom_command(TARGET aobus-winui POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
+          "$<TARGET_FILE_DIR:aobus-winui>/App.xbf"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui-lib>/MainWindow.xbf"
+          "$<TARGET_FILE_DIR:aobus-winui>/MainWindow.xbf"
   COMMAND $<TARGET_FILE:ao_winui_localization_probe>
-  COMMENT "Verifying WinUI and ICU localization fallback parity"
+  COMMENT "Deploying compiled XAML and verifying WinUI/ICU localization parity"
   VERBATIM)
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
@@ -318,7 +328,11 @@ set_target_properties(aobus-winui PROPERTIES
   VS_GLOBAL_TargetName Aobus
   VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
   WindowsTargetPlatformVersion 10.0.26100.0)
+# MakePri treats copy-local PRI files from referenced projects as merge inputs.
+# Dedicated output directories keep a previous Aobus.pri from being
+# rediscovered through a referenced target during an incremental catalog build.
 set_target_properties(ao_winui_localization_probe PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/localization-probe"
   VS_GLOBAL_AppContainerApplication false
   VS_GLOBAL_ApplicationType "Windows Store"
   VS_GLOBAL_ApplicationTypeRevision 10.0
@@ -330,6 +344,7 @@ set_target_properties(ao_winui_localization_probe PROPERTIES
   VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
   WindowsTargetPlatformVersion 10.0.26100.0)
 set_target_properties(aobus-winui-lib PROPERTIES
+  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/winui-lib"
   VS_GLOBAL_AppContainerApplication false
   VS_GLOBAL_ApplicationType "Windows Store"
   VS_GLOBAL_ApplicationTypeRevision 10.0

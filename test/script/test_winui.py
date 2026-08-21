@@ -22,7 +22,7 @@ class WinUiTest(unittest.TestCase):
         runtime = winui._runtime_contract()
 
         self.assertEqual(runtime.package_name, "Microsoft.WindowsAppRuntime.2")
-        self.assertEqual(runtime.version, "2.3.1.0")
+        self.assertEqual(runtime.version, "2.4.0.0")
         self.assertEqual(runtime.architecture, "x64")
         self.assertRegex(runtime.sha256, r"^[0-9a-f]{64}$")
 
@@ -30,12 +30,12 @@ class WinUiTest(unittest.TestCase):
         payload = json.dumps(
             [
                 {
-                    "Version": "2.3.1.0",
-                    "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.3.1.0_x64__8wekyb3d8bbwe",
+                    "Version": "2.4.0.0",
+                    "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.4.0.0_x64__8wekyb3d8bbwe",
                 },
                 {
-                    "Version": "2.3.1.0",
-                    "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.3.1.0_x86__8wekyb3d8bbwe",
+                    "Version": "2.4.0.0",
+                    "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.4.0.0_x86__8wekyb3d8bbwe",
                 },
             ]
         )
@@ -55,9 +55,9 @@ class WinUiTest(unittest.TestCase):
 
     def test_runtime_setup_is_idempotent_when_the_exact_runtime_exists(self):
         installed = winui.RuntimePackage(
-            version="2.3.1.0",
+            version="2.4.0.0",
             architecture="x64",
-            package_full_name="Microsoft.WindowsAppRuntime.2_2.3.1.0_x64__8wekyb3d8bbwe",
+            package_full_name="Microsoft.WindowsAppRuntime.2_2.4.0.0_x64__8wekyb3d8bbwe",
         )
         with mock.patch.object(winui.os, "name", "nt"):
             with mock.patch.object(winui, "matching_runtime", return_value=installed):

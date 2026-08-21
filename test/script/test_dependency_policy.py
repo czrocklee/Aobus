@@ -150,7 +150,7 @@ class DependencyPolicyTest(unittest.TestCase):
             {"boost", "ftxui", "icu", "spdlog", "windows-app-sdk", "cppwinrt"},
         )
         self.assertEqual(self.contract["dependencies"]["icu"]["policy"]["version"], "78.3")
-        self.assertEqual(self.contract["dependencies"]["windows-app-sdk"]["policy"]["version"], "2.3.1")
+        self.assertEqual(self.contract["dependencies"]["windows-app-sdk"]["policy"]["version"], "2.4.0")
         self.assertEqual(self.contract["dependencies"]["cppwinrt"]["policy"]["version"], "3.0.260715.1")
 
     def test_unknown_schema_is_rejected(self):
@@ -303,7 +303,7 @@ class DependencyPolicyTest(unittest.TestCase):
             resolved["windows-app-sdk"],
             {
                 "package": "Microsoft.WindowsAppSDK",
-                "version": "2.3.1",
+                "version": "2.4.0",
                 "archive": str(archives["Microsoft.WindowsAppSDK"]),
             },
         )
@@ -312,11 +312,11 @@ class DependencyPolicyTest(unittest.TestCase):
     def test_restored_nuget_identity_accepts_normalized_zero_revision(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            report, _ = self._nuget_resolution_fixture(root, identity_versions={"Microsoft.WindowsAppSDK": "2.3.1.0"})
+            report, _ = self._nuget_resolution_fixture(root, identity_versions={"Microsoft.WindowsAppSDK": "2.4.0.0"})
 
             resolved = dependency_policy._verify_nuget_resolution(self.contract, report, root)
 
-        self.assertEqual(resolved["windows-app-sdk"]["version"], "2.3.1")
+        self.assertEqual(resolved["windows-app-sdk"]["version"], "2.4.0")
 
     def test_restored_nuget_identity_must_match_the_locked_package(self):
         cases = (
