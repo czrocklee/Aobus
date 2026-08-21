@@ -1,0 +1,800 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+de:table {
+  messages:table {
+    pilot_library_title { "Musikbibliothek" }
+    pilot_greeting { "Willkommen, {name}" }
+    pilot_copy_summary { "Nach {destination} wurden {count} Titel kopiert" }
+    pilot_track_count { "{count, plural, one {# Titel} other {# Titel}}" }
+    pilot_playback_state { "{state, select, playing {Wiedergabe} paused {Pausiert} other {Gestoppt}}" }
+    pilot_regional_fallback { "Deutscher Sprach-Fallback" }
+    pilot_pseudo_probe { "Öffne die Musikbibliothek von {application}" }
+    track_field_title { "Titel" }
+    track_field_artist { "Interpret" }
+    track_field_album { "Album" }
+    track_field_album_artist { "Albuminterpret" }
+    track_field_genre { "Genre" }
+    track_field_composer { "Komponist" }
+    track_field_conductor { "Dirigent" }
+    track_field_ensemble { "Ensemble" }
+    track_field_work { "Werk" }
+    track_field_movement { "Satz" }
+    track_field_soloist { "Solist" }
+    track_field_year { "Jahr" }
+    track_field_disc_number { "CD" }
+    track_field_disc_total { "CDs gesamt" }
+    track_field_track_number { "Titel-Nr." }
+    track_field_track_total { "Titel gesamt" }
+    track_field_movement_number { "Satz-Nr." }
+    track_field_movement_total { "Sätze gesamt" }
+    track_field_duration { "Dauer" }
+    track_field_tags { "Tags" }
+    track_field_file_path { "Dateipfad" }
+    track_field_codec { "Codec" }
+    track_field_sample_rate { "Abtastrate" }
+    track_field_channels { "Kanäle" }
+    track_field_bit_depth { "Bittiefe" }
+    track_field_bitrate { "Bitrate" }
+    track_field_file_size { "Dateigröße" }
+    track_field_modified_time { "Geändert" }
+    track_field_display_track_number { "Titel-Nr." }
+    track_field_technical_summary { "Technisch" }
+    track_field_quality { "Qualität" }
+    track_group_none { "Keine" }
+    missing_track_artist { "Unbekannter Interpret" }
+    missing_track_album { "Unbekanntes Album" }
+    missing_track_year { "Unbekanntes Jahr" }
+    missing_track_genre { "Unbekanntes Genre" }
+    missing_track_composer { "Unbekannter Komponist" }
+    missing_track_conductor { "Unbekannter Dirigent" }
+    missing_track_ensemble { "Unbekanntes Ensemble" }
+    missing_track_work { "Unbekanntes Werk" }
+    track_presentation_library { "Bibliothek" }
+    track_presentation_description_library { "Alle Titel nach Albuminterpret und Album sortiert." }
+    track_presentation_list_order { "Manuelle Reihenfolge" }
+    track_presentation_description_list_order { "Titel in eigener Reihenfolge anordnen." }
+    track_presentation_songs { "Titel" }
+    track_presentation_description_songs { "Flache Liste aller Titel, nach Titelname sortiert." }
+    track_presentation_albums { "Alben" }
+    track_presentation_description_albums { "Nach Album gruppiert, mit titelbezogenen Spalten." }
+    track_presentation_artists { "Interpreten" }
+    track_presentation_description_artists { "Nach Albuminterpret gruppiert, in Diskografie-Reihenfolge." }
+    track_presentation_performers { "Mitwirkende" }
+    track_presentation_description_performers { "Nach Titelinterpret gruppiert, einschließlich Gastinterpreten." }
+    track_presentation_genres { "Genres" }
+    track_presentation_description_genres { "Nach Genre gruppiert." }
+    track_presentation_years { "Jahre" }
+    track_presentation_description_years { "Nach Jahr gruppiert." }
+    track_presentation_classical_composers { "Klassik: Komponisten" }
+    track_presentation_description_classical_composers { "Nach Komponist gruppiert, mit werkbezogenen Spalten." }
+    track_presentation_classical_conductors { "Klassik: Dirigenten" }
+    track_presentation_description_classical_conductors { "Nach Dirigent gruppiert, mit Werk- und Ensemble-Spalten." }
+    track_presentation_classical_works { "Klassik: Werke" }
+    track_presentation_description_classical_works { "Nach Werk gruppiert, mit komponistenbezogenen Spalten." }
+    track_presentation_tagging { "Verschlagwortung" }
+    track_presentation_description_tagging { "Flache Liste mit Disc-/Titelnummer, Genre, Jahr und Tags zur Pflege." }
+    track_presentation_technical { "Technisch" }
+    track_presentation_description_technical { "Flache Liste mit Codec, Bitrate, Größe und Pfad zur Dateiprüfung." }
+    create_custom_track_presentation { "Benutzerdefinierte Ansicht erstellen..." }
+    track_presentation_picker_label { "Darstellung" }
+    track_presentation_all_tracks_manual_order_unavailable { "Alle Titel haben keine gespeicherte Reihenfolge. Erstellen Sie eine gespeicherte Liste, um die gesamte Bibliothek manuell anzuordnen." }
+    audio_backend_pipewire_description { "Moderner Linux-Audioserver mit niedriger Latenz" }
+    audio_backend_alsa_description { "Advanced Linux Sound Architecture (direkter Hardwarezugriff)" }
+    audio_backend_wasapi_description { "Windows Audio Session API" }
+    audio_backend_wasapi_output_fallback { "WASAPI-Wiedergabeendpunkt" }
+    audio_profile_shared { "Gemeinsamer Modus" }
+    audio_profile_shared_description { "Systemweite Mischung mit anderen Anwendungen" }
+    audio_profile_exclusive { "Exklusiver Modus" }
+    audio_profile_exclusive_description { "Direkter Zugriff auf das Audiogerät" }
+    system_default_output_device { "Systemstandard" }
+    completion_field { "Feld" }
+    completion_alias { "Alias" }
+    completion_operator { "Operator" }
+    completion_logical_operator { "logischer Operator" }
+    notification_unknown_error { "unbekannter Fehler" }
+    notification_track_label { "Titel {id}" }
+    notification_playback_subject { "Wiedergabe" }
+    notification_track_open_failed { "{track} konnte nicht wiedergegeben werden: {reason}" }
+    notification_decode_failed { "Wiedergabe von {track} fehlgeschlagen: {reason}" }
+    notification_route_activation_failed { "Wiedergabe konnte nicht gestartet werden: {reason}" }
+    notification_device_lost { "Wiedergabegerät fehlgeschlagen: {reason}" }
+    notification_sequence_finished { "Wiedergabesequenz beendet" }
+    notification_tracks_skipped { "{count, plural, one {# nicht abspielbarer Titel übersprungen} other {# nicht abspielbare Titel übersprungen}}" }
+    notification_stopped_after_failures { "Wiedergabe nach {count} nicht abspielbaren Titeln beendet" }
+    notification_stopped_for_track { "{hasSubject, select, yes {{hasDetail, select, yes {Wiedergabe von {subject} beendet: {detail}} other {Wiedergabe von {subject} beendet}}} other {{hasDetail, select, yes {Wiedergabe beendet: {detail}} other {Wiedergabe beendet}}}}" }
+    notification_fallback { "Benachrichtigung" }
+    notification_grouped_info { "{count, plural, one {# Benachrichtigung} other {# Benachrichtigungen}}" }
+    notification_grouped_warning { "{count, plural, one {# Warnung} other {# Warnungen}}" }
+    notification_grouped_error { "{count, plural, one {# Fehler} other {# Fehler}}" }
+    library_task_scanning { "Scannen" }
+    library_task_updating { "Aktualisieren" }
+    library_task_fingerprinting { "Fingerabdruck erstellen" }
+    library_task_indexing_audio_identity { "Audioidentität indizieren" }
+    library_task_progress_detail { "{hasSubject, select, yes {{activity}: {subject}} other {{activity}}}" }
+    library_task_scanning_compact { "Bibliothek wird gescannt" }
+    library_task_updating_compact { "Bibliothek wird aktualisiert" }
+    library_scan_up_to_date { "Bibliothek ist aktuell" }
+    library_scan_complete { "Bibliotheksscan abgeschlossen" }
+    library_scan_relinked { "{count, plural, one {# verschobene Datei neu verknüpft} other {# verschobene Dateien neu verknüpft}}" }
+    library_scan_missing { "{count, plural, one {# fehlende Datei muss geprüft werden} other {# fehlende Dateien müssen geprüft werden}}" }
+    library_scan_changes_combined { "{relinked}; {missing}" }
+    library_scan_completed_with_errors { "{hasChanges, select, yes {Scan mit Fehlern abgeschlossen; {changes}} other {Scan mit Fehlern abgeschlossen}}" }
+    library_scan_unreadable { "Der Bibliotheksscan fand {count, plural, one {# unlesbare Datei} other {# unlesbare Dateien}} und keine verwendbaren Änderungen" }
+    library_scan_failed { "{hasError, select, yes {Scan fehlgeschlagen: {error}} other {Scan fehlgeschlagen}}" }
+    library_all_tracks { "Alle Titel" }
+    library_unnamed_list { "<Unbenannte Liste>" }
+    library_audio_identity_indexing_failed { "Indizierung der Audioidentität fehlgeschlagen" }
+    library_audio_identity_indexing_completed_with_errors { "Indizierung der Audioidentität mit Fehlern abgeschlossen" }
+    library_audio_identity_indexing_complete { "Indizierung der Audioidentität abgeschlossen" }
+    library_ready_indexing_audio_identity { "Bibliothek bereit; Audioidentität wird im Hintergrund indiziert" }
+    library_export_failed { "Export fehlgeschlagen: {error}" }
+    library_exported { "Bibliothek erfolgreich exportiert" }
+    library_import_failed { "Import fehlgeschlagen: {error}" }
+    library_import_confirmation_unavailable { "Import fehlgeschlagen: Bestätigung ist nicht verfügbar" }
+    library_imported { "Bibliothek erfolgreich importiert" }
+    track_filter_error { "Filterfehler: {diagnostic}" }
+    track_count { "{count, plural, one {# Titel} other {# Titel}}" }
+    track_selection_summary { "{count, plural, one {# Element ausgewählt} other {# Elemente ausgewählt}}{hasDuration, select, yes { ({duration})} other {}}" }
+    smart_list_membership_direct { "Direkte Mitgliedschaftsbearbeitung über {expression}" }
+    smart_list_membership_computed { "Berechnete Mitgliedschaft — Tags oder Ausdruck bearbeiten" }
+    smart_list_expression_none { "(keiner)" }
+    smart_list_no_tracks { "{source, select, library {Keine Titel in der Bibliothek} other {Keine Titel in der Quelle}}" }
+    smart_list_showing_source { "{source, select, library {Alle {count, plural, one {# Titel} other {# Titel}} werden angezeigt} other {Alle {count, plural, one {# Titel} other {# Titel}} aus der Quelle werden angezeigt}}" }
+    smart_list_invalid_filter { "Ungültiger Filter" }
+    smart_list_no_matches { "Keine Treffer" }
+    smart_list_showing_all_matches { "Alle {count, plural, one {# Treffer} other {# Treffer}} werden angezeigt" }
+    smart_list_showing_first_matches { "{visible} von {count} Treffern werden angezeigt" }
+    smart_list_untitled_track { "(ohne Titel)" }
+    list_order_saved_lists_only { "Manuelle Sortierung ist nur für gespeicherte Listen verfügbar." }
+    list_order_library_busy { "Die Bibliothek ist beschäftigt. Manuelle Sortierung ist nach Abschluss der Wartung wieder verfügbar." }
+    list_order_authoring_unavailable { "Die Bibliothek kann derzeit nicht bearbeitet werden." }
+    list_order_list_unavailable { "Diese Liste ist nicht mehr verfügbar." }
+    list_order_fix_filter { "Korrigieren Sie die Liste oder den Schnellfilter, bevor Sie die Sortierung ändern." }
+    list_order_choose_flat_presentation { "Wählen Sie Manuelle Sortierung oder eine andere flache, unsortierte Darstellung, um Titel neu anzuordnen." }
+    list_order_clear_quick_filter { "Löschen Sie den Schnellfilter, um Titel zu ziehen oder relativ zu verschieben; an den Anfang oder das Ende können sie weiterhin verschoben werden." }
+    list_order_changed { "Die Liste wurde geändert. Starten Sie die Sortieraktion erneut." }
+    list_order_unchanged { "Sortierung unverändert." }
+    list_order_editing_unavailable { "Die Bibliothek kann derzeit nicht bearbeitet werden." }
+    list_order_moved { "{count, plural, one {# Titel wurde} other {# Titel wurden}} in der manuellen Sortierung verschoben." }
+    list_order_reset { "Die manuelle Sortierung wurde zurückgesetzt und {count, plural, one {# gespeicherte Position wurde} other {# gespeicherte Positionen wurden}} verworfen." }
+    list_order_forgot_hidden { "{count, plural, one {# ausgeblendete gespeicherte Position wurde} other {# ausgeblendete gespeicherte Positionen wurden}} verworfen." }
+    list_membership_add_stale { "Die Bibliothek wurde geändert, bevor Titel hinzugefügt werden konnten. Versuchen Sie es erneut." }
+    list_membership_add_unavailable { "Die Bibliothek ist beschäftigt. Es wurden keine Titel hinzugefügt." }
+    list_membership_add_noop { "{list} enthält bereits {tag} für die ausgewählten Titel." }
+    list_membership_added { "{tag} wurde für {count, plural, one {# Titel} other {# Titel}} in {list} hinzugefügt." }
+    list_membership_remove_stale { "Die Bibliothek wurde geändert, bevor Titel entfernt werden konnten. Versuchen Sie es erneut." }
+    list_membership_remove_unavailable { "Die Bibliothek ist beschäftigt. Es wurden keine Titel entfernt." }
+    list_membership_remove_noop { "In {list} war weder eine {tag}-Mitgliedschaft noch eine gespeicherte Position vorhanden." }
+    list_membership_removed_without_position { "{tag} wurde von {count, plural, one {# Titel} other {# Titeln}} entfernt; in {list} ist keine gespeicherte Position mehr vorhanden." }
+    list_membership_removed_with_positions { "{tag} wurde von {trackCount, plural, one {# Titel} other {# Titeln}} entfernt und {positionCount, plural, one {# gespeicherte Position wurde} other {# gespeicherte Positionen wurden}} in {list} verworfen." }
+    track_channel_mono { "Mono" }
+    track_channel_stereo { "Stereo" }
+    track_channel_count { "{count, plural, one {# Kanal} other {# Kanäle}}" }
+    track_technical_unknown { "Unbekannt" }
+    playback_not_playing { "Keine Wiedergabe" }
+    playback_connecting_audio_engine { "Verbindung zur Audio-Engine wird hergestellt..." }
+    playback_unknown_artist { "Unbekannter Interpret" }
+    playback_audio_pipeline { "Audiokette" }
+    audio_node_source { "[Quelle]" }
+    audio_node_decoder { "[Decoder]" }
+    audio_node_engine { "[Engine]" }
+    audio_node_stream { "[Stream]" }
+    audio_node_filter { "[Filter]" }
+    audio_node_device { "[Gerät]" }
+    audio_node_other_source { "[Andere Quelle]" }
+    audio_node_unknown { "[Unbekannt]" }
+    audio_format { "{sampleRate} kHz · {bits} Bit · {channels}" }
+    audio_channels_compact { "{count} Kan." }
+    audio_finding_lossy_source { "Verlustbehaftete Quelle" }
+    audio_finding_software_volume_attenuation { "{hasGain, select, yes {Software-Lautstärkeabsenkung: {gain}} other {Software-Lautstärkeabsenkung}}" }
+    audio_finding_software_amplification { "{hasGain, select, yes {Software-Verstärkung: {gain} Verstärkung (Übersteuerungsgefahr)} other {Software-Verstärkung (Übersteuerungsgefahr)}}" }
+    audio_finding_hardware_volume_modification { "Hardware-Lautstärkeregelung" }
+    audio_finding_unclassified_volume_modification { "Nicht klassifizierte Lautstärkeänderung" }
+    audio_finding_muted { "Stummgeschaltet" }
+    audio_finding_resampling { "{hasFormats, select, yes {Neuabtastung: {fromRate} Hz → {toRate} Hz} other {Neuabtastung}}" }
+    audio_finding_channel_mapping { "{hasFormats, select, yes {Kanäle: {fromChannels} → {toChannels}} other {Kanalzuordnung}}" }
+    audio_finding_lossless_padding { "Bittransparente Ganzzahl-Auffüllung" }
+    audio_finding_lossless_float { "Bittransparente Gleitkomma-Abbildung" }
+    audio_finding_lossless_round_trip { "Bittransparenter Rundlauf (Gleitkomma-Engine)" }
+    audio_finding_truncation { "{kind, select, floatToInteger {Gleitkomma → Ganzzahl-Quantisierung: {fromPrecision} → {toPrecision}} integerToFloat {Ganzzahl → Gleitkomma-Quantisierung: {fromPrecision} → {toPrecision}} precision {Präzision gekürzt: {fromPrecision} → {toPrecision}} other {Präzision gekürzt}}" }
+    audio_finding_mixed_sources { "{hasApps, select, yes {Gemischt mit {apps}} other {Gemischte Quellen}}" }
+    audio_quality_bit_perfect_playback { "Bitperfekte Wiedergabe" }
+    audio_quality_signal_preserved { "Signal erhalten" }
+    audio_quality_pipeline_intervention { "Eingriff in die Audiokette" }
+    audio_quality_signal_clipping_detected { "Signalübersteuerung erkannt" }
+    audio_quality_unknown_pipeline { "Unbekannte Audiokette" }
+    audio_quality_clipping_risk { "Übersteuerungsgefahr" }
+    audio_quality_partially_verified_path { "Teilweise geprüfter Signalweg" }
+    audio_quality_clean_lossy_delivery { "Saubere verlustbehaftete Ausgabe" }
+    audio_quality_clean_delivery { "Saubere Ausgabe" }
+    playback_control_play { "Wiedergeben" }
+    playback_control_pause { "Pausieren" }
+    playback_control_stop { "Stoppen" }
+    playback_control_next_track { "Nächster Titel" }
+    playback_control_previous_track { "Vorheriger Titel" }
+    playback_control_shuffle { "Zufallswiedergabe" }
+    playback_control_repeat { "Wiederholen" }
+    playback_action_play_pause { "Wiedergabe/Pause" }
+    playback_action_next { "Nächster Titel" }
+    playback_action_previous { "Vorheriger Titel" }
+    playback_action_toggle_shuffle { "Zufallswiedergabe umschalten" }
+    playback_action_cycle_repeat { "Wiederholungsmodus wechseln" }
+    playback_volume_tooltip { "Lautstärke: {percent}%{state, select, muted { (Stumm)} hardware { (Hardware)} other {}}" }
+    gtk_shell_menu_file { "Datei" }
+    gtk_shell_open_library { "Bibliothek öffnen..." }
+    gtk_shell_scan_library { "Bibliothek scannen" }
+    gtk_shell_import_library_data { "Bibliotheksdaten importieren..." }
+    gtk_shell_export_library_data { "Bibliotheksdaten exportieren..." }
+    gtk_shell_quit { "Beenden" }
+    gtk_shell_menu_edit { "Bearbeiten" }
+    gtk_shell_preferences { "Einstellungen..." }
+    gtk_shell_menu_view { "Ansicht" }
+    gtk_shell_edit_layout { "Layout bearbeiten..." }
+    gtk_shell_save_panel_sizes_as_layout_defaults { "Aktuelle Bereichsgrößen als Layout-Standard speichern" }
+    gtk_shell_reset_runtime_layout_state { "Laufzeit-Layoutzustand zurücksetzen" }
+    gtk_shell_menu_help { "Hilfe" }
+    gtk_shell_about { "Über" }
+    gtk_shell_application_menu { "Anwendungsmenü" }
+    gtk_playback_show_playing_list { "Klicken, um die Wiedergabeliste anzuzeigen" }
+    gtk_playback_toggle_mute { "Stummschaltung umschalten" }
+    gtk_playback_show_current_album { "Aktuelles Album anzeigen" }
+    gtk_playback_now_playing_cover_art { "Cover der aktuellen Wiedergabe" }
+    gtk_library_quick_filter_placeholder { "Titel, Interpreten, Alben und Tags durchsuchen..." }
+    gtk_library_clear_filter { "Filter löschen" }
+    gtk_library_create_list_from_filter { "Liste aus aktuellem Filter erstellen" }
+    gtk_list_new { "Neue Liste..." }
+    gtk_list_new_playlist { "Neue Wiedergabeliste..." }
+    gtk_list_edit { "Liste bearbeiten..." }
+    gtk_list_delete { "Liste löschen" }
+    gtk_list_delete_subtree { "Liste und Unterlisten löschen..." }
+    gtk_smart_list_new_title { "Neue Liste" }
+    gtk_smart_list_edit_title { "Liste bearbeiten" }
+    gtk_smart_list_new_playlist_title { "Neue Wiedergabeliste" }
+    gtk_common_cancel { "Abbrechen" }
+    gtk_common_create { "Erstellen" }
+    gtk_common_save { "Speichern" }
+    gtk_common_close { "Schließen" }
+    gtk_smart_list_name_placeholder { "Listenname" }
+    gtk_smart_list_name { "Name" }
+    gtk_smart_list_description_placeholder { "Optionale Beschreibung" }
+    gtk_smart_list_description { "Beschreibung" }
+    gtk_smart_list_membership_tag_placeholder { "Sichtbares Tag für die Mitgliedschaft" }
+    gtk_smart_list_membership_tag { "Mitgliedschafts-Tag" }
+    gtk_smart_list_inherited_filter { "Geerbter Filter" }
+    gtk_smart_list_filter_expression_placeholder { "Filterausdruck ($, @, # oder % eingeben)" }
+    gtk_smart_list_local_filter { "Lokaler Filter" }
+    gtk_smart_list_effective_filter { "Wirksamer Filter" }
+    gtk_smart_list_membership { "Mitgliedschaft" }
+    gtk_smart_list_auto_presentation { "Automatisch" }
+    gtk_smart_list_presentation { "Darstellung" }
+    gtk_smart_list_preview { "Vorschau" }
+    gtk_smart_list_waiting_for_filter { "Warten auf Filter..." }
+    gtk_smart_list_track { "Titel" }
+    gtk_smart_list_invalid_source { "(ungültige Quelle)" }
+    gtk_smart_list_choose_membership_tag { "Sichtbares Tag für die Wiedergabelisten-Mitgliedschaft wählen" }
+    gtk_library_open_music_library { "Musikbibliothek öffnen" }
+    gtk_library_select_export_mode { "Exportmodus auswählen" }
+    gtk_library_choose_backup_contents { "Inhalt der Sicherung auswählen:" }
+    gtk_library_export_mode_delta { "Differenz (Benutzeränderungen, Tags und Listen synchronisieren)" }
+    gtk_library_export_mode_metadata { "Metadaten (gepflegter Text und Cover, ohne technische Daten)" }
+    gtk_library_export_mode_full { "Vollständig (Notfallwiederherstellung: alles)" }
+    gtk_library_export_mode_list_only { "Nur Listen (Wiedergabelisten ohne Titeländerungen synchronisieren)" }
+    gtk_library_include { "Einschließen" }
+    gtk_library_next { "Weiter" }
+    gtk_library_export_yaml { "Bibliothek als YAML exportieren" }
+    gtk_library_yaml_files { "YAML-Dateien" }
+    gtk_library_import_yaml { "Bibliothek aus YAML importieren" }
+    gtk_library_confirm_restore { "Bibliothekswiederherstellung bestätigen" }
+    gtk_library_restore_library { "Bibliothek wiederherstellen" }
+    gtk_library_restore_lists { "Listen wiederherstellen" }
+    gtk_library_restore_scope_library { "Bibliothekstitel und Listen" }
+    gtk_library_restore_scope_lists { "Listen" }
+    gtk_library_file_selection_failed { "Dateiauswahl fehlgeschlagen" }
+    gtk_library_could_not_select_music_folder { "Musikbibliotheksordner konnte nicht ausgewählt werden" }
+    gtk_library_could_not_select_export_file { "Exportdatei konnte nicht ausgewählt werden" }
+    gtk_library_could_not_select_backup { "Bibliothekssicherung konnte nicht ausgewählt werden" }
+    gtk_list_delete_question_title { "Liste löschen?" }
+    gtk_list_delete_subtree_title { "Liste und Unterlisten löschen?" }
+    gtk_list_delete_action { "Löschen" }
+    gtk_list_delete_all_action { "Alle löschen" }
+    gtk_list_unable_to_delete_title { "Liste kann nicht gelöscht werden" }
+    gtk_list_delete_question { "\"{name}\" löschen?\n\nDie Liste wird entfernt. Musikdateien bleiben erhalten." }
+    gtk_list_delete_subtree_question { "{count, plural, one {# Liste} other {# Listen}} in diesem abgeleiteten Teilbaum löschen?\n\n{entries}\nTags verschachtelter Wiedergabelisten bleiben erhalten.\nMusikdateien bleiben erhalten." }
+    gtk_list_remove_tag { "{tag} auch von {count, plural, one {# Titel} other {# Titeln}} entfernen" }
+    gtk_list_tag_references { "{tag} wird auch verwendet von: {references}. Das Entfernen kann diese Listen ändern." }
+    gtk_library_restore_confirmation { "Diese Wiederherstellung ersetzt die aktuellen {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; {listsCreated} Listen erstellt, {listsDeleted} gelöscht; {dangling} verwaiste Verweise ignoriert.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
+    gtk_library_file_selection_error { "{operation}: {message}" }
+    gtk_list_other_computed_membership { "Andere Listen haben eine berechnete Mitgliedschaft; bearbeiten Sie stattdessen deren Ausdruck oder die Titel-Tags." }
+    gtk_list_no_editable_playlists { "Keine direkt bearbeitbaren Wiedergabelisten" }
+    gtk_list_create_playlist { "Wiedergabeliste erstellen..." }
+    gtk_list_manage_lists { "Listen verwalten..." }
+    gtk_list_add_to_playlist { "Zur Wiedergabeliste hinzufügen" }
+    gtk_list_remove_from_current { "Aus {name} ({tag}) entfernen" }
+    gtk_list_remove_computed_unavailable { "Das Entfernen aus dieser Liste ist nicht verfügbar, da ihre Mitgliedschaft berechnet wird." }
+    gtk_list_move_up { "Nach oben" }
+    gtk_list_move_down { "Nach unten" }
+    gtk_list_move_to_top { "An den Anfang" }
+    gtk_list_move_to_bottom { "An das Ende" }
+    gtk_list_reset_order { "Sortierung zurücksetzen" }
+    gtk_list_forget_hidden_positions { "Ausgeblendete Positionen verwerfen" }
+    gtk_list_manual_order { "Manuelle Sortierung" }
+    gtk_list_select_tracks_for_order { "Wählen Sie mindestens einen Titel aus, um die manuelle Sortierung zu ändern." }
+    gtk_list_move_up_action { "In der manuellen Sortierung nach oben" }
+    gtk_list_move_down_action { "In der manuellen Sortierung nach unten" }
+    gtk_list_move_to_top_action { "An den Anfang der manuellen Sortierung" }
+    gtk_list_move_to_bottom_action { "An das Ende der manuellen Sortierung" }
+    gtk_list_reset_order_action { "Manuelle Sortierung zurücksetzen" }
+    gtk_preferences_title { "Einstellungen" }
+    gtk_preferences_page_general { "Allgemein" }
+    gtk_preferences_page_appearance { "Erscheinungsbild" }
+    gtk_preferences_page_playback_output { "Wiedergabe/Ausgabe" }
+    gtk_preferences_page_layout { "Layout" }
+    gtk_preferences_page_keyboard { "Tastatur" }
+    gtk_preferences_theme { "Design" }
+    gtk_preferences_theme_classic { "Klassisch" }
+    gtk_preferences_theme_modern { "Modern" }
+    gtk_preferences_output_device { "Ausgabegerät" }
+    gtk_preferences_choose_output_device { "Ausgabegerät auswählen..." }
+    gtk_preferences_output_unavailable { "Nicht verfügbar" }
+    gtk_preferences_default_layout_preset { "Standardvorgabe" }
+    gtk_preferences_layout_preset_classic { "Klassisch" }
+    gtk_preferences_layout_preset_modern { "Modern" }
+    gtk_preferences_actions { "Aktionen" }
+    gtk_shortcut_title { "Tastaturkürzel anpassen" }
+    gtk_shortcut_reset_all { "Alle zurücksetzen" }
+    gtk_shortcut_reset_all_tooltip { "Alle Tastaturkürzel auf ihre Standardwerte zurücksetzen" }
+    gtk_shortcut_other_category { "Sonstiges" }
+    gtk_shortcut_conflict_title { "Tastaturkürzel neu zuweisen?" }
+    gtk_shortcut_conflict_message { "{chord} ist bereits „{owner}“ zugewiesen. Soll es dieser Aktion neu zugewiesen werden?" }
+    gtk_shortcut_reassign { "Neu zuweisen" }
+    gtk_shortcut_conflicts { "Konfliktierende Tastaturkürzel: {chords}" }
+    gtk_shortcut_unassigned { "Nicht zugewiesen" }
+    gtk_shortcut_remove { "{chord} entfernen" }
+    gtk_shortcut_add { "Hinzufügen…" }
+    gtk_shortcut_add_tooltip { "Ein neues Tastaturkürzel für diese Aktion aufnehmen" }
+    gtk_shortcut_reset { "Zurücksetzen" }
+    gtk_shortcut_reset_tooltip { "Diese Aktion auf ihren Standard zurücksetzen" }
+    gtk_shortcut_capture_title { "Tastaturkürzel festlegen" }
+    gtk_shortcut_capture_prompt { "Drücken Sie die neue Tastenkombination." }
+    gtk_shortcut_capture_cancel_hint { "Mit {key} abbrechen" }
+    gtk_action_category_playback { "Wiedergabe" }
+    gtk_action_category_shell { "Oberfläche" }
+    gtk_action_category_workspace { "Arbeitsbereich" }
+    gtk_action_category_tracks { "Titel" }
+    gtk_action_output_devices { "Ausgabegeräte" }
+    gtk_action_system_menu { "Systemmenü" }
+    gtk_action_reveal_track { "Titel anzeigen" }
+    gtk_action_track_properties { "Eigenschaften" }
+    gtk_action_edit_tags { "Tags bearbeiten" }
+    gtk_custom_view_title { "Benutzerdefinierte Ansicht bearbeiten" }
+    gtk_custom_view_label_placeholder { "Ansichtsbezeichnung" }
+    gtk_custom_view_name { "Name" }
+    gtk_custom_view_group_by { "Gruppieren nach" }
+    gtk_custom_view_add_sort_field { "Sortierfeld hinzufügen" }
+    gtk_custom_view_sort_order { "Sortierreihenfolge" }
+    gtk_custom_view_add_column { "Spalte hinzufügen" }
+    gtk_custom_view_visible_columns { "Sichtbare Spalten" }
+    gtk_custom_view_sort_ascending { "Aufsteigend sortieren" }
+    gtk_custom_view_sort_descending { "Absteigend sortieren" }
+    gtk_common_remove { "Entfernen" }
+    gtk_presentation_view_inactive { "Die ausgewählte Titelansicht ist nicht mehr aktiv." }
+    gtk_presentation_unable_to_change { "Titelansicht kann nicht geändert werden" }
+    gtk_presentation_copy_label { "Kopie von {label}" }
+    tui_shell_command_palette_title { "Befehlspalette" }
+    tui_shell_command_palette_no_matches { "Keine Treffer" }
+    tui_shell_command_palette_footer { "{completeKey} ergänzen  {runKey} ausführen  {cancelKey} abbrechen" }
+    tui_shell_workspace_list { "Liste" }
+    tui_shell_workspace_view { "Ansicht" }
+    tui_shell_overlay_tracks { "Titel" }
+    tui_shell_overlay_lists { "Listen" }
+    tui_shell_overlay_detail { "Details" }
+    tui_shell_overlay_pipeline { "Audiokette" }
+    tui_shell_overlay_output { "Ausgabe" }
+    tui_shell_overlay_views { "Ansichten" }
+    tui_shell_overlay_notifications { "Benachrichtigungen" }
+    tui_shell_overlay_help { "Hilfe" }
+    tui_shell_hint_workspace { "{commandKey} Befehl  {listsKey} Listen  {viewKey} Ansicht  {notificationsKey} Meldungen  {detailKey} Details  {pipelineKey} Audiokette  {outputKey} Ausgabe  {groupsKey} Gruppen  {currentKey} aktuell  {quitKey} beenden" }
+    tui_shell_hint_lists { "{toggleKey} umschalten  {openKey} öffnen  {closeKey} schließen" }
+    tui_shell_hint_detail { "{toggleKey} umschalten  {closeKey} schließen" }
+    tui_shell_hint_pipeline { "{toggleKey} umschalten  {closeKey} schließen" }
+    tui_shell_hint_output { "{toggleKey} umschalten  {selectKey} wählen  {closeKey} schließen" }
+    tui_shell_hint_views { "{toggleKey} umschalten  {selectKey} wählen  {closeKey} schließen" }
+    tui_shell_hint_notifications { "{toggleKey} umschalten  {hideKey} kompakt ausblenden  {closeKey} schließen" }
+    tui_shell_hint_help { "{closeKey} schließen" }
+    tui_shell_status_command { "Befehl" }
+    tui_shell_status_lists { "Listen" }
+    tui_shell_status_view { "Ansicht" }
+    tui_shell_status_notifications { "Meldungen" }
+    tui_shell_status_detail { "Details" }
+    tui_shell_status_pipeline { "Audiokette" }
+    tui_shell_status_output { "Ausgabe" }
+    tui_shell_status_groups { "Gruppen" }
+    tui_shell_status_current { "aktuell" }
+    tui_shell_status_quit { "beenden" }
+    tui_shell_filter_label { "Filter" }
+    tui_shell_category_library { "Bibliothek" }
+    tui_shell_category_view { "Ansicht" }
+    tui_shell_category_track { "Titel" }
+    tui_shell_category_audio { "Audio" }
+    tui_shell_category_status { "Status" }
+    tui_shell_category_ui { "Oberfläche" }
+    tui_shell_category_playback { "Wiedergabe" }
+    tui_shell_category_app { "Anwendung" }
+    tui_shell_detail_quick_filter { "Schnellfilter" }
+    tui_shell_detail_track_view { "Titelansicht" }
+    tui_shell_detail_choose_list { "Liste wählen" }
+    tui_shell_detail_track_detail { "Titeldetails" }
+    tui_shell_detail_audio_pipeline { "Audiokette" }
+    tui_shell_detail_output_device { "Ausgabegerät" }
+    tui_shell_detail_choose_view { "Ansicht wählen" }
+    tui_shell_detail_notification_center { "Benachrichtigungszentrale" }
+    tui_shell_detail_close_overlay { "Einblendung schließen" }
+    tui_shell_detail_help { "Hilfe" }
+    tui_shell_detail_now_playing { "Aktuelle Wiedergabe" }
+    tui_shell_detail_clear_filter { "Filter löschen" }
+    tui_shell_detail_reload_list { "Liste neu laden" }
+    tui_shell_detail_play { "Wiedergeben" }
+    tui_shell_detail_pause { "Pausieren" }
+    tui_shell_detail_toggle_playback { "Wiedergabe umschalten" }
+    tui_shell_detail_stop { "Stoppen" }
+    tui_shell_detail_quit { "Beenden" }
+    tui_shell_output_devices_title { "Ausgabegeräte" }
+    tui_playback_no_active_track { "Kein aktiver Titel" }
+    tui_playback_volume { "Lautst. {percent}%" }
+    tui_playback_no_output_device_selected { "Kein Ausgabegerät ausgewählt" }
+    tui_playback_no_output_devices_found { "Keine Ausgabegeräte gefunden" }
+    tui_playback_no_audio_pipeline { "Noch keine Audiokette" }
+    tui_shell_help_quick_filter { "{command}              Schnellfilter" }
+    tui_shell_help_choose_list { "{command} oder {alias}       Liste wählen" }
+    tui_shell_help_track_detail { "{command} oder {alias}      Details zum gewählten Titel" }
+    tui_shell_help_audio_pipeline { "{command} oder {alias}    Audiokette anzeigen" }
+    tui_shell_help_output_device { "{command} oder {alias}      Ausgabegerät wählen" }
+    tui_shell_help_choose_view { "{command} oder {alias}       Ansicht wählen" }
+    tui_shell_help_notifications { "{command} oder {alias} Benachrichtigungen anzeigen" }
+    tui_shell_help_current_track { "{command}           Aktuellen Titel zeigen" }
+    tui_shell_help_switch_presentation { "{command}         Ansicht wechseln" }
+    tui_shell_help_previous_next_group { "{command}              Vorherige / nächste Gruppe" }
+    tui_shell_help_clear_filter { "{command}             Filter löschen" }
+    tui_shell_help_reload_list { "{command}            Aktive Liste neu laden" }
+    tui_shell_help_playback { "{command} Wiedergabe" }
+    tui_shell_help_quit { "{command}              Beenden" }
+    tui_shell_help_footer { "{closeKey} schließen  {runKey} ausführen" }
+    tui_shell_notification_footer { "{toggleKey} umschalten  {hideKey} kompakt ausblenden  löschbare Zeile anklicken  {closeKey} schließen" }
+    tui_library_detail { "Bibliothek" }
+    tui_library_no_sections { "Keine Abschnitte in dieser Ansicht" }
+    tui_library_no_section_selected { "Kein Abschnitt ausgewählt" }
+    tui_library_no_current_track { "Kein aktueller Titel" }
+    tui_library_current_track_not_in_view { "Der aktuelle Titel ist nicht in dieser Ansicht" }
+    tui_library_no_active_track_view { "Keine aktive Titelansicht" }
+    tui_library_no_views_available { "Keine Ansichten verfügbar" }
+    tui_library_no_lists_available { "Keine Listen verfügbar" }
+    tui_library_filter_cleared { "Filter gelöscht" }
+    tui_library_filter_applied { "Filter angewendet" }
+    tui_library_no_tracks_found { "Keine Titel gefunden. Führen Sie zuerst `aobus init` in dieser Bibliothek aus." }
+    tui_library_no_lists_found { "Keine Listen gefunden" }
+    tui_library_ready { "Bereit" }
+    tui_library_section { "Abschnitt: {name}" }
+    tui_library_revealed_track { "{track} angezeigt" }
+    tui_library_unknown_view { "Unbekannte Ansicht {id}" }
+    tui_library_view { "Ansicht: {id}" }
+    tui_library_opened_list { "{list} geöffnet" }
+    tui_library_reloaded_tracks { "{count, plural, one {# Titel neu geladen} other {# Titel neu geladen}}" }
+    tui_library_quick_filter_matched { "Schnellfilter fand {count, plural, one {# Titel} other {# Titel}}" }
+    tui_library_expression_filter_matched { "Ausdrucksfilter fand {count, plural, one {# Titel} other {# Titel}}" }
+    tui_presentation_custom { "benutzerdefiniert" }
+    tui_presentation_custom_from { "benutzerdefiniert aus {id}" }
+    tui_presentation_default { "Standard" }
+    tui_presentation_badge { "Ansicht:{id}" }
+    winui_shell_menu_file { "Datei" }
+    winui_shell_open_library { "Bibliothek öffnen..." }
+    winui_shell_rescan { "Neu scannen" }
+    winui_shell_rescan_library { "Bibliothek neu scannen" }
+    winui_shell_menu_view { "Ansicht" }
+    winui_shell_modern_mode { "Moderner Modus" }
+    winui_shell_columns { "Spalten..." }
+    winui_shell_reload_theme { "Design neu laden" }
+    winui_shell_menu_playback { "Wiedergabe" }
+    winui_shell_play_pause { "Wiedergabe/Pause" }
+    winui_shell_stop { "Stopp" }
+    winui_shell_track_details { "Titeldetails" }
+    winui_shell_classic_mode { "Klassischer Modus" }
+    winui_playback_output_device { "Ausgabegerät" }
+    winui_playback_volume { "Lautstärke" }
+    winui_playback_no_output_devices { "Keine Ausgabegeräte" }
+    winui_library_open_label { "Öffnen" }
+    winui_library_rescan_label { "Neu scannen" }
+    winui_library_navigation_pane_title { "Bibliothek" }
+    winui_library_quick_filter_placeholder { "Titel filtern" }
+    winui_library_ready { "Bereit" }
+    winui_library_rescanning { "Bibliothek wird neu gescannt..." }
+    winui_library_no_selection { "Keine Auswahl" }
+    winui_track_move_column_left { "Nach links verschieben" }
+    winui_track_move_column_right { "Nach rechts verschieben" }
+    winui_more_menu { "Mehr" }
+    winui_error { "Fehler: {detail}" }
+    winui_save_settings_failed { "Einstellungen konnten nicht gespeichert werden: {detail}" }
+    winui_open_library_picker { "Bibliothek öffnen" }
+    winui_folder_picker_failed { "Ordnerauswahl fehlgeschlagen: {detail}" }
+    winui_library_switch_failed { "Bibliothek konnte nicht gewechselt werden: {detail}" }
+    winui_theme_override_removed { "Designüberschreibung entfernt; Windows-Darstellung wird verwendet" }
+    winui_theme_reload_failed { "Design konnte nicht neu geladen werden: {detail}" }
+    winui_theme_reloaded { "Design neu geladen: {path}" }
+    winui_smtc_unavailable { "SMTC nicht verfügbar: {detail}" }
+    winui_shell_layout_failed { "Das Shell-Layout konnte nicht erstellt werden: {detail}" }
+    winui_activity_details { "Aktivitätsdetails anzeigen" }
+    winui_activity_notifications { "Benachrichtigungen" }
+    winui_activity_hide_notification { "Benachrichtigung aus dem Status ausblenden" }
+    winui_library_ready_at { "Bibliothek bereit: {root}" }
+    winui_navigation_failed { "Navigation fehlgeschlagen: {detail}" }
+    winui_list_status { "Liste: {list}" }
+    winui_presentation_failed { "Darstellung fehlgeschlagen: {detail}" }
+    winui_playback_failed { "Wiedergabe fehlgeschlagen: {detail}" }
+    winui_column_resize_failed { "Spaltengröße konnte nicht geändert werden: {detail}" }
+    winui_column_settings_failed { "Spalteneinstellungen konnten nicht gespeichert werden: {detail}" }
+    winui_column_move_failed { "Spalte konnte nicht verschoben werden: {detail}" }
+    winui_column_visibility_failed { "Spaltensichtbarkeit konnte nicht geändert werden: {detail}" }
+    winui_column_not_sortable { "Spalte ''{column}'' kann nicht sortiert werden" }
+    winui_sort_failed { "Sortierung fehlgeschlagen: {detail}" }
+    winui_unavailable_track { "Nicht verfügbarer Titel" }
+    winui_theme_file_not_found { "Designdatei nicht gefunden: {path}" }
+    winui_theme_load_failed { "Windows-Design konnte nicht geladen werden: {detail}" }
+    winui_startup_failure { "Aobus konnte nicht gestartet werden:\n\n{detail}" }
+    track_multiple_values { "<Mehrere Werte>" }
+    track_metadata_heading { "Metadaten" }
+    track_audio_properties_heading { "Audioeigenschaften" }
+    track_show_empty_fields { "Leere Felder anzeigen" }
+    track_hide_empty_fields { "Leere Felder ausblenden" }
+    track_missing_on_some { "Bei einigen Titeln nicht vorhanden" }
+    track_fallback { "Titel {id}" }
+    track_detail_title { "Titeldetails" }
+    track_no_selection { "Kein Titel ausgewählt" }
+    cover_art_title { "Cover" }
+    cover_art_none { "Kein Cover" }
+    library_task_label { "Bibliotheksaufgabe" }
+    track_tags_changed { "{hasAdded, select, yes {Tags hinzugefügt: {addedCount}{hasRemoved, select, yes {; entfernt: {removedCount}} other {}}} other {Tags entfernt: {removedCount}}} für {trackCount, plural, one {# Titel} other {# Titel}}" }
+    track_tags_stale { "Die Bibliothek wurde geändert, während der Tag-Editor geöffnet war. Laden Sie neu und versuchen Sie es erneut." }
+    track_edit_stale { "Die Bibliothek wurde während dieser Bearbeitung geändert. Laden Sie den Wert neu und versuchen Sie es erneut." }
+    track_editing_unavailable { "Die Bearbeitung der Bibliothek ist derzeit nicht verfügbar." }
+    gtk_track_properties_title { "Eigenschaften" }
+    gtk_track_properties_selected_title { "Eigenschaften — {count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }
+    gtk_track_editing_unavailable { "Bearbeitung nicht verfügbar: {detail}" }
+    gtk_track_save_failed { "Speichern fehlgeschlagen" }
+    gtk_track_save_stale_title { "Speichern konnte nicht angewendet werden" }
+    gtk_track_save_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Laden Sie die Eigenschaften neu und versuchen Sie es erneut." }
+    gtk_tag_add { "Hinzufügen…" }
+    gtk_tag_add_placeholder { "Tag hinzufügen…" }
+    gtk_tag_remove { "Tag {tag} entfernen" }
+    gtk_custom_metadata_title { "Benutzerdefinierte Metadaten" }
+    gtk_custom_metadata_key { "Schlüssel" }
+    gtk_custom_metadata_value { "Wert" }
+    gtk_custom_metadata_deleted { "Benutzerdefinierte Metadaten ''{key}'' entfernt" }
+    gtk_custom_metadata_delete { "Benutzerdefinierte Metadaten löschen" }
+    gtk_activity_hide_status { "Status ausblenden" }
+    gtk_activity_hide_notification { "Benachrichtigung aus dem Status ausblenden" }
+    gtk_manual_order_drag { "Ziehen, um Titel in der manuellen Sortierung neu anzuordnen" }
+    gtk_manual_order_rearrange { "Titel neu anordnen" }
+    gtk_status_ready { "Aobus ist bereit" }
+    gtk_edit_value { "Wert bearbeiten" }
+    gtk_collapse_panel { "Bereich einklappen" }
+    gtk_expand_panel { "Bereich ausklappen" }
+    gtk_hide_details { "Details ausblenden" }
+    gtk_show_details { "Details anzeigen" }
+    gtk_no_track_view_available { "Keine Titelansicht verfügbar." }
+    gtk_save_layout_defaults_message { "Dadurch wird die Layout-Vorgabe ''{preset}'' auf dem Datenträger mit den aktuellen Bereichsgrößen aktualisiert.\n\nÜbernommene Größen werden aus dem Laufzeitzustand entfernt; andere Laufzeitwerte wie der Einblendzustand bleiben erhalten." }
+    gtk_unable_switch_libraries { "Bibliothek kann nicht gewechselt werden" }
+    gtk_startup_failed_title { "Aobus konnte nicht gestartet werden" }
+    gtk_startup_select_library_failed { "Aobus konnte die Startbibliothek nicht auswählen: {detail}" }
+    gtk_startup_open_library_failed { "Aobus konnte die Bibliothek nicht öffnen: {detail}" }
+    gtk_startup_activate_library_failed { "Aobus konnte die Bibliothek nicht aktivieren: {detail}" }
+    gtk_startup_launch_library_failed { "Aobus konnte die ausgewählte Bibliothek nicht starten: {detail}" }
+    gtk_layout_editor_title { "Layout-Editor" }
+    gtk_layout_apply { "Anwenden" }
+    gtk_layout_unable_to_save { "Layout kann nicht gespeichert werden" }
+    gtk_layout_tree_node { "Knoten" }
+    gtk_layout_tree_type { "Typ" }
+    gtk_layout_classic_preset { "Klassisches Layout" }
+    gtk_layout_modern_preset { "Modernes Layout" }
+    gtk_layout_classic_theme { "Klassisches Design" }
+    gtk_layout_modern_theme { "Modernes Design" }
+    gtk_layout_reset_preset { "Ausgewählte Vorgabe auf ihr Standardlayout zurücksetzen" }
+    gtk_layout_add_child { "Unterknoten hinzufügen" }
+    gtk_layout_wrap_node { "Knoten umschließen" }
+    gtk_layout_remove_node { "Knoten entfernen" }
+    gtk_layout_move_up { "Nach oben" }
+    gtk_layout_move_down { "Nach unten" }
+    gtk_layout_invalid_document { "Ungültiges Layout-Dokument" }
+    gtk_layout_validation_preset { "Validierung der Vorgabe ''{preset}'' fehlgeschlagen:\n\n{detail}" }
+    gtk_layout_invalid_component_ids { "Ungültige Layout-Komponenten-IDs" }
+    gtk_layout_validation_component { "Validierung der Vorgabe ''{preset}'', Komponente ''{component}'', Typ ''{type}'' fehlgeschlagen:\n\n{detail}" }
+    gtk_layout_invalid_actions { "Ungültige Layout-Aktionen" }
+    gtk_layout_validation_action { "Validierung der Vorgabe ''{preset}'', Komponente ''{component}'', Eigenschaft ''{property}'' fehlgeschlagen:\n\n{detail}" }
+    gtk_common_ok { "OK" }
+    gtk_common_add { "Hinzufügen" }
+    gtk_common_undo { "Rückgängig" }
+    gtk_common_no { "Nein" }
+    gtk_common_yes { "Ja" }
+    gtk_layout_id { "ID" }
+    gtk_layout_none { "Keine" }
+    gtk_layout_capability_anchor { "Anker" }
+    gtk_layout_capability_menu { "Menü" }
+    gtk_layout_unknown_id { "⚠ Unbekannte ID: {id}" }
+    gtk_layout_unsupported_editor { "(Nicht unterstützter Editor)" }
+    gtk_layout_no_selection { "Keine Auswahl" }
+    gtk_layout_general { "Allgemein" }
+    gtk_layout_properties { "Layout-Eigenschaften" }
+    gtk_layout_no_descriptor { "Keine Beschreibung gefunden" }
+    gtk_layout_category_containers { "Container" }
+    gtk_layout_category_decorators { "Dekorationen" }
+    gtk_layout_category_tracks { "Titel" }
+    gtk_layout_category_playback { "Wiedergabe" }
+    gtk_layout_category_status { "Status" }
+    gtk_layout_category_generic { "Allgemein" }
+    gtk_layout_category_application { "Anwendung" }
+    gtk_layout_category_library { "Bibliothek" }
+    gtk_layout_category_layout { "Layout" }
+    gtk_layout_component_box { "Box" }
+    gtk_layout_component_split_pane { "Geteilte Ansicht" }
+    gtk_layout_component_label { "Beschriftung" }
+    gtk_layout_component_action_button { "Aktionsschaltfläche" }
+    gtk_layout_component_menu_button { "Menüschaltfläche" }
+    gtk_layout_component_menu_bar { "Menüleiste" }
+    gtk_layout_component_track_table { "Titeltabelle" }
+    gtk_layout_component_quick_filter { "Schnellfilter" }
+    gtk_layout_component_presentation_button { "Darstellungsschaltfläche" }
+    gtk_layout_component_cover_art { "Cover" }
+    gtk_layout_component_transport_button { "Wiedergabeschaltfläche" }
+    gtk_layout_component_soul_button { "Soul-Schaltfläche" }
+    gtk_layout_component_seek_slider { "Positionsregler" }
+    gtk_layout_component_time_label { "Zeitanzeige" }
+    gtk_layout_component_volume_control { "Lautstärkeregler" }
+    gtk_layout_component_output_device_selector { "Ausgabegeräteauswahl" }
+    gtk_layout_component_activity_status { "Aktivitätsstatus" }
+    gtk_layout_component_track_count { "Titelanzahl" }
+    gtk_layout_component_selection_info { "Auswahlinformation" }
+    gtk_layout_component_status_message { "Statusmeldung" }
+    gtk_layout_component_now_playing_status { "Wiedergabestatus" }
+    gtk_layout_component_playback_details { "Wiedergabedetails" }
+    gtk_layout_component_library_tree { "Bibliotheksbaum" }
+    gtk_layout_component_playback_cover_art { "Wiedergabe-Cover" }
+    gtk_layout_component_soul_play_pause { "Soul-Wiedergabe/Pause-Schaltfläche" }
+    gtk_layout_component_quality_indicator { "Qualitätsanzeige" }
+    gtk_layout_component_audio_pipeline_panel { "Audiokettenbereich" }
+    gtk_layout_component_current_title_label { "Aktueller Titel" }
+    gtk_layout_component_current_artist_label { "Aktueller Interpret" }
+    gtk_layout_component_separator { "Trennlinie" }
+    gtk_layout_component_absolute_canvas { "Absolute Zeichenfläche" }
+    gtk_layout_component_spacer { "Abstandhalter" }
+    gtk_layout_component_scroll_window { "Bildlaufbereich" }
+    gtk_layout_component_tabs { "Registerkarten" }
+    gtk_layout_component_responsive_class { "Responsive Klasse" }
+    gtk_layout_component_center_box { "Zentrierte Box" }
+    gtk_layout_component_open_library_button { "Bibliothek-öffnen-Schaltfläche" }
+    gtk_layout_component_workspace_with_detail { "Arbeitsbereich mit Details" }
+    gtk_layout_component_collapsible_split { "Einklappbare Teilung" }
+    gtk_layout_component_detail_scope { "Detailbereich" }
+    gtk_layout_component_field_grid { "Feldraster" }
+    gtk_layout_component_tag_editor { "Tag-Editor" }
+    gtk_layout_component_selection_region { "Auswahlbereich" }
+    gtk_layout_component_detail_undo_bar { "Rückgängig-Leiste" }
+    gtk_layout_property_text { "Text" }
+    gtk_layout_property_orientation { "Ausrichtung" }
+    gtk_layout_property_spacing { "Abstand" }
+    gtk_layout_property_variant { "Variante" }
+    gtk_layout_property_placeholder_style { "Platzhalterstil" }
+    gtk_layout_property_command { "Befehl" }
+    gtk_layout_property_stroke_width { "Strichstärke" }
+    gtk_layout_property_glyph_scale { "Glyphenskalierung" }
+    gtk_layout_property_mode { "Modus" }
+    gtk_layout_property_idle_behavior { "Leerlaufverhalten" }
+    gtk_layout_property_max_text_chars { "Maximale Textzeichen" }
+    gtk_layout_property_glyph { "Glyphe" }
+    gtk_layout_property_show_full_logo { "Vollständiges Logo anzeigen" }
+    gtk_layout_property_target_size { "Zielgröße" }
+    gtk_layout_property_force_square { "Quadratisch erzwingen" }
+    gtk_layout_property_action { "Aktion" }
+    gtk_layout_property_show_label { "Beschriftung anzeigen" }
+    gtk_layout_property_size { "Größe" }
+    gtk_layout_property_icon_symbolic { "Symbolisches Icon" }
+    gtk_layout_property_style { "Stil" }
+    gtk_layout_property_homogeneous { "Gleichmäßig" }
+    gtk_layout_property_snap_to_grid { "Am Raster ausrichten" }
+    gtk_layout_property_grid_size { "Rastergröße" }
+    gtk_layout_property_horizontal_scroll_policy { "Horizontaler Bildlauf" }
+    gtk_layout_property_vertical_scroll_policy { "Vertikaler Bildlauf" }
+    gtk_layout_property_min_content_width { "Minimale Inhaltsbreite" }
+    gtk_layout_property_min_content_height { "Minimale Inhaltshöhe" }
+    gtk_layout_property_propagate_natural_width { "Natürliche Breite weitergeben" }
+    gtk_layout_property_propagate_natural_height { "Natürliche Höhe weitergeben" }
+    gtk_layout_property_tab_title { "Registertitel" }
+    gtk_layout_property_tab_icon { "Registersymbol" }
+    gtk_layout_property_axis { "Achse" }
+    gtk_layout_property_compact_max { "Maximum Kompakt" }
+    gtk_layout_property_regular_max { "Maximum Regulär" }
+    gtk_layout_property_class_prefix { "Klassenpräfix" }
+    gtk_layout_property_slot { "Position" }
+    gtk_layout_property_view_source { "Ansichtsquelle" }
+    gtk_layout_property_group_cover_placeholder { "Gruppen-Cover-Platzhalter" }
+    gtk_layout_property_position { "Position" }
+    gtk_layout_property_initial_position { "Anfangsposition (%)" }
+    gtk_layout_property_resize_start { "Anfangsseite vergrößerbar" }
+    gtk_layout_property_shrink_start { "Anfangsseite verkleinerbar" }
+    gtk_layout_property_resize_end { "Endseite vergrößerbar" }
+    gtk_layout_property_shrink_end { "Endseite verkleinerbar" }
+    gtk_layout_property_collapse_side { "Einklappseite" }
+    gtk_layout_property_initially_revealed { "Anfangs eingeblendet" }
+    gtk_layout_property_css_classes { "CSS-Klassen" }
+    gtk_layout_property_categories { "Kategorien" }
+    gtk_layout_property_show_when { "Anzeigen wenn" }
+    gtk_layout_property_show_placeholder { "Platzhalter anzeigen" }
+    gtk_layout_property_expand_horizontal { "Horizontal erweitern" }
+    gtk_layout_property_expand_vertical { "Vertikal erweitern" }
+    gtk_layout_property_horizontal_align { "Horizontale Ausrichtung" }
+    gtk_layout_property_vertical_align { "Vertikale Ausrichtung" }
+    gtk_layout_property_width_request { "Breitenvorgabe" }
+    gtk_layout_property_height_request { "Höhenvorgabe" }
+    gtk_layout_property_x { "X" }
+    gtk_layout_property_y { "Y" }
+    gtk_layout_property_width { "Breite" }
+    gtk_layout_property_height { "Höhe" }
+    gtk_layout_property_z_index { "Z-Index" }
+    gtk_layout_value_ambient { "Umgebend" }
+    gtk_layout_value_classic_inline { "Klassisch eingebettet" }
+    gtk_layout_value_hidden { "Ausgeblendet" }
+    gtk_layout_value_reserve { "Platz reservieren" }
+    gtk_layout_value_small { "Klein" }
+    gtk_layout_value_normal { "Normal" }
+    gtk_layout_value_large { "Groß" }
+    gtk_layout_value_flat { "Flach" }
+    gtk_layout_value_raised { "Erhaben" }
+    gtk_layout_value_circular { "Kreisförmig" }
+    gtk_layout_value_suggested { "Empfohlen" }
+    gtk_layout_value_destructive { "Destruktiv" }
+    gtk_layout_value_monogram { "Monogramm" }
+    gtk_layout_value_note { "Musiknote" }
+    gtk_layout_value_vinyl { "Schallplatte" }
+    gtk_layout_value_equalizer { "Equalizer" }
+    gtk_layout_value_soul { "Soul" }
+    gtk_layout_value_sigil { "Sigille" }
+    gtk_layout_value_seal { "Siegel" }
+    gtk_layout_value_horizontal { "Horizontal" }
+    gtk_layout_value_vertical { "Vertikal" }
+    gtk_layout_value_jump_to_album { "Zum Album springen" }
+    gtk_layout_value_inline { "Eingebettet" }
+    gtk_layout_value_compact { "Kompakt" }
+    gtk_layout_value_tooltip { "Kurzinfo" }
+    gtk_layout_value_reveal { "Aktuellen Titel anzeigen" }
+    gtk_layout_value_play_pause { "Wiedergabe/Pause" }
+    gtk_layout_value_filter_by_field { "Nach Feld filtern" }
+    gtk_layout_value_start { "Anfang" }
+    gtk_layout_value_end { "Ende" }
+    gtk_layout_value_automatic { "Automatisch" }
+    gtk_layout_value_always { "Immer" }
+    gtk_layout_value_never { "Nie" }
+    gtk_layout_value_width { "Breite" }
+    gtk_layout_value_height { "Höhe" }
+    gtk_layout_value_fill { "Ausfüllen" }
+    gtk_layout_value_center { "Zentriert" }
+    tui_untitled_section { "Unbenannter Abschnitt" }
+    tui_notification_none { "Keine Benachrichtigungen" }
+    tui_lists_closed { "Listen geschlossen" }
+    tui_lists_opened { "Listen" }
+    tui_detail_closed { "Details geschlossen" }
+    tui_detail_opened { "Detailbereich" }
+    tui_pipeline_closed { "Audiokette geschlossen" }
+    tui_pipeline_opened { "Audiokette" }
+    tui_output_closed { "Ausgabegeräte geschlossen" }
+    tui_output_unavailable { "Ausgabegeräte nicht verfügbar" }
+    tui_output_opened { "Ausgabegeräte" }
+    tui_views_closed { "Ansichten geschlossen" }
+    tui_views_opened { "Ansichten" }
+    tui_notifications_closed { "Benachrichtigungen geschlossen" }
+    tui_notifications_opened { "Benachrichtigungen" }
+    tui_playback_start_failed { "Wiedergabe wurde nicht gestartet. Prüfen Sie Ausgabegerät, Dateipfad und Protokolle." }
+    tui_playback_control_unavailable { "Wiedergabesteuerung nicht verfügbar" }
+    tui_overlay_closed { "Einblendung geschlossen" }
+    tui_help_opened { "Hilfe" }
+    tui_section_unavailable { "Abschnitt ist nicht mehr verfügbar" }
+    tui_filter_failed { "Filter fehlgeschlagen: {detail}" }
+  }
+}

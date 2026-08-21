@@ -89,12 +89,15 @@
       "cmake": {
         "package": "ICU",
         "targets": [
+          "ICU::i18n",
           "ICU::uc",
           "ICU::data"
         ]
       },
       "capabilities": [
-        "unicode-17.0"
+        "unicode-17.0",
+        "resource-bundles",
+        "classic-message-format"
       ]
     },
     "spdlog": {

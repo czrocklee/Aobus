@@ -8,6 +8,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <functional>
 #include <optional>
@@ -29,7 +30,7 @@ namespace ao::uimodel
   {
     bool enabled = false;
     rt::ViewId activeViewId = rt::kInvalidViewId;
-    std::string label = "Presentation";
+    std::string label{};
     std::vector<TrackPresentationMenuItem> menuItems;
 
     bool operator==(TrackPresentationPickerState const&) const = default;
@@ -50,7 +51,9 @@ namespace ao::uimodel
     bool operator==(TrackPresentationEligibility const&) const = default;
   };
 
-  TrackPresentationEligibility trackPresentationEligibility(ListId listId, std::string_view presentationId);
+  TrackPresentationEligibility trackPresentationEligibility(PresentationTextCatalog const& textCatalog,
+                                                            ListId listId,
+                                                            std::string_view presentationId);
 
   class TrackPresentationPickerViewModel final
   {
@@ -59,6 +62,7 @@ namespace ao::uimodel
                                      rt::WorkspaceService& workspace,
                                      TrackPresentationCatalog& catalog,
                                      ListPresentationPreferenceStore& preferences,
+                                     PresentationTextCatalog textCatalog,
                                      std::function<void(TrackPresentationPickerState const&)> onRender);
     ~TrackPresentationPickerViewModel() = default;
 
@@ -83,6 +87,7 @@ namespace ao::uimodel
     rt::WorkspaceService& _workspace;
     TrackPresentationCatalog& _catalog;
     ListPresentationPreferenceStore& _preferences;
+    PresentationTextCatalog _textCatalog;
     std::function<void(TrackPresentationPickerState const&)> _onRender;
     async::Subscription _focusSub;
     async::Subscription _presentationSub;

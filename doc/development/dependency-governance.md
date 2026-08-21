@@ -94,9 +94,17 @@ particular, Aobus requires spdlog to advertise `SPDLOG_USE_STD_FORMAT` and to
 avoid `SPDLOG_FMT_EXTERNAL`.
 
 ICU is exact-version governed because its Unicode data affects NFC, case-fold,
-grapheme, and future derived-key behavior. Aobus calls ICU directly
-behind its own text facade; it does not discover or link Boost.Locale merely
-because the Boost distribution contains that optional component.
+grapheme, message formatting, catalog fallback, and future derived-key behavior.
+The Core Unicode facade links only ICU `uc` and `data`; the interactive
+localization leaf additionally links `i18n`, while CLI excludes that leaf.
+Aobus calls ICU directly behind its own facades; it does not discover or link
+Boost.Locale merely because the Boost distribution contains that optional
+component.
+
+Canonical localization assets are compiled by the same ICU release that the
+application links. CMake locates and version-checks `genrb` and `pkgdata` at
+configure time. Windows enables vcpkg's ICU `tools` feature explicitly; those
+build-host executables are never deployment artifacts.
 
 ## Native resolution
 

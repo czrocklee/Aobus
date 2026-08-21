@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 
@@ -22,7 +23,7 @@ namespace ao::uimodel::test
     };
     spec.visibleFields = {rt::TrackField::Title, rt::TrackField::Album};
 
-    auto model = CustomPresentationEditorModel{spec, "Album View"};
+    auto model = CustomPresentationEditorModel{ao::test::englishPresentationTextCatalog(), spec, "Album View"};
 
     SECTION("populates initial state and options")
     {

@@ -33,10 +33,9 @@ namespace ao::uimodel
     }
   } // namespace
 
-  TrackPropertiesFormSpec buildTrackPropertiesFormSpec()
+  TrackPropertiesFormSpec buildTrackPropertiesFormSpec(PresentationTextCatalog const& textCatalog)
   {
     auto spec = TrackPropertiesFormSpec{};
-    auto const textCatalog = PresentationTextCatalog{};
 
     for (auto const& def : rt::trackFieldDefinitions())
     {
@@ -44,7 +43,7 @@ namespace ao::uimodel
       {
         spec.metadataRows.push_back(TrackPropertiesFormRow{
           .field = def.field,
-          .label = textCatalog.trackFieldLabel(def.field),
+          .label = std::string{textCatalog.trackFieldLabel(def.field)},
           .editorKind = editorKindFor(def),
         });
       }
@@ -53,7 +52,7 @@ namespace ao::uimodel
       {
         spec.propertyRows.push_back(TrackPropertiesFormRow{
           .field = def.field,
-          .label = textCatalog.trackFieldLabel(def.field),
+          .label = std::string{textCatalog.trackFieldLabel(def.field)},
           .editorKind = TrackPropertiesFormEditorKind::ReadonlyText,
         });
       }

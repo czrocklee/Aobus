@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/VirtualListIds.h>
@@ -18,6 +19,7 @@ namespace ao::uimodel::test
     auto const parentId = ListId{2};
     auto const childId = ListId{3};
     auto const projection = buildListTreeProjection(
+      ao::test::englishPresentationTextCatalog(),
       std::vector{rt::ListNode{.id = childId, .parentId = parentId, .name = "Smart Child", .expression = "genre:rock"},
                   rt::ListNode{.id = parentId, .parentId = kInvalidListId, .name = "Parent"}});
 
@@ -39,11 +41,21 @@ namespace ao::uimodel::test
     CHECK(child.childIds.empty());
   }
 
+  TEST_CASE("buildListTreeProjection localizes the virtual library row", "[uimodel][unit][list][localization]")
+  {
+    auto const catalog = ao::test::presentationTextCatalog("de-AT");
+    auto const projection = buildListTreeProjection(catalog, {});
+
+    REQUIRE(projection.rowsById.contains(rt::kAllTracksListId));
+    CHECK(projection.rowsById.at(rt::kAllTracksListId).name == "Alle Titel");
+  }
+
   TEST_CASE("buildListTreeProjection places invalid parents beside All Tracks", "[uimodel][unit][library][list]")
   {
     auto const orphanId = ListId{4};
     auto const selfParentId = ListId{5};
     auto const projection = buildListTreeProjection(
+      ao::test::englishPresentationTextCatalog(),
       std::vector{rt::ListNode{.id = orphanId, .parentId = ListId{999}, .name = "Orphan"},
                   rt::ListNode{.id = selfParentId, .parentId = selfParentId, .name = "Self Parent"}});
 
@@ -59,11 +71,13 @@ namespace ao::uimodel::test
     auto const descendantId = ListId{2};
     auto const lowerCycleId = ListId{4};
     auto const higherCycleId = ListId{7};
-    auto const projection = buildListTreeProjection(std::vector{
-      rt::ListNode{.id = higherCycleId, .parentId = lowerCycleId, .name = "Higher"},
-      rt::ListNode{.id = descendantId, .parentId = higherCycleId, .name = "Descendant"},
-      rt::ListNode{.id = lowerCycleId, .parentId = higherCycleId, .name = "Lower"},
-    });
+    auto const projection =
+      buildListTreeProjection(ao::test::englishPresentationTextCatalog(),
+                              std::vector{
+                                rt::ListNode{.id = higherCycleId, .parentId = lowerCycleId, .name = "Higher"},
+                                rt::ListNode{.id = descendantId, .parentId = higherCycleId, .name = "Descendant"},
+                                rt::ListNode{.id = lowerCycleId, .parentId = higherCycleId, .name = "Lower"},
+                              });
 
     CHECK(projection.rowsById.at(rt::kAllTracksListId).childIds.empty());
     CHECK(projection.rootIds == std::vector{rt::kAllTracksListId, lowerCycleId});
@@ -77,12 +91,14 @@ namespace ao::uimodel::test
   TEST_CASE("buildListTreeProjection orders children by list id", "[uimodel][unit][library][list]")
   {
     auto const parentId = ListId{2};
-    auto const projection = buildListTreeProjection(std::vector{
-      rt::ListNode{.id = ListId{30}, .parentId = parentId, .name = "Third in snapshot"},
-      rt::ListNode{.id = parentId, .parentId = kInvalidListId, .name = "Parent"},
-      rt::ListNode{.id = ListId{10}, .parentId = parentId, .name = "First by id"},
-      rt::ListNode{.id = ListId{20}, .parentId = parentId, .name = "Second by id"},
-    });
+    auto const projection =
+      buildListTreeProjection(ao::test::englishPresentationTextCatalog(),
+                              std::vector{
+                                rt::ListNode{.id = ListId{30}, .parentId = parentId, .name = "Third in snapshot"},
+                                rt::ListNode{.id = parentId, .parentId = kInvalidListId, .name = "Parent"},
+                                rt::ListNode{.id = ListId{10}, .parentId = parentId, .name = "First by id"},
+                                rt::ListNode{.id = ListId{20}, .parentId = parentId, .name = "Second by id"},
+                              });
 
     CHECK(projection.rowsById.at(parentId).childIds == std::vector{ListId{10}, ListId{20}, ListId{30}});
   }

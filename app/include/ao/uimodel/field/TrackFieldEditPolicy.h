@@ -22,5 +22,6 @@ namespace ao::uimodel
   bool isProtectedInlineEditText(rt::TrackField field,
                                  rt::TrackDetailSnapshot const& snap,
                                  std::string_view newText,
-                                 bool protectCompositeMixedText);
+                                 std::string_view mixedText,
+                                 bool requireMixedField);
 } // namespace ao::uimodel

@@ -146,8 +146,8 @@ namespace ao::uimodel
     }
   }
 
-  std::string_view trackFieldColumnTitle(rt::TrackField field)
+  std::string_view trackFieldColumnTitle(PresentationTextCatalog const& textCatalog, rt::TrackField field)
   {
-    return PresentationTextCatalog{}.trackFieldLabel(field);
+    return textCatalog.trackFieldLabel(field);
   }
 } // namespace ao::uimodel

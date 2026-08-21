@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/PlaybackUiTestSupport.h"
 #include <ao/CoreIds.h>
@@ -30,8 +31,12 @@ namespace ao::uimodel::test
     SECTION("Play action uses play icon and disabled command state")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
-      auto vm =
-        TransportViewModel{playback, commands, PlaybackCommand::Play, false, [&log](auto const& v) { log.render(v); }};
+      auto vm = TransportViewModel{playback,
+                                   commands,
+                                   ao::test::englishPresentationTextCatalog(),
+                                   PlaybackCommand::Play,
+                                   false,
+                                   [&log](auto const& v) { log.render(v); }};
 
       REQUIRE(!log.empty());
       CHECK(log.last().enabled == false);
@@ -42,8 +47,12 @@ namespace ao::uimodel::test
     SECTION("PlayPause switches icon and label from playback transport")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
-      auto vm = TransportViewModel{
-        playback, commands, PlaybackCommand::PlayPause, true, [&log](auto const& v) { log.render(v); }};
+      auto vm = TransportViewModel{playback,
+                                   commands,
+                                   ao::test::englishPresentationTextCatalog(),
+                                   PlaybackCommand::PlayPause,
+                                   true,
+                                   [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().icon == TransportIcon::Play);
       CHECK(log.last().tooltip == "Play");
@@ -61,11 +70,16 @@ namespace ao::uimodel::test
       auto repeatLog = ao::test::RenderLog<TransportViewState>{};
       auto shuffleVm = TransportViewModel{playback,
                                           commands,
+                                          ao::test::englishPresentationTextCatalog(),
                                           PlaybackCommand::ToggleShuffle,
                                           true,
                                           [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
-      auto repeatVm = TransportViewModel{
-        playback, commands, PlaybackCommand::CycleRepeat, true, [&repeatLog](auto const& v) { repeatLog.render(v); }};
+      auto repeatVm = TransportViewModel{playback,
+                                         commands,
+                                         ao::test::englishPresentationTextCatalog(),
+                                         PlaybackCommand::CycleRepeat,
+                                         true,
+                                         [&repeatLog](auto const& v) { repeatLog.render(v); }};
 
       CHECK(shuffleLog.last().engaged == true);
       CHECK(shuffleLog.last().label == "Shuffle");
@@ -87,10 +101,18 @@ namespace ao::uimodel::test
 
     auto nextLog = ao::test::RenderLog<TransportViewState>{};
     auto previousLog = ao::test::RenderLog<TransportViewState>{};
-    auto nextVm = TransportViewModel{
-      playback, commands, PlaybackCommand::Next, false, [&nextLog](auto const& v) { nextLog.render(v); }};
-    auto previousVm = TransportViewModel{
-      playback, commands, PlaybackCommand::Previous, false, [&previousLog](auto const& v) { previousLog.render(v); }};
+    auto nextVm = TransportViewModel{playback,
+                                     commands,
+                                     ao::test::englishPresentationTextCatalog(),
+                                     PlaybackCommand::Next,
+                                     false,
+                                     [&nextLog](auto const& v) { nextLog.render(v); }};
+    auto previousVm = TransportViewModel{playback,
+                                         commands,
+                                         ao::test::englishPresentationTextCatalog(),
+                                         PlaybackCommand::Previous,
+                                         false,
+                                         [&previousLog](auto const& v) { previousLog.render(v); }};
 
     CHECK(nextLog.last().enabled == true);
     CHECK(previousLog.last().enabled == false);
@@ -105,10 +127,15 @@ namespace ao::uimodel::test
 
     auto playLog = ao::test::RenderLog<TransportViewState>{};
     auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
-    auto playVm = TransportViewModel{
-      playback, commands, PlaybackCommand::Play, false, [&playLog](auto const& v) { playLog.render(v); }};
+    auto playVm = TransportViewModel{playback,
+                                     commands,
+                                     ao::test::englishPresentationTextCatalog(),
+                                     PlaybackCommand::Play,
+                                     false,
+                                     [&playLog](auto const& v) { playLog.render(v); }};
     auto shuffleVm = TransportViewModel{playback,
                                         commands,
+                                        ao::test::englishPresentationTextCatalog(),
                                         PlaybackCommand::ToggleShuffle,
                                         false,
                                         [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
@@ -138,8 +165,12 @@ namespace ao::uimodel::test
       playback.commands().pause();
 
       auto log = ao::test::RenderLog<TransportViewState>{};
-      auto vm = TransportViewModel{
-        playback, commands, PlaybackCommand::PlayPause, false, [&log](auto const& v) { log.render(v); }};
+      auto vm = TransportViewModel{playback,
+                                   commands,
+                                   ao::test::englishPresentationTextCatalog(),
+                                   PlaybackCommand::PlayPause,
+                                   false,
+                                   [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
@@ -151,8 +182,12 @@ namespace ao::uimodel::test
     {
       REQUIRE(fixture.playFromView(firstTrack));
       auto log = ao::test::RenderLog<TransportViewState>{};
-      auto vm =
-        TransportViewModel{playback, commands, PlaybackCommand::Next, false, [&log](auto const& v) { log.render(v); }};
+      auto vm = TransportViewModel{playback,
+                                   commands,
+                                   ao::test::englishPresentationTextCatalog(),
+                                   PlaybackCommand::Next,
+                                   false,
+                                   [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
@@ -162,8 +197,12 @@ namespace ao::uimodel::test
     SECTION("Shuffle delegates to sequence mode command")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
-      auto vm = TransportViewModel{
-        playback, commands, PlaybackCommand::ToggleShuffle, false, [&log](auto const& v) { log.render(v); }};
+      auto vm = TransportViewModel{playback,
+                                   commands,
+                                   ao::test::englishPresentationTextCatalog(),
+                                   PlaybackCommand::ToggleShuffle,
+                                   false,
+                                   [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
@@ -180,8 +219,12 @@ namespace ao::uimodel::test
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     auto log = ao::test::RenderLog<TransportViewState>{};
-    auto viewModelPtr = std::make_unique<TransportViewModel>(
-      playback, commands, PlaybackCommand::ToggleShuffle, false, [&log](auto const& view) { log.render(view); });
+    auto viewModelPtr = std::make_unique<TransportViewModel>(playback,
+                                                             commands,
+                                                             ao::test::englishPresentationTextCatalog(),
+                                                             PlaybackCommand::ToggleShuffle,
+                                                             false,
+                                                             [&log](auto const& view) { log.render(view); });
 
     REQUIRE(!log.empty());
     log.clear();
@@ -195,5 +238,20 @@ namespace ao::uimodel::test
 
     playback.commands().setShuffleMode(ShuffleMode::Off);
     CHECK(log.empty());
+  }
+
+  TEST_CASE("TransportViewModel - renders control semantics in the selected locale", "[uimodel][unit][playback]")
+  {
+    auto fixture = PlaybackUiFixture{};
+    auto& playback = fixture.runtime().playback();
+    auto commands = PlaybackCommandSurface{playback, [] {}};
+    auto catalog = ao::test::presentationTextCatalog("de-DE");
+    auto log = ao::test::RenderLog<TransportViewState>{};
+    auto viewModel = TransportViewModel{
+      playback, commands, catalog, PlaybackCommand::Next, true, [&log](auto const& view) { log.render(view); }};
+
+    REQUIRE(!log.empty());
+    CHECK(log.last().tooltip == "Nächster Titel");
+    CHECK(log.last().label == "Nächster Titel");
   }
 } // namespace ao::uimodel::test

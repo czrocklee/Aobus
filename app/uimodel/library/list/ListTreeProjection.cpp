@@ -4,8 +4,10 @@
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -91,14 +93,17 @@ namespace ao::uimodel
     }
   } // namespace
 
-  ListTreeProjection buildListTreeProjection(std::span<rt::ListNode const> snapshot)
+  ListTreeProjection buildListTreeProjection(PresentationTextCatalog const& textCatalog,
+                                             std::span<rt::ListNode const> snapshot)
   {
     auto projection = ListTreeProjection{};
 
     projection.rowsById.emplace(
       rt::kAllTracksListId,
-      ListTreeProjectionRow{
-        .id = rt::kAllTracksListId, .parentId = kInvalidListId, .name = "All Tracks", .isSystem = true});
+      ListTreeProjectionRow{.id = rt::kAllTracksListId,
+                            .parentId = kInvalidListId,
+                            .name = std::string{textCatalog.text(i18n::MessageId::LibraryAllTracks)},
+                            .isSystem = true});
     projection.rootIds.push_back(rt::kAllTracksListId);
 
     for (auto const& node : snapshot)

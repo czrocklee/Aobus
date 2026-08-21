@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
@@ -39,6 +40,7 @@ namespace ao::uimodel::test
     std::int32_t renderCount = 0;
     auto viewModel = ActivityStatusViewModel{
       notifications,
+      ao::test::englishPresentationTextCatalog(),
       [&](ActivityStatusViewState const& view)
       {
         latest = view;
@@ -156,6 +158,7 @@ namespace ao::uimodel::test
     std::int32_t renderCount = 0;
     auto viewModel = ActivityStatusViewModel{
       notifications,
+      ao::test::englishPresentationTextCatalog(),
       [&](ActivityStatusViewState const& view)
       {
         latest = view;
@@ -196,6 +199,7 @@ namespace ao::uimodel::test
     auto rendered = std::vector<ActivityStatusViewState>{};
     auto viewModel = ActivityStatusViewModel{
       notifications,
+      ao::test::englishPresentationTextCatalog(),
       [&](ActivityStatusViewState const& view)
       {
         latest = view;

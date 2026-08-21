@@ -9,6 +9,7 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <functional>
 #include <utility>
@@ -34,23 +35,6 @@ namespace ao::uimodel
       return TransportIcon::None;
     }
 
-    char const* labelForCommand(PlaybackCommand command)
-    {
-      switch (command)
-      {
-        case PlaybackCommand::Play: return "Play";
-        case PlaybackCommand::Pause: return "Pause";
-        case PlaybackCommand::Stop: return "Stop";
-        case PlaybackCommand::PlayPause: return "Play";
-        case PlaybackCommand::Next: return "Next Track";
-        case PlaybackCommand::Previous: return "Previous Track";
-        case PlaybackCommand::ToggleShuffle: return "Shuffle";
-        case PlaybackCommand::CycleRepeat: return "Repeat";
-      }
-
-      return "";
-    }
-
     bool isPresentedAsPlaying(audio::Transport const transport) noexcept
     {
       return transport == audio::Transport::Opening || transport == audio::Transport::Buffering ||
@@ -58,6 +42,7 @@ namespace ao::uimodel
     }
 
     TransportViewState describeTransportButton(PlaybackCommand command,
+                                               PresentationTextCatalog const& textCatalog,
                                                rt::PlaybackTransportSnapshot const& transport,
                                                rt::PlaybackSuccessionSnapshot const& succession,
                                                bool enabled,
@@ -67,23 +52,24 @@ namespace ao::uimodel
       bool const isPlaying = isPresentedAsPlaying(transport.transport);
 
       view.icon = iconForCommand(command);
-      view.tooltip = labelForCommand(command);
+      view.tooltip = textCatalog.transportControlLabel(command);
       view.enabled = enabled;
 
       if (showLabel)
       {
-        view.label = labelForCommand(command);
+        view.label = textCatalog.transportControlLabel(command);
       }
 
       if (command == PlaybackCommand::PlayPause)
       {
         view.icon = isPlaying ? TransportIcon::Pause : TransportIcon::Play;
-        view.tooltip = isPlaying ? "Pause" : "Play";
+        auto const presentedCommand = isPlaying ? PlaybackCommand::Pause : PlaybackCommand::Play;
+        view.tooltip = textCatalog.transportControlLabel(presentedCommand);
         view.playing = isPlaying;
 
         if (showLabel)
         {
-          view.label = isPlaying ? "Pause" : "Play";
+          view.label = textCatalog.transportControlLabel(presentedCommand);
         }
       }
       else if (command == PlaybackCommand::ToggleShuffle)
@@ -115,10 +101,16 @@ namespace ao::uimodel
 
   TransportViewModel::TransportViewModel(rt::PlaybackService& playback,
                                          PlaybackCommandSurface& commands,
+                                         PresentationTextCatalog textCatalog,
                                          PlaybackCommand command,
                                          bool showLabel,
                                          std::function<void(TransportViewState const&)> onRender)
-    : _playback{playback}, _commands{commands}, _command{command}, _showLabel{showLabel}, _onRender{std::move(onRender)}
+    : _playback{playback}
+    , _commands{commands}
+    , _textCatalog{std::move(textCatalog)}
+    , _command{command}
+    , _showLabel{showLabel}
+    , _onRender{std::move(onRender)}
   {
     _availabilitySub = _commands.onAvailabilityChanged(_command, [this] { refresh(); });
     refresh();
@@ -133,7 +125,7 @@ namespace ao::uimodel
   {
     auto const& snapshot = _playback.snapshot();
     auto const view = describeTransportButton(
-      _command, snapshot.transport, snapshot.succession, _commands.isEnabled(_command), _showLabel);
+      _command, _textCatalog, snapshot.transport, snapshot.succession, _commands.isEnabled(_command), _showLabel);
 
     if (_onRender)
     {

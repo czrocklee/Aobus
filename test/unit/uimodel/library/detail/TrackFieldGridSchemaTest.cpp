@@ -67,13 +67,13 @@ namespace ao::uimodel::test
     CHECK(formatMetadataHeader("Song", "Artist") == "Song — Artist");
     CHECK(formatMetadataHeader("Song", "") == "Song");
     CHECK(formatMetadataHeader("", "Artist") == "Artist");
-    CHECK(formatMetadataHeader("", "") == "Metadata");
+    CHECK(formatMetadataHeader("", "").empty());
   }
 
   TEST_CASE("formatTechnicalHeader summarizes collapsed audio properties", "[uimodel][unit][library][detail]")
   {
     CHECK(formatTechnicalHeader("FLAC", "44.1 kHz", "16-bit") == "FLAC · 44.1 kHz · 16-bit");
     CHECK(formatTechnicalHeader("", "44.1 kHz", "") == "44.1 kHz");
-    CHECK(formatTechnicalHeader("", "", "") == "Audio Properties");
+    CHECK(formatTechnicalHeader("", "", "").empty());
   }
 } // namespace ao::uimodel::test

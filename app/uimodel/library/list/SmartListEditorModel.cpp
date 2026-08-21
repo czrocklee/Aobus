@@ -4,11 +4,11 @@
 #include <ao/uimodel/library/list/SmartListEditorModel.h>
 
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/WritableTagList.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstddef>
@@ -19,7 +19,8 @@
 
 namespace ao::uimodel
 {
-  SmartListEditorViewState makeSmartListEditorViewState(SmartListPreviewState const& input)
+  SmartListEditorViewState makeSmartListEditorViewState(PresentationTextCatalog const& textCatalog,
+                                                        SmartListPreviewState const& input)
   {
     auto state = SmartListEditorViewState{};
     state.name = std::string{input.name};
@@ -33,11 +34,11 @@ namespace ao::uimodel
     {
       auto const expression =
         query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = *optWritableTag});
-      state.membershipEditingText = std::format("Direct membership editing via {}", expression);
+      state.membershipEditingText = textCatalog.smartListMembershipEditingText(true, expression);
     }
     else
     {
-      state.membershipEditingText = "Computed membership — edit tags or the expression";
+      state.membershipEditingText = textCatalog.smartListMembershipEditingText(false);
     }
 
     if (!input.hasPreviewSource)
@@ -54,19 +55,21 @@ namespace ao::uimodel
     state.expressionValid = !state.queryInvalid;
     state.canSubmit = !state.name.empty() && state.expressionValid;
     state.previewStatusText = formatSmartListPreviewStatusText(
-      state.expressionValid, input.matchCount, input.isAllTracks, input.localExpression.empty());
+      textCatalog, state.expressionValid, input.matchCount, input.isAllTracks, input.localExpression.empty());
 
     if (state.errorVisible)
     {
-      state.errorText = PresentationTextCatalog{}.trackFilterError(input.errorMessage);
+      state.errorText = textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", input.errorMessage}});
     }
 
     return state;
   }
 
-  std::string formatSmartListExpressionDisplayText(std::string_view expression)
+  std::string formatSmartListExpressionDisplayText(PresentationTextCatalog const& textCatalog,
+                                                   std::string_view expression)
   {
-    return expression.empty() ? "(none)" : std::string{expression};
+    return expression.empty() ? std::string{textCatalog.text(i18n::MessageId::SmartListExpressionNone)}
+                              : std::string{expression};
   }
 
   std::string combineSmartListEffectiveExpression(std::string_view parent, std::string_view local)
@@ -84,42 +87,19 @@ namespace ao::uimodel
     return std::format("({}) and ({})", parent, local);
   }
 
-  std::string formatSmartListPreviewStatusText(bool const expressionValid,
+  std::string formatSmartListPreviewStatusText(PresentationTextCatalog const& textCatalog,
+                                               bool const expressionValid,
                                                std::size_t count,
                                                bool isAllTracks,
                                                bool localEmpty)
   {
-    if (localEmpty)
-    {
-      if (count == 0)
-      {
-        return isAllTracks ? "No tracks in library" : "No tracks in source";
-      }
-
-      return std::format("Showing all {}{}", formatTrackCount(count), isAllTracks ? "" : " from source");
-    }
-
-    if (!expressionValid)
-    {
-      return "Invalid filter";
-    }
-
-    if (count == 0)
-    {
-      return "No matches";
-    }
-
-    constexpr std::size_t kMaxPreview = 10;
-
-    if (count <= kMaxPreview)
-    {
-      return std::format("Showing all {} matches", count);
-    }
-
-    return std::format("Showing {} of {} matches", kMaxPreview, count);
+    return textCatalog.smartListPreviewStatus(expressionValid, count, isAllTracks, localEmpty);
   }
 
-  std::string formatSmartListPreviewTrackLabel(std::string_view title, std::string_view artist, std::string_view album)
+  std::string formatSmartListPreviewTrackLabel(PresentationTextCatalog const& textCatalog,
+                                               std::string_view title,
+                                               std::string_view artist,
+                                               std::string_view album)
   {
     if (!title.empty())
     {
@@ -150,7 +130,7 @@ namespace ao::uimodel
       return formatted;
     }
 
-    return "(untitled)";
+    return std::string{textCatalog.text(i18n::MessageId::SmartListUntitledTrack)};
   }
 
   // The draft owns its strings, so they are taken by value and moved in: a

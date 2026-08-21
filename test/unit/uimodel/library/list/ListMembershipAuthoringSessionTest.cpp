@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -37,8 +38,8 @@ namespace ao::uimodel::test
     CHECK(result[1] == WritableTagListTarget{.listId = ListId{1}, .name = "Zulu", .tag = "zulu"});
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - Remove notification names the tag and forgotten position",
-            "[uimodel][unit][list][list-membership]")
+  TEST_CASE("ListMembershipAuthoringSession - Remove notification uses the injected locale",
+            "[uimodel][unit][list-membership][localization]")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Road Song");
@@ -55,7 +56,8 @@ namespace ao::uimodel::test
     auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
     auto const tag = std::array{std::string{"road-trip"}};
     REQUIRE(writerFixture.editTags(std::array{trackId}, tag, {}));
-    auto sessionRes = ListMembershipAuthoringSession::begin(writerFixture.library(), std::array{trackId});
+    auto sessionRes = ListMembershipAuthoringSession::begin(
+      writerFixture.library(), std::array{trackId}, ao::test::presentationTextCatalog("de-DE"));
     REQUIRE(sessionRes);
 
     auto const result = (*sessionRes)->removeFromList(listId);
@@ -63,6 +65,7 @@ namespace ao::uimodel::test
     REQUIRE(result);
     CHECK(result->status == rt::TrackAuthoringStatus::Applied);
     CHECK(result->forgottenPositionCount == 1);
-    CHECK(result->notificationText == R"(Removed #"road-trip" from 1 track and forgot 1 saved position in Road Trip.)");
+    CHECK(result->notificationText ==
+          R"(#"road-trip" wurde von 1 Titel entfernt und 1 gespeicherte Position wurde in Road Trip verworfen.)");
   }
 } // namespace ao::uimodel::test

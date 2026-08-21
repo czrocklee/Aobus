@@ -4,6 +4,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -12,6 +13,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <functional>
 #include <optional>
@@ -21,13 +23,16 @@
 
 namespace ao::uimodel
 {
-  TrackPresentationEligibility trackPresentationEligibility(ListId const listId, std::string_view const presentationId)
+  TrackPresentationEligibility trackPresentationEligibility(PresentationTextCatalog const& textCatalog,
+                                                            ListId const listId,
+                                                            std::string_view const presentationId)
   {
     if (listId == rt::kAllTracksListId && presentationId == rt::kListOrderTrackPresentationId)
     {
       return {
         .enabled = false,
-        .disabledReason = "All Tracks has no saved order. Create a saved List to arrange the full library manually.",
+        .disabledReason =
+          std::string{textCatalog.text(i18n::MessageId::TrackPresentationAllTracksManualOrderUnavailable)},
       };
     }
 
@@ -39,8 +44,14 @@ namespace ao::uimodel
     rt::WorkspaceService& workspace,
     TrackPresentationCatalog& catalog,
     ListPresentationPreferenceStore& preferences,
+    PresentationTextCatalog textCatalog,
     std::function<void(TrackPresentationPickerState const&)> onRender)
-    : _views{views}, _workspace{workspace}, _catalog{catalog}, _preferences{preferences}, _onRender{std::move(onRender)}
+    : _views{views}
+    , _workspace{workspace}
+    , _catalog{catalog}
+    , _preferences{preferences}
+    , _textCatalog{std::move(textCatalog)}
+    , _onRender{std::move(onRender)}
   {
     _observedViewId = _workspace.snapshot().activeViewId;
     _focusSub = _workspace.onChanged(
@@ -74,7 +85,7 @@ namespace ao::uimodel
     auto result = TrackPresentationPickerState{
       .enabled = false,
       .activeViewId = rt::kInvalidViewId,
-      .label = "Presentation",
+      .label = std::string{_textCatalog.text(i18n::MessageId::TrackPresentationPickerLabel)},
       .menuItems = _catalog.menuItems(),
     };
     auto const activeViewId = _workspace.snapshot().activeViewId;
@@ -104,7 +115,7 @@ namespace ao::uimodel
         continue;
       }
 
-      auto eligibility = trackPresentationEligibility(foundStateRes->listId, item.id);
+      auto eligibility = trackPresentationEligibility(_textCatalog, foundStateRes->listId, item.id);
       item.enabled = eligibility.enabled;
       item.disabledReason = std::move(eligibility.disabledReason);
     }
@@ -137,7 +148,7 @@ namespace ao::uimodel
       return {};
     }
 
-    if (!trackPresentationEligibility(foundStateRes->listId, presentationId).enabled)
+    if (!trackPresentationEligibility(_textCatalog, foundStateRes->listId, presentationId).enabled)
     {
       return {};
     }

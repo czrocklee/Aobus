@@ -7,6 +7,7 @@
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <cstdint>
@@ -31,18 +32,28 @@ namespace ao::uimodel
     AudioQualityCategory category = AudioQualityCategory::Unknown;
   };
 
-  std::string audioNodeTypeLabel(audio::flow::NodeType type);
+  class AudioQualityFormatter final
+  {
+  public:
+    explicit AudioQualityFormatter(i18n::MessageCatalog catalog);
 
-  /**
-   * @brief Formats a sample format as "kHz · bit · channels" for display.
-   *
-   * Signal nodes report logical precision; PCM nodes report their concrete
-   * container width.
-   */
-  std::string audioFormatLabel(audio::NodeFormat const& format);
-  std::string audioFindingLabel(audio::QualityFinding const& finding);
+    std::string nodeTypeLabel(audio::flow::NodeType type) const;
+
+    /**
+     * @brief Formats a sample format as "kHz · bit · channels" for display.
+     *
+     * Signal nodes report logical precision; PCM nodes report their concrete
+     * container width.
+     */
+    std::string formatLabel(audio::NodeFormat const& format) const;
+    std::string findingLabel(audio::QualityFinding const& finding) const;
+    std::string qualityConclusion(audio::Quality quality) const;
+    AudioQualityPresentation presentation(rt::QualityState const& state) const;
+
+  private:
+    i18n::MessageCatalog _catalog;
+  };
+
   AudioQualityCategory audioFindingCategory(audio::QualityFinding const& finding) noexcept;
-  std::string audioQualityConclusion(audio::Quality quality);
   AudioQualityCategory audioQualityCategory(audio::Quality quality) noexcept;
-  AudioQualityPresentation audioQualityPresentation(rt::QualityState const& state);
 } // namespace ao::uimodel

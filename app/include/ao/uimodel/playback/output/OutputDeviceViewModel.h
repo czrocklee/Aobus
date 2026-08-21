@@ -56,7 +56,10 @@ namespace ao::uimodel
     using RenderCallback = std::function<void(OutputDeviceViewState const&)>;
 
     /// @param intent Where a requested route is recorded; `OutputDeviceIntent::discarded()` keeps none.
-    OutputDeviceViewModel(rt::PlaybackService& playback, RenderCallback onRender, OutputDeviceIntent intent);
+    OutputDeviceViewModel(rt::PlaybackService& playback,
+                          PresentationTextCatalog textCatalog,
+                          RenderCallback onRender,
+                          OutputDeviceIntent intent);
 
     OutputDeviceViewModel(OutputDeviceViewModel const&) = delete;
     OutputDeviceViewModel& operator=(OutputDeviceViewModel const&) = delete;

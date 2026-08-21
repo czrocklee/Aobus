@@ -17,6 +17,8 @@
 
 namespace ao::uimodel
 {
+  class PresentationTextCatalog;
+
   struct ListOrderCapabilityInput final
   {
     ListId listId = kInvalidListId;
@@ -40,7 +42,8 @@ namespace ao::uimodel
     bool operator==(ListOrderCapabilityState const&) const = default;
   };
 
-  ListOrderCapabilityState describeListOrderCapabilities(ListOrderCapabilityInput const& input);
+  ListOrderCapabilityState describeListOrderCapabilities(PresentationTextCatalog const& textCatalog,
+                                                         ListOrderCapabilityInput const& input);
 
   std::vector<TrackId> listOrderDragSelection(TrackId draggedTrackId,
                                               std::span<TrackId const> selectedTrackIds,

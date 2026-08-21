@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/property/TagEdit.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
@@ -35,13 +36,14 @@ namespace ao::uimodel::test
   TEST_CASE("applyTagEdit reports tag mutations for a bound authoring session", "[uimodel][unit][tag-edit]")
   {
     auto fixture = TrackAuthoringFixture{2};
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
     auto const trackId = fixture.trackIds()[0];
     auto const trackId2 = fixture.trackIds()[1];
 
     SECTION("empty tag changes do not submit a mutation")
     {
       auto sessionPtr = beginSession(fixture, std::array{trackId});
-      auto const result = applyTagEdit(*sessionPtr, {}, {});
+      auto const result = applyTagEdit(*sessionPtr, textCatalog, {}, {});
 
       REQUIRE(result);
       CHECK(result->status == rt::TrackAuthoringStatus::NoOp);
@@ -54,7 +56,7 @@ namespace ao::uimodel::test
       auto sessionPtr = beginSession(fixture, std::array{trackId});
       REQUIRE(fixture.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
 
-      auto const result = applyTagEdit(*sessionPtr, std::array{std::string{"Tag1"}}, {});
+      auto const result = applyTagEdit(*sessionPtr, textCatalog, std::array{std::string{"Tag1"}}, {});
 
       REQUIRE(result);
       CHECK(result->status == rt::TrackAuthoringStatus::Stale);
@@ -65,7 +67,7 @@ namespace ao::uimodel::test
     SECTION("adding a single tag mutates the bound track and reports the count")
     {
       auto sessionPtr = beginSession(fixture, std::array{trackId});
-      auto const result = applyTagEdit(*sessionPtr, std::array{std::string{"Tag1"}}, {});
+      auto const result = applyTagEdit(*sessionPtr, textCatalog, std::array{std::string{"Tag1"}}, {});
 
       REQUIRE(result);
       CHECK(result->status == rt::TrackAuthoringStatus::Applied);
@@ -80,7 +82,7 @@ namespace ao::uimodel::test
       auto sessionPtr = beginSession(fixture, targetIds);
       REQUIRE(sessionPtr->submitTags(std::array{std::string{"Tag1"}}, {}));
 
-      auto const result = applyTagEdit(*sessionPtr, {}, std::array{std::string{"Tag1"}});
+      auto const result = applyTagEdit(*sessionPtr, textCatalog, {}, std::array{std::string{"Tag1"}});
 
       REQUIRE(result);
       CHECK(result->status == rt::TrackAuthoringStatus::Applied);
@@ -95,7 +97,7 @@ namespace ao::uimodel::test
       REQUIRE(sessionPtr->submitTags(std::array{std::string{"OldTag"}}, {}));
 
       auto const result =
-        applyTagEdit(*sessionPtr, std::array{std::string{"NewTag"}}, std::array{std::string{"OldTag"}});
+        applyTagEdit(*sessionPtr, textCatalog, std::array{std::string{"NewTag"}}, std::array{std::string{"OldTag"}});
 
       REQUIRE(result);
       CHECK(result->status == rt::TrackAuthoringStatus::Applied);

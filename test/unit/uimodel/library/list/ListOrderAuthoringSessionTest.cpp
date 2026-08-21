@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
@@ -70,8 +71,10 @@ namespace ao::uimodel::test
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open();
-    auto sessionRes =
-      ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId);
+    auto sessionRes = ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
+                                                       fixture.runtime.service,
+                                                       viewId,
+                                                       ao::test::englishPresentationTextCatalog());
     REQUIRE(sessionRes);
     auto& session = **sessionRes;
 
@@ -90,8 +93,10 @@ namespace ao::uimodel::test
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open("true");
-    auto sessionRes =
-      ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId);
+    auto sessionRes = ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
+                                                       fixture.runtime.service,
+                                                       viewId,
+                                                       ao::test::englishPresentationTextCatalog());
     REQUIRE(sessionRes);
     auto& session = **sessionRes;
 
@@ -117,8 +122,11 @@ namespace ao::uimodel::test
     SECTION("presentation")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr = ao::test::requireValue(
-        ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId));
+      auto sessionPtr =
+        ao::test::requireValue(ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
+                                                                fixture.runtime.service,
+                                                                viewId,
+                                                                ao::test::englishPresentationTextCatalog()));
       REQUIRE(fixture.runtime.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
       CHECK_FALSE(sessionPtr->isCurrent());
     }
@@ -126,8 +134,11 @@ namespace ao::uimodel::test
     SECTION("quick filter")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr = ao::test::requireValue(
-        ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId));
+      auto sessionPtr =
+        ao::test::requireValue(ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
+                                                                fixture.runtime.service,
+                                                                viewId,
+                                                                ao::test::englishPresentationTextCatalog()));
       REQUIRE(fixture.runtime.service.setFilter(viewId, "true"));
       CHECK_FALSE(sessionPtr->isCurrent());
     }
@@ -135,8 +146,11 @@ namespace ao::uimodel::test
     SECTION("view close")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr = ao::test::requireValue(
-        ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId));
+      auto sessionPtr =
+        ao::test::requireValue(ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
+                                                                fixture.runtime.service,
+                                                                viewId,
+                                                                ao::test::englishPresentationTextCatalog()));
       REQUIRE(fixture.runtime.workspace.closeView(viewId));
       CHECK_FALSE(sessionPtr->isCurrent());
     }

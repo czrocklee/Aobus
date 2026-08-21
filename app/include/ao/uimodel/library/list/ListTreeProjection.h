@@ -13,6 +13,8 @@
 
 namespace ao::uimodel
 {
+  class PresentationTextCatalog;
+
   struct ListTreeProjectionRow final
   {
     ListId id = kInvalidListId;
@@ -29,5 +31,6 @@ namespace ao::uimodel
     std::map<ListId, ListTreeProjectionRow> rowsById;
   };
 
-  ListTreeProjection buildListTreeProjection(std::span<rt::ListNode const> snapshot);
+  ListTreeProjection buildListTreeProjection(PresentationTextCatalog const& textCatalog,
+                                             std::span<rt::ListNode const> snapshot);
 } // namespace ao::uimodel

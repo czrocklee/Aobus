@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
@@ -58,6 +59,11 @@ namespace ao::uimodel
     }
   } // namespace
 
+  TrackPropertiesFormModel::TrackPropertiesFormModel(PresentationTextCatalog textCatalog)
+    : _textCatalog{std::move(textCatalog)}
+  {
+  }
+
   void TrackPropertiesFormModel::addField(rt::TrackField field, bool editable)
   {
     _fields.push_back(TrackPropertiesFormFieldState{.field = field, .editable = editable});
@@ -100,8 +106,8 @@ namespace ao::uimodel
     {
       return TrackPropertiesFormRowView{
         .field = state->field,
-        .text = state->mixed ? std::string{kMultipleTrackValuesText}
-                             : formatTrackFieldRawValue(state->field, state->originalRawValue),
+        .text = state->mixed ? std::string{_textCatalog.text(i18n::MessageId::TrackMultipleValues)}
+                             : formatTrackFieldRawValue(_textCatalog, state->field, state->originalRawValue),
         .mixed = state->mixed,
         .editable = state->editable,
       };

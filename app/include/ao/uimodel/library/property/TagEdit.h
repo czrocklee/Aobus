@@ -12,6 +12,7 @@
 namespace ao::uimodel
 {
   class TrackAuthoringSession;
+  class PresentationTextCatalog;
 
   struct TagEditResult final
   {
@@ -20,6 +21,7 @@ namespace ao::uimodel
   };
 
   Result<TagEditResult> applyTagEdit(TrackAuthoringSession& session,
+                                     PresentationTextCatalog const& textCatalog,
                                      std::span<std::string const> tagsToAdd,
                                      std::span<std::string const> tagsToRemove);
 } // namespace ao::uimodel

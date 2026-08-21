@@ -4,6 +4,7 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include "runtime/playback/PlaybackTransport.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
@@ -31,8 +32,10 @@ namespace ao::uimodel::test
     auto fixture = ApplicationPlaybackFixture{};
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
-    auto viewModel = OutputDeviceViewModel{
-      fixture.playback, [&log](auto const& view) { log.render(view); }, OutputDeviceIntent::discarded()};
+    auto viewModel = OutputDeviceViewModel{fixture.playback,
+                                           ao::test::englishPresentationTextCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
 
     SECTION("Initial state is empty when no outputs registered")
     {
@@ -58,8 +61,10 @@ namespace ao::uimodel::test
     auto& playbackTransport = fixture.playbackTransport;
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
-    auto viewModel =
-      OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }, OutputDeviceIntent::discarded()};
+    auto viewModel = OutputDeviceViewModel{playback,
+                                           ao::test::englishPresentationTextCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
 
     SECTION("refresh shows backend header and device×profile rows")
     {
@@ -210,8 +215,10 @@ namespace ao::uimodel::test
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
-    auto viewModel = OutputDeviceViewModel{
-      fixture.playback, [&log](auto const& view) { log.render(view); }, OutputDeviceIntent::discarded()};
+    auto viewModel = OutputDeviceViewModel{fixture.playback,
+                                           ao::test::englishPresentationTextCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
     viewModel.refresh();
     REQUIRE(log.states.size() == 1);
     fixture.commands().setShuffleMode(ShuffleMode::On);
@@ -230,6 +237,7 @@ namespace ao::uimodel::test
     auto optRequested = std::optional<audio::OutputDeviceSelection>{};
     auto viewModel = OutputDeviceViewModel{
       fixture.playback,
+      ao::test::englishPresentationTextCatalog(),
       {},
       OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
                                      { optRequested = selection; }),
@@ -254,6 +262,7 @@ namespace ao::uimodel::test
     auto optRequested = std::optional<audio::OutputDeviceSelection>{};
     auto viewModel = OutputDeviceViewModel{
       fixture.playback,
+      ao::test::englishPresentationTextCatalog(),
       [&rendered](OutputDeviceViewState const& view)
       {
         auto replacement = view;

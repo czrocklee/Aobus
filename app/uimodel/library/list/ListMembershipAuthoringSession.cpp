@@ -12,10 +12,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <expected>
-#include <format>
 #include <memory>
 #include <span>
 #include <string>
@@ -30,55 +30,6 @@ namespace ao::uimodel
     std::string tagExpression(std::string_view const tag)
     {
       return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
-    }
-
-    std::string addNotification(ListMembershipEditResult const& result)
-    {
-      switch (result.status)
-      {
-        case rt::TrackAuthoringStatus::Stale: return "The library changed before tracks could be added. Try again.";
-        case rt::TrackAuthoringStatus::Unavailable: return "Library is busy. Tracks were not added.";
-        case rt::TrackAuthoringStatus::NoOp:
-          return std::format("{} already has {} on the selected tracks.", result.listName, tagExpression(result.tag));
-        case rt::TrackAuthoringStatus::Applied:
-          return std::format("Added {} to {} track{} in {}.",
-                             tagExpression(result.tag),
-                             result.changedTrackCount,
-                             result.changedTrackCount == 1 ? "" : "s",
-                             result.listName);
-      }
-
-      return {};
-    }
-
-    std::string removeNotification(ListMembershipEditResult const& result)
-    {
-      switch (result.status)
-      {
-        case rt::TrackAuthoringStatus::Stale: return "The library changed before tracks could be removed. Try again.";
-        case rt::TrackAuthoringStatus::Unavailable: return "Library is busy. Tracks were not removed.";
-        case rt::TrackAuthoringStatus::NoOp:
-          return std::format(
-            "No {} membership or saved position remained in {}.", tagExpression(result.tag), result.listName);
-        case rt::TrackAuthoringStatus::Applied: break;
-      }
-
-      if (result.forgottenPositionCount == 0)
-      {
-        return std::format("Removed {} from {} track{} and confirmed no saved position remains in {}.",
-                           tagExpression(result.tag),
-                           result.changedTrackCount,
-                           result.changedTrackCount == 1 ? "" : "s",
-                           result.listName);
-      }
-
-      return std::format("Removed {} from {} track{} and forgot {} saved position{} in {}.",
-                         tagExpression(result.tag),
-                         result.changedTrackCount,
-                         result.changedTrackCount == 1 ? "" : "s",
-                         result.forgottenPositionCount,
-                         result.forgottenPositionCount == 1 ? "" : "s",
-                         result.listName);
     }
   } // namespace
 
@@ -115,11 +66,13 @@ namespace ao::uimodel
   {
     rt::Library& library;
     rt::BoundTrackTargets targets;
+    PresentationTextCatalog textCatalog;
   };
 
   Result<std::unique_ptr<ListMembershipAuthoringSession>> ListMembershipAuthoringSession::begin(
     rt::Library& library,
-    std::span<TrackId const> const trackIds)
+    std::span<TrackId const> const trackIds,
+    PresentationTextCatalog const& textCatalog)
   {
     auto targetsRes = library.bindTrackTargets(trackIds);
 
@@ -129,7 +82,7 @@ namespace ao::uimodel
     }
 
     return std::unique_ptr<ListMembershipAuthoringSession>{new ListMembershipAuthoringSession{
-      std::make_unique<Impl>(Impl{.library = library, .targets = std::move(*targetsRes)})}};
+      std::make_unique<Impl>(Impl{.library = library, .targets = std::move(*targetsRes), .textCatalog = textCatalog})}};
   }
 
   ListMembershipAuthoringSession::ListMembershipAuthoringSession(std::unique_ptr<Impl> implPtr)
@@ -161,7 +114,12 @@ namespace ao::uimodel
       .targetTrackCount = result->reply.targetTrackIds.size(),
       .changedTrackCount = result->reply.tagEdit.changes.size(),
     };
-    uiResult.notificationText = addNotification(uiResult);
+    uiResult.notificationText = _implPtr->textCatalog.listMembershipNotification(uiResult.status,
+                                                                                 ListMembershipOperation::Add,
+                                                                                 uiResult.listName,
+                                                                                 tagExpression(uiResult.tag),
+                                                                                 uiResult.changedTrackCount,
+                                                                                 uiResult.forgottenPositionCount);
 
     if (result->optNextTargets)
     {
@@ -189,7 +147,12 @@ namespace ao::uimodel
       .changedTrackCount = result->reply.tagEdit.changes.size(),
       .forgottenPositionCount = result->reply.forgottenPositionTrackIds.size(),
     };
-    uiResult.notificationText = removeNotification(uiResult);
+    uiResult.notificationText = _implPtr->textCatalog.listMembershipNotification(uiResult.status,
+                                                                                 ListMembershipOperation::Remove,
+                                                                                 uiResult.listName,
+                                                                                 tagExpression(uiResult.tag),
+                                                                                 uiResult.changedTrackCount,
+                                                                                 uiResult.forgottenPositionCount);
 
     if (result->optNextTargets)
     {

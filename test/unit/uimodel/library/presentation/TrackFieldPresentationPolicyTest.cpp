@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_message.hpp>
@@ -92,13 +93,16 @@ namespace ao::uimodel::test
 
   TEST_CASE("trackFieldColumnTitle returns runtime field labels", "[uimodel][unit][library][presentation]")
   {
-    CHECK(trackFieldColumnTitle(rt::TrackField::Title) == "Title");
-    CHECK(trackFieldColumnTitle(rt::TrackField::Artist) == "Artist");
-    CHECK(trackFieldColumnTitle(rt::TrackField::Duration) == "Duration");
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    CHECK(trackFieldColumnTitle(textCatalog, rt::TrackField::Title) == "Title");
+    CHECK(trackFieldColumnTitle(textCatalog, rt::TrackField::Artist) == "Artist");
+    CHECK(trackFieldColumnTitle(textCatalog, rt::TrackField::Duration) == "Duration");
   }
 
   TEST_CASE("presentable runtime fields have default presentation policy", "[uimodel][unit][library][presentation]")
   {
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+
     for (auto const& rtDef : rt::trackFieldDefinitions())
     {
       if (!rtDef.presentable)
@@ -107,7 +111,7 @@ namespace ao::uimodel::test
       }
 
       INFO("Field " << rtDef.id << " must have a column title and width");
-      CHECK_FALSE(trackFieldColumnTitle(rtDef.field).empty());
+      CHECK_FALSE(trackFieldColumnTitle(textCatalog, rtDef.field).empty());
       CHECK(defaultTrackFieldColumnWidth(rtDef.field) > 0);
     }
   }

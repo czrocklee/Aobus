@@ -4,13 +4,18 @@
 #pragma once
 
 #include <ao/audio/BackendIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -18,10 +23,19 @@
 namespace ao::rt
 {
   enum class MissingTrackValueKind : std::uint8_t;
+  enum class TrackAuthoringStatus : std::uint8_t;
 }
 
 namespace ao::uimodel
 {
+  class AudioQualityFormatter;
+
+  enum class ListMembershipOperation : std::uint8_t
+  {
+    Add,
+    Remove,
+  };
+
   struct TrackPresentationText final
   {
     std::string_view label{};
@@ -56,25 +70,33 @@ namespace ao::uimodel
   };
 
   /**
-   * Immutable authored-copy catalog for shared interactive presentation.
+   * Immutable locale-selected catalog for shared interactive presentation.
    *
-   * The initial catalog is stateless because Aobus currently ships one English
-   * vocabulary. Keeping it as a value type establishes the ownership boundary
-   * without committing the application to a localization storage mechanism.
+   * Borrowed views remain valid for the lifetime of this value. Messages with
+   * runtime arguments are formatted on demand by the underlying catalog.
    */
   class PresentationTextCatalog final
   {
   public:
+    explicit PresentationTextCatalog(i18n::MessageCatalog const& catalog);
+    PresentationTextCatalog(PresentationTextCatalog const&) = default;
+    PresentationTextCatalog(PresentationTextCatalog&&) noexcept = default;
+    PresentationTextCatalog& operator=(PresentationTextCatalog const&) = default;
+    PresentationTextCatalog& operator=(PresentationTextCatalog&&) noexcept = default;
+    ~PresentationTextCatalog();
+
+    std::string_view text(i18n::MessageId id) const noexcept;
+    std::string format(i18n::MessageId id, std::initializer_list<i18n::MessageArgument> arguments) const;
+
     std::string_view trackFieldLabel(rt::TrackField field) const noexcept;
     std::string_view trackGroupKeyLabel(rt::TrackGroupKey key) const noexcept;
     std::string_view missingTrackValueLabel(rt::MissingTrackValueKind kind) const noexcept;
     std::optional<TrackPresentationText> builtinTrackPresentation(std::string_view id) const noexcept;
-    std::string_view createCustomTrackPresentationLabel() const noexcept;
     AudioBackendPresentation audioBackend(audio::BackendId const& id) const;
     AudioProfilePresentation audioProfile(audio::ProfileId const& id) const;
-    std::string_view systemDefaultOutputDeviceLabel() const noexcept;
     std::string completionDetail(rt::CompletionDetail const& detail) const;
     std::string notificationMessage(rt::NotificationMessage const& message) const;
+    std::string notificationGroupMessage(rt::NotificationSeverity severity, std::size_t count) const;
     std::string libraryTaskProgressDetail(rt::LibraryTaskProgressKind kind, std::string_view subject) const;
     std::string libraryTaskProgressCompact(rt::LibraryTaskProgressKind kind, std::string_view subject) const;
 
@@ -82,8 +104,28 @@ namespace ao::uimodel
     // sentence, so it is written once rather than once per window.
     std::string libraryScanMessage(LibraryScanOutcome const& outcome) const;
 
-    // Wraps a query-parser diagnostic in the shared label the filter entry and
-    // the saved-List editor both show.
-    std::string trackFilterError(std::string_view diagnostic) const;
+    std::string trackSelectionSummary(std::size_t count, std::string_view duration = {}) const;
+    std::string smartListMembershipEditingText(bool direct, std::string_view expression = {}) const;
+    std::string smartListPreviewStatus(bool expressionValid,
+                                       std::size_t count,
+                                       bool isAllTracks,
+                                       bool localEmpty) const;
+    std::string listMembershipNotification(rt::TrackAuthoringStatus status,
+                                           ListMembershipOperation operation,
+                                           std::string_view listName,
+                                           std::string_view tagExpression,
+                                           std::size_t changedTrackCount,
+                                           std::size_t forgottenPositionCount) const;
+
+    std::string trackChannelText(std::uint8_t channels) const;
+    std::string_view transportControlLabel(PlaybackCommand command) const noexcept;
+    std::string_view playbackActionLabel(PlaybackCommand command) const noexcept;
+    std::string volumeTooltip(std::int32_t percent, bool muted, bool hardwareAssisted) const;
+    AudioQualityFormatter const& audioQualityFormatter() const noexcept;
+
+  private:
+    struct Impl;
+
+    std::shared_ptr<Impl const> _implPtr;
   };
 } // namespace ao::uimodel

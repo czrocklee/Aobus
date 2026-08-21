@@ -13,7 +13,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <optional>
 #include <string>
 #include <utility>
@@ -72,21 +71,16 @@ namespace ao::uimodel
       return textCatalog.notificationMessage(entry.message);
     }
 
-    std::string groupedText(rt::NotificationSeverity const severity, std::size_t const count)
+    std::string groupedText(PresentationTextCatalog const& textCatalog,
+                            rt::NotificationSeverity const severity,
+                            std::size_t const count)
     {
       if (count == 1)
       {
         return {};
       }
 
-      switch (severity)
-      {
-        case rt::NotificationSeverity::Info: return std::format("{} notifications", count);
-        case rt::NotificationSeverity::Warning: return std::format("{} warnings", count);
-        case rt::NotificationSeverity::Error: return std::format("{} errors", count);
-      }
-
-      return std::format("{} notifications", count);
+      return textCatalog.notificationGroupMessage(severity, count);
     }
 
     ActivityDetailItem detailItem(PresentationTextCatalog const& textCatalog, rt::NotificationEntry const& entry)
@@ -99,6 +93,11 @@ namespace ao::uimodel
       };
     }
   } // namespace
+
+  ActivityStatusFeedProjection::ActivityStatusFeedProjection(PresentationTextCatalog textCatalog)
+    : _textCatalog{std::move(textCatalog)}
+  {
+  }
 
   bool hasDetailContent(ActivityDetailState const& detail) noexcept
   {
@@ -373,7 +372,7 @@ namespace ao::uimodel
       return;
     }
 
-    auto text = groupedText(*optSeverity, ids.size());
+    auto text = groupedText(_textCatalog, *optSeverity, ids.size());
 
     if (text.empty())
     {

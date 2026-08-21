@@ -6,9 +6,11 @@
 #include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace ao::rt
@@ -40,7 +42,10 @@ namespace ao::uimodel
   class VolumeViewModel final
   {
   public:
-    VolumeViewModel(rt::PlaybackService& playback, std::function<void(VolumeViewState const&)> onRender);
+    explicit VolumeViewModel(rt::PlaybackService& playback);
+    VolumeViewModel(rt::PlaybackService& playback,
+                    PresentationTextCatalog const& textCatalog,
+                    std::function<void(VolumeViewState const&)> onRender);
 
     VolumeViewModel(VolumeViewModel const&) = delete;
     VolumeViewModel& operator=(VolumeViewModel const&) = delete;
@@ -58,8 +63,6 @@ namespace ao::uimodel
   private:
     static float resolveVolumeScroll(float currentVolume, double scrollDy);
     static VolumeIndicatorKind resolveIndicatorKind(float volume, bool muted) noexcept;
-    static std::string resolveTooltip(float volume, bool muted, bool isHardwareAssisted);
-
     void applyVolumeTarget(float currentVolume, bool muted, float targetVolume);
     void refresh();
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
@@ -67,6 +70,7 @@ namespace ao::uimodel
 
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _commands;
+    std::optional<PresentationTextCatalog> _optTextCatalog;
     std::function<void(VolumeViewState const&)> _onRender;
     rt::VolumeState _lastVolume{};
 

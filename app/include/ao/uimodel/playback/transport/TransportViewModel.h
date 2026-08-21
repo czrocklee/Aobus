@@ -5,6 +5,7 @@
 
 #include <ao/async/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <functional>
@@ -47,6 +48,7 @@ namespace ao::uimodel
   public:
     TransportViewModel(rt::PlaybackService& playback,
                        PlaybackCommandSurface& commands,
+                       PresentationTextCatalog textCatalog,
                        PlaybackCommand command,
                        bool showLabel,
                        std::function<void(TransportViewState const&)> onRender);
@@ -64,6 +66,7 @@ namespace ao::uimodel
   private:
     rt::PlaybackService& _playback;
     PlaybackCommandSurface& _commands;
+    PresentationTextCatalog _textCatalog;
     PlaybackCommand _command;
     bool _showLabel;
     std::function<void(TransportViewState const&)> _onRender;

@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
+#include <ao/Contract.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
@@ -10,12 +11,17 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <format>
+#include <span>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -23,6 +29,24 @@ namespace ao::uimodel
 {
   namespace
   {
+    using i18n::MessageArgument;
+    using i18n::MessageCatalog;
+    using i18n::MessageId;
+
+    std::string requiredMessage(MessageCatalog const& catalog,
+                                MessageId const id,
+                                std::span<MessageArgument const> const arguments = {})
+    {
+      auto result = catalog.format(id, arguments);
+
+      if (!result)
+      {
+        AO_FATAL("Could not format required audio-quality message: {}", result.error().message);
+      }
+
+      return std::move(result->text);
+    }
+
     std::string joinSharedApps(std::vector<std::string> const& apps)
     {
       auto text = std::string{};
@@ -97,48 +121,43 @@ namespace ao::uimodel
       return std::format("{:+.1f} dB", decibels);
     }
 
-    AudioQualityPresentation diagnosticPresentation(rt::QualityState const& state)
+    std::string gainFindingLabel(MessageCatalog const& catalog, MessageId const id, float const gainValue)
     {
-      if (firstFinding(state, audio::QualityFindingKind::SoftwareAmplification) != nullptr)
-      {
-        return AudioQualityPresentation{.headline = "Clipping risk", .category = AudioQualityCategory::Warning};
-      }
-
-      if (firstFinding(state, audio::QualityFindingKind::Muted) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::Truncation) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::Resampling) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::SoftwareVolumeModification) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::UnclassifiedVolumeModification) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::MixedSources) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::ChannelMapping) != nullptr)
-      {
-        return AudioQualityPresentation{
-          .headline = "Pipeline intervention", .category = AudioQualityCategory::Diagnostic};
-      }
-
-      return {};
+      auto const gain = gainDecibelLabel(gainValue);
+      auto const arguments = std::array{
+        MessageArgument{"hasGain", gain.empty() ? "no" : "yes"},
+        MessageArgument{"gain", gain},
+      };
+      return requiredMessage(catalog, id, arguments);
     }
   } // namespace
 
-  std::string audioNodeTypeLabel(audio::flow::NodeType type)
+  AudioQualityFormatter::AudioQualityFormatter(MessageCatalog catalog)
+    : _catalog{std::move(catalog)}
+  {
+  }
+
+  std::string AudioQualityFormatter::nodeTypeLabel(audio::flow::NodeType const type) const
   {
     using Type = audio::flow::NodeType;
 
+    auto id = MessageId::AudioNodeUnknown;
+
     switch (type)
     {
-      case Type::Source: return "[Source]";
-      case Type::Decoder: return "[Decoder]";
-      case Type::Engine: return "[Engine]";
-      case Type::Stream: return "[Stream]";
-      case Type::Intermediary: return "[Filter]";
-      case Type::Sink: return "[Device]";
-      case Type::ExternalSource: return "[Other Source]";
+      case Type::Source: id = MessageId::AudioNodeSource; break;
+      case Type::Decoder: id = MessageId::AudioNodeDecoder; break;
+      case Type::Engine: id = MessageId::AudioNodeEngine; break;
+      case Type::Stream: id = MessageId::AudioNodeStream; break;
+      case Type::Intermediary: id = MessageId::AudioNodeFilter; break;
+      case Type::Sink: id = MessageId::AudioNodeDevice; break;
+      case Type::ExternalSource: id = MessageId::AudioNodeOtherSource; break;
     }
 
-    return "[Unknown]";
+    return requiredMessage(_catalog, id);
   }
 
-  std::string audioFormatLabel(audio::NodeFormat const& format)
+  std::string AudioQualityFormatter::formatLabel(audio::NodeFormat const& format) const
   {
     constexpr double kKhzMultiplier = 1000.0;
     auto const signal = audio::signalFormat(format);
@@ -146,15 +165,17 @@ namespace ao::uimodel
     {
       if (signal.channels == 1)
       {
-        return "Mono";
+        return requiredMessage(_catalog, MessageId::TrackChannelMono);
       }
 
       if (signal.channels == 2)
       {
-        return "Stereo";
+        return requiredMessage(_catalog, MessageId::TrackChannelStereo);
       }
 
-      return std::format("{} ch", signal.channels);
+      auto const channelCount = std::to_string(signal.channels);
+      auto const arguments = std::array{MessageArgument{"count", channelCount}};
+      return requiredMessage(_catalog, MessageId::AudioChannelsCompact, arguments);
     }();
 
     auto bits = signal.precisionBits;
@@ -164,102 +185,115 @@ namespace ao::uimodel
       bits = audio::encodingContainerBits(pcmFormat->encoding);
     }
 
-    return std::format("{:.1f} kHz · {}-bit · {}", signal.sampleRate / kKhzMultiplier, bits, channelsText);
+    auto const sampleRate = std::format("{:.1f}", signal.sampleRate / kKhzMultiplier);
+    auto const bitsText = std::to_string(bits);
+    auto const arguments = std::array{
+      MessageArgument{"sampleRate", sampleRate},
+      MessageArgument{"bits", bitsText},
+      MessageArgument{"channels", channelsText},
+    };
+    return requiredMessage(_catalog, MessageId::AudioFormat, arguments);
   }
 
-  std::string audioFindingLabel(audio::QualityFinding const& finding)
+  std::string AudioQualityFormatter::findingLabel(audio::QualityFinding const& finding) const
   {
     switch (finding.kind)
     {
       case audio::QualityFindingKind::BitPerfect: return "";
-      case audio::QualityFindingKind::LossySource: return "Lossy source";
+      case audio::QualityFindingKind::LossySource: return requiredMessage(_catalog, MessageId::AudioFindingLossySource);
       case audio::QualityFindingKind::SoftwareVolumeModification:
-        if (auto const decibelLabel = gainDecibelLabel(finding.gain); !decibelLabel.empty())
-        {
-          return std::format("Software volume attenuation: {}", decibelLabel);
-        }
-
-        return "Software volume attenuation";
+        return gainFindingLabel(_catalog, MessageId::AudioFindingSoftwareVolumeAttenuation, finding.gain);
       case audio::QualityFindingKind::SoftwareAmplification:
-        if (auto const decibelLabel = gainDecibelLabel(finding.gain); !decibelLabel.empty())
-        {
-          return std::format("Software amplification: {} gain (clipping risk)", decibelLabel);
-        }
-
-        return "Software amplification (clipping risk)";
-      case audio::QualityFindingKind::HardwareVolumeModification: return "Hardware volume control";
-      case audio::QualityFindingKind::UnclassifiedVolumeModification: return "Unclassified volume change";
-      case audio::QualityFindingKind::Muted: return "Muted";
+        return gainFindingLabel(_catalog, MessageId::AudioFindingSoftwareAmplification, finding.gain);
+      case audio::QualityFindingKind::HardwareVolumeModification:
+        return requiredMessage(_catalog, MessageId::AudioFindingHardwareVolumeModification);
+      case audio::QualityFindingKind::UnclassifiedVolumeModification:
+        return requiredMessage(_catalog, MessageId::AudioFindingUnclassifiedVolumeModification);
+      case audio::QualityFindingKind::Muted: return requiredMessage(_catalog, MessageId::AudioFindingMuted);
       case audio::QualityFindingKind::Resampling:
-        if (finding.optFromFormat && finding.optToFormat)
-        {
-          return std::format("Resampling: {}Hz → {}Hz",
-                             audio::signalFormat(*finding.optFromFormat).sampleRate,
-                             audio::signalFormat(*finding.optToFormat).sampleRate);
-        }
-
-        return "Resampling";
+      {
+        auto const hasFormats = finding.optFromFormat && finding.optToFormat;
+        auto const fromRate = std::to_string(hasFormats ? audio::signalFormat(*finding.optFromFormat).sampleRate : 0);
+        auto const toRate = std::to_string(hasFormats ? audio::signalFormat(*finding.optToFormat).sampleRate : 0);
+        auto const arguments = std::array{
+          MessageArgument{"hasFormats", hasFormats ? "yes" : "no"},
+          MessageArgument{"fromRate", fromRate},
+          MessageArgument{"toRate", toRate},
+        };
+        return requiredMessage(_catalog, MessageId::AudioFindingResampling, arguments);
+      }
       case audio::QualityFindingKind::ChannelMapping:
-        if (finding.optFromFormat && finding.optToFormat)
-        {
-          return std::format("Channels: {}ch → {}ch",
-                             audio::signalFormat(*finding.optFromFormat).channels,
-                             audio::signalFormat(*finding.optToFormat).channels);
-        }
-
-        return "Channel mapping";
-      case audio::QualityFindingKind::LosslessPadding: return "Bit-transparent integer padding";
-      case audio::QualityFindingKind::LosslessFloat: return "Bit-transparent float mapping";
-      case audio::QualityFindingKind::LosslessRoundTrip: return "Bit-transparent round trip (float engine)";
+      {
+        auto const hasFormats = finding.optFromFormat && finding.optToFormat;
+        auto const fromChannels = std::to_string(hasFormats ? audio::signalFormat(*finding.optFromFormat).channels : 0);
+        auto const toChannels = std::to_string(hasFormats ? audio::signalFormat(*finding.optToFormat).channels : 0);
+        auto const arguments = std::array{
+          MessageArgument{"hasFormats", hasFormats ? "yes" : "no"},
+          MessageArgument{"fromChannels", fromChannels},
+          MessageArgument{"toChannels", toChannels},
+        };
+        return requiredMessage(_catalog, MessageId::AudioFindingChannelMapping, arguments);
+      }
+      case audio::QualityFindingKind::LosslessPadding:
+        return requiredMessage(_catalog, MessageId::AudioFindingLosslessPadding);
+      case audio::QualityFindingKind::LosslessFloat:
+        return requiredMessage(_catalog, MessageId::AudioFindingLosslessFloat);
+      case audio::QualityFindingKind::LosslessRoundTrip:
+        return requiredMessage(_catalog, MessageId::AudioFindingLosslessRoundTrip);
       case audio::QualityFindingKind::Truncation:
+      {
+        auto kind = std::string_view{"other"};
+        auto fromPrecision = std::string{};
+        auto toPrecision = std::string{};
+
         if (finding.optFromFormat && finding.optToFormat)
         {
           auto const fromSignal = audio::signalFormat(*finding.optFromFormat);
           auto const toSignal = audio::signalFormat(*finding.optToFormat);
+          fromPrecision = precisionLabel(*finding.optFromFormat);
+          toPrecision = precisionLabel(*finding.optToFormat);
+          kind = "precision";
 
           if (fromSignal.sampleKind != toSignal.sampleKind)
           {
-            char const* const fromDomain =
-              fromSignal.sampleKind == audio::SampleKind::FloatingPoint ? "Float" : "Integer";
-            char const* const toDomain = toSignal.sampleKind == audio::SampleKind::FloatingPoint ? "float" : "integer";
-            return std::format("{} → {} quantization: {} → {}",
-                               fromDomain,
-                               toDomain,
-                               precisionLabel(*finding.optFromFormat),
-                               precisionLabel(*finding.optToFormat));
+            kind = fromSignal.sampleKind == audio::SampleKind::FloatingPoint ? "floatToInteger" : "integerToFloat";
           }
-
-          return std::format("Precision truncated: {} → {}",
-                             precisionLabel(*finding.optFromFormat),
-                             precisionLabel(*finding.optToFormat));
         }
 
-        return "Precision truncated";
+        auto const arguments = std::array{
+          MessageArgument{"kind", kind},
+          MessageArgument{"fromPrecision", fromPrecision},
+          MessageArgument{"toPrecision", toPrecision},
+        };
+        return requiredMessage(_catalog, MessageId::AudioFindingTruncation, arguments);
+      }
       case audio::QualityFindingKind::MixedSources:
-        if (!finding.sharedApps.empty())
-        {
-          return std::format("Mixed with {}", joinSharedApps(finding.sharedApps));
-        }
-
-        return "Mixed sources";
+      {
+        auto const apps = joinSharedApps(finding.sharedApps);
+        auto const arguments = std::array{
+          MessageArgument{"hasApps", apps.empty() ? "no" : "yes"},
+          MessageArgument{"apps", apps},
+        };
+        return requiredMessage(_catalog, MessageId::AudioFindingMixedSources, arguments);
+      }
       case audio::QualityFindingKind::Unknown: return "";
     }
 
     return "";
   }
 
-  std::string audioQualityConclusion(audio::Quality quality)
+  std::string AudioQualityFormatter::qualityConclusion(audio::Quality const quality) const
   {
     using Quality = audio::Quality;
 
     switch (quality)
     {
-      case Quality::BitwisePerfect: return "Bit-perfect playback";
+      case Quality::BitwisePerfect: return requiredMessage(_catalog, MessageId::AudioQualityBitPerfectPlayback);
       case Quality::LosslessPadded:
-      case Quality::LosslessFloat: return "Signal preserved";
-      case Quality::LinearIntervention: return "Pipeline intervention";
-      case Quality::LossySource: return "Lossy source";
-      case Quality::Clipped: return "Signal clipping detected";
+      case Quality::LosslessFloat: return requiredMessage(_catalog, MessageId::AudioQualitySignalPreserved);
+      case Quality::LinearIntervention: return requiredMessage(_catalog, MessageId::AudioQualityPipelineIntervention);
+      case Quality::LossySource: return requiredMessage(_catalog, MessageId::AudioFindingLossySource);
+      case Quality::Clipped: return requiredMessage(_catalog, MessageId::AudioQualitySignalClippingDetected);
       case Quality::Unknown: return "";
     }
 
@@ -294,50 +328,70 @@ namespace ao::uimodel
     return AudioQualityCategory::Unknown;
   }
 
-  AudioQualityPresentation audioQualityPresentation(rt::QualityState const& state)
+  AudioQualityPresentation AudioQualityFormatter::presentation(rt::QualityState const& state) const
   {
     if (state.overall == audio::Quality::Unknown)
     {
-      return AudioQualityPresentation{.headline = "Unknown pipeline", .category = AudioQualityCategory::Unknown};
+      return AudioQualityPresentation{.headline = requiredMessage(_catalog, MessageId::AudioQualityUnknownPipeline),
+                                      .category = AudioQualityCategory::Unknown};
     }
 
-    if (auto presentation = diagnosticPresentation(state); !presentation.headline.empty())
+    if (firstFinding(state, audio::QualityFindingKind::SoftwareAmplification) != nullptr)
     {
-      return presentation;
+      return AudioQualityPresentation{.headline = requiredMessage(_catalog, MessageId::AudioQualityClippingRisk),
+                                      .category = AudioQualityCategory::Warning};
+    }
+
+    if (firstFinding(state, audio::QualityFindingKind::Muted) != nullptr ||
+        firstFinding(state, audio::QualityFindingKind::Truncation) != nullptr ||
+        firstFinding(state, audio::QualityFindingKind::Resampling) != nullptr ||
+        firstFinding(state, audio::QualityFindingKind::SoftwareVolumeModification) != nullptr ||
+        firstFinding(state, audio::QualityFindingKind::UnclassifiedVolumeModification) != nullptr ||
+        firstFinding(state, audio::QualityFindingKind::MixedSources) != nullptr ||
+        firstFinding(state, audio::QualityFindingKind::ChannelMapping) != nullptr)
+    {
+      return AudioQualityPresentation{.headline = qualityConclusion(audio::Quality::LinearIntervention),
+                                      .category = AudioQualityCategory::Diagnostic};
     }
 
     if (!state.fullyVerified)
     {
       return AudioQualityPresentation{
-        .headline = "Partially verified path", .category = AudioQualityCategory::Informational};
+        .headline = requiredMessage(_catalog, MessageId::AudioQualityPartiallyVerifiedPath),
+        .category = AudioQualityCategory::Informational};
     }
 
     if (firstFinding(state, audio::QualityFindingKind::LosslessPadding) != nullptr)
     {
-      return AudioQualityPresentation{.headline = "Signal preserved", .category = AudioQualityCategory::Positive};
+      return AudioQualityPresentation{
+        .headline = qualityConclusion(audio::Quality::LosslessFloat), .category = AudioQualityCategory::Positive};
     }
 
     if (hasFinding(state, audio::QualityFindingKind::LosslessRoundTrip))
     {
-      return AudioQualityPresentation{.headline = "Signal preserved", .category = AudioQualityCategory::Positive};
+      return AudioQualityPresentation{
+        .headline = qualityConclusion(audio::Quality::LosslessFloat), .category = AudioQualityCategory::Positive};
     }
 
     if (hasFinding(state, audio::QualityFindingKind::LosslessFloat))
     {
-      return AudioQualityPresentation{.headline = "Signal preserved", .category = AudioQualityCategory::Positive};
+      return AudioQualityPresentation{
+        .headline = qualityConclusion(audio::Quality::LosslessFloat), .category = AudioQualityCategory::Positive};
     }
 
     if (state.sourceQuality == audio::Quality::LossySource)
     {
-      return AudioQualityPresentation{
-        .headline = "Clean lossy delivery", .category = AudioQualityCategory::Informational};
+      return AudioQualityPresentation{.headline = requiredMessage(_catalog, MessageId::AudioQualityCleanLossyDelivery),
+                                      .category = AudioQualityCategory::Informational};
     }
 
     if (visibleFindings(state).empty() && state.sourceQuality == audio::Quality::BitwisePerfect)
     {
-      return AudioQualityPresentation{.headline = "Bit-perfect playback", .category = AudioQualityCategory::Medal};
+      return AudioQualityPresentation{
+        .headline = qualityConclusion(audio::Quality::BitwisePerfect), .category = AudioQualityCategory::Medal};
     }
 
-    return AudioQualityPresentation{.headline = "Clean delivery", .category = AudioQualityCategory::Positive};
+    return AudioQualityPresentation{.headline = requiredMessage(_catalog, MessageId::AudioQualityCleanDelivery),
+                                    .category = AudioQualityCategory::Positive};
   }
 } // namespace ao::uimodel

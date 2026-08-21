@@ -21,6 +21,8 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
+  class PresentationTextCatalog;
+
   struct WritableTagListTarget final
   {
     ListId listId = kInvalidListId;
@@ -50,7 +52,8 @@ namespace ao::uimodel
   {
   public:
     static Result<std::unique_ptr<ListMembershipAuthoringSession>> begin(rt::Library& library,
-                                                                         std::span<TrackId const> trackIds);
+                                                                         std::span<TrackId const> trackIds,
+                                                                         PresentationTextCatalog const& textCatalog);
 
     ~ListMembershipAuthoringSession();
 

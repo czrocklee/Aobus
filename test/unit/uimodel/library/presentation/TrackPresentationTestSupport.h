@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/ViewService.h>
@@ -11,6 +12,7 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 namespace ao::uimodel::test
 {
@@ -22,7 +24,8 @@ namespace ao::uimodel::test
     rt::TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
     rt::ViewService viewService{executor, libraryFixture.library(), trackSourceCache, changes};
     rt::WorkspaceService workspace{executor, viewService, changes};
-    TrackPresentationCatalog catalog{workspace};
+    PresentationTextCatalog textCatalog{ao::test::englishMessageCatalog()};
+    TrackPresentationCatalog catalog{workspace, textCatalog};
     ListPresentationPreferenceStore preferences{catalog};
   };
 } // namespace ao::uimodel::test

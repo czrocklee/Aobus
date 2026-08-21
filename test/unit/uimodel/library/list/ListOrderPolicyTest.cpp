@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -48,7 +49,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][list][list-order]")
   {
     auto input = eligibleInput();
-    auto const state = describeListOrderCapabilities(input);
+    auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
 
     CHECK(state.canAuthorOrder);
     CHECK(state.canGapMove);
@@ -60,7 +61,7 @@ namespace ao::uimodel::test
 
     input.presentation.id = std::string{rt::kListOrderTrackPresentationId};
     input.presentation.sortBy = {rt::TrackSortTerm{.field = rt::TrackSortField::Title, .ascending = true}};
-    auto const sorted = describeListOrderCapabilities(input);
+    auto const sorted = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
     CHECK_FALSE(sorted.canAuthorOrder);
     CHECK_FALSE(sorted.canAbsoluteMove);
   }
@@ -70,7 +71,7 @@ namespace ao::uimodel::test
     auto input = eligibleInput();
     input.quickFilterExpression = "$year >= 2020";
 
-    auto const state = describeListOrderCapabilities(input);
+    auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
 
     CHECK(state.canAuthorOrder);
     CHECK_FALSE(state.canGapMove);
@@ -81,6 +82,20 @@ namespace ao::uimodel::test
     CHECK(state.disabledReason.contains("Clear the quick filter"));
   }
 
+  TEST_CASE("ListOrderPolicy - disabled reasons come from the injected locale",
+            "[uimodel][unit][list-order][localization]")
+  {
+    auto input = eligibleInput();
+    input.authoring.state = rt::LibraryAuthoringState::Maintenance;
+    input.authoring.maintenanceKind = rt::LibraryMaintenanceKind::ScanApply;
+
+    auto const state = describeListOrderCapabilities(ao::test::presentationTextCatalog("de-AT"), input);
+
+    CHECK_FALSE(state.canAuthorOrder);
+    CHECK(state.disabledReason ==
+          "Die Bibliothek ist beschäftigt. Manuelle Sortierung ist nach Abschluss der Wartung wieder verfügbar.");
+  }
+
   TEST_CASE("ListOrderPolicy - rejects virtual, grouped, unavailable, and erroneous sources",
             "[uimodel][unit][list][list-order]")
   {
@@ -89,7 +104,7 @@ namespace ao::uimodel::test
     SECTION("All Tracks")
     {
       input.listId = rt::kAllTracksListId;
-      auto const state = describeListOrderCapabilities(input);
+      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("saved Lists"));
     }
@@ -97,7 +112,7 @@ namespace ao::uimodel::test
     SECTION("grouped")
     {
       input.presentation.groupBy = rt::TrackGroupKey::Album;
-      auto const state = describeListOrderCapabilities(input);
+      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("flat unsorted"));
     }
@@ -106,7 +121,7 @@ namespace ao::uimodel::test
     {
       input.authoring.state = rt::LibraryAuthoringState::Maintenance;
       input.authoring.maintenanceKind = rt::LibraryMaintenanceKind::ScanApply;
-      auto const state = describeListOrderCapabilities(input);
+      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("Library is busy"));
     }
@@ -114,7 +129,7 @@ namespace ao::uimodel::test
     SECTION("source gone")
     {
       input.sourceLive = false;
-      auto const state = describeListOrderCapabilities(input);
+      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("no longer available"));
     }
@@ -122,7 +137,7 @@ namespace ao::uimodel::test
     SECTION("filter error")
     {
       input.sourceHasError = true;
-      auto const state = describeListOrderCapabilities(input);
+      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("Fix the List or quick-filter expression"));
     }

@@ -1,3 +1,130 @@
+# Interactive localization is a leaf application capability. Its build-time
+# compiler and ICU implementation stay out of Core, runtime, and the CLI graph.
+add_library(ao_catalog_pattern STATIC
+    i18n/CatalogPattern.cpp
+)
+target_include_directories(ao_catalog_pattern PUBLIC "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/include")
+target_link_libraries(ao_catalog_pattern PRIVATE ICU::i18n ICU::uc ICU::data)
+
+add_executable(ao_catalog_compiler
+    ${CMAKE_SOURCE_DIR}/tool/catalog/CatalogCompiler.cpp
+)
+aobus_enable_windows_utf8_manifest(ao_catalog_compiler)
+target_include_directories(ao_catalog_compiler PRIVATE "${CMAKE_SOURCE_DIR}/app/include")
+target_link_libraries(ao_catalog_compiler PRIVATE ao_catalog_pattern ao_utility)
+
+set(AOBUS_CATALOG_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/i18n/catalog")
+set(AOBUS_CATALOG_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/i18n/catalog")
+set(AOBUS_CATALOG_RESW_DIR "${CMAKE_CURRENT_BINARY_DIR}/i18n/resw")
+file(MAKE_DIRECTORY
+    "${AOBUS_CATALOG_GENERATED_DIR}"
+    "${AOBUS_CATALOG_RESW_DIR}/en"
+    "${AOBUS_CATALOG_RESW_DIR}/de"
+    "${AOBUS_CATALOG_RESW_DIR}/qps-ploc")
+
+set(AOBUS_CATALOG_ROOT_RES "${AOBUS_CATALOG_GENERATED_DIR}/root.res")
+set(AOBUS_CATALOG_DE_RES "${AOBUS_CATALOG_GENERATED_DIR}/de.res")
+set(AOBUS_CATALOG_PSEUDO_SOURCE "${AOBUS_CATALOG_GENERATED_DIR}/qps_Ploc.txt")
+set(AOBUS_CATALOG_PSEUDO_RES "${AOBUS_CATALOG_GENERATED_DIR}/qps_Ploc.res")
+set(AOBUS_CATALOG_DATA "${AOBUS_CATALOG_GENERATED_DIR}/aobus_messages.dat")
+set(AOBUS_CATALOG_EMBEDDED_CPP "${AOBUS_CATALOG_GENERATED_DIR}/EmbeddedCatalogData.cpp")
+set(AOBUS_CATALOG_EN_RESW "${AOBUS_CATALOG_RESW_DIR}/en/Resources.resw")
+set(AOBUS_CATALOG_DE_RESW "${AOBUS_CATALOG_RESW_DIR}/de/Resources.resw")
+set(AOBUS_CATALOG_PSEUDO_RESW "${AOBUS_CATALOG_RESW_DIR}/qps-ploc/Resources.resw")
+
+add_custom_command(
+    OUTPUT "${AOBUS_CATALOG_ROOT_RES}" "${AOBUS_CATALOG_DE_RES}"
+    COMMAND "${AOBUS_ICU_GENRB_EXECUTABLE}"
+            --strict
+            --encoding UTF-8
+            --sourcedir "${AOBUS_CATALOG_SOURCE_DIR}"
+            --destdir "${AOBUS_CATALOG_GENERATED_DIR}"
+            root.txt de.txt
+    DEPENDS
+            "${AOBUS_CATALOG_SOURCE_DIR}/root.txt"
+            "${AOBUS_CATALOG_SOURCE_DIR}/de.txt"
+    COMMENT "Compiling canonical ICU message catalogs"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT
+            "${AOBUS_CATALOG_PSEUDO_SOURCE}"
+            "${AOBUS_CATALOG_EN_RESW}"
+            "${AOBUS_CATALOG_DE_RESW}"
+            "${AOBUS_CATALOG_PSEUDO_RESW}"
+    COMMAND $<TARGET_FILE:ao_catalog_compiler>
+            --root-res root.res
+            --de-res de.res
+            --pseudo-source qps_Ploc.txt
+            --en-resw ../resw/en/Resources.resw
+            --de-resw ../resw/de/Resources.resw
+            --pseudo-resw ../resw/qps-ploc/Resources.resw
+    DEPENDS ao_catalog_compiler "${AOBUS_CATALOG_ROOT_RES}" "${AOBUS_CATALOG_DE_RES}"
+    WORKING_DIRECTORY "${AOBUS_CATALOG_GENERATED_DIR}"
+    COMMENT "Validating catalogs and generating pseudo/WinUI resources"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT "${AOBUS_CATALOG_PSEUDO_RES}"
+    COMMAND "${AOBUS_ICU_GENRB_EXECUTABLE}"
+            --strict
+            --encoding UTF-8
+            --sourcedir "${AOBUS_CATALOG_GENERATED_DIR}"
+            --destdir "${AOBUS_CATALOG_GENERATED_DIR}"
+            qps_Ploc.txt
+    DEPENDS "${AOBUS_CATALOG_PSEUDO_SOURCE}"
+    COMMENT "Compiling generated pseudo-localization catalog"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT "${AOBUS_CATALOG_DATA}"
+    COMMAND "${AOBUS_ICU_PKGDATA_EXECUTABLE}"
+            --quiet
+            --force-prefix
+            --name aobus_messages
+            --mode common
+            --sourcedir "${AOBUS_CATALOG_GENERATED_DIR}"
+            --destdir "${AOBUS_CATALOG_GENERATED_DIR}"
+            --tempdir "${AOBUS_CATALOG_GENERATED_DIR}"
+            "${AOBUS_CATALOG_SOURCE_DIR}/package.lst"
+    DEPENDS
+            "${AOBUS_CATALOG_ROOT_RES}"
+            "${AOBUS_CATALOG_DE_RES}"
+            "${AOBUS_CATALOG_PSEUDO_RES}"
+            "${AOBUS_CATALOG_SOURCE_DIR}/package.lst"
+    COMMENT "Packaging embedded ICU message data"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT "${AOBUS_CATALOG_EMBEDDED_CPP}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT=${AOBUS_CATALOG_DATA}"
+            "-DOUTPUT=${AOBUS_CATALOG_EMBEDDED_CPP}"
+            -P "${CMAKE_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+    DEPENDS "${AOBUS_CATALOG_DATA}" "${CMAKE_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+    COMMENT "Embedding ICU message data"
+    VERBATIM)
+
+add_library(ao_app_i18n STATIC
+    i18n/MessageCatalog.cpp
+    i18n/EmbeddedCatalogData.h
+    i18n/MessageIds.h
+    i18n/SystemLocale.h
+    "${AOBUS_CATALOG_EMBEDDED_CPP}"
+)
+if(WIN32)
+  target_sources(ao_app_i18n PRIVATE i18n/SystemLocaleWindows.cpp)
+else()
+  target_sources(ao_app_i18n PRIVATE i18n/SystemLocalePosix.cpp)
+endif()
+target_include_directories(ao_app_i18n
+    PUBLIC
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+      "${CMAKE_SOURCE_DIR}/include"
+    PRIVATE "${CMAKE_SOURCE_DIR}")
+target_link_libraries(ao_app_i18n
+    PRIVATE ao_catalog_pattern ao_unicode_text ICU::i18n ICU::uc ICU::data)
+
 # Prepared-next contract diagnostics are compiled once and shared with the
 # minimal fatal probe so source-location coverage does not duplicate a source
 # file across targets with incompatible compile commands.
@@ -169,7 +296,6 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/property/TrackPropertiesFormModel.cpp
     uimodel/library/task/LibraryScanOutcome.cpp
     uimodel/library/task/LibraryScanWorkflow.cpp
-    uimodel/library/track/TrackCountFormatter.cpp
     uimodel/library/track/TrackSelectionSummary.cpp
     uimodel/library/track/TrackFilterPolicy.cpp
     uimodel/library/track/TrackFilterCompleter.cpp
@@ -199,7 +325,7 @@ add_library(ao_app_uimodel STATIC
 target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_uimodel PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_uimodel PUBLIC ao_app_runtime)
-target_link_libraries(ao_app_uimodel PRIVATE)
+target_link_libraries(ao_app_uimodel PRIVATE ao_app_i18n)
 
 # --- Boundary guardrails for ao_app_uimodel ---
 # Ensure shared UI-model layout files never include platform UI headers
@@ -303,6 +429,8 @@ set(AO_FORBIDDEN_TRACK_FIELD_COPY_REGEX "std::string_view[ \t]+label[ \t]*[;{]")
 set(AO_FORBIDDEN_TRACK_PRESET_COPY_REGEX "std::string_view[ \t]+(label|description)[ \t]*[;{]")
 set(AO_FORBIDDEN_BACKEND_DESCRIPTOR_COPY_REGEX "std::string[ \t]+(name|description|iconName)[ \t]*[;{]")
 set(AO_FORBIDDEN_COMPLETION_DETAIL_COPY_REGEX "std::string[ \t]+detail[ \t]*[;{]")
+set(AO_FORBIDDEN_CLI_LOCALIZATION_REGEX
+  "#[ \t]*include[ \t]*[<\"]ao/i18n/")
 set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/))))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX}))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryWriter([^A-Za-z0-9_]|$)|\\.writer[ \t\r\n]*\\(")
@@ -368,6 +496,11 @@ ao_write_guardrail_regex(
   AO_FORBIDDEN_COMPLETION_DETAIL_COPY_REGEX_FILE
   "completion-detail-copy"
   "${AO_FORBIDDEN_COMPLETION_DETAIL_COPY_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_CLI_LOCALIZATION_REGEX_FILE
+  "cli-localization"
+  "${AO_FORBIDDEN_CLI_LOCALIZATION_REGEX}"
 )
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/ao/yaml/ConfigTraits.h")
@@ -638,6 +771,50 @@ if(AOBUS_BUILD_GTK)
 endif()
 if(AOBUS_BUILD_CLI)
   add_subdirectory(cli)
+
+  add_custom_target(ao_cli_localization_boundary_check
+    COMMAND ${CMAKE_COMMAND}
+            "-DROOTS=${CMAKE_SOURCE_DIR}/app/cli"
+            "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_CLI_LOCALIZATION_REGEX_FILE}"
+            -DMODE=enforce
+            -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+    COMMENT "Checking that CLI source does not consume interactive localization"
+    VERBATIM)
+  add_dependencies(aobus-cli-lib ao_cli_localization_boundary_check)
+
+  function(aobus_assert_cli_link_closure root_target)
+    set(_queue "${root_target}")
+    set(_visited)
+    while(_queue)
+      list(POP_FRONT _queue _target)
+      if(_target IN_LIST _visited OR NOT TARGET "${_target}")
+        continue()
+      endif()
+      list(APPEND _visited "${_target}")
+
+      foreach(_property IN ITEMS LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+        get_target_property(_links "${_target}" "${_property}")
+        if(NOT _links OR _links STREQUAL "_links-NOTFOUND")
+          continue()
+        endif()
+        foreach(_link IN LISTS _links)
+          if(_link MATCHES "ao_app_i18n|ao_catalog_pattern|ICU::i18n")
+            message(FATAL_ERROR
+              "CLI target '${root_target}' reaches forbidden localization dependency "
+              "'${_link}' through '${_target}'.")
+          endif()
+          string(REGEX MATCHALL "[A-Za-z_][A-Za-z0-9_.:+-]*" _link_tokens "${_link}")
+          foreach(_token IN LISTS _link_tokens)
+            if(TARGET "${_token}" AND NOT _token IN_LIST _visited)
+              list(APPEND _queue "${_token}")
+            endif()
+          endforeach()
+        endforeach()
+      endforeach()
+    endwhile()
+  endfunction()
+
+  aobus_assert_cli_link_closure(aobus)
 endif()
 if(AOBUS_BUILD_TUI)
   add_subdirectory(tui)

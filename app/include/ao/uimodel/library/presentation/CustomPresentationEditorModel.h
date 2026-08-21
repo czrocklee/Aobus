@@ -18,6 +18,8 @@
 
 namespace ao::uimodel
 {
+  class PresentationTextCatalog;
+
   // A choice offered by a dropdown: the value it selects plus its authored label.
   template<typename T>
   struct LabeledOption final
@@ -33,8 +35,10 @@ namespace ao::uimodel
   class CustomPresentationEditorModel final
   {
   public:
-    CustomPresentationEditorModel();
-    CustomPresentationEditorModel(rt::TrackPresentationSpec const& spec, std::string_view label);
+    explicit CustomPresentationEditorModel(PresentationTextCatalog const& textCatalog);
+    CustomPresentationEditorModel(PresentationTextCatalog const& textCatalog,
+                                  rt::TrackPresentationSpec const& spec,
+                                  std::string_view label);
 
     void populate(rt::TrackPresentationSpec const& spec, std::string_view label);
 
@@ -120,9 +124,9 @@ namespace ao::uimodel
       return static_cast<std::size_t>(std::ranges::distance(options.begin(), iter));
     }
 
-    static std::vector<TrackGroupKeyOption> makeGroupOptions();
-    static std::vector<TrackSortFieldOption> makeSortFieldOptions();
-    static std::vector<TrackVisibleFieldOption> makeVisibleFieldOptions();
+    static std::vector<TrackGroupKeyOption> makeGroupOptions(PresentationTextCatalog const& textCatalog);
+    static std::vector<TrackSortFieldOption> makeSortFieldOptions(PresentationTextCatalog const& textCatalog);
+    static std::vector<TrackVisibleFieldOption> makeVisibleFieldOptions(PresentationTextCatalog const& textCatalog);
 
     std::string _label;
     rt::TrackGroupKey _groupKey = rt::TrackGroupKey::None;

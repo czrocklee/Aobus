@@ -10,6 +10,8 @@
 
 namespace ao::uimodel
 {
+  class PresentationTextCatalog;
+
   /**
    * Render the selection status text shown in the status bar.
    *
@@ -20,6 +22,7 @@ namespace ao::uimodel
    * When a positive total duration is supplied, " (<h:mm:ss>)" is appended,
    * formatted via formatDuration. A null or non-positive duration adds nothing.
    */
-  std::string trackSelectionSummaryText(std::size_t count,
+  std::string trackSelectionSummaryText(PresentationTextCatalog const& textCatalog,
+                                        std::size_t count,
                                         std::optional<std::chrono::milliseconds> optTotalDuration = std::nullopt);
 } // namespace ao::uimodel

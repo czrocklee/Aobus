@@ -5,9 +5,11 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <chrono>
 #include <cstdint>
@@ -57,16 +59,6 @@ namespace ao::uimodel
       if (auto const* value = std::get_if<std::uint64_t>(&rawValue); value != nullptr)
       {
         return formatter(*value);
-      }
-
-      return {};
-    }
-
-    std::string readRawUint32AsUint8(rt::TrackFieldRawValue const& rawValue, std::string (*formatter)(std::uint8_t))
-    {
-      if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
-      {
-        return formatter(static_cast<std::uint8_t>(*value));
       }
 
       return {};
@@ -154,24 +146,14 @@ namespace ao::uimodel
     return std::format("{} kbps", bitrate / 1000);
   }
 
-  std::string formatChannels(std::uint8_t channels)
+  std::string formatChannels(PresentationTextCatalog const& textCatalog, std::uint8_t channels)
   {
     if (channels == 0)
     {
       return {};
     }
 
-    if (channels == 1)
-    {
-      return "Mono";
-    }
-
-    if (channels == 2)
-    {
-      return "Stereo";
-    }
-
-    return std::format("{} channels", channels);
+    return textCatalog.trackChannelText(channels);
   }
 
   std::string formatBitDepth(std::uint8_t bitDepth)
@@ -241,7 +223,9 @@ namespace ao::uimodel
     return result;
   }
 
-  std::string formatTrackFieldRawValue(rt::TrackField field, rt::TrackFieldRawValue const& rawValue)
+  std::string formatTrackFieldRawValue(PresentationTextCatalog const& textCatalog,
+                                       rt::TrackField field,
+                                       rt::TrackFieldRawValue const& rawValue)
   {
     using F = rt::TrackField;
 
@@ -281,8 +265,20 @@ namespace ao::uimodel
         return {};
 
       case F::SampleRate: return readRawUint32(rawValue, formatSampleRate);
-      case F::Channels: return readRawUint32AsUint8(rawValue, formatChannels);
-      case F::BitDepth: return readRawUint32AsUint8(rawValue, formatBitDepth);
+      case F::Channels:
+        if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
+        {
+          return formatChannels(textCatalog, static_cast<std::uint8_t>(*value));
+        }
+
+        return {};
+      case F::BitDepth:
+        if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
+        {
+          return formatBitDepth(static_cast<std::uint8_t>(*value));
+        }
+
+        return {};
       case F::Bitrate: return readRawUint32(rawValue, formatBitrate);
       case F::FileSize: return readRawUint64(rawValue, formatFileSize);
       case F::ModifiedTime: return readRawUint64(rawValue, formatTime);
@@ -293,7 +289,8 @@ namespace ao::uimodel
     return {};
   }
 
-  std::string formatTrackFieldDisplayText(rt::TrackField field,
+  std::string formatTrackFieldDisplayText(PresentationTextCatalog const& textCatalog,
+                                          rt::TrackField field,
                                           rt::TrackDetailSnapshot const& snap,
                                           std::string_view mixedText,
                                           bool showTechnicalUnknown)
@@ -310,12 +307,12 @@ namespace ao::uimodel
     {
       if (showTechnicalUnknown && def != nullptr && def->category == rt::TrackFieldCategory::Technical)
       {
-        return "Unknown";
+        return std::string{textCatalog.text(i18n::MessageId::TrackTechnicalUnknown)};
       }
 
       return {};
     }
 
-    return formatTrackFieldRawValue(field, *agg.optValue);
+    return formatTrackFieldRawValue(textCatalog, field, *agg.optValue);
   }
 } // namespace ao::uimodel

@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <functional>
 #include <optional>
@@ -34,6 +35,7 @@ namespace ao::uimodel
   public:
     TrackFilterViewModel(rt::ViewService& viewService,
                          rt::WorkspaceService& workspaceService,
+                         PresentationTextCatalog textCatalog,
                          std::function<void(TrackFilterViewState const&)> onRender);
 
     TrackFilterViewModel(TrackFilterViewModel const&) = delete;
@@ -51,6 +53,7 @@ namespace ao::uimodel
 
     rt::ViewService& _viewService;
     rt::WorkspaceService& _workspaceService;
+    PresentationTextCatalog _textCatalog;
     std::function<void(TrackFilterViewState const&)> _onRender;
 
     rt::ViewId _viewId{rt::kInvalidViewId};

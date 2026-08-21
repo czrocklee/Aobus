@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -76,12 +77,24 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackFieldFormatter - channels formatting", "[uimodel][unit][field][formatter]")
   {
-    CHECK(formatChannels(0).empty());
-    CHECK(formatChannels(1) == "Mono");
-    CHECK(formatChannels(2) == "Stereo");
-    CHECK(formatChannels(3) == "3 channels");
-    CHECK(formatChannels(6) == "6 channels");
-    CHECK(formatChannels(8) == "8 channels");
+    auto const& catalog = ao::test::englishPresentationTextCatalog();
+    CHECK(formatChannels(catalog, 0).empty());
+    CHECK(formatChannels(catalog, 1) == "Mono");
+    CHECK(formatChannels(catalog, 2) == "Stereo");
+    CHECK(formatChannels(catalog, 3) == "3 channels");
+    CHECK(formatChannels(catalog, 6) == "6 channels");
+    CHECK(formatChannels(catalog, 8) == "8 channels");
+  }
+
+  TEST_CASE("TrackFieldFormatter - lexical output follows the injected locale", "[uimodel][unit][field][localization]")
+  {
+    auto const catalog = ao::test::presentationTextCatalog("de-AT");
+    auto snap = makeTrackDetailSnapshot();
+
+    CHECK(formatChannels(catalog, 1) == "Mono");
+    CHECK(formatChannels(catalog, 2) == "Stereo");
+    CHECK(formatChannels(catalog, 6) == "6 Kanäle");
+    CHECK(formatTrackFieldDisplayText(catalog, TrackField::Codec, snap, "unused", true) == "Unbekannt");
   }
 
   TEST_CASE("TrackFieldFormatter - bit depth formatting", "[uimodel][unit][field][formatter]")
@@ -124,38 +137,50 @@ namespace ao::uimodel::test
   TEST_CASE("formatTrackFieldRawValue formats raw values by field policy", "[uimodel][unit][field][formatter]")
   {
     using Raw = TrackFieldRawValue;
+    auto const& catalog = ao::test::englishPresentationTextCatalog();
 
-    CHECK(formatTrackFieldRawValue(TrackField::Title, Raw{std::in_place_type<std::string>, "Hello"}) == "Hello");
-    CHECK(formatTrackFieldRawValue(TrackField::Title, Raw{std::monostate{}}).empty());
-    CHECK(formatTrackFieldRawValue(
-            TrackField::Year, Raw{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(2024)}) == "2024");
-    CHECK(formatTrackFieldRawValue(TrackField::Year, Raw{std::in_place_type<std::string>, "not a number"}).empty());
-    CHECK(formatTrackFieldRawValue(
-            TrackField::Duration, Raw{std::in_place_type<TrackFieldDuration>, TrackFieldDuration{225000}}) == "3:45");
-    CHECK(formatTrackFieldRawValue(
-            TrackField::SampleRate, Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(44100)}) ==
+    CHECK(formatTrackFieldRawValue(catalog, TrackField::Title, Raw{std::in_place_type<std::string>, "Hello"}) ==
+          "Hello");
+    CHECK(formatTrackFieldRawValue(catalog, TrackField::Title, Raw{std::monostate{}}).empty());
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::Year,
+                                   Raw{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(2024)}) == "2024");
+    CHECK(formatTrackFieldRawValue(catalog, TrackField::Year, Raw{std::in_place_type<std::string>, "not a number"})
+            .empty());
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::Duration,
+                                   Raw{std::in_place_type<TrackFieldDuration>, TrackFieldDuration{225000}}) == "3:45");
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::SampleRate,
+                                   Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(44100)}) ==
           "44100 Hz");
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::Channels,
+                                   Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(2)}) == "Stereo");
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::BitDepth,
+                                   Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(24)}) == "24-bit");
     CHECK(formatTrackFieldRawValue(
-            TrackField::Channels, Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(2)}) == "Stereo");
-    CHECK(formatTrackFieldRawValue(
-            TrackField::BitDepth, Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(24)}) == "24-bit");
-    CHECK(formatTrackFieldRawValue(
-            TrackField::Bitrate, Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(320000)}) ==
+            catalog, TrackField::Bitrate, Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(320000)}) ==
           "320 kbps");
-    CHECK(formatTrackFieldRawValue(
-            TrackField::FileSize, Raw{std::in_place_type<std::uint64_t>, static_cast<std::uint64_t>(1048576)}) ==
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::FileSize,
+                                   Raw{std::in_place_type<std::uint64_t>, static_cast<std::uint64_t>(1048576)}) ==
           "1.0 MB");
-    CHECK(formatTrackFieldRawValue(TrackField::Quality, Raw{std::in_place_type<std::string>, "anything"}).empty());
+    CHECK(
+      formatTrackFieldRawValue(catalog, TrackField::Quality, Raw{std::in_place_type<std::string>, "anything"}).empty());
   }
 
   TEST_CASE("formatTrackFieldDisplayText resolves aggregate display text", "[uimodel][unit][field][formatter]")
   {
+    auto const& catalog = ao::test::englishPresentationTextCatalog();
+
     SECTION("mixed aggregate returns caller-provided mixed text")
     {
       auto snap = makeTrackDetailSnapshot();
       trackFieldArrayAt(snap.fields, TrackField::Title).mixed = true;
 
-      auto const result = formatTrackFieldDisplayText(TrackField::Title, snap, "<<<mixed>>>", true);
+      auto const result = formatTrackFieldDisplayText(catalog, TrackField::Title, snap, "<<<mixed>>>", true);
 
       CHECK(result == "<<<mixed>>>");
     }
@@ -166,15 +191,15 @@ namespace ao::uimodel::test
       auto const& def = *trackFieldDefinition(TrackField::Codec);
       REQUIRE(def.category == TrackFieldCategory::Technical);
 
-      CHECK(formatTrackFieldDisplayText(TrackField::Codec, snap, kMultipleTrackValuesText, true) == "Unknown");
-      CHECK(formatTrackFieldDisplayText(TrackField::Codec, snap, kMultipleTrackValuesText, false).empty());
+      CHECK(formatTrackFieldDisplayText(catalog, TrackField::Codec, snap, "unused", true) == "Unknown");
+      CHECK(formatTrackFieldDisplayText(catalog, TrackField::Codec, snap, "unused", false).empty());
     }
 
     SECTION("unset non-technical field returns empty text")
     {
       auto snap = makeTrackDetailSnapshot();
 
-      CHECK(formatTrackFieldDisplayText(TrackField::Title, snap, kMultipleTrackValuesText, true).empty());
+      CHECK(formatTrackFieldDisplayText(catalog, TrackField::Title, snap, "unused", true).empty());
     }
 
     SECTION("populated aggregate uses raw field formatter policy")
@@ -184,9 +209,9 @@ namespace ao::uimodel::test
       trackFieldArrayAt(snap.fields, TrackField::Year).optValue = std::uint16_t{2024};
       trackFieldArrayAt(snap.fields, TrackField::Quality).optValue = std::string{"anything"};
 
-      CHECK(formatTrackFieldDisplayText(TrackField::Title, snap, kMultipleTrackValuesText, true) == "Hello");
-      CHECK(formatTrackFieldDisplayText(TrackField::Year, snap, kMultipleTrackValuesText, true) == "2024");
-      CHECK(formatTrackFieldDisplayText(TrackField::Quality, snap, kMultipleTrackValuesText, true).empty());
+      CHECK(formatTrackFieldDisplayText(catalog, TrackField::Title, snap, "unused", true) == "Hello");
+      CHECK(formatTrackFieldDisplayText(catalog, TrackField::Year, snap, "unused", true) == "2024");
+      CHECK(formatTrackFieldDisplayText(catalog, TrackField::Quality, snap, "unused", true).empty());
     }
   }
 } // namespace ao::uimodel::test

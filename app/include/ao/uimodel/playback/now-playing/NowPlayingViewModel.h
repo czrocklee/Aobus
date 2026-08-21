@@ -72,7 +72,9 @@ namespace ao::uimodel
   class NowPlayingViewModel final
   {
   public:
-    NowPlayingViewModel(rt::PlaybackService& playback, std::function<void(NowPlayingViewState const&)> onRender);
+    NowPlayingViewModel(rt::PlaybackService& playback,
+                        PresentationTextCatalog textCatalog,
+                        std::function<void(NowPlayingViewState const&)> onRender);
 
     NowPlayingViewModel(NowPlayingViewModel const&) = delete;
     NowPlayingViewModel& operator=(NowPlayingViewModel const&) = delete;

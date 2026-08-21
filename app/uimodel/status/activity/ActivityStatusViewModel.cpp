@@ -10,6 +10,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryTaskService.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
@@ -49,9 +50,13 @@ namespace ao::uimodel
     async::Subscription libraryProgressFinishedSub;
 
     Impl(rt::NotificationService& notificationService,
+         PresentationTextCatalog const& textCatalog,
          std::function<void(ActivityStatusViewState const&)> renderCallback,
          ActivityStatusViewModelOptions options)
-      : notifications{notificationService}, onRender{std::move(renderCallback)}, clock{std::move(options.clock)}
+      : notifications{notificationService}
+      , onRender{std::move(renderCallback)}
+      , clock{std::move(options.clock)}
+      , feedProjection{textCatalog}
     {
       if (!clock)
       {
@@ -154,9 +159,10 @@ namespace ao::uimodel
   };
 
   ActivityStatusViewModel::ActivityStatusViewModel(rt::NotificationService& notifications,
+                                                   PresentationTextCatalog const& textCatalog,
                                                    std::function<void(ActivityStatusViewState const&)> onRender,
                                                    ActivityStatusViewModelOptions options)
-    : _implPtr{std::make_unique<Impl>(notifications, std::move(onRender), std::move(options))}
+    : _implPtr{std::make_unique<Impl>(notifications, textCatalog, std::move(onRender), std::move(options))}
   {
   }
 

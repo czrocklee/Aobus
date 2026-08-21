@@ -6,6 +6,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -51,7 +52,7 @@ namespace ao::uimodel
 
             if (device.isDefault && device.id.empty() && result.device.empty())
             {
-              result.device = textCatalog.systemDefaultOutputDeviceLabel();
+              result.device = textCatalog.text(i18n::MessageId::SystemDefaultOutputDevice);
             }
 
             break;
@@ -76,12 +77,14 @@ namespace ao::uimodel
   } // namespace
 
   OutputDeviceViewModel::OutputDeviceViewModel(rt::PlaybackService& playback,
+                                               PresentationTextCatalog textCatalog,
                                                RenderCallback onRender,
                                                OutputDeviceIntent intent)
     : _playback{playback}
     , _commands{playback.commands()}
     , _onRender{std::move(onRender)}
     , _intent{std::move(intent)}
+    , _textCatalog{std::move(textCatalog)}
     , _lastOutput{playback.snapshot().transport.output}
   {
     _snapshotSub =
@@ -152,7 +155,7 @@ namespace ao::uimodel
 
           if (device.isDefault && device.id.empty() && deviceTitle.empty())
           {
-            deviceTitle = _textCatalog.systemDefaultOutputDeviceLabel();
+            deviceTitle = _textCatalog.text(i18n::MessageId::SystemDefaultOutputDevice);
           }
 
           bool const isActive =

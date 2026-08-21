@@ -130,6 +130,16 @@ target_link_libraries(ao_test_support_runtime
       FakeIt::FakeIt-catch
 )
 
+add_library(ao_test_support_presentation STATIC
+    unit/PresentationTextCatalogTestSupport.cpp
+)
+target_link_libraries(ao_test_support_presentation
+    PUBLIC
+      ao_test_options
+      ao_app_uimodel
+      ao_app_i18n
+)
+
 if(AOBUS_BUILD_GTK)
   add_executable(ao_gapplication_probe
       integration/linux-gtk/GApplicationReplacementProbeMain.cpp
@@ -193,6 +203,10 @@ add_executable(ao_core_test
     unit/core/ErrorTest.cpp
     unit/core/FatalTest.cpp
     unit/core/FatalProbeTest.cpp
+
+    # localization foundation tests
+    unit/i18n/CatalogPatternTest.cpp
+    unit/i18n/MessageCatalogTest.cpp
 
     # query tests
     unit/query/CompletionBaselineTest.cpp
@@ -402,7 +416,6 @@ add_executable(ao_core_test
     unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
     unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp
     unit/uimodel/library/track/TrackDisplayIndexTest.cpp
-    unit/uimodel/library/track/TrackCountFormatterTest.cpp
     unit/uimodel/library/track/TrackFilterCompleterTest.cpp
     unit/uimodel/library/track/TrackFilterResolverTest.cpp
     unit/uimodel/library/track/TrackFilterViewModelTest.cpp
@@ -594,7 +607,10 @@ target_link_libraries(ao_core_test PRIVATE
     ao_fatal_probe_support
     ao_app_desktop
     ao_app_uimodel
+    ao_app_i18n
+    ao_catalog_pattern
     ao_unicode_text
+    ao_test_support_presentation
     ao_test_support_runtime
     ao_test_options
     Catch2::Catch2

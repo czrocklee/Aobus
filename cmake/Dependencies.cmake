@@ -200,12 +200,36 @@ if(NOT Boost_FOUND)
     "'${Boost_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
 endif()
 
-find_package(ICU ${AOBUS_ICU_FIND_ARGUMENTS} QUIET COMPONENTS uc data)
+find_package(ICU ${AOBUS_ICU_FIND_ARGUMENTS} QUIET COMPONENTS i18n uc data)
 if(NOT ICU_FOUND)
   message(FATAL_ERROR
     "Aobus dependency 'icu' requires ${AOBUS_ICU_REQUESTED_VERSION}, but the active resolver "
     "could not provide an exact compatible package. Resolved version: '${ICU_VERSION}'. "
     "See doc/development/dependency-upgrade.md.")
+endif()
+
+find_program(AOBUS_ICU_GENRB_EXECUTABLE NAMES genrb REQUIRED)
+get_filename_component(AOBUS_ICU_TOOLS_DIR "${AOBUS_ICU_GENRB_EXECUTABLE}" DIRECTORY)
+find_program(AOBUS_ICU_PKGDATA_EXECUTABLE
+  NAMES pkgdata
+  HINTS "${AOBUS_ICU_TOOLS_DIR}"
+  NO_DEFAULT_PATH
+  REQUIRED)
+execute_process(
+  COMMAND "${AOBUS_ICU_GENRB_EXECUTABLE}" -V
+  RESULT_VARIABLE AOBUS_ICU_GENRB_VERSION_RESULT
+  OUTPUT_VARIABLE AOBUS_ICU_GENRB_VERSION_OUTPUT
+  ERROR_VARIABLE AOBUS_ICU_GENRB_VERSION_ERROR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_STRIP_TRAILING_WHITESPACE)
+# Some distro builds print the version and usage together and return a non-zero
+# status for -V. The reported ICU version is the stable capability to verify.
+if(NOT "${AOBUS_ICU_GENRB_VERSION_OUTPUT}${AOBUS_ICU_GENRB_VERSION_ERROR}"
+       MATCHES "ICU version ${AOBUS_ICU_REQUESTED_VERSION}([.]|[^0-9]|$)")
+  message(FATAL_ERROR
+    "Aobus requires genrb from governed ICU ${AOBUS_ICU_REQUESTED_VERSION}, but "
+    "'${AOBUS_ICU_GENRB_EXECUTABLE}' reported: "
+    "'${AOBUS_ICU_GENRB_VERSION_OUTPUT}${AOBUS_ICU_GENRB_VERSION_ERROR}'.")
 endif()
 
 find_package(spdlog ${AOBUS_SPDLOG_FIND_ARGUMENTS} CONFIG QUIET)
@@ -452,6 +476,10 @@ string(JSON AOBUS_SPDLOG_CAPABILITIES SET
 set(AOBUS_ICU_CAPABILITIES "{}")
 string(JSON AOBUS_ICU_CAPABILITIES SET
   "${AOBUS_ICU_CAPABILITIES}" unicode-17.0 true)
+string(JSON AOBUS_ICU_CAPABILITIES SET
+  "${AOBUS_ICU_CAPABILITIES}" resource-bundles true)
+string(JSON AOBUS_ICU_CAPABILITIES SET
+  "${AOBUS_ICU_CAPABILITIES}" classic-message-format true)
 
 aobus_dependency_report_entry(AOBUS_BOOST_REPORT boost
   "${AOBUS_BOOST_REQUESTED_VERSION}" "${AOBUS_BOOST_RESOLVED_VERSION}"

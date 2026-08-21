@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
@@ -9,13 +10,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <string>
 
 namespace ao::uimodel::test
 {
   TEST_CASE("ActivityStatusFeedProjection - projects compact notifications and dismissal state",
             "[uimodel][unit][status][activity]")
   {
-    auto feedProjection = ActivityStatusFeedProjection{};
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishPresentationTextCatalog()};
 
     SECTION("warning and error notifications are severity-grouped")
     {
@@ -29,6 +31,23 @@ namespace ao::uimodel::test
       CHECK(compact.kind == ActivityStatusKind::Error);
       CHECK(compact.text == "2 errors");
       CHECK(compact.hasDetails);
+    }
+
+    SECTION("severity groups use the selected locale and plural rules")
+    {
+      auto germanProjection = ActivityStatusFeedProjection{ao::test::presentationTextCatalog("de-DE")};
+      auto currentFeed = feed({entry(rt::NotificationId{30}, rt::NotificationSeverity::Warning, "Warn A"),
+                               entry(rt::NotificationId{31}, rt::NotificationSeverity::Warning, "Warn B")});
+
+      germanProjection.initialize(currentFeed);
+      CHECK(germanProjection.viewState().compact.text == "2 Warnungen");
+
+      auto pseudoProjection = ActivityStatusFeedProjection{ao::test::presentationTextCatalog("qps-ploc")};
+      pseudoProjection.initialize(currentFeed);
+      auto const& pseudoText = pseudoProjection.viewState().compact.text;
+      CHECK(pseudoText.starts_with("[!! "));
+      CHECK(pseudoText.contains('2'));
+      CHECK(pseudoText != "2 warnings");
     }
 
     SECTION("runtime-transient notification does not create a presentation-local timeout")

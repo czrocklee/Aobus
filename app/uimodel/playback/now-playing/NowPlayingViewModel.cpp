@@ -7,6 +7,7 @@
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackState.h>
@@ -36,7 +37,7 @@ namespace ao::uimodel
       return query::serialize(query::ConstantExpression{std::string{value}});
     }
 
-    std::string sourceStreamInfo(rt::QualityState const& quality)
+    std::string sourceStreamInfo(AudioQualityFormatter const& formatter, rt::QualityState const& quality)
     {
       auto const it =
         std::ranges::find_if(quality.assessments,
@@ -45,7 +46,7 @@ namespace ao::uimodel
 
       // The source node carries the track's native format, so show its true
       // resolution (valid bits) rather than a padded transport container width.
-      return (it != quality.assessments.end() && it->optFormat) ? audioFormatLabel(*it->optFormat) : std::string{};
+      return (it != quality.assessments.end() && it->optFormat) ? formatter.formatLabel(*it->optFormat) : std::string{};
     }
 
     struct SelectedDevicePresentation final
@@ -75,7 +76,7 @@ namespace ao::uimodel
 
           if (device.isDefault && device.id.empty() && name.empty())
           {
-            name = textCatalog.systemDefaultOutputDeviceLabel();
+            name = textCatalog.text(i18n::MessageId::SystemDefaultOutputDevice);
           }
 
           return {.name = std::move(name), .iconKind = textCatalog.audioBackend(backend.id).iconKind};
@@ -93,8 +94,9 @@ namespace ao::uimodel
   } // namespace
 
   NowPlayingViewModel::NowPlayingViewModel(rt::PlaybackService& playback,
+                                           PresentationTextCatalog textCatalog,
                                            std::function<void(NowPlayingViewState const&)> onRender)
-    : _playback{playback}, _onRender{std::move(onRender)}
+    : _playback{playback}, _onRender{std::move(onRender)}, _textCatalog{std::move(textCatalog)}
   {
     auto const& transport = _playback.snapshot().transport;
     _lastNowPlaying = transport.nowPlaying;
@@ -141,14 +143,17 @@ namespace ao::uimodel
 
     if (state.nowPlaying.title.empty())
     {
-      view.title = "Not Playing";
-      view.streamInfo = state.ready ? "" : "Connecting to audio engine...";
+      view.title = _textCatalog.text(i18n::MessageId::PlaybackNotPlaying);
+      view.streamInfo =
+        state.ready ? "" : std::string{_textCatalog.text(i18n::MessageId::PlaybackConnectingAudioEngine)};
       view.isActive = false;
     }
     else
     {
       view.title = state.nowPlaying.title;
-      view.artist = state.nowPlaying.artist.empty() ? "Unknown Artist" : state.nowPlaying.artist;
+      view.artist = state.nowPlaying.artist.empty()
+                      ? std::string{_textCatalog.text(i18n::MessageId::PlaybackUnknownArtist)}
+                      : state.nowPlaying.artist;
 
       if (!state.nowPlaying.artist.empty())
       {
@@ -159,10 +164,12 @@ namespace ao::uimodel
         view.combinedStatus = state.nowPlaying.title;
       }
 
-      auto const presentation = audioQualityPresentation(state.quality);
-      view.streamInfo = sourceStreamInfo(state.quality);
+      auto const& qualityFormatter = _textCatalog.audioQualityFormatter();
+      auto const presentation = qualityFormatter.presentation(state.quality);
+      view.streamInfo = sourceStreamInfo(qualityFormatter, state.quality);
 
-      auto plainTextFallback = std::string{"Audio Pipeline:\n"};
+      auto plainTextFallback = std::string{_textCatalog.text(i18n::MessageId::PlaybackAudioPipeline)};
+      plainTextFallback.append(":\n");
 
       if (!presentation.headline.empty())
       {

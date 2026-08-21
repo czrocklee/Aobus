@@ -5,44 +5,19 @@
 
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
-#include <cstddef>
 #include <expected>
-#include <format>
 #include <span>
 #include <string>
 
 namespace ao::uimodel
 {
-  namespace
-  {
-    std::string tagChangeStatusMessage(std::size_t trackCount, std::size_t addedCount, std::size_t removedCount)
-    {
-      auto message = std::string{"Tags "};
-
-      if (addedCount > 0)
-      {
-        message += std::format("added {}", addedCount);
-      }
-
-      if (addedCount > 0 && removedCount > 0)
-      {
-        message += " and ";
-      }
-
-      if (removedCount > 0)
-      {
-        message += std::format("removed {}", removedCount);
-      }
-
-      return std::format("{} for {}", message, formatTrackCount(trackCount));
-    }
-  } // namespace
-
   Result<TagEditResult> applyTagEdit(TrackAuthoringSession& session,
+                                     PresentationTextCatalog const& textCatalog,
                                      std::span<std::string const> tagsToAdd,
                                      std::span<std::string const> tagsToRemove)
   {
@@ -64,14 +39,19 @@ namespace ao::uimodel
         return TagEditResult{
           .status = replyRes->status,
           .notificationText =
-            tagChangeStatusMessage(replyRes->reply.changes.size(), tagsToAdd.size(), tagsToRemove.size()),
+            textCatalog.format(i18n::MessageId::TrackTagsChanged,
+                               {{"hasAdded", tagsToAdd.empty() ? std::string_view{"no"} : std::string_view{"yes"}},
+                                {"hasRemoved", tagsToRemove.empty() ? std::string_view{"no"} : std::string_view{"yes"}},
+                                {"addedCount", tagsToAdd.size()},
+                                {"removedCount", tagsToRemove.size()},
+                                {"trackCount", replyRes->reply.changes.size()}}),
         };
       case rt::TrackAuthoringStatus::NoOp: return TagEditResult{};
       case rt::TrackAuthoringStatus::Stale:
       case rt::TrackAuthoringStatus::Unavailable:
         return TagEditResult{
           .status = replyRes->status,
-          .notificationText = "Library changed while the tag editor was open. Reload and try again.",
+          .notificationText = std::string{textCatalog.text(i18n::MessageId::TrackTagsStale)},
         };
     }
 

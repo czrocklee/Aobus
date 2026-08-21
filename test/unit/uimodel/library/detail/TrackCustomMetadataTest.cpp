@@ -4,7 +4,6 @@
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,22 +12,27 @@
 
 namespace ao::uimodel::test
 {
+  namespace
+  {
+    constexpr auto kMixedText = "Mehrere Werte";
+  }
+
   TEST_CASE("formatTrackCustomMetadataDisplayText formats aggregate custom metadata",
             "[uimodel][unit][library][detail]")
   {
     CHECK(formatTrackCustomMetadataDisplayText(
-            rt::CustomMetadataItem{.key = "Mood", .value = {.optValue = "Bright"}}) == "Bright");
-    CHECK(formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem{.key = "Mood"}).empty());
-    CHECK(formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem{.key = "Mood", .value = {.mixed = true}}) ==
-          kMultipleTrackValuesText);
+            rt::CustomMetadataItem{.key = "Mood", .value = {.optValue = "Bright"}}, kMixedText) == "Bright");
+    CHECK(formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem{.key = "Mood"}, kMixedText).empty());
+    CHECK(formatTrackCustomMetadataDisplayText(
+            rt::CustomMetadataItem{.key = "Mood", .value = {.mixed = true}}, kMixedText) == kMixedText);
   }
 
   TEST_CASE("isProtectedTrackCustomMetadataEditText protects aggregate sentinel text",
             "[uimodel][unit][library][detail]")
   {
-    CHECK(isProtectedTrackCustomMetadataEditText(kMultipleTrackValuesText));
-    CHECK_FALSE(isProtectedTrackCustomMetadataEditText(""));
-    CHECK_FALSE(isProtectedTrackCustomMetadataEditText("edited"));
+    CHECK(isProtectedTrackCustomMetadataEditText(kMixedText, kMixedText));
+    CHECK_FALSE(isProtectedTrackCustomMetadataEditText("", kMixedText));
+    CHECK_FALSE(isProtectedTrackCustomMetadataEditText("edited", kMixedText));
   }
 
   TEST_CASE("validateCustomMetadataAddition rejects duplicate and reserved keys", "[uimodel][unit][library][detail]")

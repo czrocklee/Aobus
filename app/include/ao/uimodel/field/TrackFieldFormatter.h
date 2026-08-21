@@ -20,7 +20,8 @@ namespace ao::library
 
 namespace ao::uimodel
 {
-  inline constexpr std::string_view kMultipleTrackValuesText = "<Multiple Values>";
+  class PresentationTextCatalog;
+
   inline constexpr std::string_view kCompositeMixedTrackText = "-";
 
   std::string formatDuration(std::chrono::milliseconds duration);
@@ -29,7 +30,7 @@ namespace ao::uimodel
   std::string formatTime(std::uint64_t mtime);
   std::string formatSampleRate(std::uint32_t sampleRate);
   std::string formatBitrate(std::uint32_t bitrate);
-  std::string formatChannels(std::uint8_t channels);
+  std::string formatChannels(PresentationTextCatalog const& textCatalog, std::uint8_t channels);
   std::string formatBitDepth(std::uint8_t bitDepth);
   std::string formatCodec(AudioCodec codec);
   std::string formatDisplayTrackNumber(std::uint16_t discNumber, std::uint16_t discTotal, std::uint16_t trackNumber);
@@ -37,8 +38,11 @@ namespace ao::uimodel
                                      std::uint32_t sampleRate,
                                      std::uint16_t bitDepth,
                                      std::uint32_t bitrate);
-  std::string formatTrackFieldRawValue(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
-  std::string formatTrackFieldDisplayText(rt::TrackField field,
+  std::string formatTrackFieldRawValue(PresentationTextCatalog const& textCatalog,
+                                       rt::TrackField field,
+                                       rt::TrackFieldRawValue const& rawValue);
+  std::string formatTrackFieldDisplayText(PresentationTextCatalog const& textCatalog,
+                                          rt::TrackField field,
                                           rt::TrackDetailSnapshot const& snap,
                                           std::string_view mixedText,
                                           bool showTechnicalUnknown);

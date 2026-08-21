@@ -4,6 +4,7 @@
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include "runtime/playback/PlaybackTransport.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
@@ -50,7 +51,8 @@ namespace ao::uimodel::test
     fixture.addReadyProvider();
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto const viewModel = NowPlayingViewModel{
+      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render when idle")
     {
@@ -170,10 +172,32 @@ namespace ao::uimodel::test
     auto fixture = ApplicationPlaybackFixture{};
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const viewModel = NowPlayingViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+    auto const viewModel = NowPlayingViewModel{
+      fixture.playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
     CHECK(log.last().streamInfo == "Connecting to audio engine...");
+  }
+
+  TEST_CASE("NowPlayingViewModel - localizes shared copy without changing track metadata",
+            "[uimodel][unit][playback][localization]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
+    fixture.addReadyProvider();
+
+    auto log = ao::test::RenderLog<NowPlayingViewState>{};
+    auto const catalog = ao::test::presentationTextCatalog("de-DE");
+    auto const viewModel = NowPlayingViewModel{playback, catalog, [&log](auto const& view) { log.render(view); }};
+
+    REQUIRE(!log.empty());
+    CHECK(log.last().title == "Keine Wiedergabe");
+
+    REQUIRE(playbackTransport.play(playbackRequest(TrackId{1}, "誰か、海を。"), ListId{1}));
+    CHECK(log.last().title == "誰か、海を。");
+    CHECK(log.last().artist == "Unbekannter Interpret");
+    CHECK(log.last().audioPipeline.plainTextFallback.starts_with("Audiokette:\n"));
   }
 
   TEST_CASE("NowPlayingViewModel - presents an unnamed system-default output through the catalog",
@@ -190,7 +214,8 @@ namespace ao::uimodel::test
       });
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto const viewModel = NowPlayingViewModel{
+      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(playbackTransport.play(playbackRequest(TrackId{1}, "Song"), ListId{1}));
     REQUIRE(!log.empty());
@@ -207,7 +232,8 @@ namespace ao::uimodel::test
     fixture.addReadyProvider();
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto viewModelPtr = std::make_unique<NowPlayingViewModel>(playback, [&log](auto const& view) { log.render(view); });
+    auto viewModelPtr = std::make_unique<NowPlayingViewModel>(
+      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); });
 
     REQUIRE(!log.empty());
     log.clear();

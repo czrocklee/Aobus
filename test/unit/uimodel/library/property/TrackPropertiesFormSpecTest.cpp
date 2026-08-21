@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -29,7 +30,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackPropertiesFormSpec - projects editable metadata rows", "[uimodel][unit][library][property]")
   {
-    auto const spec = buildTrackPropertiesFormSpec();
+    auto const spec = buildTrackPropertiesFormSpec(ao::test::englishPresentationTextCatalog());
 
     CHECK(fieldsFrom(spec.metadataRows) == std::vector{rt::TrackField::Title,
                                                        rt::TrackField::Artist,
@@ -60,7 +61,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackPropertiesFormSpec - projects readonly technical property rows", "[uimodel][unit][library][property]")
   {
-    auto const spec = buildTrackPropertiesFormSpec();
+    auto const spec = buildTrackPropertiesFormSpec(ao::test::englishPresentationTextCatalog());
 
     CHECK(fieldsFrom(spec.propertyRows) == std::vector{rt::TrackField::Duration,
                                                        rt::TrackField::FilePath,
@@ -75,5 +76,14 @@ namespace ao::uimodel::test
     REQUIRE(spec.propertyRows.size() > 3U);
     CHECK(spec.propertyRows[0].label == "Duration");
     CHECK(spec.propertyRows[0].editorKind == TrackPropertiesFormEditorKind::ReadonlyText);
+  }
+
+  TEST_CASE("TrackPropertiesFormSpec - owns labels from a temporary locale catalog",
+            "[uimodel][unit][property][localization]")
+  {
+    auto const spec = buildTrackPropertiesFormSpec(ao::test::presentationTextCatalog("de-DE"));
+
+    REQUIRE_FALSE(spec.metadataRows.empty());
+    CHECK(spec.metadataRows.front().label == "Titel");
   }
 } // namespace ao::uimodel::test

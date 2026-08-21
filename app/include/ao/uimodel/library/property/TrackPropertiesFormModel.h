@@ -7,6 +7,7 @@
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <string>
 #include <vector>
@@ -33,6 +34,8 @@ namespace ao::uimodel
   class TrackPropertiesFormModel final
   {
   public:
+    explicit TrackPropertiesFormModel(PresentationTextCatalog textCatalog);
+
     void addField(rt::TrackField field, bool editable);
     void clear();
 
@@ -48,6 +51,7 @@ namespace ao::uimodel
     TrackPropertiesFormFieldState* findField(rt::TrackField field);
     TrackPropertiesFormFieldState const* findField(rt::TrackField field) const;
 
+    PresentationTextCatalog _textCatalog;
     std::vector<TrackPropertiesFormFieldState> _fields;
   };
 

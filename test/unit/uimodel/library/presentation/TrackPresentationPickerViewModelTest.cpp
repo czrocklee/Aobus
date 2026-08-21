@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackPresentation.h>
@@ -18,6 +19,16 @@
 
 namespace ao::uimodel::test
 {
+  TEST_CASE("TrackPresentationPickerViewModel - localizes shared eligibility copy", "[uimodel][unit][localization]")
+  {
+    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto const eligibility =
+      trackPresentationEligibility(textCatalog, rt::kAllTracksListId, rt::kListOrderTrackPresentationId);
+
+    CHECK_FALSE(eligibility.enabled);
+    CHECK(eligibility.disabledReason.contains("gespeicherte Liste"));
+  }
+
   TEST_CASE("TrackPresentationPickerViewModel - renders disabled picker without an active view",
             "[uimodel][unit][workflow]")
   {
@@ -27,6 +38,7 @@ namespace ao::uimodel::test
                                                      fixture.workspace,
                                                      fixture.catalog,
                                                      fixture.preferences,
+                                                     fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
     workflow.refresh();
@@ -50,6 +62,7 @@ namespace ao::uimodel::test
                                                      fixture.workspace,
                                                      fixture.catalog,
                                                      fixture.preferences,
+                                                     fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
     workflow.refresh();
@@ -75,6 +88,7 @@ namespace ao::uimodel::test
                                                      fixture.workspace,
                                                      fixture.catalog,
                                                      fixture.preferences,
+                                                     fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
     workflow.refresh();
@@ -100,6 +114,7 @@ namespace ao::uimodel::test
                                                      fixture.workspace,
                                                      fixture.catalog,
                                                      fixture.preferences,
+                                                     fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
     auto const optCommand = workflow.selectPresentation("albums");
@@ -126,6 +141,7 @@ namespace ao::uimodel::test
                                                      fixture.workspace,
                                                      fixture.catalog,
                                                      fixture.preferences,
+                                                     fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
     REQUIRE(workflow.selectPresentation("albums"));
@@ -147,6 +163,7 @@ namespace ao::uimodel::test
                                                      fixture.workspace,
                                                      fixture.catalog,
                                                      fixture.preferences,
+                                                     fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
     auto const activeViewId = fixture.workspace.snapshot().activeViewId;
     REQUIRE(fixture.workspace.closeView(activeViewId));
@@ -164,8 +181,12 @@ namespace ao::uimodel::test
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
-    auto workflow = TrackPresentationPickerViewModel{
-      fixture.viewService, fixture.workspace, fixture.catalog, fixture.preferences, [](auto const&) {}};
+    auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
+                                                     fixture.workspace,
+                                                     fixture.catalog,
+                                                     fixture.preferences,
+                                                     fixture.textCatalog,
+                                                     [](auto const&) {}};
 
     auto const optCommand = workflow.selectPresentation("not-a-presentation");
 
@@ -183,6 +204,7 @@ namespace ao::uimodel::test
                                                      fixture.workspace,
                                                      fixture.catalog,
                                                      fixture.preferences,
+                                                     fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
     auto const activeViewId = fixture.workspace.snapshot().activeViewId;
     auto const* const albums = rt::builtinTrackPresentationPreset("albums");

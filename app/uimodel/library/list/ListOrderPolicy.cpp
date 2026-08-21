@@ -5,10 +5,12 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -19,43 +21,44 @@
 
 namespace ao::uimodel
 {
-  ListOrderCapabilityState describeListOrderCapabilities(ListOrderCapabilityInput const& input)
+  ListOrderCapabilityState describeListOrderCapabilities(PresentationTextCatalog const& textCatalog,
+                                                         ListOrderCapabilityInput const& input)
   {
     auto state = ListOrderCapabilityState{};
 
     if (rt::isVirtualListId(input.listId))
     {
-      state.disabledReason = "Manual ordering is available for saved Lists only.";
+      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderSavedListsOnly);
       return state;
     }
 
     if (input.authoring.state == rt::LibraryAuthoringState::Maintenance)
     {
-      state.disabledReason = "Library is busy. Manual ordering will be available when maintenance finishes.";
+      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderLibraryBusy);
       return state;
     }
 
     if (input.authoring.state != rt::LibraryAuthoringState::Available)
     {
-      state.disabledReason = "Library authoring is unavailable.";
+      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderAuthoringUnavailable);
       return state;
     }
 
     if (!input.sourceLive)
     {
-      state.disabledReason = "This List is no longer available.";
+      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderListUnavailable);
       return state;
     }
 
     if (input.sourceHasError)
     {
-      state.disabledReason = "Fix the List or quick-filter expression before changing its order.";
+      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderFixFilter);
       return state;
     }
 
     if (input.presentation.groupBy != rt::TrackGroupKey::None || !input.presentation.sortBy.empty())
     {
-      state.disabledReason = "Choose Manual Order or another flat unsorted presentation to rearrange tracks.";
+      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderChooseFlatPresentation);
       return state;
     }
 
@@ -71,8 +74,7 @@ namespace ao::uimodel
     }
     else
     {
-      state.disabledReason =
-        "Clear the quick filter to drag or move relatively; moving to the top or bottom is still available.";
+      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderClearQuickFilter);
     }
 
     return state;

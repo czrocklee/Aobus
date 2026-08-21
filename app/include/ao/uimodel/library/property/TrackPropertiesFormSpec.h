@@ -6,11 +6,13 @@
 #include <ao/rt/TrackField.h>
 
 #include <cstdint>
-#include <string_view>
+#include <string>
 #include <vector>
 
 namespace ao::uimodel
 {
+  class PresentationTextCatalog;
+
   enum class TrackPropertiesFormEditorKind : std::uint8_t
   {
     Text,
@@ -21,7 +23,7 @@ namespace ao::uimodel
   struct TrackPropertiesFormRow final
   {
     rt::TrackField field = rt::TrackField::Title;
-    std::string_view label;
+    std::string label;
     TrackPropertiesFormEditorKind editorKind = TrackPropertiesFormEditorKind::Text;
 
     bool operator==(TrackPropertiesFormRow const&) const = default;
@@ -33,5 +35,5 @@ namespace ao::uimodel
     std::vector<TrackPropertiesFormRow> propertyRows;
   };
 
-  TrackPropertiesFormSpec buildTrackPropertiesFormSpec();
+  TrackPropertiesFormSpec buildTrackPropertiesFormSpec(PresentationTextCatalog const& textCatalog);
 } // namespace ao::uimodel

@@ -4,6 +4,7 @@
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include "runtime/playback/PlaybackTransport.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
@@ -24,7 +25,8 @@ namespace ao::uimodel::test
     auto& playbackTransport = fixture.playbackTransport;
 
     auto log = ao::test::RenderLog<VolumeViewState>{};
-    auto viewModel = VolumeViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto viewModel = VolumeViewModel{
+      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render")
     {
@@ -104,11 +106,28 @@ namespace ao::uimodel::test
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<VolumeViewState>{};
-    auto const viewModel = VolumeViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+    auto const viewModel = VolumeViewModel{
+      fixture.playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
     REQUIRE(log.states.size() == 1);
     fixture.commands().setShuffleMode(ShuffleMode::On);
 
     CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(log.states.size() == 1);
+  }
+
+  TEST_CASE("VolumeViewModel - formats volume state in the selected locale", "[uimodel][unit][playback]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto catalog = ao::test::presentationTextCatalog("de-DE");
+    auto log = ao::test::RenderLog<VolumeViewState>{};
+    auto viewModel = VolumeViewModel{fixture.playback, catalog, [&log](auto const& view) { log.render(view); }};
+
+    addReadyAudioProvider(fixture.playbackTransport);
+    viewModel.handleVolumeChanged(0.5F);
+    REQUIRE(!log.empty());
+    CHECK(log.last().tooltip == "Lautstärke: 50%");
+
+    viewModel.handleMutedChanged(true);
+    CHECK(log.last().tooltip == "Lautstärke: 50% (Stumm)");
   }
 } // namespace ao::uimodel::test

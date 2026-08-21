@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
@@ -15,6 +16,7 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -39,21 +41,22 @@ namespace ao::uimodel
          rt::ViewId const viewIdValue,
          rt::BoundListOrder orderValue,
          ListOrderCapabilityState capabilitiesValue,
-         std::shared_ptr<rt::TrackListProjection> projectionValuePtr)
+         std::shared_ptr<rt::TrackListProjection> projectionValuePtr,
+         PresentationTextCatalog textCatalogValue)
       : library{libraryValue}
       , views{viewsValue}
       , viewId{viewIdValue}
       , order{std::move(orderValue)}
       , capabilities{std::move(capabilitiesValue)}
       , projectionPtr{std::move(projectionValuePtr)}
+      , textCatalog{std::move(textCatalogValue)}
     {
       availabilitySubscription = library.onAuthoringAvailabilityChanged(
         [this](rt::LibraryAuthoringAvailability const& availability)
         {
           if (availability.state == rt::LibraryAuthoringState::Maintenance)
           {
-            capabilities.disabledReason =
-              "Library is busy. Manual ordering will be available when maintenance finishes.";
+            capabilities.disabledReason = textCatalog.text(i18n::MessageId::ListOrderLibraryBusy);
           }
 
           if (availability.state != rt::LibraryAuthoringState::Available ||
@@ -117,7 +120,7 @@ namespace ao::uimodel
 
       if (capabilities.disabledReason.empty())
       {
-        capabilities.disabledReason = "The List changed. Start the order action again.";
+        capabilities.disabledReason = textCatalog.text(i18n::MessageId::ListOrderChanged);
       }
 
       invalidated.emit();
@@ -220,6 +223,7 @@ namespace ao::uimodel
     rt::BoundListOrder order;
     ListOrderCapabilityState capabilities;
     std::shared_ptr<rt::TrackListProjection> projectionPtr;
+    PresentationTextCatalog textCatalog;
     bool current = true;
     bool submitting = false;
     bool projectionEventsArmed = false;
@@ -231,9 +235,11 @@ namespace ao::uimodel
     mutable async::Signal<> invalidated;
   };
 
-  Result<std::unique_ptr<ListOrderAuthoringSession>> ListOrderAuthoringSession::begin(rt::Library& library,
-                                                                                      rt::ViewService& views,
-                                                                                      rt::ViewId const viewId)
+  Result<std::unique_ptr<ListOrderAuthoringSession>> ListOrderAuthoringSession::begin(
+    rt::Library& library,
+    rt::ViewService& views,
+    rt::ViewId const viewId,
+    PresentationTextCatalog const& textCatalog)
   {
     auto stateRes = views.findTrackListState(viewId);
 
@@ -249,14 +255,15 @@ namespace ao::uimodel
       return std::unexpected{sourceStateRes.error()};
     }
 
-    auto capabilities = describeListOrderCapabilities(ListOrderCapabilityInput{
-      .listId = stateRes->listId,
-      .presentation = stateRes->presentation,
-      .quickFilterExpression = stateRes->filterExpression,
-      .sourceLive = *sourceStateRes == rt::TrackSourceState::Live,
-      .sourceHasError = stateRes->optFilterError.has_value(),
-      .authoring = library.authoringAvailability(),
-    });
+    auto capabilities = describeListOrderCapabilities(textCatalog,
+                                                      ListOrderCapabilityInput{
+                                                        .listId = stateRes->listId,
+                                                        .presentation = stateRes->presentation,
+                                                        .quickFilterExpression = stateRes->filterExpression,
+                                                        .sourceLive = *sourceStateRes == rt::TrackSourceState::Live,
+                                                        .sourceHasError = stateRes->optFilterError.has_value(),
+                                                        .authoring = library.authoringAvailability(),
+                                                      });
 
     if (!capabilities.canAuthorOrder)
     {
@@ -285,7 +292,7 @@ namespace ao::uimodel
     }
 
     return std::unique_ptr<ListOrderAuthoringSession>{new ListOrderAuthoringSession{std::make_unique<Impl>(
-      library, views, viewId, std::move(*orderRes), std::move(capabilities), std::move(*projectionRes))}};
+      library, views, viewId, std::move(*orderRes), std::move(capabilities), std::move(*projectionRes), textCatalog)}};
   }
 
   ListOrderAuthoringSession::ListOrderAuthoringSession(std::unique_ptr<Impl> implPtr)

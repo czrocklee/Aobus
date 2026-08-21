@@ -3,22 +3,26 @@
 
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::uimodel
 {
-  TrackPresentationCatalog::TrackPresentationCatalog(rt::WorkspaceService& workspace)
-    : _workspace{workspace}
+  TrackPresentationCatalog::TrackPresentationCatalog(rt::WorkspaceService& workspace,
+                                                     PresentationTextCatalog textCatalog)
+    : _workspace{workspace}, _textCatalog{std::move(textCatalog)}
   {
     _customPresetsSub = _workspace.onChanged(
       [this](rt::WorkspaceChanged const& changed)
@@ -117,7 +121,7 @@ namespace ao::uimodel
     });
     items.push_back(TrackPresentationMenuItem{
       .type = TrackPresentationMenuItemType::CreateCustomView,
-      .label = std::string{_textCatalog.createCustomTrackPresentationLabel()},
+      .label = std::string{_textCatalog.text(i18n::MessageId::CreateCustomTrackPresentation)},
     });
 
     return items;

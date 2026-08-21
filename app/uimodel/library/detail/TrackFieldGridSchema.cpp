@@ -102,11 +102,6 @@ namespace ao::uimodel
       summary += artistText;
     }
 
-    if (summary.empty())
-    {
-      return "Metadata";
-    }
-
     return summary;
   }
 
@@ -118,11 +113,6 @@ namespace ao::uimodel
     appendHeaderPart(summary, codecText);
     appendHeaderPart(summary, sampleRateText);
     appendHeaderPart(summary, bitDepthText);
-
-    if (summary.empty())
-    {
-      return "Audio Properties";
-    }
 
     return summary;
   }

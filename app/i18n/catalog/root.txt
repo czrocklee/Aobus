@@ -1,0 +1,801 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+root:table {
+  messages:table {
+    pilot_library_title { "Music library" }
+    pilot_greeting { "Welcome, {name}" }
+    pilot_copy_summary { "Copied {count} tracks to {destination}" }
+    pilot_track_count { "{count, plural, one {# track} other {# tracks}}" }
+    pilot_playback_state { "{state, select, playing {Playing} paused {Paused} other {Stopped}}" }
+    pilot_regional_fallback { "English regional fallback" }
+    pilot_english_fallback { "English message fallback" }
+    pilot_pseudo_probe { "Open {application} music library" }
+    track_field_title { "Title" }
+    track_field_artist { "Artist" }
+    track_field_album { "Album" }
+    track_field_album_artist { "Album Artist" }
+    track_field_genre { "Genre" }
+    track_field_composer { "Composer" }
+    track_field_conductor { "Conductor" }
+    track_field_ensemble { "Ensemble" }
+    track_field_work { "Work" }
+    track_field_movement { "Movement" }
+    track_field_soloist { "Soloist" }
+    track_field_year { "Year" }
+    track_field_disc_number { "Disc" }
+    track_field_disc_total { "Total Discs" }
+    track_field_track_number { "Track" }
+    track_field_track_total { "Total Tracks" }
+    track_field_movement_number { "Movement No." }
+    track_field_movement_total { "Total Movements" }
+    track_field_duration { "Duration" }
+    track_field_tags { "Tags" }
+    track_field_file_path { "File Path" }
+    track_field_codec { "Codec" }
+    track_field_sample_rate { "Sample Rate" }
+    track_field_channels { "Channels" }
+    track_field_bit_depth { "Bit Depth" }
+    track_field_bitrate { "Bitrate" }
+    track_field_file_size { "File Size" }
+    track_field_modified_time { "Modified" }
+    track_field_display_track_number { "Track #" }
+    track_field_technical_summary { "Technical" }
+    track_field_quality { "Quality" }
+    track_group_none { "None" }
+    missing_track_artist { "Unknown Artist" }
+    missing_track_album { "Unknown Album" }
+    missing_track_year { "Unknown Year" }
+    missing_track_genre { "Unknown Genre" }
+    missing_track_composer { "Unknown Composer" }
+    missing_track_conductor { "Unknown Conductor" }
+    missing_track_ensemble { "Unknown Ensemble" }
+    missing_track_work { "Unknown Work" }
+    track_presentation_library { "Library" }
+    track_presentation_description_library { "All tracks in album-artist and album order." }
+    track_presentation_list_order { "Manual Order" }
+    track_presentation_description_list_order { "Arrange tracks in your own order." }
+    track_presentation_songs { "Songs" }
+    track_presentation_description_songs { "Flat list of every track ordered by title." }
+    track_presentation_albums { "Albums" }
+    track_presentation_description_albums { "Grouped by album with track-oriented columns." }
+    track_presentation_artists { "Artists" }
+    track_presentation_description_artists { "Grouped by album artist with discography ordering." }
+    track_presentation_performers { "Performers" }
+    track_presentation_description_performers { "Grouped by track artist, including featured guests." }
+    track_presentation_genres { "Genres" }
+    track_presentation_description_genres { "Grouped by genre." }
+    track_presentation_years { "Years" }
+    track_presentation_description_years { "Grouped by year." }
+    track_presentation_classical_composers { "Classical: Composers" }
+    track_presentation_description_classical_composers { "Grouped by composer with work-oriented columns." }
+    track_presentation_classical_conductors { "Classical: Conductors" }
+    track_presentation_description_classical_conductors { "Grouped by conductor with work and ensemble columns." }
+    track_presentation_classical_works { "Classical: Works" }
+    track_presentation_description_classical_works { "Grouped by work with composer-oriented columns." }
+    track_presentation_tagging { "Tagging" }
+    track_presentation_description_tagging { "Flat list with raw disc/track, genre, year, and tags for curation." }
+    track_presentation_technical { "Technical" }
+    track_presentation_description_technical { "Flat list of codec, bitrate, size, and path for file inspection." }
+    create_custom_track_presentation { "Create Custom View..." }
+    track_presentation_picker_label { "Presentation" }
+    track_presentation_all_tracks_manual_order_unavailable { "All Tracks has no saved order. Create a saved List to arrange the full library manually." }
+    audio_backend_pipewire_description { "Modern Linux audio server with low latency" }
+    audio_backend_alsa_description { "Advanced Linux Sound Architecture (Direct Hardware Access)" }
+    audio_backend_wasapi_description { "Windows Audio Session API" }
+    audio_backend_wasapi_output_fallback { "WASAPI render endpoint" }
+    audio_profile_shared { "Shared Mode" }
+    audio_profile_shared_description { "System-level mixing with other applications" }
+    audio_profile_exclusive { "Exclusive Mode" }
+    audio_profile_exclusive_description { "Direct access to the hardware device" }
+    system_default_output_device { "System Default" }
+    completion_field { "field" }
+    completion_alias { "alias" }
+    completion_operator { "operator" }
+    completion_logical_operator { "logical operator" }
+    notification_unknown_error { "unknown error" }
+    notification_track_label { "track {id}" }
+    notification_playback_subject { "playback" }
+    notification_track_open_failed { "Could not play {track}: {reason}" }
+    notification_decode_failed { "Playback failed for {track}: {reason}" }
+    notification_route_activation_failed { "Could not start playback: {reason}" }
+    notification_device_lost { "Playback device failed: {reason}" }
+    notification_sequence_finished { "Playback sequence finished" }
+    notification_tracks_skipped { "{count, plural, one {Skipped # unplayable track} other {Skipped # unplayable tracks}}" }
+    notification_stopped_after_failures { "Playback stopped after {count} unplayable tracks" }
+    notification_stopped_for_track { "{hasSubject, select, yes {{hasDetail, select, yes {Playback stopped for {subject}: {detail}} other {Playback stopped for {subject}}}} other {{hasDetail, select, yes {Playback stopped: {detail}} other {Playback stopped}}}}" }
+    notification_fallback { "Notification" }
+    notification_grouped_info { "{count, plural, one {# notification} other {# notifications}}" }
+    notification_grouped_warning { "{count, plural, one {# warning} other {# warnings}}" }
+    notification_grouped_error { "{count, plural, one {# error} other {# errors}}" }
+    library_task_scanning { "Scanning" }
+    library_task_updating { "Updating" }
+    library_task_fingerprinting { "Fingerprinting" }
+    library_task_indexing_audio_identity { "Indexing audio identity" }
+    library_task_progress_detail { "{hasSubject, select, yes {{activity}: {subject}} other {{activity}}}" }
+    library_task_scanning_compact { "Scanning library" }
+    library_task_updating_compact { "Updating library" }
+    library_scan_up_to_date { "Library is up to date" }
+    library_scan_complete { "Library scan complete" }
+    library_scan_relinked { "{count, plural, one {Relinked # moved file} other {Relinked # moved files}}" }
+    library_scan_missing { "{count, plural, one {# missing file needs review} other {# missing files need review}}" }
+    library_scan_changes_combined { "{relinked}; {missing}" }
+    library_scan_completed_with_errors { "{hasChanges, select, yes {Scan completed with errors; {changes}} other {Scan completed with errors}}" }
+    library_scan_unreadable { "Library scan found {count, plural, one {# unreadable file} other {# unreadable files}} and no usable changes" }
+    library_scan_failed { "{hasError, select, yes {Scan failed: {error}} other {Scan failed}}" }
+    library_all_tracks { "All Tracks" }
+    library_unnamed_list { "<Unnamed List>" }
+    library_audio_identity_indexing_failed { "Audio identity indexing failed" }
+    library_audio_identity_indexing_completed_with_errors { "Audio identity indexing completed with errors" }
+    library_audio_identity_indexing_complete { "Audio identity indexing complete" }
+    library_ready_indexing_audio_identity { "Library ready; indexing audio identity in background" }
+    library_export_failed { "Export failed: {error}" }
+    library_exported { "Library exported successfully" }
+    library_import_failed { "Import failed: {error}" }
+    library_import_confirmation_unavailable { "Import failed: Confirmation is unavailable" }
+    library_imported { "Library imported successfully" }
+    track_filter_error { "Filter error: {diagnostic}" }
+    track_count { "{count, plural, one {# track} other {# tracks}}" }
+    track_selection_summary { "{count, plural, one {# item selected} other {# items selected}}{hasDuration, select, yes { ({duration})} other {}}" }
+    smart_list_membership_direct { "Direct membership editing via {expression}" }
+    smart_list_membership_computed { "Computed membership — edit tags or the expression" }
+    smart_list_expression_none { "(none)" }
+    smart_list_no_tracks { "{source, select, library {No tracks in library} other {No tracks in source}}" }
+    smart_list_showing_source { "{source, select, library {Showing all {count, plural, one {# track} other {# tracks}}} other {Showing all {count, plural, one {# track} other {# tracks}} from source}}" }
+    smart_list_invalid_filter { "Invalid filter" }
+    smart_list_no_matches { "No matches" }
+    smart_list_showing_all_matches { "Showing all {count, plural, one {# match} other {# matches}}" }
+    smart_list_showing_first_matches { "Showing {visible} of {count} matches" }
+    smart_list_untitled_track { "(untitled)" }
+    list_order_saved_lists_only { "Manual ordering is available for saved Lists only." }
+    list_order_library_busy { "Library is busy. Manual ordering will be available when maintenance finishes." }
+    list_order_authoring_unavailable { "Library authoring is unavailable." }
+    list_order_list_unavailable { "This List is no longer available." }
+    list_order_fix_filter { "Fix the List or quick-filter expression before changing its order." }
+    list_order_choose_flat_presentation { "Choose Manual Order or another flat unsorted presentation to rearrange tracks." }
+    list_order_clear_quick_filter { "Clear the quick filter to drag or move relatively; moving to the top or bottom is still available." }
+    list_order_changed { "The List changed. Start the order action again." }
+    list_order_unchanged { "Order unchanged." }
+    list_order_editing_unavailable { "Library editing is currently unavailable." }
+    list_order_moved { "Moved {count, plural, one {# track} other {# tracks}} in Manual Order." }
+    list_order_reset { "Reset Manual Order and forgot {count, plural, one {# saved position} other {# saved positions}}." }
+    list_order_forgot_hidden { "Forgot {count, plural, one {# hidden saved position} other {# hidden saved positions}}." }
+    list_membership_add_stale { "The library changed before tracks could be added. Try again." }
+    list_membership_add_unavailable { "Library is busy. Tracks were not added." }
+    list_membership_add_noop { "{list} already has {tag} on the selected tracks." }
+    list_membership_added { "Added {tag} to {count, plural, one {# track} other {# tracks}} in {list}." }
+    list_membership_remove_stale { "The library changed before tracks could be removed. Try again." }
+    list_membership_remove_unavailable { "Library is busy. Tracks were not removed." }
+    list_membership_remove_noop { "No {tag} membership or saved position remained in {list}." }
+    list_membership_removed_without_position { "Removed {tag} from {count, plural, one {# track} other {# tracks}} and confirmed no saved position remains in {list}." }
+    list_membership_removed_with_positions { "Removed {tag} from {trackCount, plural, one {# track} other {# tracks}} and forgot {positionCount, plural, one {# saved position} other {# saved positions}} in {list}." }
+    track_channel_mono { "Mono" }
+    track_channel_stereo { "Stereo" }
+    track_channel_count { "{count, plural, one {# channel} other {# channels}}" }
+    track_technical_unknown { "Unknown" }
+    playback_not_playing { "Not Playing" }
+    playback_connecting_audio_engine { "Connecting to audio engine..." }
+    playback_unknown_artist { "Unknown Artist" }
+    playback_audio_pipeline { "Audio Pipeline" }
+    audio_node_source { "[Source]" }
+    audio_node_decoder { "[Decoder]" }
+    audio_node_engine { "[Engine]" }
+    audio_node_stream { "[Stream]" }
+    audio_node_filter { "[Filter]" }
+    audio_node_device { "[Device]" }
+    audio_node_other_source { "[Other Source]" }
+    audio_node_unknown { "[Unknown]" }
+    audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
+    audio_channels_compact { "{count} ch" }
+    audio_finding_lossy_source { "Lossy source" }
+    audio_finding_software_volume_attenuation { "{hasGain, select, yes {Software volume attenuation: {gain}} other {Software volume attenuation}}" }
+    audio_finding_software_amplification { "{hasGain, select, yes {Software amplification: {gain} gain (clipping risk)} other {Software amplification (clipping risk)}}" }
+    audio_finding_hardware_volume_modification { "Hardware volume control" }
+    audio_finding_unclassified_volume_modification { "Unclassified volume change" }
+    audio_finding_muted { "Muted" }
+    audio_finding_resampling { "{hasFormats, select, yes {Resampling: {fromRate}Hz → {toRate}Hz} other {Resampling}}" }
+    audio_finding_channel_mapping { "{hasFormats, select, yes {Channels: {fromChannels}ch → {toChannels}ch} other {Channel mapping}}" }
+    audio_finding_lossless_padding { "Bit-transparent integer padding" }
+    audio_finding_lossless_float { "Bit-transparent float mapping" }
+    audio_finding_lossless_round_trip { "Bit-transparent round trip (float engine)" }
+    audio_finding_truncation { "{kind, select, floatToInteger {Float → integer quantization: {fromPrecision} → {toPrecision}} integerToFloat {Integer → float quantization: {fromPrecision} → {toPrecision}} precision {Precision truncated: {fromPrecision} → {toPrecision}} other {Precision truncated}}" }
+    audio_finding_mixed_sources { "{hasApps, select, yes {Mixed with {apps}} other {Mixed sources}}" }
+    audio_quality_bit_perfect_playback { "Bit-perfect playback" }
+    audio_quality_signal_preserved { "Signal preserved" }
+    audio_quality_pipeline_intervention { "Pipeline intervention" }
+    audio_quality_signal_clipping_detected { "Signal clipping detected" }
+    audio_quality_unknown_pipeline { "Unknown pipeline" }
+    audio_quality_clipping_risk { "Clipping risk" }
+    audio_quality_partially_verified_path { "Partially verified path" }
+    audio_quality_clean_lossy_delivery { "Clean lossy delivery" }
+    audio_quality_clean_delivery { "Clean delivery" }
+    playback_control_play { "Play" }
+    playback_control_pause { "Pause" }
+    playback_control_stop { "Stop" }
+    playback_control_next_track { "Next Track" }
+    playback_control_previous_track { "Previous Track" }
+    playback_control_shuffle { "Shuffle" }
+    playback_control_repeat { "Repeat" }
+    playback_action_play_pause { "Play/Pause" }
+    playback_action_next { "Next" }
+    playback_action_previous { "Previous" }
+    playback_action_toggle_shuffle { "Toggle Shuffle" }
+    playback_action_cycle_repeat { "Cycle Repeat" }
+    playback_volume_tooltip { "Volume: {percent}%{state, select, muted { (Muted)} hardware { (Hardware)} other {}}" }
+    gtk_shell_menu_file { "File" }
+    gtk_shell_open_library { "Open Library..." }
+    gtk_shell_scan_library { "Scan Library" }
+    gtk_shell_import_library_data { "Import Library Data..." }
+    gtk_shell_export_library_data { "Export Library Data..." }
+    gtk_shell_quit { "Quit" }
+    gtk_shell_menu_edit { "Edit" }
+    gtk_shell_preferences { "Preferences..." }
+    gtk_shell_menu_view { "View" }
+    gtk_shell_edit_layout { "Edit Layout..." }
+    gtk_shell_save_panel_sizes_as_layout_defaults { "Save Current Panel Sizes as Layout Defaults" }
+    gtk_shell_reset_runtime_layout_state { "Reset Runtime Layout State" }
+    gtk_shell_menu_help { "Help" }
+    gtk_shell_about { "About" }
+    gtk_shell_application_menu { "Application menu" }
+    gtk_playback_show_playing_list { "Click to show playing list" }
+    gtk_playback_toggle_mute { "Toggle Mute" }
+    gtk_playback_show_current_album { "Show current album" }
+    gtk_playback_now_playing_cover_art { "Now playing cover art" }
+    gtk_library_quick_filter_placeholder { "Search songs, artists, albums, tags..." }
+    gtk_library_clear_filter { "Clear filter" }
+    gtk_library_create_list_from_filter { "Create List from current filter" }
+    gtk_list_new { "New List..." }
+    gtk_list_new_playlist { "New Playlist..." }
+    gtk_list_edit { "Edit List..." }
+    gtk_list_delete { "Delete List" }
+    gtk_list_delete_subtree { "Delete List and Descendants..." }
+    gtk_smart_list_new_title { "New List" }
+    gtk_smart_list_edit_title { "Edit List" }
+    gtk_smart_list_new_playlist_title { "New Playlist" }
+    gtk_common_cancel { "Cancel" }
+    gtk_common_create { "Create" }
+    gtk_common_save { "Save" }
+    gtk_common_close { "Close" }
+    gtk_smart_list_name_placeholder { "List name" }
+    gtk_smart_list_name { "Name" }
+    gtk_smart_list_description_placeholder { "Optional description" }
+    gtk_smart_list_description { "Description" }
+    gtk_smart_list_membership_tag_placeholder { "Visible tag used for membership" }
+    gtk_smart_list_membership_tag { "Membership Tag" }
+    gtk_smart_list_inherited_filter { "Inherited Filter" }
+    gtk_smart_list_filter_expression_placeholder { "Filter expression (type $, @, #, or %)" }
+    gtk_smart_list_local_filter { "Local Filter" }
+    gtk_smart_list_effective_filter { "Effective Filter" }
+    gtk_smart_list_membership { "Membership" }
+    gtk_smart_list_auto_presentation { "Auto" }
+    gtk_smart_list_presentation { "Presentation" }
+    gtk_smart_list_preview { "Preview" }
+    gtk_smart_list_waiting_for_filter { "Waiting for filter..." }
+    gtk_smart_list_track { "Track" }
+    gtk_smart_list_invalid_source { "(invalid source)" }
+    gtk_smart_list_choose_membership_tag { "Choose a visible tag for Playlist membership" }
+    gtk_library_open_music_library { "Open Music Library" }
+    gtk_library_select_export_mode { "Select Export Mode" }
+    gtk_library_choose_backup_contents { "Choose what to include in the backup:" }
+    gtk_library_export_mode_delta { "Delta (Sync user edits, Tags, Lists)" }
+    gtk_library_export_mode_metadata { "Metadata (Curated text + Cover Art, no technical stats)" }
+    gtk_library_export_mode_full { "Full (Disaster Recovery: Everything)" }
+    gtk_library_export_mode_list_only { "List Only (Sync playlists without touching tracks)" }
+    gtk_library_include { "Include" }
+    gtk_library_next { "Next" }
+    gtk_library_export_yaml { "Export Library to YAML" }
+    gtk_library_yaml_files { "YAML files" }
+    gtk_library_import_yaml { "Import Library from YAML" }
+    gtk_library_confirm_restore { "Confirm Library Restore" }
+    gtk_library_restore_library { "Restore Library" }
+    gtk_library_restore_lists { "Restore Lists" }
+    gtk_library_restore_scope_library { "library tracks and lists" }
+    gtk_library_restore_scope_lists { "lists" }
+    gtk_library_file_selection_failed { "File Selection Failed" }
+    gtk_library_could_not_select_music_folder { "Could not select a music library folder" }
+    gtk_library_could_not_select_export_file { "Could not select an export file" }
+    gtk_library_could_not_select_backup { "Could not select a library backup" }
+    gtk_list_delete_question_title { "Delete List?" }
+    gtk_list_delete_subtree_title { "Delete List and Descendants?" }
+    gtk_list_delete_action { "Delete" }
+    gtk_list_delete_all_action { "Delete All" }
+    gtk_list_unable_to_delete_title { "Unable to Delete List" }
+    gtk_list_delete_question { "Delete \"{name}\"?\n\nThe List will be removed. Music files will be kept." }
+    gtk_list_delete_subtree_question { "Delete {count, plural, one {# List} other {# Lists}} in this derived subtree?\n\n{entries}\nTags used by nested Playlists are kept.\nMusic files will be kept." }
+    gtk_list_remove_tag { "Also remove {tag} from {count, plural, one {# track} other {# tracks}}" }
+    gtk_list_tag_references { "{tag} is also referenced by: {references}. Removing it may change those Lists." }
+    gtk_library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; {listsCreated} lists created, {listsDeleted} deleted; {dangling} dangling references ignored.\n\nContinue only if this matches the selected backup." }
+    gtk_library_file_selection_error { "{operation}: {message}" }
+    gtk_list_other_computed_membership { "Other Lists have computed membership; edit their expression or track tags instead." }
+    gtk_list_no_editable_playlists { "No directly editable Playlists" }
+    gtk_list_create_playlist { "Create a Playlist..." }
+    gtk_list_manage_lists { "Manage Lists..." }
+    gtk_list_add_to_playlist { "Add to Playlist" }
+    gtk_list_remove_from_current { "Remove from {name} ({tag})" }
+    gtk_list_remove_computed_unavailable { "Remove from this List is unavailable because its membership is computed." }
+    gtk_list_move_up { "Move Up" }
+    gtk_list_move_down { "Move Down" }
+    gtk_list_move_to_top { "Move to Top" }
+    gtk_list_move_to_bottom { "Move to Bottom" }
+    gtk_list_reset_order { "Reset Order" }
+    gtk_list_forget_hidden_positions { "Forget Hidden Positions" }
+    gtk_list_manual_order { "Manual Order" }
+    gtk_list_select_tracks_for_order { "Select at least one track to change Manual Order." }
+    gtk_list_move_up_action { "Move Up in Manual Order" }
+    gtk_list_move_down_action { "Move Down in Manual Order" }
+    gtk_list_move_to_top_action { "Move to Top of Manual Order" }
+    gtk_list_move_to_bottom_action { "Move to Bottom of Manual Order" }
+    gtk_list_reset_order_action { "Reset Manual Order" }
+    gtk_preferences_title { "Preferences" }
+    gtk_preferences_page_general { "General" }
+    gtk_preferences_page_appearance { "Appearance" }
+    gtk_preferences_page_playback_output { "Playback/Output" }
+    gtk_preferences_page_layout { "Layout" }
+    gtk_preferences_page_keyboard { "Keyboard" }
+    gtk_preferences_theme { "Theme" }
+    gtk_preferences_theme_classic { "Classic" }
+    gtk_preferences_theme_modern { "Modern" }
+    gtk_preferences_output_device { "Output device" }
+    gtk_preferences_choose_output_device { "Choose Output Device..." }
+    gtk_preferences_output_unavailable { "Unavailable" }
+    gtk_preferences_default_layout_preset { "Default preset" }
+    gtk_preferences_layout_preset_classic { "Classic" }
+    gtk_preferences_layout_preset_modern { "Modern" }
+    gtk_preferences_actions { "Actions" }
+    gtk_shortcut_title { "Customize keyboard shortcuts" }
+    gtk_shortcut_reset_all { "Reset All" }
+    gtk_shortcut_reset_all_tooltip { "Reset every shortcut to its default" }
+    gtk_shortcut_other_category { "Other" }
+    gtk_shortcut_conflict_title { "Reassign shortcut?" }
+    gtk_shortcut_conflict_message { "{chord} is already assigned to \"{owner}\". Reassign it to this action?" }
+    gtk_shortcut_reassign { "Reassign" }
+    gtk_shortcut_conflicts { "Conflicting shortcuts: {chords}" }
+    gtk_shortcut_unassigned { "Unassigned" }
+    gtk_shortcut_remove { "Remove {chord}" }
+    gtk_shortcut_add { "Add…" }
+    gtk_shortcut_add_tooltip { "Record a new shortcut for this action" }
+    gtk_shortcut_reset { "Reset" }
+    gtk_shortcut_reset_tooltip { "Reset this action to its default" }
+    gtk_shortcut_capture_title { "Set Shortcut" }
+    gtk_shortcut_capture_prompt { "Press the new shortcut combination." }
+    gtk_shortcut_capture_cancel_hint { "{key} to cancel" }
+    gtk_action_category_playback { "Playback" }
+    gtk_action_category_shell { "Shell" }
+    gtk_action_category_workspace { "Workspace" }
+    gtk_action_category_tracks { "Tracks" }
+    gtk_action_output_devices { "Output Devices" }
+    gtk_action_system_menu { "System Menu" }
+    gtk_action_reveal_track { "Reveal Track" }
+    gtk_action_track_properties { "Properties" }
+    gtk_action_edit_tags { "Edit Tags" }
+    gtk_custom_view_title { "Edit Custom View" }
+    gtk_custom_view_label_placeholder { "View label" }
+    gtk_custom_view_name { "Name" }
+    gtk_custom_view_group_by { "Group By" }
+    gtk_custom_view_add_sort_field { "Add sort field" }
+    gtk_custom_view_sort_order { "Sort Order" }
+    gtk_custom_view_add_column { "Add column" }
+    gtk_custom_view_visible_columns { "Visible Columns" }
+    gtk_custom_view_sort_ascending { "Sort ascending" }
+    gtk_custom_view_sort_descending { "Sort descending" }
+    gtk_common_remove { "Remove" }
+    gtk_presentation_view_inactive { "The selected track view is no longer active." }
+    gtk_presentation_unable_to_change { "Unable to Change Track View" }
+    gtk_presentation_copy_label { "{label} Copy" }
+    tui_shell_command_palette_title { "Command Palette" }
+    tui_shell_command_palette_no_matches { "No matches" }
+    tui_shell_command_palette_footer { "{completeKey} complete  {runKey} run  {cancelKey} cancel" }
+    tui_shell_workspace_list { "list" }
+    tui_shell_workspace_view { "view" }
+    tui_shell_overlay_tracks { "Tracks" }
+    tui_shell_overlay_lists { "Lists" }
+    tui_shell_overlay_detail { "Detail" }
+    tui_shell_overlay_pipeline { "Pipeline" }
+    tui_shell_overlay_output { "Output" }
+    tui_shell_overlay_views { "Views" }
+    tui_shell_overlay_notifications { "Notifications" }
+    tui_shell_overlay_help { "Help" }
+    tui_shell_hint_workspace { "{commandKey} command  {listsKey} lists  {viewKey} view  {notificationsKey} notif  {detailKey} detail  {pipelineKey} pipeline  {outputKey} output  {groupsKey} groups  {currentKey} current  {quitKey} quit" }
+    tui_shell_hint_lists { "{toggleKey} toggle  {openKey} open  {closeKey} close" }
+    tui_shell_hint_detail { "{toggleKey} toggle  {closeKey} close" }
+    tui_shell_hint_pipeline { "{toggleKey} toggle  {closeKey} close" }
+    tui_shell_hint_output { "{toggleKey} toggle  {selectKey} select  {closeKey} close" }
+    tui_shell_hint_views { "{toggleKey} toggle  {selectKey} select  {closeKey} close" }
+    tui_shell_hint_notifications { "{toggleKey} toggle  {hideKey} hide compact  {closeKey} close" }
+    tui_shell_hint_help { "{closeKey} close" }
+    tui_shell_status_command { "command" }
+    tui_shell_status_lists { "lists" }
+    tui_shell_status_view { "view" }
+    tui_shell_status_notifications { "notif" }
+    tui_shell_status_detail { "detail" }
+    tui_shell_status_pipeline { "pipeline" }
+    tui_shell_status_output { "output" }
+    tui_shell_status_groups { "groups" }
+    tui_shell_status_current { "current" }
+    tui_shell_status_quit { "quit" }
+    tui_shell_filter_label { "Filter" }
+    tui_shell_category_library { "library" }
+    tui_shell_category_view { "view" }
+    tui_shell_category_track { "track" }
+    tui_shell_category_audio { "audio" }
+    tui_shell_category_status { "status" }
+    tui_shell_category_ui { "ui" }
+    tui_shell_category_playback { "playback" }
+    tui_shell_category_app { "app" }
+    tui_shell_detail_quick_filter { "quick filter" }
+    tui_shell_detail_track_view { "track view" }
+    tui_shell_detail_choose_list { "choose list" }
+    tui_shell_detail_track_detail { "track detail" }
+    tui_shell_detail_audio_pipeline { "audio pipeline" }
+    tui_shell_detail_output_device { "output device" }
+    tui_shell_detail_choose_view { "choose view" }
+    tui_shell_detail_notification_center { "notification center" }
+    tui_shell_detail_close_overlay { "close overlay" }
+    tui_shell_detail_help { "help" }
+    tui_shell_detail_now_playing { "now playing" }
+    tui_shell_detail_clear_filter { "clear filter" }
+    tui_shell_detail_reload_list { "reload list" }
+    tui_shell_detail_play { "play" }
+    tui_shell_detail_pause { "pause" }
+    tui_shell_detail_toggle_playback { "toggle playback" }
+    tui_shell_detail_stop { "stop" }
+    tui_shell_detail_quit { "quit" }
+    tui_shell_output_devices_title { "Output Devices" }
+    tui_playback_no_active_track { "No active track" }
+    tui_playback_volume { "Vol {percent}%" }
+    tui_playback_no_output_device_selected { "No output device selected" }
+    tui_playback_no_output_devices_found { "No output devices found" }
+    tui_playback_no_audio_pipeline { "No audio pipeline yet" }
+    tui_shell_help_quick_filter { "{command}              quick filter" }
+    tui_shell_help_choose_list { "{command} or {alias}       choose list" }
+    tui_shell_help_track_detail { "{command} or {alias}      show selected track detail" }
+    tui_shell_help_audio_pipeline { "{command} or {alias}    show audio pipeline" }
+    tui_shell_help_output_device { "{command} or {alias}      choose output device" }
+    tui_shell_help_choose_view { "{command} or {alias}       choose presentation" }
+    tui_shell_help_notifications { "{command} or {alias} show notification center" }
+    tui_shell_help_current_track { "{command}           reveal current track" }
+    tui_shell_help_switch_presentation { "{command}         switch presentation" }
+    tui_shell_help_previous_next_group { "{command}              previous / next group" }
+    tui_shell_help_clear_filter { "{command}             clear filter" }
+    tui_shell_help_reload_list { "{command}            reload active list" }
+    tui_shell_help_playback { "{command} playback" }
+    tui_shell_help_quit { "{command}              exit" }
+    tui_shell_help_footer { "{closeKey} close  {runKey} run" }
+    tui_shell_notification_footer { "{toggleKey} toggle  {hideKey} hide compact  click clearable row  {closeKey} close" }
+    tui_library_detail { "library" }
+    tui_library_no_sections { "No sections in this view" }
+    tui_library_no_section_selected { "No section selected" }
+    tui_library_no_current_track { "No current track" }
+    tui_library_current_track_not_in_view { "Current track is not in this view" }
+    tui_library_no_active_track_view { "No active track view" }
+    tui_library_no_views_available { "No views available" }
+    tui_library_no_lists_available { "No lists available" }
+    tui_library_filter_cleared { "Filter cleared" }
+    tui_library_filter_applied { "Filter applied" }
+    tui_library_no_tracks_found { "No tracks found. Run `aobus init` in this library first." }
+    tui_library_no_lists_found { "No lists found" }
+    tui_library_ready { "Ready" }
+    tui_library_section { "Section: {name}" }
+    tui_library_revealed_track { "Revealed {track}" }
+    tui_library_unknown_view { "Unknown view {id}" }
+    tui_library_view { "View: {id}" }
+    tui_library_opened_list { "Opened {list}" }
+    tui_library_reloaded_tracks { "Reloaded {count, plural, one {# track} other {# tracks}}" }
+    tui_library_quick_filter_matched { "Quick filter matched {count, plural, one {# track} other {# tracks}}" }
+    tui_library_expression_filter_matched { "Expression filter matched {count, plural, one {# track} other {# tracks}}" }
+    tui_presentation_custom { "custom" }
+    tui_presentation_custom_from { "custom from {id}" }
+    tui_presentation_default { "default" }
+    tui_presentation_badge { "view:{id}" }
+    winui_shell_menu_file { "File" }
+    winui_shell_open_library { "Open Library..." }
+    winui_shell_rescan { "Rescan" }
+    winui_shell_rescan_library { "Rescan Library" }
+    winui_shell_menu_view { "View" }
+    winui_shell_modern_mode { "Modern Mode" }
+    winui_shell_columns { "Columns..." }
+    winui_shell_reload_theme { "Reload Theme" }
+    winui_shell_menu_playback { "Playback" }
+    winui_shell_play_pause { "Play/Pause" }
+    winui_shell_stop { "Stop" }
+    winui_shell_track_details { "Track Details" }
+    winui_shell_classic_mode { "Classic Mode" }
+    winui_playback_output_device { "Output device" }
+    winui_playback_volume { "Volume" }
+    winui_playback_no_output_devices { "No output devices" }
+    winui_library_open_label { "Open" }
+    winui_library_rescan_label { "Rescan" }
+    winui_library_navigation_pane_title { "Library" }
+    winui_library_quick_filter_placeholder { "Filter tracks" }
+    winui_library_ready { "Ready" }
+    winui_library_rescanning { "Rescanning library..." }
+    winui_library_no_selection { "No selection" }
+    winui_track_move_column_left { "Move left" }
+    winui_track_move_column_right { "Move right" }
+    winui_more_menu { "More" }
+    winui_error { "Error: {detail}" }
+    winui_save_settings_failed { "Could not save settings: {detail}" }
+    winui_open_library_picker { "Open library" }
+    winui_folder_picker_failed { "Folder picker failed: {detail}" }
+    winui_library_switch_failed { "Could not switch libraries: {detail}" }
+    winui_theme_override_removed { "Theme override removed; following Windows appearance" }
+    winui_theme_reload_failed { "Theme reload failed: {detail}" }
+    winui_theme_reloaded { "Theme reloaded: {path}" }
+    winui_smtc_unavailable { "SMTC unavailable: {detail}" }
+    winui_shell_layout_failed { "The shell layout could not be built: {detail}" }
+    winui_activity_details { "View activity details" }
+    winui_activity_notifications { "Notifications" }
+    winui_activity_hide_notification { "Hide notification from status" }
+    winui_library_ready_at { "Library ready: {root}" }
+    winui_navigation_failed { "Navigation failed: {detail}" }
+    winui_list_status { "List: {list}" }
+    winui_presentation_failed { "Presentation failed: {detail}" }
+    winui_playback_failed { "Playback failed: {detail}" }
+    winui_column_resize_failed { "Column resize failed: {detail}" }
+    winui_column_settings_failed { "Column settings failed: {detail}" }
+    winui_column_move_failed { "Column move failed: {detail}" }
+    winui_column_visibility_failed { "Column visibility failed: {detail}" }
+    winui_column_not_sortable { "Column ''{column}'' is not sortable" }
+    winui_sort_failed { "Sort failed: {detail}" }
+    winui_unavailable_track { "Unavailable track" }
+    winui_theme_file_not_found { "Theme file not found: {path}" }
+    winui_theme_load_failed { "Failed to load Windows theme: {detail}" }
+    winui_startup_failure { "Aobus could not start:\n\n{detail}" }
+    track_multiple_values { "<Multiple Values>" }
+    track_metadata_heading { "Metadata" }
+    track_audio_properties_heading { "Audio Properties" }
+    track_show_empty_fields { "Show empty fields" }
+    track_hide_empty_fields { "Hide empty fields" }
+    track_missing_on_some { "Missing on some tracks" }
+    track_fallback { "Track {id}" }
+    track_detail_title { "Track Detail" }
+    track_no_selection { "No track selected" }
+    cover_art_title { "Cover Art" }
+    cover_art_none { "No cover art" }
+    library_task_label { "Library task" }
+    track_tags_changed { "{hasAdded, select, yes {Tags added {addedCount}{hasRemoved, select, yes { and removed {removedCount}} other {}}} other {Tags removed {removedCount}}} for {trackCount, plural, one {# track} other {# tracks}}" }
+    track_tags_stale { "Library changed while the tag editor was open. Reload and try again." }
+    track_edit_stale { "Library changed while this edit was open. Reload the value and try again." }
+    track_editing_unavailable { "Library editing is currently unavailable." }
+    gtk_track_properties_title { "Properties" }
+    gtk_track_properties_selected_title { "Properties — {count, plural, one {# track selected} other {# tracks selected}}" }
+    gtk_track_editing_unavailable { "Editing unavailable: {detail}" }
+    gtk_track_save_failed { "Save failed" }
+    gtk_track_save_stale_title { "Save could not be applied" }
+    gtk_track_save_stale { "The library changed while this dialog was open. Reload the properties and try again." }
+    gtk_tag_add { "Add…" }
+    gtk_tag_add_placeholder { "Add tag…" }
+    gtk_tag_remove { "Remove tag {tag}" }
+    gtk_custom_metadata_title { "Custom Metadata" }
+    gtk_custom_metadata_key { "Key" }
+    gtk_custom_metadata_value { "Value" }
+    gtk_custom_metadata_deleted { "Custom metadata ''{key}'' removed" }
+    gtk_custom_metadata_delete { "Delete Custom Metadata" }
+    gtk_activity_hide_status { "Hide status" }
+    gtk_activity_hide_notification { "Hide notification from status" }
+    gtk_manual_order_drag { "Drag to rearrange tracks in Manual Order" }
+    gtk_manual_order_rearrange { "Rearrange track" }
+    gtk_status_ready { "Aobus Ready" }
+    gtk_edit_value { "Edit Value" }
+    gtk_collapse_panel { "Collapse panel" }
+    gtk_expand_panel { "Expand panel" }
+    gtk_hide_details { "Hide details" }
+    gtk_show_details { "Show details" }
+    gtk_no_track_view_available { "No track view is available." }
+    gtk_save_layout_defaults_message { "This will update the ''{preset}'' layout preset on disk with the current panel sizes.\n\nPromoted sizes will be removed from runtime state; other runtime values such as revealed state will remain." }
+    gtk_unable_switch_libraries { "Unable to Switch Libraries" }
+    gtk_startup_failed_title { "Aobus Startup Failed" }
+    gtk_startup_select_library_failed { "Aobus could not select the startup library: {detail}" }
+    gtk_startup_open_library_failed { "Aobus could not open the library: {detail}" }
+    gtk_startup_activate_library_failed { "Aobus could not activate the library: {detail}" }
+    gtk_startup_launch_library_failed { "Aobus could not start the selected library: {detail}" }
+    gtk_layout_editor_title { "Layout Editor" }
+    gtk_layout_apply { "Apply" }
+    gtk_layout_unable_to_save { "Unable to Save Layout" }
+    gtk_layout_tree_node { "Node" }
+    gtk_layout_tree_type { "Type" }
+    gtk_layout_classic_preset { "Classic Layout" }
+    gtk_layout_modern_preset { "Modern Layout" }
+    gtk_layout_classic_theme { "Classic Theme" }
+    gtk_layout_modern_theme { "Modern Theme" }
+    gtk_layout_reset_preset { "Reset selected preset to its default layout" }
+    gtk_layout_add_child { "Add Child" }
+    gtk_layout_wrap_node { "Wrap Node" }
+    gtk_layout_remove_node { "Remove Node" }
+    gtk_layout_move_up { "Move Up" }
+    gtk_layout_move_down { "Move Down" }
+    gtk_layout_invalid_document { "Invalid Layout Document" }
+    gtk_layout_validation_preset { "Validation failed on preset ''{preset}'':\n\n{detail}" }
+    gtk_layout_invalid_component_ids { "Invalid Layout Component IDs" }
+    gtk_layout_validation_component { "Validation failed on preset ''{preset}'' component ''{component}'' type ''{type}'':\n\n{detail}" }
+    gtk_layout_invalid_actions { "Invalid Layout Actions" }
+    gtk_layout_validation_action { "Validation failed on preset ''{preset}'' component ''{component}'' property ''{property}'':\n\n{detail}" }
+    gtk_common_ok { "OK" }
+    gtk_common_add { "Add" }
+    gtk_common_undo { "Undo" }
+    gtk_common_no { "No" }
+    gtk_common_yes { "Yes" }
+    gtk_layout_id { "ID" }
+    gtk_layout_none { "None" }
+    gtk_layout_capability_anchor { "Anchor" }
+    gtk_layout_capability_menu { "Menu" }
+    gtk_layout_unknown_id { "⚠ Unknown ID: {id}" }
+    gtk_layout_unsupported_editor { "(Unsupported editor)" }
+    gtk_layout_no_selection { "No selection" }
+    gtk_layout_general { "General" }
+    gtk_layout_properties { "Layout Properties" }
+    gtk_layout_no_descriptor { "No descriptor found" }
+    gtk_layout_category_containers { "Containers" }
+    gtk_layout_category_decorators { "Decorators" }
+    gtk_layout_category_tracks { "Tracks" }
+    gtk_layout_category_playback { "Playback" }
+    gtk_layout_category_status { "Status" }
+    gtk_layout_category_generic { "Generic" }
+    gtk_layout_category_application { "Application" }
+    gtk_layout_category_library { "Library" }
+    gtk_layout_category_layout { "Layout" }
+    gtk_layout_component_box { "Box" }
+    gtk_layout_component_split_pane { "Split Pane" }
+    gtk_layout_component_label { "Label" }
+    gtk_layout_component_action_button { "Action Button" }
+    gtk_layout_component_menu_button { "Menu Button" }
+    gtk_layout_component_menu_bar { "Menu Bar" }
+    gtk_layout_component_track_table { "Track Table" }
+    gtk_layout_component_quick_filter { "Quick Filter" }
+    gtk_layout_component_presentation_button { "Presentation Button" }
+    gtk_layout_component_cover_art { "Cover Art" }
+    gtk_layout_component_transport_button { "Transport Button" }
+    gtk_layout_component_soul_button { "Soul Button" }
+    gtk_layout_component_seek_slider { "Seek Slider" }
+    gtk_layout_component_time_label { "Time Label" }
+    gtk_layout_component_volume_control { "Volume Control" }
+    gtk_layout_component_output_device_selector { "Output Device Selector" }
+    gtk_layout_component_activity_status { "Activity Status" }
+    gtk_layout_component_track_count { "Track Count" }
+    gtk_layout_component_selection_info { "Selection Info" }
+    gtk_layout_component_status_message { "Status Message" }
+    gtk_layout_component_now_playing_status { "Now Playing Status" }
+    gtk_layout_component_playback_details { "Playback Details" }
+    gtk_layout_component_library_tree { "Library Tree" }
+    gtk_layout_component_playback_cover_art { "Playback Cover Art" }
+    gtk_layout_component_soul_play_pause { "Soul Play/Pause Button" }
+    gtk_layout_component_quality_indicator { "Quality Indicator" }
+    gtk_layout_component_audio_pipeline_panel { "Audio Pipeline Panel" }
+    gtk_layout_component_current_title_label { "Current Title Label" }
+    gtk_layout_component_current_artist_label { "Current Artist Label" }
+    gtk_layout_component_separator { "Separator" }
+    gtk_layout_component_absolute_canvas { "Absolute Canvas" }
+    gtk_layout_component_spacer { "Spacer" }
+    gtk_layout_component_scroll_window { "Scroll Window" }
+    gtk_layout_component_tabs { "Tabs" }
+    gtk_layout_component_responsive_class { "Responsive Class" }
+    gtk_layout_component_center_box { "Center Box" }
+    gtk_layout_component_open_library_button { "Open Library Button" }
+    gtk_layout_component_workspace_with_detail { "Workspace with Detail" }
+    gtk_layout_component_collapsible_split { "Collapsible Split" }
+    gtk_layout_component_detail_scope { "Detail Scope" }
+    gtk_layout_component_field_grid { "Field Grid" }
+    gtk_layout_component_tag_editor { "Tag Editor" }
+    gtk_layout_component_selection_region { "Selection Region" }
+    gtk_layout_component_detail_undo_bar { "Detail Undo Bar" }
+    gtk_layout_property_text { "Text" }
+    gtk_layout_property_orientation { "Orientation" }
+    gtk_layout_property_spacing { "Spacing" }
+    gtk_layout_property_variant { "Variant" }
+    gtk_layout_property_placeholder_style { "Placeholder Style" }
+    gtk_layout_property_command { "Command" }
+    gtk_layout_property_stroke_width { "Stroke Width" }
+    gtk_layout_property_glyph_scale { "Glyph Scale" }
+    gtk_layout_property_mode { "Mode" }
+    gtk_layout_property_idle_behavior { "Idle Behavior" }
+    gtk_layout_property_max_text_chars { "Max Text Chars" }
+    gtk_layout_property_glyph { "Glyph" }
+    gtk_layout_property_show_full_logo { "Show Full Logo" }
+    gtk_layout_property_target_size { "Target Size" }
+    gtk_layout_property_force_square { "Force Square" }
+    gtk_layout_property_action { "Action" }
+    gtk_layout_property_show_label { "Show Label" }
+    gtk_layout_property_size { "Size" }
+    gtk_layout_property_icon_symbolic { "Icon (Symbolic)" }
+    gtk_layout_property_style { "Style" }
+    gtk_layout_property_homogeneous { "Homogeneous" }
+    gtk_layout_property_snap_to_grid { "Snap To Grid" }
+    gtk_layout_property_grid_size { "Grid Size" }
+    gtk_layout_property_horizontal_scroll_policy { "H. Scroll Policy" }
+    gtk_layout_property_vertical_scroll_policy { "V. Scroll Policy" }
+    gtk_layout_property_min_content_width { "Min Content Width" }
+    gtk_layout_property_min_content_height { "Min Content Height" }
+    gtk_layout_property_propagate_natural_width { "Propagate Nat. Width" }
+    gtk_layout_property_propagate_natural_height { "Propagate Nat. Height" }
+    gtk_layout_property_tab_title { "Tab Title" }
+    gtk_layout_property_tab_icon { "Tab Icon" }
+    gtk_layout_property_axis { "Axis" }
+    gtk_layout_property_compact_max { "Compact Max" }
+    gtk_layout_property_regular_max { "Regular Max" }
+    gtk_layout_property_class_prefix { "Class Prefix" }
+    gtk_layout_property_slot { "Slot" }
+    gtk_layout_property_view_source { "View Source" }
+    gtk_layout_property_group_cover_placeholder { "Group Cover Placeholder" }
+    gtk_layout_property_position { "Position" }
+    gtk_layout_property_initial_position { "Initial Position (%)" }
+    gtk_layout_property_resize_start { "Resize Start" }
+    gtk_layout_property_shrink_start { "Shrink Start" }
+    gtk_layout_property_resize_end { "Resize End" }
+    gtk_layout_property_shrink_end { "Shrink End" }
+    gtk_layout_property_collapse_side { "Collapse Side" }
+    gtk_layout_property_initially_revealed { "Initially Revealed" }
+    gtk_layout_property_css_classes { "CSS Classes" }
+    gtk_layout_property_categories { "Categories" }
+    gtk_layout_property_show_when { "Show When" }
+    gtk_layout_property_show_placeholder { "Show Placeholder" }
+    gtk_layout_property_expand_horizontal { "Expand Horizontal" }
+    gtk_layout_property_expand_vertical { "Expand Vertical" }
+    gtk_layout_property_horizontal_align { "Horizontal Align" }
+    gtk_layout_property_vertical_align { "Vertical Align" }
+    gtk_layout_property_width_request { "Width Request" }
+    gtk_layout_property_height_request { "Height Request" }
+    gtk_layout_property_x { "X" }
+    gtk_layout_property_y { "Y" }
+    gtk_layout_property_width { "Width" }
+    gtk_layout_property_height { "Height" }
+    gtk_layout_property_z_index { "Z-Index" }
+    gtk_layout_value_ambient { "Ambient" }
+    gtk_layout_value_classic_inline { "Classic Inline" }
+    gtk_layout_value_hidden { "Hidden" }
+    gtk_layout_value_reserve { "Reserve Space" }
+    gtk_layout_value_small { "Small" }
+    gtk_layout_value_normal { "Normal" }
+    gtk_layout_value_large { "Large" }
+    gtk_layout_value_flat { "Flat" }
+    gtk_layout_value_raised { "Raised" }
+    gtk_layout_value_circular { "Circular" }
+    gtk_layout_value_suggested { "Suggested" }
+    gtk_layout_value_destructive { "Destructive" }
+    gtk_layout_value_monogram { "Monogram" }
+    gtk_layout_value_note { "Music Note" }
+    gtk_layout_value_vinyl { "Vinyl" }
+    gtk_layout_value_equalizer { "Equalizer" }
+    gtk_layout_value_soul { "Soul" }
+    gtk_layout_value_sigil { "Sigil" }
+    gtk_layout_value_seal { "Seal" }
+    gtk_layout_value_horizontal { "Horizontal" }
+    gtk_layout_value_vertical { "Vertical" }
+    gtk_layout_value_jump_to_album { "Jump to Album" }
+    gtk_layout_value_inline { "Inline" }
+    gtk_layout_value_compact { "Compact" }
+    gtk_layout_value_tooltip { "Tooltip" }
+    gtk_layout_value_reveal { "Reveal Current Track" }
+    gtk_layout_value_play_pause { "Play/Pause" }
+    gtk_layout_value_filter_by_field { "Filter by Field" }
+    gtk_layout_value_start { "Start" }
+    gtk_layout_value_end { "End" }
+    gtk_layout_value_automatic { "Automatic" }
+    gtk_layout_value_always { "Always" }
+    gtk_layout_value_never { "Never" }
+    gtk_layout_value_width { "Width" }
+    gtk_layout_value_height { "Height" }
+    gtk_layout_value_fill { "Fill" }
+    gtk_layout_value_center { "Center" }
+    tui_untitled_section { "Untitled Section" }
+    tui_notification_none { "No notifications" }
+    tui_lists_closed { "Lists closed" }
+    tui_lists_opened { "Lists" }
+    tui_detail_closed { "Detail closed" }
+    tui_detail_opened { "Detail panel" }
+    tui_pipeline_closed { "Pipeline closed" }
+    tui_pipeline_opened { "Audio pipeline" }
+    tui_output_closed { "Output devices closed" }
+    tui_output_unavailable { "Output devices unavailable" }
+    tui_output_opened { "Output devices" }
+    tui_views_closed { "Views closed" }
+    tui_views_opened { "Views" }
+    tui_notifications_closed { "Notifications closed" }
+    tui_notifications_opened { "Notifications" }
+    tui_playback_start_failed { "Playback did not start. Check output device, file path, and logs." }
+    tui_playback_control_unavailable { "Playback control unavailable" }
+    tui_overlay_closed { "Overlay closed" }
+    tui_help_opened { "Help" }
+    tui_section_unavailable { "Section is no longer available" }
+    tui_filter_failed { "Filter failed: {detail}" }
+  }
+}

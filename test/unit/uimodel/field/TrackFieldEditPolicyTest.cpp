@@ -112,18 +112,25 @@ namespace ao::uimodel::test
 
   TEST_CASE("isProtectedInlineEditText protects aggregate sentinel values", "[uimodel][unit][field][inline-edit]")
   {
+    constexpr auto kLocalizedMixedText = "Mehrere Werte";
     auto snap = rt::TrackDetailSnapshot{};
 
-    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kMultipleTrackValuesText, false));
+    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kLocalizedMixedText, kLocalizedMixedText, false));
+    CHECK_FALSE(
+      isProtectedInlineEditText(rt::TrackField::Title, snap, "<Multiple Values>", kLocalizedMixedText, false));
 
     rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = true;
-    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, true));
-    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, false));
-    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "anything else", true));
+    CHECK(
+      isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, kCompositeMixedTrackText, true));
+    CHECK(isProtectedInlineEditText(
+      rt::TrackField::Title, snap, kCompositeMixedTrackText, kCompositeMixedTrackText, false));
+    CHECK_FALSE(
+      isProtectedInlineEditText(rt::TrackField::Title, snap, "anything else", kCompositeMixedTrackText, true));
 
     rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = false;
-    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, true));
-    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "edit", true));
-    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "", true));
+    CHECK_FALSE(
+      isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, kCompositeMixedTrackText, true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "edit", kCompositeMixedTrackText, true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "", kCompositeMixedTrackText, true));
   }
 } // namespace ao::uimodel::test

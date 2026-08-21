@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -18,8 +19,12 @@ namespace ao::uimodel
 {
   TrackFilterViewModel::TrackFilterViewModel(rt::ViewService& viewService,
                                              rt::WorkspaceService& workspaceService,
+                                             PresentationTextCatalog textCatalog,
                                              std::function<void(TrackFilterViewState const&)> onRender)
-    : _viewService{viewService}, _workspaceService{workspaceService}, _onRender{std::move(onRender)}
+    : _viewService{viewService}
+    , _workspaceService{workspaceService}
+    , _textCatalog{std::move(textCatalog)}
+    , _onRender{std::move(onRender)}
   {
     _filterErrorSub = _viewService.onFilterErrorChanged(
       [this](rt::ViewService::FilterErrorChanged const& changed)
@@ -122,7 +127,8 @@ namespace ao::uimodel
       if (_optFilterError)
       {
         view.hasError = true;
-        view.tooltip = PresentationTextCatalog{}.trackFilterError(_optFilterError->message);
+        view.tooltip =
+          _textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", _optFilterError->message}});
       }
 
       view.canCreateSmartList = !view.resolvedExpression.empty() && !view.hasError;

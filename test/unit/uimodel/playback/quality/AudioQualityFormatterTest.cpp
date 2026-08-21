@@ -3,6 +3,8 @@
 
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include <ao/audio/NodeFormat.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
@@ -13,8 +15,43 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
+
 namespace ao::uimodel::test
 {
+  namespace
+  {
+    AudioQualityFormatter const& englishFormatter()
+    {
+      return ao::test::englishPresentationTextCatalog().audioQualityFormatter();
+    }
+
+    std::string audioNodeTypeLabel(audio::flow::NodeType const type)
+    {
+      return englishFormatter().nodeTypeLabel(type);
+    }
+
+    std::string audioFormatLabel(audio::NodeFormat const& format)
+    {
+      return englishFormatter().formatLabel(format);
+    }
+
+    std::string audioFindingLabel(audio::QualityFinding const& finding)
+    {
+      return englishFormatter().findingLabel(finding);
+    }
+
+    std::string audioQualityConclusion(audio::Quality const quality)
+    {
+      return englishFormatter().qualityConclusion(quality);
+    }
+
+    AudioQualityPresentation audioQualityPresentation(rt::QualityState const& state)
+    {
+      return englishFormatter().presentation(state);
+    }
+  } // namespace
+
   TEST_CASE("AudioQualityFormatter - audioNodeTypeLabel", "[uimodel][unit][playback][quality]")
   {
     CHECK(audioNodeTypeLabel(audio::flow::NodeType::Source) == "[Source]");
@@ -321,5 +358,36 @@ namespace ao::uimodel::test
       CHECK(presentation.headline == "Partially verified path");
       CHECK(presentation.category == AudioQualityCategory::Informational);
     }
+  }
+
+  TEST_CASE("AudioQualityFormatter - localized copy preserves numeric and external values",
+            "[uimodel][unit][quality][localization]")
+  {
+    auto const catalog = ao::test::presentationTextCatalog("de-DE");
+    auto const& formatter = catalog.audioQualityFormatter();
+    auto const format = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
+
+    CHECK(formatter.nodeTypeLabel(audio::flow::NodeType::Source) == "[Quelle]");
+    CHECK(formatter.formatLabel(format) == "44.1 kHz · 16 Bit · Stereo");
+    CHECK(formatter.findingLabel(audio::QualityFinding{
+            .kind = audio::QualityFindingKind::MixedSources,
+            .sharedApps = {"Dvořák", "誰か"},
+          }) == "Gemischt mit Dvořák, 誰か");
+    CHECK(formatter.presentation(rt::QualityState{.overall = audio::Quality::Unknown}).headline ==
+          "Unbekannte Audiokette");
+  }
+
+  TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values", "[uimodel][unit][quality][localization]")
+  {
+    auto const catalog = ao::test::presentationTextCatalog("qps-ploc");
+    auto const& formatter = catalog.audioQualityFormatter();
+    auto const finding = formatter.findingLabel(audio::QualityFinding{
+      .kind = audio::QualityFindingKind::MixedSources,
+      .sharedApps = {"Dvořák", "誰か"},
+    });
+
+    CHECK(finding.starts_with("[!! "));
+    CHECK(finding.ends_with(" !!]"));
+    CHECK(finding.contains("Dvořák, 誰か"));
   }
 } // namespace ao::uimodel::test

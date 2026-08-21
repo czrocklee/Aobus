@@ -6,7 +6,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <algorithm>
 #include <optional>
@@ -15,19 +14,19 @@
 
 namespace ao::uimodel
 {
-  std::string formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem const& item)
+  std::string formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem const& item, std::string_view const mixedText)
   {
     if (item.value.mixed)
     {
-      return std::string{kMultipleTrackValuesText};
+      return std::string{mixedText};
     }
 
     return item.value.optValue.value_or("");
   }
 
-  bool isProtectedTrackCustomMetadataEditText(std::string_view const newText)
+  bool isProtectedTrackCustomMetadataEditText(std::string_view const newText, std::string_view const mixedText)
   {
-    return newText == kMultipleTrackValuesText;
+    return newText == mixedText;
   }
 
   CustomMetadataAddValidation validateCustomMetadataAddition(rt::TrackDetailSnapshot const& snap,

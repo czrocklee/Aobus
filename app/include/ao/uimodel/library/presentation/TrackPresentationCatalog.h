@@ -43,7 +43,7 @@ namespace ao::uimodel
   class TrackPresentationCatalog final
   {
   public:
-    explicit TrackPresentationCatalog(rt::WorkspaceService& workspace);
+    TrackPresentationCatalog(rt::WorkspaceService& workspace, PresentationTextCatalog textCatalog);
 
     std::span<rt::TrackPresentationPreset const> builtinPresets() const noexcept;
     std::span<rt::CustomTrackPresentationPreset const> customPresentations() const noexcept;

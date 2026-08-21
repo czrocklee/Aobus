@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
@@ -14,7 +15,7 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusFeedProjection - projects compact state from runtime priority",
             "[uimodel][unit][status][activity]")
   {
-    auto feedProjection = ActivityStatusFeedProjection{};
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishPresentationTextCatalog()};
 
     SECTION("initial state is idle without surfacing historical info")
     {

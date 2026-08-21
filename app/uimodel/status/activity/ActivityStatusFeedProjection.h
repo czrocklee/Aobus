@@ -18,6 +18,8 @@ namespace ao::uimodel
   class ActivityStatusFeedProjection final
   {
   public:
+    explicit ActivityStatusFeedProjection(PresentationTextCatalog textCatalog);
+
     void initialize(rt::NotificationFeedState const& feed);
     void handleFeedUpdated(rt::NotificationFeedUpdate const& update);
     void handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event);
@@ -51,7 +53,7 @@ namespace ao::uimodel
     void pruneHiddenSources(rt::NotificationFeedState const& feed);
 
     ActivityStatusViewState _state{};
-    PresentationTextCatalog _textCatalog{};
+    PresentationTextCatalog _textCatalog;
     bool _taskActive = false;
     std::optional<LibraryProgressState> _optLibraryProgress{};
     std::vector<rt::NotificationId> _compactSourceNotificationIds{};

@@ -20,8 +20,8 @@ namespace ao::uimodel
     ReservedTrackField,
   };
 
-  std::string formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem const& item);
-  bool isProtectedTrackCustomMetadataEditText(std::string_view newText);
+  std::string formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem const& item, std::string_view mixedText);
+  bool isProtectedTrackCustomMetadataEditText(std::string_view newText, std::string_view mixedText);
 
   CustomMetadataAddValidation validateCustomMetadataAddition(rt::TrackDetailSnapshot const& snap, std::string_view key);
   std::optional<std::string> undoValueForDeletedTrackCustomMetadata(rt::TrackDetailSnapshot const& snap,

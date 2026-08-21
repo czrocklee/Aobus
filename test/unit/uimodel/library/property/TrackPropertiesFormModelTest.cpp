@@ -3,6 +3,8 @@
 
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
@@ -71,7 +73,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackPropertiesFormModel - exposes row view and save state", "[uimodel][unit][library][property]")
   {
-    auto model = TrackPropertiesFormModel{};
+    auto model = TrackPropertiesFormModel{ao::test::englishPresentationTextCatalog()};
     model.addField(rt::TrackField::Title, true);
     model.addField(rt::TrackField::FilePath, false);
 
@@ -96,7 +98,8 @@ namespace ao::uimodel::test
   TEST_CASE("TrackPropertiesFormModel - keeps mixed multi-track edits out of patches",
             "[uimodel][unit][library][property]")
   {
-    auto model = TrackPropertiesFormModel{};
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto model = TrackPropertiesFormModel{textCatalog};
     model.addField(rt::TrackField::Title, true);
 
     model.loadFirstTrackField(rt::TrackField::Title, textRaw("First"));
@@ -104,7 +107,7 @@ namespace ao::uimodel::test
 
     auto const view = model.rowView(rt::TrackField::Title);
     CHECK(view.mixed);
-    CHECK(view.text == kMultipleTrackValuesText);
+    CHECK(view.text == textCatalog.text(i18n::MessageId::TrackMultipleValues));
 
     model.setEditValue(rt::TrackField::Title, textEdit("Replacement"));
     CHECK_FALSE(model.canSave());

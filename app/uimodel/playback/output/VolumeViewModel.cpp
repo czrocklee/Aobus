@@ -3,25 +3,32 @@
 
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
+#include <ao/Contract.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <format>
 #include <functional>
-#include <string>
 #include <utility>
 
 namespace ao::uimodel
 {
-  VolumeViewModel::VolumeViewModel(rt::PlaybackService& playback, std::function<void(VolumeViewState const&)> onRender)
-    : _playback{playback}
-    , _commands{playback.commands()}
-    , _onRender{std::move(onRender)}
-    , _lastVolume{playback.snapshot().transport.volume}
+  VolumeViewModel::VolumeViewModel(rt::PlaybackService& playback)
+    : _playback{playback}, _commands{playback.commands()}, _lastVolume{playback.snapshot().transport.volume}
   {
+  }
+
+  VolumeViewModel::VolumeViewModel(rt::PlaybackService& playback,
+                                   PresentationTextCatalog const& textCatalog,
+                                   std::function<void(VolumeViewState const&)> onRender)
+    : VolumeViewModel{playback}
+  {
+    _optTextCatalog = textCatalog;
+    _onRender = std::move(onRender);
+
     if (!_onRender)
     {
       return;
@@ -96,13 +103,16 @@ namespace ao::uimodel
       return;
     }
 
+    AO_INVARIANT(_optTextCatalog, "Volume presentation requires a text catalog");
+
     auto view = VolumeViewState{
       .visible = volume.available,
       .volume = volume.level,
       .isHardwareAssisted = volume.hardwareAssisted,
       .muted = volume.muted,
       .indicatorKind = resolveIndicatorKind(volume.level, volume.muted),
-      .tooltip = resolveTooltip(volume.level, volume.muted, volume.hardwareAssisted),
+      .tooltip = _optTextCatalog->volumeTooltip(
+        static_cast<std::int32_t>(std::round(volume.level * 100.0F)), volume.muted, volume.hardwareAssisted),
     };
 
     _onRender(view);
@@ -136,23 +146,5 @@ namespace ao::uimodel
     }
 
     return VolumeIndicatorKind::High;
-  }
-
-  std::string VolumeViewModel::resolveTooltip(float volume, bool muted, bool isHardwareAssisted)
-  {
-    std::int32_t const percent = static_cast<std::int32_t>(std::round(volume * 100.0F));
-
-    std::string text = std::format("Volume: {}%", percent);
-
-    if (muted)
-    {
-      text += " (Muted)";
-    }
-    else if (isHardwareAssisted)
-    {
-      text += " (Hardware)";
-    }
-
-    return text;
   }
 } // namespace ao::uimodel
