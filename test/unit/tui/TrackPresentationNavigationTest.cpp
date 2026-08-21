@@ -3,6 +3,7 @@
 
 #include "tui/TrackPresentationNavigation.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/rt/TrackPresentation.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -17,7 +18,8 @@ namespace ao::tui::test
       {.label = "Dense Albums", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense-albums"}},
     };
 
-    auto const items = makeTrackPresentationNavigation(rt::builtinTrackPresentationPresets(), custom);
+    auto const items = makeTrackPresentationNavigation(
+      ao::test::englishPresentationTextCatalog(), rt::builtinTrackPresentationPresets(), custom);
 
     REQUIRE(items.size() > custom.size());
     CHECK(items[0].id == "library");
@@ -37,7 +39,7 @@ namespace ao::tui::test
       {.spec = rt::TrackPresentationSpec{.id = "custom-raw"}},
     };
 
-    auto const items = makeTrackPresentationNavigation(builtin, custom);
+    auto const items = makeTrackPresentationNavigation(ao::test::englishPresentationTextCatalog(), builtin, custom);
 
     REQUIRE(items.size() == 2);
     CHECK(items[0].label == "raw");
@@ -47,9 +49,25 @@ namespace ao::tui::test
 
   TEST_CASE("TrackPresentationNavigation - display labels fall back to default", "[tui][unit][track-presentation]")
   {
-    CHECK(trackPresentationDisplayId("") == "default");
-    CHECK(trackPresentationDisplayId("albums") == "albums");
-    CHECK(trackPresentationBadgeLabel("") == "view:default");
-    CHECK(trackPresentationBadgeLabel("albums") == "view:albums");
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    CHECK(trackPresentationDisplayId(textCatalog, "") == "default");
+    CHECK(trackPresentationDisplayId(textCatalog, "albums") == "albums");
+    CHECK(trackPresentationBadgeLabel(textCatalog, "") == "view:default");
+    CHECK(trackPresentationBadgeLabel(textCatalog, "albums") == "view:albums");
+  }
+
+  TEST_CASE("TrackPresentationNavigation - renders locale-selected navigation copy", "[tui][unit][localization]")
+  {
+    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
+      {.label = "Dicht", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense"}},
+    };
+
+    auto const items = makeTrackPresentationNavigation(textCatalog, {}, custom);
+
+    REQUIRE(items.size() == 1);
+    CHECK(items.front().detail == "benutzerdefiniert aus albums");
+    CHECK(trackPresentationDisplayId(textCatalog, "") == "Standard");
+    CHECK(trackPresentationBadgeLabel(textCatalog, "") == "Ansicht:Standard");
   }
 } // namespace ao::tui::test

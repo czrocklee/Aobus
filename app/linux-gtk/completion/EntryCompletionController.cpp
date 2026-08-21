@@ -92,9 +92,10 @@ namespace ao::gtk
   } // namespace
 
   EntryCompletionController::EntryCompletionController(Gtk::Entry& entry,
+                                                       uimodel::PresentationTextCatalog textCatalog,
                                                        rt::CompletionProvider provider,
                                                        EntryCompletionControllerOptions options)
-    : _entry{entry}, _provider{std::move(provider)}, _options{options}
+    : _entry{entry}, _textCatalog{std::move(textCatalog)}, _provider{std::move(provider)}, _options{options}
   {
     _itemsPtr = Gio::ListStore<Glib::Object>::create();
     _selectionPtr = Gtk::SingleSelection::create(_itemsPtr);
@@ -123,7 +124,7 @@ namespace ao::gtk
       });
 
     factoryPtr->signal_bind().connect(
-      [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+      [this](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
         auto* const row = dynamic_cast<Gtk::Box*>(listItemPtr->get_child());
 
@@ -142,7 +143,7 @@ namespace ao::gtk
         }
 
         auto const& item = itemPtr->item();
-        auto const detailText = uimodel::PresentationTextCatalog{}.completionDetail(item.detail);
+        auto const detailText = _textCatalog.completionDetail(item.detail);
         title->set_text(item.displayText);
         detail->set_text(detailText);
         detail->set_visible(!detailText.empty());

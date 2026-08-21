@@ -5,13 +5,17 @@
 
 #include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <utility>
 #include <vector>
 
 namespace ao::gtk
 {
-  TagPopover::TagPopover(rt::Library const& reads, std::vector<TrackId> selectedTrackIds)
+  TagPopover::TagPopover(rt::Library const& reads,
+                         uimodel::PresentationTextCatalog const& textCatalog,
+                         std::vector<TrackId> selectedTrackIds)
+    : _tagEditor{textCatalog}
   {
     set_autohide(true);
     set_has_arrow(false);

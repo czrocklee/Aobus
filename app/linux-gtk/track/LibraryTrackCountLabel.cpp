@@ -3,11 +3,12 @@
 
 #include "track/LibraryTrackCountLabel.h"
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <utility>
@@ -15,8 +16,9 @@
 
 namespace ao::gtk
 {
-  LibraryTrackCountLabel::LibraryTrackCountLabel(rt::TrackSourceLease sourceLease)
-    : _sourceLease{std::move(sourceLease)}
+  LibraryTrackCountLabel::LibraryTrackCountLabel(rt::TrackSourceLease sourceLease,
+                                                 uimodel::PresentationTextCatalog textCatalog)
+    : _sourceLease{std::move(sourceLease)}, _textCatalog{std::move(textCatalog)}
   {
     _label.add_css_class("dim-label");
     _sourceSubscription =
@@ -51,6 +53,6 @@ namespace ao::gtk
 
   void LibraryTrackCountLabel::updateCount()
   {
-    _label.set_text(uimodel::formatTrackCount(_sourceLease->size()));
+    _label.set_text(_textCatalog.format(i18n::MessageId::TrackCount, {{"count", _sourceLease->size()}}));
   }
 } // namespace ao::gtk

@@ -150,6 +150,7 @@ if(AOBUS_BUILD_GTK)
       unit/linux-gtk/GtkApplicationTestSupport.cpp
       unit/linux-gtk/GtkLayoutTestSupport.cpp
       unit/linux-gtk/GtkRuntimeTestSupport.cpp
+      unit/linux-gtk/GtkTextCatalogTestSupport.cpp
       unit/linux-gtk/GtkWidgetTestSupport.cpp
       unit/linux-gtk/image/ImageTestSupport.cpp
       unit/linux-gtk/layout/LayoutTestSupport.cpp
@@ -159,6 +160,7 @@ if(AOBUS_BUILD_GTK)
   target_link_libraries(ao_test_support_gtk
       PUBLIC
         ao_test_options
+        ao_test_support_presentation
         aobus-gtk-lib
         PkgGTKMM
       PRIVATE
@@ -664,6 +666,16 @@ add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_pro
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
 if(AOBUS_BUILD_TUI)
+add_library(ao_test_support_tui STATIC
+    unit/tui/TuiTextCatalogTestSupport.cpp
+)
+target_link_libraries(ao_test_support_tui
+    PUBLIC
+      ao_test_options
+      ao_test_support_presentation
+      aobus-tui-lib
+)
+
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
     unit/tui/CoverArtTestSupport.cpp
@@ -703,7 +715,9 @@ target_link_libraries(ao_tui_test PRIVATE
     aobus-tui-lib
     ao_app_uimodel
     ao_app_runtime
+    ao_test_support_presentation
     ao_test_support_runtime
+    ao_test_support_tui
     ao_test_options
     Catch2::Catch2WithMain
     FakeIt::FakeIt-catch
@@ -719,7 +733,7 @@ add_executable(ao_tui_bench EXCLUDE_FROM_ALL
     unit/tui/TrackTableBenchmark.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_bench)
-target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain mimalloc)
+target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_support_presentation ao_test_support_tui ao_test_options Catch2::Catch2WithMain mimalloc)
 endif()
 
 if(AOBUS_BUILD_CLI)
@@ -858,6 +872,7 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
+      unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorAbsoluteCanvasTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorDescriptorTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorDialogSessionTest.cpp

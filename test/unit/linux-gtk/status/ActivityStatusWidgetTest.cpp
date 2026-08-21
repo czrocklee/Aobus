@@ -3,6 +3,7 @@
 
 #include "status/ActivityStatusWidget.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -23,6 +24,7 @@ namespace ao::gtk::test
     {
       return ActivityStatusWidget{ActivityStatusWidgetDependencies{
         .notifications = runtime.notifications(),
+        .textCatalog = ao::test::englishPresentationTextCatalog(),
         .libraryTasks = nullptr,
         .options = options,
       }};

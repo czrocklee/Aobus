@@ -5,10 +5,12 @@
 
 #include "playback/AudioQualityCss.h"
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
+#include <glibmm/markup.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/image.h>
@@ -17,6 +19,7 @@
 #include <gtkmm/separator.h>
 
 #include <format>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -25,8 +28,9 @@ namespace ao::gtk
     constexpr int kPanelSpacing = 6;
   }
 
-  AudioPipelinePanel::AudioPipelinePanel(AudioPipelinePanelVariant variant)
-    : Gtk::Box{Gtk::Orientation::VERTICAL}, _variant{variant}
+  AudioPipelinePanel::AudioPipelinePanel(uimodel::PresentationTextCatalog textCatalog,
+                                         AudioPipelinePanelVariant variant)
+    : Gtk::Box{Gtk::Orientation::VERTICAL}, _textCatalog{std::move(textCatalog)}, _variant{variant}
   {
     set_spacing(kPanelSpacing);
     add_css_class("ao-quality-panel");
@@ -86,9 +90,10 @@ namespace ao::gtk
     icon->set_pixel_size(16);
     headerBox->append(*icon);
 
-    auto const title = view.deviceName.empty() ? "Audio Pipeline" : view.deviceName;
+    auto const title = view.deviceName.empty() ? std::string{_textCatalog.text(i18n::MessageId::PlaybackAudioPipeline)}
+                                               : view.deviceName;
     auto* titleLabel = Gtk::make_managed<Gtk::Label>();
-    titleLabel->set_markup(std::format("<b>{}</b>", title));
+    titleLabel->set_markup(std::format("<b>{}</b>", Glib::Markup::escape_text(title).raw()));
     titleLabel->set_halign(Gtk::Align::START);
     titleLabel->add_css_class("ao-pipeline-title");
     headerBox->append(*titleLabel);
@@ -109,7 +114,8 @@ namespace ao::gtk
       auto* headerBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       headerBox->set_spacing(4);
 
-      auto const typeLabel = uimodel::audioNodeTypeLabel(assessment.nodeType);
+      auto const& formatter = _textCatalog.audioQualityFormatter();
+      auto const typeLabel = formatter.nodeTypeLabel(assessment.nodeType);
       auto* typeWidget = Gtk::make_managed<Gtk::Label>(typeLabel);
       typeWidget->add_css_class("dim-label");
       headerBox->append(*typeWidget);
@@ -120,7 +126,7 @@ namespace ao::gtk
       // Format details
       if (assessment.optFormat)
       {
-        auto const formatStr = std::string{"("} + uimodel::audioFormatLabel(*assessment.optFormat) + ")";
+        auto const formatStr = std::string{"("} + formatter.formatLabel(*assessment.optFormat) + ")";
         auto* formatLabel = Gtk::make_managed<Gtk::Label>(formatStr);
         formatLabel->add_css_class("dim-label");
         headerBox->append(*formatLabel);
@@ -131,7 +137,7 @@ namespace ao::gtk
       // Quality findings
       for (auto const& finding : assessment.findings)
       {
-        auto const findingText = uimodel::audioFindingLabel(finding);
+        auto const findingText = formatter.findingLabel(finding);
 
         if (findingText.empty())
         {
@@ -167,7 +173,7 @@ namespace ao::gtk
     }
 
     // Conclusion separator
-    auto const presentation = uimodel::audioQualityPresentation(view.quality);
+    auto const presentation = _textCatalog.audioQualityFormatter().presentation(view.quality);
 
     if (!presentation.headline.empty())
     {

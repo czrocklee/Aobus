@@ -16,9 +16,15 @@ namespace Gtk
   class Application;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
   class AppConfigStore;
+  class GtkTextCatalog;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
 
@@ -32,7 +38,9 @@ namespace ao::gtk
     LibraryWindowPaths paths,
     std::shared_ptr<AppConfigStore> appConfigStorePtr,
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr);
+    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+    uimodel::PresentationTextCatalog const& textCatalog,
+    GtkTextCatalog const& gtkTextCatalog);
 
   Result<> activateLibraryWindow(Gtk::Application& app,
                                  Glib::RefPtr<MainWindow> const& windowPtr,

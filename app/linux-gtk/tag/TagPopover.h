@@ -5,6 +5,7 @@
 
 #include "tag/TagEditor.h"
 #include <ao/CoreIds.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/popover.h>
 
@@ -20,7 +21,9 @@ namespace ao::gtk
   class TagPopover final : public Gtk::Popover
   {
   public:
-    TagPopover(rt::Library const& reads, std::vector<TrackId> selectedTrackIds);
+    TagPopover(rt::Library const& reads,
+               uimodel::PresentationTextCatalog const& textCatalog,
+               std::vector<TrackId> selectedTrackIds);
     ~TagPopover() override;
 
     // Not copyable or movable

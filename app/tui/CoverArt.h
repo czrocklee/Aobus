@@ -17,6 +17,11 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+} // namespace ao::uimodel
+
 namespace ao::tui
 {
   struct CoverArtCell final
@@ -67,5 +72,6 @@ namespace ao::tui
                                std::int32_t rows,
                                std::uint32_t imageId = kKittyCoverArtImageId);
 
-  ftxui::Element renderCoverArtPreview(std::optional<CoverArtRows> const& optPreview);
+  ftxui::Element renderCoverArtPreview(uimodel::PresentationTextCatalog const& textCatalog,
+                                       std::optional<CoverArtRows> const& optPreview);
 } // namespace ao::tui

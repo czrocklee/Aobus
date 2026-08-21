@@ -3,6 +3,7 @@
 
 #include "preference/PreferencesWindow.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -67,7 +68,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window = PreferencesWindow{{}};
+    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(), {}};
 
     CHECK(window.hasPage("general"));
     CHECK(window.hasPage("appearance"));
@@ -82,6 +83,19 @@ namespace ao::gtk::test
     CHECK(findLabelByText(window, "Ctrl+P") != nullptr);
   }
 
+  TEST_CASE("PreferencesWindow - renders locale-selected page and action copy", "[gtk][unit][localization]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto window = PreferencesWindow{textCatalog, {}};
+
+    CHECK(window.get_title() == "Einstellungen");
+    CHECK(findLabelByText(window, "Design") != nullptr);
+    CHECK(findLabelByText(window, "Aktionen") != nullptr);
+    CHECK(findButtonByLabel(window, "Layout bearbeiten...") != nullptr);
+  }
+
   TEST_CASE("PreferencesWindow - layout page dispatches commands", "[gtk][unit][preferences]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -90,11 +104,13 @@ namespace ao::gtk::test
     std::int32_t resetCount = 0;
     std::int32_t savePanelsCount = 0;
 
-    auto window = PreferencesWindow{PreferencesWindow::Callbacks{
-      .onEditLayout = [&editCount] { ++editCount; },
-      .onResetRuntimeLayoutState = [&resetCount] { ++resetCount; },
-      .onSaveCurrentPanelSizesAsLayoutDefaults = [&savePanelsCount] { ++savePanelsCount; },
-    }};
+    auto window =
+      PreferencesWindow{ao::test::englishPresentationTextCatalog(),
+                        PreferencesWindow::Callbacks{
+                          .onEditLayout = [&editCount] { ++editCount; },
+                          .onResetRuntimeLayoutState = [&resetCount] { ++resetCount; },
+                          .onSaveCurrentPanelSizesAsLayoutDefaults = [&savePanelsCount] { ++savePanelsCount; },
+                        }};
 
     auto* const editButton = findButtonByLabel(window, "Edit Layout...");
     auto* const saveButton = findButtonByLabel(window, "Save Current Panel Sizes as Layout Defaults");
@@ -118,10 +134,12 @@ namespace ao::gtk::test
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
     auto optTheme = std::optional<uimodel::ThemePreset>{};
-    auto window = PreferencesWindow{PreferencesWindow::Callbacks{
-      .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange) { optPersisted = prefs; },
-      .onApplyTheme = [&](uimodel::ThemePreset const theme) { optTheme = theme; },
-    }};
+    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(),
+                                    PreferencesWindow::Callbacks{
+                                      .onPersistPreferences = [&](rt::AppPrefsState const& prefs,
+                                                                  uimodel::PreferencesChange) { optPersisted = prefs; },
+                                      .onApplyTheme = [&](uimodel::ThemePreset const theme) { optTheme = theme; },
+                                    }};
 
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "classic";
@@ -144,10 +162,13 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
-    auto window = PreferencesWindow{PreferencesWindow::Callbacks{
-      .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange) { optPersisted = prefs; },
-      .onApplyTheme = [](uimodel::ThemePreset) { FAIL("Layout preset changes must not apply theme changes"); },
-    }};
+    auto window = PreferencesWindow{
+      ao::test::englishPresentationTextCatalog(),
+      PreferencesWindow::Callbacks{
+        .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange)
+        { optPersisted = prefs; },
+        .onApplyTheme = [](uimodel::ThemePreset) { FAIL("Layout preset changes must not apply theme changes"); },
+      }};
 
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "classic";
@@ -173,14 +194,15 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
-    auto window = PreferencesWindow{PreferencesWindow::Callbacks{
-      .onPersistPreferences =
-        [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange const change)
-      {
-        CHECK(change == uimodel::PreferencesChange::OutputDevice);
-        optPersisted = prefs;
-      },
-    }};
+    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(),
+                                    PreferencesWindow::Callbacks{
+                                      .onPersistPreferences =
+                                        [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange const change)
+                                      {
+                                        CHECK(change == uimodel::PreferencesChange::OutputDevice);
+                                        optPersisted = prefs;
+                                      },
+                                    }};
 
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "modern";
@@ -214,7 +236,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto target = Gtk::Window{};
-    auto window = PreferencesWindow{{}};
+    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(), {}};
     auto prefs = rt::AppPrefsState{};
 
     window.refreshPreferences(prefs, &fixture.runtime().playback(), &target);
@@ -232,7 +254,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window = PreferencesWindow{{}};
+    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(), {}};
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "future-theme";
     prefs.lastLayoutPreset = "future-layout";

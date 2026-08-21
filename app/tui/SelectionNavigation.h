@@ -7,9 +7,16 @@
 #include <cstdint>
 #include <string>
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
-  std::string selectionSummary(std::size_t trackCount, std::int32_t selectedIndex);
+  std::string selectionSummary(uimodel::PresentationTextCatalog const& textCatalog,
+                               std::size_t trackCount,
+                               std::int32_t selectedIndex);
   std::int32_t moveSelection(std::int32_t selectedIndex, std::int32_t delta, std::size_t itemCount);
   std::size_t clampSelection(std::size_t selection, std::size_t itemCount);
 } // namespace ao::tui

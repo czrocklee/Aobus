@@ -8,6 +8,11 @@
 #include <cstddef>
 #include <string>
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
   struct TrackSection final
@@ -20,5 +25,5 @@ namespace ao::tui
     ResourceId imageId{kInvalidResourceId};
   };
 
-  std::string trackSectionDisplayName(TrackSection const& section);
+  std::string trackSectionDisplayName(uimodel::PresentationTextCatalog const& textCatalog, TrackSection const& section);
 } // namespace ao::tui

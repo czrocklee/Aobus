@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -30,7 +31,8 @@ namespace ao::gtk::layout
     {
     public:
       AudioPipelinePanelComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _panel{[](LayoutBuildContext const& ctx2, LayoutNode const& n)
+        : _panel{ctx.dependencies.textCatalog,
+                 [](LayoutBuildContext const& ctx2, LayoutNode const& n)
                  {
                    auto const variantStr = n.propertyOr<std::string>("variant", "");
 
@@ -52,7 +54,9 @@ namespace ao::gtk::layout
                    return ctx2.surface == uimodel::LayoutSurface::Tooltip ? AudioPipelinePanelVariant::Tooltip
                                                                           : AudioPipelinePanelVariant::Inline;
                  }(ctx, node)}
-        , _viewModel{ctx.runtime.playback(), [this](auto const& view) { _panel.apply(view.audioPipeline); }}
+        , _viewModel{ctx.runtime.playback(),
+                     ctx.dependencies.textCatalog,
+                     [this](auto const& view) { _panel.apply(view.audioPipeline); }}
       {
       }
 

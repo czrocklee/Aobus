@@ -8,6 +8,11 @@
 #include <cstdint>
 #include <memory>
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ftxui
 {
   class Node;
@@ -16,7 +21,11 @@ namespace ftxui
 
 namespace ao::tui
 {
+  class TuiTextCatalog;
   std::int32_t commandPalettePanelColumns(std::int32_t terminalColumns);
   std::int32_t commandPalettePanelRows(std::int32_t terminalRows);
-  ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t columns = 0);
+  ftxui::Element commandPalettePanel(uimodel::PresentationTextCatalog const& textCatalog,
+                                     TuiTextCatalog const& tuiTextCatalog,
+                                     ShellInteractionModel const& shell,
+                                     std::int32_t columns = 0);
 } // namespace ao::tui

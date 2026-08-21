@@ -15,9 +15,11 @@
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
+  class PresentationTextCatalog;
 }
 namespace ao::gtk
 {
+  class GtkTextCatalog;
   class TrackRowCache;
   class ResourceImageLoader;
   class TagEditController;
@@ -41,6 +43,8 @@ namespace ao::gtk
    */
   struct GtkUiDependencies final
   {
+    uimodel::PresentationTextCatalog const& textCatalog;
+    GtkTextCatalog const& gtkTextCatalog;
     TrackRowCache* trackRowCache = nullptr;
     ResourceImageLoader* imageLoader = nullptr;
     uimodel::PlaybackCommandSurface* playbackCommandSurface = nullptr;
@@ -51,7 +55,6 @@ namespace ao::gtk
     uimodel::ListPresentationPreferenceStore* trackPresentationPreferences = nullptr;
     ListNavigationController* listNavigationController = nullptr;
     ThemeCoordinator* themeCoordinator = nullptr;
-
     /// Creates a saved List from a filter expression under the given parent (defaults to the
     /// navigation controller's dialog flow; injectable so components stay decoupled from it).
     std::function<void(ao::ListId parentListId, std::string expression)> createSmartListFromExpression{};

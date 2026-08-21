@@ -5,6 +5,7 @@
 
 #include "ShellInteractionModel.h"
 #include "Style.h"
+#include "TuiTextCatalog.h"
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -105,7 +106,7 @@ namespace ao::tui
     return state != nullptr && state->compact.kind != uimodel::ActivityStatusKind::Idle && !state->compact.text.empty();
   }
 
-  ftxui::Element statusBar(StatusBarViewState const& state)
+  ftxui::Element statusBar(TuiTextCatalog const& textCatalog, StatusBarViewState const& state)
   {
     using namespace ftxui;
 
@@ -117,7 +118,7 @@ namespace ao::tui
 
       if (!state.filterDraft.empty())
       {
-        parts.push_back(text("Filter: ") | style::accent() | bold);
+        parts.push_back(text(std::string{textCatalog.text(TuiTextId::FilterLabel)} + ": ") | style::accent() | bold);
         parts.push_back(text(state.filterDraft) | dim);
         parts.push_back(text("  "));
       }
@@ -144,16 +145,16 @@ namespace ao::tui
 
       // Opening the command line and jumping between groups are not commands,
       // so they are named here and nowhere else.
-      appendChip("/", "command");
-      appendCommandChip(CommandAction::OpenLists, "lists");
-      appendCommandChip(CommandAction::OpenPresentationPanel, "view");
-      appendCommandChip(CommandAction::OpenNotifications, "notif");
-      appendCommandChip(CommandAction::OpenDetail, "detail");
-      appendCommandChip(CommandAction::OpenQuality, "pipeline");
-      appendCommandChip(CommandAction::OpenOutputDevices, "output");
-      appendChip("{ }", "groups");
-      appendCommandChip(CommandAction::RevealCurrentTrack, "current");
-      appendCommandChip(CommandAction::Quit, "quit");
+      appendChip("/", textCatalog.text(TuiTextId::StatusCommand));
+      appendCommandChip(CommandAction::OpenLists, textCatalog.text(TuiTextId::StatusLists));
+      appendCommandChip(CommandAction::OpenPresentationPanel, textCatalog.text(TuiTextId::StatusView));
+      appendCommandChip(CommandAction::OpenNotifications, textCatalog.text(TuiTextId::StatusNotifications));
+      appendCommandChip(CommandAction::OpenDetail, textCatalog.text(TuiTextId::StatusDetail));
+      appendCommandChip(CommandAction::OpenQuality, textCatalog.text(TuiTextId::StatusPipeline));
+      appendCommandChip(CommandAction::OpenOutputDevices, textCatalog.text(TuiTextId::StatusOutput));
+      appendChip("{ }", textCatalog.text(TuiTextId::StatusGroups));
+      appendCommandChip(CommandAction::RevealCurrentTrack, textCatalog.text(TuiTextId::StatusCurrent));
+      appendCommandChip(CommandAction::Quit, textCatalog.text(TuiTextId::StatusQuit));
       return hbox(std::move(parts));
     };
 
@@ -188,14 +189,15 @@ namespace ao::tui
     auto leftStatusAreaPtr = [&] { return hasActivity ? statusSlotPtr() | xflex : filler() | xflex; };
 
     auto const overlay = shell.overlay();
-    auto const interactionHint = std::string{overlayHint(overlay)};
-    auto const contextLabel = overlay == Overlay::None ? std::string{} : overlayLabel(overlay);
+    auto const interactionHint = std::string{overlayHint(textCatalog, overlay)};
+    auto const contextLabel =
+      overlay == Overlay::None ? std::string{} : std::string{overlayLabel(textCatalog, overlay)};
 
     auto hint = std::string{};
 
     if (!state.filterDraft.empty())
     {
-      hint = std::format("Filter: {}  ", state.filterDraft);
+      hint = std::format("{}: {}  ", textCatalog.text(TuiTextId::FilterLabel), state.filterDraft);
     }
 
     hint += interactionHint;

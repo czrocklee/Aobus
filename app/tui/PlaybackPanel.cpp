@@ -7,6 +7,7 @@
 #include "PlaybackStatusFormatter.h"
 #include "SoulButton.h"
 #include "Style.h"
+#include "TuiTextCatalog.h"
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -16,7 +17,6 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -105,13 +105,14 @@ namespace ao::tui
     return kPlaybackRows;
   }
 
-  ftxui::Element playbackBar(PlaybackBarViewState const& view)
+  ftxui::Element playbackBar(TuiTextCatalog const& textCatalog, PlaybackBarViewState const& view)
   {
     using namespace ftxui;
 
     auto fallbackState = rt::PlaybackTransportSnapshot{};
     auto const& state = view.playbackState == nullptr ? fallbackState : *view.playbackState;
-    auto const title = state.nowPlaying.title.empty() ? std::string{"No active track"} : state.nowPlaying.title;
+    auto const title = state.nowPlaying.title.empty() ? std::string{textCatalog.text(TuiTextId::PlaybackNoActiveTrack)}
+                                                      : state.nowPlaying.title;
     auto const artist = state.nowPlaying.artist;
     auto titleLine = title;
 
@@ -124,7 +125,7 @@ namespace ao::tui
     auto const effectiveElapsed = clampedElapsed(view.displayElapsed, state.duration);
     auto const elapsed = formatDuration(effectiveElapsed);
     auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
-    auto const volume = std::format("Vol {}%", static_cast<std::int32_t>(std::round(state.volume.level * 100.0F)));
+    auto const volume = textCatalog.playbackVolume(static_cast<std::int32_t>(std::round(state.volume.level * 100.0F)));
     auto const soulAura = uimodel::resolveSoulAura(state.transport, state.ready, state.quality);
     auto const soulVisual = uimodel::aobusSoulVisualFrame(uimodel::aobusSoulAuraRgb(soulAura), view.soulMotion);
     auto outputElementPtr = outputDeviceBadge(view.outputView, view.outputDeviceHovered);

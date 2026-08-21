@@ -9,6 +9,7 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
@@ -24,6 +25,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -45,9 +47,11 @@ namespace ao::gtk
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
                                uimodel::TrackColumnLayoutStore& layoutStore,
+                               uimodel::PresentationTextCatalog textCatalog,
                                rt::ResourceByteLoader& byteLoader)
     : _stack{stack}
     , _runtime{runtime}
+    , _textCatalog{std::move(textCatalog)}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _layoutStore{layoutStore}
@@ -365,11 +369,11 @@ namespace ao::gtk
     modelPtr->bindProjection(projPtr);
 
     auto trackPagePtr = std::make_unique<TrackViewPage>(
-      listId, modelPtr, _layoutStore, _runtime, _thumbnailLoader, foundStateRes->presentation, viewId);
+      listId, modelPtr, _layoutStore, _textCatalog, _runtime, _thumbnailLoader, foundStateRes->presentation, viewId);
     trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
     auto const pageId = std::format("view-{}", viewId.raw());
 
-    auto listName = std::string{"List"};
+    auto listName = std::string{_textCatalog.text(i18n::MessageId::LibraryUnnamedList)};
 
     if (!rt::isVirtualListId(listId))
     {
@@ -377,12 +381,13 @@ namespace ao::gtk
 
       if (auto optNode = scope.listNode(listId); optNode)
       {
-        listName = optNode->name.empty() ? "<Unnamed List>" : optNode->name;
+        listName =
+          optNode->name.empty() ? std::string{_textCatalog.text(i18n::MessageId::LibraryUnnamedList)} : optNode->name;
       }
     }
     else if (listId == rt::kAllTracksListId)
     {
-      listName = "All Tracks";
+      listName = _textCatalog.text(i18n::MessageId::LibraryAllTracks);
     }
 
     _stack.add(*trackPagePtr, pageId, listName);

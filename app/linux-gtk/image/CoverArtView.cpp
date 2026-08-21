@@ -136,6 +136,11 @@ namespace ao::gtk
     _image.setHighQualityRenderer(std::move(renderer));
   }
 
+  void CoverArtView::setAlternativeText(std::string_view const text)
+  {
+    _image.set_alternative_text(std::string{text});
+  }
+
   double CoverArtView::displayScale() const
   {
     return _image.displayScale();

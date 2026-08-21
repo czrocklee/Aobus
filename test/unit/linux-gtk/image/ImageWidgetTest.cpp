@@ -42,9 +42,9 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = ImageWidget{};
 
-    SECTION("initial state has alt text")
+    SECTION("generic image state does not own presentation copy")
     {
-      CHECK(widget.get_alternative_text() == "No cover art");
+      CHECK(widget.get_alternative_text().empty());
     }
 
     SECTION("allocated rendering uses current widget size")

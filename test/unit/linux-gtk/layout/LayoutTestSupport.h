@@ -80,7 +80,8 @@ namespace ao::gtk::layout::test
   {
   public:
     explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test",
-                                  std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {});
+                                  std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {},
+                                  std::string_view locale = "en");
     ~LayoutRuntimeFixture() noexcept;
 
     LayoutRuntimeFixture(LayoutRuntimeFixture const&) = delete;

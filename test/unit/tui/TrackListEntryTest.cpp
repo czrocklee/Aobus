@@ -3,6 +3,7 @@
 
 #include "tui/TrackListEntry.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackRow.h>
 
@@ -24,7 +25,7 @@ namespace ao::tui::test
                             .album = "Keyboard Works",
                             .duration = std::chrono::seconds{125}};
 
-    auto item = makeTrackListEntry(row);
+    auto item = makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
 
     CHECK(item.id == TrackId{7});
     CHECK(item.row.title == "Fugue");
@@ -32,15 +33,18 @@ namespace ao::tui::test
     CHECK(item.label == "--  Fugue  A. Composer  Keyboard Works");
 
     row.title.clear();
-    item = makeTrackListEntry(row);
+    item = makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
 
     CHECK(item.label == "--  untitled.flac  A. Composer  Keyboard Works");
 
     row.optUriPath.reset();
     row.id = TrackId{99};
-    item = makeTrackListEntry(row);
+    item = makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
 
     CHECK(item.label == "--  Track 99  A. Composer  Keyboard Works");
+
+    auto const german = ao::test::presentationTextCatalog("de-AT");
+    CHECK(makeTrackListEntry(german, row).label == "--  Titel 99  A. Composer  Keyboard Works");
   }
 
   TEST_CASE("TrackListEntry - menu labels preserve track order", "[tui][unit][track-list]")

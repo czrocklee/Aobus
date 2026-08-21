@@ -6,6 +6,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -59,7 +60,7 @@ namespace ao::gtk::layout::editor::test
     {
       for (auto* const button : collectAll<Gtk::Button>(dialog.headerBar()))
       {
-        if (button->get_tooltip_text() == "Reset to selected preset's default layout")
+        if (button->get_tooltip_text() == "Reset selected preset to its default layout")
         {
           return button;
         }
@@ -105,8 +106,14 @@ namespace ao::gtk::layout::editor::test
       return presetRootDocument(presetId);
     };
 
-    auto dialog = LayoutEditorDialog{
-      fixture.window, fixture.registry, fixture.actionRegistry, fixture.doc, "classic", "modern", customLoader};
+    auto dialog = LayoutEditorDialog{fixture.window,
+                                     fixture.registry,
+                                     fixture.actionRegistry,
+                                     ao::test::englishPresentationTextCatalog(),
+                                     fixture.doc,
+                                     "classic",
+                                     "modern",
+                                     customLoader};
 
     auto* const combo = presetCombo(dialog);
     CHECK(combo->get_active_id() == "classic");
@@ -152,8 +159,14 @@ namespace ao::gtk::layout::editor::test
   {
     auto fixture = DialogSessionFixture{};
     auto const customLoader = [](std::string_view presetId) { return presetRootDocument(presetId); };
-    auto dialog = LayoutEditorDialog{
-      fixture.window, fixture.registry, fixture.actionRegistry, fixture.doc, "classic", "modern", customLoader};
+    auto dialog = LayoutEditorDialog{fixture.window,
+                                     fixture.registry,
+                                     fixture.actionRegistry,
+                                     ao::test::englishPresentationTextCatalog(),
+                                     fixture.doc,
+                                     "classic",
+                                     "modern",
+                                     customLoader};
 
     auto* const combo = presetCombo(dialog);
     auto* const resetButton = resetDefaultButton(dialog);
@@ -203,8 +216,14 @@ namespace ao::gtk::layout::editor::test
       return presetRootDocument(presetId);
     };
 
-    auto dialog = LayoutEditorDialog{
-      fixture.window, fixture.registry, fixture.actionRegistry, fixture.doc, "classic", "modern", customLoader};
+    auto dialog = LayoutEditorDialog{fixture.window,
+                                     fixture.registry,
+                                     fixture.actionRegistry,
+                                     ao::test::englishPresentationTextCatalog(),
+                                     fixture.doc,
+                                     "classic",
+                                     "modern",
+                                     customLoader};
     auto* const combo = presetCombo(dialog);
 
     combo->set_active_id("modern");
@@ -237,8 +256,14 @@ namespace ao::gtk::layout::editor::test
             "[gtk][unit][layout-editor][session]")
   {
     auto fixture = DialogSessionFixture{};
-    auto dialog = LayoutEditorDialog{
-      fixture.window, fixture.registry, fixture.actionRegistry, fixture.doc, "classic", "modern", emptyLayout};
+    auto dialog = LayoutEditorDialog{fixture.window,
+                                     fixture.registry,
+                                     fixture.actionRegistry,
+                                     ao::test::englishPresentationTextCatalog(),
+                                     fixture.doc,
+                                     "classic",
+                                     "modern",
+                                     emptyLayout};
 
     auto* const resetButton = resetDefaultButton(dialog);
     REQUIRE(resetButton != nullptr);
@@ -264,8 +289,14 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("LayoutEditorDialog - reset default ignores missing active preset", "[gtk][unit][layout-editor][session]")
   {
     auto fixture = DialogSessionFixture{};
-    auto dialog = LayoutEditorDialog{
-      fixture.window, fixture.registry, fixture.actionRegistry, fixture.doc, "classic", "modern", emptyLayout};
+    auto dialog = LayoutEditorDialog{fixture.window,
+                                     fixture.registry,
+                                     fixture.actionRegistry,
+                                     ao::test::englishPresentationTextCatalog(),
+                                     fixture.doc,
+                                     "classic",
+                                     "modern",
+                                     emptyLayout};
 
     auto* const combo = presetCombo(dialog);
     combo->set_active(-1);

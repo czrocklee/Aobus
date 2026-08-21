@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -23,7 +24,7 @@ namespace ao::gtk::layout
     {
     public:
       SelectionInfoComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.views()}
+        : _widget{ctx.runtime.views(), ctx.dependencies.textCatalog}
       {
         _widget.widget().add_css_class("ao-selection-info-modern");
       }

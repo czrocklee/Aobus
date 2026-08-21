@@ -16,5 +16,6 @@ namespace ao::gtk::layout::track_field_grid
   bool isProtectedFieldEditValue(rt::TrackField field,
                                  rt::TrackDetailSnapshot const& snap,
                                  std::string_view newValue,
-                                 bool protectCompositeMixedText);
+                                 std::string_view mixedText,
+                                 bool requireMixedField);
 } // namespace ao::gtk::layout::track_field_grid

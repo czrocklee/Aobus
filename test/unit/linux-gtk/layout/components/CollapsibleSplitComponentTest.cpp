@@ -424,4 +424,27 @@ namespace ao::gtk::layout::test
       CHECK(stateStore.document().components.empty());
     }
   }
+
+  TEST_CASE("CollapsibleSplitComponent - toggle accessibility copy follows the selected locale",
+            "[gtk][unit][localization]")
+  {
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.collapsible_localization_test", {}, "de-DE"};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
+    auto doc = LayoutDocument{};
+    doc.root.type = "collapsibleSplit";
+    doc.root.props["revealed"] = LayoutValue{false};
+    doc.root.children.push_back(LayoutNode{.type = "spacer"});
+    doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+    auto const componentPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+    auto* const box = collapsibleSplitBox(*componentPtr);
+    REQUIRE(box != nullptr);
+    auto* const toggle = endSideCollapsibleToggle(*box);
+    REQUIRE(toggle != nullptr);
+    CHECK(hasAccessibleLabel(*toggle, "Bereich ausklappen"));
+
+    emitClicked(*toggle);
+    CHECK(hasAccessibleLabel(*toggle, "Bereich einklappen"));
+  }
 } // namespace ao::gtk::layout::test

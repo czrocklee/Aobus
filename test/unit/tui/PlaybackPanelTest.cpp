@@ -3,7 +3,9 @@
 
 #include "tui/PlaybackPanel.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
+#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/QualityPanel.h"
 #include <ao/audio/BackendIds.h>
@@ -37,6 +39,36 @@ namespace ao::tui::test
 {
   namespace
   {
+    ftxui::Element qualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t const columns = 0)
+    {
+      return ao::tui::qualityPanel(englishTuiTextCatalog(), ao::test::englishPresentationTextCatalog(), state, columns);
+    }
+
+    ftxui::Element playbackBar(PlaybackBarViewState const& view)
+    {
+      return ao::tui::playbackBar(englishTuiTextCatalog(), view);
+    }
+
+    std::int32_t qualityPanelColumns(rt::PlaybackTransportSnapshot const& state, std::int32_t const terminalColumns)
+    {
+      return ao::tui::qualityPanelColumns(
+        englishTuiTextCatalog(), ao::test::englishPresentationTextCatalog(), state, terminalColumns);
+    }
+
+    ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
+                                     std::int32_t const selectedRow,
+                                     std::vector<OutputDeviceRowHitRegion>* const rowHitRegions = nullptr,
+                                     std::int32_t const columns = 0)
+    {
+      return ao::tui::outputDevicePanel(englishTuiTextCatalog(), view, selectedRow, rowHitRegions, columns);
+    }
+
+    std::int32_t outputDevicePanelColumns(uimodel::OutputDeviceViewState const& view,
+                                          std::int32_t const terminalColumns)
+    {
+      return ao::tui::outputDevicePanelColumns(englishTuiTextCatalog(), view, terminalColumns);
+    }
+
     std::string renderPlaybackText(ftxui::Element elementPtr)
     {
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fit(elementPtr));
@@ -120,6 +152,22 @@ namespace ao::tui::test
     CHECK(text.contains("0:00"));
     CHECK(text.contains("--:--"));
     CHECK(text.contains("Vol 100%"));
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar uses localized copy without changing track data",
+            "[tui][unit][playback][localization]")
+  {
+    auto const german = tuiTextCatalog("de-DE");
+    auto state = rt::PlaybackTransportSnapshot{
+      .nowPlaying = rt::NowPlayingInfo{.title = "誰か、海を。"}, .volume = rt::VolumeState{.level = 0.42F}};
+    auto text = renderPlaybackText(playbackBar(german, {.playbackState = &state}));
+
+    CHECK(text.contains("誰か、海を。"));
+    CHECK(text.contains("Lautst. 42%"));
+
+    state.nowPlaying.title.clear();
+    text = renderPlaybackText(playbackBar(german, {.playbackState = &state}));
+    CHECK(text.contains("Kein aktiver Titel"));
   }
 
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
@@ -419,6 +467,50 @@ namespace ao::tui::test
     CHECK(text.contains("Pipeline intervention"));
   }
 
+  TEST_CASE("PlaybackPanel - quality panel localizes semantic copy and preserves external names",
+            "[tui][unit][playback][localization]")
+  {
+    auto const tuiText = tuiTextCatalog("de-DE");
+    auto const presentationText = ao::test::presentationTextCatalog("de-DE");
+    auto state = rt::PlaybackTransportSnapshot{
+      .output =
+        rt::OutputState{
+          .selectedDevice = audio::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"},
+                                                         .deviceId = audio::DeviceId{"dac"}},
+          .availableBackends = {rt::OutputBackendSnapshot{
+            .id = audio::BackendId{"mock_backend"},
+            .devices = {rt::OutputDeviceSnapshot{.id = audio::DeviceId{"dac"}, .displayName = "Dvořák DAC"}},
+          }},
+        },
+      .quality = rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                  .pipelineQuality = audio::Quality::LinearIntervention,
+                                  .overall = audio::Quality::LinearIntervention,
+                                  .assessments = {audio::NodeQualityAssessment{
+                                    .nodeName = "誰か",
+                                    .nodeType = audio::flow::NodeType::Source,
+                                    .optFormat = cdFormat(),
+                                    .findings = {audio::QualityFinding{
+                                      .kind = audio::QualityFindingKind::Resampling,
+                                      .quality = audio::Quality::LinearIntervention,
+                                      .optFromFormat = cdFormat(),
+                                      .optToFormat =
+                                        audio::SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16},
+                                    }},
+                                  }}},
+    };
+
+    auto const text = renderPlaybackText(qualityPanel(tuiText, presentationText, state, 0));
+
+    CHECK(text.contains("Dvořák DAC"));
+    CHECK(text.contains("[Quelle] 誰か"));
+    CHECK(text.contains("Neuabtastung: 44100 Hz → 48000 Hz"));
+    CHECK(text.contains("Eingriff in die Audiokette"));
+
+    state.quality.assessments.clear();
+    auto const emptyText = renderPlaybackText(qualityPanel(tuiText, presentationText, state, 0));
+    CHECK(emptyText.contains("Noch keine Audiokette"));
+  }
+
   TEST_CASE("PlaybackPanel - quality panel width follows content and terminal bounds", "[tui][unit][playback]")
   {
     auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
@@ -485,6 +577,17 @@ namespace ao::tui::test
     CHECK(rowHitRegions[0].profileId == audio::kProfileShared);
     CHECK(rowHitRegions[1].rowIndex == 2);
     CHECK(rowHitRegions[1].profileId == audio::kProfileExclusive);
+  }
+
+  TEST_CASE("PlaybackPanel - output device empty state uses the selected locale", "[tui][unit][playback][localization]")
+  {
+    auto const german = tuiTextCatalog("de-AT");
+    auto const view = uimodel::OutputDeviceViewState{};
+    auto const text = renderPlaybackText(outputDevicePanel(german, view, 0));
+
+    CHECK(text.contains("Ausgabegeräte"));
+    CHECK(text.contains("Keine Ausgabegeräte gefunden"));
+    CHECK(text.contains("Kein Ausgabegerät ausgewählt"));
   }
 
   TEST_CASE("PlaybackPanel - output device panel width follows content and terminal bounds", "[tui][unit][playback]")

@@ -19,6 +19,11 @@ namespace ao::rt
   class Library;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
   class ListTreeModelBuilder final
@@ -33,6 +38,6 @@ namespace ao::gtk
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 
-    static BuildResult build(rt::Library const& reads);
+    static BuildResult build(rt::Library const& reads, uimodel::PresentationTextCatalog const& textCatalog);
   };
 } // namespace ao::gtk

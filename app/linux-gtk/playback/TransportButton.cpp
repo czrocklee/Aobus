@@ -50,11 +50,13 @@ namespace ao::gtk
 
   TransportButton::TransportButton(rt::PlaybackService& playback,
                                    ao::uimodel::PlaybackCommandSurface& commands,
+                                   ao::uimodel::PresentationTextCatalog const& textCatalog,
                                    Action action,
                                    bool showLabel,
                                    std::string const& size)
     : _transportViewModel{playback,
                           commands,
+                          textCatalog,
                           action,
                           showLabel,
                           [this](ao::uimodel::TransportViewState const& state) { applyState(state); }}

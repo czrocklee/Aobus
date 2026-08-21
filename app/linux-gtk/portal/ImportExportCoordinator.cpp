@@ -6,6 +6,7 @@
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
 #include "app/ThemeCoordinator.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/LayoutConstants.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinatorPolicy.h"
@@ -14,7 +15,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <giomm/asyncresult.h>
@@ -35,7 +36,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <format>
 #include <functional>
 #include <memory>
 #include <string>
@@ -45,12 +45,15 @@ namespace ao::gtk::portal
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
+                                                   uimodel::PresentationTextCatalog const& textCatalog,
+                                                   GtkTextCatalog gtkTextCatalog,
                                                    ImportExportCallbacks callbacks,
                                                    ThemeCoordinator& themeCoordinator)
     : _parent{parent}
     , _callbacks{std::move(callbacks)}
     , _themeCoordinator{themeCoordinator}
-    , _workflow{runtime, _callbacks}
+    , _gtkTextCatalog{std::move(gtkTextCatalog)}
+    , _workflow{runtime, _callbacks, textCatalog}
     , _fileDialogCancellablePtr{Gio::Cancellable::create()}
     , _callbackScope{[cancellablePtr = _fileDialogCancellablePtr] { cancellablePtr->cancel(); }}
   {
@@ -62,37 +65,38 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::openLibrary()
   {
     auto dialogPtr = Gtk::FileDialog::create();
-    dialogPtr->set_title("Open Music Library");
+    dialogPtr->set_title(_gtkTextCatalog.text(GtkTextId::LibraryOpenMusicLibrary));
 
-    dialogPtr->select_folder(_parent,
-                             _callbackScope.guard(
-                               [this, dialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
-                               {
-                                 try
-                                 {
-                                   if (auto const folderPtr = dialogPtr->select_folder_finish(resultPtr); folderPtr)
-                                   {
-                                     auto const path = utility::pathFromNative(folderPtr->get_path());
-                                     auto const libraryPaths = rt::LibraryPaths{path};
+    dialogPtr->select_folder(
+      _parent,
+      _callbackScope.guard(
+        [this, dialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
+        {
+          try
+          {
+            if (auto const folderPtr = dialogPtr->select_folder_finish(resultPtr); folderPtr)
+            {
+              auto const path = utility::pathFromNative(folderPtr->get_path());
+              auto const libraryPaths = rt::LibraryPaths{path};
 
-                                     openMusicLibrary(path, !libraryPaths.hasExistingDatabase());
-                                   }
-                                 }
-                                 catch (Gtk::DialogError const& e)
-                                 {
-                                   if (!isExpectedNativeChooserCancellation(e.code()))
-                                   {
-                                     APP_LOG_ERROR("Error selecting folder: {}", e.what());
-                                     presentFileDialogError("Could not select a music library folder", e.what());
-                                   }
-                                 }
-                                 catch (Glib::Error const& e)
-                                 {
-                                   APP_LOG_ERROR("Error selecting folder: {}", e.what());
-                                   presentFileDialogError("Could not select a music library folder", e.what());
-                                 }
-                               }),
-                             _fileDialogCancellablePtr);
+              openMusicLibrary(path, !libraryPaths.hasExistingDatabase());
+            }
+          }
+          catch (Gtk::DialogError const& e)
+          {
+            if (!isExpectedNativeChooserCancellation(e.code()))
+            {
+              APP_LOG_ERROR("Error selecting folder: {}", e.what());
+              presentFileDialogError(_gtkTextCatalog.text(GtkTextId::LibraryCouldNotSelectMusicFolder), e.what());
+            }
+          }
+          catch (Glib::Error const& e)
+          {
+            APP_LOG_ERROR("Error selecting folder: {}", e.what());
+            presentFileDialogError(_gtkTextCatalog.text(GtkTextId::LibraryCouldNotSelectMusicFolder), e.what());
+          }
+        }),
+      _fileDialogCancellablePtr);
   }
 
   void ImportExportCoordinator::scanLibrary()
@@ -116,30 +120,30 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::exportLibrary()
   {
     auto* const dialog = Gtk::make_managed<AppDialog>();
-    dialog->set_title("Select Export Mode");
+    dialog->set_title(_gtkTextCatalog.text(GtkTextId::LibrarySelectExportMode));
     dialog->configureForParent(_parent);
 
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingMedium);
 
-    auto* const label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
+    auto* const label = Gtk::make_managed<Gtk::Label>(_gtkTextCatalog.text(GtkTextId::LibraryChooseBackupContents));
     label->set_halign(Gtk::Align::START);
     box->append(*label);
 
     auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
-    auto modeStringsPtr = Gtk::StringList::create({"Delta (Sync user edits, Tags, Lists)",
-                                                   "Metadata (Curated text + Cover Art, no technical stats)",
-                                                   "Full (Disaster Recovery: Everything)",
-                                                   "List Only (Sync playlists without touching tracks)"});
+    auto modeStringsPtr = Gtk::StringList::create({_gtkTextCatalog.text(GtkTextId::LibraryExportModeDelta),
+                                                   _gtkTextCatalog.text(GtkTextId::LibraryExportModeMetadata),
+                                                   _gtkTextCatalog.text(GtkTextId::LibraryExportModeFull),
+                                                   _gtkTextCatalog.text(GtkTextId::LibraryExportModeListOnly)});
     modeCombo->set_model(modeStringsPtr);
     modeCombo->set_selected(2); // Default to Full
 
     auto* list = Gtk::make_managed<FormBoxedList>();
-    list->addRow("Include", *modeCombo);
+    list->addRow(_gtkTextCatalog.text(GtkTextId::LibraryInclude), *modeCombo);
     box->append(*list);
 
     dialog->setContentWidget(*box);
-    dialog->addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
-    dialog->addPrimaryAction("Next", Gtk::ResponseType::OK);
+    dialog->addCancelAction(_gtkTextCatalog.text(GtkTextId::CommonCancel), Gtk::ResponseType::CANCEL);
+    dialog->addPrimaryAction(_gtkTextCatalog.text(GtkTextId::LibraryNext), Gtk::ResponseType::OK);
 
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
 
@@ -165,11 +169,11 @@ namespace ao::gtk::portal
     dialog->close();
 
     auto fileDialogPtr = Gtk::FileDialog::create();
-    fileDialogPtr->set_title("Export Library to YAML");
+    fileDialogPtr->set_title(_gtkTextCatalog.text(GtkTextId::LibraryExportYaml));
     fileDialogPtr->set_initial_name("library_backup.yaml");
 
     auto filterPtr = Gtk::FileFilter::create();
-    filterPtr->set_name("YAML files");
+    filterPtr->set_name(_gtkTextCatalog.text(GtkTextId::LibraryYamlFiles));
     filterPtr->add_pattern("*.yaml");
     filterPtr->add_pattern("*.yml");
     auto filtersPtr = Gio::ListStore<Gtk::FileFilter>::create();
@@ -198,13 +202,13 @@ namespace ao::gtk::portal
       if (!isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting export file: {}", e.what());
-        presentFileDialogError("Could not select an export file", e.what());
+        presentFileDialogError(_gtkTextCatalog.text(GtkTextId::LibraryCouldNotSelectExportFile), e.what());
       }
     }
     catch (Glib::Error const& e)
     {
       APP_LOG_ERROR("Error selecting export file: {}", e.what());
-      presentFileDialogError("Could not select an export file", e.what());
+      presentFileDialogError(_gtkTextCatalog.text(GtkTextId::LibraryCouldNotSelectExportFile), e.what());
     }
   }
 
@@ -216,10 +220,10 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::importLibrary()
   {
     auto fileDialogPtr = Gtk::FileDialog::create();
-    fileDialogPtr->set_title("Import Library from YAML");
+    fileDialogPtr->set_title(_gtkTextCatalog.text(GtkTextId::LibraryImportYaml));
 
     auto filterPtr = Gtk::FileFilter::create();
-    filterPtr->set_name("YAML files");
+    filterPtr->set_name(_gtkTextCatalog.text(GtkTextId::LibraryYamlFiles));
     filterPtr->add_pattern("*.yaml");
     filterPtr->add_pattern("*.yml");
     auto filtersPtr = Gio::ListStore<Gtk::FileFilter>::create();
@@ -240,35 +244,23 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::presentLibraryRestoreConfirmation(rt::ImportReport const& report,
                                                                   std::function<void(bool)> completion)
   {
-    auto const* const scopeName =
-      report.targetScope == rt::ImportTargetScope::Library ? "library tracks and lists" : "lists";
-    auto const* const actionLabel =
-      report.targetScope == rt::ImportTargetScope::Library ? "Restore Library" : "Restore Lists";
-    auto const message = std::format("This restore will replace the current {}.\n\n"
-                                     "Payload: YAML v{}, mode '{}'.\n"
-                                     "Preview: {} created, {} updated, {} deleted; {} lists created, {} deleted; "
-                                     "{} dangling references ignored.\n\n"
-                                     "Continue only if this matches the selected backup.",
-                                     scopeName,
-                                     report.payloadVersion,
-                                     rt::exportModeName(report.payloadMode),
-                                     uimodel::formatTrackCount(report.tracksCreated),
-                                     uimodel::formatTrackCount(report.tracksUpdated),
-                                     uimodel::formatTrackCount(report.tracksDeleted),
-                                     report.listsCreated,
-                                     report.listsDeleted,
-                                     report.danglingReferencesIgnored);
+    auto const actionId = report.targetScope == rt::ImportTargetScope::Library ? GtkTextId::LibraryRestoreLibrary
+                                                                               : GtkTextId::LibraryRestoreLists;
+    auto const message = _gtkTextCatalog.libraryRestoreConfirmation(report);
 
-    auto* const dialog = AppDialog::presentMessage(
-      _parent,
-      "Confirm Library Restore",
-      message,
-      {AppDialogAction{.label = "Cancel", .responseId = Gtk::ResponseType::CANCEL, .role = AppDialogActionRole::Cancel},
-       AppDialogAction{
-         .label = actionLabel, .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
-      Gtk::ResponseType::CANCEL,
-      _callbackScope.guard([completion = std::move(completion)](std::int32_t const responseId)
-                           { completion(responseId == Gtk::ResponseType::OK); }));
+    auto* const dialog =
+      AppDialog::presentMessage(_parent,
+                                _gtkTextCatalog.text(GtkTextId::LibraryConfirmRestore),
+                                message,
+                                {AppDialogAction{.label = std::string{_gtkTextCatalog.text(GtkTextId::CommonCancel)},
+                                                 .responseId = Gtk::ResponseType::CANCEL,
+                                                 .role = AppDialogActionRole::Cancel},
+                                 AppDialogAction{.label = std::string{_gtkTextCatalog.text(actionId)},
+                                                 .responseId = Gtk::ResponseType::OK,
+                                                 .role = AppDialogActionRole::Primary}},
+                                Gtk::ResponseType::CANCEL,
+                                _callbackScope.guard([completion = std::move(completion)](std::int32_t const responseId)
+                                                     { completion(responseId == Gtk::ResponseType::OK); }));
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
   }
@@ -288,24 +280,26 @@ namespace ao::gtk::portal
       if (!isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting import file: {}", e.what());
-        presentFileDialogError("Could not select a library backup", e.what());
+        presentFileDialogError(_gtkTextCatalog.text(GtkTextId::LibraryCouldNotSelectBackup), e.what());
       }
     }
     catch (Glib::Error const& e)
     {
       APP_LOG_ERROR("Error selecting import file: {}", e.what());
-      presentFileDialogError("Could not select a library backup", e.what());
+      presentFileDialogError(_gtkTextCatalog.text(GtkTextId::LibraryCouldNotSelectBackup), e.what());
     }
   }
 
   void ImportExportCoordinator::presentFileDialogError(std::string_view operation, std::string_view message)
   {
-    auto* const dialog = AppDialog::presentMessage(
-      _parent,
-      "File Selection Failed",
-      std::format("{}: {}", operation, message),
-      {AppDialogAction{.label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
-      Gtk::ResponseType::CLOSE);
+    auto* const dialog =
+      AppDialog::presentMessage(_parent,
+                                _gtkTextCatalog.text(GtkTextId::LibraryFileSelectionFailed),
+                                _gtkTextCatalog.fileSelectionError(operation, message),
+                                {AppDialogAction{.label = std::string{_gtkTextCatalog.text(GtkTextId::CommonClose)},
+                                                 .responseId = Gtk::ResponseType::CLOSE,
+                                                 .role = AppDialogActionRole::Cancel}},
+                                Gtk::ResponseType::CLOSE);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
   }

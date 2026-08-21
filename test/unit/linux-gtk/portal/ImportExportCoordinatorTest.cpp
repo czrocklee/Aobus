@@ -7,9 +7,11 @@
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinatorPolicy.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -60,7 +62,8 @@ namespace ao::gtk::test
         ++openCallbackCount;
       },
     };
-    auto coordinator = portal::ImportExportCoordinator{parent, fixture.runtime(), callbacks, theme};
+    auto coordinator = portal::ImportExportCoordinator{
+      parent, fixture.runtime(), ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog(), callbacks, theme};
 
     SECTION("default open does not request a scan")
     {
@@ -92,8 +95,12 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto parent = Gtk::Window{};
     auto theme = ThemeCoordinator{};
-    auto coordinatorPtr = std::make_unique<portal::ImportExportCoordinator>(
-      parent, fixture.runtime(), portal::ImportExportCallbacks{}, theme);
+    auto coordinatorPtr = std::make_unique<portal::ImportExportCoordinator>(parent,
+                                                                            fixture.runtime(),
+                                                                            ao::test::englishPresentationTextCatalog(),
+                                                                            englishGtkTextCatalog(),
+                                                                            portal::ImportExportCallbacks{},
+                                                                            theme);
 
     coordinatorPtr->exportLibrary();
 

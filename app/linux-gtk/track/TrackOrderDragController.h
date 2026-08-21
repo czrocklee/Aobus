@@ -22,6 +22,10 @@ namespace ao::rt
 {
   class AppRuntime;
 }
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
 
 namespace ao::gtk
 {
@@ -41,6 +45,7 @@ namespace ao::gtk
 
     TrackOrderDragController(rt::AppRuntime& runtime,
                              rt::ViewId viewId,
+                             uimodel::PresentationTextCatalog const& textCatalog,
                              Gtk::ColumnView& columnView,
                              Gtk::ScrolledWindow& scrolledWindow,
                              TrackSelectionController& selectionController,

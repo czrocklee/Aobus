@@ -26,7 +26,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackPresentationButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _widget{ctx.runtime}
+        : _widget{ctx.runtime, ctx.dependencies.textCatalog}
       {
         if (ctx.dependencies.trackPresentationCatalog != nullptr &&
             ctx.dependencies.trackPresentationPreferences != nullptr)

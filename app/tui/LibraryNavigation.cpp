@@ -3,10 +3,13 @@
 
 #include "LibraryNavigation.h"
 
+#include "TuiTextCatalog.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -29,16 +32,20 @@ namespace ao::tui
     };
 
     void appendNavigationEntry(std::vector<LibraryNavEntry>& items,
+                               uimodel::PresentationTextCatalog const& textCatalog,
+                               TuiTextCatalog const& tuiTextCatalog,
                                uimodel::ListTreeProjectionRow const& row,
                                std::size_t const depth)
     {
       if (row.id == rt::kAllTracksListId)
       {
-        items.push_back(LibraryNavEntry{.id = row.id, .label = row.name, .detail = "library"});
+        items.push_back(LibraryNavEntry{
+          .id = row.id, .label = row.name, .detail = std::string{tuiTextCatalog.text(TuiTextId::LibraryDetail)}});
         return;
       }
 
-      auto const displayName = row.name.empty() ? std::string{"<Unnamed List>"} : row.name;
+      auto const displayName =
+        row.name.empty() ? std::string{textCatalog.text(i18n::MessageId::LibraryUnnamedList)} : row.name;
       auto label = std::string(depth * 2, ' ');
       label.append(listNodeIcon());
       label.push_back(' ');
@@ -60,12 +67,21 @@ namespace ao::tui
   std::string listTitle(ListId const listId, std::vector<LibraryNavEntry> const& items)
   {
     auto const it = std::ranges::find(items, listId, &LibraryNavEntry::id);
-    return it == items.end() ? std::string{"All Tracks"} : it->label;
+
+    if (it != items.end())
+    {
+      return it->label;
+    }
+
+    auto const allTracks = std::ranges::find(items, rt::kAllTracksListId, &LibraryNavEntry::id);
+    return allTracks == items.end() ? std::string{} : allTracks->label;
   }
 
-  std::vector<LibraryNavEntry> makeLibraryNavigation(std::span<rt::ListNode const> const lists)
+  std::vector<LibraryNavEntry> makeLibraryNavigation(uimodel::PresentationTextCatalog const& textCatalog,
+                                                     TuiTextCatalog const& tuiTextCatalog,
+                                                     std::span<rt::ListNode const> const lists)
   {
-    auto const projection = uimodel::buildListTreeProjection(lists);
+    auto const projection = uimodel::buildListTreeProjection(textCatalog, lists);
     auto items = std::vector<LibraryNavEntry>{};
     items.reserve(projection.rowsById.size());
 
@@ -97,7 +113,7 @@ namespace ao::tui
       }
 
       auto const& row = rowIt->second;
-      appendNavigationEntry(items, row, current.depth);
+      appendNavigationEntry(items, textCatalog, tuiTextCatalog, row, current.depth);
 
       auto const childDepth = row.id == rt::kAllTracksListId ? current.depth : current.depth + 1;
 

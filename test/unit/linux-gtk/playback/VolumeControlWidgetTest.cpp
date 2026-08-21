@@ -3,8 +3,10 @@
 
 #include "playback/VolumeControlWidget.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/rt/playback/PlaybackService.h>
@@ -26,7 +28,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     playback.commands().setVolume(0.5F);
 
-    auto control = VolumeControlWidget{playback};
+    auto control = VolumeControlWidget{playback, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
     auto* btn = dynamic_cast<Gtk::Button*>(&control.widget());
     REQUIRE(btn != nullptr);
     auto* icon = dynamic_cast<Gtk::Image*>(btn->get_child());
@@ -60,5 +62,22 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-high-symbolic");
+  }
+
+  TEST_CASE("VolumeControlWidget - exposes localized volume state", "[gtk][unit][playback][localization]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& playback = fixture.runtime().playback();
+    rt::test::addReadyAudioProvider(fixture.runtime());
+    playback.commands().setVolume(0.5F);
+    auto catalog = ao::test::presentationTextCatalog("de-DE");
+    auto gtkCatalog = gtkTextCatalog("de-DE");
+
+    auto control = VolumeControlWidget{playback, catalog, gtkCatalog};
+    auto* const button = dynamic_cast<Gtk::Button*>(&control.widget());
+    REQUIRE(button != nullptr);
+    CHECK(button->get_tooltip_text() == "Lautstärke: 50%");
+    CHECK(hasAccessibleLabel(*button, "Lautstärke: 50%"));
   }
 } // namespace ao::gtk::test

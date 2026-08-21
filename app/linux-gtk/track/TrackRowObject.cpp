@@ -5,9 +5,11 @@
 
 #include "track/TrackFieldUi.h"
 #include <ao/AudioCodec.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
@@ -51,9 +53,14 @@ namespace ao::gtk
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id)
+  TrackRowObject::TrackRowObject(uimodel::PresentationTextCatalog const& textCatalog)
+    : Glib::ObjectBase{"TrackRowObject"}, _optTextCatalog{textCatalog}
   {
-    auto objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
+  }
+
+  Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, uimodel::PresentationTextCatalog const& textCatalog)
+  {
+    auto objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{textCatalog});
     objPtr->_id = id;
     return objPtr;
   }
@@ -202,6 +209,12 @@ namespace ao::gtk
 
     static Glib::ustring const kEmpty;
     return kEmpty;
+  }
+
+  uimodel::PresentationTextCatalog const& TrackRowObject::textCatalog() const
+  {
+    AO_INVARIANT(_optTextCatalog, "The GObject type-registration sentinel cannot format row text");
+    return *_optTextCatalog;
   }
 
   void TrackRowObject::setYear(std::uint16_t year)

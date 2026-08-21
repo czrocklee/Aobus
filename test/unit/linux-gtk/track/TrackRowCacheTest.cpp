@@ -3,6 +3,7 @@
 
 #include "track/TrackRowCache.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "track/TrackRowObject.h"
@@ -77,7 +78,7 @@ namespace ao::gtk::test
 
     SECTION("Basic data loading")
     {
-      auto provider = TrackRowCache{runtime.library()};
+      auto provider = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
 
       Glib::RefPtr<TrackRowObject> const row1Ptr = provider.trackRow(basicId1);
       REQUIRE(row1Ptr);
@@ -143,7 +144,7 @@ namespace ao::gtk::test
 
     SECTION("UTF-8 metadata survives row materialization")
     {
-      auto provider = TrackRowCache{runtime.library()};
+      auto provider = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
 
       auto const rowPtr = provider.trackRow(utf8Id);
       REQUIRE(rowPtr);
@@ -164,7 +165,7 @@ namespace ao::gtk::test
 
     SECTION("Clearing the cache discards loaded rows")
     {
-      auto provider = TrackRowCache{runtime.library()};
+      auto provider = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
 
       auto const rowBeforeClearPtr = provider.trackRow(helperId);
       REQUIRE(rowBeforeClearPtr);
@@ -179,7 +180,7 @@ namespace ao::gtk::test
     // FilePath is a text-backed value materialized from the read-model row.
     SECTION("File path is materialized into the row")
     {
-      auto provider = TrackRowCache{runtime.library()};
+      auto provider = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
 
       auto const rowPtr = provider.trackRow(helperId);
       REQUIRE(rowPtr);
@@ -192,7 +193,7 @@ namespace ao::gtk::test
 
     SECTION("Caching works")
     {
-      auto provider = TrackRowCache{runtime.library()};
+      auto provider = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
 
       auto const row1APtr = provider.trackRow(cachingId);
       auto const row1BPtr = provider.trackRow(cachingId);
@@ -204,7 +205,7 @@ namespace ao::gtk::test
 
     SECTION("Invalidation")
     {
-      auto provider = TrackRowCache{runtime.library()};
+      auto provider = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
 
       auto const row1Ptr = provider.trackRow(invalidationId);
       CHECK(row1Ptr);
@@ -216,7 +217,7 @@ namespace ao::gtk::test
 
     SECTION("Non-existent track")
     {
-      auto provider = TrackRowCache{runtime.library()};
+      auto provider = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
       auto const rowPtr = provider.trackRow(TrackId{999});
       CHECK_FALSE(rowPtr);
     }

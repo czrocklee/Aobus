@@ -16,6 +16,7 @@ namespace ao::uimodel
 {
   class PlaybackCommandSurface;
   class ListPresentationPreferenceStore;
+  class PresentationTextCatalog;
 }
 namespace ao::rt
 {
@@ -27,6 +28,7 @@ namespace Gtk
 }
 namespace ao::gtk
 {
+  class GtkTextCatalog;
   class AppConfigStore;
   class TrackRowCache;
   class ListNavigationController;
@@ -45,7 +47,11 @@ namespace ao::gtk
       ExcludeSelectedRootAndPlayback,
     };
 
-    MainWindowCoordinator(Gtk::Window& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfigStore> configStorePtr);
+    MainWindowCoordinator(Gtk::Window& window,
+                          rt::AppRuntime& runtime,
+                          std::shared_ptr<AppConfigStore> configStorePtr,
+                          uimodel::PresentationTextCatalog const& textCatalog,
+                          GtkTextCatalog const& gtkTextCatalog);
     ~MainWindowCoordinator();
 
     // Not copyable or movable

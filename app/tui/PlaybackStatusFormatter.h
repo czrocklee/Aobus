@@ -11,6 +11,5 @@
 namespace ao::tui
 {
   std::string formatDuration(std::chrono::milliseconds duration);
-  std::string transportLabel(audio::Transport transport);
   bool shouldTickTransportClock(audio::Transport transport);
 } // namespace ao::tui

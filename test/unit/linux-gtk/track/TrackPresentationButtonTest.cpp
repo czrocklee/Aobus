@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -40,11 +41,11 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
-    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishPresentationTextCatalog()};
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
 
     auto window = Gtk::Window{};
-    auto button = TrackPresentationButton{runtime};
+    auto button = TrackPresentationButton{runtime, ao::test::englishPresentationTextCatalog()};
     button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
     window.set_child(button);
 
@@ -87,7 +88,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
-    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishPresentationTextCatalog()};
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto replacementPreferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
@@ -95,7 +96,7 @@ namespace ao::gtk::test
     auto const activeViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
 
-    auto button = TrackPresentationButton{runtime};
+    auto button = TrackPresentationButton{runtime, ao::test::englishPresentationTextCatalog()};
     button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
     window.set_child(button);
     drainGtkEvents();
@@ -124,7 +125,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
-    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishPresentationTextCatalog()};
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
 
@@ -134,7 +135,7 @@ namespace ao::gtk::test
     REQUIRE(activeViewId != rt::kInvalidViewId);
     REQUIRE(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
 
-    auto buttonPtr = std::make_unique<TrackPresentationButton>(runtime);
+    auto buttonPtr = std::make_unique<TrackPresentationButton>(runtime, ao::test::englishPresentationTextCatalog());
     buttonPtr->setPresentationServices(&catalog, &preferences, &themeCoordinator);
     window.set_child(*buttonPtr);
     drainGtkEvents();
@@ -162,13 +163,13 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
     themeCoordinator.setTheme(uimodel::ThemePreset::Modern);
-    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishPresentationTextCatalog()};
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
 
     auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
-    auto button = TrackPresentationButton{runtime};
+    auto button = TrackPresentationButton{runtime, ao::test::englishPresentationTextCatalog()};
     button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
     window.set_child(button);
     window.present();

@@ -13,13 +13,16 @@
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "list/ListNavigationController.h"
+#include "portal/ImportExportActions.h"
 #include "tag/TagEditController.h"
 #include "tag/TagEditor.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include "track/TrackPageHost.h"
@@ -91,6 +94,20 @@ namespace ao::gtk::layout::test
   {
     constexpr std::size_t kOversizedMetadataLength = std::size_t{1024} * 1024;
 
+    class RecordingImportExportActions final : public portal::ImportExportActions
+    {
+    public:
+      void openLibrary() override { ++_openLibraryCount; }
+      void scanLibrary() override {}
+      void importLibrary() override {}
+      void exportLibrary() override {}
+
+      std::int32_t openLibraryCount() const noexcept { return _openLibraryCount; }
+
+    private:
+      std::int32_t _openLibraryCount = 0;
+    };
+
     library::test::TrackSpec trackSpecFor(library::MusicLibrary const& musicLibrary, TrackId const trackId)
     {
       auto const transaction = musicLibrary.readTransaction();
@@ -119,7 +136,8 @@ namespace ao::gtk::layout::test
 
     SECTION("library.listTree shows error when listNavigationController missing")
     {
-      auto const rdpPtr = std::make_unique<TrackRowCache>(fixture.runtime().library());
+      auto const rdpPtr =
+        std::make_unique<TrackRowCache>(fixture.runtime().library(), ao::test::englishPresentationTextCatalog());
       fixture.dependencies().trackRowCache = rdpPtr.get();
       auto const node = LayoutNode{.type = "library.listTree"};
       auto const compPtr = fixture.create(node);
@@ -158,6 +176,16 @@ namespace ao::gtk::layout::test
       REQUIRE(label != nullptr);
       CHECK(label->get_label().raw().contains("imageLoader missing"));
     }
+
+    SECTION("library.openLibraryButton is disabled when its action service is missing")
+    {
+      auto const compPtr = fixture.create(LayoutNode{.type = "library.openLibraryButton"});
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      CHECK_FALSE(button->get_sensitive());
+    }
   }
 
   TEST_CASE("SemanticLayoutComponents - render configured GTK widgets", "[gtk][unit][layout-component][semantic]")
@@ -193,6 +221,8 @@ namespace ao::gtk::layout::test
 
     SECTION("library.openLibraryButton creates Gtk::Button")
     {
+      auto actions = RecordingImportExportActions{};
+      fixture.dependencies().importExportActions = &actions;
       auto const node = LayoutNode{.type = "library.openLibraryButton"};
       auto const compPtr = fixture.create(node);
 
@@ -201,6 +231,12 @@ namespace ao::gtk::layout::test
       auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "folder-open-symbolic");
+      CHECK(btn->get_tooltip_text() == "Open Library...");
+      CHECK(ao::gtk::test::hasAccessibleLabel(*btn, "Open Library..."));
+      CHECK(btn->get_sensitive());
+
+      emitClicked(*btn);
+      CHECK(actions.openLibraryCount() == 1);
     }
 
     SECTION("app.menuBar creates Gtk::PopoverMenuBar")
@@ -890,17 +926,33 @@ namespace ao::gtk::layout::test
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto cache = TrackRowCache{runtime.library()};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto window = Gtk::Window{};
     auto stack = Gtk::Stack{};
     auto themeCoordinator = ThemeCoordinator{};
     auto tagEditCallbacks = TagEditController::Callbacks{};
-    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeCoordinator};
+    auto tagEditController = TagEditController{window,
+                                               runtime,
+                                               ao::test::englishPresentationTextCatalog(),
+                                               ao::gtk::test::englishGtkTextCatalog(),
+                                               std::move(tagEditCallbacks),
+                                               themeCoordinator};
     auto navCallbacks = ListNavigationController::Callbacks{};
-    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeCoordinator};
+    auto listNavigation = ListNavigationController{window,
+                                                   runtime,
+                                                   ao::test::englishPresentationTextCatalog(),
+                                                   ao::gtk::test::englishGtkTextCatalog(),
+                                                   std::move(navCallbacks),
+                                                   themeCoordinator};
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto pageHost = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore, byteLoader};
+    auto pageHost = TrackPageHost{stack,
+                                  runtime,
+                                  tagEditController,
+                                  listNavigation,
+                                  layoutStore,
+                                  ao::test::englishPresentationTextCatalog(),
+                                  byteLoader};
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
@@ -913,7 +965,9 @@ namespace ao::gtk::layout::test
 
     auto actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
+    auto dependencies = GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
+                                          .gtkTextCatalog = ao::gtk::test::englishGtkTextCatalog(),
+                                          .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = runtime,

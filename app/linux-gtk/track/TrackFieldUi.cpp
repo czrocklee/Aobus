@@ -259,7 +259,7 @@ namespace ao::gtk
         {
           .field = F::Channels,
           .readRowText = +[](TrackRowObject const& row) -> std::string
-          { return uimodel::formatChannels(row.channels()); },
+          { return uimodel::formatChannels(row.textCatalog(), row.channels()); },
         },
         {
           .field = F::BitDepth,

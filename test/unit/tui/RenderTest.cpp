@@ -3,7 +3,9 @@
 
 #include "tui/Render.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
+#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/CommandPalettePanel.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/PresentationPanel.h"
@@ -13,6 +15,7 @@
 #include "tui/TrackListEntry.h"
 #include "tui/TrackPresentationNavigation.h"
 #include "tui/TuiHitRegions.h"
+#include "tui/TuiTextCatalog.h"
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionItem.h>
@@ -36,6 +39,98 @@
 
 namespace ao::tui::test
 {
+  namespace
+  {
+    TrackListEntry makeTrackListEntry(rt::TrackRow const& row)
+    {
+      return ao::tui::makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
+    }
+
+    std::int32_t detailPaneColumns(TrackListEntry const* const selectedTrack, std::int32_t const terminalColumns)
+    {
+      return ao::tui::detailPaneColumns(ao::test::englishPresentationTextCatalog(), selectedTrack, terminalColumns);
+    }
+
+    ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t const columns = 0)
+    {
+      return ao::tui::commandPalettePanel(
+        ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), shell, columns);
+    }
+
+    ftxui::Element helpPane(std::int32_t const columns = 0)
+    {
+      return ao::tui::helpPane(englishTuiTextCatalog(), columns);
+    }
+
+    std::int32_t helpPaneColumns(std::int32_t const terminalColumns)
+    {
+      return ao::tui::helpPaneColumns(englishTuiTextCatalog(), terminalColumns);
+    }
+
+    ftxui::Element statusBar(StatusBarViewState const& state)
+    {
+      return ao::tui::statusBar(englishTuiTextCatalog(), state);
+    }
+
+    ftxui::Element notificationCenterPanel(uimodel::ActivityStatusViewState const& state,
+                                           std::vector<NotificationDetailRowHitRegion>* const rowHitRegions = nullptr,
+                                           std::int32_t const columns = 0)
+    {
+      return ao::tui::notificationCenterPanel(
+        ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), state, rowHitRegions, columns);
+    }
+
+    ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
+                                     std::string_view const activePresentationId,
+                                     std::int32_t const selectedIndex,
+                                     std::vector<PresentationRowHitRegion>* const rowHitRegions = nullptr,
+                                     std::int32_t const columns = 0)
+    {
+      return ao::tui::presentationPanel(ao::test::englishPresentationTextCatalog(),
+                                        englishTuiTextCatalog(),
+                                        items,
+                                        activePresentationId,
+                                        selectedIndex,
+                                        rowHitRegions,
+                                        columns);
+    }
+
+    std::int32_t presentationPanelColumns(std::vector<TrackPresentationNavEntry> const& items,
+                                          std::string_view const activePresentationId,
+                                          std::int32_t const terminalColumns)
+    {
+      return ao::tui::presentationPanelColumns(ao::test::englishPresentationTextCatalog(),
+                                               englishTuiTextCatalog(),
+                                               items,
+                                               activePresentationId,
+                                               terminalColumns);
+    }
+  } // namespace
+
+  TEST_CASE("TuiTextCatalog - resolves German and pseudo shell copy", "[tui][unit][localization]")
+  {
+    auto const german = tuiTextCatalog("de-AT");
+    CHECK(german.text(TuiTextId::CommandPaletteTitle) == "Befehlspalette");
+    CHECK(german.text(TuiTextId::OverlayViews) == "Ansichten");
+    CHECK(german.text(TuiTextId::HintLists).contains("Enter öffnen"));
+    CHECK(german.text(TuiTextId::LibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
+    CHECK(german.libraryReloadedTracks(2) == "2 Titel neu geladen");
+    CHECK(german.libraryQuickFilterMatched(1) == "Schnellfilter fand 1 Titel");
+
+    auto const pseudo = tuiTextCatalog("qps-ploc");
+    CHECK(pseudo.text(TuiTextId::CommandPaletteTitle) != "Command Palette");
+    CHECK(pseudo.text(TuiTextId::HintViews).contains("Enter"));
+    CHECK(pseudo.text(TuiTextId::LibraryNoTracksFound) != "No tracks found. Run `aobus init` in this library first.");
+    CHECK(pseudo.libraryOpenedList("Road Trip").contains("Road Trip"));
+
+    auto shell = ShellInteractionModel{};
+    shell.beginCommand("view albums");
+    auto const narrow =
+      renderElement(commandPalettePanel(ao::test::englishPresentationTextCatalog(), pseudo, shell, 32), 32, 8);
+    CHECK(narrow.text.contains("/view albums"));
+    CHECK_FALSE(narrow.text.empty());
+  }
+
   TEST_CASE("Render - help pane advertises workspace commands", "[tui][unit][render]")
   {
     auto const text = renderText(helpPane());
@@ -602,7 +697,7 @@ namespace ao::tui::test
     CHECK(wideColumns > kPresentationPanelColumns);
     CHECK(wideColumns <= 120);
     CHECK(presentationPanelColumns(items, "wide", 60) == 60);
-    CHECK(presentationPanelColumns({TrackPresentationNavEntry{.id = "x", .label = "X"}}, "x", 120) <
+    CHECK(presentationPanelColumns(std::vector{TrackPresentationNavEntry{.id = "x", .label = "X"}}, "x", 120) <
           kPresentationPanelColumns);
 
     auto const rendered = renderElement(presentationPanel(items, "wide", 0, nullptr, wideColumns), wideColumns, 16);
@@ -613,7 +708,8 @@ namespace ao::tui::test
   TEST_CASE("Render - presentation panel handles empty and out-of-range selection", "[tui][unit][render]")
   {
     auto rowHitRegions = std::vector<PresentationRowHitRegion>{};
-    auto const emptyRendered = renderElement(presentationPanel({}, "", 99, &rowHitRegions), 48, 16);
+    auto const emptyRendered =
+      renderElement(presentationPanel(std::vector<TrackPresentationNavEntry>{}, "", 99, &rowHitRegions), 48, 16);
 
     CHECK(emptyRendered.text.contains("default"));
     CHECK(emptyRendered.text.contains("No views available"));

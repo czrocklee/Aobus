@@ -3,6 +3,8 @@
 
 #include "tui/LibraryNavigation.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/VirtualListIds.h>
@@ -21,7 +23,7 @@ namespace ao::tui::test
       {.id = ListId{3}, .name = "Live", .expression = "$title ~ \"Live\""},
     };
 
-    auto items = makeLibraryNavigation(lists);
+    auto items = makeLibraryNavigation(ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), lists);
     auto labels = libraryNavigationLabels(items);
 
     REQUIRE(items.size() == 4);
@@ -42,7 +44,8 @@ namespace ao::tui::test
       {.id = ListId{7}, .parentId = ListId{7}, .name = "Self"},
     };
 
-    auto const items = makeLibraryNavigation(lists);
+    auto const items =
+      makeLibraryNavigation(ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), lists);
 
     REQUIRE(items.size() == 4);
     CHECK(items[1].label == "[L] Root");
@@ -57,7 +60,7 @@ namespace ao::tui::test
       {.id = ListId{2}, .parentId = ListId{1}, .name = "Two"},
     };
 
-    auto items = makeLibraryNavigation(lists);
+    auto items = makeLibraryNavigation(ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), lists);
 
     REQUIRE(items.size() == 3);
     CHECK(items[1].id == ListId{1});

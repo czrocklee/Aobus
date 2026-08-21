@@ -20,10 +20,16 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string_view>
 
 namespace Gtk
 {
   class Grid;
+}
+
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
 }
 
 namespace ao::gtk
@@ -86,12 +92,13 @@ namespace ao::gtk::layout::track_field_grid
     Glib::ustring text() const;
 
     void setEditable(bool editable);
+    void setEditActionText(std::string_view text);
     bool isEditable() const;
     bool isEditing() const;
 
     void startEditing();
     void stopEditing(bool commit);
-    void setCompletionProvider(rt::CompletionProvider provider);
+    void setCompletionProvider(uimodel::PresentationTextCatalog const& textCatalog, rt::CompletionProvider provider);
 
     Gtk::Label& displayLabel() { return _displayLabel; }
     Gtk::Entry& entry() { return _entry; }

@@ -23,14 +23,15 @@
 
 namespace ao::gtk
 {
-  ListTreeModelBuilder::BuildResult ListTreeModelBuilder::build(rt::Library const& reads)
+  ListTreeModelBuilder::BuildResult ListTreeModelBuilder::build(rt::Library const& reads,
+                                                                uimodel::PresentationTextCatalog const& textCatalog)
   {
     auto result = BuildResult{};
     result.storePtr = Gio::ListStore<ListTreeItem>::create();
 
     auto scope = reads.reader();
     auto const snapshot = scope.lists();
-    auto const projection = uimodel::buildListTreeProjection(snapshot);
+    auto const projection = uimodel::buildListTreeProjection(textCatalog, snapshot);
 
     for (auto const& [id, row] : projection.rowsById)
     {

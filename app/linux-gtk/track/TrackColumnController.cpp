@@ -32,14 +32,16 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk
 {
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
                                                uimodel::TrackColumnLayoutStore& layoutStore,
+                                               uimodel::PresentationTextCatalog textCatalog,
                                                ao::ListId listId)
-    : _listId{listId}, _columnView{columnView}, _layoutStore{layoutStore}
+    : _listId{listId}, _columnView{columnView}, _layoutStore{layoutStore}, _textCatalog{std::move(textCatalog)}
   {
     _dynamicCssProviderPtr = Gtk::CssProvider::create();
 
@@ -92,7 +94,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const title = toUString(uimodel::PresentationTextCatalog{}.trackFieldLabel(rtDef.field));
+      auto const title = toUString(_textCatalog.trackFieldLabel(rtDef.field));
       auto const columnPtr = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
 
       columnPtr->set_id(toUString(rtDef.id));

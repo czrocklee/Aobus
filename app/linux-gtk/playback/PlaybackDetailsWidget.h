@@ -16,6 +16,11 @@ namespace ao::rt
   class PlaybackService;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
   /**
@@ -25,7 +30,7 @@ namespace ao::gtk
   class PlaybackDetailsWidget final
   {
   public:
-    explicit PlaybackDetailsWidget(rt::PlaybackService& playback);
+    PlaybackDetailsWidget(rt::PlaybackService& playback, uimodel::PresentationTextCatalog const& textCatalog);
     ~PlaybackDetailsWidget();
 
     // Not copyable or movable

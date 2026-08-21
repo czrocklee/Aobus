@@ -3,6 +3,7 @@
 
 #include "ShellInteractionModel.h"
 
+#include "TuiTextCatalog.h"
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/utility/String.h>
 #include <ao/utility/UnicodeText.h>
@@ -21,72 +22,195 @@ namespace ao::tui
   namespace
   {
     constexpr auto kPrefixCommands = std::to_array<CommandPrefixSpec>({
-      {.prefix = "filter ", .action = CommandAction::QuickFilter, .detail = "quick filter", .category = "library"},
-      {.prefix = "presentation ", .action = CommandAction::SetPresentation, .detail = "track view", .category = "view"},
-      {.prefix = "preset ", .action = CommandAction::SetPresentation, .detail = "track view", .category = "view"},
+      {.prefix = "filter ",
+       .action = CommandAction::QuickFilter,
+       .detail = TuiTextId::DetailQuickFilter,
+       .category = TuiTextId::CategoryLibrary},
+      {.prefix = "presentation ",
+       .action = CommandAction::SetPresentation,
+       .detail = TuiTextId::DetailTrackView,
+       .category = TuiTextId::CategoryView},
+      {.prefix = "preset ",
+       .action = CommandAction::SetPresentation,
+       .detail = TuiTextId::DetailTrackView,
+       .category = TuiTextId::CategoryView},
       {.prefix = "view ",
        .action = CommandAction::SetPresentation,
-       .detail = "track view",
-       .category = "view",
+       .detail = TuiTextId::DetailTrackView,
+       .category = TuiTextId::CategoryView,
        .optShortcutAction = CommandAction::OpenPresentationPanel},
     });
 
     constexpr auto kAliasCommands = std::to_array<CommandAliasSpec>({
-      {.alias = "lists", .action = CommandAction::OpenLists, .detail = "choose list", .category = "library"},
-      {.alias = "l", .action = CommandAction::OpenLists, .detail = "choose list", .category = "library"},
-      {.alias = "detail", .action = CommandAction::OpenDetail, .detail = "track detail", .category = "track"},
-      {.alias = "details", .action = CommandAction::OpenDetail, .detail = "track detail", .category = "track"},
-      {.alias = "d", .action = CommandAction::OpenDetail, .detail = "track detail", .category = "track"},
-      {.alias = "quality", .action = CommandAction::OpenQuality, .detail = "audio pipeline", .category = "audio"},
-      {.alias = "audio", .action = CommandAction::OpenQuality, .detail = "audio pipeline", .category = "audio"},
-      {.alias = "pipeline", .action = CommandAction::OpenQuality, .detail = "audio pipeline", .category = "audio"},
-      {.alias = "a", .action = CommandAction::OpenQuality, .detail = "audio pipeline", .category = "audio"},
-      {.alias = "output", .action = CommandAction::OpenOutputDevices, .detail = "output device", .category = "audio"},
-      {.alias = "outputs", .action = CommandAction::OpenOutputDevices, .detail = "output device", .category = "audio"},
-      {.alias = "device", .action = CommandAction::OpenOutputDevices, .detail = "output device", .category = "audio"},
-      {.alias = "devices", .action = CommandAction::OpenOutputDevices, .detail = "output device", .category = "audio"},
-      {.alias = "o", .action = CommandAction::OpenOutputDevices, .detail = "output device", .category = "audio"},
-      {.alias = "views", .action = CommandAction::OpenPresentationPanel, .detail = "choose view", .category = "view"},
-      {.alias = "v", .action = CommandAction::OpenPresentationPanel, .detail = "choose view", .category = "view"},
+      {.alias = "lists",
+       .action = CommandAction::OpenLists,
+       .detail = TuiTextId::DetailChooseList,
+       .category = TuiTextId::CategoryLibrary},
+      {.alias = "l",
+       .action = CommandAction::OpenLists,
+       .detail = TuiTextId::DetailChooseList,
+       .category = TuiTextId::CategoryLibrary},
+      {.alias = "detail",
+       .action = CommandAction::OpenDetail,
+       .detail = TuiTextId::DetailTrackDetail,
+       .category = TuiTextId::CategoryTrack},
+      {.alias = "details",
+       .action = CommandAction::OpenDetail,
+       .detail = TuiTextId::DetailTrackDetail,
+       .category = TuiTextId::CategoryTrack},
+      {.alias = "d",
+       .action = CommandAction::OpenDetail,
+       .detail = TuiTextId::DetailTrackDetail,
+       .category = TuiTextId::CategoryTrack},
+      {.alias = "quality",
+       .action = CommandAction::OpenQuality,
+       .detail = TuiTextId::DetailAudioPipeline,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "audio",
+       .action = CommandAction::OpenQuality,
+       .detail = TuiTextId::DetailAudioPipeline,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "pipeline",
+       .action = CommandAction::OpenQuality,
+       .detail = TuiTextId::DetailAudioPipeline,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "a",
+       .action = CommandAction::OpenQuality,
+       .detail = TuiTextId::DetailAudioPipeline,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "output",
+       .action = CommandAction::OpenOutputDevices,
+       .detail = TuiTextId::DetailOutputDevice,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "outputs",
+       .action = CommandAction::OpenOutputDevices,
+       .detail = TuiTextId::DetailOutputDevice,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "device",
+       .action = CommandAction::OpenOutputDevices,
+       .detail = TuiTextId::DetailOutputDevice,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "devices",
+       .action = CommandAction::OpenOutputDevices,
+       .detail = TuiTextId::DetailOutputDevice,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "o",
+       .action = CommandAction::OpenOutputDevices,
+       .detail = TuiTextId::DetailOutputDevice,
+       .category = TuiTextId::CategoryAudio},
+      {.alias = "views",
+       .action = CommandAction::OpenPresentationPanel,
+       .detail = TuiTextId::DetailChooseView,
+       .category = TuiTextId::CategoryView},
+      {.alias = "v",
+       .action = CommandAction::OpenPresentationPanel,
+       .detail = TuiTextId::DetailChooseView,
+       .category = TuiTextId::CategoryView},
       {.alias = "notifications",
        .action = CommandAction::OpenNotifications,
-       .detail = "notification center",
-       .category = "status"},
+       .detail = TuiTextId::DetailNotificationCenter,
+       .category = TuiTextId::CategoryStatus},
       {.alias = "notification",
        .action = CommandAction::OpenNotifications,
-       .detail = "notification center",
-       .category = "status"},
-      {.alias = "n", .action = CommandAction::OpenNotifications, .detail = "notification center", .category = "status"},
-      {.alias = "close", .action = CommandAction::CloseOverlay, .detail = "close overlay", .category = "ui"},
-      {.alias = "hide", .action = CommandAction::CloseOverlay, .detail = "close overlay", .category = "ui"},
-      {.alias = "esc", .action = CommandAction::CloseOverlay, .detail = "close overlay", .category = "ui"},
-      {.alias = "help", .action = CommandAction::ShowHelp, .detail = "help", .category = "ui"},
-      {.alias = "h", .action = CommandAction::ShowHelp, .detail = "help", .category = "ui"},
-      {.alias = "?", .action = CommandAction::ShowHelp, .detail = "help", .category = "ui"},
+       .detail = TuiTextId::DetailNotificationCenter,
+       .category = TuiTextId::CategoryStatus},
+      {.alias = "n",
+       .action = CommandAction::OpenNotifications,
+       .detail = TuiTextId::DetailNotificationCenter,
+       .category = TuiTextId::CategoryStatus},
+      {.alias = "close",
+       .action = CommandAction::CloseOverlay,
+       .detail = TuiTextId::DetailCloseOverlay,
+       .category = TuiTextId::CategoryUi},
+      {.alias = "hide",
+       .action = CommandAction::CloseOverlay,
+       .detail = TuiTextId::DetailCloseOverlay,
+       .category = TuiTextId::CategoryUi},
+      {.alias = "esc",
+       .action = CommandAction::CloseOverlay,
+       .detail = TuiTextId::DetailCloseOverlay,
+       .category = TuiTextId::CategoryUi},
+      {.alias = "help",
+       .action = CommandAction::ShowHelp,
+       .detail = TuiTextId::DetailHelp,
+       .category = TuiTextId::CategoryUi},
+      {.alias = "h",
+       .action = CommandAction::ShowHelp,
+       .detail = TuiTextId::DetailHelp,
+       .category = TuiTextId::CategoryUi},
+      {.alias = "?",
+       .action = CommandAction::ShowHelp,
+       .detail = TuiTextId::DetailHelp,
+       .category = TuiTextId::CategoryUi},
       {.alias = "current",
        .action = CommandAction::RevealCurrentTrack,
-       .detail = "now playing",
-       .category = "playback"},
-      {.alias = "now", .action = CommandAction::RevealCurrentTrack, .detail = "now playing", .category = "playback"},
-      {.alias = "reveal", .action = CommandAction::RevealCurrentTrack, .detail = "now playing", .category = "playback"},
-      {.alias = "clear", .action = CommandAction::ClearFilter, .detail = "clear filter", .category = "library"},
-      {.alias = "c", .action = CommandAction::ClearFilter, .detail = "clear filter", .category = "library"},
-      {.alias = "reload", .action = CommandAction::Reload, .detail = "reload list", .category = "library"},
-      {.alias = "refresh", .action = CommandAction::Reload, .detail = "reload list", .category = "library"},
-      {.alias = "r", .action = CommandAction::Reload, .detail = "reload list", .category = "library"},
-      {.alias = "play", .action = CommandAction::Play, .detail = "play", .category = "playback"},
-      {.alias = "p", .action = CommandAction::Play, .detail = "play", .category = "playback"},
-      {.alias = "pause", .action = CommandAction::TogglePlayback, .detail = "pause", .category = "playback"},
-      {.alias = "toggle", .action = CommandAction::TogglePlayback, .detail = "toggle playback", .category = "playback"},
-      {.alias = "space", .action = CommandAction::TogglePlayback, .detail = "toggle playback", .category = "playback"},
-      {.alias = "stop", .action = CommandAction::Stop, .detail = "stop", .category = "playback"},
-      {.alias = "s", .action = CommandAction::Stop, .detail = "stop", .category = "playback"},
-      {.alias = "quit", .action = CommandAction::Quit, .detail = "quit", .category = "app"},
-      {.alias = "q", .action = CommandAction::Quit, .detail = "quit", .category = "app"},
+       .detail = TuiTextId::DetailNowPlaying,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "now",
+       .action = CommandAction::RevealCurrentTrack,
+       .detail = TuiTextId::DetailNowPlaying,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "reveal",
+       .action = CommandAction::RevealCurrentTrack,
+       .detail = TuiTextId::DetailNowPlaying,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "clear",
+       .action = CommandAction::ClearFilter,
+       .detail = TuiTextId::DetailClearFilter,
+       .category = TuiTextId::CategoryLibrary},
+      {.alias = "c",
+       .action = CommandAction::ClearFilter,
+       .detail = TuiTextId::DetailClearFilter,
+       .category = TuiTextId::CategoryLibrary},
+      {.alias = "reload",
+       .action = CommandAction::Reload,
+       .detail = TuiTextId::DetailReloadList,
+       .category = TuiTextId::CategoryLibrary},
+      {.alias = "refresh",
+       .action = CommandAction::Reload,
+       .detail = TuiTextId::DetailReloadList,
+       .category = TuiTextId::CategoryLibrary},
+      {.alias = "r",
+       .action = CommandAction::Reload,
+       .detail = TuiTextId::DetailReloadList,
+       .category = TuiTextId::CategoryLibrary},
+      {.alias = "play",
+       .action = CommandAction::Play,
+       .detail = TuiTextId::DetailPlay,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "p",
+       .action = CommandAction::Play,
+       .detail = TuiTextId::DetailPlay,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "pause",
+       .action = CommandAction::TogglePlayback,
+       .detail = TuiTextId::DetailPause,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "toggle",
+       .action = CommandAction::TogglePlayback,
+       .detail = TuiTextId::DetailTogglePlayback,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "space",
+       .action = CommandAction::TogglePlayback,
+       .detail = TuiTextId::DetailTogglePlayback,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "stop",
+       .action = CommandAction::Stop,
+       .detail = TuiTextId::DetailStop,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "s",
+       .action = CommandAction::Stop,
+       .detail = TuiTextId::DetailStop,
+       .category = TuiTextId::CategoryPlayback},
+      {.alias = "quit",
+       .action = CommandAction::Quit,
+       .detail = TuiTextId::DetailQuit,
+       .category = TuiTextId::CategoryApp},
+      {.alias = "q",
+       .action = CommandAction::Quit,
+       .detail = TuiTextId::DetailQuit,
+       .category = TuiTextId::CategoryApp},
     });
-
-    constexpr std::string_view kWorkspaceHint =
-      "/ command  l lists  v view  n notif  d detail  a pipeline  o output  { } groups  Ctrl-L current  q quit";
 
     std::string trim(std::string_view value)
     {
@@ -200,38 +324,38 @@ namespace ao::tui
     return {.action = CommandAction::QuickFilter, .argument = value};
   }
 
-  std::string overlayLabel(Overlay const overlay)
+  std::string_view overlayLabel(TuiTextCatalog const& textCatalog, Overlay const overlay)
   {
     switch (overlay)
     {
-      case Overlay::None: return "Tracks";
-      case Overlay::ListChooser: return "Lists";
-      case Overlay::DetailPanel: return "Detail";
-      case Overlay::QualityPanel: return "Pipeline";
-      case Overlay::OutputDevices: return "Output";
-      case Overlay::PresentationPanel: return "Views";
-      case Overlay::Notifications: return "Notifications";
-      case Overlay::Help: return "Help";
+      case Overlay::None: return textCatalog.text(TuiTextId::OverlayTracks);
+      case Overlay::ListChooser: return textCatalog.text(TuiTextId::OverlayLists);
+      case Overlay::DetailPanel: return textCatalog.text(TuiTextId::OverlayDetail);
+      case Overlay::QualityPanel: return textCatalog.text(TuiTextId::OverlayPipeline);
+      case Overlay::OutputDevices: return textCatalog.text(TuiTextId::OverlayOutput);
+      case Overlay::PresentationPanel: return textCatalog.text(TuiTextId::OverlayViews);
+      case Overlay::Notifications: return textCatalog.text(TuiTextId::OverlayNotifications);
+      case Overlay::Help: return textCatalog.text(TuiTextId::OverlayHelp);
     }
 
-    return "Tracks";
+    return textCatalog.text(TuiTextId::OverlayTracks);
   }
 
-  std::string_view overlayHint(Overlay const overlay)
+  std::string_view overlayHint(TuiTextCatalog const& textCatalog, Overlay const overlay)
   {
     switch (overlay)
     {
-      case Overlay::None: return kWorkspaceHint;
-      case Overlay::ListChooser: return "l toggle  Enter open  Esc close";
-      case Overlay::DetailPanel: return "d toggle  Esc close";
-      case Overlay::QualityPanel: return "a toggle  Esc close";
-      case Overlay::OutputDevices: return "o toggle  Enter select  Esc close";
-      case Overlay::PresentationPanel: return "v toggle  Enter select  Esc close";
-      case Overlay::Notifications: return "n toggle  x hide compact  Esc close";
-      case Overlay::Help: return "Esc close";
+      case Overlay::None: return textCatalog.text(TuiTextId::HintWorkspace);
+      case Overlay::ListChooser: return textCatalog.text(TuiTextId::HintLists);
+      case Overlay::DetailPanel: return textCatalog.text(TuiTextId::HintDetail);
+      case Overlay::QualityPanel: return textCatalog.text(TuiTextId::HintPipeline);
+      case Overlay::OutputDevices: return textCatalog.text(TuiTextId::HintOutput);
+      case Overlay::PresentationPanel: return textCatalog.text(TuiTextId::HintViews);
+      case Overlay::Notifications: return textCatalog.text(TuiTextId::HintNotifications);
+      case Overlay::Help: return textCatalog.text(TuiTextId::HintHelp);
     }
 
-    return kWorkspaceHint;
+    return textCatalog.text(TuiTextId::HintWorkspace);
   }
 
   bool ShellInteractionModel::isCommandActive() const noexcept
@@ -274,6 +398,7 @@ namespace ao::tui
   void ShellInteractionModel::backspaceCommand()
   {
     auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_commandDraft);
+
     if (boundaryRes)
     {
       _commandDraft.resize(*boundaryRes);

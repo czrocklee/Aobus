@@ -5,10 +5,12 @@
 
 #include "common/AccessibleLabel.h"
 #include "completion/EntryCompletionController.h"
+#include "i18n/GtkTextCatalog.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/library/track/TrackFilterCompleter.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/enums.h>
 #include <glibmm/main.h>
@@ -56,24 +58,29 @@ namespace ao::gtk
     }
   } // namespace
 
-  TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime, DebounceScheduler debounceScheduler)
+  TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime,
+                                     uimodel::PresentationTextCatalog const& textCatalog,
+                                     GtkTextCatalog const& gtkTextCatalog,
+                                     DebounceScheduler debounceScheduler)
     : Gtk::Box{Gtk::Orientation::HORIZONTAL, 0}
     , _runtime{runtime}
     , _completer{_runtime.completion()}
     , _completionController{_entry,
+                            textCatalog,
                             [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); }}
     , _debounceScheduler{std::move(debounceScheduler)}
     , _textChangedConn{_entry.signal_changed().connect(
         sigc::mem_fun(*this, &TrackQuickFilter::handleFilterTextChanged))}
     , _filterViewModel{_runtime.views(),
                        _runtime.workspace(),
+                       textCatalog,
                        [this](ao::uimodel::TrackFilterViewState const& state) { applyState(state); }}
   {
     add_css_class("ao-quick-filter");
     set_hexpand(true);
 
     _entry.add_css_class("ao-quick-filter-entry");
-    _entry.set_placeholder_text("Search songs, artists, albums, tags...");
+    _entry.set_placeholder_text(gtkTextCatalog.text(GtkTextId::LibraryQuickFilterPlaceholder));
     _entry.set_hexpand(true);
     _entry.set_icon_from_icon_name("system-search-symbolic", Gtk::Entry::IconPosition::PRIMARY);
     _entry.set_icon_sensitive(Gtk::Entry::IconPosition::PRIMARY, false);
@@ -82,7 +89,7 @@ namespace ao::gtk
     _clearButton.add_css_class("ao-quick-filter-clear");
     _clearButton.set_icon_name("edit-clear-symbolic");
     _clearButton.set_has_frame(false);
-    setTooltipAndAccessibleLabel(_clearButton, "Clear filter");
+    setTooltipAndAccessibleLabel(_clearButton, gtkTextCatalog.text(GtkTextId::LibraryClearFilter));
     _clearButton.set_visible(false);
     _clearButton.signal_clicked().connect(sigc::mem_fun(*this, &TrackQuickFilter::handleClearClicked));
 
@@ -90,7 +97,7 @@ namespace ao::gtk
     _createSmartListButton.add_css_class("ao-quick-filter-create");
     _createSmartListButton.set_icon_name("list-add-symbolic");
     _createSmartListButton.set_has_frame(false);
-    setTooltipAndAccessibleLabel(_createSmartListButton, "Create List from current filter");
+    setTooltipAndAccessibleLabel(_createSmartListButton, gtkTextCatalog.text(GtkTextId::LibraryCreateListFromFilter));
     _createSmartListButton.set_sensitive(false);
     _createSmartListButton.signal_clicked().connect(
       sigc::mem_fun(*this, &TrackQuickFilter::handleCreateSmartListClicked));

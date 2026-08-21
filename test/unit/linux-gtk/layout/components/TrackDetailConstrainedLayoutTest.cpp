@@ -5,6 +5,7 @@
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
@@ -43,6 +44,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::findButtonByLabel;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
+  using ao::gtk::test::hasAccessibleLabel;
   using ao::gtk::test::walkWidgets;
 
   namespace
@@ -161,10 +163,26 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry.get_child_visible());
   }
 
+  TEST_CASE("TrackFieldGrid - edit actions use locale-selected accessibility copy", "[gtk][unit][localization]")
+  {
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_editor_localization_test", {}, "de-DE"};
+    auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
+    REQUIRE(componentPtr != nullptr);
+
+    auto const editors = collectAll<track_field_grid::DetailFieldEditor>(componentPtr->widget());
+    REQUIRE_FALSE(editors.empty());
+
+    for (auto* const editor : editors)
+    {
+      CHECK(editor->editButton().get_tooltip_text() == "Wert bearbeiten");
+      CHECK(hasAccessibleLabel(editor->editButton(), "Wert bearbeiten"));
+    }
+  }
+
   TEST_CASE("AddCustomMetadataButton - submits popover values", "[gtk][unit][track]")
   {
     auto windowFixture = ao::gtk::test::GtkWindowFixture{};
-    auto addButton = track_field_grid::AddCustomMetadataButton{};
+    auto addButton = track_field_grid::AddCustomMetadataButton{ao::test::englishPresentationTextCatalog()};
     auto submissions = std::vector<std::pair<std::string, std::string>>{};
     addButton.signalAddRequested().connect([&submissions](std::string key, std::string value)
                                            { submissions.emplace_back(std::move(key), std::move(value)); });

@@ -3,7 +3,9 @@
 
 #include "tui/TrackTable.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
+#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
 #include <ao/CoreIds.h>
@@ -31,6 +33,55 @@ namespace ao::tui::test
 {
   namespace
   {
+    TrackListEntry makeTrackListEntry(rt::TrackRow const& row)
+    {
+      return ao::tui::makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
+    }
+
+    ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
+                                  std::int32_t const selectedIndex,
+                                  TrackId const playingTrackId,
+                                  rt::TrackPresentationSpec const& presentation,
+                                  TrackTableViewOptions const& options = {})
+    {
+      return ao::tui::trackTableView(ao::test::englishPresentationTextCatalog(),
+                                     englishTuiTextCatalog(),
+                                     tracks,
+                                     selectedIndex,
+                                     playingTrackId,
+                                     presentation,
+                                     options);
+    }
+
+    ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
+                                  std::span<TrackSection const> const sections,
+                                  std::int32_t const selectedIndex,
+                                  TrackId const playingTrackId,
+                                  rt::TrackPresentationSpec const& presentation,
+                                  TrackTableViewOptions const& options = {})
+    {
+      return ao::tui::trackTableView(ao::test::englishPresentationTextCatalog(),
+                                     englishTuiTextCatalog(),
+                                     tracks,
+                                     sections,
+                                     selectedIndex,
+                                     playingTrackId,
+                                     presentation,
+                                     options);
+    }
+
+    std::int32_t libraryChooserPaneColumns(std::vector<std::string> const& labels, std::int32_t const terminalColumns)
+    {
+      return ao::tui::libraryChooserPaneColumns(englishTuiTextCatalog(), labels, terminalColumns);
+    }
+
+    ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
+                                      std::int32_t const selected,
+                                      std::int32_t const columns = 0)
+    {
+      return ao::tui::libraryChooserPane(englishTuiTextCatalog(), labels, selected, columns);
+    }
+
     std::string lineContaining(std::string_view text, std::string_view needle)
     {
       auto const position = text.find(needle);
@@ -522,7 +573,7 @@ namespace ao::tui::test
     auto labels = std::vector<std::string>{"All Tracks", "[L] Very Long List Name For Testing"};
     auto const wideColumns = libraryChooserPaneColumns(labels, 120);
 
-    CHECK(wideColumns > libraryChooserPaneColumns({"All Tracks"}, 120));
+    CHECK(wideColumns > libraryChooserPaneColumns(std::vector<std::string>{"All Tracks"}, 120));
     CHECK(wideColumns <= 120);
     CHECK(libraryChooserPaneColumns(labels, 24) == 24);
 

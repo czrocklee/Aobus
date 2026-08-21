@@ -3,7 +3,6 @@
 
 #include "QualityIndicatorStyle.h"
 
-#include <ao/audio/Quality.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -37,27 +36,10 @@ namespace ao::tui
         applyIndicatorColor(style, uimodel::kAobusSoulVeiled);
         return style;
       case uimodel::AudioQualityCategory::Clipped: applyIndicatorColor(style, uimodel::kAobusSoulBurning); return style;
-      case uimodel::AudioQualityCategory::Unknown:
-        applyIndicatorColor(style, uimodel::kAobusSoulVeiled);
-        style.label = "Unknown quality";
-        return style;
+      case uimodel::AudioQualityCategory::Unknown: applyIndicatorColor(style, uimodel::kAobusSoulVeiled); return style;
     }
 
     applyIndicatorColor(style, uimodel::kAobusSoulVeiled);
-    style.label = "Unknown quality";
-    return style;
-  }
-
-  QualityIndicatorStyle qualityIndicatorStyle(audio::Quality const quality)
-  {
-    auto style = qualityIndicatorStyle(uimodel::audioQualityCategory(quality));
-    style.label = uimodel::audioQualityConclusion(quality);
-
-    if (style.label.empty() && quality == audio::Quality::Unknown)
-    {
-      style.label = "Unknown quality";
-    }
-
     return style;
   }
 } // namespace ao::tui

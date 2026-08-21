@@ -24,6 +24,11 @@ namespace ao::rt
   class PlaybackService;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
   class OutputDevicePopover final : public Gtk::Popover
@@ -35,6 +40,7 @@ namespace ao::gtk
     OutputDevicePopover& operator=(OutputDevicePopover&&) = delete;
 
     OutputDevicePopover(rt::PlaybackService& playback,
+                        uimodel::PresentationTextCatalog const& textCatalog,
                         uimodel::OutputDeviceIntent intent,
                         Gtk::PositionType position = Gtk::PositionType::BOTTOM);
     ~OutputDevicePopover() override;

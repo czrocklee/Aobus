@@ -14,6 +14,11 @@ namespace ao::rt
   class AppRuntime;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
   class NowPlayingFieldLabel final
@@ -21,7 +26,10 @@ namespace ao::gtk
   public:
     using Action = uimodel::NowPlayingFieldAction;
 
-    NowPlayingFieldLabel(rt::AppRuntime& runtime, rt::TrackField field, Action action = Action::None);
+    NowPlayingFieldLabel(rt::AppRuntime& runtime,
+                         uimodel::PresentationTextCatalog const& textCatalog,
+                         rt::TrackField field,
+                         Action action = Action::None);
 
     Gtk::Widget& widget() { return _label; }
 

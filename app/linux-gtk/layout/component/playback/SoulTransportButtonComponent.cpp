@@ -55,6 +55,7 @@ namespace ao::gtk::layout
         : _hasComplexTooltip{node.optTooltip.has_value()}
         , _transportViewModel{ctx.runtime.playback(),
                               commandSurface(ctx),
+                              ctx.dependencies.textCatalog,
                               TransportButton::Action::PlayPause,
                               false,
                               [this](uimodel::TransportViewState const& state) { applyTransportState(state); }}

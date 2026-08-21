@@ -5,6 +5,7 @@
 
 #include "common/AccessibleLabel.h"
 #include "layout/LayoutConstants.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -24,6 +25,7 @@
 
 namespace ao::gtk
 {
+  using i18n::MessageId;
   namespace
   {
     constexpr std::size_t kMaxNotificationDetailRows = 4;
@@ -72,7 +74,9 @@ namespace ao::gtk
     , _box{Gtk::Orientation::HORIZONTAL}
     , _readoutBox{Gtk::Orientation::HORIZONTAL}
     , _detailBox{Gtk::Orientation::VERTICAL}
+    , _textCatalog{dependencies.textCatalog}
     , _activityStatusViewModel{dependencies.notifications,
+                               _textCatalog,
                                [this](uimodel::ActivityStatusViewState const&) { render(); },
                                uimodel::ActivityStatusViewModelOptions{
                                  .libraryTasks = dependencies.libraryTasks,
@@ -129,7 +133,7 @@ namespace ao::gtk
     _dismissButton.add_css_class("flat");
     _dismissButton.add_css_class("ao-activity-status-dismiss");
     _dismissButton.set_icon_name("window-close-symbolic");
-    setTooltipAndAccessibleLabel(_dismissButton, "Hide status");
+    setTooltipAndAccessibleLabel(_dismissButton, _textCatalog.text(MessageId::GtkActivityHideStatus));
     _dismissButton.signal_clicked().connect([this] { handleDismissClicked(); });
 
     _detailBox.add_css_class("ao-activity-detail");
@@ -247,7 +251,7 @@ namespace ao::gtk
     row->add_css_class("ao-activity-detail-row");
     row->add_css_class("ao-activity-detail-task");
 
-    auto* const title = Gtk::make_managed<Gtk::Label>("Library task");
+    auto* const title = Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::LibraryTaskLabel)});
     title->set_xalign(0.0F);
     title->add_css_class("ao-activity-detail-title");
     row->append(*title);
@@ -289,7 +293,7 @@ namespace ao::gtk
       dismissButton->add_css_class("flat");
       dismissButton->add_css_class("ao-activity-detail-dismiss");
       dismissButton->set_icon_name("window-close-symbolic");
-      setTooltipAndAccessibleLabel(*dismissButton, "Hide notification from status");
+      setTooltipAndAccessibleLabel(*dismissButton, _textCatalog.text(MessageId::GtkActivityHideNotification));
       dismissButton->signal_clicked().connect([this, id = item.id] { handleDetailDismissClicked(id); });
       header->append(*dismissButton);
     }

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 
@@ -21,7 +22,8 @@ namespace ao::gtk
   class AudioPipelinePanel final : public Gtk::Box
   {
   public:
-    explicit AudioPipelinePanel(AudioPipelinePanelVariant variant = AudioPipelinePanelVariant::Inline);
+    explicit AudioPipelinePanel(uimodel::PresentationTextCatalog textCatalog,
+                                AudioPipelinePanelVariant variant = AudioPipelinePanelVariant::Inline);
     ~AudioPipelinePanel() override = default;
 
     AudioPipelinePanel(AudioPipelinePanel const&) = delete;
@@ -33,6 +35,7 @@ namespace ao::gtk
     void apply(uimodel::AudioPipelineViewState const& view);
 
   private:
+    uimodel::PresentationTextCatalog _textCatalog;
     AudioPipelinePanelVariant _variant;
   };
 } // namespace ao::gtk

@@ -9,7 +9,9 @@
 #include "TextCell.h"
 #include "TrackListEntry.h"
 #include "TrackSection.h"
+#include "TuiTextCatalog.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackPresentation.h>
@@ -17,7 +19,7 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -99,13 +101,16 @@ namespace ao::tui
       return ftxui::text("|") | ftxui::dim;
     }
 
-    rt::TrackFieldRawValue rawValueForField(rt::TrackField const field, rt::TrackRow const& row)
+    rt::TrackFieldRawValue rawValueForField(uimodel::PresentationTextCatalog const& textCatalog,
+                                            rt::TrackField const field,
+                                            rt::TrackRow const& row)
     {
       using F = rt::TrackField;
 
       switch (field)
       {
-        case F::Title: return rt::TrackFieldRawValue{std::in_place_type<std::string>, trackDisplayTitle(row)};
+        case F::Title:
+          return rt::TrackFieldRawValue{std::in_place_type<std::string>, trackDisplayTitle(textCatalog, row)};
         case F::Artist: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.artist};
         case F::Album: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.album};
         case F::AlbumArtist: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.albumArtist};
@@ -149,9 +154,11 @@ namespace ao::tui
       return rt::TrackFieldRawValue{};
     }
 
-    std::string formatFieldDisplayText(rt::TrackField const field, rt::TrackRow const& row)
+    std::string formatFieldDisplayText(uimodel::PresentationTextCatalog const& textCatalog,
+                                       rt::TrackField const field,
+                                       rt::TrackRow const& row)
     {
-      auto value = uimodel::formatTrackFieldRawValue(field, rawValueForField(field, row));
+      auto value = uimodel::formatTrackFieldRawValue(textCatalog, field, rawValueForField(textCatalog, field, row));
 
       if (field == rt::TrackField::Duration && value.empty())
       {
@@ -198,7 +205,8 @@ namespace ao::tui
       return std::max(0, availableColumns - chromeColumns);
     }
 
-    std::vector<TrackColumn> columnsForPresentation(rt::TrackPresentationSpec const& presentation,
+    std::vector<TrackColumn> columnsForPresentation(uimodel::PresentationTextCatalog const& textCatalog,
+                                                    rt::TrackPresentationSpec const& presentation,
                                                     std::vector<TrackColumnWidthOverride> const* const columnWidths,
                                                     std::int32_t const availableColumns)
     {
@@ -239,7 +247,7 @@ namespace ao::tui
         auto const width = index < widths.size() ? widths[index] : terminalColumnWidth(field);
         columns.push_back(
           TrackColumn{.field = field,
-                      .label = std::string{uimodel::trackFieldColumnTitle(field)},
+                      .label = std::string{uimodel::trackFieldColumnTitle(textCatalog, field)},
                       .width = width,
                       .rightAligned = uimodel::trackFieldColumnAlignment(field) == uimodel::TrackColumnAlignment::End});
       }
@@ -288,7 +296,8 @@ namespace ao::tui
       return hbox(std::move(cells));
     }
 
-    ftxui::Element trackRow(TrackListEntry const& track,
+    ftxui::Element trackRow(uimodel::PresentationTextCatalog const& textCatalog,
+                            TrackListEntry const& track,
                             TrackId const playingTrackId,
                             std::vector<TrackColumn> const& columns)
     {
@@ -310,7 +319,7 @@ namespace ao::tui
       {
         auto const& column = columns[index];
         cells.push_back(columnSeparator(index));
-        cells.push_back(fieldCell(formatFieldDisplayText(column.field, track.row), column));
+        cells.push_back(fieldCell(formatFieldDisplayText(textCatalog, column.field, track.row), column));
       }
 
       if (!columns.empty())
@@ -322,7 +331,7 @@ namespace ao::tui
       return hbox(std::move(cells));
     }
 
-    std::string sectionDetailText(TrackSection const& section)
+    std::string sectionDetailText(uimodel::PresentationTextCatalog const& textCatalog, TrackSection const& section)
     {
       auto details = std::vector<std::string>{};
 
@@ -336,7 +345,7 @@ namespace ao::tui
         details.push_back(section.tertiaryText);
       }
 
-      details.push_back(uimodel::formatTrackCount(section.rowCount));
+      details.push_back(textCatalog.format(i18n::MessageId::TrackCount, {{"count", section.rowCount}}));
 
       auto result = std::string{};
 
@@ -353,12 +362,12 @@ namespace ao::tui
       return result;
     }
 
-    ftxui::Element sectionHeaderRow(TrackSection const& section)
+    ftxui::Element sectionHeaderRow(uimodel::PresentationTextCatalog const& textCatalog, TrackSection const& section)
     {
       using namespace ftxui;
 
-      auto const primary = trackSectionDisplayName(section);
-      auto detail = sectionDetailText(section);
+      auto const primary = trackSectionDisplayName(textCatalog, section);
+      auto detail = sectionDetailText(textCatalog, section);
 
       return hbox({
         text("─ ") | dim,
@@ -554,17 +563,27 @@ namespace ao::tui
     return rows;
   }
 
-  ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
+  ftxui::Element trackTableView(uimodel::PresentationTextCatalog const& textCatalog,
+                                TuiTextCatalog const& tuiTextCatalog,
+                                std::span<TrackListEntry const> const tracks,
                                 std::int32_t const selected,
                                 TrackId const playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
                                 TrackTableViewOptions options)
   {
-    return trackTableView(
-      tracks, std::span<TrackSection const>{}, selected, playingTrackId, presentation, std::move(options));
+    return trackTableView(textCatalog,
+                          tuiTextCatalog,
+                          tracks,
+                          std::span<TrackSection const>{},
+                          selected,
+                          playingTrackId,
+                          presentation,
+                          std::move(options));
   }
 
-  ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
+  ftxui::Element trackTableView(uimodel::PresentationTextCatalog const& textCatalog,
+                                TuiTextCatalog const& tuiTextCatalog,
+                                std::span<TrackListEntry const> const tracks,
                                 std::span<TrackSection const> const sections,
                                 std::int32_t const selected,
                                 TrackId const playingTrackId,
@@ -573,7 +592,8 @@ namespace ao::tui
   {
     using namespace ftxui;
 
-    auto const columns = columnsForPresentation(presentation, options.columnWidths, options.availableColumns);
+    auto const columns =
+      columnsForPresentation(textCatalog, presentation, options.columnWidths, options.availableColumns);
 
     if (options.sectionRowHitRegions != nullptr)
     {
@@ -585,7 +605,8 @@ namespace ao::tui
 
     if (tracks.empty())
     {
-      listElementPtr = selectableRows(Elements{}, -1, true, "No tracks found. Run `aobus init` in this library first.");
+      listElementPtr =
+        selectableRows(Elements{}, -1, true, std::string{tuiTextCatalog.text(TuiTextId::LibraryNoTracksFound)});
     }
     else
     {
@@ -611,7 +632,7 @@ namespace ao::tui
       {
         if (ref.isSectionHeader)
         {
-          auto rowPtr = sectionHeaderRow(sections[ref.sectionIndex]);
+          auto rowPtr = sectionHeaderRow(textCatalog, sections[ref.sectionIndex]);
 
           if (options.sectionRowHitRegions != nullptr)
           {
@@ -628,7 +649,7 @@ namespace ao::tui
         }
         else
         {
-          rows.push_back(trackRow(tracks[ref.trackIndex], playingTrackId, columns));
+          rows.push_back(trackRow(textCatalog, tracks[ref.trackIndex], playingTrackId, columns));
         }
       }
 
@@ -670,11 +691,14 @@ namespace ao::tui
     return tablePtr;
   }
 
-  std::int32_t libraryChooserPaneColumns(std::vector<std::string> const& labels, std::int32_t const terminalColumns)
+  std::int32_t libraryChooserPaneColumns(TuiTextCatalog const& textCatalog,
+                                         std::vector<std::string> const& labels,
+                                         std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max({cellWidth("Lists"),
-                                    cellWidth("No lists found") + kScrollIndicatorColumns,
-                                    cellWidth(overlayHint(Overlay::ListChooser))});
+    auto contentColumns =
+      std::max({cellWidth(overlayLabel(textCatalog, Overlay::ListChooser)),
+                cellWidth(textCatalog.text(TuiTextId::LibraryNoListsFound)) + kScrollIndicatorColumns,
+                cellWidth(overlayHint(textCatalog, Overlay::ListChooser))});
 
     for (auto const& label : labels)
     {
@@ -684,7 +708,8 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
+  ftxui::Element libraryChooserPane(TuiTextCatalog const& textCatalog,
+                                    std::vector<std::string> const& labels,
                                     std::int32_t const selected,
                                     std::int32_t columns)
   {
@@ -692,7 +717,7 @@ namespace ao::tui
 
     if (columns <= 0)
     {
-      columns = libraryChooserPaneColumns(labels, 0);
+      columns = libraryChooserPaneColumns(textCatalog, labels, 0);
     }
 
     auto rows = std::vector<SelectableListRow>{};
@@ -704,18 +729,20 @@ namespace ao::tui
         SelectableListRow{.elementPtr = text(labels[index]) | flex, .selected = std::cmp_equal(index, selected)});
     }
 
-    return style::popupPanel("Lists",
-                             vbox({
-                               selectableList(std::move(rows),
-                                              SelectableListOptions{.focusRow = std::max(0, selected),
-                                                                    .emptyText = "No lists found",
-                                                                    .framed = !labels.empty(),
-                                                                    .scrollIndicator = !labels.empty(),
-                                                                    .flex = !labels.empty(),
-                                                                    .centerEmpty = labels.empty()}),
-                               separator(),
-                               style::panelFooterHint(overlayHint(Overlay::ListChooser)),
-                             })) |
+    return style::popupPanel(
+             overlayLabel(textCatalog, Overlay::ListChooser),
+             vbox({
+               selectableList(
+                 std::move(rows),
+                 SelectableListOptions{.focusRow = std::max(0, selected),
+                                       .emptyText = std::string{textCatalog.text(TuiTextId::LibraryNoListsFound)},
+                                       .framed = !labels.empty(),
+                                       .scrollIndicator = !labels.empty(),
+                                       .flex = !labels.empty(),
+                                       .centerEmpty = labels.empty()}),
+               separator(),
+               style::panelFooterHint(overlayHint(textCatalog, Overlay::ListChooser)),
+             })) |
            size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

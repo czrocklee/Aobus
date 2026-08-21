@@ -3,6 +3,7 @@
 
 #include "tui/TrackDetailLines.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackRow.h>
@@ -33,7 +34,7 @@ namespace ao::tui::test
                             .bitDepth = 16,
                             .codec = AudioCodec::Flac};
 
-    auto lines = trackDetailLines(row);
+    auto lines = trackDetailLines(ao::test::englishPresentationTextCatalog(), row);
 
     REQUIRE(lines.size() >= 15);
     CHECK(lines[0].label == "Title");
@@ -50,5 +51,11 @@ namespace ao::tui::test
     CHECK(lines[11].value == "4:59");
     CHECK(lines[13].value == "44100 Hz");
     CHECK(lines[14].value == "16-bit");
+
+    auto const german = ao::test::presentationTextCatalog("de-DE");
+    auto const germanLines = trackDetailLines(german, row);
+    CHECK(germanLines[0].label == "Titel");
+    CHECK(germanLines[5].label == "Dirigent");
+    CHECK(germanLines[0].value == "Seven");
   }
 } // namespace ao::tui::test

@@ -3,6 +3,7 @@
 
 #include "tui/EventController.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -10,6 +11,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/LibraryController.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDeviceController.h"
@@ -86,7 +88,10 @@ namespace ao::tui::test
         addTrack(library::test::TrackSpec{.title = "Second", .uri = fixturePath});
       }
 
-      LibraryController makeLibrary() const { return LibraryController{*runtimePtr}; }
+      LibraryController makeLibrary() const
+      {
+        return LibraryController{*runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+      }
 
       TrackId addTrack(library::test::TrackSpec const& spec) const
       {
@@ -327,8 +332,9 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
-    auto outputDevices =
-      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
+    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback(),
+                                                ao::test::englishPresentationTextCatalog(),
+                                                uimodel::OutputDeviceIntent::discarded()};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -591,8 +597,9 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
-    auto outputDevices =
-      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
+    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback(),
+                                                ao::test::englishPresentationTextCatalog(),
+                                                uimodel::OutputDeviceIntent::discarded()};
     outputDevices.refresh();
     REQUIRE(outputDevices.viewState().rows.size() > 1);
     auto const outputRow = outputDevices.viewState().rows[1];
@@ -637,8 +644,9 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
-    auto outputDevices =
-      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
+    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback(),
+                                                ao::test::englishPresentationTextCatalog(),
+                                                uimodel::OutputDeviceIntent::discarded()};
     outputDevices.refresh();
     auto hitRegions = TuiHitRegions{};
     hitRegions.outputDeviceRows = {
@@ -668,8 +676,9 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider(rt::test::makePipeWireOutputStatus());
     auto library = fixture.makeLibrary();
-    auto outputDevices =
-      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
+    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback(),
+                                                ao::test::englishPresentationTextCatalog(),
+                                                uimodel::OutputDeviceIntent::discarded()};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -698,7 +707,8 @@ namespace ao::tui::test
     auto renderScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(80), ftxui::Dimension::Fixed(1));
     auto const playbackSnapshot = currentPlayback(fixture);
     ftxui::Render(renderScreen,
-                  playbackBar(PlaybackBarViewState{.playbackState = &playbackSnapshot.transport,
+                  playbackBar(englishTuiTextCatalog(),
+                              PlaybackBarViewState{.playbackState = &playbackSnapshot.transport,
                                                    .soulButtonBox = &hitRegions.soulButtonBox,
                                                    .terminalColumns = 80}));
     auto controller = EventController{
@@ -763,7 +773,8 @@ namespace ao::tui::test
     auto renderScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(80), ftxui::Dimension::Fixed(1));
     auto const playbackSnapshot = currentPlayback(fixture);
     ftxui::Render(renderScreen,
-                  playbackBar(PlaybackBarViewState{.playbackState = &playbackSnapshot.transport,
+                  playbackBar(englishTuiTextCatalog(),
+                              PlaybackBarViewState{.playbackState = &playbackSnapshot.transport,
                                                    .soulButtonBox = &hitRegions.soulButtonBox,
                                                    .terminalColumns = 80}));
     auto controller = EventController{
@@ -888,8 +899,9 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
-      fixture.runtimePtr->notifications(), [](uimodel::ActivityStatusViewState const&) {}};
+    auto activityStatusViewModel = uimodel::ActivityStatusViewModel{fixture.runtimePtr->notifications(),
+                                                                    ao::test::englishPresentationTextCatalog(),
+                                                                    [](uimodel::ActivityStatusViewState const&) {}};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -915,6 +927,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
       fixture.runtimePtr->notifications(),
+      ao::test::englishPresentationTextCatalog(),
       [](uimodel::ActivityStatusViewState const&) {},
     };
     auto controller = EventController{fixture.screen,
@@ -941,8 +954,9 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
-      fixture.runtimePtr->notifications(), [](uimodel::ActivityStatusViewState const&) {}};
+    auto activityStatusViewModel = uimodel::ActivityStatusViewModel{fixture.runtimePtr->notifications(),
+                                                                    ao::test::englishPresentationTextCatalog(),
+                                                                    [](uimodel::ActivityStatusViewState const&) {}};
     fixture.runtimePtr->notifications().post(
       rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::history());
     auto const notificationId = fixture.runtimePtr->notifications().feed().entries.front().id;
@@ -1401,8 +1415,9 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     REQUIRE(library.setPresentation("albums") == "View: albums");
     REQUIRE(library.sections().size() >= 2);
-    auto outputDevices =
-      OutputDeviceController{fixture.runtimePtr->playback(), uimodel::OutputDeviceIntent::discarded()};
+    auto outputDevices = OutputDeviceController{fixture.runtimePtr->playback(),
+                                                ao::test::englishPresentationTextCatalog(),
+                                                uimodel::OutputDeviceIntent::discarded()};
     auto hitRegions = TuiHitRegions{};
     hitRegions.outputDeviceButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
     hitRegions.soulButtonBox = ftxui::Box{.x_min = 0, .x_max = 2, .y_min = 0, .y_max = 0};

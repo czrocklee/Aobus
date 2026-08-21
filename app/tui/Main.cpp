@@ -2,10 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "App.h"
+#include "TuiTextCatalog.h"
 #include <ao/AppVersion.h>
 #include <ao/Contract.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <CLI/CLI.hpp>
 
@@ -25,6 +28,7 @@
 #include <print>
 #include <span>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -93,7 +97,17 @@ int main(int argc, char* argv[])
 {
   try
   {
-    return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}));
+    auto catalogRes = ao::i18n::MessageCatalog::createForSystemLocale();
+
+    if (!catalogRes)
+    {
+      AO_FATAL("Could not initialize TUI localization: {}", catalogRes.error().message);
+    }
+
+    auto catalog = std::move(*catalogRes);
+    auto const textCatalog = ao::uimodel::PresentationTextCatalog{catalog};
+    auto const tuiTextCatalog = ao::tui::TuiTextCatalog{catalog};
+    return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}), textCatalog, tuiTextCatalog);
   }
   catch (...)
   {

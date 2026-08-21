@@ -12,6 +12,7 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "common/MainContextCallbackScope.h"
+#include "i18n/GtkTextCatalog.h"
 #include "platform/SuccessorProcessLauncher.h"
 #include "portal/ImportExportCoordinator.h"
 #include "portal/LibraryImportExportWorkflow.h"
@@ -21,6 +22,7 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -28,6 +30,7 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -371,7 +374,8 @@ namespace
 
   void presentPreferences(Glib::RefPtr<Gtk::Application> const& appPtr,
                           std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
-                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr)
+                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
+                          uimodel::PresentationTextCatalog const& textCatalog)
   {
     auto* const targetWindow = activeMainWindow(appPtr);
 
@@ -382,40 +386,42 @@ namespace
 
     if (!preferencesWindowPtr)
     {
-      preferencesWindowPtr = std::make_unique<PreferencesWindow>(PreferencesWindow::Callbacks{
-        .onEditLayout =
-          [appPtr]
-        {
-          if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+      preferencesWindowPtr = std::make_unique<PreferencesWindow>(
+        textCatalog,
+        PreferencesWindow::Callbacks{
+          .onEditLayout =
+            [appPtr]
           {
-            window->openLayoutEditor();
-          }
-        },
-        .onResetRuntimeLayoutState =
-          [appPtr]
-        {
-          if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+            if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+            {
+              window->openLayoutEditor();
+            }
+          },
+          .onResetRuntimeLayoutState =
+            [appPtr]
           {
-            window->resetRuntimeLayoutState();
-          }
-        },
-        .onSaveCurrentPanelSizesAsLayoutDefaults =
-          [appPtr]
-        {
-          if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+            if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+            {
+              window->resetRuntimeLayoutState();
+            }
+          },
+          .onSaveCurrentPanelSizesAsLayoutDefaults =
+            [appPtr]
           {
-            window->saveCurrentPanelSizesAsLayoutDefaults();
-          }
-        },
-        .onPersistPreferences =
-          [appConfigStorePtr](rt::AppPrefsState const& prefs, uimodel::PreferencesChange const change)
-        {
-          auto current = rt::AppPrefsState{};
-          appConfigStorePtr->loadAppPrefs(current);
-          appConfigStorePtr->saveAppPrefs(uimodel::mergePreferenceChange(std::move(current), prefs, change));
-        },
-        .onApplyTheme = [appPtr](uimodel::ThemePreset const theme) { applyThemeToMainWindows(appPtr, theme); },
-      });
+            if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+            {
+              window->saveCurrentPanelSizesAsLayoutDefaults();
+            }
+          },
+          .onPersistPreferences =
+            [appConfigStorePtr](rt::AppPrefsState const& prefs, uimodel::PreferencesChange const change)
+          {
+            auto current = rt::AppPrefsState{};
+            appConfigStorePtr->loadAppPrefs(current);
+            appConfigStorePtr->saveAppPrefs(uimodel::mergePreferenceChange(std::move(current), prefs, change));
+          },
+          .onApplyTheme = [appPtr](uimodel::ThemePreset const theme) { applyThemeToMainWindows(appPtr, theme); },
+        });
     }
 
     if (!preferencesWindowPtr->get_application())
@@ -441,7 +447,8 @@ namespace
 
   void addAppActions(Glib::RefPtr<Gtk::Application>& appPtr,
                      std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
-                     std::shared_ptr<AppConfigStore> const& appConfigStorePtr)
+                     std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
+                     uimodel::PresentationTextCatalog const& textCatalog)
   {
     auto const aboutActionPtr = Gio::SimpleAction::create("about");
     aboutActionPtr->signal_activate().connect(
@@ -468,8 +475,8 @@ namespace
 
     auto const preferencesActionPtr = Gio::SimpleAction::create("preferences");
     preferencesActionPtr->signal_activate().connect(
-      [&appPtr, &preferencesWindowPtr, appConfigStorePtr](Glib::VariantBase const& /*variant*/)
-      { presentPreferences(appPtr, preferencesWindowPtr, appConfigStorePtr); });
+      [&appPtr, &preferencesWindowPtr, appConfigStorePtr, &textCatalog](Glib::VariantBase const& /*variant*/)
+      { presentPreferences(appPtr, preferencesWindowPtr, appConfigStorePtr, textCatalog); });
     appPtr->add_action(preferencesActionPtr);
     appPtr->set_accels_for_action("app.preferences", {"<Control>comma"});
   }
@@ -511,6 +518,8 @@ namespace
                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
                          std::shared_ptr<ShellLayoutStore> const& shellLayoutStorePtr,
                          std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr,
+                         uimodel::PresentationTextCatalog const& textCatalog,
+                         GtkTextCatalog const& gtkTextCatalog,
                          GtkStartupPlan const& startupPlan,
                          std::optional<LibraryRestartRequest>& optRestartRequest,
                          std::optional<std::string>& optDiagnosticMessage,
@@ -530,9 +539,10 @@ namespace
 
     if (!pathsRes)
     {
-      failStartup(appPtr,
-                  optDiagnosticMessage,
-                  std::format("Aobus could not select the startup library: {}", pathsRes.error().message));
+      failStartup(
+        appPtr,
+        optDiagnosticMessage,
+        textCatalog.format(i18n::MessageId::GtkStartupSelectLibraryFailed, {{"detail", pathsRes.error().message}}));
       return;
     }
 
@@ -543,12 +553,16 @@ namespace
       prepareLibraryWindow({.musicRoot = std::move(paths.musicRoot), .databasePath = std::move(paths.databasePath)},
                            appConfigStorePtr,
                            shellLayoutStorePtr,
-                           componentStateStorePtr);
+                           componentStateStorePtr,
+                           textCatalog,
+                           gtkTextCatalog);
 
     if (!windowRes)
     {
       failStartup(
-        appPtr, optDiagnosticMessage, std::format("Aobus could not open the library: {}", windowRes.error().message));
+        appPtr,
+        optDiagnosticMessage,
+        textCatalog.format(i18n::MessageId::GtkStartupOpenLibraryFailed, {{"detail", windowRes.error().message}}));
       return;
     }
 
@@ -564,7 +578,8 @@ namespace
       mainWindowPtr.reset();
       failStartup(appPtr,
                   optDiagnosticMessage,
-                  std::format("Aobus could not activate the library: {}", activatedRes.error().message));
+                  textCatalog.format(
+                    i18n::MessageId::GtkStartupActivateLibraryFailed, {{"detail", activatedRes.error().message}}));
       return;
     }
 
@@ -611,7 +626,10 @@ namespace
     AO_FATAL_EXCEPTION(std::current_exception(), "GTK signal handler");
   }
 
-  RunAppResult runApp(std::span<char*> args, ProcessSignalHandlers& processSignalHandlers)
+  RunAppResult runApp(std::span<char*> args,
+                      ProcessSignalHandlers& processSignalHandlers,
+                      uimodel::PresentationTextCatalog const& textCatalog,
+                      GtkTextCatalog const& gtkTextCatalog)
   {
     auto argumentViews = std::vector<std::string_view>{};
     argumentViews.reserve(args.size());
@@ -733,7 +751,7 @@ namespace
     auto callbackScope =
       MainContextCallbackScope{[&openLibraryIdleRegistration] { openLibraryIdleRegistration.reset(); }};
 
-    addAppActions(appPtr, preferencesWindowPtr, appConfigStorePtr);
+    addAppActions(appPtr, preferencesWindowPtr, appConfigStorePtr, textCatalog);
     auto appActionsRegistration = utility::ScopedRegistration{[appPtr] { removeAppActions(*appPtr); }};
 
     auto activateConnection = appPtr->signal_activate().connect(
@@ -744,6 +762,8 @@ namespace
        appConfigStorePtr,
        shellLayoutStorePtr,
        componentStateStorePtr,
+       &textCatalog,
+       &gtkTextCatalog,
        &startupPlan,
        &optRestartRequest,
        &optDiagnosticMessage,
@@ -756,6 +776,8 @@ namespace
                           appConfigStorePtr,
                           shellLayoutStorePtr,
                           componentStateStorePtr,
+                          textCatalog,
+                          gtkTextCatalog,
                           startupPlan,
                           optRestartRequest,
                           optDiagnosticMessage,
@@ -787,15 +809,17 @@ namespace
             .optDiagnosticMessage = std::move(optDiagnosticMessage)};
   }
 
-  std::int32_t runDiagnosticApp(std::string const& message, ProcessSignalHandlers& processSignalHandlers)
+  std::int32_t runDiagnosticApp(std::string_view const title,
+                                std::string const& message,
+                                ProcessSignalHandlers& processSignalHandlers)
   {
     auto appPtr = Gtk::Application::create({}, Gio::Application::Flags::NON_UNIQUE);
     processSignalHandlers.install(appPtr);
 
     auto diagnosticActivateConnection = appPtr->signal_activate().connect(
-      [appPtr, message]
+      [appPtr, title = std::string{title}, message]
       {
-        auto alertPtr = Gtk::AlertDialog::create("Aobus Startup Failed");
+        auto alertPtr = Gtk::AlertDialog::create(title);
         alertPtr->set_detail(message);
         appPtr->hold();
         alertPtr->choose(
@@ -828,7 +852,17 @@ int main(int argc, char* argv[])
 
   try
   {
-    auto result = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers);
+    auto catalogRes = i18n::MessageCatalog::createForSystemLocale();
+
+    if (!catalogRes)
+    {
+      AO_FATAL("Could not initialize GTK localization: {}", catalogRes.error().message);
+    }
+
+    auto catalog = std::move(*catalogRes);
+    auto const textCatalog = uimodel::PresentationTextCatalog{catalog};
+    auto const gtkTextCatalog = GtkTextCatalog{catalog};
+    auto result = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers, textCatalog, gtkTextCatalog);
     processSignalHandlers.uninstall();
 
     if (result.optRestartRequest)
@@ -848,16 +882,19 @@ int main(int argc, char* argv[])
           request.activation.contextPtr->launch_failed(*request.activation.optToken);
         }
 
-        auto const message = std::format("Aobus could not start the selected library: {}", launchedRes.error().message);
+        auto const message =
+          textCatalog.format(i18n::MessageId::GtkStartupLaunchLibraryFailed, {{"detail", launchedRes.error().message}});
         APP_LOG_ERROR("{}", message);
-        std::ignore = runDiagnosticApp(message, processSignalHandlers);
+        std::ignore =
+          runDiagnosticApp(textCatalog.text(i18n::MessageId::GtkStartupFailedTitle), message, processSignalHandlers);
         rt::Log::shutdown();
         return EXIT_FAILURE;
       }
     }
     else if (result.optDiagnosticMessage)
     {
-      std::ignore = runDiagnosticApp(*result.optDiagnosticMessage, processSignalHandlers);
+      std::ignore = runDiagnosticApp(
+        textCatalog.text(i18n::MessageId::GtkStartupFailedTitle), *result.optDiagnosticMessage, processSignalHandlers);
     }
 
     rt::Log::shutdown();

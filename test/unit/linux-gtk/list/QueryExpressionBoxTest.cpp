@@ -3,6 +3,7 @@
 
 #include "list/QueryExpressionBox.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -22,7 +23,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     auto window = Gtk::Window{};
-    auto box = QueryExpressionBox{fixture.runtime().completion()};
+    auto box = QueryExpressionBox{fixture.runtime().completion(), ao::test::englishPresentationTextCatalog()};
     window.set_child(box);
     drainGtkEvents();
 

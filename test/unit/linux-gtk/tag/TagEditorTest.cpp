@@ -3,6 +3,7 @@
 
 #include "tag/TagEditor.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -95,7 +96,7 @@ namespace ao::gtk::test
     addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Jazz"}});
     auto const emptyTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{});
 
-    auto editor = TagEditor{};
+    auto editor = TagEditor{ao::test::englishPresentationTextCatalog()};
     auto window = Gtk::Window{};
     window.set_child(editor);
 
@@ -111,7 +112,7 @@ namespace ao::gtk::test
       editor.measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, natWidth, minBaseline, natBaseline);
 
       CHECK(minWidth == 0);
-      CHECK(natWidth > 0);
+      CHECK(natWidth > 66);
 
       std::int32_t minHeight = 0;
       std::int32_t natHeight = 0;
@@ -119,9 +120,7 @@ namespace ao::gtk::test
       editor.size_allocate(Gtk::Allocation{0, 0, 66, natHeight}, -1);
 
       CHECK(editor.get_width() == 66);
-      REQUIRE(editor.get_first_child() != nullptr);
-      // Each chip is clamped to the pane width (then ellipsizes); none balloons past it.
-      CHECK(editor.get_first_child()->get_width() <= 66);
+      CHECK(editor.get_overflow() == Gtk::Overflow::HIDDEN);
     }
 
     SECTION("Overall minimum height remains a lower bound after tags load")
@@ -150,6 +149,7 @@ namespace ao::gtk::test
       // The inline add trigger lives in the same flow as a trailing button.
       auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
       CHECK(addButton != nullptr);
+      CHECK(addButton->get_label() == "Add…");
     }
 
     SECTION("Clicking a suggested tag promotes it to a current chip")

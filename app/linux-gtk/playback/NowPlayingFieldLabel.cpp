@@ -11,6 +11,7 @@
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/eventcontroller.h>
@@ -37,11 +38,15 @@ namespace ao::gtk
     }
   } // namespace
 
-  NowPlayingFieldLabel::NowPlayingFieldLabel(rt::AppRuntime& runtime, rt::TrackField field, Action action)
+  NowPlayingFieldLabel::NowPlayingFieldLabel(rt::AppRuntime& runtime,
+                                             uimodel::PresentationTextCatalog const& textCatalog,
+                                             rt::TrackField field,
+                                             Action action)
     : _runtime{runtime}
     , _field{field}
     , _action{action}
     , _nowPlayingViewModel{_runtime.playback(),
+                           textCatalog,
                            [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);

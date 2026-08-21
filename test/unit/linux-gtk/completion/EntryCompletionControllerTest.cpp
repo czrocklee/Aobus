@@ -3,6 +3,7 @@
 
 #include "completion/EntryCompletionController.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/completion/CompletionItem.h>
@@ -57,6 +58,7 @@ namespace ao::gtk::test
     bool providerCalled = false;
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [&providerCalled](std::string_view text, std::size_t cursor) -> std::optional<rt::CompletionResult>
       {
         providerCalled = true;
@@ -98,6 +100,7 @@ namespace ao::gtk::test
     std::int32_t providerCalls = 0;
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [&providerCalls](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
       {
         ++providerCalls;
@@ -135,6 +138,7 @@ namespace ao::gtk::test
 
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
       {
         auto items = std::vector<rt::CompletionItem>{};
@@ -178,6 +182,7 @@ namespace ao::gtk::test
 
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
       {
         auto items = std::vector<rt::CompletionItem>{};
@@ -219,6 +224,7 @@ namespace ao::gtk::test
     std::int32_t providerCalls = 0;
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [&providerCalls](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
       {
         ++providerCalls;
@@ -263,6 +269,7 @@ namespace ao::gtk::test
 
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
       {
         auto items = std::vector<rt::CompletionItem>{};
@@ -296,6 +303,7 @@ namespace ao::gtk::test
 
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
       {
         auto items = std::vector<rt::CompletionItem>{};
@@ -335,6 +343,7 @@ namespace ao::gtk::test
 
     auto controller = EntryCompletionController{
       entry,
+      ao::test::englishPresentationTextCatalog(),
       [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
       {
         auto items = std::vector<rt::CompletionItem>{};

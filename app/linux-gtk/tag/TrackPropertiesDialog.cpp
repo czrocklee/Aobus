@@ -10,6 +10,7 @@
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
@@ -21,7 +22,6 @@
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -39,7 +39,6 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
-#include <format>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -48,6 +47,7 @@
 
 namespace ao::gtk
 {
+  using i18n::MessageId;
   namespace
   {
     constexpr int kSectionSpacing = layout::kSpacingLarge;
@@ -65,18 +65,21 @@ namespace ao::gtk
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
                                                rt::Library& library,
                                                rt::CompletionService& completion,
+                                               uimodel::PresentationTextCatalog textCatalog,
                                                TrackRowCache& rowCache,
                                                std::vector<TrackId> trackIds)
     : AppDialog{}
     , _library{library}
     , _completion{completion}
+    , _textCatalog{std::move(textCatalog)}
     , _rowCache{rowCache}
     , _trackIds{std::move(trackIds)}
     , _multipleTracks{_trackIds.size() > 1}
+    , _formModel{_textCatalog}
   {
-    auto const title = _multipleTracks
-                         ? std::format("Properties — {} selected", uimodel::formatTrackCount(_trackIds.size()))
-                         : std::string{"Properties"};
+    auto const title =
+      _multipleTracks ? _textCatalog.format(MessageId::GtkTrackPropertiesSelectedTitle, {{"count", _trackIds.size()}})
+                      : std::string{_textCatalog.text(MessageId::GtkTrackPropertiesTitle)};
 
     set_title(title);
     configureForParent(parent);
@@ -94,7 +97,8 @@ namespace ao::gtk
     }
     else
     {
-      _sessionErrorLabel.set_text(std::format("Editing unavailable: {}", sessionRes.error().message));
+      _sessionErrorLabel.set_text(
+        _textCatalog.format(MessageId::GtkTrackEditingUnavailable, {{"detail", sessionRes.error().message}}));
       _sessionErrorLabel.set_visible(true);
 
       for (auto const& editor : _editors)
@@ -112,8 +116,8 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::buildUi()
   {
-    addCancelAction("Close", Gtk::ResponseType::CLOSE);
-    _saveButton = addPrimaryAction("Save", Gtk::ResponseType::OK);
+    addCancelAction(std::string{_textCatalog.text(MessageId::GtkCommonClose)}, Gtk::ResponseType::CLOSE);
+    _saveButton = addPrimaryAction(std::string{_textCatalog.text(MessageId::GtkCommonSave)}, Gtk::ResponseType::OK);
     _saveButton->set_sensitive(false);
     _saveButton->signal_clicked().connect([this] { handleSaveClicked(); });
 
@@ -154,7 +158,7 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    auto const spec = uimodel::buildTrackPropertiesFormSpec();
+    auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
 
     for (auto const& row : spec.metadataRows)
     {
@@ -166,7 +170,7 @@ namespace ao::gtk
     }
 
     _metadataBox.append(*list);
-    _notebook.append_page(_metadataScroll, "Metadata");
+    _notebook.append_page(_metadataScroll, std::string{_textCatalog.text(MessageId::TrackMetadataHeading)});
   }
 
   void TrackPropertiesDialog::buildPropertiesTab()
@@ -186,7 +190,7 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    auto const spec = uimodel::buildTrackPropertiesFormSpec();
+    auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
 
     for (auto const& row : spec.propertyRows)
     {
@@ -198,7 +202,7 @@ namespace ao::gtk
     }
 
     _propertiesBox.append(*list);
-    _notebook.append_page(_propertiesScroll, "Properties");
+    _notebook.append_page(_propertiesScroll, std::string{_textCatalog.text(MessageId::GtkTrackPropertiesTitle)});
   }
 
   Gtk::Widget* TrackPropertiesDialog::createEditorWidget(rt::TrackField field,
@@ -225,7 +229,7 @@ namespace ao::gtk
       _completionControllers.push_back(CompletionControllerBinding{
         .entry = entry,
         .controllerPtr = std::make_unique<EntryCompletionController>(
-          *entry, rt::MetadataValueCompleter{_completion, field}.asProvider()),
+          *entry, _textCatalog, rt::MetadataValueCompleter{_completion, field}.asProvider()),
       });
     }
 
@@ -337,25 +341,25 @@ namespace ao::gtk
 
     if (!replyRes)
     {
-      AppDialog::presentMessage(
-        *this,
-        "Save failed",
-        replyRes.error().message,
-        {AppDialogAction{
-          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
-        Gtk::ResponseType::CLOSE);
+      AppDialog::presentMessage(*this,
+                                std::string{_textCatalog.text(MessageId::GtkTrackSaveFailed)},
+                                replyRes.error().message,
+                                {AppDialogAction{.label = std::string{_textCatalog.text(MessageId::GtkCommonClose)},
+                                                 .responseId = Gtk::ResponseType::CLOSE,
+                                                 .role = AppDialogActionRole::Cancel}},
+                                Gtk::ResponseType::CLOSE);
       return;
     }
 
     if (replyRes->status != rt::TrackAuthoringStatus::Applied && replyRes->status != rt::TrackAuthoringStatus::NoOp)
     {
-      AppDialog::presentMessage(
-        *this,
-        "Save could not be applied",
-        "The library changed while this dialog was open. Reload the properties and try again.",
-        {AppDialogAction{
-          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
-        Gtk::ResponseType::CLOSE);
+      AppDialog::presentMessage(*this,
+                                std::string{_textCatalog.text(MessageId::GtkTrackSaveStaleTitle)},
+                                std::string{_textCatalog.text(MessageId::GtkTrackSaveStale)},
+                                {AppDialogAction{.label = std::string{_textCatalog.text(MessageId::GtkCommonClose)},
+                                                 .responseId = Gtk::ResponseType::CLOSE,
+                                                 .role = AppDialogActionRole::Cancel}},
+                                Gtk::ResponseType::CLOSE);
       return;
     }
 
@@ -396,7 +400,7 @@ namespace ao::gtk
   {
     if (view.mixed)
     {
-      setEditorMixed(widget);
+      setEditorMixed(widget, view.text);
       return;
     }
 
@@ -439,13 +443,13 @@ namespace ao::gtk
     }
   }
 
-  void TrackPropertiesDialog::setEditorMixed(Gtk::Widget* widget)
+  void TrackPropertiesDialog::setEditorMixed(Gtk::Widget* widget, std::string_view const text)
   {
     widget->set_sensitive(false);
 
     if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
-      entry->set_placeholder_text(std::string{uimodel::kMultipleTrackValuesText});
+      entry->set_placeholder_text(std::string{text});
       return;
     }
 
@@ -457,7 +461,7 @@ namespace ao::gtk
 
     if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label != nullptr)
     {
-      label->set_text(std::string{uimodel::kMultipleTrackValuesText});
+      label->set_text(std::string{text});
     }
   }
 } // namespace ao::gtk

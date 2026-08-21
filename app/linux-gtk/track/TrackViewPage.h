@@ -16,6 +16,7 @@
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
@@ -67,6 +68,7 @@ namespace ao::gtk
     explicit TrackViewPage(ListId listId,
                            Glib::RefPtr<TrackListModel> modelPtr,
                            uimodel::TrackColumnLayoutStore& layoutStore,
+                           uimodel::PresentationTextCatalog textCatalog,
                            rt::AppRuntime& runtime,
                            ResourceImageLoader& thumbnailLoader,
                            rt::TrackPresentationSpec const& presentation = rt::defaultTrackPresentationSpec(),
@@ -141,6 +143,7 @@ namespace ao::gtk
     rt::ViewId _viewId;
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::TrackColumnLayoutStore& _layoutStore;
+    uimodel::PresentationTextCatalog _textCatalog;
     rt::AppRuntime& _runtime;
     ResourceImageLoader& _thumbnailLoader;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;

@@ -3,11 +3,13 @@
 
 #include "LayoutEditorDialog.h"
 
+#include "LayoutEditorText.h"
 #include "app/AppDialog.h"
 #include "common/AccessibleLabel.h"
 #include "layout/document/LayoutPresets.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionValidator.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -58,6 +60,7 @@
 namespace ao::gtk::layout::editor
 {
   using namespace uimodel;
+  using i18n::MessageId;
   namespace
   {
     constexpr int kTreeMinContentWidth = 220;
@@ -77,6 +80,7 @@ namespace ao::gtk::layout::editor
   LayoutEditorDialog::LayoutEditorDialog(Gtk::Window& parent,
                                          ComponentRegistry const& registry,
                                          ActionRegistry const& actionRegistry,
+                                         uimodel::PresentationTextCatalog textCatalog,
                                          LayoutDocument initialLayout,
                                          std::string initialPresetId,
                                          std::string initialThemeId,
@@ -86,6 +90,7 @@ namespace ao::gtk::layout::editor
     : AppDialog{}
     , _registry{registry}
     , _actionRegistry{actionRegistry}
+    , _textCatalog{std::move(textCatalog)}
     , _document{std::move(initialLayout)}
     , _columns{}
     , _treeStorePtr{Gtk::TreeStore::create(_columns)}
@@ -104,13 +109,13 @@ namespace ao::gtk::layout::editor
       };
     }
 
-    set_title("Layout Editor");
+    set_title(std::string{_textCatalog.text(MessageId::GtkLayoutEditorTitle)});
     configureForParent(parent);
     set_default_size(-1, -1);
 
-    addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
-    addPrimaryAction("Apply", Gtk::ResponseType::APPLY);
-    addPrimaryAction("Save", Gtk::ResponseType::OK);
+    addCancelAction(std::string{_textCatalog.text(MessageId::GtkCommonCancel)}, Gtk::ResponseType::CANCEL);
+    addPrimaryAction(std::string{_textCatalog.text(MessageId::GtkLayoutApply)}, Gtk::ResponseType::APPLY);
+    addPrimaryAction(std::string{_textCatalog.text(MessageId::GtkCommonSave)}, Gtk::ResponseType::OK);
 
     buildUi();
 
@@ -148,7 +153,8 @@ namespace ao::gtk::layout::editor
 
             if (auto savedRes = _signalSaveRequest.emit(result); !savedRes)
             {
-              presentErrorDialog("Unable to Save Layout", savedRes.error().message);
+              presentErrorDialog(
+                std::string{_textCatalog.text(MessageId::GtkLayoutUnableToSave)}, savedRes.error().message);
               return;
             }
 
@@ -191,8 +197,8 @@ namespace ao::gtk::layout::editor
     _treeStorePtr = Gtk::TreeStore::create(_columns);
     _treeView.set_model(_treeStorePtr);
 
-    _treeView.append_column("Node", _columns.displayName);
-    _treeView.append_column("Type", _columns.type);
+    _treeView.append_column(std::string{_textCatalog.text(MessageId::GtkLayoutTreeNode)}, _columns.displayName);
+    _treeView.append_column(std::string{_textCatalog.text(MessageId::GtkLayoutTreeType)}, _columns.type);
 
     _treeView.get_selection()->signal_changed().connect(
       sigc::mem_fun(*this, &LayoutEditorDialog::handleSelectionChanged));
@@ -217,14 +223,14 @@ namespace ao::gtk::layout::editor
     headerBar().pack_end(_comboThemePresets);
     headerBar().pack_end(_btnReset);
 
-    _comboPresets.append("classic", "Classic Layout");
-    _comboPresets.append("modern", "Modern Layout");
+    _comboPresets.append("classic", std::string{_textCatalog.text(MessageId::GtkLayoutClassicPreset)});
+    _comboPresets.append("modern", std::string{_textCatalog.text(MessageId::GtkLayoutModernPreset)});
 
-    _comboThemePresets.append("classic", "Classic Theme");
-    _comboThemePresets.append("modern", "Modern Theme");
+    _comboThemePresets.append("classic", std::string{_textCatalog.text(MessageId::GtkLayoutClassicTheme)});
+    _comboThemePresets.append("modern", std::string{_textCatalog.text(MessageId::GtkLayoutModernTheme)});
 
     _btnReset.set_icon_name("view-refresh-symbolic");
-    setTooltipAndAccessibleLabel(_btnReset, "Reset to selected preset's default layout");
+    setTooltipAndAccessibleLabel(_btnReset, _textCatalog.text(MessageId::GtkLayoutResetPreset));
     _btnReset.add_css_class("flat");
 
     _actionGroupPtr = Gio::SimpleActionGroup::create();
@@ -236,7 +242,7 @@ namespace ao::gtk::layout::editor
 
     for (auto const& descriptor : _registry.descriptors())
     {
-      auto const categoryLabel = std::string{uimodel::toString(descriptor.category)};
+      auto const categoryLabel = layoutEditorVocabularyText(_textCatalog, uimodel::toString(descriptor.category));
 
       if (!categoryMenus.contains(categoryLabel))
       {
@@ -247,7 +253,8 @@ namespace ao::gtk::layout::editor
       auto actionName = "add_" + descriptor.type;
       std::ranges::replace(actionName, '.', '_');
 
-      categoryMenus[categoryLabel]->append(descriptor.displayName, "editor." + actionName);
+      categoryMenus[categoryLabel]->append(
+        layoutEditorVocabularyText(_textCatalog, descriptor.displayName), "editor." + actionName);
 
       _actionGroupPtr->add_action(actionName, [this, type = descriptor.type] { addComponent(type); });
 
@@ -255,29 +262,30 @@ namespace ao::gtk::layout::editor
       {
         auto wrapActionName = "wrap_" + descriptor.type;
         std::ranges::replace(wrapActionName, '.', '_');
-        wrapMenuPtr->append(descriptor.displayName, "editor." + wrapActionName);
+        wrapMenuPtr->append(
+          layoutEditorVocabularyText(_textCatalog, descriptor.displayName), "editor." + wrapActionName);
         _actionGroupPtr->add_action(wrapActionName, [this, type = descriptor.type] { wrapNode(type); });
       }
     }
 
     _btnAdd.set_icon_name("list-add-symbolic");
-    setTooltipAndAccessibleLabel(_btnAdd, "Add Child");
+    setTooltipAndAccessibleLabel(_btnAdd, _textCatalog.text(MessageId::GtkLayoutAddChild));
     _btnAdd.set_menu_model(addMenuPtr);
 
     _btnWrap.set_icon_name("object-group-symbolic");
-    setTooltipAndAccessibleLabel(_btnWrap, "Wrap Node");
+    setTooltipAndAccessibleLabel(_btnWrap, _textCatalog.text(MessageId::GtkLayoutWrapNode));
     _btnWrap.set_menu_model(wrapMenuPtr);
 
     _btnRemove.set_icon_name("user-trash-symbolic");
-    setTooltipAndAccessibleLabel(_btnRemove, "Remove Node");
+    setTooltipAndAccessibleLabel(_btnRemove, _textCatalog.text(MessageId::GtkLayoutRemoveNode));
     _btnRemove.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleRemoveNodeClicked));
 
     _btnUp.set_icon_name("go-up-symbolic");
-    setTooltipAndAccessibleLabel(_btnUp, "Move Up");
+    setTooltipAndAccessibleLabel(_btnUp, _textCatalog.text(MessageId::GtkLayoutMoveUp));
     _btnUp.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleMoveUpClicked));
 
     _btnDown.set_icon_name("go-down-symbolic");
-    setTooltipAndAccessibleLabel(_btnDown, "Move Down");
+    setTooltipAndAccessibleLabel(_btnDown, _textCatalog.text(MessageId::GtkLayoutMoveDown));
     _btnDown.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleMoveDownClicked));
 
     _btnReset.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleResetDefaultClicked));
@@ -319,7 +327,8 @@ namespace ao::gtk::layout::editor
 
     if (displayName.empty())
     {
-      displayName = optDescriptor ? optDescriptor->displayName : _document.root.type;
+      displayName =
+        optDescriptor ? layoutEditorVocabularyText(_textCatalog, optDescriptor->displayName) : _document.root.type;
     }
 
     if (_document.root.type == "template")
@@ -350,7 +359,7 @@ namespace ao::gtk::layout::editor
 
     if (displayName.empty())
     {
-      displayName = optDescriptor ? optDescriptor->displayName : node->type;
+      displayName = optDescriptor ? layoutEditorVocabularyText(_textCatalog, optDescriptor->displayName) : node->type;
     }
 
     if (node->type == "template")
@@ -685,9 +694,9 @@ namespace ao::gtk::layout::editor
 
         if (!preparedRes)
         {
-          presentErrorDialog(
-            "Invalid Layout Document",
-            std::format("Validation failed on preset '{}':\n\n{}", presetId, preparedRes.error().message));
+          presentErrorDialog(std::string{_textCatalog.text(MessageId::GtkLayoutInvalidDocument)},
+                             _textCatalog.format(MessageId::GtkLayoutValidationPreset,
+                                                 {{"preset", presetId}, {"detail", preparedRes.error().message}}));
           return false;
         }
 
@@ -700,12 +709,12 @@ namespace ao::gtk::layout::editor
                                  [](uimodel::LayoutNodeIdDiagnostic const& diagnostic)
                                  { return diagnostic.severity == uimodel::LayoutNodeIdDiagnosticSeverity::Error; });
           auto const& firstError = *firstErrorIt;
-          presentErrorDialog("Invalid Layout Component IDs",
-                             std::format("Validation failed on preset '{}' component '{}' type '{}':\n\n{}",
-                                         presetId,
-                                         firstError.componentId,
-                                         firstError.componentType,
-                                         firstError.message));
+          presentErrorDialog(std::string{_textCatalog.text(MessageId::GtkLayoutInvalidComponentIds)},
+                             _textCatalog.format(MessageId::GtkLayoutValidationComponent,
+                                                 {{"preset", presetId},
+                                                  {"component", firstError.componentId},
+                                                  {"type", firstError.componentType},
+                                                  {"detail", firstError.message}}));
           return false;
         }
 
@@ -715,12 +724,12 @@ namespace ao::gtk::layout::editor
         if (!diagnostics.empty())
         {
           auto const& firstError = diagnostics.front();
-          presentErrorDialog("Invalid Layout Actions",
-                             std::format("Validation failed on preset '{}' component '{}' property '{}':\n\n{}",
-                                         presetId,
-                                         firstError.componentId,
-                                         firstError.propertyName,
-                                         firstError.message));
+          presentErrorDialog(std::string{_textCatalog.text(MessageId::GtkLayoutInvalidActions)},
+                             _textCatalog.format(MessageId::GtkLayoutValidationAction,
+                                                 {{"preset", presetId},
+                                                  {"component", firstError.componentId},
+                                                  {"property", firstError.propertyName},
+                                                  {"detail", firstError.message}}));
           return false;
         }
       }
@@ -731,12 +740,13 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::presentErrorDialog(std::string const& title, std::string const& message)
   {
-    AppDialog::presentMessage(
-      *this,
-      title,
-      message,
-      {AppDialogAction{.label = "OK", .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
-      Gtk::ResponseType::OK);
+    AppDialog::presentMessage(*this,
+                              title,
+                              message,
+                              {AppDialogAction{.label = std::string{_textCatalog.text(MessageId::GtkCommonOk)},
+                                               .responseId = Gtk::ResponseType::OK,
+                                               .role = AppDialogActionRole::Primary}},
+                              Gtk::ResponseType::OK);
   }
 
   void LayoutEditorDialog::handleSelectionChanged()
@@ -828,7 +838,7 @@ namespace ao::gtk::layout::editor
   {
     auto* const hbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
 
-    auto* const label = Gtk::make_managed<Gtk::Label>("ID");
+    auto* const label = Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::GtkLayoutId)});
     label->set_halign(Gtk::Align::START);
     label->set_size_request(100, -1);
 
@@ -857,7 +867,8 @@ namespace ao::gtk::layout::editor
 
           if (displayName.empty())
           {
-            displayName = optDescriptor ? optDescriptor->displayName : node->type;
+            displayName =
+              optDescriptor ? layoutEditorVocabularyText(_textCatalog, optDescriptor->displayName) : node->type;
           }
 
           row->set_value(_columns.displayName, displayName);
@@ -883,7 +894,7 @@ namespace ao::gtk::layout::editor
     check->property_active().signal_changed().connect(
       [this, node, prop, check, isLayoutProp]
       { applyPropertyChange(node, prop.name, LayoutValue{check->get_active()}, isLayoutProp); });
-    return createPropertyRow(prop.label, *check);
+    return createPropertyRow(layoutEditorVocabularyText(_textCatalog, prop.label), *check);
   }
 
   Gtk::Widget* LayoutEditorDialog::renderIntEditor(LayoutNode* node,
@@ -901,12 +912,12 @@ namespace ao::gtk::layout::editor
         applyPropertyChange(
           node, prop.name, LayoutValue{static_cast<std::int64_t>(spin->get_value_as_int())}, isLayoutProp);
       });
-    return createPropertyRow(prop.label, *spin);
+    return createPropertyRow(layoutEditorVocabularyText(_textCatalog, prop.label), *spin);
   }
 
   void LayoutEditorDialog::populateActionComboBox(Gtk::ComboBoxText* combo)
   {
-    combo->append("none", "none");
+    combo->append("none", std::string{_textCatalog.text(MessageId::GtkLayoutNone)});
 
     for (auto const& desc : _actionRegistry.descriptors())
     {
@@ -915,12 +926,12 @@ namespace ao::gtk::layout::editor
 
       if (desc.capabilities.has(LayoutActionCapability::RequiresAnchor))
       {
-        caps.emplace_back("Anchor");
+        caps.emplace_back(_textCatalog.text(MessageId::GtkLayoutCapabilityAnchor));
       }
 
       if (desc.capabilities.has(LayoutActionCapability::PresentsMenu))
       {
-        caps.emplace_back("Menu");
+        caps.emplace_back(_textCatalog.text(MessageId::GtkLayoutCapabilityMenu));
       }
 
       if (!caps.empty())
@@ -961,7 +972,7 @@ namespace ao::gtk::layout::editor
     {
       for (auto const& val : prop.enumValues)
       {
-        combo->append(val, val);
+        combo->append(val, layoutEditorVocabularyText(_textCatalog, val));
       }
     }
 
@@ -974,15 +985,16 @@ namespace ao::gtk::layout::editor
       [this, node, prop, combo, isLayoutProp]
       { applyPropertyChange(node, prop.name, LayoutValue{combo->get_active_id().raw()}, isLayoutProp); });
 
-    auto* const rowBox = createPropertyRow(prop.label, *combo);
+    auto* const rowBox = createPropertyRow(layoutEditorVocabularyText(_textCatalog, prop.label), *combo);
 
     if (isUnknown && prop.optActionBinding && currentStr != "none" && !currentStr.empty())
     {
-      auto* const warning = Gtk::make_managed<Gtk::Label>("⚠ Unknown");
+      auto* const warning = Gtk::make_managed<Gtk::Label>();
       warning->add_css_class("error");
 
-      warning->set_markup(
-        std::format("<span color='red' weight='bold'>⚠ Unknown ID: {}</span>", Glib::Markup::escape_text(currentStr)));
+      warning->set_markup(std::format(
+        "<span color='red' weight='bold'>{}</span>",
+        Glib::Markup::escape_text(_textCatalog.format(MessageId::GtkLayoutUnknownId, {{"id", currentStr}}))));
       rowBox->append(*warning);
     }
 
@@ -1003,7 +1015,7 @@ namespace ao::gtk::layout::editor
       [this, node, prop, entry, isLayoutProp]
       { applyPropertyChange(node, prop.name, LayoutValue{entry->get_text().raw()}, isLayoutProp); });
 
-    return createPropertyRow(prop.label, *entry);
+    return createPropertyRow(layoutEditorVocabularyText(_textCatalog, prop.label), *entry);
   }
 
   Gtk::Widget* LayoutEditorDialog::renderPropertyEditor(LayoutNode* node,
@@ -1026,8 +1038,9 @@ namespace ao::gtk::layout::editor
       case LayoutPropertyKind::String: return renderStringEditor(node, prop, currentVal, isLayoutProp);
       default:
       {
-        auto* const placeholder = Gtk::make_managed<Gtk::Label>("(Unsupported editor)");
-        return createPropertyRow(prop.label, *placeholder);
+        auto* const placeholder =
+          Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::GtkLayoutUnsupportedEditor)});
+        return createPropertyRow(layoutEditorVocabularyText(_textCatalog, prop.label), *placeholder);
       }
     }
   }
@@ -1046,7 +1059,8 @@ namespace ao::gtk::layout::editor
 
     if (node == nullptr)
     {
-      auto* const label = Gtk::make_managed<Gtk::Label>("No selection");
+      auto* const label =
+        Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::GtkLayoutNoSelection)});
       _propertiesBox.append(*label);
       return;
     }
@@ -1076,7 +1090,7 @@ namespace ao::gtk::layout::editor
     };
 
     // 1. General Section (ID + Component properties)
-    addSectionTitle("General");
+    addSectionTitle(_textCatalog.text(MessageId::GtkLayoutGeneral));
     auto* const generalList = Gtk::make_managed<Gtk::ListBox>();
     generalList->add_css_class("ao-boxed-list");
 
@@ -1153,7 +1167,7 @@ namespace ao::gtk::layout::editor
 
       if (!layoutProps.empty())
       {
-        addSectionTitle("Layout Properties");
+        addSectionTitle(_textCatalog.text(MessageId::GtkLayoutProperties));
         auto* const layoutList = Gtk::make_managed<Gtk::ListBox>();
         layoutList->add_css_class("ao-boxed-list");
 
@@ -1168,7 +1182,9 @@ namespace ao::gtk::layout::editor
 
     if (!optDescriptorOption)
     {
-      auto* const label = Gtk::make_managed<Gtk::Label>("<i>No descriptor found</i>");
+      auto* const label = Gtk::make_managed<Gtk::Label>(std::format(
+        "<i>{}</i>",
+        Glib::Markup::escape_text(Glib::ustring{std::string{_textCatalog.text(MessageId::GtkLayoutNoDescriptor)}})));
       label->set_use_markup(true);
       label->set_halign(Gtk::Align::START);
       label->add_css_class("ao-layout-editor-section-title");

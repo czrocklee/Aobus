@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -26,7 +27,7 @@ namespace ao::gtk
   class SelectionInfoLabel final
   {
   public:
-    explicit SelectionInfoLabel(rt::ViewService& viewService);
+    SelectionInfoLabel(rt::ViewService& viewService, uimodel::PresentationTextCatalog textCatalog);
     ~SelectionInfoLabel();
 
     // Not copyable or movable
@@ -41,6 +42,7 @@ namespace ao::gtk
     void updateState(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration = std::nullopt);
 
     rt::ViewService& _viewService;
+    uimodel::PresentationTextCatalog _textCatalog;
     Gtk::Label _label;
     async::Subscription _selectionChangedSub;
   };

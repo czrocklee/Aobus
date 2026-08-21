@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk::layout::track_field_grid
@@ -160,7 +161,6 @@ namespace ao::gtk::layout::track_field_grid
     _editButton.set_focusable(true);
     _editButton.add_css_class("ao-icon-button");
     _editButton.add_css_class("ao-detail-field-edit-hint");
-    setTooltipAndAccessibleLabel(_editButton, "Edit Value");
     _editButton.set_visible(false);
     _editButton.signal_clicked().connect(sigc::track_object([this] { startEditing(); }, *this));
 
@@ -186,6 +186,11 @@ namespace ao::gtk::layout::track_field_grid
     auto const focusPtr = Gtk::EventControllerFocus::create();
     focusPtr->signal_leave().connect(sigc::track_object([this] { stopEditing(true); }, *this));
     _entry.add_controller(focusPtr);
+  }
+
+  void DetailFieldEditor::setEditActionText(std::string_view const text)
+  {
+    setTooltipAndAccessibleLabel(_editButton, text);
   }
 
   DetailFieldEditor::~DetailFieldEditor() = default;
@@ -279,9 +284,10 @@ namespace ao::gtk::layout::track_field_grid
     }
   }
 
-  void DetailFieldEditor::setCompletionProvider(rt::CompletionProvider provider)
+  void DetailFieldEditor::setCompletionProvider(uimodel::PresentationTextCatalog const& textCatalog,
+                                                rt::CompletionProvider provider)
   {
-    _completionControllerPtr = std::make_unique<EntryCompletionController>(_entry, std::move(provider));
+    _completionControllerPtr = std::make_unique<EntryCompletionController>(_entry, textCatalog, std::move(provider));
   }
 
   sigc::signal<void()>& DetailFieldEditor::signalEditStarted()

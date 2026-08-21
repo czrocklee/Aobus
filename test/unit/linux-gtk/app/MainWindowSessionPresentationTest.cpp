@@ -6,11 +6,13 @@
 #include "app/MainWindow.h"
 #include "app/MainWindowCoordinator.h"
 #include "list/ListNavigationController.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
@@ -115,7 +117,11 @@ namespace ao::gtk::test
     }
 
     auto runtimePtr = makeRuntime(tempDir);
-    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
+    auto window = MainWindow{*runtimePtr,
+                             appConfigStore(tempDir),
+                             nullptr,
+                             ao::test::englishPresentationTextCatalog(),
+                             englishGtkTextCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
@@ -143,7 +149,11 @@ namespace ao::gtk::test
     }
 
     auto runtimePtr = makeRuntime(tempDir);
-    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
+    auto window = MainWindow{*runtimePtr,
+                             appConfigStore(tempDir),
+                             nullptr,
+                             ao::test::englishPresentationTextCatalog(),
+                             englishGtkTextCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
@@ -169,7 +179,8 @@ namespace ao::gtk::test
     auto runtimePtr = makeRuntime(tempDir);
     auto configStorePtr = appConfigStore(tempDir);
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{window, *runtimePtr, configStorePtr};
+    auto coordinator = MainWindowCoordinator{
+      window, *runtimePtr, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
     coordinator.loadSession();
     coordinator.prepareSession();
 
@@ -220,7 +231,11 @@ namespace ao::gtk::test
 
     auto runtimePtr = makeRuntime(tempDir);
     rt::test::addReadyAudioProvider(*runtimePtr);
-    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
+    auto window = MainWindow{*runtimePtr,
+                             appConfigStore(tempDir),
+                             nullptr,
+                             ao::test::englishPresentationTextCatalog(),
+                             englishGtkTextCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
@@ -253,7 +268,11 @@ namespace ao::gtk::test
 
     auto runtimePtr = makeRuntime(tempDir);
     rt::test::addReadyAudioProvider(*runtimePtr);
-    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
+    auto window = MainWindow{*runtimePtr,
+                             appConfigStore(tempDir),
+                             nullptr,
+                             ao::test::englishPresentationTextCatalog(),
+                             englishGtkTextCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
 
@@ -298,7 +317,11 @@ namespace ao::gtk::test
 
     auto runtimePtr = makeRuntime(tempDir);
     rt::test::addReadyAudioProvider(*runtimePtr);
-    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
+    auto window = MainWindow{*runtimePtr,
+                             appConfigStore(tempDir),
+                             nullptr,
+                             ao::test::englishPresentationTextCatalog(),
+                             englishGtkTextCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
@@ -350,7 +373,11 @@ namespace ao::gtk::test
 
     auto runtimePtr = makeRuntime(tempDir);
     rt::test::addReadyAudioProvider(*runtimePtr);
-    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
+    auto window = MainWindow{*runtimePtr,
+                             appConfigStore(tempDir),
+                             nullptr,
+                             ao::test::englishPresentationTextCatalog(),
+                             englishGtkTextCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();

@@ -6,6 +6,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -17,10 +18,12 @@
 namespace ao::tui
 {
   OutputDeviceController::OutputDeviceController(rt::PlaybackService& playback,
+                                                 uimodel::PresentationTextCatalog const& textCatalog,
                                                  uimodel::OutputDeviceIntent intent,
                                                  std::function<void()> onChanged)
     : _onChanged{std::move(onChanged)}
     , _viewModel{playback,
+                 textCatalog,
                  [this](uimodel::OutputDeviceViewState const& view)
                  {
                    _view = view;

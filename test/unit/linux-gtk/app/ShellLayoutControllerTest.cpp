@@ -9,12 +9,14 @@
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
 #include "playback/OutputDevicePopover.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/audio/BackendIds.h>
@@ -142,6 +144,8 @@ namespace ao::gtk::test
                             storePtr,
                             componentStateStorePtr,
                             GtkUiDependencies{
+                              .textCatalog = ao::test::englishPresentationTextCatalog(),
+                              .gtkTextCatalog = englishGtkTextCatalog(),
                               .playbackCommandSurface = &commandSurface,
                               .themeCoordinator = &themeCoordinator,
                               .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
@@ -153,6 +157,15 @@ namespace ao::gtk::test
     {
       controller.attachToWindow();
       CHECK(window.get_child() != nullptr);
+    }
+
+    SECTION("action descriptors retain stable ids with catalog-selected presentation")
+    {
+      auto const optDescriptor = controller.actionCatalog().descriptor("playback.playPause");
+      REQUIRE(optDescriptor);
+      CHECK(optDescriptor->id == "playback.playPause");
+      CHECK(optDescriptor->label == "Play/Pause");
+      CHECK(optDescriptor->category == "Playback");
     }
 
     SECTION("output-device action reports the exact route selected from its popover")
@@ -190,6 +203,21 @@ namespace ao::gtk::test
       CHECK(controller.editorDialog() == nullptr);
       drainGtkEvents();
       CHECK(controller.editorDialog() != nullptr);
+    }
+
+    SECTION("Soul window retirement is deferred beyond the hide callback")
+    {
+      REQUIRE(controller.soulWindow() == nullptr);
+
+      controller.activateAction("shell.showSoul");
+      auto* const soulWindow = controller.soulWindow();
+      REQUIRE(soulWindow != nullptr);
+
+      soulWindow->hide();
+      CHECK(controller.soulWindow() == soulWindow);
+
+      drainGtkEvents();
+      CHECK(controller.soulWindow() == nullptr);
     }
 
     SECTION("loadLayout load works")
@@ -626,6 +654,45 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("ShellLayoutController - teardown cancels pending Soul window retirement",
+            "[gtk][regression][shell][lifecycle]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto window = Gtk::ApplicationWindow{};
+    window.set_application(appPtr);
+    auto themeCoordinator = ThemeCoordinator{};
+    auto& playback = runtime.playback();
+    auto commandSurface =
+      uimodel::PlaybackCommandSurface{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+
+    auto const tempDir = fixture.tempDir().path();
+    auto const topLevelCount = Gtk::Window::list_toplevels().size();
+
+    {
+      auto controller =
+        ShellLayoutController{runtime,
+                              window,
+                              std::make_shared<AppConfigStore>(tempDir / "config.yaml"),
+                              std::make_shared<ShellLayoutStore>(tempDir / "layouts"),
+                              std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state"),
+                              GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
+                                                .gtkTextCatalog = englishGtkTextCatalog(),
+                                                .playbackCommandSurface = &commandSurface,
+                                                .themeCoordinator = &themeCoordinator,
+                                                .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
+
+      controller.activateAction("shell.showSoul");
+      REQUIRE(controller.soulWindow() != nullptr);
+      CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+      controller.soulWindow()->hide();
+    }
+
+    drainGtkEvents();
+    CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
+  }
+
   TEST_CASE("ShellLayoutController - teardown flushes pending component state while its sole store owner is alive",
             "[gtk][regression][shell][lifecycle]")
   {
@@ -657,7 +724,9 @@ namespace ao::gtk::test
                               std::move(configStorePtr),
                               std::move(layoutStorePtr),
                               std::move(componentStateStorePtr),
-                              GtkUiDependencies{.playbackCommandSurface = &commandSurface,
+                              GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
+                                                .gtkTextCatalog = englishGtkTextCatalog(),
+                                                .playbackCommandSurface = &commandSurface,
                                                 .themeCoordinator = &themeCoordinator,
                                                 .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
       controller.loadLayout();

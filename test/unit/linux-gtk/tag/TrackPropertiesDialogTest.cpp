@@ -3,6 +3,7 @@
 
 #include "tag/TrackPropertiesDialog.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -11,6 +12,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
@@ -22,7 +24,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <vector>
 
 namespace ao::gtk::test
 {
@@ -68,7 +69,7 @@ namespace ao::gtk::test
                                                                                   .codec = AudioCodec::Flac});
                         }};
     auto& runtime = fixture.runtime();
-    auto cache = TrackRowCache{runtime.library()};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto window = Gtk::Window{};
 
     REQUIRE(trackId1 != kInvalidTrackId);
@@ -76,7 +77,8 @@ namespace ao::gtk::test
 
     SECTION("dialog creation and data loading")
     {
-      auto dialog = TrackPropertiesDialog{window, runtime.library(), runtime.completion(), cache, {trackId1}};
+      auto dialog = TrackPropertiesDialog{
+        window, runtime.library(), runtime.completion(), ao::test::englishPresentationTextCatalog(), cache, {trackId1}};
       drainGtkEvents();
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
@@ -97,7 +99,9 @@ namespace ao::gtk::test
 
     SECTION("multi-track selection marks differing fields as mixed")
     {
-      auto dialog = TrackPropertiesDialog{window, runtime.library(), runtime.completion(), cache, {trackId1, trackId2}};
+      auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+      auto dialog = TrackPropertiesDialog{
+        window, runtime.library(), runtime.completion(), textCatalog, cache, {trackId1, trackId2}};
       drainGtkEvents();
 
       CHECK(dialog.get_title() == "Properties — 2 tracks selected");
@@ -105,16 +109,20 @@ namespace ao::gtk::test
       // Title and artist differ across the two tracks. UIModel owns the mixed-state decision; this
       // adapter test only asserts that the dialog reflects that row view in GTK widgets.
       auto const entries = collectAll<Gtk::Entry>(dialog);
-      auto const mixedCount =
-        std::ranges::count_if(entries,
-                              [](Gtk::Entry const* entry)
-                              { return entry->get_placeholder_text().raw() == uimodel::kMultipleTrackValuesText; });
+      auto const mixedText = textCatalog.text(i18n::MessageId::TrackMultipleValues);
+      auto const mixedCount = std::ranges::count_if(
+        entries, [mixedText](Gtk::Entry const* entry) { return entry->get_placeholder_text().raw() == mixedText; });
       CHECK(mixedCount >= 1);
     }
 
     SECTION("missing authoring targets show why editing is unavailable")
     {
-      auto dialog = TrackPropertiesDialog{window, runtime.library(), runtime.completion(), cache, {TrackId{999999}}};
+      auto dialog = TrackPropertiesDialog{window,
+                                          runtime.library(),
+                                          runtime.completion(),
+                                          ao::test::englishPresentationTextCatalog(),
+                                          cache,
+                                          {TrackId{999999}}};
 
       auto const labels = collectAll<Gtk::Label>(dialog);
       auto const errorLabelIter = std::ranges::find_if(

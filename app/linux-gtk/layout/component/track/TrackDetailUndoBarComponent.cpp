@@ -2,15 +2,18 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -19,7 +22,6 @@
 #include <gtkmm/widget.h>
 #include <sigc++/connection.h>
 
-#include <format>
 #include <memory>
 
 namespace ao::gtk::layout
@@ -31,8 +33,11 @@ namespace ao::gtk::layout
     {
     public:
       TrackDetailUndoBarComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _undoController{ctx.detailUndo}, _notifications{ctx.runtime.notifications()}
+        : _undoController{ctx.detailUndo}
+        , _notifications{ctx.runtime.notifications()}
+        , _textCatalog{ctx.dependencies.textCatalog}
       {
+        _undoButton.set_label(std::string{_textCatalog.text(i18n::MessageId::GtkCommonUndo)});
         _bar.set_orientation(Gtk::Orientation::HORIZONTAL);
         _bar.set_spacing(8);
         _bar.set_margin(8);
@@ -92,15 +97,16 @@ namespace ao::gtk::layout
         }
 
         auto const& pending = *_undoController->pendingCustomMetadataUndo();
-        _label.set_text(std::format("Custom metadata '{}' removed", pending.key));
+        _label.set_text(_textCatalog.format(i18n::MessageId::GtkCustomMetadataDeleted, {{"key", pending.key}}));
         _bar.set_visible(true);
       }
 
       TrackDetailUndoController* _undoController = nullptr;
       rt::NotificationService& _notifications;
+      uimodel::PresentationTextCatalog _textCatalog;
       Gtk::Box _bar{Gtk::Orientation::HORIZONTAL, 0};
       Gtk::Label _label;
-      Gtk::Button _undoButton{"Undo"};
+      Gtk::Button _undoButton;
       sigc::connection _changedConn;
     };
 

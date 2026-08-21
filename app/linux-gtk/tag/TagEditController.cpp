@@ -4,11 +4,13 @@
 #include "tag/TagEditController.h"
 
 #include "app/ThemeCoordinator.h"
+#include "i18n/GtkTextCatalog.h"
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
@@ -62,9 +64,16 @@ namespace ao::gtk
 
   TagEditController::TagEditController(Gtk::Window& parent,
                                        rt::AppRuntime& runtime,
+                                       uimodel::PresentationTextCatalog textCatalog,
+                                       GtkTextCatalog const& gtkTextCatalog,
                                        Callbacks callbacks,
                                        ThemeCoordinator& themeCoordinator)
-    : _callbacks{std::move(callbacks)}, _runtime{runtime}, _parent{parent}, _themeCoordinator{themeCoordinator}
+    : _callbacks{std::move(callbacks)}
+    , _runtime{runtime}
+    , _textCatalog{std::move(textCatalog)}
+    , _gtkTextCatalog{gtkTextCatalog}
+    , _parent{parent}
+    , _themeCoordinator{themeCoordinator}
   {
     createActions();
   }
@@ -137,7 +146,7 @@ namespace ao::gtk
     }
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _runtime.library(), _runtime.completion(), *_dataProvider, selection.selectedIds);
+      _parent, _runtime.library(), _runtime.completion(), _textCatalog, *_dataProvider, selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -158,7 +167,7 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), selection.selectedIds);
+    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), _textCatalog, selection.selectedIds);
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -181,7 +190,7 @@ namespace ao::gtk
       }
     }
 
-    auto const result = ao::uimodel::applyTagEdit(*_tagEditSessionPtr, tagsToAdd, tagsToRemove);
+    auto const result = ao::uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, tagsToAdd, tagsToRemove);
 
     if (!result)
     {
@@ -245,7 +254,7 @@ namespace ao::gtk
     };
 
     addAction(menuModelPtr,
-              "Edit Tags",
+              std::string{_textCatalog.text(i18n::MessageId::GtkActionEditTags)},
               "edit-tags",
               [this]
               {
@@ -260,7 +269,7 @@ namespace ao::gtk
                 }
               });
     addAction(menuModelPtr,
-              "Properties",
+              std::string{_textCatalog.text(i18n::MessageId::GtkActionTrackProperties)},
               "properties",
               [this]
               {
@@ -320,7 +329,7 @@ namespace ao::gtk
     {
       addAction(
         addToListMenuPtr,
-        "Other Lists have computed membership; edit their expression or track tags instead.",
+        _gtkTextCatalog.text(GtkTextId::ListOtherComputedMembership),
         "computed-lists-omitted",
         [] {},
         false);
@@ -328,15 +337,20 @@ namespace ao::gtk
 
     if (addTargetCount == 0)
     {
-      addAction(addToListMenuPtr, "No directly editable Playlists", "add-to-list-unavailable", [] {}, false);
-      addManageListsAction("Create a Playlist...");
+      addAction(
+        addToListMenuPtr,
+        _gtkTextCatalog.text(GtkTextId::ListNoEditablePlaylists),
+        "add-to-list-unavailable",
+        [] {},
+        false);
+      addManageListsAction(_gtkTextCatalog.text(GtkTextId::ListCreatePlaylist));
     }
     else if (hasOmittedComputedTargets)
     {
-      addManageListsAction("Manage Lists...");
+      addManageListsAction(_gtkTextCatalog.text(GtkTextId::ListManageLists));
     }
 
-    menuModelPtr->append_submenu("Add to Playlist", addToListMenuPtr);
+    menuModelPtr->append_submenu(_gtkTextCatalog.text(GtkTextId::ListAddToPlaylist), addToListMenuPtr);
 
     if (_optActiveSelection)
     {
@@ -346,7 +360,7 @@ namespace ao::gtk
       if (current != targets.end())
       {
         addAction(menuModelPtr,
-                  std::format("Remove from {} ({})", current->name, tagExpression(current->tag)),
+                  _gtkTextCatalog.removeFromCurrentList(current->name, tagExpression(current->tag)),
                   "remove-from-current-list",
                   [this, listId = current->listId]
                   {
@@ -359,7 +373,7 @@ namespace ao::gtk
       {
         addAction(
           menuModelPtr,
-          "Remove from this List is unavailable because its membership is computed.",
+          _gtkTextCatalog.text(GtkTextId::ListRemoveComputedUnavailable),
           "remove-from-current-list-unavailable",
           [] {},
           false);
@@ -389,34 +403,37 @@ namespace ao::gtk
     {
       if (capabilities.canRelativeMove)
       {
-        addOrderAction("Move Up", "order-up", TrackOrderCommand::MoveUp);
-        addOrderAction("Move Down", "order-down", TrackOrderCommand::MoveDown);
+        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListMoveUp), "order-up", TrackOrderCommand::MoveUp);
+        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListMoveDown), "order-down", TrackOrderCommand::MoveDown);
       }
       else
       {
-        addAction(orderingMenuPtr, "Move Up", "order-up", [] {}, false);
-        addAction(orderingMenuPtr, "Move Down", "order-down", [] {}, false);
+        addAction(orderingMenuPtr, _gtkTextCatalog.text(GtkTextId::ListMoveUp), "order-up", [] {}, false);
+        addAction(orderingMenuPtr, _gtkTextCatalog.text(GtkTextId::ListMoveDown), "order-down", [] {}, false);
         addAction(orderingMenuPtr, capabilities.disabledReason, "relative-ordering-unavailable", [] {}, false);
       }
 
       if (capabilities.canAbsoluteMove)
       {
-        addOrderAction("Move to Top", "order-top", TrackOrderCommand::MoveToTop);
-        addOrderAction("Move to Bottom", "order-bottom", TrackOrderCommand::MoveToBottom);
+        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListMoveToTop), "order-top", TrackOrderCommand::MoveToTop);
+        addOrderAction(
+          _gtkTextCatalog.text(GtkTextId::ListMoveToBottom), "order-bottom", TrackOrderCommand::MoveToBottom);
       }
 
       if (capabilities.canResetOrder)
       {
-        addOrderAction("Reset Order", "order-reset", TrackOrderCommand::Reset);
+        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListResetOrder), "order-reset", TrackOrderCommand::Reset);
       }
 
       if (capabilities.canForgetHiddenPositions)
       {
-        addOrderAction("Forget Hidden Positions", "order-forget-hidden", TrackOrderCommand::ForgetHidden);
+        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListForgetHiddenPositions),
+                       "order-forget-hidden",
+                       TrackOrderCommand::ForgetHidden);
       }
     }
 
-    menuModelPtr->append_submenu("Manual Order", orderingMenuPtr);
+    menuModelPtr->append_submenu(_gtkTextCatalog.text(GtkTextId::ListManualOrder), orderingMenuPtr);
     _contextPopoverPtr->set_menu_model(menuModelPtr);
   }
 
@@ -427,8 +444,8 @@ namespace ao::gtk
       return;
     }
 
-    auto sessionRes =
-      uimodel::ListMembershipAuthoringSession::begin(_runtime.library(), _optActiveSelection->selectedIds);
+    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(
+      _runtime.library(), _optActiveSelection->selectedIds, _textCatalog);
 
     if (!sessionRes)
     {
@@ -485,7 +502,7 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), selectedIds);
+    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), _textCatalog, selectedIds);
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -502,8 +519,12 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _runtime.library(), _runtime.completion(), *_dataProvider, _optActiveSelection->selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
+                                                                  _runtime.library(),
+                                                                  _runtime.completion(),
+                                                                  _textCatalog,
+                                                                  *_dataProvider,
+                                                                  _optActiveSelection->selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();

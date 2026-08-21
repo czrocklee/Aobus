@@ -6,6 +6,8 @@
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
@@ -45,7 +47,9 @@ namespace ao::gtk::layout::test
     {
       auto actionRegistry = ActionRegistry{};
       auto runtimeState = uimodel::LayoutRuntimeState{};
-      auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
+      auto dependencies = GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
+                                            .gtkTextCatalog = ao::gtk::test::englishGtkTextCatalog(),
+                                            .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
       auto actionCtx = LayoutBuildContext{.registry = registry,
                                           .actionRegistry = actionRegistry,
                                           .runtime = fixture.runtime(),

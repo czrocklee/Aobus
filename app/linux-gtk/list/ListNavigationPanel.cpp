@@ -3,9 +3,11 @@
 
 #include "list/ListNavigationPanel.h"
 
+#include "i18n/GtkTextCatalog.h"
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 
 #include <gdk/gdk.h>
@@ -43,8 +45,10 @@ namespace ao::gtk
     constexpr guint kInvalidListPosition = std::numeric_limits<guint>::max();
   }
 
-  ListNavigationPanel::ListNavigationPanel(Callbacks callbacks)
-    : _callbacks{std::move(callbacks)}
+  ListNavigationPanel::ListNavigationPanel(uimodel::PresentationTextCatalog textCatalog,
+                                           GtkTextCatalog const& gtkTextCatalog,
+                                           Callbacks callbacks)
+    : _callbacks{std::move(callbacks)}, _textCatalog{std::move(textCatalog)}, _gtkTextCatalog{gtkTextCatalog}
   {
     _listScrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _listScrolledWindow.set_child(_listView);
@@ -89,11 +93,11 @@ namespace ao::gtk
     _listView.set_header_factory(headerFactoryPtr);
 
     auto menuModelPtr = Gio::Menu::create();
-    menuModelPtr->append("New List...", "win.list-new-smart-list");
-    menuModelPtr->append("New Playlist...", "win.list-new-playlist");
-    menuModelPtr->append("Edit List...", "win.list-edit");
-    menuModelPtr->append("Delete List", "win.list-delete");
-    menuModelPtr->append("Delete List and Descendants...", "win.list-delete-subtree");
+    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListNew), "win.list-new-smart-list");
+    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListNewPlaylist), "win.list-new-playlist");
+    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListEdit), "win.list-edit");
+    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListDelete), "win.list-delete");
+    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListDeleteSubtree), "win.list-delete-subtree");
     _listContextMenu.set_menu_model(menuModelPtr);
     _listContextMenu.set_parent(_listView);
   }
@@ -105,7 +109,7 @@ namespace ao::gtk
 
   void ListNavigationPanel::rebuildTree(rt::Library const& reads)
   {
-    auto result = ListTreeModelBuilder::build(reads);
+    auto result = ListTreeModelBuilder::build(reads, _textCatalog);
     _selectionChangedConnection.disconnect();
     _nodesById = std::move(result.nodesById);
     _listTreeStorePtr = std::move(result.storePtr);
@@ -300,16 +304,16 @@ namespace ao::gtk
     if (icon != nullptr)
     {
       auto iconName = Glib::ustring{"folder-saved-search-symbolic"};
-      auto const nameLower = rowPtr->name().lowercase();
 
-      if (auto const filterLower = rowPtr->filter().lowercase();
-          nameLower.find("favorite") != Glib::ustring::npos || filterLower.find("#fav") != Glib::ustring::npos)
-      {
-        iconName = "emblem-favorite-symbolic";
-      }
-      else if (nameLower.find("all tracks") != Glib::ustring::npos || nameLower.find("songs") != Glib::ustring::npos)
+      if (auto const nameLower = rowPtr->name().lowercase();
+          rowPtr->listId() == rt::kAllTracksListId || nameLower.find("songs") != Glib::ustring::npos)
       {
         iconName = "library-music-symbolic";
+      }
+      else if (auto const filterLower = rowPtr->filter().lowercase();
+               nameLower.find("favorite") != Glib::ustring::npos || filterLower.find("#fav") != Glib::ustring::npos)
+      {
+        iconName = "emblem-favorite-symbolic";
       }
       else if (nameLower.find("hi-res") != Glib::ustring::npos)
       {

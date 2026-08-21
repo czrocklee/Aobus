@@ -31,8 +31,15 @@ namespace ao::rt
   class AppRuntime;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
+  class GtkTextCatalog;
+
   /**
    * @brief TrackQuickFilter is a global entry control that manages filtering for the focused track view.
    */
@@ -42,7 +49,10 @@ namespace ao::gtk
     using CreateSmartListSignal = sigc::signal<void(std::string)>;
     using DebounceScheduler = std::function<sigc::connection(std::chrono::milliseconds, sigc::slot<bool()>)>;
 
-    explicit TrackQuickFilter(rt::AppRuntime& runtime, DebounceScheduler debounceScheduler = {});
+    TrackQuickFilter(rt::AppRuntime& runtime,
+                     uimodel::PresentationTextCatalog const& textCatalog,
+                     GtkTextCatalog const& gtkTextCatalog,
+                     DebounceScheduler debounceScheduler = {});
     ~TrackQuickFilter() override;
 
     TrackQuickFilter(TrackQuickFilter const&) = delete;

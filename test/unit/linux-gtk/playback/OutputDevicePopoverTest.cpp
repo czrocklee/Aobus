@@ -3,6 +3,7 @@
 
 #include "playback/OutputDevicePopover.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -54,8 +55,10 @@ namespace ao::gtk::test
 
     SECTION("constructor wires up the popover with a scrolled list box")
     {
-      auto selector =
-        OutputDevicePopover{playback, uimodel::OutputDeviceIntent::discarded(), Gtk::PositionType::BOTTOM};
+      auto selector = OutputDevicePopover{playback,
+                                          ao::test::englishPresentationTextCatalog(),
+                                          uimodel::OutputDeviceIntent::discarded(),
+                                          Gtk::PositionType::BOTTOM};
       drainGtkEvents();
 
       CHECK(selector.get_autohide());
@@ -79,6 +82,7 @@ namespace ao::gtk::test
       auto optSelected = std::optional<audio::OutputDeviceSelection>{};
       auto selector = OutputDevicePopover{
         playback,
+        ao::test::englishPresentationTextCatalog(),
         uimodel::OutputDeviceIntent::recordedBy([&optSelected](auto const& selection) { optSelected = selection; }),
         Gtk::PositionType::BOTTOM};
       auto host = GtkWindowFixture{};

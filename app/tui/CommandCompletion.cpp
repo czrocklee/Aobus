@@ -4,6 +4,7 @@
 #include "CommandCompletion.h"
 
 #include "ShellInteractionModel.h"
+#include "TuiTextCatalog.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionText.h>
@@ -52,6 +53,7 @@ namespace ao::tui
     }
 
     void appendCommandItems(std::vector<rt::CompletionItem>& items,
+                            TuiTextCatalog const& textCatalog,
                             std::string_view const prefix,
                             std::size_t const limit)
     {
@@ -64,7 +66,11 @@ namespace ao::tui
 
         if (auto const text = commandDisplayText(spec.prefix); rt::startsWithCompletionPrefixInsensitive(text, prefix))
         {
-          if (!appendItem(items, limit, "/" + std::string{text}, std::string{spec.prefix}, std::string{spec.detail}))
+          if (!appendItem(items,
+                          limit,
+                          "/" + std::string{text},
+                          std::string{spec.prefix},
+                          std::string{textCatalog.text(spec.detail)}))
           {
             return;
           }
@@ -80,8 +86,11 @@ namespace ao::tui
 
         if (rt::startsWithCompletionPrefixInsensitive(spec.alias, prefix))
         {
-          if (!appendItem(
-                items, limit, "/" + std::string{spec.alias}, std::string{spec.alias}, std::string{spec.detail}))
+          if (!appendItem(items,
+                          limit,
+                          "/" + std::string{spec.alias},
+                          std::string{spec.alias},
+                          std::string{textCatalog.text(spec.detail)}))
           {
             return;
           }
@@ -90,12 +99,11 @@ namespace ao::tui
     }
 
     void appendPresentationItems(std::vector<rt::CompletionItem>& items,
+                                 uimodel::PresentationTextCatalog const& textCatalog,
                                  CommandCompletionContext const& context,
                                  std::string_view const prefix,
                                  std::size_t const limit)
     {
-      auto const textCatalog = uimodel::PresentationTextCatalog{};
-
       for (auto const& preset : context.builtinPresentations)
       {
         if (items.size() >= limit)
@@ -171,7 +179,9 @@ namespace ao::tui
     }
   } // namespace
 
-  std::optional<rt::CompletionResult> completeCommandDraft(std::string_view const draft,
+  std::optional<rt::CompletionResult> completeCommandDraft(uimodel::PresentationTextCatalog const& textCatalog,
+                                                           TuiTextCatalog const& tuiTextCatalog,
+                                                           std::string_view const draft,
                                                            CommandCompletionContext const& context,
                                                            std::size_t const limit)
   {
@@ -187,7 +197,7 @@ namespace ao::tui
 
         if (spec.action == CommandAction::SetPresentation)
         {
-          appendPresentationItems(items, context, argumentPrefix, limit);
+          appendPresentationItems(items, textCatalog, context, argumentPrefix, limit);
           return buildResult(replaceBegin, draft.size(), std::move(items));
         }
 
@@ -197,7 +207,7 @@ namespace ao::tui
 
     if (draft.find_first_of(" \t") == std::string_view::npos)
     {
-      appendCommandItems(items, draft, limit);
+      appendCommandItems(items, tuiTextCatalog, draft, limit);
 
       if (!items.empty())
       {

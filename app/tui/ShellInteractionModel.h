@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CommandCompletionState.h"
+#include "TuiTextCatalog.h"
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <cstdint>
@@ -57,8 +58,8 @@ namespace ao::tui
   {
     std::string_view prefix;
     CommandAction action;
-    std::string_view detail;
-    std::string_view category{};
+    TuiTextId detail;
+    TuiTextId category;
     /**
      * @brief The action whose key this entry advertises, when not its own.
      *
@@ -74,8 +75,8 @@ namespace ao::tui
   {
     std::string_view alias;
     CommandAction action;
-    std::string_view detail;
-    std::string_view category{};
+    TuiTextId detail;
+    TuiTextId category;
   };
 
   /**
@@ -99,8 +100,8 @@ namespace ao::tui
   /// The first key that runs @p action, or empty when no key does.
   std::string_view shortcutFor(CommandAction action);
   Command parseCommand(std::string_view input);
-  std::string overlayLabel(Overlay overlay);
-  std::string_view overlayHint(Overlay overlay);
+  std::string_view overlayLabel(TuiTextCatalog const& textCatalog, Overlay overlay);
+  std::string_view overlayHint(TuiTextCatalog const& textCatalog, Overlay overlay);
 
   class ShellInteractionModel final
   {

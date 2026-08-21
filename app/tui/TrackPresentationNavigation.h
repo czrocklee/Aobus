@@ -10,6 +10,11 @@
 #include <string_view>
 #include <vector>
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
   struct TrackPresentationNavEntry final
@@ -19,9 +24,12 @@ namespace ao::tui
     std::string detail{};
   };
 
-  std::string trackPresentationDisplayId(std::string_view presentationId);
-  std::string trackPresentationBadgeLabel(std::string_view presentationId);
+  std::string trackPresentationDisplayId(uimodel::PresentationTextCatalog const& textCatalog,
+                                         std::string_view presentationId);
+  std::string trackPresentationBadgeLabel(uimodel::PresentationTextCatalog const& textCatalog,
+                                          std::string_view presentationId);
   std::vector<TrackPresentationNavEntry> makeTrackPresentationNavigation(
+    uimodel::PresentationTextCatalog const& textCatalog,
     std::span<rt::TrackPresentationPreset const> builtinPresets,
     std::span<rt::CustomTrackPresentationPreset const> customPresets);
 } // namespace ao::tui

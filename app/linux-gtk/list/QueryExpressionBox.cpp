@@ -7,6 +7,7 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -17,10 +18,12 @@
 
 namespace ao::gtk
 {
-  QueryExpressionBox::QueryExpressionBox(rt::CompletionService& completion)
+  QueryExpressionBox::QueryExpressionBox(rt::CompletionService& completion,
+                                         uimodel::PresentationTextCatalog const& textCatalog)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _completer{completion}
     , _completionController{_entry,
+                            textCatalog,
                             [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); }}
   {
     _entry.add_css_class("ao-query-expression-entry");

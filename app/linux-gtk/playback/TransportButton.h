@@ -13,6 +13,7 @@
 
 namespace ao::uimodel
 {
+  class PresentationTextCatalog;
   class PlaybackCommandSurface;
 }
 
@@ -30,6 +31,7 @@ namespace ao::gtk
 
     TransportButton(rt::PlaybackService& playback,
                     uimodel::PlaybackCommandSurface& commands,
+                    uimodel::PresentationTextCatalog const& textCatalog,
                     Action action,
                     bool showLabel = false,
                     std::string const& size = "normal");

@@ -12,8 +12,14 @@
 #include <span>
 #include <string_view>
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
+  class TuiTextCatalog;
   struct CommandCompletionContext final
   {
     std::span<rt::TrackPresentationPreset const> builtinPresentations{};
@@ -22,7 +28,9 @@ namespace ao::tui
       filterCompleter{};
   };
 
-  std::optional<rt::CompletionResult> completeCommandDraft(std::string_view draft,
+  std::optional<rt::CompletionResult> completeCommandDraft(uimodel::PresentationTextCatalog const& textCatalog,
+                                                           TuiTextCatalog const& tuiTextCatalog,
+                                                           std::string_view draft,
                                                            CommandCompletionContext const& context,
                                                            std::size_t limit = 8);
 } // namespace ao::tui

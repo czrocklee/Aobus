@@ -4,12 +4,15 @@
 #include "LayoutTestSupport.h"
 
 #include "app/linux-gtk/app/GtkUiDependencies.h"
+#include "app/linux-gtk/i18n/GtkTextCatalog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
@@ -76,11 +79,18 @@ namespace ao::gtk::layout::test
   struct LayoutRuntimeFixture::State final
   {
     explicit State(std::string_view applicationId,
-                   std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
+                   std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                   std::string_view locale)
       : appPtr{Gtk::Application::create(std::string{applicationId})}
       , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary))}
+      , messageCatalog{ao::test::messageCatalog(locale)}
+      , textCatalog{messageCatalog}
+      , gtkTextCatalog{messageCatalog}
       , playbackCommandSurface{runtimePtr->playback(),
                                [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
+      , dependencies{.textCatalog = textCatalog,
+                     .gtkTextCatalog = gtkTextCatalog,
+                     .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}
       , context{.registry = components,
                 .actionRegistry = actions,
                 .runtime = *runtimePtr,
@@ -116,20 +126,24 @@ namespace ao::gtk::layout::test
     Glib::RefPtr<Gtk::Application> appPtr;
     ao::test::TempDir tempDir;
     std::unique_ptr<rt::AppRuntime> runtimePtr;
+    i18n::MessageCatalog messageCatalog;
+    uimodel::PresentationTextCatalog textCatalog;
+    GtkTextCatalog gtkTextCatalog;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ComponentRegistry components;
     ActionRegistry actions;
     Gtk::Window window;
     uimodel::LayoutRuntimeState runtimeState;
-    GtkUiDependencies dependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
+    GtkUiDependencies dependencies;
     LayoutBuildContext context;
     LayoutRuntime layoutRuntime;
     std::unique_ptr<FakeTrackDetailScope> trackDetailScopePtr;
   };
 
   LayoutRuntimeFixture::LayoutRuntimeFixture(std::string_view const applicationId,
-                                             std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
-    : _statePtr{std::make_unique<State>(applicationId, std::move(initializeLibrary))}
+                                             std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                                             std::string_view const locale)
+    : _statePtr{std::make_unique<State>(applicationId, std::move(initializeLibrary), locale)}
   {
   }
 

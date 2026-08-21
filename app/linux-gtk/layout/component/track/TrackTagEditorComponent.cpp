@@ -41,7 +41,9 @@ namespace ao::gtk::layout
     {
     public:
       TrackTagEditorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _library{ctx.runtime.library()}
+        : _tagEditor{ctx.dependencies.textCatalog}
+        , _textCatalog{ctx.dependencies.textCatalog}
+        , _library{ctx.runtime.library()}
         , _notifications{ctx.runtime.notifications()}
         , _tagEditController{ctx.dependencies.tagEditController}
       {
@@ -94,7 +96,7 @@ namespace ao::gtk::layout
           _tagEditSessionPtr = std::move(*sessionRes);
         }
 
-        auto const result = uimodel::applyTagEdit(*_tagEditSessionPtr, tagsToAdd, tagsToRemove);
+        auto const result = uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, tagsToAdd, tagsToRemove);
 
         if (!result)
         {
@@ -134,6 +136,7 @@ namespace ao::gtk::layout
       }
 
       TagEditor _tagEditor;
+      uimodel::PresentationTextCatalog _textCatalog;
       rt::Library& _library;
       rt::NotificationService& _notifications;
       TagEditController* _tagEditController;

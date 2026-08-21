@@ -7,6 +7,7 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/comboboxtext.h>
@@ -49,7 +50,7 @@ namespace ao::gtk
       uimodel::PreferencesEditorModel::ThemeApplyCallback onApplyTheme{};
     };
 
-    explicit PreferencesWindow(Callbacks callbacks);
+    PreferencesWindow(uimodel::PresentationTextCatalog textCatalog, Callbacks callbacks);
     ~PreferencesWindow() override;
 
     PreferencesWindow(PreferencesWindow const&) = delete;
@@ -88,6 +89,7 @@ namespace ao::gtk
     void rebuildOutputSelector(rt::PlaybackService* playback, Gtk::Window* targetWindow);
 
     Callbacks _callbacks;
+    uimodel::PresentationTextCatalog _textCatalog;
     std::unique_ptr<uimodel::PreferencesEditorModel> _modelPtr;
     sigc::scoped_connection _targetHideConn;
     sigc::connection _themeComboConn;

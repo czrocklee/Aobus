@@ -123,7 +123,6 @@ namespace ao::gtk
   {
     set_content_fit(Gtk::ContentFit::CONTAIN);
     set_can_shrink(true);
-    set_alternative_text("No cover art");
 
     signal_map().connect(
       [this]

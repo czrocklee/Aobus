@@ -3,6 +3,7 @@
 
 #include "track/TrackColumnController.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
@@ -73,7 +74,8 @@ namespace ao::gtk::test
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
 
     auto columnView = Gtk::ColumnView{};
-    auto controller = TrackColumnController{columnView, layoutStore, rt::kAllTracksListId};
+    auto controller =
+      TrackColumnController{columnView, layoutStore, ao::test::englishPresentationTextCatalog(), rt::kAllTracksListId};
 
     SECTION("configureColumns creates all supported columns")
     {
@@ -168,7 +170,8 @@ namespace ao::gtk::test
       controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto secondColumnView = Gtk::ColumnView{};
-      auto secondController = TrackColumnController{secondColumnView, layoutStore, rt::kAllTracksListId};
+      auto secondController = TrackColumnController{
+        secondColumnView, layoutStore, ao::test::englishPresentationTextCatalog(), rt::kAllTracksListId};
       secondController.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto firstVisible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
@@ -246,7 +249,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto columnView = Gtk::ColumnView{};
-    auto controller = TrackColumnController{columnView, layoutStore, rt::kAllTracksListId};
+    auto controller =
+      TrackColumnController{columnView, layoutStore, ao::test::englishPresentationTextCatalog(), rt::kAllTracksListId};
     controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
     controller.syncLayout(std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration});
 

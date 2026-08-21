@@ -15,6 +15,8 @@
 // counts reported alongside are allocator-independent, so they carry directly to
 // the Windows debug build where each allocation simply costs far more.
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
 #include "tui/TrackTable.h"
@@ -40,6 +42,7 @@
 #include <cstdint>
 #include <format>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::tui::bench
@@ -49,6 +52,13 @@ namespace ao::tui::bench
     constexpr std::int32_t kColumns = 120;
     constexpr std::int32_t kViewportRows = 40;
 
+    template<typename... Args>
+    ftxui::Element buildTrackTableView(Args&&... args)
+    {
+      return trackTableView(
+        ao::test::englishPresentationTextCatalog(), test::englishTuiTextCatalog(), std::forward<Args>(args)...);
+    }
+
     std::vector<TrackListEntry> manyTracks(std::size_t const count)
     {
       auto tracks = std::vector<TrackListEntry>{};
@@ -56,7 +66,8 @@ namespace ao::tui::bench
 
       for (std::size_t index = 0; index < count; ++index)
       {
-        tracks.push_back(makeTrackListEntry(rt::TrackRow{.id = TrackId{static_cast<std::uint32_t>(index + 1)},
+        tracks.push_back(makeTrackListEntry(ao::test::englishPresentationTextCatalog(),
+                                            rt::TrackRow{.id = TrackId{static_cast<std::uint32_t>(index + 1)},
                                                          .title = std::format("Track {:05}", index),
                                                          .artist = "Artist",
                                                          .album = "Album",
@@ -110,12 +121,12 @@ namespace ao::tui::bench
 
       BENCHMARK("build full   N=" + std::to_string(trackCount))
       {
-        return trackTableView(tracks, selected, kInvalidTrackId, presentation, fullOptions());
+        return buildTrackTableView(tracks, selected, kInvalidTrackId, presentation, fullOptions());
       };
 
       BENCHMARK("build window N=" + std::to_string(trackCount))
       {
-        return trackTableView(tracks, selected, kInvalidTrackId, presentation, windowedOptions());
+        return buildTrackTableView(tracks, selected, kInvalidTrackId, presentation, windowedOptions());
       };
     }
   }
@@ -129,7 +140,7 @@ namespace ao::tui::bench
 
     BENCHMARK_ADVANCED("render full   N=5000")(Catch::Benchmark::Chronometer meter)
     {
-      auto elementPtr = trackTableView(tracks, selected, kInvalidTrackId, presentation, fullOptions());
+      auto elementPtr = buildTrackTableView(tracks, selected, kInvalidTrackId, presentation, fullOptions());
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(kColumns), ftxui::Dimension::Fixed(kViewportRows));
       meter.measure(
         [&]
@@ -141,7 +152,7 @@ namespace ao::tui::bench
 
     BENCHMARK_ADVANCED("render window N=5000")(Catch::Benchmark::Chronometer meter)
     {
-      auto elementPtr = trackTableView(tracks, selected, kInvalidTrackId, presentation, windowedOptions());
+      auto elementPtr = buildTrackTableView(tracks, selected, kInvalidTrackId, presentation, windowedOptions());
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(kColumns), ftxui::Dimension::Fixed(kViewportRows));
       meter.measure(
         [&]
@@ -162,12 +173,12 @@ namespace ao::tui::bench
 
     BENCHMARK("build full   grouped N=5000")
     {
-      return trackTableView(tracks, sections, selected, kInvalidTrackId, presentation, fullOptions());
+      return buildTrackTableView(tracks, sections, selected, kInvalidTrackId, presentation, fullOptions());
     };
 
     BENCHMARK("build window grouped N=5000")
     {
-      return trackTableView(tracks, sections, selected, kInvalidTrackId, presentation, windowedOptions());
+      return buildTrackTableView(tracks, sections, selected, kInvalidTrackId, presentation, windowedOptions());
     };
   }
 } // namespace ao::tui::bench

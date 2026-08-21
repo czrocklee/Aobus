@@ -15,12 +15,17 @@
 
 #include <string>
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk::layout::track_field_grid
 {
   class AddCustomMetadataButton final
   {
   public:
-    AddCustomMetadataButton();
+    explicit AddCustomMetadataButton(uimodel::PresentationTextCatalog const& textCatalog);
     ~AddCustomMetadataButton();
 
     AddCustomMetadataButton(AddCustomMetadataButton const&) = delete;
@@ -44,7 +49,7 @@ namespace ao::gtk::layout::track_field_grid
     Gtk::Button _button;
     Gtk::Popover _popover;
     Gtk::Box _box{Gtk::Orientation::VERTICAL, kSpacingLarge};
-    Gtk::Label _titleLabel{"Custom Metadata"};
+    Gtk::Label _titleLabel;
     Gtk::Entry _keyEntry;
     Gtk::Entry _valueEntry;
     Gtk::Box _actionBox{Gtk::Orientation::HORIZONTAL, kSpacingMedium};

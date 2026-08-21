@@ -2,11 +2,14 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -26,11 +29,11 @@ namespace ao::gtk::layout
     class StatusMessageLabelComponent final : public LayoutComponent
     {
     public:
-      StatusMessageLabelComponent(LayoutBuildContext& /*ctx*/, LayoutNode const& /*node*/)
+      StatusMessageLabelComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
         _label.set_halign(Gtk::Align::START);
-        _label.set_text("Aobus Ready");
+        _label.set_text(std::string{ctx.dependencies.textCatalog.text(i18n::MessageId::GtkStatusReady)});
       }
 
       Gtk::Widget& widget() override { return _label; }

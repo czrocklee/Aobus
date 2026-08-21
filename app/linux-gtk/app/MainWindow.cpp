@@ -15,6 +15,7 @@
 #include "app/ThemeCoordinator.h"
 #include "app/WindowActionRegistry.h"
 #include "app/WindowState.h"
+#include "i18n/GtkTextCatalog.h"
 #include "list/ListNavigationController.h"
 #include "platform/MprisArtUrlCache.h"
 #include "platform/MprisBridge.h"
@@ -23,6 +24,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
@@ -42,7 +44,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <format>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -54,10 +55,17 @@ namespace ao::gtk
   MainWindow::MainWindow(rt::AppRuntime& runtime,
                          std::shared_ptr<AppConfigStore> configStorePtr,
                          std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+                         uimodel::PresentationTextCatalog textCatalog,
+                         GtkTextCatalog const& gtkTextCatalog,
                          std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
     : _runtime{runtime}
     , _configStorePtr{std::move(configStorePtr)}
-    , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configStorePtr)}
+    , _textCatalog{std::move(textCatalog)}
+    , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this,
+                                                                        _runtime,
+                                                                        _configStorePtr,
+                                                                        _textCatalog,
+                                                                        gtkTextCatalog)}
     , _shellLayout{_runtime,
                    *this,
                    _configStorePtr,
@@ -80,7 +88,7 @@ namespace ao::gtk
     _windowActionRegistryPtr->install(*this);
 
     _menuControllerPtr = std::make_unique<MenuController>();
-    _menuControllerPtr->setup();
+    _menuControllerPtr->setup(gtkTextCatalog);
     _mainWindowCoordinatorPtr->listNavigationController()->addActionsTo(*this);
     _shellLayout.setMenuModel(_menuControllerPtr->menuModel());
     _shellLayout.attachToWindow();
@@ -117,13 +125,14 @@ namespace ao::gtk
       {
         AppDialog::presentMessage(
           *this,
-          "Save Current Panel Sizes as Layout Defaults?",
-          std::format("This will update the '{}' layout preset on disk with the current panel sizes.\n\n"
-                      "Promoted sizes will be removed from runtime state; other runtime values such as revealed state "
-                      "will remain.",
-                      presetId),
-          {AppDialogAction{.label = "No", .responseId = Gtk::ResponseType::NO, .role = AppDialogActionRole::Cancel},
-           AppDialogAction{.label = "Yes", .responseId = Gtk::ResponseType::YES, .role = AppDialogActionRole::Primary}},
+          std::string{_textCatalog.text(i18n::MessageId::GtkShellSavePanelSizesAsLayoutDefaults)},
+          _textCatalog.format(i18n::MessageId::GtkSaveLayoutDefaultsMessage, {{"preset", presetId}}),
+          {AppDialogAction{.label = std::string{_textCatalog.text(i18n::MessageId::GtkCommonNo)},
+                           .responseId = Gtk::ResponseType::NO,
+                           .role = AppDialogActionRole::Cancel},
+           AppDialogAction{.label = std::string{_textCatalog.text(i18n::MessageId::GtkCommonYes)},
+                           .responseId = Gtk::ResponseType::YES,
+                           .role = AppDialogActionRole::Primary}},
           Gtk::ResponseType::NO,
           [answer = std::move(answer)](std::int32_t const responseId) mutable
           { answer(responseId == Gtk::ResponseType::YES); });
@@ -196,10 +205,11 @@ namespace ao::gtk
       APP_LOG_ERROR("Failed to retire active library for process restart: {}", discardedRes.error().message);
       auto* const dialog = AppDialog::presentMessage(
         *this,
-        "Unable to Switch Libraries",
+        std::string{_textCatalog.text(i18n::MessageId::GtkUnableSwitchLibraries)},
         discardedRes.error().message,
-        {AppDialogAction{
-          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+        {AppDialogAction{.label = std::string{_textCatalog.text(i18n::MessageId::GtkCommonClose)},
+                         .responseId = Gtk::ResponseType::CLOSE,
+                         .role = AppDialogActionRole::Cancel}},
         Gtk::ResponseType::CLOSE);
 
       if (auto* const themeCoordinator = _mainWindowCoordinatorPtr->themeCoordinator(); themeCoordinator != nullptr)

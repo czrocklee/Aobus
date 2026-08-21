@@ -9,6 +9,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/ustring.h>
@@ -38,9 +39,11 @@ namespace ao::gtk
   } // namespace
 
   OutputDevicePopover::OutputDevicePopover(rt::PlaybackService& playback,
+                                           uimodel::PresentationTextCatalog const& textCatalog,
                                            uimodel::OutputDeviceIntent intent,
                                            Gtk::PositionType position)
     : _outputDeviceViewModel{playback,
+                             textCatalog,
                              [this](ao::uimodel::OutputDeviceViewState const& view)
                              {
                                _storePtr->remove_all();

@@ -3,6 +3,8 @@
 
 #include "tui/SelectionNavigation.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 namespace ao::tui::test
@@ -16,11 +18,12 @@ namespace ao::tui::test
 
   TEST_CASE("SelectionNavigation - summary is one-based and bounded", "[tui][unit][selection]")
   {
-    CHECK(selectionSummary(0, 0) == "0 tracks");
-    CHECK(selectionSummary(1, 0) == "1 / 1 track");
-    CHECK(selectionSummary(12, 0) == "1 / 12 tracks");
-    CHECK(selectionSummary(12, 99) == "12 / 12 tracks");
-    CHECK(selectionSummary(12, -4) == "1 / 12 tracks");
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    CHECK(selectionSummary(textCatalog, 0, 0) == "0 tracks");
+    CHECK(selectionSummary(textCatalog, 1, 0) == "1 / 1 track");
+    CHECK(selectionSummary(textCatalog, 12, 0) == "1 / 12 tracks");
+    CHECK(selectionSummary(textCatalog, 12, 99) == "12 / 12 tracks");
+    CHECK(selectionSummary(textCatalog, 12, -4) == "1 / 12 tracks");
   }
 
   TEST_CASE("SelectionNavigation - movement is bounded", "[tui][unit][selection]")

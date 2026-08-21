@@ -3,9 +3,13 @@
 
 #include "NotificationCenterPanel.h"
 
+#include "ShellInteractionModel.h"
 #include "StatusBar.h"
 #include "Style.h"
 #include "TextCell.h"
+#include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -21,15 +25,16 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::string_view kNotificationCenterPanelFooter =
-      "n toggle  x hide compact  click clearable row  Esc close";
     constexpr std::int32_t kActivityProgressRailColumns = 10;
   } // namespace
 
-  std::int32_t notificationCenterPanelColumns(uimodel::ActivityStatusViewState const& state,
+  std::int32_t notificationCenterPanelColumns(uimodel::PresentationTextCatalog const& textCatalog,
+                                              TuiTextCatalog const& tuiTextCatalog,
+                                              uimodel::ActivityStatusViewState const& state,
                                               std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max(cellWidth("Notifications"), cellWidth(kNotificationCenterPanelFooter));
+    auto contentColumns = std::max(cellWidth(overlayLabel(tuiTextCatalog, Overlay::Notifications)),
+                                   cellWidth(tuiTextCatalog.text(TuiTextId::NotificationFooter)));
 
     if (state.compact.kind != uimodel::ActivityStatusKind::Idle)
     {
@@ -40,7 +45,7 @@ namespace ao::tui
 
     if (state.detail.optLibraryTask)
     {
-      contentColumns = std::max(contentColumns, cellWidth("Library task"));
+      contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::LibraryTaskLabel)));
       contentColumns = std::max(contentColumns, cellWidth(state.detail.optLibraryTask->message));
     }
 
@@ -57,13 +62,16 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element notificationCenterPanel(uimodel::ActivityStatusViewState const& state,
+  ftxui::Element notificationCenterPanel(uimodel::PresentationTextCatalog const& textCatalog,
+                                         TuiTextCatalog const& tuiTextCatalog,
+                                         uimodel::ActivityStatusViewState const& state,
                                          std::vector<NotificationDetailRowHitRegion>* const rowHitRegions,
                                          std::int32_t const columns)
   {
     using namespace ftxui;
 
-    auto const panelColumns = columns <= 0 ? notificationCenterPanelColumns(state, 0) : columns;
+    auto const panelColumns =
+      columns <= 0 ? notificationCenterPanelColumns(textCatalog, tuiTextCatalog, state, 0) : columns;
 
     if (rowHitRegions != nullptr)
     {
@@ -81,7 +89,7 @@ namespace ao::tui
 
     if (state.detail.optLibraryTask)
     {
-      rows.push_back(text("Library task") | style::accent() | bold);
+      rows.push_back(text(std::string{textCatalog.text(i18n::MessageId::LibraryTaskLabel)}) | style::accent() | bold);
       rows.push_back(hbox({
         text(state.detail.optLibraryTask->message) | flex,
         text(" "),
@@ -115,12 +123,13 @@ namespace ao::tui
 
     if (rows.empty())
     {
-      rows.push_back(text("No notifications") | dim);
+      rows.push_back(text(std::string{textCatalog.text(i18n::MessageId::TuiNotificationNone)}) | dim);
     }
 
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(kNotificationCenterPanelFooter));
+    rows.push_back(style::panelFooterHint(tuiTextCatalog.text(TuiTextId::NotificationFooter)));
 
-    return style::popupPanel("Notifications", vbox(std::move(rows))) | size(WIDTH, EQUAL, panelColumns);
+    return style::popupPanel(overlayLabel(tuiTextCatalog, Overlay::Notifications), vbox(std::move(rows))) |
+           size(WIDTH, EQUAL, panelColumns);
   }
 } // namespace ao::tui

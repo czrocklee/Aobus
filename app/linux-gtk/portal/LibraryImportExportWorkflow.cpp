@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
@@ -23,7 +24,6 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
-#include <format>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -52,8 +52,9 @@ namespace ao::gtk::portal
   } // namespace
 
   LibraryImportExportWorkflow::LibraryImportExportWorkflow(rt::AppRuntime& runtime,
-                                                           ImportExportCallbacks const& callbacks)
-    : _runtime{runtime}, _callbacks{callbacks}
+                                                           ImportExportCallbacks const& callbacks,
+                                                           uimodel::PresentationTextCatalog textCatalog)
+    : _runtime{runtime}, _callbacks{callbacks}, _textCatalog{std::move(textCatalog)}
   {
   }
 
@@ -117,20 +118,25 @@ namespace ao::gtk::portal
         {
           logStructuredError("Audio identity indexing failed", *optError);
           _runtime.notifications().post(
-            rt::NotificationSeverity::Warning, "Audio identity indexing failed", rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Warning,
+            std::string{_textCatalog.text(i18n::MessageId::LibraryAudioIdentityIndexingFailed)},
+            rt::NotificationLifetime::history());
           return;
         }
 
         if (failureCount > 0)
         {
-          _runtime.notifications().post(rt::NotificationSeverity::Warning,
-                                        "Audio identity indexing completed with errors",
-                                        rt::NotificationLifetime::history());
+          _runtime.notifications().post(
+            rt::NotificationSeverity::Warning,
+            std::string{_textCatalog.text(i18n::MessageId::LibraryAudioIdentityIndexingCompletedWithErrors)},
+            rt::NotificationLifetime::history());
         }
         else if (completedCount > 0)
         {
           _runtime.notifications().post(
-            rt::NotificationSeverity::Info, "Audio identity indexing complete", rt::NotificationLifetime::transient());
+            rt::NotificationSeverity::Info,
+            std::string{_textCatalog.text(i18n::MessageId::LibraryAudioIdentityIndexingComplete)},
+            rt::NotificationLifetime::transient());
         }
       });
     auto* const taskService = &_runtime.library().taskService();
@@ -154,12 +160,15 @@ namespace ao::gtk::portal
       {
         if (!result)
         {
-          presentFailure("Export failed", std::format("Export failed: {}", result.error().message), result.error());
+          presentFailure("Export failed",
+                         _textCatalog.format(i18n::MessageId::LibraryExportFailed, {{"error", result.error().message}}),
+                         result.error());
           return;
         }
 
-        _runtime.notifications().post(
-          rt::NotificationSeverity::Info, "Library exported successfully", rt::NotificationLifetime::transient());
+        _runtime.notifications().post(rt::NotificationSeverity::Info,
+                                      std::string{_textCatalog.text(i18n::MessageId::LibraryExported)},
+                                      rt::NotificationLifetime::transient());
       });
     auto* const taskService = &_runtime.library().taskService();
     auto result = co_await taskService->exportLibraryAsync(std::move(exportPath), mode, stopToken);
@@ -175,7 +184,9 @@ namespace ao::gtk::portal
       {
         if (!result)
         {
-          presentFailure("Import failed", std::format("Import failed: {}", result.error().message), result.error());
+          presentFailure("Import failed",
+                         _textCatalog.format(i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
+                         result.error());
           return;
         }
 
@@ -183,7 +194,9 @@ namespace ao::gtk::portal
         {
           auto const error =
             Error{.code = Error::Code::InvalidState, .message = "Library restore confirmation is unavailable"};
-          presentFailure("Import failed", "Import failed: Confirmation is unavailable", error);
+          presentFailure("Import failed",
+                         std::string{_textCatalog.text(i18n::MessageId::LibraryImportConfirmationUnavailable)},
+                         error);
           return;
         }
 
@@ -234,12 +247,15 @@ namespace ao::gtk::portal
       {
         if (!result)
         {
-          presentFailure("Import failed", std::format("Import failed: {}", result.error().message), result.error());
+          presentFailure("Import failed",
+                         _textCatalog.format(i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
+                         result.error());
           return;
         }
 
-        _runtime.notifications().post(
-          rt::NotificationSeverity::Info, "Library imported successfully", rt::NotificationLifetime::transient());
+        _runtime.notifications().post(rt::NotificationSeverity::Info,
+                                      std::string{_textCatalog.text(i18n::MessageId::LibraryImported)},
+                                      rt::NotificationLifetime::transient());
       });
     auto* const taskService = &_runtime.library().taskService();
     auto result = co_await taskService->applyLibraryImportPlanAsync(std::move(plan), stopToken);
@@ -252,7 +268,7 @@ namespace ao::gtk::portal
     // decided in uimodel, which is what keeps this window and the Windows one
     // reporting the same scan the same way. Posting it is all that is left.
     _runtime.notifications().post(uimodel::libraryScanSeverity(outcome.verdict),
-                                  uimodel::PresentationTextCatalog{}.libraryScanMessage(outcome),
+                                  _textCatalog.libraryScanMessage(outcome),
                                   uimodel::libraryScanLifetime(outcome.verdict));
 
     if (outcome.shouldBackfillAudioIdentity)
@@ -264,7 +280,7 @@ namespace ao::gtk::portal
   void LibraryImportExportWorkflow::startAudioIdentityIndexing()
   {
     _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                  "Library ready; indexing audio identity in background",
+                                  std::string{_textCatalog.text(i18n::MessageId::LibraryReadyIndexingAudioIdentity)},
                                   rt::NotificationLifetime::transient());
 
     spawnUiWorkflow(_runtime.async(),

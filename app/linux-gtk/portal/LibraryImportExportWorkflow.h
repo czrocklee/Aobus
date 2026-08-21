@@ -12,6 +12,7 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <filesystem>
 #include <stop_token>
@@ -38,7 +39,9 @@ namespace ao::gtk::portal
   class LibraryImportExportWorkflow final
   {
   public:
-    LibraryImportExportWorkflow(rt::AppRuntime& runtime, ImportExportCallbacks const& callbacks);
+    LibraryImportExportWorkflow(rt::AppRuntime& runtime,
+                                ImportExportCallbacks const& callbacks,
+                                uimodel::PresentationTextCatalog textCatalog);
     ~LibraryImportExportWorkflow();
 
     LibraryImportExportWorkflow(LibraryImportExportWorkflow const&) = delete;
@@ -68,6 +71,7 @@ namespace ao::gtk::portal
 
     rt::AppRuntime& _runtime;
     ImportExportCallbacks const& _callbacks;
+    uimodel::PresentationTextCatalog _textCatalog;
 
     async::LifetimeScope _tasks;
     MainContextCallbackScope _presentationCallbacks;

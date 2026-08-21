@@ -12,11 +12,12 @@
 #include <chrono>
 #include <cstddef>
 #include <optional>
+#include <utility>
 
 namespace ao::gtk
 {
-  SelectionInfoLabel::SelectionInfoLabel(rt::ViewService& viewService)
-    : _viewService{viewService}
+  SelectionInfoLabel::SelectionInfoLabel(rt::ViewService& viewService, uimodel::PresentationTextCatalog textCatalog)
+    : _viewService{viewService}, _textCatalog{std::move(textCatalog)}
   {
     _label.add_css_class("dim-label");
     _label.set_halign(Gtk::Align::END);
@@ -31,6 +32,6 @@ namespace ao::gtk
 
   void SelectionInfoLabel::updateState(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration)
   {
-    _label.set_text(uimodel::trackSelectionSummaryText(count, optTotalDuration));
+    _label.set_text(uimodel::trackSelectionSummaryText(_textCatalog, count, optTotalDuration));
   }
 } // namespace ao::gtk

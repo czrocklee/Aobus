@@ -3,6 +3,7 @@
 
 #include "playback/AudioPipelinePanel.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/audio/Quality.h>
@@ -108,7 +109,7 @@ namespace ao::gtk::test
   TEST_CASE("AudioPipelinePanel - renders no rows for an empty pipeline", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto widget = AudioPipelinePanel{};
+    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog()};
     auto inspector = AudioPipelinePanelInspector{widget};
 
     auto view = uimodel::AudioPipelineViewState{};
@@ -120,7 +121,7 @@ namespace ao::gtk::test
   TEST_CASE("AudioPipelinePanel - renders pipeline nodes with header and conclusion", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto widget = AudioPipelinePanel{};
+    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog()};
     auto inspector = AudioPipelinePanelInspector{widget};
 
     auto view = uimodel::AudioPipelineViewState{};
@@ -153,7 +154,7 @@ namespace ao::gtk::test
   TEST_CASE("AudioPipelinePanel - replaces variant CSS classes", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto widget = AudioPipelinePanel{AudioPipelinePanelVariant::Inline};
+    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog(), AudioPipelinePanelVariant::Inline};
     auto inspector = AudioPipelinePanelInspector{widget};
 
     CHECK(inspector.hasCssClass("ao-quality-panel"));
@@ -166,5 +167,56 @@ namespace ao::gtk::test
     widget.setVariant(AudioPipelinePanelVariant::Compact);
     CHECK_FALSE(inspector.hasCssClass("ao-quality-panel-tooltip"));
     CHECK(inspector.hasCssClass("ao-quality-panel-compact"));
+  }
+
+  TEST_CASE("AudioPipelinePanel - renders shared pipeline semantics in the selected locale",
+            "[gtk][unit][playback][localization]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto catalog = ao::test::presentationTextCatalog("de-DE");
+    auto widget = AudioPipelinePanel{catalog};
+    auto inspector = AudioPipelinePanelInspector{widget};
+    auto view = uimodel::AudioPipelineViewState{
+      .quality =
+        rt::QualityState{
+          .sourceQuality = audio::Quality::BitwisePerfect,
+          .pipelineQuality = audio::Quality::BitwisePerfect,
+          .overall = audio::Quality::BitwisePerfect,
+          .assessments = {audio::NodeQualityAssessment{
+            .nodeName = "Dvořák DAC",
+            .nodeType = audio::flow::NodeType::Source,
+            .findings = {audio::QualityFinding{
+              .kind = audio::QualityFindingKind::BitPerfect,
+              .quality = audio::Quality::BitwisePerfect,
+            }},
+          }},
+        },
+    };
+
+    widget.apply(view);
+    auto const labels = inspector.labelTexts();
+    CHECK(hasLabel(labels, "Audiokette"));
+    CHECK(hasLabel(labels, "[Quelle]"));
+    CHECK(hasLabel(labels, "Dvořák DAC"));
+    CHECK(hasLabel(labels, "Bitperfekte Wiedergabe"));
+  }
+
+  TEST_CASE("AudioPipelinePanel - escapes external device names before applying markup",
+            "[gtk][unit][playback][regression]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog()};
+    auto inspector = AudioPipelinePanelInspector{widget};
+    auto view = uimodel::AudioPipelineViewState{
+      .quality =
+        rt::QualityState{
+          .assessments = {audio::NodeQualityAssessment{.nodeName = "Source"}},
+        },
+      .deviceName = "Dvořák & Sons <DAC>",
+    };
+
+    widget.apply(view);
+
+    CHECK(hasLabel(inspector.labelTexts(), "Dvořák & Sons <DAC>"));
   }
 } // namespace ao::gtk::test

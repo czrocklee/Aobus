@@ -8,6 +8,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -31,6 +32,7 @@ namespace ao::rt
 
 namespace ao::gtk
 {
+  class GtkTextCatalog;
   class TrackRowCache;
   class ListNavigationPanel;
   class ThemeCoordinator;
@@ -47,6 +49,8 @@ namespace ao::gtk
 
     ListNavigationController(Gtk::Window& parent,
                              rt::AppRuntime& runtime,
+                             uimodel::PresentationTextCatalog textCatalog,
+                             GtkTextCatalog const& gtkTextCatalog,
                              Callbacks callbacks,
                              ThemeCoordinator& themeCoordinator);
     ~ListNavigationController();
@@ -93,6 +97,8 @@ namespace ao::gtk
     Gtk::Window& _parent;
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;
+    uimodel::PresentationTextCatalog _textCatalog;
+    GtkTextCatalog const& _gtkTextCatalog;
     ThemeCoordinator& _themeCoordinator;
     TrackRowCache* _dataProvider = nullptr;
 

@@ -4,6 +4,7 @@
 #include "SemanticComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -32,7 +33,8 @@ namespace ao::gtk::layout
       {
         // The vocabulary lets a document name the button; without one it is
         // still the application menu, and still has to describe itself.
-        setTooltipAndAccessibleLabel(_button, node.propertyOr<std::string>(kTextProp, "Application menu"));
+        auto const fallbackLabel = std::string{ctx.dependencies.gtkTextCatalog.text(GtkTextId::ApplicationMenu)};
+        setTooltipAndAccessibleLabel(_button, node.propertyOr<std::string>(kTextProp, fallbackLabel));
 
         if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())
         {

@@ -8,6 +8,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <glibmm/refptr.h>
@@ -26,14 +27,14 @@ namespace ao::gtk
     }
   }
 
-  TrackRowCache::TrackRowCache(rt::Library const& reads)
-    : _reads{reads}
+  TrackRowCache::TrackRowCache(rt::Library const& reads, uimodel::PresentationTextCatalog textCatalog)
+    : _reads{reads}, _textCatalog{std::move(textCatalog)}
   {
   }
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::createRowObject(rt::TrackRow row) const
   {
-    auto const rowPtr = TrackRowObject::create(row.id);
+    auto const rowPtr = TrackRowObject::create(row.id, _textCatalog);
 
     rowPtr->populate(toUString(std::move(row.title)),
                      toUString(std::move(row.artist)),

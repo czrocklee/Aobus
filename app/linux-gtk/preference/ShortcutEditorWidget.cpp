@@ -6,11 +6,13 @@
 #include "app/AppDialog.h"
 #include "app/GtkAccelTranslator.h"
 #include "common/AccessibleLabel.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -38,6 +40,7 @@ namespace ao::gtk
 {
   namespace
   {
+    using i18n::MessageId;
     using uimodel::LayoutActionCapability;
 
     constexpr auto kContentMargin = 12;
@@ -59,11 +62,13 @@ namespace ao::gtk
     }
   } // namespace
 
-  ShortcutEditorWidget::ShortcutEditorWidget(uimodel::LayoutActionCatalog const& catalog,
+  ShortcutEditorWidget::ShortcutEditorWidget(uimodel::PresentationTextCatalog textCatalog,
+                                             uimodel::LayoutActionCatalog const& catalog,
                                              uimodel::KeymapModel keymap,
                                              ChangedCallback onChanged,
                                              Gtk::Window& hostForDialogs)
     : Gtk::Box{Gtk::Orientation::VERTICAL, 8}
+    , _textCatalog{std::move(textCatalog)}
     , _hostForDialogs{hostForDialogs}
     , _keymap{std::move(keymap)}
     , _onChanged{std::move(onChanged)}
@@ -75,12 +80,14 @@ namespace ao::gtk
     {
       AppDialog::presentMessage(
         _hostForDialogs,
-        "Reassign shortcut?",
-        chordText + " is already assigned to \"" + ownerLabel + "\". Reassign it to this action?",
-        {AppDialogAction{
-           .label = "Cancel", .responseId = Gtk::ResponseType::CANCEL, .role = AppDialogActionRole::Cancel},
-         AppDialogAction{
-           .label = "Reassign", .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
+        std::string{_textCatalog.text(MessageId::GtkShortcutConflictTitle)},
+        _textCatalog.format(MessageId::GtkShortcutConflictMessage, {{"chord", chordText}, {"owner", ownerLabel}}),
+        {AppDialogAction{.label = std::string{_textCatalog.text(MessageId::GtkCommonCancel)},
+                         .responseId = Gtk::ResponseType::CANCEL,
+                         .role = AppDialogActionRole::Cancel},
+         AppDialogAction{.label = std::string{_textCatalog.text(MessageId::GtkShortcutReassign)},
+                         .responseId = Gtk::ResponseType::OK,
+                         .role = AppDialogActionRole::Primary}},
         Gtk::ResponseType::OK,
         [respond = std::move(respond)](std::int32_t const responseId)
         { respond(responseId == Gtk::ResponseType::OK); });
@@ -95,7 +102,9 @@ namespace ao::gtk
 
       _actions.push_back({.id = desc.id,
                           .label = desc.label.empty() ? desc.id : desc.label,
-                          .category = desc.category.empty() ? "Other" : desc.category});
+                          .category = desc.category.empty()
+                                        ? std::string{_textCatalog.text(MessageId::GtkShortcutOtherCategory)}
+                                        : desc.category});
       _editableActionIds.push_back(desc.id);
     }
 
@@ -103,14 +112,15 @@ namespace ao::gtk
     _unmapConn = signal_unmap().connect([this] { closeCapture(); });
 
     auto* const header = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
-    auto* const title = Gtk::make_managed<Gtk::Label>("Customize keyboard shortcuts");
+    auto* const title = Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::GtkShortcutTitle)});
     title->set_xalign(0.0F);
     title->set_hexpand(true);
     title->add_css_class("title-4");
     header->append(*title);
 
-    auto* const resetAllButton = Gtk::make_managed<Gtk::Button>("Reset All");
-    resetAllButton->set_tooltip_text("Reset every shortcut to its default");
+    auto* const resetAllButton =
+      Gtk::make_managed<Gtk::Button>(std::string{_textCatalog.text(MessageId::GtkShortcutResetAll)});
+    resetAllButton->set_tooltip_text(std::string{_textCatalog.text(MessageId::GtkShortcutResetAllTooltip)});
     resetAllButton->signal_clicked().connect([this] { resetAll(); });
     header->append(*resetAllButton);
     append(*header);
@@ -261,14 +271,15 @@ namespace ao::gtk
 
     if (auto const conflicts = _keymap.conflicts(); !conflicts.empty())
     {
-      auto text = std::string{"Conflicting shortcuts: "};
+      auto chords = std::string{};
 
       for (std::size_t i = std::size_t{0}; i < conflicts.size(); ++i)
       {
-        text += (i == 0 ? "" : "; ");
-        text += conflicts[i].chord.toString();
+        chords += (i == 0 ? "" : "; ");
+        chords += conflicts[i].chord.toString();
       }
 
+      auto text = _textCatalog.format(MessageId::GtkShortcutConflicts, {{"chords", chords}});
       auto* const warning = Gtk::make_managed<Gtk::Label>(text);
       warning->set_xalign(0.0F);
       warning->set_wrap(true);
@@ -309,7 +320,8 @@ namespace ao::gtk
 
     if (auto const chords = _keymap.chordsFor(action.id); chords.empty())
     {
-      auto* const unassigned = Gtk::make_managed<Gtk::Label>("Unassigned");
+      auto* const unassigned =
+        Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::GtkShortcutUnassigned)});
       unassigned->add_css_class("dim-label");
       row->append(*unassigned);
     }
@@ -326,7 +338,9 @@ namespace ao::gtk
 
         auto* const removeButton = Gtk::make_managed<Gtk::Button>("✕");
         removeButton->add_css_class("flat");
-        setTooltipAndAccessibleLabel(*removeButton, "Remove " + chord.toString());
+        auto const chordText = chord.toString();
+        setTooltipAndAccessibleLabel(
+          *removeButton, _textCatalog.format(MessageId::GtkShortcutRemove, {{"chord", chordText}}));
         removeButton->signal_clicked().connect([this, id = action.id, chord] { unbindChord(id, chord); });
         chip->append(*removeButton);
 
@@ -334,13 +348,14 @@ namespace ao::gtk
       }
     }
 
-    auto* const addButton = Gtk::make_managed<Gtk::Button>("Add…");
-    addButton->set_tooltip_text("Record a new shortcut for this action");
+    auto* const addButton = Gtk::make_managed<Gtk::Button>(std::string{_textCatalog.text(MessageId::GtkShortcutAdd)});
+    addButton->set_tooltip_text(std::string{_textCatalog.text(MessageId::GtkShortcutAddTooltip)});
     addButton->signal_clicked().connect([this, id = action.id] { beginCapture(id); });
     row->append(*addButton);
 
-    auto* const resetButton = Gtk::make_managed<Gtk::Button>("Reset");
-    resetButton->set_tooltip_text("Reset this action to its default");
+    auto* const resetButton =
+      Gtk::make_managed<Gtk::Button>(std::string{_textCatalog.text(MessageId::GtkShortcutReset)});
+    resetButton->set_tooltip_text(std::string{_textCatalog.text(MessageId::GtkShortcutResetTooltip)});
     resetButton->signal_clicked().connect([this, id = action.id] { resetAction(id); });
     row->append(*resetButton);
 
@@ -352,7 +367,7 @@ namespace ao::gtk
     closeCapture();
 
     auto capturePtr = std::make_unique<Gtk::Window>();
-    capturePtr->set_title("Set Shortcut");
+    capturePtr->set_title(std::string{_textCatalog.text(MessageId::GtkShortcutCaptureTitle)});
     capturePtr->set_transient_for(_hostForDialogs);
     capturePtr->set_modal(true);
     capturePtr->set_resizable(false);
@@ -360,10 +375,12 @@ namespace ao::gtk
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
     box->set_margin(24);
 
-    auto* const prompt = Gtk::make_managed<Gtk::Label>("Press the new shortcut combination.");
+    auto* const prompt =
+      Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::GtkShortcutCapturePrompt)});
     box->append(*prompt);
 
-    auto* const hint = Gtk::make_managed<Gtk::Label>("Esc to cancel");
+    auto* const hint =
+      Gtk::make_managed<Gtk::Label>(_textCatalog.format(MessageId::GtkShortcutCaptureCancelHint, {{"key", "Esc"}}));
     hint->add_css_class("dim-label");
     box->append(*hint);
 

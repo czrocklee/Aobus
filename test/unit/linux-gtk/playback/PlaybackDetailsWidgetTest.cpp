@@ -3,6 +3,7 @@
 
 #include "playback/PlaybackDetailsWidget.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -22,7 +23,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto widget = PlaybackDetailsWidget{fixture.runtime().playback()};
+    auto widget = PlaybackDetailsWidget{fixture.runtime().playback(), ao::test::englishPresentationTextCatalog()};
 
     auto* const root = dynamic_cast<Gtk::Box*>(&widget.widget());
     REQUIRE(root != nullptr);

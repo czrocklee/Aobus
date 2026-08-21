@@ -3,15 +3,18 @@
 
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/StatefulComponentState.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/box.h>
@@ -174,7 +177,8 @@ namespace ao::gtk::layout
       };
 
       CollapsibleSplitComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _state{ctx.runtimeState, ctx.buildState, ctx.surface, node, kCollapsibleSplitComponentType}
+        : _textCatalog{ctx.dependencies.textCatalog}
+        , _state{ctx.runtimeState, ctx.buildState, ctx.surface, node, kCollapsibleSplitComponentType}
       {
         if (node.children.size() != 2)
         {
@@ -675,9 +679,11 @@ namespace ao::gtk::layout
           }
         }
 
-        setTooltipAndAccessibleLabel(_toggleButton, revealed ? "Collapse panel" : "Expand panel");
+        auto const id = revealed ? i18n::MessageId::GtkCollapsePanel : i18n::MessageId::GtkExpandPanel;
+        setTooltipAndAccessibleLabel(_toggleButton, _textCatalog.text(id));
       }
 
+      uimodel::PresentationTextCatalog _textCatalog;
       uimodel::StatefulComponentState _state;
       AllocationObserver _allocationRoot;
       Gtk::Box _container;

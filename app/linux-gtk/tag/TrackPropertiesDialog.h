@@ -9,6 +9,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
@@ -50,6 +51,7 @@ namespace ao::gtk
     TrackPropertiesDialog(Gtk::Window& parent,
                           rt::Library& library,
                           rt::CompletionService& completion,
+                          uimodel::PresentationTextCatalog textCatalog,
                           TrackRowCache& rowCache,
                           std::vector<TrackId> trackIds);
     ~TrackPropertiesDialog() override;
@@ -86,10 +88,11 @@ namespace ao::gtk
     Gtk::Widget* createReadonlyWidget(rt::TrackField field);
     void applyRowView(Gtk::Widget* widget, uimodel::TrackPropertiesFormRowView const& view);
     void setWidgetValue(Gtk::Widget* widget, std::string_view value);
-    void setEditorMixed(Gtk::Widget* widget);
+    void setEditorMixed(Gtk::Widget* widget, std::string_view text);
 
     rt::Library& _library;
     rt::CompletionService& _completion;
+    uimodel::PresentationTextCatalog _textCatalog;
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
     std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;

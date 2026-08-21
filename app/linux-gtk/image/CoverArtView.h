@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace ao::gtk
 {
@@ -36,6 +37,7 @@ namespace ao::gtk
     void setMaxRenderSize(std::int32_t width, std::int32_t height);
     void setForceSquareTarget(bool forceSquare);
     void setHighQualityRenderer(ImageWidget::HighQualityRenderer renderer);
+    void setAlternativeText(std::string_view text);
     double displayScale() const;
 
     void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr);

@@ -15,6 +15,7 @@
 #include "TrackSection.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
@@ -185,7 +186,7 @@ namespace ao::tui
     , _playback{runtime.playback()}
     , _playbackCommands{_playback, [this] { playSelectedTrack(); }}
     , _seekViewModel{_playback, {}}
-    , _volumeViewModel{_playback, {}}
+    , _volumeViewModel{_playback}
     , _outputDevices{bindings.outputDevices}
     , _hitRegions{bindings.hitRegions}
     , _trackColumnWidthOverrides{bindings.trackColumnWidthOverrides}
@@ -224,7 +225,9 @@ namespace ao::tui
     if (auto result = _library.applyFilter(); !result)
     {
       APP_LOG_ERROR("Failed to apply TUI filter: {}", result.error().message);
-      postActivityNotification(rt::NotificationSeverity::Error, "Filter failed: " + result.error().message);
+      postActivityNotification(
+        rt::NotificationSeverity::Error,
+        _library.textCatalog().format(i18n::MessageId::TuiFilterFailed, {{"detail", result.error().message}}));
     }
   }
 
@@ -233,12 +236,14 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::ListChooser)
     {
       _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Lists closed");
+      postActivityNotification(
+        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiListsClosed)});
       return;
     }
 
     _shell.openOverlay(Overlay::ListChooser);
-    postActivityNotification(rt::NotificationSeverity::Info, "Lists");
+    postActivityNotification(
+      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiListsOpened)});
   }
 
   void EventController::toggleDetailPanel()
@@ -246,12 +251,14 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::DetailPanel)
     {
       _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Detail closed");
+      postActivityNotification(
+        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiDetailClosed)});
       return;
     }
 
     _shell.openOverlay(Overlay::DetailPanel);
-    postActivityNotification(rt::NotificationSeverity::Info, "Detail panel");
+    postActivityNotification(
+      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiDetailOpened)});
   }
 
   void EventController::toggleQualityPanel()
@@ -259,12 +266,14 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::QualityPanel)
     {
       _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Pipeline closed");
+      postActivityNotification(
+        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiPipelineClosed)});
       return;
     }
 
     _shell.openOverlay(Overlay::QualityPanel);
-    postActivityNotification(rt::NotificationSeverity::Info, "Audio pipeline");
+    postActivityNotification(
+      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiPipelineOpened)});
   }
 
   void EventController::toggleOutputDevices()
@@ -272,19 +281,22 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::OutputDevices)
     {
       _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Output devices closed");
+      postActivityNotification(
+        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputClosed)});
       return;
     }
 
     if (_outputDevices == nullptr)
     {
-      postActivityNotification(rt::NotificationSeverity::Warning, "Output devices unavailable");
+      postActivityNotification(rt::NotificationSeverity::Warning,
+                               std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputUnavailable)});
       return;
     }
 
     _outputDevices->refresh();
     _shell.openOverlay(Overlay::OutputDevices);
-    postActivityNotification(rt::NotificationSeverity::Info, "Output devices");
+    postActivityNotification(
+      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputOpened)});
   }
 
   void EventController::togglePresentationPanel()
@@ -292,12 +304,14 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::PresentationPanel)
     {
       _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Views closed");
+      postActivityNotification(
+        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiViewsClosed)});
       return;
     }
 
     _shell.openOverlay(Overlay::PresentationPanel);
-    postActivityNotification(rt::NotificationSeverity::Info, "Views");
+    postActivityNotification(
+      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiViewsOpened)});
   }
 
   void EventController::toggleNotificationCenter()
@@ -305,7 +319,8 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::Notifications)
     {
       _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Notifications closed");
+      postActivityNotification(rt::NotificationSeverity::Info,
+                               std::string{_library.textCatalog().text(i18n::MessageId::TuiNotificationsClosed)});
       return;
     }
 
@@ -321,14 +336,16 @@ namespace ao::tui
     }
 
     _shell.openOverlay(Overlay::Notifications);
-    postActivityNotification(rt::NotificationSeverity::Info, "Notifications");
+    postActivityNotification(rt::NotificationSeverity::Info,
+                             std::string{_library.textCatalog().text(i18n::MessageId::TuiNotificationsOpened)});
   }
 
   void EventController::selectOutputDevice()
   {
     if (_outputDevices == nullptr)
     {
-      postActivityNotification(rt::NotificationSeverity::Warning, "Output devices unavailable");
+      postActivityNotification(rt::NotificationSeverity::Warning,
+                               std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputUnavailable)});
       return;
     }
 
@@ -351,8 +368,8 @@ namespace ao::tui
   {
     if (!playSelected(_playback.commands(), _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
     {
-      postActivityNotification(
-        rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
+      postActivityNotification(rt::NotificationSeverity::Warning,
+                               std::string{_library.textCatalog().text(i18n::MessageId::TuiPlaybackStartFailed)});
     }
   }
 
@@ -360,7 +377,9 @@ namespace ao::tui
   {
     if (!_playbackCommands.execute(command) && command != uimodel::PlaybackCommand::Stop)
     {
-      postActivityNotification(rt::NotificationSeverity::Warning, "Playback control unavailable");
+      postActivityNotification(
+        rt::NotificationSeverity::Warning,
+        std::string{_library.textCatalog().text(i18n::MessageId::TuiPlaybackControlUnavailable)});
     }
   }
 
@@ -380,11 +399,13 @@ namespace ao::tui
       case CommandAction::OpenNotifications: toggleNotificationCenter(); break;
       case CommandAction::CloseOverlay:
         _shell.closeOverlay();
-        postActivityNotification(rt::NotificationSeverity::Info, "Overlay closed");
+        postActivityNotification(
+          rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOverlayClosed)});
         break;
       case CommandAction::ShowHelp:
         _shell.openOverlay(Overlay::Help);
-        postActivityNotification(rt::NotificationSeverity::Info, "Help");
+        postActivityNotification(
+          rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiHelpOpened)});
         break;
       case CommandAction::RevealCurrentTrack: revealCurrentTrack(); break;
       case CommandAction::SetPresentation: _library.setPresentation(command.argument); break;
@@ -672,7 +693,8 @@ namespace ao::tui
     if (hitRegionIt->sectionIndex < 0 ||
         static_cast<std::size_t>(hitRegionIt->sectionIndex) >= _library.sections().size())
     {
-      postActivityNotification(rt::NotificationSeverity::Warning, "Section is no longer available");
+      postActivityNotification(rt::NotificationSeverity::Warning,
+                               std::string{_library.textCatalog().text(i18n::MessageId::TuiSectionUnavailable)});
       return true;
     }
 

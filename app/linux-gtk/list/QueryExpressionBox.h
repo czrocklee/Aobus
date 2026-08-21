@@ -19,12 +19,17 @@ namespace ao::rt
   class CompletionService;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
   class QueryExpressionBox final : public Gtk::Box
   {
   public:
-    explicit QueryExpressionBox(rt::CompletionService& completion);
+    QueryExpressionBox(rt::CompletionService& completion, uimodel::PresentationTextCatalog const& textCatalog);
     ~QueryExpressionBox() override;
 
     QueryExpressionBox(QueryExpressionBox const&) = delete;

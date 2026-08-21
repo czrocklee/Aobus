@@ -18,8 +18,14 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
+  class TuiTextCatalog;
   inline constexpr std::int32_t kPresentationPanelColumns = 48;
   inline constexpr std::int32_t kPresentationPanelListRows = 10;
   inline constexpr std::int32_t kPresentationPanelChromeRows = 6;
@@ -31,10 +37,14 @@ namespace ao::tui
     ftxui::Box box{};
   };
 
-  std::int32_t presentationPanelColumns(std::vector<TrackPresentationNavEntry> const& items,
+  std::int32_t presentationPanelColumns(uimodel::PresentationTextCatalog const& textCatalog,
+                                        TuiTextCatalog const& tuiTextCatalog,
+                                        std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view activePresentationId,
                                         std::int32_t terminalColumns);
-  ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
+  ftxui::Element presentationPanel(uimodel::PresentationTextCatalog const& textCatalog,
+                                   TuiTextCatalog const& tuiTextCatalog,
+                                   std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view activePresentationId,
                                    std::int32_t selectedIndex,
                                    std::vector<PresentationRowHitRegion>* rowHitRegions = nullptr,

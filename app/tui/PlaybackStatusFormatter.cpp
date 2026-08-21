@@ -18,23 +18,6 @@ namespace ao::tui
     return formatted.empty() ? std::string{"0:00"} : std::move(formatted);
   }
 
-  std::string transportLabel(audio::Transport const transport)
-  {
-    switch (transport)
-    {
-      case audio::Transport::Idle: return "Idle";
-      case audio::Transport::Opening: return "Opening";
-      case audio::Transport::Buffering: return "Buffering";
-      case audio::Transport::Playing: return "Playing";
-      case audio::Transport::Paused: return "Paused";
-      case audio::Transport::Seeking: return "Seeking";
-      case audio::Transport::Stopping: return "Stopping";
-      case audio::Transport::Error: return "Error";
-    }
-
-    return "Unknown";
-  }
-
   bool shouldTickTransportClock(audio::Transport const transport)
   {
     switch (transport)

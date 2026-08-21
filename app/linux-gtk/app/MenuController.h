@@ -9,6 +9,7 @@
 
 namespace ao::gtk
 {
+  class GtkTextCatalog;
   class WindowActionRegistry;
 
   // Owns the main menu model. Window-scoped action installation lives in WindowActionRegistry so
@@ -18,7 +19,7 @@ namespace ao::gtk
   public:
     MenuController() = default;
 
-    void setup();
+    void setup(GtkTextCatalog const& textCatalog);
 
     Glib::RefPtr<Gio::MenuModel> menuModel() const { return _menuModelPtr; }
 

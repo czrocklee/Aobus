@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -72,6 +73,7 @@ namespace ao::gtk::layout
       ActivityStatusComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _widget{ActivityStatusWidgetDependencies{
             .notifications = ctx.runtime.notifications(),
+            .textCatalog = ctx.dependencies.textCatalog,
             .libraryTasks = &ctx.runtime.library().taskService(),
             .options = optionsFromNode(node),
           }}

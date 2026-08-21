@@ -3,6 +3,7 @@
 
 #include "track/SelectionInfoLabel.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -23,7 +24,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
 
     auto const reply = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
-    auto label = SelectionInfoLabel{runtime.views()};
+    auto label = SelectionInfoLabel{runtime.views(), ao::test::englishPresentationTextCatalog()};
     auto const& text = dynamic_cast<Gtk::Label const&>(label.widget());
 
     CHECK(text.has_css_class("dim-label"));

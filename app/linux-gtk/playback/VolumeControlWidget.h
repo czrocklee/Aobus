@@ -20,15 +20,23 @@ namespace ao::rt
   class PlaybackService;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
+  class GtkTextCatalog;
   /**
    * @brief A composite widget for controlling playback volume.
    */
   class VolumeControlWidget final
   {
   public:
-    explicit VolumeControlWidget(rt::PlaybackService& playback);
+    VolumeControlWidget(rt::PlaybackService& playback,
+                        uimodel::PresentationTextCatalog const& textCatalog,
+                        GtkTextCatalog const& gtkTextCatalog);
     ~VolumeControlWidget();
 
     VolumeControlWidget(VolumeControlWidget const&) = delete;

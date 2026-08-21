@@ -6,6 +6,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -44,6 +45,7 @@ namespace ao::gtk::layout::editor::test
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
     auto actionRegistry = ActionRegistry{};
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
 
     auto window = Gtk::Window{};
     auto const doc = makeDefaultLayout();
@@ -51,8 +53,8 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("Dialog initializes selectors and tree")
     {
-      auto dialogPtr =
-        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
+        window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader);
 
       CHECK(dialogPtr->selectedPresetId() == "classic");
       CHECK(dialogPtr->selectedThemeId() == "modern");
@@ -67,8 +69,8 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("document returns the initial document on construction")
     {
-      auto dialogPtr =
-        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
+        window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader);
       auto const& returned = dialogPtr->document();
 
       CHECK(returned.root.type == doc.root.type);
@@ -83,7 +85,8 @@ namespace ao::gtk::layout::editor::test
       invalidDoc.root.type = "actionButton";
       invalidDoc.root.props["primaryAction"] = LayoutValue{std::string{"this.does.not.exist"}};
 
-      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader};
+      auto dialog =
+        LayoutEditorDialog{window, registry, actionRegistry, textCatalog, invalidDoc, "classic", "modern", stubLoader};
 
       std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect(
@@ -107,8 +110,16 @@ namespace ao::gtk::layout::editor::test
       auto limits = LayoutDocumentLimits{};
       limits.authored.maxEntries = 1;
 
-      auto dialog = LayoutEditorDialog{
-        window, registry, actionRegistry, overBudget, "classic", "modern", stubLoader, PreviewSchedulerFn{}, limits};
+      auto dialog = LayoutEditorDialog{window,
+                                       registry,
+                                       actionRegistry,
+                                       textCatalog,
+                                       overBudget,
+                                       "classic",
+                                       "modern",
+                                       stubLoader,
+                                       PreviewSchedulerFn{},
+                                       limits};
       std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect(
         [&](LayoutSaveResult const&)
@@ -125,8 +136,8 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("signalApplyPreview is emitted on document changes")
     {
-      auto dialogPtr =
-        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
+        window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader);
       std::int32_t count = 0;
 
       dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
@@ -158,7 +169,7 @@ namespace ao::gtk::layout::editor::test
           return manualScheduler.connect(std::move(callback));
         };
         auto dialogPtr = std::make_unique<LayoutEditorDialog>(
-          window, registry, actionRegistry, doc, "classic", "modern", stubLoader, scheduler);
+          window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader, scheduler);
         dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++previewCount; });
 
         auto* const treeView = findWidget<Gtk::TreeView>(*dialogPtr);
@@ -181,7 +192,8 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("added components receive unique ids")
     {
-      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
+      auto dialog =
+        LayoutEditorDialog{window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader};
 
       auto* const treeView = findWidget<Gtk::TreeView>(dialog);
       REQUIRE(treeView != nullptr);
@@ -219,7 +231,8 @@ namespace ao::gtk::layout::editor::test
         LayoutNode{.id = "shared-split", .type = "collapsibleSplit"},
       };
 
-      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, duplicateDoc, "classic", "modern", stubLoader};
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, duplicateDoc, "classic", "modern", stubLoader};
 
       std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect(
@@ -237,7 +250,8 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("wrapped nodes receive a unique container id")
     {
-      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
+      auto dialog =
+        LayoutEditorDialog{window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader};
 
       auto* const treeView = findWidget<Gtk::TreeView>(dialog);
       REQUIRE(treeView != nullptr);

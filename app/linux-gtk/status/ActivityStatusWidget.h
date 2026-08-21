@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/rt/NotificationIds.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -52,6 +53,7 @@ namespace ao::gtk
   struct ActivityStatusWidgetDependencies final
   {
     rt::NotificationService& notifications;
+    uimodel::PresentationTextCatalog const& textCatalog;
     rt::LibraryTaskService const* libraryTasks = nullptr;
     ActivityStatusWidgetOptions options{};
   };
@@ -98,6 +100,7 @@ namespace ao::gtk
     Gtk::Box _detailBox;
     Gtk::Popover _detailPopover;
 
+    uimodel::PresentationTextCatalog _textCatalog;
     uimodel::ActivityStatusViewModel _activityStatusViewModel;
     sigc::connection _autoDismissTimer;
   };

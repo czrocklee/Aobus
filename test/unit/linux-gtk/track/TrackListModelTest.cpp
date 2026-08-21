@@ -3,6 +3,7 @@
 
 #include "track/TrackListModel.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -119,7 +120,7 @@ namespace ao::gtk::test
     sourcePtr->addInitial(id1);
     sourcePtr->addInitial(id2);
 
-    auto rowCache = TrackRowCache{runtime.library()};
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto const projectionPtr =
       std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, musicLibrary);
 
@@ -295,7 +296,7 @@ namespace ao::gtk::test
     auto sourcePtr = rt::test::makeMutableTrackSource({albumA1, albumA2, albumB});
     auto projectionPtr =
       std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
-    auto rowCache = TrackRowCache{runtime.library()};
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 
@@ -346,7 +347,7 @@ namespace ao::gtk::test
     auto const firstTrackId = addRuntimeTrack(runtime, makeTrackSpec("First", "Artist", "Album"));
     auto const secondTrackId = addRuntimeTrack(runtime, makeTrackSpec("Second", "Artist", "Album"));
     auto sourcePtr = rt::test::makeMutableTrackSource({firstTrackId, secondTrackId});
-    auto rowCache = TrackRowCache{runtime.library()};
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto projectionPtr =
       std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
     auto const modelPtr = TrackListModel::create(rowCache);
@@ -400,7 +401,7 @@ namespace ao::gtk::test
       .sortBy = {{.field = rt::TrackSortField::Album}},
     });
 
-    auto rowCache = TrackRowCache{runtime.library()};
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 
@@ -474,7 +475,7 @@ namespace ao::gtk::test
     auto sourcePtr = rt::test::makeMutableTrackSource({trackA, trackB, trackC});
     auto projectionPtr =
       std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
-    auto rowCache = TrackRowCache{runtime.library()};
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 

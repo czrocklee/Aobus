@@ -29,6 +29,7 @@ namespace ao::uimodel
 
 namespace ao::tui
 {
+  class TuiTextCatalog;
   struct PlaybackBarViewState final
   {
     rt::PlaybackTransportSnapshot const* playbackState = nullptr;
@@ -44,5 +45,5 @@ namespace ao::tui
   };
 
   std::int32_t playbackBarRows(std::int32_t terminalRows) noexcept;
-  ftxui::Element playbackBar(PlaybackBarViewState const& view);
+  ftxui::Element playbackBar(TuiTextCatalog const& textCatalog, PlaybackBarViewState const& view);
 } // namespace ao::tui

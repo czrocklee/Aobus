@@ -7,8 +7,10 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
@@ -55,7 +57,9 @@ namespace ao::gtk::layout::test
                             [&](auto&) { secondaryLongPressed = true; });
 
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{.outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
+    auto dependencies = GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
+                                          .gtkTextCatalog = ao::gtk::test::englishGtkTextCatalog(),
+                                          .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = compRegistry,
                                   .actionRegistry = registry,
                                   .runtime = fixture.runtime(),

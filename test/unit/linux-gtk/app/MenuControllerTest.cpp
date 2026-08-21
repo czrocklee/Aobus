@@ -4,10 +4,13 @@
 #include "app/MenuController.h"
 
 #include "app/WindowActionRegistry.h"
+#include "i18n/GtkTextCatalog.h"
 #include "portal/ImportExportActions.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <gio/gio.h>
 #include <giomm/actiongroup.h>
 #include <gtkmm/applicationwindow.h>
 
@@ -108,8 +111,34 @@ namespace ao::gtk::test
 
     CHECK(controller.menuModel() == nullptr);
 
-    controller.setup();
+    controller.setup(englishGtkTextCatalog());
 
     CHECK(controller.menuModel() != nullptr);
+
+    auto* const fileLabel = ::g_menu_model_get_item_attribute_value(
+      controller.menuModel()->gobj(), 0, G_MENU_ATTRIBUTE_LABEL, G_VARIANT_TYPE_STRING);
+    REQUIRE(fileLabel != nullptr);
+    CHECK(std::string_view{::g_variant_get_string(fileLabel, nullptr)} == "File");
+    ::g_variant_unref(fileLabel);
+  }
+
+  TEST_CASE("GtkTextCatalog - resolves German and pseudo shell copy", "[gtk][unit][menu][localization]")
+  {
+    auto const german = gtkTextCatalog("de-DE");
+    CHECK(german.text(GtkTextId::MenuFile) == "Datei");
+    CHECK(german.text(GtkTextId::OpenLibrary) == "Bibliothek öffnen...");
+    CHECK(german.text(GtkTextId::ApplicationMenu) == "Anwendungsmenü");
+    CHECK(german.text(GtkTextId::LibraryQuickFilterPlaceholder) == "Titel, Interpreten, Alben und Tags durchsuchen...");
+    CHECK(german.text(GtkTextId::SmartListPreview) == "Vorschau");
+    CHECK(german.text(GtkTextId::ListManualOrder) == "Manuelle Sortierung");
+    CHECK(german.text(GtkTextId::ListMoveToTopAction) == "An den Anfang der manuellen Sortierung");
+    CHECK(german.removeFromCurrentList("Straße", "#straße") == "Aus Straße (#straße) entfernen");
+    CHECK(german.deleteListQuestion("Sommer").starts_with("\"Sommer\" löschen?"));
+
+    auto const pseudo = gtkTextCatalog("qps-ploc");
+    CHECK(pseudo.text(GtkTextId::MenuFile) != "File");
+    CHECK(pseudo.text(GtkTextId::OpenLibrary).contains("..."));
+    CHECK(pseudo.text(GtkTextId::SmartListNewTitle) != "New List");
+    CHECK(pseudo.deleteSubtreeQuestion(2, "• A\n• B\n").contains("• A\n• B\n"));
   }
 } // namespace ao::gtk::test

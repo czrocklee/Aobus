@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -29,7 +30,7 @@ namespace ao::gtk::layout
     {
     public:
       VolumeControlComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _control{ctx.runtime.playback()}
+        : _control{ctx.runtime.playback(), ctx.dependencies.textCatalog, ctx.dependencies.gtkTextCatalog}
       {
         auto const orient = node.propertyOr<std::string>(kOrientationProp, "horizontal");
 

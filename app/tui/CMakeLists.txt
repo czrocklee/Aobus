@@ -30,6 +30,7 @@ add_library(aobus-tui-lib STATIC
     TrackListEntry.cpp
     TrackPresentationNavigation.cpp
     TrackSection.cpp
+    TuiTextCatalog.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp
     TextCell.cpp
@@ -45,7 +46,7 @@ endif()
 
 target_include_directories(aobus-tui-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-tui-lib PUBLIC ao_app_runtime ao_app_uimodel ftxui::component)
-target_link_libraries(aobus-tui-lib PRIVATE PkgStb ao_unicode_text)
+target_link_libraries(aobus-tui-lib PRIVATE PkgStb ao_app_i18n ao_unicode_text)
 add_dependencies(aobus-tui-lib ao_frontend_library_path_boundary_check ao_tui_core_boundary_report)
 
 add_executable(aobus-tui
@@ -57,6 +58,7 @@ aobus_enable_windows_utf8_manifest(aobus-tui)
 
 target_link_libraries(aobus-tui PRIVATE
     aobus-tui-lib
+    ao_app_i18n
     ao_app_uimodel
     ao_app_runtime
     ao

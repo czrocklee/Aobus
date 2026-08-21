@@ -3,10 +3,12 @@
 
 #include "playback/NowPlayingStatusLabel.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/rt/VirtualListIds.h>
@@ -30,7 +32,8 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(fixture.runtime());
     drainGtkEvents();
 
-    auto statusLabel = NowPlayingStatusLabel{playback};
+    auto statusLabel =
+      NowPlayingStatusLabel{playback, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
     auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&statusLabel.widget());
     REQUIRE(gtkLabel);
     CHECK(gtkLabel->get_text().empty());

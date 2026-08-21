@@ -19,6 +19,7 @@
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -37,7 +38,6 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
@@ -64,7 +64,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <format>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -146,15 +145,18 @@ namespace ao::gtk
     {
     public:
       TrackSectionHeaderWidget(ResourceImageLoader& thumbnailLoader,
+                               uimodel::PresentationTextCatalog textCatalog,
                                uimodel::CoverArtPlaceholderStyle const placeholderStyle)
         : Gtk::Box{Gtk::Orientation::HORIZONTAL}
         , _coverArtSlot{_coverArt, layout::kSectionCoverLogicalSize}
         , _coverArtController{_coverArt, thumbnailLoader}
+        , _textCatalog{std::move(textCatalog)}
         , _placeholderStyle{placeholderStyle}
       {
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
 
+        _coverArt.setAlternativeText(_textCatalog.text(i18n::MessageId::CoverArtTitle));
         _coverArtController.enableThumbnailMode(layout::kSectionCoverLogicalSize);
         _coverArtSlot.add_css_class("ao-track-section-cover");
         _coverArtSlot.set_valign(Gtk::Align::CENTER);
@@ -197,12 +199,12 @@ namespace ao::gtk
 
       void bind(rt::TrackGroupSectionSnapshot const& snap, ::guint count, bool hasSection)
       {
-        auto const heading = uimodel::formatTrackGroupHeading(uimodel::PresentationTextCatalog{}, snap.heading);
+        auto const heading = uimodel::formatTrackGroupHeading(_textCatalog, snap.heading);
         _primaryLabel.set_text(heading.primaryText);
         _secondaryLabel.set_text(heading.secondaryText);
         _tertiaryLabel.set_text(heading.tertiaryText);
 
-        if (auto const countText = "(" + uimodel::formatTrackCount(count) + ")";
+        if (auto const countText = "(" + _textCatalog.format(i18n::MessageId::TrackCount, {{"count", count}}) + ")";
             heading.secondaryText.empty() && heading.tertiaryText.empty())
         {
           _countLabel.set_text(countText);
@@ -237,6 +239,7 @@ namespace ao::gtk
       CoverArtView _coverArt;
       TrackSectionCoverSlot _coverArtSlot;
       ResourceImageController _coverArtController;
+      uimodel::PresentationTextCatalog _textCatalog;
       uimodel::CoverArtPlaceholderStyle _placeholderStyle;
       Gtk::Label _primaryLabel;
       Gtk::Label _secondaryLabel;
@@ -249,6 +252,7 @@ namespace ao::gtk
   TrackViewPage::TrackViewPage(ListId listId,
                                Glib::RefPtr<TrackListModel> modelPtr,
                                uimodel::TrackColumnLayoutStore& layoutStore,
+                               uimodel::PresentationTextCatalog textCatalog,
                                rt::AppRuntime& runtime,
                                ResourceImageLoader& thumbnailLoader,
                                rt::TrackPresentationSpec const& presentation,
@@ -259,10 +263,12 @@ namespace ao::gtk
     , _modelPtr{std::move(modelPtr)}
 
     , _layoutStore{layoutStore}
+    , _textCatalog{std::move(textCatalog)}
     , _runtime{runtime}
     , _thumbnailLoader{thumbnailLoader}
     , _selectionModelPtr{Gtk::MultiSelection::create(_modelPtr)}
-    , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _layoutStore, _selectionModelPtr, listId)}
+    , _viewHostPtr{
+        std::make_unique<TrackColumnViewHost>(_modelPtr, _layoutStore, _textCatalog, _selectionModelPtr, listId)}
   {
     _layoutStore.setActiveListId(_listId);
     _viewHostPtr->configureSelectionActivation();
@@ -350,7 +356,8 @@ namespace ao::gtk
           return;
         }
 
-        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_thumbnailLoader, _groupCoverPlaceholderStyle);
+        auto* const widget =
+          Gtk::make_managed<TrackSectionHeaderWidget>(_thumbnailLoader, _textCatalog, _groupCoverPlaceholderStyle);
         headerPtr->set_child(*widget);
       });
 
@@ -581,6 +588,7 @@ namespace ao::gtk
     _orderDragControllerPtr = std::make_unique<TrackOrderDragController>(
       _runtime,
       _viewId,
+      _textCatalog,
       _viewHostPtr->columnView(),
       _scrolledWindow,
       _viewHostPtr->selectionController(),
@@ -598,24 +606,27 @@ namespace ao::gtk
     if (!stateRes)
     {
       return uimodel::ListOrderCapabilityState{
-        .disabledReason = "This view is no longer available.",
+        .disabledReason = std::string{_textCatalog.text(i18n::MessageId::ListOrderListUnavailable)},
       };
     }
 
     auto const sourceStateRes = _runtime.views().listSourceState(_viewId);
-    return uimodel::describeListOrderCapabilities(uimodel::ListOrderCapabilityInput{
-      .listId = stateRes->listId,
-      .presentation = stateRes->presentation,
-      .quickFilterExpression = stateRes->filterExpression,
-      .sourceLive = sourceStateRes && *sourceStateRes == rt::TrackSourceState::Live,
-      .sourceHasError = stateRes->optFilterError.has_value(),
-      .authoring = _runtime.library().authoringAvailability(),
-    });
+    return uimodel::describeListOrderCapabilities(
+      _textCatalog,
+      uimodel::ListOrderCapabilityInput{
+        .listId = stateRes->listId,
+        .presentation = stateRes->presentation,
+        .quickFilterExpression = stateRes->filterExpression,
+        .sourceLive = sourceStateRes && *sourceStateRes == rt::TrackSourceState::Live,
+        .sourceHasError = stateRes->optFilterError.has_value(),
+        .authoring = _runtime.library().authoringAvailability(),
+      });
   }
 
   void TrackViewPage::applyListOrderCommand(TrackOrderCommand const command)
   {
-    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(_runtime.library(), _runtime.views(), _viewId);
+    auto sessionRes =
+      uimodel::ListOrderAuthoringSession::begin(_runtime.library(), _runtime.views(), _viewId, _textCatalog);
 
     if (!sessionRes)
     {
@@ -630,12 +641,14 @@ namespace ao::gtk
       switch (status)
       {
         case rt::ListOrderAuthoringStatus::Applied: setStatusMessage(appliedMessage); return;
-        case rt::ListOrderAuthoringStatus::NoOp: setStatusMessage("Order unchanged."); return;
+        case rt::ListOrderAuthoringStatus::NoOp:
+          setStatusMessage(_textCatalog.text(i18n::MessageId::ListOrderUnchanged));
+          return;
         case rt::ListOrderAuthoringStatus::Stale:
-          setStatusMessage("The List changed. Start the order action again.");
+          setStatusMessage(_textCatalog.text(i18n::MessageId::ListOrderChanged));
           return;
         case rt::ListOrderAuthoringStatus::Unavailable:
-          setStatusMessage("Library editing is currently unavailable.");
+          setStatusMessage(_textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable));
           return;
       }
     };
@@ -647,10 +660,9 @@ namespace ao::gtk
         return;
       }
 
-      handleStatus(result->status,
-                   std::format("Moved {} track{} in Manual Order.",
-                               result->reply.selectedTrackIds.size(),
-                               result->reply.selectedTrackIds.size() == 1 ? "" : "s"));
+      handleStatus(
+        result->status,
+        _textCatalog.format(i18n::MessageId::ListOrderMoved, {{"count", result->reply.selectedTrackIds.size()}}));
     };
 
     switch (command)
@@ -669,10 +681,9 @@ namespace ao::gtk
           return;
         }
 
-        handleStatus(result->status,
-                     std::format("Reset Manual Order and forgot {} saved position{}.",
-                                 result->reply.forgottenPositionCount,
-                                 result->reply.forgottenPositionCount == 1 ? "" : "s"));
+        handleStatus(
+          result->status,
+          _textCatalog.format(i18n::MessageId::ListOrderReset, {{"count", result->reply.forgottenPositionCount}}));
         return;
       }
       case TrackOrderCommand::ForgetHidden:
@@ -686,9 +697,8 @@ namespace ao::gtk
         }
 
         handleStatus(result->status,
-                     std::format("Forgot {} hidden saved position{}.",
-                                 result->reply.forgottenPositionCount,
-                                 result->reply.forgottenPositionCount == 1 ? "" : "s"));
+                     _textCatalog.format(
+                       i18n::MessageId::ListOrderForgotHidden, {{"count", result->reply.forgottenPositionCount}}));
         return;
       }
     }
@@ -773,9 +783,11 @@ namespace ao::gtk
     {
       case rt::TrackAuthoringStatus::NoOp: return;
       case rt::TrackAuthoringStatus::Stale:
-        setStatusMessage("Library changed while this edit was open. Reload the value and try again.");
+        setStatusMessage(_textCatalog.text(i18n::MessageId::TrackEditStale));
         return;
-      case rt::TrackAuthoringStatus::Unavailable: setStatusMessage("Library editing is currently unavailable."); return;
+      case rt::TrackAuthoringStatus::Unavailable:
+        setStatusMessage(_textCatalog.text(i18n::MessageId::TrackEditingUnavailable));
+        return;
       case rt::TrackAuthoringStatus::Applied: break;
     }
 

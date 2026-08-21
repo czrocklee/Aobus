@@ -14,8 +14,14 @@ namespace ao::rt
   class PlaybackCommands;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::gtk
 {
+  class GtkTextCatalog;
   /**
    * NowPlayingStatusLabel displays the currently playing track metadata
    * (Artist - Title) and reveals the playing track when clicked.
@@ -23,7 +29,9 @@ namespace ao::gtk
   class NowPlayingStatusLabel final
   {
   public:
-    explicit NowPlayingStatusLabel(rt::PlaybackService& playback);
+    NowPlayingStatusLabel(rt::PlaybackService& playback,
+                          uimodel::PresentationTextCatalog const& textCatalog,
+                          GtkTextCatalog const& gtkTextCatalog);
     ~NowPlayingStatusLabel();
 
     // Not copyable or movable

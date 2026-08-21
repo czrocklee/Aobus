@@ -16,6 +16,7 @@
 
 namespace ao::tui
 {
+  class TuiTextCatalog;
   inline constexpr std::int32_t kDefaultStatusBarColumns = 140;
 
   struct StatusBarViewState final
@@ -34,5 +35,5 @@ namespace ao::tui
   std::string activityProgressRail(double fraction, std::int32_t columns);
   ftxui::Element activityCompactLine(uimodel::ActivityCompactState const& compact, bool plain = false);
   bool hasVisibleActivity(uimodel::ActivityStatusViewState const* state) noexcept;
-  ftxui::Element statusBar(StatusBarViewState const& state);
+  ftxui::Element statusBar(TuiTextCatalog const& textCatalog, StatusBarViewState const& state);
 } // namespace ao::tui

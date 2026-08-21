@@ -10,6 +10,10 @@ namespace ao::rt
 {
   struct TrackRow;
 } // namespace ao::rt
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
 
 namespace ao::tui
 {
@@ -19,5 +23,6 @@ namespace ao::tui
     std::string value{};
   };
 
-  std::vector<TrackDetailLine> trackDetailLines(rt::TrackRow const& row);
+  std::vector<TrackDetailLine> trackDetailLines(uimodel::PresentationTextCatalog const& textCatalog,
+                                                rt::TrackRow const& row);
 } // namespace ao::tui

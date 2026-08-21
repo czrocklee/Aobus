@@ -8,8 +8,10 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPageHost.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -36,6 +38,7 @@ namespace ao::gtk::layout
     {
     public:
       WorkspaceWithDetailPaneComponent(LayoutBuildContext& ctx, LayoutNode const& node)
+        : _textCatalog{ctx.dependencies.textCatalog}
       {
         if (ctx.dependencies.trackPageHost == nullptr)
         {
@@ -90,9 +93,11 @@ namespace ao::gtk::layout
       void updateHandlePresentation(bool const active)
       {
         _handle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
-        setTooltipAndAccessibleLabel(_handle, active ? "Hide details" : "Show details");
+        auto const id = active ? i18n::MessageId::GtkHideDetails : i18n::MessageId::GtkShowDetails;
+        setTooltipAndAccessibleLabel(_handle, _textCatalog.text(id));
       }
 
+      uimodel::PresentationTextCatalog _textCatalog;
       Gtk::Box _container;
       Gtk::ToggleButton _handle;
       Gtk::Revealer _revealer;

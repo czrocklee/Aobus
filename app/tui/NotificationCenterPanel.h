@@ -18,8 +18,14 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
+  class TuiTextCatalog;
   struct NotificationDetailRowHitRegion final
   {
     rt::NotificationId id{};
@@ -27,9 +33,13 @@ namespace ao::tui
     ftxui::Box box{};
   };
 
-  std::int32_t notificationCenterPanelColumns(uimodel::ActivityStatusViewState const& state,
+  std::int32_t notificationCenterPanelColumns(uimodel::PresentationTextCatalog const& textCatalog,
+                                              TuiTextCatalog const& tuiTextCatalog,
+                                              uimodel::ActivityStatusViewState const& state,
                                               std::int32_t terminalColumns);
-  ftxui::Element notificationCenterPanel(uimodel::ActivityStatusViewState const& state,
+  ftxui::Element notificationCenterPanel(uimodel::PresentationTextCatalog const& textCatalog,
+                                         TuiTextCatalog const& tuiTextCatalog,
+                                         uimodel::ActivityStatusViewState const& state,
                                          std::vector<NotificationDetailRowHitRegion>* rowHitRegions = nullptr,
                                          std::int32_t columns = 0);
 } // namespace ao::tui

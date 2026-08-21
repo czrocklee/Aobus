@@ -7,11 +7,13 @@
 #include "TrackListEntry.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackSection.h"
+#include "TuiTextCatalog.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <string>
@@ -40,7 +42,9 @@ namespace ao::tui
   class LibraryController final
   {
   public:
-    explicit LibraryController(rt::AppRuntime& runtime);
+    LibraryController(rt::AppRuntime& runtime,
+                      uimodel::PresentationTextCatalog textCatalog,
+                      TuiTextCatalog tuiTextCatalog);
 
     std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
     std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
@@ -53,6 +57,7 @@ namespace ao::tui
     std::int32_t selectedPresentation() const noexcept { return _selectedPresentation; }
     std::int32_t selectedTrack() const noexcept { return _selectedTrack; }
     std::string const& filterDraft() const noexcept { return _filterDraft; }
+    uimodel::PresentationTextCatalog const& textCatalog() const noexcept { return _textCatalog; }
 
     std::string currentListTitle() const;
     std::string activePresentationId() const;
@@ -91,6 +96,8 @@ namespace ao::tui
     TrackItemsSnapshot loadTrackItems(ListId listId);
 
     rt::AppRuntime& _runtime;
+    uimodel::PresentationTextCatalog _textCatalog;
+    TuiTextCatalog _tuiTextCatalog;
     std::vector<LibraryNavEntry> _libraryEntries{};
     std::vector<std::string> _libraryLabels{};
     std::vector<TrackPresentationNavEntry> _presentationEntries{};

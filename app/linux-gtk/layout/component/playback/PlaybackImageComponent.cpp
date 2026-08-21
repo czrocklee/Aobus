@@ -4,6 +4,7 @@
 #include "PlaybackComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
+#include "i18n/GtkTextCatalog.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
@@ -13,6 +14,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/WorkspaceService.h>
@@ -26,6 +28,7 @@
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/button.h>
@@ -122,6 +125,8 @@ namespace ao::gtk::layout
         }
 
         _imageWidgetPtr = std::make_unique<CoverArtView>();
+        _imageWidgetPtr->setAlternativeText(
+          ctx.dependencies.textCatalog.text(i18n::MessageId::GtkPlaybackNowPlayingCoverArt));
         _imageControllerPtr = std::make_unique<ResourceImageController>(*_imageWidgetPtr,
                                                                         *ctx.dependencies.imageLoader,
                                                                         [this](bool const imageAvailable)
@@ -172,7 +177,10 @@ namespace ao::gtk::layout
           return Action::None;
         }();
 
-        setAccessibleLabel(_button, _action == Action::JumpToAlbum ? "Show current album" : "Now playing cover art");
+        setAccessibleLabel(
+          _button,
+          ctx.dependencies.gtkTextCatalog.text(_action == Action::JumpToAlbum ? GtkTextId::PlaybackShowCurrentAlbum
+                                                                              : GtkTextId::PlaybackNowPlayingCoverArt));
 
         if (forceSquare)
         {

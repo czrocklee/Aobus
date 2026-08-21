@@ -4,8 +4,10 @@
 #include "TrackListEntry.h"
 
 #include "PlaybackStatusFormatter.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <format>
@@ -23,7 +25,7 @@ namespace ao::tui
     }
   } // namespace
 
-  std::string trackDisplayTitle(rt::TrackRow const& row)
+  std::string trackDisplayTitle(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row)
   {
     if (!row.title.empty())
     {
@@ -35,7 +37,7 @@ namespace ao::tui
       return utility::pathToUtf8(row.optUriPath->filename());
     }
 
-    return std::format("Track {}", row.id.raw());
+    return textCatalog.format(i18n::MessageId::TrackFallback, {{"id", row.id.raw()}});
   }
 
   std::string trackDisplayDetail(rt::TrackRow const& row)
@@ -70,23 +72,23 @@ namespace ao::tui
     return detail;
   }
 
-  TrackListEntry makeTrackListEntry(rt::TrackRow const& row)
+  TrackListEntry makeTrackListEntry(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row)
   {
     auto detail = trackDisplayDetail(row);
 
     return TrackListEntry{.id = row.id,
                           .coverArtId = row.coverArtId,
                           .row = row,
-                          .label = trackTableLabel(row),
+                          .label = trackTableLabel(textCatalog, row),
                           .detail = std::move(detail)};
   }
 
-  std::string trackTableLabel(rt::TrackRow const& row)
+  std::string trackTableLabel(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row)
   {
     auto trackNo = textOrPlaceholder(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber));
     return std::format("{:>2}  {}  {}  {}",
                        trackNo == "-" ? std::string{"--"} : trackNo,
-                       trackDisplayTitle(row),
+                       trackDisplayTitle(textCatalog, row),
                        row.artist.empty() ? "-" : row.artist,
                        row.album.empty() ? "-" : row.album);
   }

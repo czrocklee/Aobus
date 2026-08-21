@@ -3,6 +3,7 @@
 
 #include "playback/TransportButton.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -23,7 +24,8 @@ namespace ao::gtk::test
     SECTION("PlayPause action maps initial view state to button attributes")
     {
       auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
-      auto button = TransportButton{playback, commands, TransportButton::Action::PlayPause};
+      auto button = TransportButton{
+        playback, commands, ao::test::englishPresentationTextCatalog(), TransportButton::Action::PlayPause};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
       auto windowFixture = GtkWindowFixture{};
@@ -41,12 +43,26 @@ namespace ao::gtk::test
       drainGtkEvents();
       bool playSelectionCalled = false;
       auto commands = uimodel::PlaybackCommandSurface{playback, [&playSelectionCalled] { playSelectionCalled = true; }};
-      auto button = TransportButton{playback, commands, TransportButton::Action::Play, false};
+      auto button = TransportButton{
+        playback, commands, ao::test::englishPresentationTextCatalog(), TransportButton::Action::Play, false};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
 
       emitClicked(*gtkButton);
       CHECK(playSelectionCalled);
+    }
+
+    SECTION("The selected catalog supplies the accessible control name")
+    {
+      auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
+      auto catalog = ao::test::presentationTextCatalog("de-DE");
+      auto button = TransportButton{playback, commands, catalog, TransportButton::Action::Previous};
+      auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
+      REQUIRE(gtkButton != nullptr);
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(button.widget());
+      windowFixture.present();
+      CHECK(hasAccessibleLabel(*gtkButton, "Vorheriger Titel"));
     }
   }
 } // namespace ao::gtk::test

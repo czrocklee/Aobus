@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
@@ -15,13 +16,14 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 
 namespace ao::gtk
 {
   class TrackRowObject final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<TrackRowObject> create(TrackId id);
+    static Glib::RefPtr<TrackRowObject> create(TrackId id, uimodel::PresentationTextCatalog const& textCatalog);
     static ::GType objectType();
 
     TrackId trackId() const { return _id; }
@@ -37,6 +39,7 @@ namespace ao::gtk
     Glib::ustring const* displayText(rt::TrackField field) const;
 
     Glib::ustring fieldText(rt::TrackField field) const;
+    uimodel::PresentationTextCatalog const& textCatalog() const;
 
     Glib::ustring const& tags() const { return _tags; }
 
@@ -108,6 +111,7 @@ namespace ao::gtk
 
   protected:
     explicit TrackRowObject();
+    explicit TrackRowObject(uimodel::PresentationTextCatalog const& textCatalog);
 
   private:
     // Clears every memoized computed-field string. Called by any mutator: computed
@@ -117,6 +121,8 @@ namespace ao::gtk
     void invalidateComputedCache() noexcept { _computedFilled = 0; }
 
     TrackId _id;
+    // Empty only on the private GObject type-registration sentinel.
+    std::optional<uimodel::PresentationTextCatalog> _optTextCatalog;
 
     // Holds both text-backed fields (filled at populate) and lazily memoized
     // computed-field strings; mutable so displayText() can fill computed slots

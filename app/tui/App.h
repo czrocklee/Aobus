@@ -9,8 +9,14 @@
 #include <filesystem>
 #include <string>
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
+  class TuiTextCatalog;
   struct AppOptions final
   {
     std::filesystem::path libraryRoot{"."};
@@ -20,5 +26,7 @@ namespace ao::tui
     rt::LogLevel logLevel = rt::LogLevel::Info;
   };
 
-  std::int32_t run(AppOptions const& options);
+  std::int32_t run(AppOptions const& options,
+                   uimodel::PresentationTextCatalog const& textCatalog,
+                   TuiTextCatalog const& tuiTextCatalog);
 } // namespace ao::tui

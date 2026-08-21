@@ -4,6 +4,7 @@
 #include "playback/VolumeControlWidget.h"
 
 #include "common/AccessibleLabel.h"
+#include "i18n/GtkTextCatalog.h"
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
@@ -38,8 +39,10 @@ namespace ao::gtk
     }
   } // namespace
 
-  VolumeControlWidget::VolumeControlWidget(rt::PlaybackService& playback)
-    : _volumeViewModel{playback, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
+  VolumeControlWidget::VolumeControlWidget(rt::PlaybackService& playback,
+                                           uimodel::PresentationTextCatalog const& textCatalog,
+                                           GtkTextCatalog const& gtkTextCatalog)
+    : _volumeViewModel{playback, textCatalog, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
   {
     _button.set_child(_icon);
     _button.set_valign(Gtk::Align::CENTER);
@@ -134,7 +137,7 @@ namespace ao::gtk
     vbox->append(_scale);
 
     _muteButton.set_icon_name("audio-volume-muted-symbolic");
-    setTooltipAndAccessibleLabel(_muteButton, "Toggle Mute");
+    setTooltipAndAccessibleLabel(_muteButton, gtkTextCatalog.text(GtkTextId::PlaybackToggleMute));
     _muteButton.set_halign(Gtk::Align::CENTER);
     _muteButton.signal_toggled().connect(
       [this]

@@ -6,10 +6,12 @@
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/rt/ViewIds.h>
@@ -36,20 +38,36 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto cache = TrackRowCache{runtime.library()};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto window = Gtk::Window{};
 
     auto stack = Gtk::Stack{};
     auto themeCoordinator = ThemeCoordinator{};
     auto tagEditCallbacks = TagEditController::Callbacks{};
-    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeCoordinator};
+    auto tagEditController = TagEditController{window,
+                                               runtime,
+                                               ao::test::englishPresentationTextCatalog(),
+                                               englishGtkTextCatalog(),
+                                               std::move(tagEditCallbacks),
+                                               themeCoordinator};
 
     auto navCallbacks = ListNavigationController::Callbacks{};
-    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeCoordinator};
+    auto listNavigation = ListNavigationController{window,
+                                                   runtime,
+                                                   ao::test::englishPresentationTextCatalog(),
+                                                   englishGtkTextCatalog(),
+                                                   std::move(navCallbacks),
+                                                   themeCoordinator};
 
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto host = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore, byteLoader};
+    auto host = TrackPageHost{stack,
+                              runtime,
+                              tagEditController,
+                              listNavigation,
+                              layoutStore,
+                              ao::test::englishPresentationTextCatalog(),
+                              byteLoader};
 
     SECTION("initial state")
     {

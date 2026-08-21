@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -28,6 +29,7 @@ namespace ao::gtk::layout
     public:
       NowPlayingFieldComponent(LayoutBuildContext& ctx, LayoutNode const& node, rt::TrackField field)
         : _label{ctx.runtime,
+                 ctx.dependencies.textCatalog,
                  field,
                  [action = node.propertyOr<std::string>("action", "none")]
                  {

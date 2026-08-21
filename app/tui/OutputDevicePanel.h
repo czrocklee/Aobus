@@ -21,6 +21,7 @@ namespace ftxui
 
 namespace ao::tui
 {
+  class TuiTextCatalog;
   struct OutputDeviceRowHitRegion final
   {
     std::int32_t rowIndex = -1;
@@ -32,8 +33,11 @@ namespace ao::tui
   };
 
   ftxui::Element outputDeviceBadge(uimodel::OutputDeviceViewState const* outputView, bool hovered);
-  std::int32_t outputDevicePanelColumns(uimodel::OutputDeviceViewState const& view, std::int32_t terminalColumns);
-  ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
+  std::int32_t outputDevicePanelColumns(TuiTextCatalog const& textCatalog,
+                                        uimodel::OutputDeviceViewState const& view,
+                                        std::int32_t terminalColumns);
+  ftxui::Element outputDevicePanel(TuiTextCatalog const& textCatalog,
+                                   uimodel::OutputDeviceViewState const& view,
                                    std::int32_t selectedRow,
                                    std::vector<OutputDeviceRowHitRegion>* rowHitRegions = nullptr,
                                    std::int32_t columns = 0);

@@ -36,9 +36,11 @@ namespace ao::gtk::layout
     public:
       OutputDeviceSelectorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _playback{ctx.runtime.playback()}
+        , _textCatalog{ctx.dependencies.textCatalog}
         , _intent{ctx.dependencies.outputDeviceIntent}
         // The button only names the active route; the popover it raises is what records a request.
         , _viewModel{_playback,
+                     ctx.dependencies.textCatalog,
                      [this](uimodel::OutputDeviceViewState const& view)
                      {
                        _label.set_text(view.outputBackendSummary);
@@ -58,7 +60,8 @@ namespace ao::gtk::layout
               return;
             }
 
-            auto popoverPtr = std::make_unique<OutputDevicePopover>(_playback, _intent, Gtk::PositionType::TOP);
+            auto popoverPtr =
+              std::make_unique<OutputDevicePopover>(_playback, _textCatalog, _intent, Gtk::PositionType::TOP);
             _popoverAttachment.attach(std::move(popoverPtr), _button);
             _popoverAttachment.popup();
           });
@@ -70,6 +73,7 @@ namespace ao::gtk::layout
 
     private:
       rt::PlaybackService& _playback;
+      uimodel::PresentationTextCatalog _textCatalog;
       uimodel::OutputDeviceIntent _intent;
       Gtk::Button _button;
       Gtk::Label _label;

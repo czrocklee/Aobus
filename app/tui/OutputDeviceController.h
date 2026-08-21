@@ -14,6 +14,11 @@ namespace ao::rt
   class PlaybackService;
 }
 
+namespace ao::uimodel
+{
+  class PresentationTextCatalog;
+}
+
 namespace ao::tui
 {
   class OutputDeviceController final
@@ -21,6 +26,7 @@ namespace ao::tui
   public:
     /// @param intent Where a chosen route is recorded; `OutputDeviceIntent::discarded()` keeps none.
     OutputDeviceController(rt::PlaybackService& playback,
+                           uimodel::PresentationTextCatalog const& textCatalog,
                            uimodel::OutputDeviceIntent intent,
                            std::function<void()> onChanged = {});
 

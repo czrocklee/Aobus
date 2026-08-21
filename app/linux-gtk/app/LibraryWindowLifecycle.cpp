@@ -8,11 +8,13 @@
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
+#include "i18n/GtkTextCatalog.h"
 #include "platform/AudioBackendBootstrap.h"
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/PlatformDirectories.h>
 
 #include <gtkmm/application.h>
@@ -28,7 +30,9 @@ namespace ao::gtk
     LibraryWindowPaths paths,
     std::shared_ptr<AppConfigStore> appConfigStorePtr,
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
+    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+    uimodel::PresentationTextCatalog const& textCatalog,
+    GtkTextCatalog const& gtkTextCatalog)
   {
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
 
@@ -62,8 +66,8 @@ namespace ao::gtk
 
     registerPlatformAudioBackends(*appRuntimePtr);
 
-    auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(
-      new MainWindow{*appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr});
+    auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(new MainWindow{
+      *appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, textCatalog, gtkTextCatalog, componentStateStorePtr});
 
     // Frontend observers are members of MainWindow, while the runtime is attached
     // to its GObject. Finalization therefore releases the observers before the

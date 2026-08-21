@@ -57,6 +57,7 @@ namespace ao::uimodel
 
 namespace ao::gtk
 {
+  class AobusSoulWindow;
   class AppConfigStore;
   class ResourceImageLoader;
   class ListNavigationController;
@@ -120,6 +121,7 @@ namespace ao::gtk
     layout::ActionAvailability actionAvailability(std::string_view id);
 
     layout::editor::LayoutEditorDialog* editorDialog() const { return _editorDialogPtr.get(); }
+    Gtk::Window* soulWindow() const noexcept;
 
     layout::ActionActivationContext actionContext(std::string_view componentId) override;
     bool canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const override;
@@ -131,6 +133,7 @@ namespace ao::gtk
                                   layout::ActionStateProvider const& hasActiveSequence);
     void registerTrackActions(RegisterActionFn const& registerAction);
     void registerTrackOrderActions(RegisterActionFn const& registerAction);
+    void presentSoul(layout::ActionActivationContext& context);
 
     void applyPromotedPanelSizes(uimodel::LayoutDocument promotedLayout,
                                  uimodel::LayoutComponentStateDocument promotedState);
@@ -178,6 +181,10 @@ namespace ao::gtk
     std::shared_ptr<layout::editor::LayoutEditorDialog> _editorDialogPtr;
     async::LifetimeScope _tasks;
     ConfirmPromotionFn _confirmPromotionFn;
+    std::unique_ptr<AobusSoulWindow> _soulWindowPtr;
+    sigc::scoped_connection _soulWindowHideConnection;
+    sigc::scoped_connection _queuedSoulWindowRetirementConnection;
+    bool _soulWindowRetirementQueued = false;
     sigc::scoped_connection _queuedOpenEditorConnection;
     MainContextCallbackScope _callbackScope;
   };

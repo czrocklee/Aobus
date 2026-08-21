@@ -10,6 +10,7 @@
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -618,7 +619,8 @@ namespace ao::gtk::layout::test
         .requestLibraryRestoreConfirmation = [](rt::ImportReport const&, std::function<void(bool)> completion)
         { completion(true); },
       };
-      auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
+      auto workflow =
+        portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishPresentationTextCatalog()};
       auto const importPath = fixture.runtime().musicRoot() / "cover-import.yaml";
       auto const secondCover = ao::gtk::test::encodePng(ao::gtk::test::makePixbuf(96, 96));
       ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), secondCover);

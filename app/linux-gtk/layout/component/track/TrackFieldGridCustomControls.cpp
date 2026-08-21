@@ -4,6 +4,8 @@
 #include "TrackFieldGridCustomControls.h"
 
 #include "common/AccessibleLabel.h"
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/popover.h>
@@ -31,7 +33,7 @@ namespace ao::gtk::layout::track_field_grid
     }
   } // namespace
 
-  AddCustomMetadataButton::AddCustomMetadataButton()
+  AddCustomMetadataButton::AddCustomMetadataButton(uimodel::PresentationTextCatalog const& textCatalog)
   {
     _button.set_icon_name("list-add-symbolic");
     _button.set_halign(Gtk::Align::END);
@@ -40,7 +42,7 @@ namespace ao::gtk::layout::track_field_grid
     _button.set_has_frame(false);
     _button.add_css_class("ao-icon-button");
     _button.add_css_class("ao-detail-add-custom-metadata-button");
-    setTooltipAndAccessibleLabel(_button, "Add Custom Metadata");
+    setTooltipAndAccessibleLabel(_button, textCatalog.text(i18n::MessageId::GtkCustomMetadataTitle));
     _button.signal_clicked().connect([this] { openPopover(); });
 
     _popover.set_parent(_button);
@@ -52,22 +54,23 @@ namespace ao::gtk::layout::track_field_grid
     _box.add_css_class("ao-detail-custom-metadata-popover-box");
 
     _titleLabel.set_halign(Gtk::Align::START);
+    _titleLabel.set_text(std::string{textCatalog.text(i18n::MessageId::GtkCustomMetadataTitle)});
     _titleLabel.add_css_class("ao-detail-custom-metadata-popover-title");
     _box.append(_titleLabel);
 
-    _keyEntry.set_placeholder_text("Key");
+    _keyEntry.set_placeholder_text(std::string{textCatalog.text(i18n::MessageId::GtkCustomMetadataKey)});
     _keyEntry.set_hexpand(true);
     _keyEntry.add_css_class("ao-detail-custom-metadata-popover-entry");
-    _valueEntry.set_placeholder_text("Value");
+    _valueEntry.set_placeholder_text(std::string{textCatalog.text(i18n::MessageId::GtkCustomMetadataValue)});
     _valueEntry.set_hexpand(true);
     _valueEntry.add_css_class("ao-detail-custom-metadata-popover-entry");
 
-    _submitButton.set_label("Add");
+    _submitButton.set_label(std::string{textCatalog.text(i18n::MessageId::GtkCommonAdd)});
     _submitButton.set_halign(Gtk::Align::END);
     _submitButton.set_hexpand(false);
     _submitButton.add_css_class("suggested-action");
     _submitButton.add_css_class("ao-detail-custom-metadata-popover-submit");
-    _submitButton.set_tooltip_text("Add Custom Metadata");
+    _submitButton.set_tooltip_text(std::string{textCatalog.text(i18n::MessageId::GtkCustomMetadataTitle)});
 
     _submitButton.signal_clicked().connect([this] { handleAddRequested(); });
     _keyEntry.signal_activate().connect([this] { _valueEntry.grab_focus(); });

@@ -43,6 +43,7 @@ namespace ao::gtk::layout
       TransportButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node, PlaybackCommand const command)
         : _button{ctx.runtime.playback(),
                   commandSurface(ctx),
+                  ctx.dependencies.textCatalog,
                   command,
                   node.propertyOr<bool>("showLabel", false),
                   node.propertyOr<std::string>("size", "normal")}

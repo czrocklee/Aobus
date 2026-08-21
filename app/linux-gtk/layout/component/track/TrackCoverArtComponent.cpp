@@ -12,6 +12,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
@@ -20,6 +21,7 @@
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -127,7 +129,7 @@ namespace ao::gtk::layout
       };
 
       TrackCoverArtComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _slot{_imageWidget}
+        : _textCatalog{ctx.dependencies.textCatalog}, _slot{_imageWidget}
       {
         if (ctx.dependencies.imageLoader == nullptr)
         {
@@ -154,6 +156,7 @@ namespace ao::gtk::layout
         _imageWidget.set_hexpand(true);
         _imageWidget.set_vexpand(true);
         _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
+        _imageWidget.setAlternativeText(_textCatalog.text(i18n::MessageId::CoverArtTitle));
 
         auto targetSize =
           static_cast<std::int32_t>(node.propertyOr<std::int64_t>("targetSize", kDefaultCoverArtTargetSize));
@@ -214,10 +217,11 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const album = uimodel::formatTrackFieldDisplayText(rt::TrackField::Album, snap, "", false);
-        auto const albumArtist = uimodel::formatTrackFieldDisplayText(rt::TrackField::AlbumArtist, snap, "", false);
-        auto const artist = uimodel::formatTrackFieldDisplayText(rt::TrackField::Artist, snap, "", false);
-        auto const title = uimodel::formatTrackFieldDisplayText(rt::TrackField::Title, snap, "", false);
+        auto const album = uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::Album, snap, "", false);
+        auto const albumArtist =
+          uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::AlbumArtist, snap, "", false);
+        auto const artist = uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::Artist, snap, "", false);
+        auto const title = uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::Title, snap, "", false);
         auto const candidates = std::array<std::string_view, 4>{album, albumArtist, artist, title};
         _imageControllerPtr->setPlaceholderPresentation(uimodel::makeCoverArtPlaceholderPresentation(
           _placeholderStyle, uimodel::makeCoverArtPlaceholderIdentity(candidates)));
@@ -225,6 +229,7 @@ namespace ao::gtk::layout
         _imageWidget.set_visible(true);
       }
 
+      uimodel::PresentationTextCatalog _textCatalog;
       CoverArtView _imageWidget;
       std::unique_ptr<ResourceImageController> _imageControllerPtr;
       CoverArtSlot _slot;

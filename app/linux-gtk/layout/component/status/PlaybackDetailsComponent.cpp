@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -24,7 +25,7 @@ namespace ao::gtk::layout
     {
     public:
       PlaybackDetailsComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.playback()}
+        : _widget{ctx.runtime.playback(), ctx.dependencies.textCatalog}
       {
       }
 

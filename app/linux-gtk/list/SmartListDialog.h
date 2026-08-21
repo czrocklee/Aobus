@@ -4,9 +4,11 @@
 #pragma once
 
 #include "app/AppDialog.h"
+#include "i18n/GtkTextCatalog.h"
 #include "list/QueryExpressionBox.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
@@ -51,7 +53,12 @@ namespace ao::gtk
   class SmartListDialog final : public AppDialog
   {
   public:
-    SmartListDialog(Gtk::Window& parent, rt::AppRuntime& runtime, ListId parentListId, TrackRowCache const& provider);
+    SmartListDialog(Gtk::Window& parent,
+                    rt::AppRuntime& runtime,
+                    uimodel::PresentationTextCatalog const& textCatalog,
+                    GtkTextCatalog gtkTextCatalog,
+                    ListId parentListId,
+                    TrackRowCache const& provider);
     ~SmartListDialog() override;
 
     SmartListDialog(SmartListDialog const&) = delete;
@@ -109,6 +116,8 @@ namespace ao::gtk
 
     // Preview infrastructure
     rt::AppRuntime& _runtime;
+    uimodel::PresentationTextCatalog _textCatalog;
+    GtkTextCatalog _gtkTextCatalog;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
     std::shared_ptr<rt::SmartListSource> _previewFilteredListPtr;

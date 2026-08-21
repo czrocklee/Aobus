@@ -9,12 +9,14 @@
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/contentprovider.h>
 #include <gdkmm/drag.h>
@@ -112,11 +114,13 @@ namespace ao::gtk
   {
     State(rt::AppRuntime& runtimeValue,
           rt::ViewId const viewIdValue,
+          uimodel::PresentationTextCatalog textCatalogValue,
           Gtk::ScrolledWindow& scrolledWindowValue,
           TrackSelectionController& selectionControllerValue,
           Callbacks callbacksValue)
       : runtime{runtimeValue}
       , viewId{viewIdValue}
+      , textCatalog{std::move(textCatalogValue)}
       , scrolledWindow{scrolledWindowValue}
       , selectionController{selectionControllerValue}
       , callbacks{std::move(callbacksValue)}
@@ -187,7 +191,8 @@ namespace ao::gtk
         selected = selectionController.selectedTrackIds();
       }
 
-      auto sessionRes = uimodel::ListOrderAuthoringSession::begin(runtime.library(), runtime.views(), viewId);
+      auto sessionRes =
+        uimodel::ListOrderAuthoringSession::begin(runtime.library(), runtime.views(), viewId, textCatalog);
 
       if (!sessionRes)
       {
@@ -219,8 +224,9 @@ namespace ao::gtk
           statePtr->invalidated = true;
           statePtr->token.clear();
           statePtr->clearIndicator();
-          statePtr->showStatus(statePtr->sessionPtr != nullptr ? statePtr->sessionPtr->capabilities().disabledReason
-                                                               : "The List changed. Start the drag again.");
+          statePtr->showStatus(statePtr->sessionPtr != nullptr
+                                 ? statePtr->sessionPtr->capabilities().disabledReason
+                                 : std::string{statePtr->textCatalog.text(i18n::MessageId::ListOrderChanged)});
         });
       clearStatus();
       return stringContentProvider(token);
@@ -350,15 +356,18 @@ namespace ao::gtk
       switch (result->status)
       {
         case rt::ListOrderAuthoringStatus::Applied:
-          showStatus(std::format("Moved {} track{} in Manual Order.",
-                                 result->reply.selectedTrackIds.size(),
-                                 result->reply.selectedTrackIds.size() == 1 ? "" : "s"));
+          showStatus(
+            textCatalog.format(i18n::MessageId::ListOrderMoved, {{"count", result->reply.selectedTrackIds.size()}}));
           break;
-        case rt::ListOrderAuthoringStatus::NoOp: showStatus("Order unchanged."); break;
+        case rt::ListOrderAuthoringStatus::NoOp:
+          showStatus(std::string{textCatalog.text(i18n::MessageId::ListOrderUnchanged)});
+          break;
         case rt::ListOrderAuthoringStatus::Stale:
-          showStatus("The List changed while dragging. Start the drag again.");
+          showStatus(std::string{textCatalog.text(i18n::MessageId::ListOrderChanged)});
           break;
-        case rt::ListOrderAuthoringStatus::Unavailable: showStatus("Library editing is currently unavailable."); break;
+        case rt::ListOrderAuthoringStatus::Unavailable:
+          showStatus(std::string{textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable)});
+          break;
       }
 
       clearActiveDrag();
@@ -367,6 +376,7 @@ namespace ao::gtk
 
     rt::AppRuntime& runtime;
     rt::ViewId viewId = rt::kInvalidViewId;
+    uimodel::PresentationTextCatalog textCatalog;
     Gtk::ScrolledWindow& scrolledWindow;
     TrackSelectionController& selectionController;
     Callbacks callbacks;
@@ -381,11 +391,17 @@ namespace ao::gtk
 
   TrackOrderDragController::TrackOrderDragController(rt::AppRuntime& runtime,
                                                      rt::ViewId const viewId,
+                                                     uimodel::PresentationTextCatalog const& textCatalog,
                                                      Gtk::ColumnView& /*columnView*/,
                                                      Gtk::ScrolledWindow& scrolledWindow,
                                                      TrackSelectionController& selectionController,
                                                      Callbacks callbacks)
-    : _statePtr{std::make_shared<State>(runtime, viewId, scrolledWindow, selectionController, std::move(callbacks))}
+    : _statePtr{std::make_shared<State>(runtime,
+                                        viewId,
+                                        textCatalog,
+                                        scrolledWindow,
+                                        selectionController,
+                                        std::move(callbacks))}
     , _columnPtr{makeColumn(_statePtr)}
   {
   }
@@ -403,8 +419,8 @@ namespace ao::gtk
         cell->set_hexpand(true);
         cell->add_css_class("ao-order-drag-handle");
         cell->set_cursor("grab");
-        cell->set_tooltip_text("Drag to rearrange tracks in Manual Order");
-        setAccessibleLabel(*cell, "Rearrange track");
+        cell->set_tooltip_text(std::string{statePtr->textCatalog.text(i18n::MessageId::GtkManualOrderDrag)});
+        setAccessibleLabel(*cell, statePtr->textCatalog.text(i18n::MessageId::GtkManualOrderRearrange));
 
         auto* const image = Gtk::make_managed<Gtk::Image>();
         image->set_from_icon_name("list-drag-handle-symbolic");

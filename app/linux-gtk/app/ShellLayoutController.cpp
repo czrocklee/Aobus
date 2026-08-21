@@ -8,6 +8,7 @@
 #include "ShellLayoutStore.h"
 #include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/document/LayoutDialect.h"
 #include "layout/document/LayoutPresets.h"
 #include "layout/editor/LayoutEditorDialog.h"
@@ -28,6 +29,7 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
@@ -74,6 +76,8 @@ namespace ao::gtk
 {
   namespace
   {
+    using i18n::MessageId;
+
     struct LayoutLoadResult final
     {
       std::string presetId;
@@ -198,7 +202,11 @@ namespace ao::gtk
     , _layoutStorePtr{std::move(layoutStorePtr)}
     , _componentStateStorePtr{std::move(componentStateStorePtr)}
     , _themeCoordinator{requireThemeCoordinator(_dependencies)}
-    , _callbackScope{[this] { _queuedOpenEditorConnection.disconnect(); }}
+    , _callbackScope{[this]
+                     {
+                       _queuedSoulWindowRetirementConnection.disconnect();
+                       _queuedOpenEditorConnection.disconnect();
+                     }}
   {
     _runtimeState.componentStateStore = _componentStateStorePtr.get();
     layout::LayoutRuntime::registerStandardComponents(_registry);
@@ -249,6 +257,10 @@ namespace ao::gtk
   ShellLayoutController::~ShellLayoutController()
   {
     _callbackScope.close();
+    _queuedSoulWindowRetirementConnection.disconnect();
+    _soulWindowHideConnection.disconnect();
+    _soulWindowRetirementQueued = false;
+    _soulWindowPtr.reset();
     _tasks.cancelAll();
     _optEditorThemeToken.reset();
     _editorDialogPtr.reset();
@@ -257,6 +269,11 @@ namespace ao::gtk
     // Components retain LayoutRuntimeState and may flush pending state while
     // destructing, so release them before the state and its store owner.
     _host.clearLayout();
+  }
+
+  Gtk::Window* ShellLayoutController::soulWindow() const noexcept
+  {
+    return _soulWindowPtr.get();
   }
 
   void ShellLayoutController::setMenuModel(Glib::RefPtr<Gio::MenuModel> menuModelPtr)
@@ -284,16 +301,16 @@ namespace ao::gtk
     for (auto const command : uimodel::playbackCommands())
     {
       registerAction(uimodel::playbackCommandActionId(command),
-                     std::string{uimodel::playbackCommandLabel(command)},
-                     std::string{uimodel::kPlaybackActionCategory},
+                     _dependencies.textCatalog.playbackActionLabel(command),
+                     _dependencies.textCatalog.text(MessageId::GtkActionCategoryPlayback),
                      uimodel::LayoutActionCapability::None,
                      execute(command),
                      isEnabled(command));
     }
 
     registerAction("playback.showOutputDeviceSelector",
-                   "Output Devices",
-                   "Playback",
+                   _dependencies.textCatalog.text(MessageId::GtkActionOutputDevices),
+                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryPlayback),
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
@@ -302,8 +319,10 @@ namespace ao::gtk
                        return;
                      }
 
-                     auto popoverPtr = std::make_unique<OutputDevicePopover>(
-                       ctx.runtime.playback(), _dependencies.outputDeviceIntent, Gtk::PositionType::BOTTOM);
+                     auto popoverPtr = std::make_unique<OutputDevicePopover>(ctx.runtime.playback(),
+                                                                             _dependencies.textCatalog,
+                                                                             _dependencies.outputDeviceIntent,
+                                                                             Gtk::PositionType::BOTTOM);
                      _outputDevicePopover.attach(std::move(popoverPtr), ctx.anchorWidget);
                      _outputDevicePopover.popup();
                    },
@@ -313,8 +332,8 @@ namespace ao::gtk
   void ShellLayoutController::registerShellActions(RegisterActionFn const& registerAction)
   {
     registerAction("shell.showSystemMenu",
-                   "System Menu",
-                   "Shell",
+                   _dependencies.textCatalog.text(MessageId::GtkActionSystemMenu),
+                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
@@ -339,21 +358,14 @@ namespace ao::gtk
 
     registerAction("shell.showSoul",
                    "Aobus Soul",
-                   "Shell",
+                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::None,
-                   [](layout::ActionActivationContext& ctx)
-                   {
-                     auto* const window = new AobusSoulWindow{};
-                     window->set_transient_for(ctx.parentWindow);
-                     window->bind(ctx.runtime.playback());
-                     window->signal_hide().connect([window] { delete window; });
-                     window->present();
-                   },
+                   [this](layout::ActionActivationContext& ctx) { presentSoul(ctx); },
                    {});
 
     registerAction("shell.editLayout",
-                   "Edit Layout",
-                   "Shell",
+                   _dependencies.textCatalog.text(MessageId::GtkShellEditLayout),
+                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext&)
                    {
@@ -376,13 +388,59 @@ namespace ao::gtk
                    {});
   }
 
+  void ShellLayoutController::presentSoul(layout::ActionActivationContext& context)
+  {
+    if (_soulWindowPtr)
+    {
+      _queuedSoulWindowRetirementConnection.disconnect();
+      _soulWindowRetirementQueued = false;
+      _soulWindowPtr->present();
+      return;
+    }
+
+    _soulWindowPtr = std::make_unique<AobusSoulWindow>();
+    auto* const window = _soulWindowPtr.get();
+    window->set_transient_for(context.parentWindow);
+    window->bind(context.runtime.playback());
+    _soulWindowHideConnection = window->signal_hide().connect(
+      [this, window]
+      {
+        if (_soulWindowRetirementQueued)
+        {
+          return;
+        }
+
+        _soulWindowRetirementQueued = true;
+        auto retireWindow = _callbackScope.guard(
+          [this, window]
+          {
+            _soulWindowRetirementQueued = false;
+
+            if (_soulWindowPtr.get() != window)
+            {
+              return;
+            }
+
+            _soulWindowHideConnection.disconnect();
+            _soulWindowPtr.reset();
+          });
+        _queuedSoulWindowRetirementConnection = Glib::signal_idle().connect(
+          [retireWindow = std::move(retireWindow)] mutable
+          {
+            retireWindow();
+            return false;
+          });
+      });
+    window->present();
+  }
+
   void ShellLayoutController::registerWorkspaceActions(RegisterActionFn const& registerAction,
                                                        layout::ActionStateProvider const& hasActiveSequence)
   {
     registerAction(
       "workspace.revealCurrentTrack",
-      "Reveal Track",
-      "Workspace",
+      _dependencies.textCatalog.text(MessageId::GtkActionRevealTrack),
+      _dependencies.textCatalog.text(MessageId::GtkActionCategoryWorkspace),
       uimodel::LayoutActionCapability::None,
       [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().commands().revealPlayingTrack(); },
       hasActiveSequence);
@@ -392,8 +450,8 @@ namespace ao::gtk
   {
     registerAction(
       "track.presentProperties",
-      "Properties",
-      "Tracks",
+      _dependencies.textCatalog.text(MessageId::GtkActionTrackProperties),
+      _dependencies.textCatalog.text(MessageId::GtkActionCategoryTracks),
       uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
@@ -418,8 +476,8 @@ namespace ao::gtk
 
     registerAction(
       "track.editTags",
-      "Edit Tags",
-      "Tracks",
+      _dependencies.textCatalog.text(MessageId::GtkActionEditTags),
+      _dependencies.textCatalog.text(MessageId::GtkActionCategoryTracks),
       uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
       [this](layout::ActionActivationContext& ctx)
       {
@@ -453,7 +511,7 @@ namespace ao::gtk
       registerAction(
         id,
         label,
-        "Tracks",
+        _dependencies.textCatalog.text(MessageId::GtkActionCategoryTracks),
         uimodel::LayoutActionCapability::None,
         [this, command](layout::ActionActivationContext&)
         {
@@ -473,14 +531,18 @@ namespace ao::gtk
         {
           if (_dependencies.trackPageHost == nullptr)
           {
-            return {.enabled = false, .disabledReason = "No track view is available."};
+            return {
+              .enabled = false,
+              .disabledReason = std::string{_dependencies.textCatalog.text(i18n::MessageId::GtkNoTrackViewAvailable)}};
           }
 
           auto const* const entry = _dependencies.trackPageHost->currentVisible();
 
           if (entry == nullptr || entry->pagePtr == nullptr)
           {
-            return {.enabled = false, .disabledReason = "No track view is available."};
+            return {
+              .enabled = false,
+              .disabledReason = std::string{_dependencies.textCatalog.text(i18n::MessageId::GtkNoTrackViewAvailable)}};
           }
 
           auto const capabilities = entry->pagePtr->orderCapabilities();
@@ -505,21 +567,33 @@ namespace ao::gtk
 
           if (!enabled)
           {
-            disabledReason = capabilities.disabledReason.empty() ? "Select at least one track to change Manual Order."
-                                                                 : capabilities.disabledReason;
+            disabledReason = capabilities.disabledReason.empty()
+                               ? _dependencies.gtkTextCatalog.text(GtkTextId::ListSelectTracksForOrder)
+                               : capabilities.disabledReason;
           }
 
           return {.enabled = enabled, .disabledReason = std::move(disabledReason)};
         });
     };
 
-    registerOrderAction(kTrackOrderMoveUpActionId, "Move Up in Manual Order", TrackOrderCommand::MoveUp);
-    registerOrderAction(kTrackOrderMoveDownActionId, "Move Down in Manual Order", TrackOrderCommand::MoveDown);
-    registerOrderAction(kTrackOrderMoveToTopActionId, "Move to Top of Manual Order", TrackOrderCommand::MoveToTop);
-    registerOrderAction(
-      kTrackOrderMoveToBottomActionId, "Move to Bottom of Manual Order", TrackOrderCommand::MoveToBottom);
-    registerOrderAction(kTrackOrderResetActionId, "Reset Manual Order", TrackOrderCommand::Reset);
-    registerOrderAction(kTrackOrderForgetHiddenActionId, "Forget Hidden Positions", TrackOrderCommand::ForgetHidden);
+    registerOrderAction(kTrackOrderMoveUpActionId,
+                        _dependencies.textCatalog.text(MessageId::GtkListMoveUpAction),
+                        TrackOrderCommand::MoveUp);
+    registerOrderAction(kTrackOrderMoveDownActionId,
+                        _dependencies.textCatalog.text(MessageId::GtkListMoveDownAction),
+                        TrackOrderCommand::MoveDown);
+    registerOrderAction(kTrackOrderMoveToTopActionId,
+                        _dependencies.textCatalog.text(MessageId::GtkListMoveToTopAction),
+                        TrackOrderCommand::MoveToTop);
+    registerOrderAction(kTrackOrderMoveToBottomActionId,
+                        _dependencies.textCatalog.text(MessageId::GtkListMoveToBottomAction),
+                        TrackOrderCommand::MoveToBottom);
+    registerOrderAction(kTrackOrderResetActionId,
+                        _dependencies.textCatalog.text(MessageId::GtkListResetOrderAction),
+                        TrackOrderCommand::Reset);
+    registerOrderAction(kTrackOrderForgetHiddenActionId,
+                        _dependencies.textCatalog.text(MessageId::GtkListForgetHiddenPositions),
+                        TrackOrderCommand::ForgetHidden);
   }
 
   void ShellLayoutController::attachToWindow()
@@ -733,6 +807,7 @@ namespace ao::gtk
     _editorDialogPtr = std::make_shared<layout::editor::LayoutEditorDialog>(dynamic_cast<Gtk::Window&>(_parentWindow),
                                                                             _registry,
                                                                             _actionRegistry,
+                                                                            _dependencies.textCatalog,
                                                                             _session.snapshot().layout,
                                                                             initialPresetId,
                                                                             initialThemeId,

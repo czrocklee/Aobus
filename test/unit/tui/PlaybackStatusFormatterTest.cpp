@@ -19,18 +19,6 @@ namespace ao::tui::test
     CHECK(formatDuration(-std::chrono::seconds{5}) == "0:00");
   }
 
-  TEST_CASE("PlaybackStatusFormatter - transport labels describe playback state", "[tui][unit][playback]")
-  {
-    CHECK(transportLabel(audio::Transport::Idle) == "Idle");
-    CHECK(transportLabel(audio::Transport::Opening) == "Opening");
-    CHECK(transportLabel(audio::Transport::Buffering) == "Buffering");
-    CHECK(transportLabel(audio::Transport::Playing) == "Playing");
-    CHECK(transportLabel(audio::Transport::Paused) == "Paused");
-    CHECK(transportLabel(audio::Transport::Seeking) == "Seeking");
-    CHECK(transportLabel(audio::Transport::Stopping) == "Stopping");
-    CHECK(transportLabel(audio::Transport::Error) == "Error");
-  }
-
   TEST_CASE("PlaybackStatusFormatter - active playback transports need clock ticks", "[tui][unit][playback]")
   {
     CHECK_FALSE(shouldTickTransportClock(audio::Transport::Idle));

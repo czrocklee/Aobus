@@ -8,6 +8,7 @@
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
@@ -23,10 +24,12 @@ namespace ao::gtk
 {
   TrackColumnViewHost::TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
                                            uimodel::TrackColumnLayoutStore& layoutStore,
+                                           uimodel::PresentationTextCatalog textCatalog,
                                            Glib::RefPtr<Gtk::MultiSelection> const& selectionModelPtr,
                                            ao::ListId listId)
-    : _columnViewPtr{std::make_unique<Gtk::ColumnView>()}
-    , _columnControllerPtr{std::make_unique<TrackColumnController>(*_columnViewPtr, layoutStore, listId)}
+    : _textCatalog{std::move(textCatalog)}
+    , _columnViewPtr{std::make_unique<Gtk::ColumnView>()}
+    , _columnControllerPtr{std::make_unique<TrackColumnController>(*_columnViewPtr, layoutStore, _textCatalog, listId)}
     , _selectionControllerPtr{std::make_unique<TrackSelectionController>(*_columnViewPtr, modelPtr, selectionModelPtr)}
   {
     connectSelectionSignals();
@@ -69,7 +72,7 @@ namespace ao::gtk
   {
     auto newViewPtr = std::make_unique<Gtk::ColumnView>();
     auto newSelectionPtr = std::make_unique<TrackSelectionController>(*newViewPtr, modelPtr, selectionModelPtr);
-    auto newColumnPtr = std::make_unique<TrackColumnController>(*newViewPtr, layoutStore, listId);
+    auto newColumnPtr = std::make_unique<TrackColumnController>(*newViewPtr, layoutStore, _textCatalog, listId);
 
     // Retire old generation
     _columnControllerPtr = std::move(newColumnPtr);

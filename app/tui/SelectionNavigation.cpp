@@ -3,7 +3,8 @@
 
 #include "SelectionNavigation.h"
 
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -14,15 +15,18 @@
 
 namespace ao::tui
 {
-  std::string selectionSummary(std::size_t const trackCount, std::int32_t const selectedIndex)
+  std::string selectionSummary(uimodel::PresentationTextCatalog const& textCatalog,
+                               std::size_t const trackCount,
+                               std::int32_t const selectedIndex)
   {
     if (trackCount == 0)
     {
-      return uimodel::formatTrackCount(trackCount);
+      return textCatalog.format(i18n::MessageId::TrackCount, {{"count", trackCount}});
     }
 
     auto const visibleIndex = clampSelection(static_cast<std::size_t>(std::max(0, selectedIndex)), trackCount) + 1;
-    return std::format("{} / {}", visibleIndex, uimodel::formatTrackCount(trackCount));
+    return std::format(
+      "{} / {}", visibleIndex, textCatalog.format(i18n::MessageId::TrackCount, {{"count", trackCount}}));
   }
 
   std::int32_t moveSelection(std::int32_t const selectedIndex, std::int32_t const delta, std::size_t const itemCount)

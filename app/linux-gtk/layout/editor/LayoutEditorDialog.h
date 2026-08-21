@@ -9,6 +9,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/refptr.h>
@@ -63,6 +64,7 @@ namespace ao::gtk::layout::editor
     LayoutEditorDialog(Gtk::Window& parent,
                        ComponentRegistry const& registry,
                        ActionRegistry const& actionRegistry,
+                       uimodel::PresentationTextCatalog textCatalog,
                        uimodel::LayoutDocument initialLayout,
                        std::string initialPresetId,
                        std::string initialThemeId,
@@ -160,6 +162,7 @@ namespace ao::gtk::layout::editor
 
     ComponentRegistry const& _registry;
     ActionRegistry const& _actionRegistry;
+    uimodel::PresentationTextCatalog _textCatalog;
 
     uimodel::LayoutDocument _document;
 

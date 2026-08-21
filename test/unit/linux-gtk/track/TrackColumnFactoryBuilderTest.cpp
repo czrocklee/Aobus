@@ -3,6 +3,7 @@
 
 #include "track/TrackColumnFactoryBuilder.h"
 
+#include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -81,7 +82,7 @@ namespace ao::gtk::test
                               .title = "Test Title", .artist = "Test Artist", .duration = std::chrono::minutes{2}});
                         }};
     auto const& library = fixture.runtime().musicLibrary();
-    auto cache = TrackRowCache{fixture.runtime().library()};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishPresentationTextCatalog()};
 
     {
       auto window = Gtk::Window{};

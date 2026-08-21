@@ -8,6 +8,7 @@
 #include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
 #include "app/WindowState.h"
+#include "i18n/GtkTextCatalog.h"
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
 #include "list/ListNavigationController.h"
@@ -41,6 +42,7 @@
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -59,17 +61,24 @@ namespace ao::gtk
 {
   struct MainWindowCoordinator::Impl final
   {
-    Impl(Gtk::Window& window, rt::AppRuntime& runtime)
+    Impl(Gtk::Window& window,
+         rt::AppRuntime& runtime,
+         uimodel::PresentationTextCatalog const& catalog,
+         GtkTextCatalog gtkCatalog)
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
-      , trackRowCache{runtime.library()}
+      , trackRowCache{runtime.library(), catalog}
       , imageCache{100}
       , resourceByteLoader{runtime}
       , resourceImageLoader{resourceByteLoader, imageCache, runtime.async()}
       , playbackCommandSurface{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
-      , trackPresentationCatalog{runtime.workspace()}
+      , textCatalog{catalog}
+      , gtkTextCatalog{std::move(gtkCatalog)}
+      , trackPresentationCatalog{runtime.workspace(), textCatalog}
       , trackPresentationPreferences{trackPresentationCatalog, runtime.library().changes()}
       , tagEditController{window,
                           runtime,
+                          textCatalog,
+                          gtkTextCatalog,
                           TagEditController::Callbacks{
                             .onTagsMutated = [] {},
                             .onManageListsRequested = [this] { listNavigationController.openNewPlaylistDialog(); },
@@ -77,6 +86,8 @@ namespace ao::gtk
                           themeCoordinator}
       , listNavigationController{window,
                                  runtime,
+                                 textCatalog,
+                                 gtkTextCatalog,
                                  ListNavigationController::Callbacks{
                                    .onListSelected = [&runtime, this](ListId listId)
                                    { return navigateToList(listId, runtime).has_value(); },
@@ -99,9 +110,12 @@ namespace ao::gtk
                       tagEditController,
                       listNavigationController,
                       trackColumnLayouts,
+                      textCatalog,
                       resourceByteLoader}
       , importExportCoordinator{window,
                                 runtime,
+                                textCatalog,
+                                gtkTextCatalog,
                                 portal::ImportExportCallbacks{
                                   .onOpenNewLibrary = [](std::filesystem::path const&, bool) {},
                                   .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
@@ -178,6 +192,8 @@ namespace ao::gtk
     rt::ResourceByteLoader resourceByteLoader;
     ResourceImageLoader resourceImageLoader;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
+    uimodel::PresentationTextCatalog textCatalog;
+    GtkTextCatalog gtkTextCatalog;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
     ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
     ao::uimodel::TrackColumnLayoutStore trackColumnLayouts;
@@ -190,10 +206,12 @@ namespace ao::gtk
 
   MainWindowCoordinator::MainWindowCoordinator(Gtk::Window& window,
                                                rt::AppRuntime& runtime,
-                                               std::shared_ptr<AppConfigStore> configStorePtr)
+                                               std::shared_ptr<AppConfigStore> configStorePtr,
+                                               uimodel::PresentationTextCatalog const& textCatalog,
+                                               GtkTextCatalog const& gtkTextCatalog)
     : _window{window}, _runtime{runtime}, _configStorePtr{std::move(configStorePtr)}
   {
-    _implPtr = std::make_unique<Impl>(window, runtime);
+    _implPtr = std::make_unique<Impl>(window, runtime, textCatalog, gtkTextCatalog);
 
     _trackPresentationChangedSubscription = _implPtr->trackPresentationPreferences.signalChanged().connect(
       [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
@@ -355,6 +373,8 @@ namespace ao::gtk
   GtkUiDependencies MainWindowCoordinator::uiDependencies()
   {
     return GtkUiDependencies{
+      .textCatalog = _implPtr->textCatalog,
+      .gtkTextCatalog = _implPtr->gtkTextCatalog,
       .trackRowCache = &_implPtr->trackRowCache,
       .imageLoader = &_implPtr->resourceImageLoader,
       .playbackCommandSurface = &_implPtr->playbackCommandSurface,

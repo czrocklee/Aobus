@@ -7,9 +7,11 @@
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
+#include "TuiTextCatalog.h"
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
@@ -18,6 +20,10 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+
+#ifdef RGB
+#undef RGB
+#endif
 
 namespace ao::tui
 {
@@ -53,9 +59,10 @@ namespace ao::tui
       return deviceName;
     }
 
-    std::string qualityNodeLine(audio::NodeQualityAssessment const& assessment)
+    std::string qualityNodeLine(uimodel::AudioQualityFormatter const& formatter,
+                                audio::NodeQualityAssessment const& assessment)
     {
-      auto nodeLine = uimodel::audioNodeTypeLabel(assessment.nodeType);
+      auto nodeLine = formatter.nodeTypeLabel(assessment.nodeType);
 
       if (!assessment.nodeName.empty())
       {
@@ -66,7 +73,7 @@ namespace ao::tui
       if (assessment.optFormat)
       {
         nodeLine.append(" (");
-        nodeLine.append(uimodel::audioFormatLabel(*assessment.optFormat));
+        nodeLine.append(formatter.formatLabel(*assessment.optFormat));
         nodeLine.push_back(')');
       }
 
@@ -74,30 +81,35 @@ namespace ao::tui
     }
   } // namespace
 
-  std::int32_t qualityPanelColumns(rt::PlaybackTransportSnapshot const& state, std::int32_t const terminalColumns)
+  std::int32_t qualityPanelColumns(TuiTextCatalog const& textCatalog,
+                                   uimodel::PresentationTextCatalog const& presentationText,
+                                   rt::PlaybackTransportSnapshot const& state,
+                                   std::int32_t const terminalColumns)
   {
     auto const deviceName = selectedDeviceName(state);
-    auto contentColumns = std::max(cellWidth(deviceName), cellWidth(overlayHint(Overlay::QualityPanel)));
+    auto contentColumns = std::max(cellWidth(deviceName), cellWidth(overlayHint(textCatalog, Overlay::QualityPanel)));
 
     if (state.quality.assessments.empty())
     {
-      contentColumns = std::max(contentColumns, cellWidth("No audio pipeline yet"));
+      contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(TuiTextId::PlaybackNoAudioPipeline)));
     }
+
+    auto const& formatter = presentationText.audioQualityFormatter();
 
     for (auto const& assessment : state.quality.assessments)
     {
-      contentColumns = std::max(contentColumns, cellWidth(qualityNodeLine(assessment)));
+      contentColumns = std::max(contentColumns, cellWidth(qualityNodeLine(formatter, assessment)));
 
       for (auto const& finding : assessment.findings)
       {
-        if (auto const findingText = uimodel::audioFindingLabel(finding); !findingText.empty())
+        if (auto const findingText = formatter.findingLabel(finding); !findingText.empty())
         {
           contentColumns = std::max(contentColumns, cellWidth("  ● ") + cellWidth(findingText));
         }
       }
     }
 
-    auto const presentation = uimodel::audioQualityPresentation(state.quality);
+    auto const presentation = formatter.presentation(state.quality);
 
     if (!presentation.headline.empty())
     {
@@ -107,13 +119,16 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element qualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t columns)
+  ftxui::Element qualityPanel(TuiTextCatalog const& textCatalog,
+                              uimodel::PresentationTextCatalog const& presentationText,
+                              rt::PlaybackTransportSnapshot const& state,
+                              std::int32_t columns)
   {
     using namespace ftxui;
 
     if (columns <= 0)
     {
-      columns = qualityPanelColumns(state, 0);
+      columns = qualityPanelColumns(textCatalog, presentationText, state, 0);
     }
 
     auto rows = Elements{};
@@ -121,16 +136,18 @@ namespace ao::tui
 
     if (state.quality.assessments.empty())
     {
-      rows.push_back(text("No audio pipeline yet") | dim);
+      rows.push_back(text(std::string{textCatalog.text(TuiTextId::PlaybackNoAudioPipeline)}) | dim);
     }
+
+    auto const& formatter = presentationText.audioQualityFormatter();
 
     for (auto const& assessment : state.quality.assessments)
     {
-      rows.push_back(text(qualityNodeLine(assessment)));
+      rows.push_back(text(qualityNodeLine(formatter, assessment)));
 
       for (auto const& finding : assessment.findings)
       {
-        auto const findingText = uimodel::audioFindingLabel(finding);
+        auto const findingText = formatter.findingLabel(finding);
 
         if (findingText.empty())
         {
@@ -145,7 +162,7 @@ namespace ao::tui
       }
     }
 
-    auto const presentation = uimodel::audioQualityPresentation(state.quality);
+    auto const presentation = formatter.presentation(state.quality);
 
     if (!presentation.headline.empty())
     {
@@ -157,7 +174,7 @@ namespace ao::tui
     }
 
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(overlayHint(Overlay::QualityPanel)));
+    rows.push_back(style::panelFooterHint(overlayHint(textCatalog, Overlay::QualityPanel)));
 
     return style::popupPanel(deviceName, vbox(std::move(rows))) | size(WIDTH, EQUAL, columns);
   }
