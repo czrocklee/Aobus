@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 namespace ao::audio::test
 {
@@ -484,6 +485,118 @@ namespace ao::audio::test
     CHECK_FALSE(hasFinding(findAssessment(result, "ao-sink"), QualityFindingKind::Resampling));
   }
 
+  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a duplicated multi-hop dead end regardless of order",
+            "[audio][regression][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    graph.nodes.push_back({.id = "monitor-input", .type = flow::NodeType::Intermediary});
+    graph.nodes.push_back({.id = "monitor-endpoint", .type = flow::NodeType::Intermediary});
+    auto const sideConnections = std::vector<flow::Connection>{
+      {.sourceId = "ao-stream", .destinationId = "monitor-input", .isActive = true},
+      {.sourceId = "ao-stream", .destinationId = "monitor-input", .isActive = true},
+      {.sourceId = "monitor-input", .destinationId = "monitor-endpoint", .isActive = true},
+      {.sourceId = "monitor-input", .destinationId = "monitor-endpoint", .isActive = true},
+    };
+
+    SECTION("dead-end branch is listed first")
+    {
+      auto const sinkConnectionIt = std::ranges::find_if(
+        graph.connections, [](flow::Connection const& connection) { return connection.destinationId == "ao-sink"; });
+      REQUIRE(sinkConnectionIt != graph.connections.end());
+      graph.connections.insert(sinkConnectionIt, sideConnections.begin(), sideConnections.end());
+    }
+
+    SECTION("Sink branch is listed first")
+    {
+      graph.connections.insert(graph.connections.end(), sideConnections.begin(), sideConnections.end());
+    }
+
+    auto const result = analyzeAudioQuality(graph);
+
+    CHECK(result.fullyVerified);
+    CHECK(result.overall == Quality::BitwisePerfect);
+    REQUIRE(result.assessments.size() == 5U);
+    CHECK(result.assessments[0].nodeId == "ao-source");
+    CHECK(result.assessments[1].nodeId == "ao-decoder");
+    CHECK(result.assessments[2].nodeId == "ao-engine");
+    CHECK(result.assessments[3].nodeId == "ao-stream");
+    CHECK(result.assessments[4].nodeId == "ao-sink");
+    CHECK(findAssessment(result, "monitor-input") == nullptr);
+    CHECK(findAssessment(result, "monitor-endpoint") == nullptr);
+  }
+
+  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a cyclic side branch", "[audio][regression][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    graph.nodes.push_back({.id = "cycle-a", .type = flow::NodeType::Intermediary});
+    graph.nodes.push_back({.id = "cycle-b", .type = flow::NodeType::Intermediary});
+
+    auto const sinkConnectionIt = std::ranges::find_if(
+      graph.connections, [](flow::Connection const& connection) { return connection.destinationId == "ao-sink"; });
+    REQUIRE(sinkConnectionIt != graph.connections.end());
+    graph.connections.insert(sinkConnectionIt,
+                             {
+                               {.sourceId = "ao-stream", .destinationId = "cycle-a", .isActive = true},
+                               {.sourceId = "cycle-a", .destinationId = "cycle-b", .isActive = true},
+                               {.sourceId = "cycle-b", .destinationId = "cycle-a", .isActive = true},
+                             });
+
+    auto const result = analyzeAudioQuality(graph);
+
+    CHECK(result.fullyVerified);
+    REQUIRE(result.assessments.size() == 5U);
+    CHECK(result.assessments.back().nodeId == "ao-sink");
+    CHECK(findAssessment(result, "cycle-a") == nullptr);
+    CHECK(findAssessment(result, "cycle-b") == nullptr);
+  }
+
+  TEST_CASE("QualityAnalyzer - an inactive Sink connection cannot verify the output", "[audio][unit][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    auto const sinkConnectionIt = std::ranges::find_if(
+      graph.connections, [](flow::Connection const& connection) { return connection.destinationId == "ao-sink"; });
+    REQUIRE(sinkConnectionIt != graph.connections.end());
+    sinkConnectionIt->isActive = false;
+
+    auto const result = analyzeAudioQuality(graph);
+
+    CHECK_FALSE(result.fullyVerified);
+    REQUIRE(result.assessments.size() == 4U);
+    CHECK(result.assessments.back().nodeId == "ao-stream");
+    CHECK(findAssessment(result, "ao-sink") == nullptr);
+  }
+
+  TEST_CASE("QualityAnalyzer - the first stored Sink-reaching branch breaks ties between output paths",
+            "[audio][unit][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    graph.nodes.push_back(
+      {.id = "alternate-sink", .type = flow::NodeType::Sink, .name = "Alternate Sink", .optFormat = pcm()});
+    auto const alternateConnection =
+      flow::Connection{.sourceId = "ao-stream", .destinationId = "alternate-sink", .isActive = true};
+    auto expectedSinkId = std::string_view{"ao-sink"};
+
+    SECTION("alternate Sink is listed first")
+    {
+      auto const primaryConnectionIt = std::ranges::find_if(
+        graph.connections, [](flow::Connection const& connection) { return connection.destinationId == "ao-sink"; });
+      REQUIRE(primaryConnectionIt != graph.connections.end());
+      graph.connections.insert(primaryConnectionIt, alternateConnection);
+      expectedSinkId = "alternate-sink";
+    }
+
+    SECTION("primary Sink is listed first")
+    {
+      graph.connections.push_back(alternateConnection);
+    }
+
+    auto const result = analyzeAudioQuality(graph);
+
+    CHECK(result.fullyVerified);
+    REQUIRE(result.assessments.size() == 5U);
+    CHECK(result.assessments.back().nodeId == expectedSinkId);
+  }
+
   TEST_CASE("QualityAnalyzer - incomplete and absent playback paths are not verified", "[audio][unit][quality]")
   {
     SECTION("path without sink")
@@ -495,6 +608,20 @@ namespace ao::audio::test
       auto const result = analyzeAudioQuality(graph);
       CHECK_FALSE(result.fullyVerified);
       CHECK(result.overall == Quality::BitwisePerfect);
+    }
+
+    SECTION("cycle without sink")
+    {
+      auto graph = buildBaseMergedGraph();
+      graph.nodes.resize(4);
+      graph.connections.resize(3);
+      graph.connections.push_back({.sourceId = "ao-stream", .destinationId = "ao-decoder", .isActive = true});
+
+      auto const result = analyzeAudioQuality(graph);
+      CHECK_FALSE(result.fullyVerified);
+      CHECK(result.overall == Quality::BitwisePerfect);
+      REQUIRE(result.assessments.size() == 4U);
+      CHECK(result.assessments.back().nodeId == "ao-stream");
     }
 
     SECTION("empty graph")

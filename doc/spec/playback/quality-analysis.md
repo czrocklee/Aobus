@@ -37,6 +37,8 @@ Its behavioral implementation is centered on [`QualityAnalyzer.cpp`](../../../li
 
 - `analyzeAudioQuality` is a pure function of one `flow::Graph` snapshot.
 - Analysis begins at the node identified by `ao-source`; disconnected graph content is not treated as part of the playback path.
+- When active connections branch, a Sink-reaching chain takes precedence over branches from which no Sink is reachable, regardless of their relative connection order.
+- When multiple branches reach Sinks, depth-first traversal in stored connection order selects the first Sink-reaching chain.
 - Every node on the analyzed path produces exactly one ordered assessment, including nodes whose format is unknown.
 - Source lossiness affects only the source axis; every other finding affects only the pipeline axis.
 - `overall` is the worse analyzer severity across the two axes and is not the sole input to the user-facing headline.
@@ -49,7 +51,10 @@ Its behavioral implementation is centered on [`QualityAnalyzer.cpp`](../../../li
 ## State model
 
 An empty graph or a graph without `ao-source` produces Unknown axes and no assessments.
-A path that exists but does not reach a Sink is analyzed and remains partially verified.
+The analyzer searches active connections for a Sink-reaching chain before falling back to an incomplete path, and it visits each node at most once during that search.
+Branches from which no Sink is reachable therefore remain graph evidence without replacing a reachable delivery path.
+If no Sink is reachable, the fallback path follows the first active outgoing connection in stored order at each node.
+It stops at a missing node, a node with no active outgoing connection, or immediately before the first repeated node; the resulting path is analyzed and remains partially verified.
 
 ### Result axes and confidence
 

@@ -120,9 +120,52 @@ namespace ao::audio
       return !path.empty() && path.back()->type == flow::NodeType::Sink;
     }
 
+    bool findPathToSink(flow::Graph const& graph,
+                        std::string_view const currentId,
+                        std::set<std::string_view>& visitedNodeIds,
+                        std::vector<flow::Node const*>& path)
+    {
+      if (!visitedNodeIds.insert(currentId).second)
+      {
+        return false;
+      }
+
+      auto const nodeIt = std::ranges::find(graph.nodes, currentId, &flow::Node::id);
+
+      if (nodeIt == graph.nodes.end())
+      {
+        return false;
+      }
+
+      path.push_back(&(*nodeIt));
+
+      if (nodeIt->type == flow::NodeType::Sink)
+      {
+        return true;
+      }
+
+      for (auto const& connection : graph.connections)
+      {
+        if (connection.isActive && connection.sourceId == currentId &&
+            findPathToSink(graph, connection.destinationId, visitedNodeIds, path))
+        {
+          return true;
+        }
+      }
+
+      path.pop_back();
+      return false;
+    }
+
     std::vector<flow::Node const*> findPlaybackPath(flow::Graph const& graph, std::string const& startId)
     {
       auto path = std::vector<flow::Node const*>{};
+
+      if (auto visitedNodeIds = std::set<std::string_view>{}; findPathToSink(graph, startId, visitedNodeIds, path))
+      {
+        return path;
+      }
+
       auto currentId = std::string_view{startId};
       auto visited = std::set<std::string_view>{};
 
