@@ -56,6 +56,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -616,6 +617,191 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character("d")));
     CHECK(fixture.shell.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("EventController - detail follows the track table while it stays open", "[tui][unit][event][detail]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+    REQUIRE(library.selectedTrack() == 0);
+
+    CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
+    CHECK(library.selectedTrack() == 1);
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+
+    CHECK(controller.handleEvent(ftxui::Event::Home));
+    CHECK(library.selectedTrack() == 0);
+
+    CHECK(controller.handleEvent(ftxui::Event::End));
+    CHECK(library.selectedTrack() == static_cast<std::int32_t>(library.tracks().size()) - 1);
+
+    CHECK(controller.handleEvent(ftxui::Event::PageUp));
+    CHECK(library.selectedTrack() == 0);
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+  }
+
+  TEST_CASE("EventController - detail leaves workspace commands to the workspace", "[tui][unit][event][detail]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
+    auto library = fixture.makeLibrary();
+    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.sections().size() >= 2);
+    auto const secondSection = library.sections()[1];
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("}")));
+    CHECK(library.selectedTrack() == static_cast<std::int32_t>(secondSection.rowBegin));
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("{")));
+    CHECK(library.selectedTrack() == 0);
+
+    // Text input is its own mode: it suspends the workspace without closing the
+    // inspector, so Escape leaves Detail exactly as it was.
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(fixture.shell.isInputActive());
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+
+    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+  }
+
+  TEST_CASE("EventController - detail leaves transport keys reaching playback", "[tui][unit][event][detail]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    REQUIRE_FALSE(library.tracks().empty());
+    auto& playback = fixture.runtimePtr->playback();
+    auto const trackId = library.tracks()[0].id;
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+
+    // Enter starts the selection the inspector is describing.
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+    REQUIRE(fixture.waitForPlayback(trackId));
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character(" ")));
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+  }
+
+  TEST_CASE("EventController - closing detail ends a scrollbar drag it admitted", "[tui][regression][event][detail]")
+  {
+    auto fixture = EventControllerFixture{};
+
+    for (std::int32_t index = 0; index < 20; ++index)
+    {
+      fixture.addTrack(library::test::TrackSpec{.title = std::format("Filler {}", index)});
+    }
+
+    auto library = fixture.makeLibrary();
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.trackTableBox = ftxui::Box{.x_min = 0, .x_max = 40, .y_min = 2, .y_max = 12};
+    auto controller = EventController{
+      fixture.screen, fixture.shell, library, *fixture.runtimePtr, EventControllerBindings{.hitRegions = &hitRegions}};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 40, .y = 4};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+    auto const draggedSelection = library.selectedTrack();
+
+    // Escape takes the pane away, so the drag has nothing left to aim at.
+    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    REQUIRE(fixture.shell.overlay() == Overlay::None);
+
+    auto drag = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 40, .y = 11};
+    controller.handleEvent(ftxui::Event::Mouse("", drag));
+    CHECK(library.selectedTrack() == draggedSelection);
+  }
+
+  TEST_CASE("EventController - a modal overlay ends a column drag detail admitted", "[tui][regression][event][detail]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.trackColumnResizeHandles = {
+      TrackColumnResizeHandle{.field = rt::TrackField::Title,
+                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
+                              .columns = 20}};
+    auto columnWidths = std::vector<TrackColumnWidthOverride>{};
+    auto controller =
+      EventController{fixture.screen,
+                      fixture.shell,
+                      library,
+                      *fixture.runtimePtr,
+                      EventControllerBindings{.hitRegions = &hitRegions, .trackColumnWidthOverrides = &columnWidths}};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+
+    // Help replaces Detail and blocks the workspace, so the drag stops here.
+    CHECK(controller.handleEvent(ftxui::Event::Character("?")));
+    REQUIRE(fixture.shell.overlay() == Overlay::Help);
+
+    auto drag = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 34, .y = 2};
+    controller.handleEvent(ftxui::Event::Mouse("", drag));
+    CHECK(columnWidths.empty());
+  }
+
+  TEST_CASE("EventController - another overlay replaces detail", "[tui][unit][event][detail]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("?")));
+    CHECK(fixture.shell.overlay() == Overlay::Help);
+
+    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("EventController - detail leaves table mouse gestures available", "[tui][unit][event][detail]")
+  {
+    auto fixture = EventControllerFixture{};
+
+    for (std::int32_t index = 0; index < 8; ++index)
+    {
+      fixture.addTrack(library::test::TrackSpec{.title = std::format("Filler {}", index)});
+    }
+
+    auto library = fixture.makeLibrary();
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.trackTableBox = ftxui::Box{.x_min = 0, .x_max = 40, .y_min = 2, .y_max = 12};
+    auto controller = EventController{
+      fixture.screen, fixture.shell, library, *fixture.runtimePtr, EventControllerBindings{.hitRegions = &hitRegions}};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
+    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+    REQUIRE(library.selectedTrack() == 0);
+
+    auto wheel = ftxui::Mouse{.button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 5};
+    CHECK(controller.handleEvent(ftxui::Event::Mouse("", wheel)));
+    CHECK(library.selectedTrack() > 0);
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
   }
 
   TEST_CASE("EventController - overlay shortcuts update visible shell state", "[tui][unit][event]")

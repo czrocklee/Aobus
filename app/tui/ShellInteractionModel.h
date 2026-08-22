@@ -106,6 +106,16 @@ namespace ao::tui
 
   /// The first key that runs @p action, or empty when no key does.
   std::string_view shortcutFor(CommandAction action);
+  /**
+   * @brief Whether @p overlay blocks interaction with the workspace beneath it.
+   *
+   * Separate from whether an overlay is on screen: Detail is a live inspector
+   * that follows the track table while the user keeps browsing it, so it is
+   * visible without being modal. Ask this when the question is "may the
+   * workspace still be driven"; ask @ref ShellInteractionModel::overlay when
+   * the question is "is another surface open".
+   */
+  bool isModalOverlay(Overlay overlay) noexcept;
   std::optional<Command> parseCommand(std::string_view input);
   std::string_view overlayLabel(TuiTextCatalog const& textCatalog, Overlay overlay);
   std::string_view overlayHint(TuiTextCatalog const& textCatalog, Overlay overlay);

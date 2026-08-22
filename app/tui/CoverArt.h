@@ -17,11 +17,6 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-} // namespace ao::uimodel
-
 namespace ao::tui
 {
   struct CoverArtCell final
@@ -35,6 +30,23 @@ namespace ao::tui
   };
 
   using CoverArtRows = std::vector<std::vector<CoverArtCell>>;
+
+  enum class CoverArtDeliveryMode : std::uint8_t
+  {
+    Off,
+    Blocks,
+    Kitty,
+  };
+
+  /**
+   * @brief The terminal cells one artwork slot occupies in every delivery mode.
+   *
+   * Blocks paints these cells itself and Kitty reserves them for an image the
+   * terminal draws, so the two modes claim the same area and a mode switch
+   * cannot move the surrounding layout.
+   */
+  constexpr std::int32_t kCoverArtColumns = 24;
+  constexpr std::int32_t kCoverArtRows = 12;
   constexpr std::uint32_t kKittyCoverArtImageId = 1;
   constexpr std::int32_t kMaximumCoverArtDimension = 8192;
   constexpr std::uint64_t kMaximumCoverArtPixels = 32'000'000;
@@ -72,6 +84,6 @@ namespace ao::tui
                                std::int32_t rows,
                                std::uint32_t imageId = kKittyCoverArtImageId);
 
-  ftxui::Element renderCoverArtPreview(uimodel::PresentationTextCatalog const& textCatalog,
-                                       std::optional<CoverArtRows> const& optPreview);
+  /// The block artwork alone, or nullptr when @p optPreview holds no transform.
+  ftxui::Element renderCoverArtPreview(std::optional<CoverArtRows> const& optPreview);
 } // namespace ao::tui

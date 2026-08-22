@@ -116,6 +116,13 @@ namespace ao::tui
       it->columns = clampedColumns;
     }
 
+    /**
+     * @brief Whether any overlay currently occupies the screen.
+     *
+     * Visibility, not modality: a visible overlay owns its own keys and its own
+     * share of the layout even when the workspace beneath it stays live. Use
+     * @ref isModalOverlay to ask whether the workspace may still be driven.
+     */
     bool isOverlayActive(Overlay const overlay) noexcept
     {
       return overlay != Overlay::None;
@@ -217,7 +224,7 @@ namespace ao::tui
   {
     if (auto const result = _library.openSelectedList(); result.opened)
     {
-      _shell.closeOverlay();
+      closeOverlay();
     }
   }
 
@@ -252,13 +259,13 @@ namespace ao::tui
   {
     if (_shell.overlay() == Overlay::ListChooser)
     {
-      _shell.closeOverlay();
+      closeOverlay();
       postActivityNotification(
         rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiListsClosed)});
       return;
     }
 
-    _shell.openOverlay(Overlay::ListChooser);
+    openOverlay(Overlay::ListChooser);
     postActivityNotification(
       rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiListsOpened)});
   }
@@ -267,13 +274,13 @@ namespace ao::tui
   {
     if (_shell.overlay() == Overlay::DetailPanel)
     {
-      _shell.closeOverlay();
+      closeOverlay();
       postActivityNotification(
         rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiDetailClosed)});
       return;
     }
 
-    _shell.openOverlay(Overlay::DetailPanel);
+    openOverlay(Overlay::DetailPanel);
     postActivityNotification(
       rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiDetailOpened)});
   }
@@ -282,13 +289,13 @@ namespace ao::tui
   {
     if (_shell.overlay() == Overlay::QualityPanel)
     {
-      _shell.closeOverlay();
+      closeOverlay();
       postActivityNotification(
         rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiPipelineClosed)});
       return;
     }
 
-    _shell.openOverlay(Overlay::QualityPanel);
+    openOverlay(Overlay::QualityPanel);
     postActivityNotification(
       rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiPipelineOpened)});
   }
@@ -297,7 +304,7 @@ namespace ao::tui
   {
     if (_shell.overlay() == Overlay::OutputDevices)
     {
-      _shell.closeOverlay();
+      closeOverlay();
       postActivityNotification(
         rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputClosed)});
       return;
@@ -311,7 +318,7 @@ namespace ao::tui
     }
 
     _outputDevices->refresh();
-    _shell.openOverlay(Overlay::OutputDevices);
+    openOverlay(Overlay::OutputDevices);
     postActivityNotification(
       rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputOpened)});
   }
@@ -320,13 +327,13 @@ namespace ao::tui
   {
     if (_shell.overlay() == Overlay::PresentationPanel)
     {
-      _shell.closeOverlay();
+      closeOverlay();
       postActivityNotification(
         rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiViewsClosed)});
       return;
     }
 
-    _shell.openOverlay(Overlay::PresentationPanel);
+    openOverlay(Overlay::PresentationPanel);
     postActivityNotification(
       rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiViewsOpened)});
   }
@@ -335,7 +342,7 @@ namespace ao::tui
   {
     if (_shell.overlay() == Overlay::Notifications)
     {
-      _shell.closeOverlay();
+      closeOverlay();
       postActivityNotification(rt::NotificationSeverity::Info,
                                std::string{_library.textCatalog().text(i18n::MessageId::TuiNotificationsClosed)});
       return;
@@ -352,7 +359,7 @@ namespace ao::tui
       return;
     }
 
-    _shell.openOverlay(Overlay::Notifications);
+    openOverlay(Overlay::Notifications);
     postActivityNotification(rt::NotificationSeverity::Info,
                              std::string{_library.textCatalog().text(i18n::MessageId::TuiNotificationsOpened)});
   }
@@ -367,13 +374,13 @@ namespace ao::tui
     }
 
     _outputDevices->selectSelected();
-    _shell.closeOverlay();
+    closeOverlay();
   }
 
   void EventController::selectPresentation()
   {
     _library.selectSelectedPresentation();
-    _shell.closeOverlay();
+    closeOverlay();
   }
 
   void EventController::revealCurrentTrack()
@@ -415,12 +422,12 @@ namespace ao::tui
       case CommandAction::OpenPresentationPanel: togglePresentationPanel(); break;
       case CommandAction::OpenNotifications: toggleNotificationCenter(); break;
       case CommandAction::CloseOverlay:
-        _shell.closeOverlay();
+        closeOverlay();
         postActivityNotification(
           rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOverlayClosed)});
         break;
       case CommandAction::ShowHelp:
-        _shell.openOverlay(Overlay::Help);
+        openOverlay(Overlay::Help);
         postActivityNotification(
           rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiHelpOpened)});
         break;
@@ -593,6 +600,30 @@ namespace ao::tui
     _seekSlider.reset();
   }
 
+  bool EventController::hasWorkspaceGesture() const noexcept
+  {
+    return _optSeekRailDrag || _optTrackScrollbarDrag || _optTrackColumnResizeDrag;
+  }
+
+  void EventController::cancelWorkspaceGestures()
+  {
+    cancelSeekInteraction();
+    _optTrackScrollbarDrag.reset();
+    _optTrackColumnResizeDrag.reset();
+  }
+
+  void EventController::openOverlay(Overlay const overlay)
+  {
+    cancelWorkspaceGestures();
+    _shell.openOverlay(overlay);
+  }
+
+  void EventController::closeOverlay()
+  {
+    cancelWorkspaceGestures();
+    _shell.closeOverlay();
+  }
+
   std::optional<bool> EventController::handleActiveMouseDrag(ftxui::Mouse const& mouse)
   {
     if (_optSeekRailDrag)
@@ -663,7 +694,7 @@ namespace ao::tui
     if ((mouse.button == ftxui::Mouse::WheelUp || mouse.button == ftxui::Mouse::WheelDown) &&
         mouse.motion == ftxui::Mouse::Pressed)
     {
-      if (_shell.overlay() == Overlay::None && _hitRegions != nullptr &&
+      if (!isModalOverlay(_shell.overlay()) && _hitRegions != nullptr &&
           contains(_hitRegions->trackTableBox, mouse.x, mouse.y))
       {
         auto const delta =
@@ -725,7 +756,7 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleColumnResizePress(ftxui::Mouse const& mouse)
   {
-    if (_shell.overlay() != Overlay::None || _hitRegions == nullptr || _trackColumnWidthOverrides == nullptr)
+    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr || _trackColumnWidthOverrides == nullptr)
     {
       return std::nullopt;
     }
@@ -746,7 +777,7 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleScrollbarPress(ftxui::Mouse const& mouse)
   {
-    if (_shell.overlay() != Overlay::None || _hitRegions == nullptr ||
+    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr ||
         !containsTrackScrollbar(_hitRegions->trackTableBox, mouse.x, mouse.y))
     {
       return std::nullopt;
@@ -765,7 +796,7 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleSectionPress(ftxui::Mouse const& mouse)
   {
-    if (_shell.overlay() != Overlay::None || _hitRegions == nullptr)
+    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr)
     {
       return std::nullopt;
     }
@@ -911,7 +942,7 @@ namespace ao::tui
 
       if (_outputDevices->selectRow(hitRegionIt->rowIndex))
       {
-        _shell.closeOverlay();
+        closeOverlay();
       }
 
       return true;
@@ -922,23 +953,19 @@ namespace ao::tui
 
   bool EventController::handleMouse(ftxui::Mouse const& mouse)
   {
-    auto const modalInputActive = _shell.isInputActive() || isOverlayActive(_shell.overlay());
+    auto const modalInputActive = _shell.isInputActive() || isModalOverlay(_shell.overlay());
 
-    if (modalInputActive && _optSeekRailDrag)
+    // A gesture aimed at the workspace cannot be finished across a surface that
+    // took the workspace away, whichever of the two arrived first.
+    if (modalInputActive && hasWorkspaceGesture())
     {
-      cancelSeekInteraction();
+      cancelWorkspaceGestures();
       return false;
     }
 
-    if (_shell.isInputActive())
+    if (_shell.isInputActive() && mouse.motion != ftxui::Mouse::Moved)
     {
-      _optTrackScrollbarDrag.reset();
-      _optTrackColumnResizeDrag.reset();
-
-      if (mouse.motion != ftxui::Mouse::Moved)
-      {
-        return false;
-      }
+      return false;
     }
 
     if (auto const optHandled = handleActiveMouseDrag(mouse); optHandled)
@@ -1111,9 +1138,12 @@ namespace ao::tui
         if (commandKeyAction(event) == CommandAction::OpenDetail)
         {
           toggleDetailPanel();
+          return true;
         }
 
-        return true;
+        // Detail inspects whatever the table has selected, so every other key
+        // belongs to the workspace it is watching.
+        return false;
       case Overlay::QualityPanel:
         if (commandKeyAction(event) == CommandAction::OpenQuality)
         {
@@ -1195,7 +1225,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Character("/") || event == ftxui::Event::Character(":"))
     {
-      cancelSeekInteraction();
+      cancelWorkspaceGestures();
       _shell.beginInput(event == ftxui::Event::Character("/") ? ShellInputMode::QuickFilter : ShellInputMode::Command);
       refreshCommandCompletion();
       return true;
@@ -1213,13 +1243,13 @@ namespace ao::tui
       return true;
     }
 
-    if (event == ftxui::Event::Character("{") && _shell.overlay() == Overlay::None)
+    if (event == ftxui::Event::Character("{") && !isModalOverlay(_shell.overlay()))
     {
       _library.jumpToAdjacentSection(-1);
       return true;
     }
 
-    if (event == ftxui::Event::Character("}") && _shell.overlay() == Overlay::None)
+    if (event == ftxui::Event::Character("}") && !isModalOverlay(_shell.overlay()))
     {
       _library.jumpToAdjacentSection(1);
       return true;
@@ -1268,9 +1298,11 @@ namespace ao::tui
       return true;
     }
 
-    if (isOverlayActive(_shell.overlay()))
+    // A modal overlay answers everything, so reaching the workspace below means
+    // the open overlay left this key alone.
+    if (isOverlayActive(_shell.overlay()) && handleOverlayEvent(event))
     {
-      return handleOverlayEvent(event);
+      return true;
     }
 
     return handleRootEvent(event);

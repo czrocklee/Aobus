@@ -65,7 +65,7 @@ Each delivered `ResourceBytes` value owns immutable shared storage and remains v
 Each presenter retains one generation-fenced selection.
 Its visible XAML cover state is hidden when there is no group or Inspector entity, remains the configured placeholder when Now Playing has no entity, uses a placeholder for an invalid id, is empty for pending or failed valid-resource delivery, and shows a decoded image for successful delivery.
 
-TUI retains one cancellable selected-resource byte interest and transform task, transformed cover data for that id, and separate Kitty paint state for image id `1` and the last terminal box.
+TUI retains one cancellable selection-settle task, one selected-resource byte interest and transform task, transformed cover data for that id, and separate Kitty paint state for image id `1` and the last terminal box.
 MPRIS retains process-local id-to-file/URL/byte-size entries and one delayed current-resource request in the bridge.
 
 ## Commands and transitions
@@ -179,11 +179,16 @@ SMTC keeps its own active request interest and current resource id while consumi
 
 ### TUI
 
-When the selected primary id changes and cover display is active, TUI clears its prior transform and starts a cancellable shared byte request.
+When the selected primary id changes and cover display is active, TUI clears its prior transform and opens a cancellable 100-millisecond selection-settle window; the shared byte request starts only when that window elapses while the same id is still selected.
+A frame that will not show artwork starts no window at all, so a detail pane whose terminal is too short for both artwork and metadata costs no read or transform.
 Block mode decodes `ResourceBytes::view()` on a worker, center-crops to a square, scales to two samples per terminal row, composites alpha over the fixed background, and renders upper-half blocks after a cancellation-checked callback-executor hop.
 
 Kitty mode decodes the same supported raster set on a worker, center-crops and scales it, encodes bounded PNG output, base64-chunks it into Kitty transmission escapes, and paints fixed image id `1` into the current cover box after the same current-task hop.
-Moving, hiding, replacing, or exiting deletes the previously visible Kitty image as required by paint state.
+Both modes claim the same `24x12` terminal cells and render the artwork alone, without a title, separator, or border of its own inside the detail frame.
+The detail frame clears its reflected cover box before every conditional artwork slot, so a frame reserving no cells leaves an invalid box; moving, hiding, replacing, or exiting deletes the previously visible Kitty image as required by paint state.
+
+A burst of selection changes replaces the settle window each time, so the burst costs one read and one transform for the resource still selected, not one per step.
+The settle window decides only whether a read is worth starting; the current-resource fence, not the delay, is what prevents a stale transform from publishing.
 
 ### MPRIS and CLI
 
@@ -208,7 +213,7 @@ WinUI native decode catches `hresult_error`, logs the adapter diagnostic, and re
 An unexpected non-cancellation failure in GTK, runtime resource-byte, or MPRIS shared loading is reported once, completes the flight with the owner's empty result, and leaves the key eligible for retry.
 GTK and MPRIS loader destruction and runtime resource-byte loader unbinding cancel and destroy their lifetime scopes before clearing shared request flights; runtime resource-byte unbinding also clears its byte source and cache and leaves the loader scope-free until the next binding.
 Repeated resource-byte unbinding is harmless, and every later binding creates a fresh lifetime scope.
-TUI destruction cancels its selected task.
+TUI destruction cancels its settle and transform tasks and its byte interest.
 Every owner access follows a cancellation-checked callback-executor transition.
 Individual GTK, runtime resource-byte, and MPRIS interests may be cancelled without discarding successful shared cache work.
 Lifetime cancellation may skip flight completion because the owner clears the coalescer during teardown.
@@ -250,7 +255,7 @@ Album groups may display their valid primary cover; other group types carry no r
 GTK displays the configured slot placeholder for an invalid id, keeps the Now Playing placeholder visible while playback is idle, clears it immediately when a valid-resource load starts, and updates only through the current callback interest.
 The GTK Now Playing cover tooltip appears only for a successfully decoded current image; under the [shell tooltip scheduling contract](../shell/layout-lifecycle.md#expand-and-build), an image that becomes available beneath a stationary pointer remains closed until the pointer leaves and re-enters.
 WinUI displays fixed `monogram`, `vinyl`, and `equalizer` placeholders in group heading, Inspector, and Now Playing respectively, derives the vinyl outer ring and center label from the current shared theme accent, keeps the Now Playing placeholder visible without an active track, and applies the same invalid-id/pending-valid distinction through generation-fenced presenters.
-TUI shows its no-cover placeholder while delivery is pending and when the resource is absent, over-budget, or undecodable.
+TUI shows its no-cover placeholder while delivery is pending and when the resource is absent, over-budget, or undecodable; that placeholder is one compact line inside the detail frame rather than a reserved artwork panel.
 MPRIS omits `mpris:artUrl` while file materialization is pending and when no valid file URL can be produced.
 
 These degradation states do not remove or rewrite a track's cover reference.
@@ -284,7 +289,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, decoded-image tooltip gating, authored visibility, hover timing, and action retention.
 - [`CoverArtPlaceholderTest.cpp`](../../../test/unit/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects style ids, slot defaults, candidate priority, semantic group monograms, and deterministic foreground colors.
 - [`MemoryRandomAccessStreamTest.cpp`](../../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact prepared-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
-- [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, supported decode, limits, block preview, PNG, and Kitty escapes.
+- [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, the selection-settle window and navigation-burst cost, supported decode, limits, block preview, PNG, and Kitty escapes.
 - [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects file extensions, rewriting, stale siblings, missing ids, and URL metadata.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, export by materialization, and both absence reports.
 

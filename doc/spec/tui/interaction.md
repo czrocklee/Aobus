@@ -21,7 +21,7 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 `LibraryController` adapts runtime workspace/views into terminal rows but does not become library storage or playback authority.
 Its list chooser consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
 `EventController` translates terminal events into runtime/UIModel commands.
-`CoverArtLoader` owns one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
+`CoverArtLoader` owns one cancellable selection-settle window and one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
 
 ## Terminology
 
@@ -29,21 +29,24 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - **Command Palette input** is the command editor entered by `:`.
 - **Text input** means either of those mutually exclusive shell modes.
 - An **overlay** is one of list, detail, quality, output, presentation, notification, or help panels.
+- A **modal** overlay blocks workspace input beneath it; a **visible** overlay merely occupies the screen. The detail inspector is the only visible overlay that is not modal.
 - A **hit region** is a rendered FTXUI box retained for the next mouse-dispatch pass.
 - The **seek rail** is only the reflected timeline/thumb segment, excluding elapsed/duration text.
 - A **visual row** includes group headers as well as selectable track rows.
 
 ## Invariants
 
-- Text input and overlays are modal: workspace-only input cannot mutate the track table beneath them.
-- Only one overlay is active at a time.
+- Text input is modal, and every overlay except the detail inspector is modal: workspace-only input cannot mutate the track table beneath them.
+- Only one overlay is active at a time; opening another overlay replaces the detail inspector, while text input leaves it open beneath the suspended workspace.
+- A surface change retires pointer gestures: opening or closing any overlay, and entering text input, cancels an active seek, scrollbar, or column drag rather than letting it finish against a layout the user did not aim at.
+- Detail pane width follows locale and terminal width only. Selection, cover presence, and optional-field presence cannot change it.
 - Render code writes hit regions into the one `TuiHitRegions` owner; input reads that same frame state.
 - Shared list navigation handles arrows, pages, home, and end before a panel-specific selection callback.
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
 - The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
 - Soul/Space transport toggles and ordinary stop requests use `PlaybackCommandSurface`; explicit selected-track activation remains a distinct view-based sequence command.
-- Active seek drag is canceled when text input or an overlay becomes active.
+- A modal surface arriving mid-gesture ends it: a pointer drag cannot be continued while text input or a modal overlay owns the workspace.
 - A zero-duration timeline rejects pointer and relative-keyboard seek.
 - Column drag changes only TUI session-local widths.
 - Ordinary terminal styling inherits the terminal background; semantic roles add accents without painting broad application backgrounds.
@@ -103,6 +106,11 @@ Children of the virtual All Tracks root retain zero terminal indentation, while 
 Every saved List uses the terminal-specific `[L]` icon, and a nonempty local expression appears as detail text.
 Nesting expresses derivation from a parent List; it does not introduce a Folder or List kind.
 
+The detail overlay is a live inspector rather than a modal panel.
+While it is visible, track and group navigation, wheel selection, scrollbar drag, section-header selection, column resizing, playback, seek, volume, Quick Filter, and the Command Palette all remain available against the reduced workspace geometry, and the pane follows the selection the workspace produces.
+Entering text input suspends those gestures for the duration of the input without closing the inspector.
+There is no track-row click target.
+
 Overlay toggle keys reopen/close their own panel.
 Return activates the selected list, presentation, or output row.
 Escape closes the active overlay.
@@ -124,6 +132,13 @@ Keyboard volume asks `VolumeViewModel` for a clamped five-percentage-point relat
 ### Rendering
 
 Panels use titled-frame chrome with one-cell horizontal body padding; the dense track workspace omits body padding.
+The detail pane's titled frame is its only chrome: present cover art renders as artwork alone, with no nested title, separator, or border, and block and Kitty delivery reserve the same terminal cells.
+The detail pane derives its width from the active locale's field labels plus a fixed value budget and the cover width, capped at half the terminal.
+Field labels are capped at twelve cells before they are measured, as the GTK detail grid caps its key column, so a locale with long field names shortens them instead of widening the pane.
+Inside that body the label column takes at most forty percent and leaves the value column at least twelve cells at the `80x24` target.
+Detail rows stay on one line and are shortened by display-cell width with a trailing ellipsis rather than split or silently clipped.
+Shortening cuts only between whole clusters, so a joined emoji sequence, a flag, or a combining sequence is dropped entirely rather than emitted as a fragment.
+Cover art is shown only when its fixed rows, the pane chrome, and the worst-case metadata row count all fit the available main-content rows, so artwork visibility does not change as selection moves; short terminals give the rows to metadata.
 The workspace lower frame edge carries list/view identity on the left and selection/count state on the right.
 Selected rows and hovered controls use one centralized yellow/black/bold interactive style.
 
@@ -154,8 +169,10 @@ Exact startup paths/options belong to the TUI reference.
 ## Frontend observations
 
 The detail pane remains beside the track workspace and shows a terminal cover-art representation plus selected-track fields.
+Title, artist, album, display track number, and duration always appear, keeping a placeholder when the track lacks them; every other field appears only when it carries a value.
 Kitty, block, automatic, and disabled cover modes are selected at startup.
-On a cover change, the pane renders its empty placeholder until asynchronous delivery completes; an older selection cannot replace the current cover.
+On a cover change, the pane renders one compact unavailable line until asynchronous delivery completes; an older selection cannot replace the current cover.
+A frame that reserves no artwork cells leaves an invalid cover box behind, which is how out-of-band Kitty paint state learns to delete a stale image.
 The notification center can be opened explicitly even when compact status is not the only visible affordance.
 
 ## Implementation map

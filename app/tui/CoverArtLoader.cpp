@@ -20,8 +20,6 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::size_t kBlockCoverArtColumns = 24;
-    constexpr std::size_t kBlockCoverArtRows = 12;
     constexpr std::int32_t kKittyCoverArtWidth = 768;
     constexpr std::int32_t kKittyCoverArtHeight = 384;
   } // namespace
@@ -46,8 +44,7 @@ namespace ao::tui
       return;
     }
 
-    _task.reset();
-    _byteRequest.reset();
+    cancel();
     _resourceId = resourceId;
     _optPreview.reset();
     _optKittyPng.reset();
@@ -62,15 +59,10 @@ namespace ao::tui
       return;
     }
 
-    _byteRequest = _byteLoader.request(
-      resourceId,
-      [this, mode = _mode](rt::ResourceBytes bytes)
-      {
-        _task = _runtime.spawnCancellable(
-          [loader = this, runtime = &_runtime, mode, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
-          { return load(loader, runtime, mode, std::move(bytes), stopToken); },
-          "TUI cover-art decode workflow");
-      });
+    _settleTask =
+      _runtime.spawnCancellable([loader = this, runtime = &_runtime, resourceId](std::stop_token const stopToken)
+                                { return waitForSelectionSettle(loader, runtime, resourceId, stopToken); },
+                                "TUI cover-art selection settle");
   }
 
   void CoverArtLoader::clear()
@@ -80,8 +72,7 @@ namespace ao::tui
       return;
     }
 
-    _task.reset();
-    _byteRequest.reset();
+    cancel();
     _resourceId = kInvalidResourceId;
     _optPreview.reset();
     _optKittyPng.reset();
@@ -94,8 +85,43 @@ namespace ao::tui
 
   void CoverArtLoader::cancel() noexcept
   {
+    _settleTask.reset();
     _task.reset();
     _byteRequest.reset();
+  }
+
+  async::Task<void> CoverArtLoader::waitForSelectionSettle(CoverArtLoader* const loader,
+                                                           async::Runtime* const runtime,
+                                                           ResourceId const resourceId,
+                                                           std::stop_token const stopToken)
+  {
+    co_await runtime->sleepFor(kCoverArtSelectionSettleInterval, stopToken);
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
+
+    // The settle window is not the publication fence: it only decides whether a
+    // read is worth starting, and the selection may have moved on regardless.
+    if (loader->_resourceId != resourceId)
+    {
+      co_return;
+    }
+
+    // The window has done its job; retire its handle before the read it
+    // authorizes registers, so only live work is left to cancel.
+    loader->_settleTask.reset();
+    loader->startByteRequest(resourceId);
+  }
+
+  void CoverArtLoader::startByteRequest(ResourceId const resourceId)
+  {
+    _byteRequest = _byteLoader.request(
+      resourceId,
+      [this, mode = _mode](rt::ResourceBytes bytes)
+      {
+        _task = _runtime.spawnCancellable(
+          [loader = this, runtime = &_runtime, mode, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
+          { return load(loader, runtime, mode, std::move(bytes), stopToken); },
+          "TUI cover-art decode workflow");
+      });
   }
 
   async::Task<void> CoverArtLoader::load(CoverArtLoader* const loader,
@@ -111,7 +137,8 @@ namespace ao::tui
 
     if (mode == CoverArtDeliveryMode::Blocks)
     {
-      optPreview = decodeCoverArtPreview(bytes.view(), kBlockCoverArtColumns, kBlockCoverArtRows);
+      optPreview = decodeCoverArtPreview(
+        bytes.view(), static_cast<std::size_t>(kCoverArtColumns), static_cast<std::size_t>(kCoverArtRows));
     }
     else if (mode == CoverArtDeliveryMode::Kitty)
     {

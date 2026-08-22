@@ -112,6 +112,20 @@ namespace ao::tui
     std::chrono::milliseconds seekRailElapsed(std::int32_t column) const;
     void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
     void cancelSeekInteraction();
+    bool hasWorkspaceGesture() const noexcept;
+    /**
+     * @brief Drops pointer gestures the workspace can no longer own.
+     *
+     * Seek, scrollbar, and column drags are all aimed at geometry that an
+     * overlay or text input either moves or takes away, so a surface change
+     * ends them rather than letting them finish against a layout the user
+     * never aimed at.
+     */
+    void cancelWorkspaceGestures();
+    /// Opens @p overlay, retiring gestures the change invalidates.
+    void openOverlay(Overlay overlay);
+    /// Closes the active overlay, retiring gestures the change invalidates.
+    void closeOverlay();
 
     struct TrackColumnResizeDrag final
     {

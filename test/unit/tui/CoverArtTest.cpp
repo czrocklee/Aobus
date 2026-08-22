@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -110,6 +111,24 @@ namespace ao::tui::test
     CHECK(first.bottomRed > 200);
     CHECK(first.bottomGreen < 50);
     CHECK(first.bottomBlue < 50);
+  }
+
+  TEST_CASE("CoverArt - block artwork fills the shared cell geometry", "[tui][unit][cover-art]")
+  {
+    auto const optPreview = decodeCoverArtPreview(
+      support::onePixelRedPng(), static_cast<std::size_t>(kCoverArtColumns), static_cast<std::size_t>(kCoverArtRows));
+
+    REQUIRE(optPreview);
+    CHECK(optPreview->size() == static_cast<std::size_t>(kCoverArtRows));
+    CHECK(optPreview->front().size() == static_cast<std::size_t>(kCoverArtColumns));
+    CHECK(renderCoverArtPreview(optPreview) != nullptr);
+    // Without a transform there is no artwork element to place at all.
+    CHECK(renderCoverArtPreview(std::nullopt) == nullptr);
+  }
+
+  TEST_CASE("CoverArt - trailing bytes leave a decodable image", "[tui][unit][cover-art]")
+  {
+    CHECK(decodeCoverArtPreview(support::distinctPng(7), 3, 2).has_value());
   }
 
   TEST_CASE("CoverArt - embedded BMP and GIF images remain supported", "[tui][unit][cover-art]")

@@ -272,6 +272,23 @@ namespace ao::tui
     return kAliasCommands;
   }
 
+  bool isModalOverlay(Overlay const overlay) noexcept
+  {
+    switch (overlay)
+    {
+      case Overlay::None:
+      case Overlay::DetailPanel: return false;
+      case Overlay::ListChooser:
+      case Overlay::QualityPanel:
+      case Overlay::OutputDevices:
+      case Overlay::PresentationPanel:
+      case Overlay::Notifications:
+      case Overlay::Help: return true;
+    }
+
+    return true;
+  }
+
   std::optional<Command> parseCommand(std::string_view input)
   {
     auto value = utility::trim(input);

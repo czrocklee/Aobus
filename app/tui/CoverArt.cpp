@@ -3,8 +3,6 @@
 
 #include "CoverArt.h"
 
-#include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Base64.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -55,8 +53,6 @@ namespace ao::tui
   {
     constexpr int kDecodedChannels = 4; // stb decodes to RGBA below
     constexpr auto kKittyPayloadChunkSize = std::size_t{4096};
-    constexpr int kPreviewColumns = 30;
-    constexpr int kPreviewRows = 16;
 
     struct Pixel final
     {
@@ -382,17 +378,13 @@ namespace ao::tui
     return output;
   }
 
-  ftxui::Element renderCoverArtPreview(uimodel::PresentationTextCatalog const& textCatalog,
-                                       std::optional<CoverArtRows> const& optPreview)
+  ftxui::Element renderCoverArtPreview(std::optional<CoverArtRows> const& optPreview)
   {
     using namespace ftxui;
 
     if (!optPreview || optPreview->empty())
     {
-      return vbox({text(std::string{textCatalog.text(i18n::MessageId::CoverArtTitle)}) | bold,
-                   separator(),
-                   text(std::string{textCatalog.text(i18n::MessageId::CoverArtNone)}) | dim | center}) |
-             border | size(WIDTH, EQUAL, kPreviewColumns) | size(HEIGHT, EQUAL, kPreviewRows);
+      return {};
     }
 
     auto lines = Elements{};
@@ -411,9 +403,6 @@ namespace ao::tui
       lines.push_back(hbox(std::move(cells)));
     }
 
-    return vbox({text(std::string{textCatalog.text(i18n::MessageId::CoverArtTitle)}) | bold,
-                 separator(),
-                 vbox(std::move(lines)) | center}) |
-           border | size(WIDTH, EQUAL, kPreviewColumns) | size(HEIGHT, EQUAL, kPreviewRows);
+    return vbox(std::move(lines)) | size(WIDTH, EQUAL, kCoverArtColumns) | size(HEIGHT, EQUAL, kCoverArtRows);
   }
 } // namespace ao::tui

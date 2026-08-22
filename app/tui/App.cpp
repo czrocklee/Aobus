@@ -342,13 +342,19 @@ namespace ao::tui
       return state.visible && coverArtId == state.paintedCoverArtId && isSameBox(coverBox, state.paintedCoverBox);
     }
 
+    /**
+     * @brief Brings the out-of-band Kitty image in line with the drawn frame.
+     *
+     * The frame reflects a box only when it actually reserved artwork cells, so
+     * an invalid box is how a frame says the image has no place any more and
+     * the terminal must be told to drop it.
+     */
     void updateKittyCoverArt(KittyPaintState& state,
-                             ShellInteractionModel const& shell,
                              ResourceId const cachedCoverArtId,
                              ftxui::Box const& coverBox,
                              std::optional<std::vector<std::byte>> const& optKittyCoverArtPng)
     {
-      auto const shouldShow = shell.overlay() == Overlay::DetailPanel && optKittyCoverArtPng && isValidBox(coverBox);
+      auto const shouldShow = optKittyCoverArtPng && isValidBox(coverBox);
 
       if (shouldShow)
       {
@@ -391,7 +397,7 @@ namespace ao::tui
       uimodel::PlaybackPositionInterpolator& playbackClock;
       std::optional<std::chrono::milliseconds>& optPreviewElapsed;
       CoverArtLoader& coverArt;
-      bool kittyCoverArt = false;
+      CoverArtDeliveryMode coverArtMode = CoverArtDeliveryMode::Off;
       uimodel::AobusSoulAnimationState soulAnimation{};
       std::optional<uimodel::FrameClock::TimePoint> optPreviousSoulFrameTime;
 
@@ -401,23 +407,31 @@ namespace ao::tui
 
         auto const frameBuildScope = frameTimer.measureBuild();
         auto const selectedTrackView = library.selectedTrackView();
-        auto const selectedCoverArtId = selectedTrackView.coverArtId;
+        auto const terminalSize = ftxui::Terminal::Size();
+        auto const terminalColumns = terminalSize.dimx;
+        auto const terminalRows = terminalSize.dimy;
+        auto const playbackRows = playbackBarRows(terminalRows);
+        auto const mainContentRows = terminalRows - playbackRows - kStatusBarRows;
         auto const detailVisible = shell.overlay() == Overlay::DetailPanel;
+        auto const coverArtVisible =
+          detailVisible && selectedTrackView.track != nullptr && detailPaneShowsCoverArt(mainContentRows);
 
-        if (detailVisible)
+        // Artwork nobody can see is still a resource read and a transform, so
+        // the request follows what the frame will actually show.
+        if (coverArtVisible)
         {
-          coverArt.request(selectedCoverArtId);
+          coverArt.request(selectedTrackView.coverArtId);
+        }
+        else
+        {
+          coverArt.clear();
         }
 
-        if (!detailVisible)
-        {
-          hitRegions.coverBox = ftxui::Box{};
-        }
-
-        auto coverElementPtr =
-          kittyCoverArt ? renderKittyCoverArtPlaceholder(textCatalog, coverArt.kittyPng() != std::nullopt) |
-                            reflect(hitRegions.coverBox)
-                        : renderCoverArtPreview(textCatalog, coverArt.preview()) | reflect(hitRegions.coverBox);
+        auto coverElementPtr = detailCoverArt(textCatalog,
+                                              coverArtVisible ? coverArtMode : CoverArtDeliveryMode::Off,
+                                              coverArt.preview(),
+                                              coverArt.kittyPng(),
+                                              &hitRegions.coverBox);
         auto const currentListTitle = library.currentListTitle();
         auto const& state = playback.snapshot().transport;
         hitRegions.clearFrameLocalRows();
@@ -443,10 +457,6 @@ namespace ao::tui
         auto const animationElapsed =
           std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
         auto const& presentation = runtime.views().trackListPresentation(library.activeViewId());
-        auto const terminalSize = ftxui::Terminal::Size();
-        auto const terminalColumns = terminalSize.dimx;
-        auto const terminalRows = terminalSize.dimy;
-        auto const playbackRows = playbackBarRows(terminalRows);
         auto const hoveredButton = shell.isInputActive() ? HoveredButton::None : events.hoveredButton();
         auto tableElementPtr =
           trackTableView(textCatalog,
@@ -513,8 +523,7 @@ namespace ao::tui
           }
           case Overlay::DetailPanel:
           {
-            auto const panelColumns =
-              detailPaneColumns(textCatalog, selectedTrackView.track, sidePanelColumnsLimit(terminalColumns));
+            auto const panelColumns = detailPaneColumns(textCatalog, sidePanelColumnsLimit(terminalColumns));
             mainContentPtr = hbox({
               workspaceElementPtr,
               detailPane(textCatalog, selectedTrackView.track, std::move(coverElementPtr), panelColumns),
@@ -899,7 +908,7 @@ namespace ao::tui
       .playbackClock = playbackClock,
       .optPreviewElapsed = optPreviewElapsed,
       .coverArt = coverArt,
-      .kittyCoverArt = kittyCoverArt,
+      .coverArtMode = coverArtDeliveryMode,
       .soulAnimation = {},
       .optPreviousSoulFrameTime = std::nullopt,
     };
@@ -926,7 +935,7 @@ namespace ao::tui
 
       if (kittyCoverArt)
       {
-        updateKittyCoverArt(kittyPaintState, shell, coverArt.resourceId(), hitRegions.coverBox, coverArt.kittyPng());
+        updateKittyCoverArt(kittyPaintState, coverArt.resourceId(), hitRegions.coverBox, coverArt.kittyPng());
       }
     }
 

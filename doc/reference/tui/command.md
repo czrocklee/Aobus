@@ -127,7 +127,7 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 | Overlay | Keys |
 | --- | --- |
 | Lists | `l` toggle, `Return` open, `Esc` close |
-| Detail | `d` toggle, `Esc` close |
+| Detail | `d` toggle, `Esc` close; every workspace key and mouse gesture below stays available while it is open |
 | Pipeline | `a` toggle, `Esc` close |
 | Output | `o` toggle, `Return` select, `Esc` close |
 | Views | `v` toggle, `Return` select, `Esc` close |
@@ -135,6 +135,8 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 | Help | `Esc` close |
 
 ### Mouse targets
+
+All track-table gestures below remain available while the detail inspector is open and are blocked by every other overlay.
 
 | Target/gesture | Action |
 | --- | --- |
@@ -155,7 +157,7 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 - An explicit leading query variable produces structured query suggestions; otherwise a non-empty active term produces frequency-ranked live Quick-filter value suggestions.
 - Presentation completion includes built-in and custom preset ids.
 - Quick-filter values come from live titles, artist, album, album artist, genre, composer, work, and tags; list names and other fields are excluded.
-- Both text-input modes and overlays disable workspace seek/table gestures.
+- Both text-input modes and modal overlays disable workspace seek/table gestures; the detail inspector does not.
 - A duration-zero seek rail is inert.
 
 ## Compatibility and versioning

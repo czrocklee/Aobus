@@ -18,6 +18,8 @@ namespace ao::tui
 {
   class TuiTextCatalog;
   inline constexpr std::int32_t kDefaultStatusBarColumns = 140;
+  /// The rows the bottom status bar claims from the root layout.
+  inline constexpr std::int32_t kStatusBarRows = 1;
 
   struct StatusBarViewState final
   {

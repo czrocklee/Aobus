@@ -21,8 +21,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <print>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,9 +32,23 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::int32_t kCoverArtPanelColumns = 30;
-    constexpr std::int32_t kCoverArtPanelRows = 16;
-    constexpr std::int32_t kDetailPaneLabelColumns = 14;
+    /**
+     * @brief The cells a field label may claim before it is shortened.
+     *
+     * The GTK detail grid caps its key column the same way and for the same
+     * reason: one long label in one locale must not spend the pane's width on
+     * naming a field instead of showing its value.
+     */
+    constexpr std::int32_t kDetailLabelColumns = 12;
+    /// The value budget the pane reserves, so its width never follows a track.
+    constexpr std::int32_t kDetailValueColumns = 24;
+    /// The value budget Detail keeps once labels have taken their share.
+    constexpr std::int32_t kMinimumDetailValueColumns = 12;
+    /// The share of the body labels may claim before values start paying.
+    constexpr std::int32_t kDetailLabelPercent = 40;
+    constexpr std::string_view kDetailLabelDelimiter = ": ";
+    /// Frame edges and the artwork separator: the rows Detail spends on chrome.
+    constexpr std::int32_t kDetailChromeRows = 3;
 
     constexpr auto kHelpPaneLines = std::to_array<TuiTextId>({
       TuiTextId::HelpQuickFilter,
@@ -58,36 +74,127 @@ namespace ao::tui
     {
       return std::move(popoverPtr) | ftxui::borderEmpty | ftxui::clear_under;
     }
+
+    /// The cells Kitty paints into, held open by an element that draws nothing.
+    ftxui::Element kittyCoverArtReservation()
+    {
+      using namespace ftxui;
+
+      return text("") | size(WIDTH, EQUAL, kCoverArtColumns) | size(HEIGHT, EQUAL, kCoverArtRows);
+    }
+
+    /// The label column this locale asks for, capped and delimiter included.
+    std::int32_t detailLabelContentColumns(uimodel::PresentationTextCatalog const& textCatalog)
+    {
+      std::int32_t labelColumns = 0;
+
+      for (auto const field : trackDetailFields())
+      {
+        labelColumns = std::max(labelColumns, cellWidth(textCatalog.trackFieldLabel(field)));
+      }
+
+      return std::min(labelColumns, kDetailLabelColumns) + cellWidth(kDetailLabelDelimiter);
+    }
+
+    struct DetailBodySplit final
+    {
+      std::int32_t labelColumns = 0;
+      std::int32_t valueColumns = 0;
+    };
+
+    /**
+     * @brief How @p bodyColumns is divided between labels and values.
+     *
+     * Labels ask for the widest they can ever be, then give way twice: they
+     * never take more than their share of the body, and never take so much
+     * that values fall below what a value needs to say anything.
+     */
+    DetailBodySplit detailBodySplit(uimodel::PresentationTextCatalog const& textCatalog, std::int32_t const bodyColumns)
+    {
+      auto const labelShare = bodyColumns * kDetailLabelPercent / 100;
+      auto const valueFloor = bodyColumns - kMinimumDetailValueColumns;
+      auto const labelColumns = std::max(0, std::min({detailLabelContentColumns(textCatalog), labelShare, valueFloor}));
+
+      return {.labelColumns = labelColumns, .valueColumns = std::max(0, bodyColumns - labelColumns)};
+    }
+
+    std::string detailLabelText(std::string_view const label, std::int32_t const labelColumns)
+    {
+      auto const delimiterColumns = cellWidth(kDetailLabelDelimiter);
+
+      if (labelColumns <= delimiterColumns)
+      {
+        return ellipsizeToCellWidth(label, labelColumns);
+      }
+
+      auto labelText = ellipsizeToCellWidth(label, labelColumns - delimiterColumns);
+      labelText.append(kDetailLabelDelimiter);
+      return labelText;
+    }
   } // namespace
 
-  ftxui::Element renderKittyCoverArtPlaceholder(uimodel::PresentationTextCatalog const& textCatalog,
-                                                bool const hasCover)
+  ftxui::Element detailCoverArt(uimodel::PresentationTextCatalog const& textCatalog,
+                                CoverArtDeliveryMode const mode,
+                                std::optional<CoverArtRows> const& optPreview,
+                                std::optional<std::vector<std::byte>> const& optKittyPng,
+                                ftxui::Box* const optArtworkBox)
   {
     using namespace ftxui;
 
-    return vbox({
-             text(std::string{textCatalog.text(i18n::MessageId::CoverArtTitle)}) | bold,
-             separator(),
-             hasCover ? filler() : text(std::string{textCatalog.text(i18n::MessageId::CoverArtNone)}) | dim | center,
-           }) |
-           border | size(WIDTH, EQUAL, kCoverArtPanelColumns) | size(HEIGHT, EQUAL, kCoverArtPanelRows);
+    if (optArtworkBox != nullptr)
+    {
+      *optArtworkBox = Box{};
+    }
+
+    if (mode == CoverArtDeliveryMode::Off)
+    {
+      return {};
+    }
+
+    auto artworkPtr = Element{};
+
+    if (mode == CoverArtDeliveryMode::Kitty)
+    {
+      artworkPtr = optKittyPng ? kittyCoverArtReservation() : Element{};
+    }
+    else
+    {
+      artworkPtr = renderCoverArtPreview(optPreview);
+    }
+
+    if (artworkPtr == nullptr)
+    {
+      return text(std::string{textCatalog.text(i18n::MessageId::CoverArtNone)}) | dim;
+    }
+
+    if (optArtworkBox != nullptr)
+    {
+      artworkPtr = std::move(artworkPtr) | reflect(*optArtworkBox);
+    }
+
+    // Artwork keeps its exact cells only when something beside it absorbs the
+    // rest of the pane, which also centres it.
+    return hbox({filler(), std::move(artworkPtr), filler()});
+  }
+
+  bool detailPaneShowsCoverArt(std::int32_t const availableRows)
+  {
+    auto const worstCaseMetadataRows = static_cast<std::int32_t>(trackDetailFields().size());
+
+    return availableRows >= kCoverArtRows + kDetailChromeRows + worstCaseMetadataRows;
   }
 
   void paintKittyCoverArt(ftxui::Box const& coverBox, std::vector<std::byte> const& png)
   {
-    constexpr int kImageColumns = 24;
-    constexpr int kImageRows = 12;
-
     if (coverBox.x_max <= coverBox.x_min || coverBox.y_max <= coverBox.y_min)
     {
       return;
     }
 
-    auto const panelWidth = coverBox.x_max - coverBox.x_min + 1;
-    auto const column = coverBox.x_min + std::max(1, (panelWidth - kImageColumns) / 2);
-    auto const row = coverBox.y_min + 3;
-
-    std::print("\033[s\033[{};{}H{}\033[u", row + 1, column + 1, kittyImageEscape(png, kImageColumns, kImageRows));
+    std::print("\033[s\033[{};{}H{}\033[u",
+               coverBox.y_min + 1,
+               coverBox.x_min + 1,
+               kittyImageEscape(png, kCoverArtColumns, kCoverArtRows));
     std::fflush(stdout);
   }
 
@@ -107,23 +214,12 @@ namespace ao::tui
   }
 
   std::int32_t detailPaneColumns(uimodel::PresentationTextCatalog const& textCatalog,
-                                 TrackListEntry const* const selectedTrack,
                                  std::int32_t const terminalColumns)
   {
-    auto contentColumns =
-      std::max(kCoverArtPanelColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackDetailTitle)));
-
-    if (selectedTrack == nullptr)
-    {
-      contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackNoSelection)));
-    }
-    else
-    {
-      for (auto const& line : trackDetailLines(textCatalog, selectedTrack->row))
-      {
-        contentColumns = std::max(contentColumns, kDetailPaneLabelColumns + cellWidth(line.value));
-      }
-    }
+    auto const labelColumns = detailLabelContentColumns(textCatalog);
+    auto contentColumns = std::max(kCoverArtColumns, labelColumns + kDetailValueColumns);
+    contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackDetailTitle)));
+    contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackNoSelection)));
 
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
@@ -137,32 +233,42 @@ namespace ao::tui
 
     if (columns <= 0)
     {
-      columns = detailPaneColumns(textCatalog, selectedTrack, 0);
+      columns = detailPaneColumns(textCatalog, 0);
     }
 
+    auto const bodyColumns = style::popupPanelBodyColumns(columns);
+    auto const split = detailBodySplit(textCatalog, bodyColumns);
     auto detailElements = Elements{};
 
     if (selectedTrack == nullptr)
     {
-      detailElements.push_back(text(std::string{textCatalog.text(i18n::MessageId::TrackNoSelection)}) | dim);
+      detailElements.push_back(
+        text(ellipsizeToCellWidth(textCatalog.text(i18n::MessageId::TrackNoSelection), bodyColumns)) | dim);
     }
     else
     {
       for (auto const& line : trackDetailLines(textCatalog, selectedTrack->row))
       {
         detailElements.push_back(hbox({
-          text(line.label + ": ") | dim | size(WIDTH, EQUAL, kDetailPaneLabelColumns),
-          text(line.value) | flex,
+          text(fitCellText(detailLabelText(line.label, split.labelColumns), split.labelColumns)) | dim,
+          text(ellipsizeToCellWidth(line.value, split.valueColumns)),
         }));
       }
     }
 
-    return style::popupPanel(textCatalog.text(i18n::MessageId::TrackDetailTitle),
-                             vbox({
-                               std::move(coverElementPtr),
-                               separator(),
-                               vbox(std::move(detailElements)) | frame | flex,
-                             })) |
+    auto bodyElements = Elements{};
+
+    // A selection without artwork is the pane's only content, so the separator
+    // belongs to the artwork rather than standing on its own above metadata.
+    if (selectedTrack != nullptr && coverElementPtr != nullptr)
+    {
+      bodyElements.push_back(std::move(coverElementPtr));
+      bodyElements.push_back(separator());
+    }
+
+    bodyElements.push_back(vbox(std::move(detailElements)) | frame | flex);
+
+    return style::popupPanel(textCatalog.text(i18n::MessageId::TrackDetailTitle), vbox(std::move(bodyElements))) |
            size(WIDTH, EQUAL, columns);
   }
 

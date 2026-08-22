@@ -29,4 +29,14 @@ namespace ao::tui::test::support
 
     return result;
   }
+
+  std::vector<std::byte> distinctPng(std::size_t const seed)
+  {
+    // Bytes after IEND are not part of the image, so the decoder still sees one
+    // red pixel while the content hash moves with the seed.
+    auto result = onePixelRedPng();
+    result.push_back(static_cast<std::byte>(seed & 0xFFU));
+    result.push_back(static_cast<std::byte>((seed >> 8U) & 0xFFU));
+    return result;
+  }
 } // namespace ao::tui::test::support

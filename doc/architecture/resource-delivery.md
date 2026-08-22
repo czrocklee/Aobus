@@ -118,7 +118,9 @@ The repository owns the `note`, `vinyl`, and `equalizer` SVG geometry in `asset/
 ### TUI delivery
 
 `CoverArtLoader` clears its current transform when selected cover identity changes, retains one shared byte-request interest, and performs stb decode plus block or Kitty conversion directly from `ResourceBytes::view()` on a worker.
-It owns one cancellable transform task; replacement retires both the byte interest and task, and publication follows a cancellation-checked callback-executor hop.
+It owns one cancellable settle task and one cancellable transform task: the settle task delays the byte request until the selection has stood still, because cancelling an interest does not unstart a read the shared loader already began.
+Replacement retires the settle task, the byte interest, and the transform task, and publication follows a cancellation-checked callback-executor hop.
+The settle window is TUI-local and shares no state with the Quick Filter debounce.
 The decoder checks source dimensions and pixels before full decode and bounds generated PNG retention.
 Kitty paint state separately tracks the fixed image id and terminal cell box.
 
@@ -175,7 +177,7 @@ ResourceId + logical allocation + display scale
 
 ```text
 WinUI ResourceId -> ResourceByteLoader coalesced read/cache -> worker native-memory preparation -> generation-fenced native image source or empty result
-TUI ResourceId -> ResourceByteLoader / ResourceBytes -> worker stb crop/scale -> current-task blocks or Kitty PNG
+TUI ResourceId -> selection settle -> ResourceByteLoader / ResourceBytes -> worker stb crop/scale -> current-task blocks or Kitty PNG
 MPRIS ResourceId -> ResourceByteLoader / ResourceBytes -> worker cache validation/write -> current-resource file URI
 CLI ResourceId -> descriptor + carrier snapshot -> cache or carrier walk -> output file
 ```
@@ -203,7 +205,7 @@ Core resource creation returns typed storage or id-exhaustion errors.
 Missing reads are ordinary absence; LMDB operational faults follow the storage failure boundary.
 The runtime reader copies the descriptor and the carrier snapshot it read and closes its transaction before any cache or file I/O, so no read transaction spans a materialization.
 
-Runtime byte and GTK/MPRIS transform requests have per-interest cancellation plus an owner lifetime scope; each WinUI presenter additionally owns a generation fence and worker stream-preparation task; TUI owns one selected byte interest and cancellable transform task.
+Runtime byte and GTK/MPRIS transform requests have per-interest cancellation plus an owner lifetime scope; each WinUI presenter additionally owns a generation fence and worker stream-preparation task; TUI owns one selected byte interest plus cancellable settle and transform tasks, all retired together by replacement, clearing, and destruction.
 WinUI window teardown unbinds the resource loader, SMTC bridge, and cover-art presenters before the session destroys its unique runtime; runtime shutdown joins cancelled work rather than deferring or quarantining a runtime owner.
 Resource-byte unbinding destroys its lifetime scope before clearing its shared request coalescer, cache, source, and callback-runtime binding; a later binding creates a fresh scope.
 Each delivery owner cancels external work before clearing its shared request coalescer.

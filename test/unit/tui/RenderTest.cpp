@@ -7,21 +7,28 @@
 #include "test/unit/tui/TuiRenderTestSupport.h"
 #include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/CommandPalettePanel.h"
+#include "tui/CoverArt.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/PresentationPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
 #include "tui/Style.h"
+#include "tui/TextCell.h"
+#include "tui/TrackDetailLines.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackPresentationNavigation.h"
 #include "tui/TuiHitRegions.h"
 #include "tui/TuiTextCatalog.h"
+#include <ao/AudioCodec.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
@@ -29,6 +36,9 @@
 #include <ftxui/screen/color.hpp>
 #include <ftxui/screen/screen.hpp>
 
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <optional>
@@ -41,14 +51,98 @@ namespace ao::tui::test
 {
   namespace
   {
-    TrackListEntry makeTrackListEntry(rt::TrackRow const& row)
+    TrackListEntry englishTrackListEntry(rt::TrackRow const& row)
     {
-      return ao::tui::makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
+      return makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
     }
 
-    std::int32_t detailPaneColumns(TrackListEntry const* const selectedTrack, std::int32_t const terminalColumns)
+    std::int32_t englishDetailPaneColumns(std::int32_t const terminalColumns)
     {
-      return ao::tui::detailPaneColumns(ao::test::englishPresentationTextCatalog(), selectedTrack, terminalColumns);
+      return detailPaneColumns(ao::test::englishPresentationTextCatalog(), terminalColumns);
+    }
+
+    ftxui::Element englishDetailPane(TrackListEntry const* const selectedTrack,
+                                     ftxui::Element coverElementPtr,
+                                     std::int32_t const columns)
+    {
+      return detailPane(ao::test::englishPresentationTextCatalog(), selectedTrack, std::move(coverElementPtr), columns);
+    }
+
+    /// The upper-half block a Blocks-mode cover paints its cells with.
+    constexpr std::string_view kBlockArtworkGlyph = "▀";
+    constexpr std::int32_t kDetailLabelPercent = 40;
+    constexpr std::int32_t kMinimumDetailValueColumns = 12;
+    /// The cap the pane puts on a field label, matching the GTK detail grid.
+    constexpr std::int32_t kDetailLabelColumns = 12;
+    constexpr std::int32_t kDetailValueColumns = 24;
+
+    std::int32_t boxColumns(ftxui::Box const& box)
+    {
+      return box.x_max - box.x_min + 1;
+    }
+
+    std::int32_t boxRows(ftxui::Box const& box)
+    {
+      return box.y_max - box.y_min + 1;
+    }
+
+    /**
+     * @brief Renders @p panePtr where the shell puts it: beside a flexible
+     *        workspace, which is what makes its declared width its real one.
+     */
+    RenderedElement renderBesideWorkspace(ftxui::Element panePtr,
+                                          ftxui::Box& paneBox,
+                                          std::int32_t const terminalColumns = 120,
+                                          std::int32_t const terminalRows = 40)
+    {
+      return renderElement(ftxui::hbox({ftxui::filler() | ftxui::flex, std::move(panePtr) | ftxui::reflect(paneBox)}),
+                           terminalColumns,
+                           terminalRows);
+    }
+
+    std::int32_t widestDetailLabelColumns(uimodel::PresentationTextCatalog const& textCatalog)
+    {
+      std::int32_t widest = 0;
+
+      for (auto const field : trackDetailFields())
+      {
+        widest = std::max(widest, cellWidth(textCatalog.trackFieldLabel(field)));
+      }
+
+      return std::min(widest, kDetailLabelColumns) + cellWidth(": ");
+    }
+
+    rt::TrackRow sparseRow()
+    {
+      return rt::TrackRow{.id = TrackId{1}, .title = "Untagged"};
+    }
+
+    rt::TrackRow fullyPopulatedRow()
+    {
+      return rt::TrackRow{.id = TrackId{2},
+                          .title = "A very long title that would widen any pane sized from its own selection",
+                          .artist = "An equally long artist credit that keeps going well past the pane",
+                          .album = "Album",
+                          .albumArtist = "Album Artist",
+                          .genre = "Genre",
+                          .composer = "Composer",
+                          .conductor = "Conductor",
+                          .ensemble = "Ensemble",
+                          .soloist = "Soloist",
+                          .tags = "one, two, three",
+                          .duration = std::chrono::seconds{299},
+                          .year = 2014,
+                          .trackNumber = 7,
+                          .trackTotal = 12,
+                          .sampleRate = 44100,
+                          .bitDepth = 16,
+                          .codec = AudioCodec::Flac};
+    }
+
+    CoverArtRows solidPreview()
+    {
+      return CoverArtRows(static_cast<std::size_t>(kCoverArtRows),
+                          std::vector<CoverArtCell>(static_cast<std::size_t>(kCoverArtColumns), CoverArtCell{}));
     }
 
     ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t const columns = 0)
@@ -156,14 +250,201 @@ namespace ao::tui::test
 
   TEST_CASE("Render - side panes size to content and terminal bounds", "[tui][unit][render]")
   {
-    auto row =
-      rt::TrackRow{.id = TrackId{7}, .title = "A very long title that should widen detail content", .artist = "Artist"};
-    auto item = makeTrackListEntry(row);
-
     CHECK(helpPaneColumns(120) > 0);
     CHECK(helpPaneColumns(30) == 30);
-    CHECK(detailPaneColumns(&item, 120) > detailPaneColumns(nullptr, 120));
-    CHECK(detailPaneColumns(&item, 40) == 40);
+    CHECK(englishDetailPaneColumns(120) > 0);
+    CHECK(englishDetailPaneColumns(40) == 40);
+  }
+
+  TEST_CASE("Render - detail pane width follows the locale, never the selection", "[tui][unit][render][detail]")
+  {
+    auto const columns = englishDetailPaneColumns(120);
+    auto const sparse = englishTrackListEntry(sparseRow());
+    auto const populated = englishTrackListEntry(fullyPopulatedRow());
+    auto emptyBox = ftxui::Box{};
+    auto sparseBox = ftxui::Box{};
+    auto populatedBox = ftxui::Box{};
+
+    renderBesideWorkspace(englishDetailPane(nullptr, {}, columns), emptyBox);
+    renderBesideWorkspace(englishDetailPane(&sparse, {}, columns), sparseBox);
+    renderBesideWorkspace(englishDetailPane(&populated, {}, columns), populatedBox);
+
+    CHECK(boxColumns(emptyBox) == columns);
+    CHECK(boxColumns(sparseBox) == columns);
+    CHECK(boxColumns(populatedBox) == columns);
+  }
+
+  TEST_CASE("Render - detail rows keep labels and values inside their budgets", "[tui][unit][render][detail]")
+  {
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const columns = englishDetailPaneColumns(120);
+    auto const bodyColumns = style::popupPanelBodyColumns(columns);
+    auto const labelColumns = widestDetailLabelColumns(textCatalog);
+    auto const populated = englishTrackListEntry(fullyPopulatedRow());
+    auto paneBox = ftxui::Box{};
+    auto const rendered = renderBesideWorkspace(englishDetailPane(&populated, {}, columns), paneBox);
+
+    // English labels fit the cap, so they are spelled out in full.
+    CHECK(rendered.text.contains(std::string{textCatalog.trackFieldLabel(rt::TrackField::AlbumArtist)} + ": "));
+    CHECK(labelColumns <= kDetailLabelColumns + cellWidth(": "));
+    CHECK(labelColumns * 100 <= bodyColumns * kDetailLabelPercent);
+    CHECK(bodyColumns - labelColumns >= kMinimumDetailValueColumns);
+    // A value too long for its column says where it stopped.
+    CHECK(rendered.text.contains("…"));
+  }
+
+  TEST_CASE("Render - narrow detail keeps a readable value column", "[tui][unit][render][detail]")
+  {
+    // The 80x24 floor: the side pane takes half of it and no more.
+    constexpr std::int32_t kMinimumTerminalColumns = 80;
+    auto const columns = englishDetailPaneColumns(kMinimumTerminalColumns / 2);
+    auto const bodyColumns = style::popupPanelBodyColumns(columns);
+    auto const populated = englishTrackListEntry(fullyPopulatedRow());
+    auto paneBox = ftxui::Box{};
+    auto const rendered =
+      renderBesideWorkspace(englishDetailPane(&populated, {}, columns), paneBox, kMinimumTerminalColumns, 24);
+
+    CHECK(columns == kMinimumTerminalColumns / 2);
+    CHECK(boxColumns(paneBox) == columns);
+    CHECK(bodyColumns - (bodyColumns * kDetailLabelPercent / 100) >= kMinimumDetailValueColumns);
+    CHECK(rendered.text.contains("…"));
+  }
+
+  TEST_CASE("Render - detail omits optional rows a track does not carry", "[tui][unit][render][detail]")
+  {
+    auto const columns = englishDetailPaneColumns(120);
+    auto const sparse = englishTrackListEntry(sparseRow());
+    auto paneBox = ftxui::Box{};
+    auto const rendered = renderBesideWorkspace(englishDetailPane(&sparse, {}, columns), paneBox);
+
+    CHECK(rendered.text.contains("Title"));
+    CHECK(rendered.text.contains("Duration"));
+    CHECK_FALSE(rendered.text.contains("Composer"));
+    CHECK_FALSE(rendered.text.contains("Sample Rate"));
+  }
+
+  TEST_CASE("Render - detail artwork carries no frame of its own", "[tui][unit][render][cover-art]")
+  {
+    auto const columns = englishDetailPaneColumns(120);
+    auto const populated = englishTrackListEntry(fullyPopulatedRow());
+    auto artworkBox = ftxui::Box{};
+    auto paneBox = ftxui::Box{};
+    auto const optPreview = std::optional{solidPreview()};
+    auto coverPtr = detailCoverArt(
+      ao::test::englishPresentationTextCatalog(), CoverArtDeliveryMode::Blocks, optPreview, std::nullopt, &artworkBox);
+
+    REQUIRE(coverPtr != nullptr);
+
+    auto const rendered = renderBesideWorkspace(englishDetailPane(&populated, std::move(coverPtr), columns), paneBox);
+
+    CHECK(rendered.text.contains("Track Detail"));
+    CHECK_FALSE(rendered.text.contains("Cover Art"));
+    CHECK(boxColumns(artworkBox) == kCoverArtColumns);
+    CHECK(boxRows(artworkBox) == kCoverArtRows);
+  }
+
+  TEST_CASE("Render - block and Kitty artwork claim the same cells", "[tui][unit][render][cover-art]")
+  {
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const columns = englishDetailPaneColumns(120);
+    auto const populated = englishTrackListEntry(fullyPopulatedRow());
+    auto const optPreview = std::optional{solidPreview()};
+    auto const optPng = std::optional{std::vector{std::byte{0x89}}};
+    auto blockBox = ftxui::Box{};
+    auto kittyBox = ftxui::Box{};
+    auto paneBox = ftxui::Box{};
+
+    renderBesideWorkspace(
+      englishDetailPane(&populated,
+                        detailCoverArt(textCatalog, CoverArtDeliveryMode::Blocks, optPreview, std::nullopt, &blockBox),
+                        columns),
+      paneBox);
+    renderBesideWorkspace(
+      englishDetailPane(
+        &populated, detailCoverArt(textCatalog, CoverArtDeliveryMode::Kitty, std::nullopt, optPng, &kittyBox), columns),
+      paneBox);
+
+    CHECK(blockBox.x_min == kittyBox.x_min);
+    CHECK(blockBox.x_max == kittyBox.x_max);
+    CHECK(blockBox.y_min == kittyBox.y_min);
+    CHECK(blockBox.y_max == kittyBox.y_max);
+  }
+
+  TEST_CASE("Render - artwork the loader has not published costs one line", "[tui][unit][render][cover-art]")
+  {
+    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const columns = englishDetailPaneColumns(120);
+    auto const populated = englishTrackListEntry(fullyPopulatedRow());
+    auto artworkBox = ftxui::Box{.x_min = 1, .x_max = 24, .y_min = 1, .y_max = 12};
+    auto paneBox = ftxui::Box{};
+    auto coverPtr = detailCoverArt(textCatalog, CoverArtDeliveryMode::Kitty, std::nullopt, std::nullopt, &artworkBox);
+
+    REQUIRE(coverPtr != nullptr);
+
+    auto const rendered = renderBesideWorkspace(englishDetailPane(&populated, std::move(coverPtr), columns), paneBox);
+
+    CHECK(rendered.text.contains("No cover art"));
+    CHECK_FALSE(rendered.text.contains(kBlockArtworkGlyph));
+    // Nothing reserved the cells, so out-of-band paint state sees an empty box.
+    CHECK(artworkBox.x_max <= artworkBox.x_min);
+  }
+
+  TEST_CASE("Render - artwork waits for a terminal that fits every field", "[tui][unit][render][cover-art]")
+  {
+    auto const worstCaseRows = static_cast<std::int32_t>(trackDetailFields().size());
+
+    CHECK_FALSE(detailPaneShowsCoverArt(kCoverArtRows + worstCaseRows));
+    CHECK(detailPaneShowsCoverArt(kCoverArtRows + worstCaseRows + 3));
+    // An 80x24 terminal spends its rows on metadata.
+    CHECK_FALSE(detailPaneShowsCoverArt(24 - 2));
+  }
+
+  TEST_CASE("Render - detail without a selection says so and shows nothing else", "[tui][unit][render][detail]")
+  {
+    auto const columns = englishDetailPaneColumns(120);
+    auto paneBox = ftxui::Box{};
+    auto const rendered =
+      renderBesideWorkspace(englishDetailPane(nullptr,
+                                              detailCoverArt(ao::test::englishPresentationTextCatalog(),
+                                                             CoverArtDeliveryMode::Blocks,
+                                                             std::optional{solidPreview()},
+                                                             std::nullopt,
+                                                             nullptr),
+                                              columns),
+                            paneBox);
+
+    CHECK(rendered.text.contains("No track selected"));
+    CHECK_FALSE(rendered.text.contains("Title"));
+    CHECK_FALSE(rendered.text.contains(kBlockArtworkGlyph));
+  }
+
+  TEST_CASE("Render - detail pane width holds in every supported locale", "[tui][unit][render][localization]")
+  {
+    constexpr std::int32_t kTerminalColumns = 120;
+
+    for (auto const* const locale : {"de-DE", "es-ES", "fr-FR", "ja-JP", "zh-Hans-CN", "zh-Hant-TW", "qps-ploc"})
+    {
+      auto const textCatalog = ao::test::presentationTextCatalog(locale);
+      auto const columns = detailPaneColumns(textCatalog, kTerminalColumns / 2);
+      auto const sparse = makeTrackListEntry(textCatalog, sparseRow());
+      auto const populated = makeTrackListEntry(textCatalog, fullyPopulatedRow());
+      auto sparseBox = ftxui::Box{};
+      auto populatedBox = ftxui::Box{};
+
+      renderBesideWorkspace(detailPane(textCatalog, &sparse, {}, columns), sparseBox, kTerminalColumns, 40);
+      renderBesideWorkspace(detailPane(textCatalog, &populated, {}, columns), populatedBox, kTerminalColumns, 40);
+
+      // A locale whose field names are long shortens them rather than spending
+      // the workspace's width on naming fields.
+      auto const cappedColumns = style::popupPanelColumnsForContent(
+        kDetailLabelColumns + cellWidth(": ") + kDetailValueColumns, kTerminalColumns / 2);
+
+      INFO("locale " << locale);
+      CHECK(boxColumns(sparseBox) == columns);
+      CHECK(boxColumns(populatedBox) == columns);
+      CHECK(columns <= cappedColumns);
+      CHECK(columns <= kTerminalColumns / 2);
+    }
   }
 
   TEST_CASE("Render - center popover places content in the screen middle", "[tui][unit][render]")
