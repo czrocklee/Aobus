@@ -115,12 +115,13 @@ namespace ao::tui::test
 
   TEST_CASE("CoverArt - block artwork fills the shared cell geometry", "[tui][unit][cover-art]")
   {
-    auto const optPreview = decodeCoverArtPreview(
-      support::onePixelRedPng(), static_cast<std::size_t>(kCoverArtColumns), static_cast<std::size_t>(kCoverArtRows));
+    auto const optPreview = decodeCoverArtPreview(support::onePixelRedPng(),
+                                                  static_cast<std::size_t>(kCoverArtDefaultColumns),
+                                                  static_cast<std::size_t>(kCoverArtRows));
 
     REQUIRE(optPreview);
     CHECK(optPreview->size() == static_cast<std::size_t>(kCoverArtRows));
-    CHECK(optPreview->front().size() == static_cast<std::size_t>(kCoverArtColumns));
+    CHECK(optPreview->front().size() == static_cast<std::size_t>(kCoverArtDefaultColumns));
     CHECK(renderCoverArtPreview(optPreview) != nullptr);
     // Without a transform there is no artwork element to place at all.
     CHECK(renderCoverArtPreview(std::nullopt) == nullptr);
@@ -273,5 +274,44 @@ namespace ao::tui::test
     CHECK(escape.starts_with("\033_Ga=T,i=99,f=100,t=d,c=24,r=12,q=2,m=1;"));
     CHECK(escape.contains("\033_Gm=0;"));
     CHECK(escape.ends_with("\033\\"));
+  }
+
+  TEST_CASE("CoverArt - cover columns adapt to cell aspect ratio", "[tui][unit][cover-art]")
+  {
+    CHECK(coverArtColumns(12, 0.50) == 24);
+    CHECK(coverArtColumns(12, 0.60) == 20);
+    CHECK(coverArtColumns(12, 0.62) == 19);
+    CHECK(coverArtColumns(12, 0.625) == 19);
+    CHECK(coverArtColumns(12, 0.40) == 30);
+    // In-range aspect ratios that hit the clamp bounds
+    CHECK(coverArtColumns(12, 0.30) == kMaximumCoverArtColumns);
+    CHECK(coverArtColumns(12, 1.50) == kMinimumCoverArtColumns);
+    // Invalid / out-of-bounds ratios fall back to default
+    CHECK(coverArtColumns(12, 0.05) == coverArtColumns(12, kDefaultCellAspectRatio));
+    CHECK(coverArtColumns(12, 3.00) == coverArtColumns(12, kDefaultCellAspectRatio));
+    CHECK(coverArtColumns(12, 0.0) == coverArtColumns(12, kDefaultCellAspectRatio));
+    CHECK(coverArtColumns(0, 0.60) == kCoverArtDefaultColumns);
+    CHECK(coverArtColumns(-1, 0.60) == kCoverArtDefaultColumns);
+  }
+
+  TEST_CASE("CoverArt - implausible cell geometry does not size artwork", "[tui][unit][cover-art]")
+  {
+    // Every platform query funnels through here, so this is where a terminal
+    // reporting nonsense stops mattering.
+    CHECK(acceptedCellAspectRatio(10.0, 20.0) == 0.50);
+    CHECK(acceptedCellAspectRatio(6.0, 10.0) == 0.60);
+    CHECK(acceptedCellAspectRatio(20.0, 10.0) == 2.00);
+
+    // A terminal reporting no pixel geometry leaves a zero dimension behind.
+    CHECK(acceptedCellAspectRatio(0.0, 20.0) == kDefaultCellAspectRatio);
+    CHECK(acceptedCellAspectRatio(10.0, 0.0) == kDefaultCellAspectRatio);
+    CHECK(acceptedCellAspectRatio(-10.0, 20.0) == kDefaultCellAspectRatio);
+
+    // Ratios past the plausible range are rejected rather than clamped, so an
+    // absurd report cannot masquerade as an extreme but usable font.
+    CHECK(acceptedCellAspectRatio(1.0, 20.0) == kDefaultCellAspectRatio);
+    CHECK(acceptedCellAspectRatio(60.0, 10.0) == kDefaultCellAspectRatio);
+    CHECK(acceptedCellAspectRatio(kMinimumCellAspectRatio, 1.0) == kMinimumCellAspectRatio);
+    CHECK(acceptedCellAspectRatio(kMaximumCellAspectRatio, 1.0) == kMaximumCellAspectRatio);
   }
 } // namespace ao::tui::test

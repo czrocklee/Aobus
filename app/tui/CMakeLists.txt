@@ -39,9 +39,9 @@ add_library(aobus-tui-lib STATIC
 )
 
 if(WIN32)
-    target_sources(aobus-tui-lib PRIVATE SignalExitWatcherWindows.cpp)
+    target_sources(aobus-tui-lib PRIVATE SignalExitWatcherWindows.cpp TerminalCellMetricsWindows.cpp)
 else()
-    target_sources(aobus-tui-lib PRIVATE SignalExitWatcherPosix.cpp)
+    target_sources(aobus-tui-lib PRIVATE SignalExitWatcherPosix.cpp TerminalCellMetricsPosix.cpp)
 endif()
 
 target_include_directories(aobus-tui-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")

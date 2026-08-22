@@ -10,6 +10,7 @@
 #include "TrackDetailLines.h"
 #include "TrackListEntry.h"
 #include "TuiTextCatalog.h"
+#include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
@@ -21,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <format>
 #include <optional>
 #include <print>
 #include <string>
@@ -75,12 +77,25 @@ namespace ao::tui
       return std::move(popoverPtr) | ftxui::borderEmpty | ftxui::clear_under;
     }
 
+    /**
+     * @brief DEC private mode 2026, which holds the terminal's rendering until
+     *        the end escape arrives.
+     *
+     * Writing a delete and its replacement draw in one call still leaves the
+     * terminal free to render between parsing them, because it renders on its
+     * own clock rather than per write. Bracketing the pair is what actually
+     * makes it one frame. A terminal without the mode ignores it and sees the
+     * two escapes back to back, which is the behavior without this bracket.
+     */
+    constexpr std::string_view kSynchronizedUpdateBegin = "\033[?2026h";
+    constexpr std::string_view kSynchronizedUpdateEnd = "\033[?2026l";
+
     /// The cells Kitty paints into, held open by an element that draws nothing.
-    ftxui::Element kittyCoverArtReservation()
+    ftxui::Element kittyCoverArtReservation(std::int32_t const columns)
     {
       using namespace ftxui;
 
-      return text("") | size(WIDTH, EQUAL, kCoverArtColumns) | size(HEIGHT, EQUAL, kCoverArtRows);
+      return text("") | size(WIDTH, EQUAL, columns) | size(HEIGHT, EQUAL, kCoverArtRows);
     }
 
     /// The label column this locale asks for, capped and delimiter included.
@@ -133,10 +148,33 @@ namespace ao::tui
     }
   } // namespace
 
+  void defaultKittyEscapeSink(std::string_view const escapeSequence)
+  {
+    std::print("{}", escapeSequence);
+    std::fflush(stdout);
+  }
+
+  bool isValidBox(ftxui::Box const& box)
+  {
+    return box.x_max > box.x_min && box.y_max > box.y_min;
+  }
+
+  bool isSameBox(ftxui::Box const& left, ftxui::Box const& right)
+  {
+    return left.x_min == right.x_min && left.x_max == right.x_max && left.y_min == right.y_min &&
+           left.y_max == right.y_max;
+  }
+
+  bool isSameKittyImage(KittyPaintState const& state, ResourceId const coverArtId, ftxui::Box const& coverBox)
+  {
+    return state.visible && coverArtId == state.paintedCoverArtId && isSameBox(coverBox, state.paintedCoverBox);
+  }
+
   ftxui::Element detailCoverArt(uimodel::PresentationTextCatalog const& textCatalog,
                                 CoverArtDeliveryMode const mode,
                                 std::optional<CoverArtRows> const& optPreview,
                                 std::optional<std::vector<std::byte>> const& optKittyPng,
+                                std::int32_t const columns,
                                 ftxui::Box* const optArtworkBox)
   {
     using namespace ftxui;
@@ -155,7 +193,7 @@ namespace ao::tui
 
     if (mode == CoverArtDeliveryMode::Kitty)
     {
-      artworkPtr = optKittyPng ? kittyCoverArtReservation() : Element{};
+      artworkPtr = optKittyPng ? kittyCoverArtReservation(columns) : Element{};
     }
     else
     {
@@ -184,18 +222,66 @@ namespace ao::tui
     return availableRows >= kCoverArtRows + kDetailChromeRows + worstCaseMetadataRows;
   }
 
-  void paintKittyCoverArt(ftxui::Box const& coverBox, std::vector<std::byte> const& png)
+  std::string kittyCoverArtPaintEscape(ftxui::Box const& coverBox, std::vector<std::byte> const& png)
   {
-    if (coverBox.x_max <= coverBox.x_min || coverBox.y_max <= coverBox.y_min)
+    if (!isValidBox(coverBox))
     {
+      return {};
+    }
+
+    auto const columns = coverBox.x_max - coverBox.x_min + 1;
+    auto const rows = coverBox.y_max - coverBox.y_min + 1;
+
+    return std::format(
+      "\033[s\033[{};{}H{}\033[u", coverBox.y_min + 1, coverBox.x_min + 1, kittyImageEscape(png, columns, rows));
+  }
+
+  void updateKittyCoverArt(KittyPaintState& state,
+                           ResourceId const cachedCoverArtId,
+                           ftxui::Box const& coverBox,
+                           std::optional<std::vector<std::byte>> const& optKittyCoverArtPng,
+                           KittyEscapeSink const& sink)
+  {
+    auto const shouldShow = optKittyCoverArtPng && isValidBox(coverBox);
+
+    if (shouldShow)
+    {
+      if (isSameKittyImage(state, cachedCoverArtId, coverBox))
+      {
+        return;
+      }
+
+      // A first paint has nothing to delete, so it is already one operation.
+      // A replacement is a delete plus a draw and has to be bracketed, or the
+      // terminal may render the moment it holds neither.
+      auto escape = std::string{};
+
+      if (state.visible)
+      {
+        escape.append(kSynchronizedUpdateBegin);
+        escape.append(kittyDeleteImageEscape(kKittyCoverArtImageId));
+        escape.append(kittyCoverArtPaintEscape(coverBox, *optKittyCoverArtPng));
+        escape.append(kSynchronizedUpdateEnd);
+      }
+      else
+      {
+        escape = kittyCoverArtPaintEscape(coverBox, *optKittyCoverArtPng);
+      }
+
+      sink(escape);
+      state.paintedCoverArtId = cachedCoverArtId;
+      state.paintedCoverBox = coverBox;
+      state.visible = true;
       return;
     }
 
-    std::print("\033[s\033[{};{}H{}\033[u",
-               coverBox.y_min + 1,
-               coverBox.x_min + 1,
-               kittyImageEscape(png, kCoverArtColumns, kCoverArtRows));
-    std::fflush(stdout);
+    if (!shouldShow && state.visible)
+    {
+      sink(kittyDeleteImageEscape(kKittyCoverArtImageId));
+      state.visible = false;
+      state.paintedCoverArtId = kInvalidResourceId;
+      state.paintedCoverBox = {};
+    }
   }
 
   ftxui::Element centerPopover(ftxui::Element popoverPtr)
@@ -214,10 +300,11 @@ namespace ao::tui
   }
 
   std::int32_t detailPaneColumns(uimodel::PresentationTextCatalog const& textCatalog,
-                                 std::int32_t const terminalColumns)
+                                 std::int32_t const terminalColumns,
+                                 std::int32_t const coverColumns)
   {
     auto const labelColumns = detailLabelContentColumns(textCatalog);
-    auto contentColumns = std::max(kCoverArtColumns, labelColumns + kDetailValueColumns);
+    auto contentColumns = std::max(coverColumns, labelColumns + kDetailValueColumns);
     contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackDetailTitle)));
     contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackNoSelection)));
 
@@ -227,14 +314,9 @@ namespace ao::tui
   ftxui::Element detailPane(uimodel::PresentationTextCatalog const& textCatalog,
                             TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
-                            std::int32_t columns)
+                            std::int32_t const columns)
   {
     using namespace ftxui;
-
-    if (columns <= 0)
-    {
-      columns = detailPaneColumns(textCatalog, 0);
-    }
 
     auto const bodyColumns = style::popupPanelBodyColumns(columns);
     auto const split = detailBodySplit(textCatalog, bodyColumns);

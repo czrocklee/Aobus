@@ -183,9 +183,14 @@ When the selected primary id changes and cover display is active, TUI clears its
 A frame that will not show artwork starts no window at all, so a detail pane whose terminal is too short for both artwork and metadata costs no read or transform.
 Block mode decodes `ResourceBytes::view()` on a worker, center-crops to a square, scales to two samples per terminal row, composites alpha over the fixed background, and renders upper-half blocks after a cancellation-checked callback-executor hop.
 
-Kitty mode decodes the same supported raster set on a worker, center-crops and scales it, encodes bounded PNG output, base64-chunks it into Kitty transmission escapes, and paints fixed image id `1` into the current cover box after the same current-task hop.
-Both modes claim the same `24x12` terminal cells and render the artwork alone, without a title, separator, or border of its own inside the detail frame.
+Kitty mode decodes the same supported raster set on a worker, center-crops and scales it, encodes bounded square PNG output, base64-chunks it into Kitty transmission escapes, and paints fixed image id `1` into the current cover box after the same current-task hop.
+Both modes claim the same terminal cells and render the artwork alone, without a title, separator, or border of its own inside the detail frame.
+The slot is twelve rows tall, and its column count is the width that makes those rows square on the terminal the session started on: the cell aspect ratio is measured once at startup, ratios outside `0.20` to `2.00` are rejected in favor of `0.60`, and the resulting column count is clamped to `12` through `32`, giving `20` columns on a terminal that reports nothing.
+That one column count is what the block transform decodes against, what the Kitty reservation holds open, and what the detail pane reserves its width for, so the three cannot disagree; it is fixed for the session, so a font-size change does not resize an already-decoded transform.
 The detail frame clears its reflected cover box before every conditional artwork slot, so a frame reserving no cells leaves an invalid box; moving, hiding, replacing, or exiting deletes the previously visible Kitty image as required by paint state.
+Kitty geometry comes from the reflected box rather than the requested slot, so a pane that clamped the reservation still paints the image into the cells it actually holds.
+An image whose resource id and box both match what paint state already placed emits nothing, so a redrawn frame does not retransmit it.
+A replacement writes its delete and its draw together, bracketed by synchronized update mode `2026`, so a terminal honoring that mode renders the pair as one frame rather than the moment that holds neither; a terminal ignoring the mode receives the same two escapes back to back.
 
 A burst of selection changes replaces the settle window each time, so the burst costs one read and one transform for the resource still selected, not one per step.
 The settle window decides only whether a read is worth starting; the current-resource fence, not the delay, is what prevents a stale transform from publishing.

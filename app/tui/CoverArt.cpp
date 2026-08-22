@@ -36,6 +36,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -378,6 +379,35 @@ namespace ao::tui
     return output;
   }
 
+  double acceptedCellAspectRatio(double const cellWidth, double const cellHeight) noexcept
+  {
+    if (cellWidth <= 0.0 || cellHeight <= 0.0)
+    {
+      return kDefaultCellAspectRatio;
+    }
+
+    auto const ratio = cellWidth / cellHeight;
+
+    // A ratio far outside a plausible cell shape is a terminal reporting
+    // nonsense rather than an unusual font, so it does not get to size artwork.
+    return ratio >= kMinimumCellAspectRatio && ratio <= kMaximumCellAspectRatio ? ratio : kDefaultCellAspectRatio;
+  }
+
+  std::int32_t coverArtColumns(std::int32_t const rows, double const cellAspectRatio) noexcept
+  {
+    if (rows <= 0)
+    {
+      return kCoverArtDefaultColumns;
+    }
+
+    auto const ratio = (cellAspectRatio >= kMinimumCellAspectRatio && cellAspectRatio <= kMaximumCellAspectRatio)
+                         ? cellAspectRatio
+                         : kDefaultCellAspectRatio;
+
+    auto const rawCols = static_cast<double>(rows) / ratio;
+    return std::clamp(static_cast<std::int32_t>(std::round(rawCols)), kMinimumCoverArtColumns, kMaximumCoverArtColumns);
+  }
+
   ftxui::Element renderCoverArtPreview(std::optional<CoverArtRows> const& optPreview)
   {
     using namespace ftxui;
@@ -386,6 +416,9 @@ namespace ao::tui
     {
       return {};
     }
+
+    auto const columns = static_cast<std::int32_t>(optPreview->front().size());
+    auto const rows = static_cast<std::int32_t>(optPreview->size());
 
     auto lines = Elements{};
     lines.reserve(optPreview->size());
@@ -403,6 +436,6 @@ namespace ao::tui
       lines.push_back(hbox(std::move(cells)));
     }
 
-    return vbox(std::move(lines)) | size(WIDTH, EQUAL, kCoverArtColumns) | size(HEIGHT, EQUAL, kCoverArtRows);
+    return vbox(std::move(lines)) | size(WIDTH, EQUAL, columns) | size(HEIGHT, EQUAL, rows);
   }
 } // namespace ao::tui

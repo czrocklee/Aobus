@@ -43,14 +43,45 @@ namespace ao::tui
    *
    * Blocks paints these cells itself and Kitty reserves them for an image the
    * terminal draws, so the two modes claim the same area and a mode switch
-   * cannot move the surrounding layout.
+   * cannot move the surrounding layout. The rows are fixed; the columns come
+   * from @ref coverArtColumns so the slot is square on the terminal it runs
+   * on, and fall back to @ref kCoverArtDefaultColumns when it says nothing.
    */
-  constexpr std::int32_t kCoverArtColumns = 24;
+  constexpr std::int32_t kCoverArtDefaultColumns = 20;
   constexpr std::int32_t kCoverArtRows = 12;
+  constexpr double kDefaultCellAspectRatio = 0.60;
+  constexpr double kMinimumCellAspectRatio = 0.20;
+  constexpr double kMaximumCellAspectRatio = 2.00;
+  constexpr std::int32_t kMinimumCoverArtColumns = 12;
+  constexpr std::int32_t kMaximumCoverArtColumns = 32;
   constexpr std::uint32_t kKittyCoverArtImageId = 1;
   constexpr std::int32_t kMaximumCoverArtDimension = 8192;
   constexpr std::uint64_t kMaximumCoverArtPixels = 32'000'000;
   constexpr std::size_t kMaximumGeneratedCoverArtBytes = std::size_t{8U} * 1024U * 1024U;
+
+  /**
+   * @brief The ratio when @p cellWidth by @p cellHeight is a plausible cell
+   *        shape, otherwise @ref kDefaultCellAspectRatio.
+   *
+   * Every platform query ends here, so the range a terminal has to land in to
+   * size artwork is stated once rather than per platform.
+   */
+  double acceptedCellAspectRatio(double cellWidth, double cellHeight) noexcept;
+
+  /**
+   * @brief Queries the terminal cell aspect ratio (width / height) from the
+   *        controlling terminal once for session layout.
+   *
+   * Defined per platform, because the Windows console query needs `windows.h`
+   * and its `RGB` macro cannot share a translation unit with `ftxui::Color`.
+   */
+  double queryTerminalCellAspectRatio() noexcept;
+
+  /**
+   * @brief Derives the column count required to render artwork square at
+   *        @p rows rows given @p cellAspectRatio.
+   */
+  std::int32_t coverArtColumns(std::int32_t rows, double cellAspectRatio) noexcept;
 
   struct CoverArtDecodeLimits final
   {

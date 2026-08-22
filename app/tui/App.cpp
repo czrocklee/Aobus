@@ -252,17 +252,6 @@ namespace ao::tui
       return mode == CoverArtMode::Blocks || (mode == CoverArtMode::Auto && !supportsKittyGraphics());
     }
 
-    bool isValidBox(ftxui::Box const& box)
-    {
-      return box.x_max > box.x_min && box.y_max > box.y_min;
-    }
-
-    bool isSameBox(ftxui::Box const& left, ftxui::Box const& right)
-    {
-      return left.x_min == right.x_min && left.x_max == right.x_max && left.y_min == right.y_min &&
-             left.y_max == right.y_max;
-    }
-
     class PeriodicRefresh final
     {
     public:
@@ -330,56 +319,6 @@ namespace ao::tui
       return uimodel::FrameClock::fromMicros(micros);
     }
 
-    struct KittyPaintState final
-    {
-      bool visible = false;
-      ResourceId paintedCoverArtId = kInvalidResourceId;
-      ftxui::Box paintedCoverBox{};
-    };
-
-    bool isSameKittyImage(KittyPaintState const& state, ResourceId const coverArtId, ftxui::Box const& coverBox)
-    {
-      return state.visible && coverArtId == state.paintedCoverArtId && isSameBox(coverBox, state.paintedCoverBox);
-    }
-
-    /**
-     * @brief Brings the out-of-band Kitty image in line with the drawn frame.
-     *
-     * The frame reflects a box only when it actually reserved artwork cells, so
-     * an invalid box is how a frame says the image has no place any more and
-     * the terminal must be told to drop it.
-     */
-    void updateKittyCoverArt(KittyPaintState& state,
-                             ResourceId const cachedCoverArtId,
-                             ftxui::Box const& coverBox,
-                             std::optional<std::vector<std::byte>> const& optKittyCoverArtPng)
-    {
-      auto const shouldShow = optKittyCoverArtPng && isValidBox(coverBox);
-
-      if (shouldShow)
-      {
-        if (state.visible && !isSameKittyImage(state, cachedCoverArtId, coverBox))
-        {
-          std::print("{}", kittyDeleteImageEscape(kKittyCoverArtImageId));
-        }
-
-        paintKittyCoverArt(coverBox, *optKittyCoverArtPng);
-        state.paintedCoverArtId = cachedCoverArtId;
-        state.paintedCoverBox = coverBox;
-        state.visible = true;
-        return;
-      }
-
-      if (!shouldShow && state.visible)
-      {
-        std::print("{}", kittyDeleteImageEscape(kKittyCoverArtImageId));
-        std::fflush(stdout);
-        state.visible = false;
-        state.paintedCoverArtId = kInvalidResourceId;
-        state.paintedCoverBox = {};
-      }
-    }
-
     struct AppFrameRenderer final
     {
       FrameTimer& frameTimer;
@@ -398,6 +337,7 @@ namespace ao::tui
       std::optional<std::chrono::milliseconds>& optPreviewElapsed;
       CoverArtLoader& coverArt;
       CoverArtDeliveryMode coverArtMode = CoverArtDeliveryMode::Off;
+      std::int32_t coverColumns = kCoverArtDefaultColumns;
       uimodel::AobusSoulAnimationState soulAnimation{};
       std::optional<uimodel::FrameClock::TimePoint> optPreviousSoulFrameTime;
 
@@ -431,6 +371,7 @@ namespace ao::tui
                                               coverArtVisible ? coverArtMode : CoverArtDeliveryMode::Off,
                                               coverArt.preview(),
                                               coverArt.kittyPng(),
+                                              coverColumns,
                                               &hitRegions.coverBox);
         auto const currentListTitle = library.currentListTitle();
         auto const& state = playback.snapshot().transport;
@@ -523,7 +464,8 @@ namespace ao::tui
           }
           case Overlay::DetailPanel:
           {
-            auto const panelColumns = detailPaneColumns(textCatalog, sidePanelColumnsLimit(terminalColumns));
+            auto const panelColumns =
+              detailPaneColumns(textCatalog, sidePanelColumnsLimit(terminalColumns), coverColumns);
             mainContentPtr = hbox({
               workspaceElementPtr,
               detailPane(textCatalog, selectedTrackView.track, std::move(coverElementPtr), panelColumns),
@@ -822,11 +764,14 @@ namespace ao::tui
     auto hitRegions = TuiHitRegions{};
     auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
     auto kittyPaintState = KittyPaintState{};
+    auto const cellAspectRatio = queryTerminalCellAspectRatio();
+    auto const coverColumns = coverArtColumns(kCoverArtRows, cellAspectRatio);
 
     auto& playback = runtime.playback();
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
     auto resourceByteLoader = rt::ResourceByteLoader{runtime};
-    auto coverArt = CoverArtLoader{resourceByteLoader, runtime.async(), coverArtDeliveryMode, requestRefresh};
+    auto coverArt =
+      CoverArtLoader{resourceByteLoader, runtime.async(), coverArtDeliveryMode, requestRefresh, coverColumns};
     auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.snapshot().transport.transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
@@ -909,6 +854,7 @@ namespace ao::tui
       .optPreviewElapsed = optPreviewElapsed,
       .coverArt = coverArt,
       .coverArtMode = coverArtDeliveryMode,
+      .coverColumns = coverColumns,
       .soulAnimation = {},
       .optPreviousSoulFrameTime = std::nullopt,
     };

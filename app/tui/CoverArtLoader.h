@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <stop_token>
@@ -49,7 +50,8 @@ namespace ao::tui
     CoverArtLoader(rt::ResourceByteLoader& byteLoader,
                    async::Runtime& runtime,
                    CoverArtDeliveryMode mode,
-                   RefreshCallback refresh);
+                   RefreshCallback refresh,
+                   std::int32_t columns);
     ~CoverArtLoader();
 
     CoverArtLoader(CoverArtLoader const&) = delete;
@@ -62,6 +64,7 @@ namespace ao::tui
     void cancel() noexcept;
 
     ResourceId resourceId() const noexcept { return _resourceId; }
+    std::int32_t columns() const noexcept { return _columns; }
     std::optional<CoverArtRows> const& preview() const noexcept { return _optPreview; }
     std::optional<std::vector<std::byte>> const& kittyPng() const noexcept { return _optKittyPng; }
 
@@ -73,6 +76,7 @@ namespace ao::tui
     static async::Task<void> load(CoverArtLoader* loader,
                                   async::Runtime* runtime,
                                   CoverArtDeliveryMode mode,
+                                  std::int32_t columns,
                                   rt::ResourceBytes bytes,
                                   std::stop_token stopToken);
     void startByteRequest(ResourceId resourceId);
@@ -81,6 +85,7 @@ namespace ao::tui
     async::Runtime& _runtime;
     CoverArtDeliveryMode _mode;
     RefreshCallback _refresh;
+    std::int32_t _columns;
     ResourceId _resourceId = kInvalidResourceId;
     std::optional<CoverArtRows> _optPreview;
     std::optional<std::vector<std::byte>> _optKittyPng;

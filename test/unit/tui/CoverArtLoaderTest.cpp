@@ -19,6 +19,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -124,7 +125,8 @@ namespace ao::tui::test
                                    {
                                      completionOnExecutor = fixture.executor().isCurrent();
                                    }
-                                 }};
+                                 },
+                                 kCoverArtDefaultColumns};
     observedLoader = &loader;
 
     loader.request(resourceId);
@@ -139,8 +141,30 @@ namespace ao::tui::test
     CHECK(refreshCount == 2);
     CHECK(completionOnExecutor);
     CHECK(loader.resourceId() == resourceId);
-    REQUIRE(loader.preview()->size() == 12);
-    REQUIRE(loader.preview()->front().size() == 24);
+    REQUIRE(loader.preview()->size() == static_cast<std::size_t>(kCoverArtRows));
+    REQUIRE(loader.preview()->front().size() == static_cast<std::size_t>(loader.columns()));
+  }
+
+  TEST_CASE("CoverArtLoader - block delivery decodes at the width it was given", "[tui][unit][cover-art]")
+  {
+    // The width Detail reserves is measured from the terminal, so a loader that
+    // decoded against its own idea of the slot would publish artwork the pane
+    // cannot hold. Anything but the constructed width fails here.
+    constexpr std::int32_t kRequestedColumns = kCoverArtDefaultColumns + 7;
+
+    auto fixture = CoverArtLoaderFixture{};
+    auto const resourceId = fixture.addResource(support::onePixelRedPng());
+    auto loader = CoverArtLoader{
+      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [] {}, kRequestedColumns};
+
+    CHECK(loader.columns() == kRequestedColumns);
+
+    loader.request(resourceId);
+
+    REQUIRE(fixture.settleSelection());
+    REQUIRE(fixture.executor().drainUntil([&] { return loader.preview().has_value(); }));
+    REQUIRE(loader.preview()->size() == static_cast<std::size_t>(kCoverArtRows));
+    CHECK(loader.preview()->front().size() == static_cast<std::size_t>(kRequestedColumns));
   }
 
   TEST_CASE("CoverArtLoader - Kitty delivery publishes bounded PNG output", "[tui][unit][cover-art][concurrency]")
@@ -148,8 +172,11 @@ namespace ao::tui::test
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Kitty, [&] { ++refreshCount; }};
+    auto loader = CoverArtLoader{fixture.byteLoader(),
+                                 fixture.runtimeAsync(),
+                                 CoverArtDeliveryMode::Kitty,
+                                 [&] { ++refreshCount; },
+                                 kCoverArtDefaultColumns};
 
     loader.request(resourceId);
 
@@ -165,8 +192,11 @@ namespace ao::tui::test
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
-    auto loader =
-      CoverArtLoader{fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Off, [&] { ++refreshCount; }};
+    auto loader = CoverArtLoader{fixture.byteLoader(),
+                                 fixture.runtimeAsync(),
+                                 CoverArtDeliveryMode::Off,
+                                 [&] { ++refreshCount; },
+                                 kCoverArtDefaultColumns};
 
     loader.request(resourceId);
     fixture.executor().drain();
@@ -188,8 +218,11 @@ namespace ao::tui::test
     auto const oldResourceId = fixture.addResource(support::onePixelRedPng());
     auto const missingResourceId = ResourceId{987654};
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [&] { ++refreshCount; }};
+    auto loader = CoverArtLoader{fixture.byteLoader(),
+                                 fixture.runtimeAsync(),
+                                 CoverArtDeliveryMode::Blocks,
+                                 [&] { ++refreshCount; },
+                                 kCoverArtDefaultColumns};
 
     loader.request(oldResourceId);
     loader.request(missingResourceId);
@@ -220,8 +253,11 @@ namespace ao::tui::test
     }
 
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [&] { ++refreshCount; }};
+    auto loader = CoverArtLoader{fixture.byteLoader(),
+                                 fixture.runtimeAsync(),
+                                 CoverArtDeliveryMode::Blocks,
+                                 [&] { ++refreshCount; },
+                                 kCoverArtDefaultColumns};
 
     for (auto const resourceId : resourceIds)
     {
@@ -255,8 +291,11 @@ namespace ao::tui::test
     auto const firstResourceId = fixture.addResource(support::distinctPng(1));
     auto const secondResourceId = fixture.addResource(support::distinctPng(2));
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [&] { ++refreshCount; }};
+    auto loader = CoverArtLoader{fixture.byteLoader(),
+                                 fixture.runtimeAsync(),
+                                 CoverArtDeliveryMode::Blocks,
+                                 [&] { ++refreshCount; },
+                                 kCoverArtDefaultColumns};
 
     loader.request(firstResourceId);
     // The window expires, but its resumption is still queued when the selection
@@ -275,8 +314,11 @@ namespace ao::tui::test
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [&] { ++refreshCount; }};
+    auto loader = CoverArtLoader{fixture.byteLoader(),
+                                 fixture.runtimeAsync(),
+                                 CoverArtDeliveryMode::Blocks,
+                                 [&] { ++refreshCount; },
+                                 kCoverArtDefaultColumns};
 
     loader.request(resourceId);
     REQUIRE(refreshCount == 1);
@@ -299,7 +341,11 @@ namespace ao::tui::test
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
     auto loaderPtr = std::make_unique<CoverArtLoader>(
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [&] { ++refreshCount; });
+      fixture.byteLoader(),
+      fixture.runtimeAsync(),
+      CoverArtDeliveryMode::Blocks,
+      [&] { ++refreshCount; },
+      kCoverArtDefaultColumns);
 
     loaderPtr->request(resourceId);
     REQUIRE(refreshCount == 1);
@@ -319,7 +365,11 @@ namespace ao::tui::test
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
     auto loaderPtr = std::make_unique<CoverArtLoader>(
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [&] { ++refreshCount; });
+      fixture.byteLoader(),
+      fixture.runtimeAsync(),
+      CoverArtDeliveryMode::Blocks,
+      [&] { ++refreshCount; },
+      kCoverArtDefaultColumns);
 
     loaderPtr->request(resourceId);
     REQUIRE(refreshCount == 1);

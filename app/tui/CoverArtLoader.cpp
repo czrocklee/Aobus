@@ -20,15 +20,15 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::int32_t kKittyCoverArtWidth = 768;
-    constexpr std::int32_t kKittyCoverArtHeight = 384;
+    constexpr std::int32_t kKittyCoverArtDimension = 512;
   } // namespace
 
   CoverArtLoader::CoverArtLoader(rt::ResourceByteLoader& byteLoader,
                                  async::Runtime& runtime,
                                  CoverArtDeliveryMode const mode,
-                                 RefreshCallback refresh)
-    : _byteLoader{byteLoader}, _runtime{runtime}, _mode{mode}, _refresh{std::move(refresh)}
+                                 RefreshCallback refresh,
+                                 std::int32_t const columns)
+    : _byteLoader{byteLoader}, _runtime{runtime}, _mode{mode}, _refresh{std::move(refresh)}, _columns{columns}
   {
   }
 
@@ -115,18 +115,19 @@ namespace ao::tui
   {
     _byteRequest = _byteLoader.request(
       resourceId,
-      [this, mode = _mode](rt::ResourceBytes bytes)
+      [this, mode = _mode, columns = _columns](rt::ResourceBytes bytes)
       {
-        _task = _runtime.spawnCancellable(
-          [loader = this, runtime = &_runtime, mode, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
-          { return load(loader, runtime, mode, std::move(bytes), stopToken); },
-          "TUI cover-art decode workflow");
+        _task = _runtime.spawnCancellable([loader = this, runtime = &_runtime, mode, columns, bytes = std::move(bytes)](
+                                            std::stop_token const stopToken) mutable
+                                          { return load(loader, runtime, mode, columns, std::move(bytes), stopToken); },
+                                          "TUI cover-art decode workflow");
       });
   }
 
   async::Task<void> CoverArtLoader::load(CoverArtLoader* const loader,
                                          async::Runtime* const runtime,
                                          CoverArtDeliveryMode const mode,
+                                         std::int32_t const columns,
                                          rt::ResourceBytes bytes,
                                          std::stop_token const stopToken)
   {
@@ -137,12 +138,12 @@ namespace ao::tui
 
     if (mode == CoverArtDeliveryMode::Blocks)
     {
-      optPreview = decodeCoverArtPreview(
-        bytes.view(), static_cast<std::size_t>(kCoverArtColumns), static_cast<std::size_t>(kCoverArtRows));
+      optPreview =
+        decodeCoverArtPreview(bytes.view(), static_cast<std::size_t>(columns), static_cast<std::size_t>(kCoverArtRows));
     }
     else if (mode == CoverArtDeliveryMode::Kitty)
     {
-      optKittyPng = decodeCoverArtPng(bytes.view(), kKittyCoverArtWidth, kKittyCoverArtHeight);
+      optKittyPng = decodeCoverArtPng(bytes.view(), kKittyCoverArtDimension, kKittyCoverArtDimension);
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);

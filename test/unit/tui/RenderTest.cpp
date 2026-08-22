@@ -58,7 +58,7 @@ namespace ao::tui::test
 
     std::int32_t englishDetailPaneColumns(std::int32_t const terminalColumns)
     {
-      return detailPaneColumns(ao::test::englishPresentationTextCatalog(), terminalColumns);
+      return detailPaneColumns(ao::test::englishPresentationTextCatalog(), terminalColumns, kCoverArtDefaultColumns);
     }
 
     ftxui::Element englishDetailPane(TrackListEntry const* const selectedTrack,
@@ -75,6 +75,25 @@ namespace ao::tui::test
     /// The cap the pane puts on a field label, matching the GTK detail grid.
     constexpr std::int32_t kDetailLabelColumns = 12;
     constexpr std::int32_t kDetailValueColumns = 24;
+
+    constexpr std::string_view kSynchronizedUpdateBegin = "\033[?2026h";
+    constexpr std::string_view kSynchronizedUpdateEnd = "\033[?2026l";
+    constexpr std::string_view kKittyDeletePrefix = "\033_Ga=d";
+    constexpr std::string_view kKittyDrawPrefix = "\033[s";
+
+    /// Delete then draw, both inside one synchronized update, in one write.
+    void checkBracketedReplacement(std::string const& escape)
+    {
+      CHECK(escape.starts_with(kSynchronizedUpdateBegin));
+      CHECK(escape.ends_with(kSynchronizedUpdateEnd));
+
+      auto const deleteOffset = escape.find(kKittyDeletePrefix);
+      auto const drawOffset = escape.find(kKittyDrawPrefix);
+
+      REQUIRE(deleteOffset != std::string::npos);
+      REQUIRE(drawOffset != std::string::npos);
+      CHECK(deleteOffset < drawOffset);
+    }
 
     std::int32_t boxColumns(ftxui::Box const& box)
     {
@@ -139,10 +158,10 @@ namespace ao::tui::test
                           .codec = AudioCodec::Flac};
     }
 
-    CoverArtRows solidPreview()
+    CoverArtRows solidPreview(std::int32_t const columns = kCoverArtDefaultColumns)
     {
       return CoverArtRows(static_cast<std::size_t>(kCoverArtRows),
-                          std::vector<CoverArtCell>(static_cast<std::size_t>(kCoverArtColumns), CoverArtCell{}));
+                          std::vector<CoverArtCell>(static_cast<std::size_t>(columns), CoverArtCell{}));
     }
 
     ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t const columns = 0)
@@ -330,8 +349,12 @@ namespace ao::tui::test
     auto artworkBox = ftxui::Box{};
     auto paneBox = ftxui::Box{};
     auto const optPreview = std::optional{solidPreview()};
-    auto coverPtr = detailCoverArt(
-      ao::test::englishPresentationTextCatalog(), CoverArtDeliveryMode::Blocks, optPreview, std::nullopt, &artworkBox);
+    auto coverPtr = detailCoverArt(ao::test::englishPresentationTextCatalog(),
+                                   CoverArtDeliveryMode::Blocks,
+                                   optPreview,
+                                   std::nullopt,
+                                   kCoverArtDefaultColumns,
+                                   &artworkBox);
 
     REQUIRE(coverPtr != nullptr);
 
@@ -339,35 +362,47 @@ namespace ao::tui::test
 
     CHECK(rendered.text.contains("Track Detail"));
     CHECK_FALSE(rendered.text.contains("Cover Art"));
-    CHECK(boxColumns(artworkBox) == kCoverArtColumns);
+    CHECK(boxColumns(artworkBox) == kCoverArtDefaultColumns);
     CHECK(boxRows(artworkBox) == kCoverArtRows);
   }
 
   TEST_CASE("Render - block and Kitty artwork claim the same cells", "[tui][unit][render][cover-art]")
   {
     auto const& textCatalog = ao::test::englishPresentationTextCatalog();
-    auto const columns = englishDetailPaneColumns(120);
     auto const populated = englishTrackListEntry(fullyPopulatedRow());
-    auto const optPreview = std::optional{solidPreview()};
     auto const optPng = std::optional{std::vector{std::byte{0x89}}};
-    auto blockBox = ftxui::Box{};
-    auto kittyBox = ftxui::Box{};
-    auto paneBox = ftxui::Box{};
 
-    renderBesideWorkspace(
-      englishDetailPane(&populated,
-                        detailCoverArt(textCatalog, CoverArtDeliveryMode::Blocks, optPreview, std::nullopt, &blockBox),
-                        columns),
-      paneBox);
-    renderBesideWorkspace(
-      englishDetailPane(
-        &populated, detailCoverArt(textCatalog, CoverArtDeliveryMode::Kitty, std::nullopt, optPng, &kittyBox), columns),
-      paneBox);
+    // The width is whatever the terminal measured, so parity has to hold across
+    // the range coverArtColumns can produce, not just at the fallback.
+    for (auto const coverColumns : {kMinimumCoverArtColumns, kCoverArtDefaultColumns, kMaximumCoverArtColumns})
+    {
+      CAPTURE(coverColumns);
 
-    CHECK(blockBox.x_min == kittyBox.x_min);
-    CHECK(blockBox.x_max == kittyBox.x_max);
-    CHECK(blockBox.y_min == kittyBox.y_min);
-    CHECK(blockBox.y_max == kittyBox.y_max);
+      auto const columns = detailPaneColumns(textCatalog, 120, coverColumns);
+      auto const optPreview = std::optional{solidPreview(coverColumns)};
+      auto blockBox = ftxui::Box{};
+      auto kittyBox = ftxui::Box{};
+      auto paneBox = ftxui::Box{};
+
+      renderBesideWorkspace(
+        englishDetailPane(
+          &populated,
+          detailCoverArt(textCatalog, CoverArtDeliveryMode::Blocks, optPreview, std::nullopt, coverColumns, &blockBox),
+          columns),
+        paneBox);
+      renderBesideWorkspace(
+        englishDetailPane(
+          &populated,
+          detailCoverArt(textCatalog, CoverArtDeliveryMode::Kitty, std::nullopt, optPng, coverColumns, &kittyBox),
+          columns),
+        paneBox);
+
+      CHECK(boxColumns(blockBox) == coverColumns);
+      CHECK(blockBox.x_min == kittyBox.x_min);
+      CHECK(blockBox.x_max == kittyBox.x_max);
+      CHECK(blockBox.y_min == kittyBox.y_min);
+      CHECK(blockBox.y_max == kittyBox.y_max);
+    }
   }
 
   TEST_CASE("Render - artwork the loader has not published costs one line", "[tui][unit][render][cover-art]")
@@ -377,7 +412,8 @@ namespace ao::tui::test
     auto const populated = englishTrackListEntry(fullyPopulatedRow());
     auto artworkBox = ftxui::Box{.x_min = 1, .x_max = 24, .y_min = 1, .y_max = 12};
     auto paneBox = ftxui::Box{};
-    auto coverPtr = detailCoverArt(textCatalog, CoverArtDeliveryMode::Kitty, std::nullopt, std::nullopt, &artworkBox);
+    auto coverPtr = detailCoverArt(
+      textCatalog, CoverArtDeliveryMode::Kitty, std::nullopt, std::nullopt, kCoverArtDefaultColumns, &artworkBox);
 
     REQUIRE(coverPtr != nullptr);
 
@@ -399,6 +435,89 @@ namespace ao::tui::test
     CHECK_FALSE(detailPaneShowsCoverArt(24 - 2));
   }
 
+  TEST_CASE("Render - Kitty paint state prevents redundant repaint and updates on change",
+            "[tui][unit][render][cover-art]")
+  {
+    auto state = KittyPaintState{};
+    auto const resourceId1 = ResourceId{101};
+    auto const resourceId2 = ResourceId{202};
+    auto const box1 = ftxui::Box{.x_min = 10, .x_max = 34, .y_min = 5, .y_max = 17};
+    auto const box2 = ftxui::Box{.x_min = 12, .x_max = 36, .y_min = 6, .y_max = 18};
+    auto const invalidBox = ftxui::Box{.x_min = 0, .x_max = 0, .y_min = 0, .y_max = 0};
+    auto const optPngBytes =
+      std::optional{std::vector{std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}}};
+
+    auto emitted = std::vector<std::string>{};
+    auto const sink = [&emitted](std::string_view const s) { emitted.emplace_back(s); };
+
+    CHECK(isValidBox(box1));
+    CHECK_FALSE(isValidBox(invalidBox));
+    CHECK(isSameBox(box1, box1));
+    CHECK_FALSE(isSameBox(box1, box2));
+
+    // Initially unpainted
+    CHECK_FALSE(state.visible);
+    CHECK(state.paintedCoverArtId == kInvalidResourceId);
+
+    // A first paint is one operation, so it needs no synchronized update
+    updateKittyCoverArt(state, resourceId1, box1, optPngBytes, sink);
+    CHECK(state.visible);
+    CHECK(state.paintedCoverArtId == resourceId1);
+    CHECK(isSameBox(state.paintedCoverBox, box1));
+    CHECK(isSameKittyImage(state, resourceId1, box1));
+    REQUIRE(emitted.size() == 1);
+    CHECK(emitted.front().starts_with("\033[s"));
+    CHECK_FALSE(emitted.front().contains(kSynchronizedUpdateBegin));
+
+    // Redundant update with identical resource ID and box is a no-op (preserves state, emits nothing)
+    emitted.clear();
+    updateKittyCoverArt(state, resourceId1, box1, optPngBytes, sink);
+    CHECK(state.visible);
+    CHECK(state.paintedCoverArtId == resourceId1);
+    CHECK(isSameBox(state.paintedCoverBox, box1));
+    CHECK(emitted.empty());
+
+    // Changing the box replaces the image: one write, delete before draw, and
+    // bracketed so a terminal honoring mode 2026 cannot render between them.
+    emitted.clear();
+    updateKittyCoverArt(state, resourceId1, box2, optPngBytes, sink);
+    CHECK(state.visible);
+    CHECK(state.paintedCoverArtId == resourceId1);
+    CHECK(isSameBox(state.paintedCoverBox, box2));
+    REQUIRE(emitted.size() == 1);
+    checkBracketedReplacement(emitted.front());
+
+    // Changing the resource id replaces the image the same way
+    emitted.clear();
+    updateKittyCoverArt(state, resourceId2, box2, optPngBytes, sink);
+    CHECK(state.visible);
+    CHECK(state.paintedCoverArtId == resourceId2);
+    CHECK(isSameBox(state.paintedCoverBox, box2));
+    REQUIRE(emitted.size() == 1);
+    checkBracketedReplacement(emitted.front());
+
+    // Removing the PNG clears state; a lone delete is already one operation
+    emitted.clear();
+    updateKittyCoverArt(state, resourceId2, box2, std::nullopt, sink);
+    CHECK_FALSE(state.visible);
+    CHECK(state.paintedCoverArtId == kInvalidResourceId);
+    CHECK_FALSE(isValidBox(state.paintedCoverBox));
+    REQUIRE(emitted.size() == 1);
+    CHECK(emitted.front().starts_with("\033_Ga=d"));
+    CHECK_FALSE(emitted.front().contains(kSynchronizedUpdateBegin));
+
+    // Invalid box when PNG is present also clears state and emits delete
+    emitted.clear();
+    updateKittyCoverArt(state, resourceId1, box1, optPngBytes, sink);
+    CHECK(state.visible);
+    emitted.clear();
+    updateKittyCoverArt(state, resourceId1, invalidBox, optPngBytes, sink);
+    CHECK_FALSE(state.visible);
+    CHECK(state.paintedCoverArtId == kInvalidResourceId);
+    REQUIRE(emitted.size() == 1);
+    CHECK(emitted.front().starts_with("\033_Ga=d"));
+  }
+
   TEST_CASE("Render - detail without a selection says so and shows nothing else", "[tui][unit][render][detail]")
   {
     auto const columns = englishDetailPaneColumns(120);
@@ -409,7 +528,7 @@ namespace ao::tui::test
                                                              CoverArtDeliveryMode::Blocks,
                                                              std::optional{solidPreview()},
                                                              std::nullopt,
-                                                             nullptr),
+                                                             kCoverArtDefaultColumns),
                                               columns),
                             paneBox);
 
@@ -425,7 +544,7 @@ namespace ao::tui::test
     for (auto const* const locale : {"de-DE", "es-ES", "fr-FR", "ja-JP", "zh-Hans-CN", "zh-Hant-TW", "qps-ploc"})
     {
       auto const textCatalog = ao::test::presentationTextCatalog(locale);
-      auto const columns = detailPaneColumns(textCatalog, kTerminalColumns / 2);
+      auto const columns = detailPaneColumns(textCatalog, kTerminalColumns / 2, kCoverArtDefaultColumns);
       auto const sparse = makeTrackListEntry(textCatalog, sparseRow());
       auto const populated = makeTrackListEntry(textCatalog, fullyPopulatedRow());
       auto sparseBox = ftxui::Box{};
