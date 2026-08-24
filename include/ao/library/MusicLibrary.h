@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -31,6 +31,19 @@ namespace ao::library
   public:
     struct Options final
     {
+      static constexpr std::uint32_t kDefaultMaxReaders = 512;
+
+      /**
+       * Requested maximum number of simultaneous native read transactions.
+       *
+       * Zero skips LMDB's max-reader configuration. LMDB may grow its
+       * persistent reader table only while this opener holds the exclusive
+       * environment lock; a concurrent opener adopts the existing capacity,
+       * and no opener shrinks it. The application default is higher because
+       * independent runtime snapshots can overlap.
+       */
+      std::uint32_t maxReaders = kDefaultMaxReaders;
+
       /**
        * Pins the database's capacity at exactly this many bytes, with no growth.
        *

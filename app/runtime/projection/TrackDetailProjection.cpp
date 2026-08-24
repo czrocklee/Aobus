@@ -53,24 +53,24 @@ namespace ao::rt
     }
 
     template<typename T>
-    AggregateValue<T> aggregate(std::vector<T> const& values)
+    void addAggregateValue(AggregateValue<T>& aggregate, T value)
     {
-      if (values.empty())
+      if (aggregate.mixed)
       {
-        return {};
+        return;
       }
 
-      auto const& firstValue = values.front();
-
-      for (std::size_t i = 1; i < values.size(); ++i)
+      if (!aggregate.optValue)
       {
-        if (values[i] != firstValue)
-        {
-          return {.mixed = true};
-        }
+        aggregate.optValue = std::move(value);
+        return;
       }
 
-      return {.optValue = firstValue};
+      if (*aggregate.optValue != value)
+      {
+        aggregate.optValue.reset();
+        aggregate.mixed = true;
+      }
     }
 
     struct CustomAggregationState final
@@ -83,7 +83,7 @@ namespace ao::rt
     void aggregateFields(library::TrackView const& view,
                          library::DictionaryStore const& dictionary,
                          library::FileManifestStore::Reader const* manifestReader,
-                         std::array<std::vector<TrackFieldRawValue>, kTrackFieldCount>& fieldValues)
+                         std::array<AggregateValue<TrackFieldRawValue>, kTrackFieldCount>& fieldAggregates)
     {
       for (auto const& def : trackFieldDefinitions())
       {
@@ -92,8 +92,14 @@ namespace ao::rt
           continue;
         }
 
-        auto val = readTrackFieldRawValue(def.field, view, dictionary, manifestReader);
-        trackFieldArrayAt(fieldValues, def.field).push_back(std::move(val));
+        auto& aggregate = trackFieldArrayAt(fieldAggregates, def.field);
+
+        if (aggregate.mixed)
+        {
+          continue;
+        }
+
+        addAggregateValue(aggregate, readTrackFieldRawValue(def.field, view, dictionary, manifestReader));
       }
     }
 
@@ -366,7 +372,6 @@ namespace ao::rt
       return snap;
     }
 
-    auto fieldValues = std::array<std::vector<TrackFieldRawValue>, kTrackFieldCount>{};
     auto customAggregates = std::map<std::string, CustomAggregationState>{};
     std::size_t loadedCount = 0;
 
@@ -380,21 +385,13 @@ namespace ao::rt
       }
 
       loadedCount++;
-      aggregateFields(*optView, dictionary, &manifestReader, fieldValues);
+      aggregateFields(*optView, dictionary, &manifestReader, snap.fields);
       aggregateCustom(*optView, dictionary, customAggregates);
     }
 
     if (loadedCount == 0)
     {
       return snap;
-    }
-
-    auto fieldIter = snap.fields.begin();
-
-    for (auto const& values : fieldValues)
-    {
-      *fieldIter = aggregate(values);
-      ++fieldIter;
     }
 
     for (auto const& [key, state] : customAggregates)

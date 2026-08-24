@@ -184,6 +184,26 @@ namespace ao::rt::test
     CHECK(snap.fields[static_cast<std::size_t>(F::Album)].mixed);
   }
 
+  TEST_CASE("TrackDetailProjection - mixed field remains mixed when a later value matches the first",
+            "[runtime][unit][projection][detail]")
+  {
+    auto env = TrackDetailProjectionFixture{};
+    auto const id1 = env.addTrack(library::test::TrackSpec{.title = "Repeated", .artist = "Same"});
+    auto const id2 = env.addTrack(library::test::TrackSpec{.title = "Different", .artist = "Same"});
+    auto const id3 = env.addTrack(library::test::TrackSpec{.title = "Repeated", .artist = "Same"});
+
+    auto const projPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector{id1, id2, id3}});
+    auto const snap = projPtr->snapshot();
+    auto const& title = snap.fields[static_cast<std::size_t>(F::Title)];
+    auto const& artist = snap.fields[static_cast<std::size_t>(F::Artist)];
+
+    CHECK(title.mixed);
+    CHECK_FALSE(title.optValue);
+    CHECK_FALSE(artist.mixed);
+    REQUIRE(artist.optValue);
+    CHECK(aggregateString(artist) == "Same");
+  }
+
   TEST_CASE("TrackDetailProjection - explicit selection target snapshots provided track ids",
             "[runtime][unit][projection][detail]")
   {

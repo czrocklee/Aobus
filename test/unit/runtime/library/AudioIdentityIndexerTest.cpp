@@ -18,9 +18,11 @@
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryScan.h>
@@ -157,6 +159,61 @@ namespace ao::rt::test
       };
     }
 
+    struct PendingManifestFixture final
+    {
+      std::string uri{};
+      std::uint64_t fileSize = 0;
+      std::uint64_t mtime = 0;
+    };
+
+    void addPendingManifestRows(library::MusicLibrary& ml, std::size_t const count)
+    {
+      auto fixtures = std::vector<PendingManifestFixture>{};
+      fixtures.reserve(count);
+
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        auto uri = std::format("song-{:04}.flac", index);
+        auto const path = ml.rootPath() / uri;
+        auto output = std::ofstream{path, std::ios::binary};
+        REQUIRE(output);
+        output.close();
+
+        fixtures.push_back(PendingManifestFixture{
+          .uri = std::move(uri),
+          .fileSize = std::filesystem::file_size(path),
+          .mtime = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                std::filesystem::last_write_time(path).time_since_epoch())
+                                                .count()),
+        });
+      }
+
+      auto transaction = library::test::writeTransaction(ml);
+      auto addRes = transaction.apply(
+        [&fixtures](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+
+          for (auto const& fixture : fixtures)
+          {
+            auto track = library::TrackBuilder::makeEmpty();
+            auto const trackSpec = library::test::makeEmptyTrackSpec(fixture.uri);
+            library::test::applyTrackSpec(track, trackSpec);
+            auto manifest = library::FileManifestBuilder::makeEmpty();
+            manifest.fileSize(fixture.fileSize).mtime(fixture.mtime).status(library::FileStatus::Available);
+
+            if (auto createRes = writer.create(track, std::move(manifest)); !createRes)
+            {
+              return std::unexpected{createRes.error()};
+            }
+          }
+
+          return {};
+        });
+      REQUIRE(addRes);
+      REQUIRE(transaction.commit());
+    }
+
     // Drives the indexer coroutine to completion on a private runtime. The
     // future blocks the test thread, never a pool thread.
     Result<AudioIdentityIndexResult> runIndexPending(library::MusicLibrary& ml,
@@ -230,6 +287,39 @@ namespace ao::rt::test
     {
       CHECK(manifestHasIdentity(ml, std::format("song{}.flac", index)));
     }
+  }
+
+  TEST_CASE("AudioIdentityIndexer - processes pending rows across range-cursor batch boundaries",
+            "[runtime][regression][audio-identity][pagination]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    constexpr std::size_t kTrackCount = 257;
+    addPendingManifestRows(ml, kTrackCount);
+
+    auto fingerprintCount = std::atomic{std::size_t{0}};
+    auto options = AudioIdentityIndexer::Options{
+      .maxConcurrency = 4,
+      .fingerprint = [&fingerprintCount](std::filesystem::path const&,
+                                         library::AudioIdentityProgressCallback,
+                                         std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+      {
+        fingerprintCount.fetch_add(1);
+        return std::optional{fakeIdentity()};
+      }};
+
+    auto result = runIndexPending(ml, std::move(options));
+
+    REQUIRE(result);
+    CHECK(std::cmp_equal(result->completedCount, kTrackCount));
+    CHECK(result->skippedCount == 0);
+    CHECK(result->failureCount == 0);
+    CHECK(fingerprintCount.load() == kTrackCount);
+    CHECK(manifestHasIdentity(ml, "song-0000.flac"));
+    CHECK(manifestHasIdentity(ml, "song-0255.flac"));
+    CHECK(manifestHasIdentity(ml, "song-0256.flac"));
   }
 
   TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently", "[runtime][unit][audio-identity][concurrency]")

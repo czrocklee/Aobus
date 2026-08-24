@@ -33,7 +33,7 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - An **integer-key database** is an `IntegerKeyDatabase` token whose public reader and writer accept only `std::uint32_t` keys and whose writer owns append allocation.
 - A **byte-key database** is a `ByteKeyDatabase` token whose public reader and writer accept only byte-span keys.
 - A **reader** borrows a transaction and returns byte views into that transaction's snapshot.
-- A **writer** borrows an active write transaction and owns a cursor for its database.
+- A **writer** borrows an active write transaction and holds one cursor for its database; the native write transaction owns final cursor disposal.
 - **End** is the normal cursor state represented by `MDB_NOTFOUND` during iteration.
 - An **operational fault** is an LMDB failure other than the normal absence/end cases declared by a particular operation.
 
@@ -52,7 +52,8 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - An exhausted map is its own recoverable code, distinct from a full disk and from an exhausted identifier space, because only the exhausted map may succeed on a repeat with more capacity.
 - Environment paths crossing this adapter are UTF-8, matching LMDB's own decoding, and are converted explicitly rather than through a platform's narrow-string default.
 - Native environment handles are private to the adapter; public callers compose transactions and databases rather than bypassing their ownership checks.
-- A byte span, key view, iterator value, reader, or writer obtained from a transaction does not outlive the transaction that supplies its storage or cursor state.
+- A byte span, key view, iterator value, or operation through a reader, iterator, or writer does not outlive the active transaction that supplies its storage or cursor state.
+- Destroying a reader, iterator, or writer after that transaction ends is safe and does not inspect the borrowed transaction object.
 - Explicitly aborting or destroying an uncommitted write transaction aborts all of its staged changes.
 - An unexpected failure from a mutating LMDB primitive aborts the complete write transaction before control returns; swallowing the reported error cannot make earlier staged writes committable.
 - Calling `commit()` consumes the native write transaction whether commit succeeds or fails; the transaction and every writer created from it are terminal afterward.
@@ -93,6 +94,9 @@ Destruction closes the native handle; the same process may then reopen that path
 An iterator is positioned on one record or is end.
 Construction seeks the first record; increment seeks the next record; `MDB_NOTFOUND` transitions to end.
 Dereference and increment require the positioned state.
+An iterator created from a read-only transaction closes its native cursor explicitly, including when the transaction has already ended.
+An iterator or writer created from a write transaction leaves cursor disposal to that native transaction, which tracks all of its cursors and closes them during commit or abort.
+Consequently, destroying a write-backed wrapper early may retain its native cursor until the short write transaction ends, but destroying the wrapper after transaction teardown never double-closes a cursor or dereferences a dead transaction wrapper.
 
 ### Writer allocation cursor
 
@@ -198,8 +202,10 @@ Opening a database from an inactive transaction or creating a reader/writer from
 | `Reader::get` | Transaction-scoped byte span. | `std::nullopt`. | Fatal on an ordinary read transaction; private transaction failure on a write transaction. |
 | `Writer::get` | Transaction-scoped byte span. | `std::nullopt`. | Private transaction failure. |
 | `Reader::maxKey` | Largest integer key. | `0`. | Same channel as `Reader::get`. |
+| `ByteKeyDatabase::Reader::lowerBound` | First key/value whose key is not less than the target. | End sentinel. | Same channel as `Reader::get`. |
 | Iterator construction/increment | Current key/value view. | End sentinel. | Same channel as the owning transaction. |
 
+`ByteKeyDatabase::Reader::lowerBound` requires a nonempty target; an empty target violates `AO_EXPECTS` rather than aliasing `begin()`.
 Reader iteration follows database key order and yields borrowed key/value spans.
 Integer `maxKey` reads the last database key at the time of the transaction snapshot; it is distinct from the writer's cached append cursor.
 
@@ -334,7 +340,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`EnvironmentDataFileTest.cpp`](../../../test/unit/lmdb/EnvironmentDataFileTest.cpp) protects allocation staying proportional to committed use under a large configured map, across a reopen, over a data file an earlier session left behind, on a non-ASCII path, and under deterministic concurrent preparation and concurrent first opens.
 - [`TransactionTest.cpp`](../../../test/unit/lmdb/TransactionTest.cpp) protects top-level-only construction, read/write lifetime, commit, abort, moves, and bounded deterministic database-open serialization plus commit/abort/destruction release across environments.
 - [`DatabaseTest.cpp`](../../../test/unit/lmdb/DatabaseTest.cpp) protects write-transaction-only database admission, create-capable and existing-only exact flag validation for both named-token types, exact byte-key main-database validation, missing existing databases, and failed-open rollback.
-- [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseByteKeyTest.cpp`](../../../test/unit/lmdb/DatabaseByteKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, byte-key ordering and operations, compile-time key-operation isolation, integer-key coercion, and maximum-key behavior.
+- [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseByteKeyTest.cpp`](../../../test/unit/lmdb/DatabaseByteKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, byte-key ordering and lower-bound seeks, compile-time key-operation isolation, integer-key coercion, maximum-key behavior, and safe integer-key and byte-key wrapper destruction after read or write transaction teardown.
 - [`DatabaseWriterTest.cpp`](../../../test/unit/lmdb/DatabaseWriterTest.cpp) protects compile-time key-operation isolation, the copied-data-only public writer surface, source-private integer reservation encoding and append, clear-and-reappend allocation, exhaustion, update, delete, write reads, conflicts, mutation-failure exception unwinding and rollback, moves, and use-after-commit faults.
 - [`MapCapacityPolicyTest.cpp`](../../../test/unit/lmdb/MapCapacityPolicyTest.cpp) protects the grow-only rule: a default policy leaving the map alone, the floor lifting a smaller map without lowering a larger one, doubling once the peak passes half and repeating until it fits, the ceiling stopping growth without shrinking a map already past it, additive growth and its absence where a file holds no hole, and saturation near the representable limit.
 - [`ResultErrorTest.cpp`](../../../test/unit/lmdb/ResultErrorTest.cpp) protects native-code mapping including the exhausted-map, stale-mapping, full-disk, and full-transaction separation, and caller source-location capture.
@@ -343,6 +349,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
   and the library fatal subprocess scenarios under
   [`test/fatal/`](../../../test/fatal) use the governed read-fault seam to
   protect admission, writer-root, and post-open ownership respectively.
+- [`LibraryProbeTest.cpp`](../../../test/unit/library/LibraryProbeTest.cpp) and its library fatal subprocess scenarios protect adapter call-order contracts that require process isolation, including rejection of an empty lower-bound target.
 
 ## Related documents
 

@@ -104,6 +104,8 @@ namespace ao::library
     };
 
     Iterator begin() const;
+    /** Returns the first manifest whose URI is not less than `uri`. */
+    Iterator lowerBound(std::string_view uri) const;
     EndSentinel end() const { return {}; }
 
   private:

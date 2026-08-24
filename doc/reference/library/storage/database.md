@@ -25,7 +25,11 @@ This surface belongs to the **core libraries** layer in the [system architecture
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
 Application composition keeps only one live environment for a database path in each process, as required by LMDB; `MusicLibrary` has no canonical-path registry or duplicate-open admission mechanism.
 Independent processes may open the same environment under LMDB's normal locking rules.
-`MusicLibrary::open` uses `MDB_NOTLS` and allows eight named databases.
+`MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and configures the LMDB reader table through `MusicLibrary::Options::maxReaders`.
+That option is a requested table size, defaults to `512`, and skips `mdb_env_set_maxreaders` when zero.
+The effective capacity comes from the persistent LMDB lock file: an opener that acquires the exclusive environment lock may grow a smaller table to the requested size, a concurrent opener adopts the existing size, and no opener shrinks a larger table.
+Each live `MusicLibrary::readTransaction()` snapshot occupies one effective slot until destruction under `MDB_NOTLS`.
+Exhausting that table follows the existing fatal transaction-begin contract owned by the [library architecture](../../../architecture/library.md#failure-cancellation-and-lifetime-boundaries); `maxReaders` raises capacity but is not a concurrency throttle.
 That map is the capacity this environment may grow into, not disk it occupies: the [LMDB adapter](../../../spec/storage/lmdb-operation.md) prepares the data file so allocation follows committed use, and a full map remains the point at which mutation fails with `StorageFull`.
 `MusicLibrary::storageCapacity()` reports that capacity as `mapBytes` together with the `highWaterBytes` the database has needed; the high water is the peak page extent rather than live data, so deleting rows does not lower it.
 
@@ -297,7 +301,7 @@ Dictionary rows created for a referencing record are written in the same LMDB tr
 
 Zero payload length together with an all-zero signature means pending audio identity.
 
-Manifest point reads, iteration, and writes share one exact record validator.
+Manifest point reads, lower-bound seeks, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
 Values must be exactly 48 bytes, carry a nonzero Track id, a declared status, three zero reserved bytes, and either both parts of an audio identity or neither.
 Preparation is split because a creating write only allocates the owning Track id once its Track record exists.
@@ -305,6 +309,7 @@ Preparation is split because a creating write only allocates the owning Track id
 `FileManifestBuilder::Unbound::bind()` supplies the nonzero owning Track id, cannot fail, and reapplies the complete payload validator as its postcondition, so every stored value still passes one exact validator.
 It consumes its unbound value exactly once; rebinding a consumed value surrenders the validated key and is a caller call-order violation that fails through `AO_EXPECTS`.
 `FileManifestStore::Writer::put()` accepts only the bound prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
+`FileManifestStore::Reader::lowerBound(uri)` validates that canonical URI key and returns the first manifest whose URI is not less than it in LMDB byte order.
 Only a point-read `NotFound` may be interpreted as absence.
 Point reads and iterator dereference after a successful open assume the validated Store invariant; a malformed row fails through `AO_INVARIANT` rather than being skipped, returned as partial output, or exposed through a private library error carrier.
 
@@ -419,8 +424,8 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
 - [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
 - [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks the prepared-only writer surface, pre-mutation validation, and post-open fail-fast point-read, writer-read, and iteration behavior.
-- [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock unbound and bound snapshots, binding-independent validation, the prepared-only writer surface, manifest validation, point-read outcomes, and post-open iterator fail-fast behavior.
-- [`LibraryProbeTest.cpp`](../../../../test/unit/library/LibraryProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, LMDB lifetime misuse, and bounded normal child-process observations.
+- [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock unbound and bound snapshots, binding-independent validation, the prepared-only writer surface, manifest validation, point-read and lower-bound outcomes, and post-open iterator fail-fast behavior.
+- [`LibraryProbeTest.cpp`](../../../../test/unit/library/LibraryProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, LMDB lifetime misuse, empty lower-bound rejection, fresh-environment reader-table exhaustion, the default request exceeding LMDB's 126-slot baseline through 160 simultaneous snapshots, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) locks a runtime YAML consumer's post-open Resource-reference invariant to the same fatal diagnostics.
 - [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, named-DBI-open, cursor-row, and manifest-point-read evidence.
 - [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior.

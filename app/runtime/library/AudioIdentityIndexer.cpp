@@ -92,15 +92,16 @@ namespace ao::rt
       auto rows = std::vector<PendingIdentityRow>{};
       auto const transaction = ml.readTransaction();
       auto const reader = ml.manifest().reader(transaction);
+      auto it = optAfterUri ? reader.lowerBound(*optAfterUri) : reader.begin();
 
-      for (auto const& [uriView, view] : reader)
+      for (; it != reader.end(); ++it)
       {
-        auto uri = std::string{uriView};
+        auto const [uriView, view] = *it;
 
         // Pagination relies on the manifest reader yielding URIs in strictly
         // increasing lexicographic byte order (LMDB's default memcmp
         // comparator for byte keys); a custom comparator would break it.
-        if (optAfterUri && uri <= *optAfterUri)
+        if (optAfterUri && uriView <= *optAfterUri)
         {
           continue;
         }
@@ -111,6 +112,7 @@ namespace ao::rt
           continue;
         }
 
+        auto uri = std::string{uriView};
         auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .mtime = view.mtime()};
 
         if (auto parsedRes = library::LibraryUri::parse(uri); !parsedRes)

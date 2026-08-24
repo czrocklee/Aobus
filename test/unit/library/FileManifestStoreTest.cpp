@@ -156,6 +156,45 @@ namespace ao::library::test
     }
   }
 
+  TEST_CASE("FileManifestStore::Reader - lowerBound seeks by canonical URI order", "[library][unit][manifest]")
+  {
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
+    auto wtxn = writeTransaction(library);
+    auto writer = physicalWriter(store, wtxn);
+    auto builder = FileManifestBuilder::makeEmpty().fileSize(123).mtime(456).status(FileStatus::Available);
+
+    for (auto const uri : std::array<std::string_view, 3>{"alpha.flac", "delta.flac", "omega.flac"})
+    {
+      auto const prepared = ao::test::requireValue(builder.validate(uri)).bind(TrackId{42});
+      REQUIRE(writer.put(prepared));
+    }
+
+    REQUIRE(wtxn.commit());
+    auto const rtxn = library.readTransaction();
+    auto const reader = store.reader(rtxn);
+
+    SECTION("exact URI")
+    {
+      auto const it = reader.lowerBound("delta.flac");
+      REQUIRE(it != reader.end());
+      CHECK((*it).first == "delta.flac");
+    }
+
+    SECTION("URI between stored keys")
+    {
+      auto const it = reader.lowerBound("echo.flac");
+      REQUIRE(it != reader.end());
+      CHECK((*it).first == "omega.flac");
+    }
+
+    SECTION("URI after the final key")
+    {
+      CHECK(reader.lowerBound("zulu.flac") == reader.end());
+    }
+  }
+
   TEST_CASE("FileManifestStore - remove is idempotent", "[library][unit][manifest]")
   {
     auto fixture = LibraryStoreFixture{};

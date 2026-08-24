@@ -962,6 +962,7 @@ namespace ao::library
                                             lmdb::Environment::Options{.flags = lmdb::kEnvNoTls,
                                                                        .mode = kLmdbFileMode,
                                                                        .maxDatabases = kLmdbMaxDatabases,
+                                                                       .maxReaders = options.maxReaders,
                                                                        .pinnedMapBytes = options.pinnedMapBytes,
                                                                        .capacity = capacityPolicyFor(options)});
 

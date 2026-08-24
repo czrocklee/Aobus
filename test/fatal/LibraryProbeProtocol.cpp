@@ -169,6 +169,20 @@ namespace ao::library::test
                                    "Database.cpp:",
                                    "IntegerKeyDatabase::Reader::KeyView::operator",
                                    true},
+      LibraryFatalProbeExpectation{"lmdb-empty-lower-bound-key",
+                                   "expects",
+                                   "!key.empty()",
+                                   "ByteKeyDatabase::Reader::lowerBound requires a non-empty key",
+                                   "Database.cpp:",
+                                   "ByteKeyDatabase::Reader::lowerBound",
+                                   true},
+      LibraryFatalProbeExpectation{"fresh-reader-capacity-exhaustion",
+                                   "fatal",
+                                   {},
+                                   "Failed to begin library read transaction: mdb_txn_begin",
+                                   "MusicLibrary.cpp:",
+                                   "MusicLibrary::readTransaction",
+                                   true},
       LibraryFatalProbeExpectation{"nested-apply",
                                    "expects",
                                    "!_implPtr->operationActive",
@@ -214,6 +228,7 @@ namespace ao::library::test
     static constexpr auto kExpectations = std::array{
       LibraryProbeObservationExpectation{
         "normal-observation", "observation=probe-ready", "Library probe diagnostic-only marker"},
+      LibraryProbeObservationExpectation{"default-reader-capacity", "readers=160", {}, true},
     };
 
     return kExpectations;

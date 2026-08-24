@@ -27,6 +27,14 @@ namespace ao::lmdb
   {
     class DatabaseAccess;
     class ReservationWriterAccess;
+
+    // Read-only transactions leave cursor disposal to the caller. Write
+    // transactions track every cursor and dispose of them at commit or abort.
+    enum class CursorCleanup : std::uint8_t
+    {
+      Explicit,
+      WriteTransaction
+    };
   } // namespace detail
 
   class ReadTransaction;
@@ -59,7 +67,7 @@ namespace ao::lmdb
   };
 
   /**
-   * ByteKeyDatabase - An LMDB DBI with arbitrary byte-string keys.
+   * ByteKeyDatabase - An LMDB DBI with non-empty byte-string keys.
    */
   class ByteKeyDatabase final
   {
@@ -87,6 +95,10 @@ namespace ao::lmdb
 
   /**
    * IntegerKeyDatabase::Reader - Read-only integer-key access within a transaction.
+   *
+   * The referenced transaction must remain active while an operation or
+   * iterator access is in progress. Reader and iterator destruction remains
+   * safe after the transaction ends.
    */
   class IntegerKeyDatabase::Reader final
   {
@@ -147,6 +159,7 @@ namespace ao::lmdb
 
     struct MdbCursorDeleter final
     {
+      detail::CursorCleanup cleanup = detail::CursorCleanup::Explicit;
       void operator()(MDB_cursor* cursor) const noexcept;
     };
 
@@ -191,7 +204,6 @@ namespace ao::lmdb
     Iterator(MDB_txn* transaction, ReadTransaction const& owner, DbiHandle dbi);
 
     void ensureActive() const;
-    void releaseFinishedCursor() noexcept;
     void next();
 
     Reader::CursorPtr _cursorPtr;
@@ -203,6 +215,10 @@ namespace ao::lmdb
 
   /**
    * ByteKeyDatabase::Reader - Read-only byte-key access within a transaction.
+   *
+   * The referenced transaction must remain active while an operation or
+   * iterator access is in progress. Reader and iterator destruction remains
+   * safe after the transaction ends.
    */
   class ByteKeyDatabase::Reader final
   {
@@ -214,6 +230,12 @@ namespace ao::lmdb
     class Iterator;
 
     Iterator begin() const;
+    /**
+     * Returns the first record whose key is not less than `key`.
+     *
+     * `key` must not be empty; use `begin()` to seek the first record.
+     */
+    Iterator lowerBound(std::span<std::byte const> key) const;
     EndSentinel end() const { return {}; }
 
     std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
@@ -230,6 +252,7 @@ namespace ao::lmdb
 
     struct MdbCursorDeleter final
     {
+      detail::CursorCleanup cleanup = detail::CursorCleanup::Explicit;
       void operator()(MDB_cursor* cursor) const noexcept;
     };
 
@@ -272,9 +295,12 @@ namespace ao::lmdb
 
   private:
     Iterator(MDB_txn* transaction, ReadTransaction const& owner, DbiHandle dbi);
+    Iterator(MDB_txn* transaction,
+             ReadTransaction const& owner,
+             DbiHandle dbi,
+             std::span<std::byte const> lowerBoundKey);
 
     void ensureActive() const;
-    void releaseFinishedCursor() noexcept;
     void next();
 
     Reader::CursorPtr _cursorPtr;
@@ -287,8 +313,8 @@ namespace ao::lmdb
   /**
    * IntegerKeyDatabase::Writer - Integer-key write access within a transaction.
    *
-   * The referenced transaction must outlive the writer, including after move
-   * assignment replaces the borrowed transaction.
+   * The referenced transaction must remain active while an operation is in
+   * progress. Writer destruction remains safe after the transaction ends.
    */
   class [[nodiscard]] IntegerKeyDatabase::Writer final
   {
@@ -315,7 +341,6 @@ namespace ao::lmdb
     Writer(DbiHandle dbi, WriteTransaction& transaction);
 
     void ensureActive() const;
-    void releaseFinishedCursor() noexcept;
 
     Result<std::span<std::byte>> reserveCreate(std::uint32_t id, std::size_t size);
     Result<std::pair<std::uint32_t, std::span<std::byte>>> reserveAppend(std::size_t size);
@@ -333,8 +358,8 @@ namespace ao::lmdb
   /**
    * ByteKeyDatabase::Writer - Copied-value byte-key write access within a transaction.
    *
-   * The referenced transaction must outlive the writer, including after move
-   * assignment replaces the borrowed transaction.
+   * The referenced transaction must remain active while an operation is in
+   * progress. Writer destruction remains safe after the transaction ends.
    */
   class [[nodiscard]] ByteKeyDatabase::Writer final
   {
@@ -356,7 +381,6 @@ namespace ao::lmdb
     Writer(DbiHandle dbi, WriteTransaction& transaction);
 
     void ensureActive() const;
-    void releaseFinishedCursor() noexcept;
 
     DbiHandle _dbi;
     WriteTransaction* _txn;

@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <utility>
 
@@ -210,5 +211,56 @@ namespace ao::lmdb::test
     auto const reader = db.reader(rtxn);
     auto const it = reader.begin();
     CHECK(utility::bytes::stringView(it->second) == "value");
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - destruction remains safe after a read transaction ends",
+            "[lmdb][regression][cursor-lifetime]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+
+    auto seedTransaction = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(seedTransaction, "test");
+    REQUIRE(db.writer(seedTransaction).create(1, createStringData("value")));
+    REQUIRE(seedTransaction.commit());
+
+    auto iterator = IntegerKeyDatabase::Reader::Iterator{};
+
+    {
+      auto transaction = beginReadTransaction(env);
+      iterator = db.reader(transaction).begin();
+      REQUIRE(iterator != IntegerKeyDatabase::Reader::Iterator{});
+      CHECK(static_cast<std::uint32_t>(iterator->first) == 1);
+    }
+
+    iterator = {};
+    CHECK(iterator == IntegerKeyDatabase::Reader::Iterator{});
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Writer - destruction remains safe after its transaction object is gone",
+            "[lmdb][regression][cursor-lifetime]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+
+    auto createTransaction = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(createTransaction, "test");
+    REQUIRE(createTransaction.commit());
+
+    auto optWriter = std::optional<IntegerKeyDatabase::Writer>{};
+
+    {
+      auto transaction = beginWriteTransaction(env);
+      optWriter.emplace(db.writer(transaction));
+      REQUIRE(optWriter->create(7, createStringData("persisted")));
+      REQUIRE(transaction.commit());
+    }
+
+    optWriter.reset();
+
+    auto const transaction = beginReadTransaction(env);
+    auto const optData = db.reader(transaction).get(7);
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "persisted");
   }
 } // namespace ao::lmdb::test

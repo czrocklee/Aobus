@@ -45,6 +45,7 @@
 #include <system_error>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -182,6 +183,64 @@ namespace ao::library::test
       }
 
       return writeObservation("committed-revision=1");
+    }
+
+    std::int32_t runDefaultReaderCapacity(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes = MusicLibrary::open(
+        scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        return 3;
+      }
+
+      auto library = std::move(*libraryRes);
+      auto transactions = std::vector<ReadTransaction>{};
+      transactions.reserve(160);
+
+      for (std::size_t index = 0; index < 160; ++index)
+      {
+        transactions.push_back(library.readTransaction());
+      }
+
+      return writeObservation("readers=160");
+    }
+
+    std::int32_t runFreshReaderCapacityExhaustion(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes =
+        MusicLibrary::open(scratchPath,
+                           scratchPath / "db",
+                           MusicLibrary::Options{.maxReaders = 64, .pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        return 3;
+      }
+
+      auto library = std::move(*libraryRes);
+      auto transactions = std::vector<ReadTransaction>{};
+      transactions.reserve(65);
+
+      for (std::size_t index = 0; index < 65; ++index)
+      {
+        transactions.push_back(library.readTransaction());
+      }
+
+      return 3;
     }
 
     std::int32_t runCrossLibraryFact(std::string_view const scratchName, std::string_view const scenario)
@@ -720,6 +779,7 @@ namespace ao::library::test
 
       auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
       auto const invalidIntegerKey = scenario == "lmdb-invalid-integer-key";
+      auto const emptyLowerBoundKey = scenario == "lmdb-empty-lower-bound-key";
 
       if (invalidIntegerKey && !seedInvalidIntegerKeyDatabase(scratchPath))
       {
@@ -738,6 +798,26 @@ namespace ao::library::test
 
       if (!setupRes)
       {
+        return 3;
+      }
+
+      if (emptyLowerBoundKey)
+      {
+        auto databaseRes = lmdb::ByteKeyDatabase::open(*setupRes, "probe");
+
+        if (!databaseRes || !setupRes->commit())
+        {
+          return 3;
+        }
+
+        auto readRes = lmdb::ReadTransaction::begin(*environmentRes);
+
+        if (!readRes)
+        {
+          return 3;
+        }
+
+        std::ignore = databaseRes->reader(*readRes).lowerBound(std::span<std::byte const>{});
         return 3;
       }
 
@@ -1040,6 +1120,16 @@ namespace ao::library::test
       return runCommitRevision(scratchName);
     }
 
+    if (name == "default-reader-capacity")
+    {
+      return runDefaultReaderCapacity(scratchName);
+    }
+
+    if (name == "fresh-reader-capacity-exhaustion")
+    {
+      return runFreshReaderCapacityExhaustion(scratchName);
+    }
+
     if (name == "cross-library-write-revision" || name == "cross-library-operation-metadata")
     {
       return runCrossLibraryFact(scratchName, name);
@@ -1135,7 +1225,7 @@ namespace ao::library::test
 
     if (name == "lmdb-reader-moved-from" || name == "lmdb-writer-after-commit" || name == "lmdb-writer-from-finished" ||
         name == "lmdb-reader-after-write-commit" || name == "lmdb-iterator-after-write-commit" ||
-        name == "lmdb-invalid-integer-key")
+        name == "lmdb-invalid-integer-key" || name == "lmdb-empty-lower-bound-key")
     {
       return runLmdbContract(scratchName, name);
     }

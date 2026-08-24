@@ -96,6 +96,13 @@ namespace ao::library
     return Iterator{_reader.begin()};
   }
 
+  FileManifestStore::Reader::Iterator FileManifestStore::Reader::lowerBound(std::string_view const uri) const
+  {
+    validateUri(uri);
+    auto const key = detail::PaddedFileManifestKey{uri};
+    return Iterator{_reader.lowerBound(key.bytes())};
+  }
+
   std::optional<FileManifestView> FileManifestStore::Writer::get(std::string_view uri) const
   {
     validateUri(uri);

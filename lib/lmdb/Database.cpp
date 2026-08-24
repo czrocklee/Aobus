@@ -24,7 +24,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 
 namespace ao::lmdb
@@ -186,6 +185,27 @@ namespace ao::lmdb
       auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
       auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
       auto const code = ::mdb_cursor_get(cursor, &key, &value, operation);
+
+      if (code == MDB_NOTFOUND)
+      {
+        record = {};
+        return false;
+      }
+
+      failRead("mdb_cursor_get", code, transactionOwned);
+      record = {.key = utility::bytes::view(static_cast<void const*>(key.mv_data), key.mv_size),
+                .value = utility::bytes::view(static_cast<void const*>(value.mv_data), value.mv_size)};
+      return true;
+    }
+
+    bool positionCursorAtOrAfter(MDB_cursor* cursor,
+                                 std::span<std::byte const> const keyView,
+                                 bool const transactionOwned,
+                                 RawRecord& record)
+    {
+      auto key = makeVal(keyView.data(), keyView.size());
+      auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
+      auto const code = ::mdb_cursor_get(cursor, &key, &value, MDB_SET_RANGE);
 
       if (code == MDB_NOTFOUND)
       {
@@ -453,14 +473,19 @@ namespace ao::lmdb
 
   void IntegerKeyDatabase::Reader::MdbCursorDeleter::operator()(MDB_cursor* cursor) const noexcept
   {
-    ::mdb_cursor_close(cursor);
+    if (cleanup == detail::CursorCleanup::Explicit)
+    {
+      ::mdb_cursor_close(cursor);
+    }
   }
 
   IntegerKeyDatabase::Reader::CursorPtr IntegerKeyDatabase::Reader::create(MDB_txn* transaction,
                                                                            ReadTransaction const& owner,
                                                                            DbiHandle const dbi)
   {
-    return CursorPtr{openCursor(transaction, dbi, detail::DatabaseAccess::transactionOwned(owner))};
+    auto const transactionOwned = detail::DatabaseAccess::transactionOwned(owner);
+    auto const cleanup = transactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
+    return CursorPtr{openCursor(transaction, dbi, transactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
   }
 
   void IntegerKeyDatabase::Reader::ensureActive() const
@@ -507,7 +532,6 @@ namespace ao::lmdb
       return *this;
     }
 
-    releaseFinishedCursor();
     _cursorPtr = std::move(other._cursorPtr);
     _value = other._value;
     _owner = std::exchange(other._owner, nullptr);
@@ -515,10 +539,7 @@ namespace ao::lmdb
     return *this;
   }
 
-  IntegerKeyDatabase::Reader::Iterator::~Iterator() noexcept
-  {
-    releaseFinishedCursor();
-  }
+  IntegerKeyDatabase::Reader::Iterator::~Iterator() noexcept = default;
 
   IntegerKeyDatabase::Reader::Iterator::reference IntegerKeyDatabase::Reader::Iterator::operator*() const
   {
@@ -553,14 +574,6 @@ namespace ao::lmdb
                "IntegerKeyDatabase::Reader::Iterator used after its transaction finished");
   }
 
-  void IntegerKeyDatabase::Reader::Iterator::releaseFinishedCursor() noexcept
-  {
-    if (_owner != nullptr && !_owner->isActive())
-    {
-      std::ignore = _cursorPtr.release();
-    }
-  }
-
   void IntegerKeyDatabase::Reader::Iterator::next()
   {
     auto record = RawRecord{};
@@ -586,6 +599,13 @@ namespace ao::lmdb
     return Iterator{_txn, *_owner, _dbi};
   }
 
+  ByteKeyDatabase::Reader::Iterator ByteKeyDatabase::Reader::lowerBound(std::span<std::byte const> const key) const
+  {
+    ensureActive();
+    AO_EXPECTS(!key.empty(), "ByteKeyDatabase::Reader::lowerBound requires a non-empty key");
+    return Iterator{_txn, *_owner, _dbi, key};
+  }
+
   std::optional<std::span<std::byte const>> ByteKeyDatabase::Reader::get(std::span<std::byte const> const key) const
   {
     ensureActive();
@@ -600,14 +620,19 @@ namespace ao::lmdb
 
   void ByteKeyDatabase::Reader::MdbCursorDeleter::operator()(MDB_cursor* cursor) const noexcept
   {
-    ::mdb_cursor_close(cursor);
+    if (cleanup == detail::CursorCleanup::Explicit)
+    {
+      ::mdb_cursor_close(cursor);
+    }
   }
 
   ByteKeyDatabase::Reader::CursorPtr ByteKeyDatabase::Reader::create(MDB_txn* transaction,
                                                                      ReadTransaction const& owner,
                                                                      DbiHandle const dbi)
   {
-    return CursorPtr{openCursor(transaction, dbi, detail::DatabaseAccess::transactionOwned(owner))};
+    auto const transactionOwned = detail::DatabaseAccess::transactionOwned(owner);
+    auto const cleanup = transactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
+    return CursorPtr{openCursor(transaction, dbi, transactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
   }
 
   void ByteKeyDatabase::Reader::ensureActive() const
@@ -629,6 +654,24 @@ namespace ao::lmdb
     _value = Reader::Value{record.key, record.value};
   }
 
+  ByteKeyDatabase::Reader::Iterator::Iterator(MDB_txn* transaction,
+                                              ReadTransaction const& owner,
+                                              DbiHandle const dbi,
+                                              std::span<std::byte const> const lowerBoundKey)
+    : _cursorPtr{Reader::create(transaction, owner, dbi)}, _owner{&owner}
+  {
+    auto record = RawRecord{};
+
+    if (!positionCursorAtOrAfter(
+          _cursorPtr.get(), lowerBoundKey, detail::DatabaseAccess::transactionOwned(owner), record))
+    {
+      _cursorPtr.reset();
+      return;
+    }
+
+    _value = Reader::Value{record.key, record.value};
+  }
+
   ByteKeyDatabase::Reader::Iterator::Iterator(Iterator&& other) noexcept
     : _cursorPtr{std::move(other._cursorPtr)}, _value{other._value}, _owner{std::exchange(other._owner, nullptr)}
   {
@@ -642,7 +685,6 @@ namespace ao::lmdb
       return *this;
     }
 
-    releaseFinishedCursor();
     _cursorPtr = std::move(other._cursorPtr);
     _value = other._value;
     _owner = std::exchange(other._owner, nullptr);
@@ -650,10 +692,7 @@ namespace ao::lmdb
     return *this;
   }
 
-  ByteKeyDatabase::Reader::Iterator::~Iterator() noexcept
-  {
-    releaseFinishedCursor();
-  }
+  ByteKeyDatabase::Reader::Iterator::~Iterator() noexcept = default;
 
   ByteKeyDatabase::Reader::Iterator::reference ByteKeyDatabase::Reader::Iterator::operator*() const
   {
@@ -686,14 +725,6 @@ namespace ao::lmdb
   {
     AO_EXPECTS(
       _owner != nullptr && _owner->isActive(), "ByteKeyDatabase::Reader::Iterator used after its transaction finished");
-  }
-
-  void ByteKeyDatabase::Reader::Iterator::releaseFinishedCursor() noexcept
-  {
-    if (_owner != nullptr && !_owner->isActive())
-    {
-      std::ignore = _cursorPtr.release();
-    }
   }
 
   void ByteKeyDatabase::Reader::Iterator::next()
@@ -737,7 +768,6 @@ namespace ao::lmdb
       return *this;
     }
 
-    releaseFinishedCursor();
     _dbi = other._dbi;
     _txn = std::exchange(other._txn, nullptr);
     _cursorPtr = std::move(other._cursorPtr);
@@ -745,18 +775,7 @@ namespace ao::lmdb
     return *this;
   }
 
-  IntegerKeyDatabase::Writer::~Writer() noexcept
-  {
-    releaseFinishedCursor();
-  }
-
-  void IntegerKeyDatabase::Writer::releaseFinishedCursor() noexcept
-  {
-    if (_txn != nullptr && _txn->isFinished())
-    {
-      std::ignore = _cursorPtr.release();
-    }
-  }
+  IntegerKeyDatabase::Writer::~Writer() noexcept = default;
 
   void IntegerKeyDatabase::Writer::ensureActive() const
   {
@@ -901,25 +920,13 @@ namespace ao::lmdb
       return *this;
     }
 
-    releaseFinishedCursor();
     _dbi = other._dbi;
     _txn = std::exchange(other._txn, nullptr);
     _cursorPtr = std::move(other._cursorPtr);
     return *this;
   }
 
-  ByteKeyDatabase::Writer::~Writer() noexcept
-  {
-    releaseFinishedCursor();
-  }
-
-  void ByteKeyDatabase::Writer::releaseFinishedCursor() noexcept
-  {
-    if (_txn != nullptr && _txn->isFinished())
-    {
-      std::ignore = _cursorPtr.release();
-    }
-  }
+  ByteKeyDatabase::Writer::~Writer() noexcept = default;
 
   void ByteKeyDatabase::Writer::ensureActive() const
   {
