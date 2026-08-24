@@ -18,9 +18,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <limits>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -791,15 +791,9 @@ namespace ao::media::mp4
         std::min<std::uint64_t>(static_cast<std::uint64_t>(scaledIndex), _samples.size()));
     }
 
-    for (auto const& [index, sample] : std::ranges::views::enumerate(_samples))
-    {
-      if (time < sample.startTime + sample.duration)
-      {
-        return static_cast<std::uint32_t>(index);
-      }
-    }
-
-    return sampleCount();
+    auto const sample = std::ranges::upper_bound(
+      _samples, time, std::less<>{}, [](SampleEntry const& entry) { return entry.startTime + entry.duration; });
+    return static_cast<std::uint32_t>(sample - _samples.begin());
   }
 
   std::uint32_t Demuxer::timescale() const

@@ -6,6 +6,7 @@
 #include "lib/audio/NullBackend.h"
 #include "lib/library/PhysicalStoreAccess.h"
 #include "runtime/library/LibraryMutationService.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -23,6 +24,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/Player.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
@@ -33,6 +35,7 @@
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -70,6 +73,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <utility>
 
@@ -743,6 +747,34 @@ namespace ao::rt::test
       return 3;
     }
 
+    std::int32_t runPlaybackRevealOffExecutor(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes =
+        library::MusicLibrary::open(scratchPath,
+                                    scratchPath / "db",
+                                    library::MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        return 3;
+      }
+
+      auto library = std::move(*libraryRes);
+      auto executor = ProbeQueuedExecutor{};
+      auto runtime = async::Runtime{executor};
+      auto notifications = NotificationService{runtime};
+      auto transport = PlaybackTransport{executor, library, notifications, std::make_unique<audio::Player>(runtime)};
+      auto worker = std::jthread{[&transport] { transport.revealPlayingTrack(); }};
+      worker.join();
+      return 3;
+    }
+
     std::int32_t runWorkspaceObservationAdmissionException(std::string_view const scratchName)
     {
       auto executorPtr = std::make_unique<RejectingDeferExecutor>();
@@ -971,6 +1003,11 @@ namespace ao::rt::test
     if (name == "playback-command-exception")
     {
       return runPlaybackCommandException(scratchName);
+    }
+
+    if (name == "playback-reveal-off-executor")
+    {
+      return runPlaybackRevealOffExecutor(scratchName);
     }
 
     if (name == "workspace-observation-admission-exception")

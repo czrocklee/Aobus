@@ -181,13 +181,13 @@ namespace ao::gtk::test
 
     workflow.scan();
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &progressFinishedCount, &progressEvents]
+      [&fixture, &progressFinishedCount]
       {
-        return progressEvents.size() == 4 && progressFinishedCount == 2 &&
+        return progressFinishedCount == 2 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
     CHECK(progressFinishedCount == 2);
-    REQUIRE(progressEvents.size() == 4);
+    REQUIRE(progressEvents.size() == 3);
     CHECK(progressEvents[0].kind == rt::LibraryTaskProgressKind::Scanning);
     CHECK(progressEvents[0].subject == "song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
@@ -196,10 +196,7 @@ namespace ao::gtk::test
     CHECK(progressEvents[1].fraction == 0.0);
     CHECK(progressEvents[2].kind == rt::LibraryTaskProgressKind::Fingerprinting);
     CHECK(progressEvents[2].subject == "song.flac");
-    CHECK(progressEvents[2].fraction == 0.0);
-    CHECK(progressEvents[3].kind == rt::LibraryTaskProgressKind::Fingerprinting);
-    CHECK(progressEvents[3].subject == "song.flac");
-    CHECK(progressEvents[3].fraction == 1.0);
+    CHECK(progressEvents[2].fraction == 1.0);
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
 
     progressFinishedCount = 0;

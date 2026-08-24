@@ -193,33 +193,7 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
-_LSAN_SUPPRESSIONS = """\
-# Known leaks in third-party libraries (fontconfig, pango, gtk, etc.)
-# These are one-time allocations or internal caches not explicitly freed on exit.
-
-leak:libfontconfig.so
-leak:libfontconfig
-leak:FcValueSave
-leak:FcPatternObjectAddWithBinding
-
-leak:libpango-1.0.so
-leak:libpangocairo-1.0.so
-leak:libpangoft2-1.0.so
-leak:libpango
-leak:pango_font_map_load_fontset
-leak:pango_cairo_fc_font_map_fontset_key_substitute
-
-leak:libgtk-4.so
-leak:libgdk-4.so
-leak:gtk_widget_realize
-leak:gtk_text_get_scroll_limits
-
-leak:libglib-2.0.so
-leak:libgobject-2.0.so
-leak:g_signal_emit
-"""
-
-_LSAN_SUPP_PATH = Path("/tmp/aobus-lsan.supp")
+_LSAN_SUPP_PATH = Path(__file__).resolve().parent.parent / "lsan.supp"
 _TSAN_SUPP_PATH = Path(__file__).resolve().parent.parent / "tsan.supp"
 _TSAN_MERGED_SUPP_PATH = Path("/tmp") / f"aobus-tsan-{os.getpid()}.supp"
 _SANITIZER_OPTION_SEPARATOR = re.compile(r":(?=[A-Za-z_][A-Za-z0-9_]*=)")
@@ -229,7 +203,6 @@ def _lsan_env(build_dir: Path, *, enabled: bool = False) -> dict[str, str]:
     """Return Linux LeakSanitizer options when *build_dir* is an ASan tree."""
     if builddir.platform_profile().name != "linux" or (not enabled and "asan" not in build_dir.name):
         return {}
-    _LSAN_SUPP_PATH.write_text(_LSAN_SUPPRESSIONS)
     return {"LSAN_OPTIONS": f"suppressions={_LSAN_SUPP_PATH}"}
 
 

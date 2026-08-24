@@ -20,8 +20,11 @@ Its public boundary is `app/include/ao/rt/projection/`, its implementation is `a
 ## Target model
 
 - `FocusedViewTarget` follows the workspace's active view and that view's current selection.
-- `ExplicitViewTarget` follows the selection of one fixed `ViewId`.
+- `ExplicitViewTarget` follows the selection of one fixed live `ViewId`.
 - `ExplicitSelectionTarget` snapshots the supplied track ids and does not follow view selection.
+
+An explicit target whose view is already absent starts with an empty snapshot.
+When its live view is destroyed, the projection clears and publishes its snapshot and stops tracking that runtime id.
 
 No selected ids produce `SelectionKind::None`, one produces `Single`, and more than one produces `Multiple`.
 The snapshot retains requested ids even when some or all no longer resolve to stored tracks.
@@ -46,6 +49,7 @@ Construction builds the initial snapshot.
 Subscription immediately receives the current snapshot.
 
 Focus or tracked-view selection changes rebuild and publish a snapshot.
+A tracked-view destruction clears and publishes the snapshot.
 A library reset or inserted, deleted, or mutated track intersecting the retained selection also rebuilds and publishes.
 Unrelated track changes do not publish.
 
@@ -53,7 +57,7 @@ Each publication occurs after final snapshot state is installed.
 
 ## Failure and lifetime
 
-Missing tracks contribute no loaded values and are not fatal.
+Missing tracks and missing explicit views contribute no loaded values and are not fatal.
 Storage and invariant failures are not translated into projection availability; an exception escaping callback
 delivery is fatal at the owning signal boundary.
 
@@ -67,7 +71,7 @@ Its observer signal weak-invalidates outstanding subscriptions when the projecti
 
 ## Test map
 
-- [`TrackDetailProjectionTest.cpp`](../../../../test/unit/runtime/projection/TrackDetailProjectionTest.cpp) proves target following, immediate subscription, intersecting refresh, common/mixed fields, missing tracks, single-track tags, and custom metadata aggregation.
+- [`TrackDetailProjectionTest.cpp`](../../../../test/unit/runtime/projection/TrackDetailProjectionTest.cpp) proves target following, immediate subscription, tracked-view destruction, intersecting refresh, common/mixed fields, missing tracks and views, single-track tags, and custom metadata aggregation.
 
 ## Related documents
 

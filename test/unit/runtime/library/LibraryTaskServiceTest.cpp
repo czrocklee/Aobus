@@ -47,8 +47,8 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -970,6 +970,85 @@ namespace ao::rt::test
       CHECK(event.fraction <= 1.0);
       CHECK_FALSE(event.subject.empty());
     }
+  }
+
+  TEST_CASE("LibraryTaskService - scan progress coalesces while callback delivery is backlogged",
+            "[runtime][regression][library-task][concurrency]")
+  {
+    constexpr std::size_t kFileCount = 64;
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+
+    for (std::size_t index = 0; index < kFileCount; ++index)
+    {
+      std::filesystem::copy_file(sourceFile, libraryFixture.root() / std::format("track-{:02}.flac", index));
+    }
+
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto& service = runtimeLibraryPtr->taskService();
+    auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
+    REQUIRE(plan.size() == kFileCount);
+    auto const expectedLastSubject = utility::pathToUtf8(plan.items().back().fullPath.filename());
+
+    for (auto const& item : plan.items())
+    {
+      std::filesystem::remove(item.fullPath);
+    }
+
+    auto progressEvents = std::vector<LibraryTaskProgressUpdated>{};
+    auto eventOrder = std::vector<std::string>{};
+    auto const progressSubscription = service.onProgress(
+      [&progressEvents, &eventOrder](LibraryTaskProgressUpdated const& event)
+      {
+        progressEvents.push_back(event);
+        eventOrder.emplace_back("progress");
+      });
+    auto const finishedSubscription =
+      service.onProgressFinished([&eventOrder] { eventOrder.emplace_back("finished"); });
+    auto firstProgressEntered = AsyncTestState<bool>::create(false);
+    auto progressCount = AsyncTestState<std::size_t>::create(0);
+    auto firstProgressRelease = AsyncBarrier{};
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = spawnFuture(
+      runtime,
+      service.applyScanPlanAsync(std::move(plan),
+                                 {},
+                                 {},
+                                 [firstProgressEntered, progressCount, &firstProgressRelease](ScanApplyProgress const&)
+                                 {
+                                   if (progressCount.increment() == 1)
+                                   {
+                                     firstProgressEntered.set(true);
+                                     firstProgressRelease.wait();
+                                   }
+                                 }),
+      completedPtr);
+
+    REQUIRE(executor.drainUntil([firstProgressEntered] { return firstProgressEntered.load(); }));
+    firstProgressRelease.release();
+    REQUIRE(progressCount.waitUntil(kFileCount));
+
+    // One progress delivery may already have run before the worker barrier;
+    // the remaining burst owns at most one queued delivery plus its completion.
+    CHECK(executor.queuedCount() <= 2);
+    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+    auto const result = future.get();
+    executor.drain();
+
+    REQUIRE(result);
+    CHECK(std::cmp_equal(result->failureCount, kFileCount));
+    REQUIRE_FALSE(progressEvents.empty());
+    CHECK(progressEvents.size() <= 2);
+    CHECK(progressEvents.back().subject == expectedLastSubject);
+    CHECK(progressEvents.back().fraction == static_cast<double>(kFileCount - 1) / static_cast<double>(kFileCount));
+    REQUIRE_FALSE(eventOrder.empty());
+    CHECK(eventOrder.back() == "finished");
+
+    runtime.requestStop();
+    runtime.join();
   }
 
   TEST_CASE("LibraryTaskService - applyScanPlanAsync forwards cancellation to scan executor",

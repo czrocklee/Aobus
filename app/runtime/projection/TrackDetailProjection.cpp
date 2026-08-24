@@ -29,7 +29,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -124,6 +123,47 @@ namespace ao::rt
         }
       }
     }
+
+    void populateSingleSnapshot(TrackDetailSnapshot& snapshot,
+                                library::TrackView const& view,
+                                library::DictionaryStore const& dictionary,
+                                library::FileManifestStore::Reader const* manifestReader)
+    {
+      for (auto const& definition : trackFieldDefinitions())
+      {
+        if (definition.synthetic || definition.category == TrackFieldCategory::Tag)
+        {
+          continue;
+        }
+
+        trackFieldArrayAt(snapshot.fields, definition.field).optValue =
+          readTrackFieldRawValue(definition.field, view, dictionary, manifestReader);
+      }
+
+      for (auto const& [dictionaryId, value] : view.customMetadata())
+      {
+        auto const key = std::string{dictionary.getOrDefault(dictionaryId)};
+
+        if (!key.empty())
+        {
+          snapshot.customMetadata.push_back(CustomMetadataItem{
+            .key = key,
+            .value = {.optValue = std::string{value}},
+            .presentOnAll = true,
+            .presentOnAny = true,
+          });
+        }
+      }
+
+      std::ranges::sort(snapshot.customMetadata, {}, &CustomMetadataItem::key);
+
+      if (auto const optPrimary = view.coverArt().primary(); optPrimary)
+      {
+        snapshot.singleCoverArtId = optPrimary->resourceId;
+      }
+
+      snapshot.commonTagIds.assign(view.tags().begin(), view.tags().end());
+    }
   } // namespace
 
   struct TrackDetailProjection::Impl final
@@ -138,6 +178,7 @@ namespace ao::rt
     async::Signal<TrackDetailSnapshot const&> changedSignal;
     async::Subscription focusSub;
     async::Subscription selectionSub;
+    async::Subscription viewDestroyedSub;
     async::Subscription tracksMutatedSub;
     ViewId trackedViewId = rt::kInvalidViewId;
 
@@ -158,98 +199,17 @@ namespace ao::rt
                                                LibraryChanges const& changes)
     : _implPtr{std::make_unique<Impl>(std::move(target), views, library, workspace, changes)}
   {
-    std::visit(
-      [this](auto const& target)
-      {
-        using T = std::decay_t<decltype(target)>;
+    std::visit([this](auto const& selectedTarget) { initializeTarget(selectedTarget); }, _implPtr->target);
 
-        if constexpr (std::is_same_v<T, FocusedViewTarget>)
-        {
-          auto const layout = _implPtr->workspace.snapshot();
-          _implPtr->trackedViewId = layout.activeViewId;
-
-          if (_implPtr->trackedViewId != rt::kInvalidViewId)
-          {
-            auto const state = _implPtr->views.trackListState(_implPtr->trackedViewId);
-            _implPtr->cachedSnapshot = buildSnapshot(state.selection);
-          }
-
-          _implPtr->focusSub = _implPtr->workspace.onChanged(
-            [this](WorkspaceChanged const& changed)
-            {
-              auto const viewId = changed.snapshot.activeViewId;
-
-              if (viewId == _implPtr->trackedViewId)
-              {
-                return;
-              }
-
-              _implPtr->trackedViewId = viewId;
-
-              if (viewId == rt::kInvalidViewId)
-              {
-                refreshSnapshot({});
-                return;
-              }
-
-              // The workspace snapshot can name a view that ViewService has
-              // already dropped before this observer runs.
-              auto const foundRes = _implPtr->views.findTrackListState(viewId);
-              refreshSnapshot(foundRes ? std::span<TrackId const>{foundRes->selection} : std::span<TrackId const>{});
-            });
-        }
-        else if constexpr (std::is_same_v<T, ExplicitViewTarget>)
-        {
-          _implPtr->trackedViewId = target.viewId;
-          auto const state = _implPtr->views.trackListState(target.viewId);
-          _implPtr->cachedSnapshot = buildSnapshot(state.selection);
-        }
-        else if constexpr (std::is_same_v<T, ExplicitSelectionTarget>)
-        {
-          _implPtr->cachedSnapshot = buildSnapshot(target.trackIds);
-        }
-      },
-      _implPtr->target);
+    _implPtr->viewDestroyedSub = _implPtr->views.onViewDestroyed([this](ViewService::ViewDestroyed const& event)
+                                                                 { handleViewDestroyed(event.viewId); });
 
     // Shared subscriber: ViewSelectionChanged, filtered by trackedViewId
     _implPtr->selectionSub = _implPtr->views.onSelectionChanged(
-      [this](ViewService::SelectionChanged const& ev)
-      {
-        if (ev.viewId != _implPtr->trackedViewId)
-        {
-          return;
-        }
+      [this](ViewService::SelectionChanged const& event) { handleSelectionChanged(event.viewId, event.selection); });
 
-        refreshSnapshot(ev.selection);
-      });
-
-    _implPtr->tracksMutatedSub = _implPtr->changes.onChanged(
-      [this](LibraryChangeSet const& changeSet)
-      {
-        if (_implPtr->cachedSnapshot.trackIds.empty())
-        {
-          return;
-        }
-
-        auto trackIds = changeSet.tracksInserted;
-        trackIds.append_range(changeSet.tracksDeleted);
-        trackIds.append_range(changeSet.tracksMutated);
-        bool intersect = changeSet.libraryReset;
-
-        for (auto const id : trackIds)
-        {
-          if (std::ranges::contains(_implPtr->cachedSnapshot.trackIds, id))
-          {
-            intersect = true;
-            break;
-          }
-        }
-
-        if (intersect)
-        {
-          refreshSnapshot(_implPtr->cachedSnapshot.trackIds);
-        }
-      });
+    _implPtr->tracksMutatedSub =
+      _implPtr->changes.onChanged([this](LibraryChangeSet const& changeSet) { handleLibraryChanged(changeSet); });
   }
 
   TrackDetailProjection::~TrackDetailProjection() = default;
@@ -264,6 +224,106 @@ namespace ao::rt
   {
     handler(_implPtr->cachedSnapshot);
     return _implPtr->changedSignal.connect(std::move(handler));
+  }
+
+  void TrackDetailProjection::initializeTarget(FocusedViewTarget const& /*target*/)
+  {
+    auto const layout = _implPtr->workspace.snapshot();
+    _implPtr->trackedViewId = layout.activeViewId;
+
+    if (_implPtr->trackedViewId != rt::kInvalidViewId)
+    {
+      auto const state = _implPtr->views.trackListState(_implPtr->trackedViewId);
+      _implPtr->cachedSnapshot = buildSnapshot(state.selection);
+    }
+
+    _implPtr->focusSub = _implPtr->workspace.onChanged([this](WorkspaceChanged const& changed)
+                                                       { handleFocusedViewChanged(changed.snapshot.activeViewId); });
+  }
+
+  void TrackDetailProjection::initializeTarget(ExplicitViewTarget const& target)
+  {
+    _implPtr->trackedViewId = target.viewId;
+    auto const foundRes = _implPtr->views.findTrackListState(target.viewId);
+
+    if (foundRes)
+    {
+      _implPtr->cachedSnapshot = buildSnapshot(foundRes->selection);
+    }
+  }
+
+  void TrackDetailProjection::initializeTarget(ExplicitSelectionTarget const& target)
+  {
+    _implPtr->cachedSnapshot = buildSnapshot(target.trackIds);
+  }
+
+  void TrackDetailProjection::handleFocusedViewChanged(ViewId const viewId)
+  {
+    if (viewId == _implPtr->trackedViewId)
+    {
+      return;
+    }
+
+    _implPtr->trackedViewId = viewId;
+
+    if (viewId == rt::kInvalidViewId)
+    {
+      refreshSnapshot({});
+      return;
+    }
+
+    // The workspace snapshot can name a view that ViewService has already
+    // dropped before this observer runs.
+    auto const foundRes = _implPtr->views.findTrackListState(viewId);
+    refreshSnapshot(foundRes ? std::span<TrackId const>{foundRes->selection} : std::span<TrackId const>{});
+  }
+
+  void TrackDetailProjection::handleViewDestroyed(ViewId const viewId)
+  {
+    if (viewId != _implPtr->trackedViewId)
+    {
+      return;
+    }
+
+    _implPtr->trackedViewId = rt::kInvalidViewId;
+    refreshSnapshot({});
+  }
+
+  void TrackDetailProjection::handleSelectionChanged(ViewId const viewId, std::span<TrackId const> const ids)
+  {
+    if (viewId != _implPtr->trackedViewId)
+    {
+      return;
+    }
+
+    refreshSnapshot(ids);
+  }
+
+  void TrackDetailProjection::handleLibraryChanged(LibraryChangeSet const& changeSet)
+  {
+    if (_implPtr->cachedSnapshot.trackIds.empty())
+    {
+      return;
+    }
+
+    auto trackIds = changeSet.tracksInserted;
+    trackIds.append_range(changeSet.tracksDeleted);
+    trackIds.append_range(changeSet.tracksMutated);
+    bool intersect = changeSet.libraryReset;
+
+    for (auto const id : trackIds)
+    {
+      if (std::ranges::contains(_implPtr->cachedSnapshot.trackIds, id))
+      {
+        intersect = true;
+        break;
+      }
+    }
+
+    if (intersect)
+    {
+      refreshSnapshot(_implPtr->cachedSnapshot.trackIds);
+    }
   }
 
   void TrackDetailProjection::publishSnapshot()
@@ -294,6 +354,18 @@ namespace ao::rt
     auto const manifestReader = _implPtr->library.manifest().reader(transaction);
     auto const& dictionary = _implPtr->library.dictionary();
 
+    if (ids.size() == 1)
+    {
+      auto const optView = trackReader.get(ids.front(), library::TrackStore::Reader::LoadMode::Both);
+
+      if (optView && optView->isHotValid() && optView->isColdValid())
+      {
+        populateSingleSnapshot(snap, *optView, dictionary, &manifestReader);
+      }
+
+      return snap;
+    }
+
     auto fieldValues = std::array<std::vector<TrackFieldRawValue>, kTrackFieldCount>{};
     auto customAggregates = std::map<std::string, CustomAggregationState>{};
     std::size_t loadedCount = 0;
@@ -310,19 +382,6 @@ namespace ao::rt
       loadedCount++;
       aggregateFields(*optView, dictionary, &manifestReader, fieldValues);
       aggregateCustom(*optView, dictionary, customAggregates);
-
-      if (ids.size() == 1)
-      {
-        if (auto const optPrimary = optView->coverArt().primary(); optPrimary)
-        {
-          snap.singleCoverArtId = optPrimary->resourceId;
-        }
-
-        for (auto const tagId : optView->tags())
-        {
-          snap.commonTagIds.push_back(tagId);
-        }
-      }
     }
 
     if (loadedCount == 0)

@@ -34,8 +34,6 @@ namespace ao::uimodel
     ListPresentationPreferenceLifecycle& operator=(ListPresentationPreferenceLifecycle&&) = delete;
 
   private:
-    std::map<ListId, std::string>& _presentations;
-    compat::MoveOnlyFunction<void(ListId)> _onPreferenceRemoved;
     async::Subscription _changesSubscription;
   };
 } // namespace ao::uimodel

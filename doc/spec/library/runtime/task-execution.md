@@ -44,6 +44,8 @@ Once a maintenance transaction may have committed, the same non-cancellable retu
 
 Task progress uses owner-local operational channels on `LibraryTaskService`.
 Progress is best effort and does not constitute a committed state transition.
+Each operation keeps at most one progress-delivery callback queued; while that callback is pending, a newer update replaces the pending value for the same phase.
+Phase transitions remain ordered, so consumers observe each entered phase and the newest accepted state within that phase without per-file event flooding.
 `onProgressFinished()` is a status-free pulse used only to clear presentation progress.
 It carries no outcome, Error, cancellation state, count, or message.
 The awaited `Task<Result<T>>` value and the ordinary cancellation/exception channel are the sole operation outcome; the task-specific caller owns final wording and payload presentation.
@@ -51,6 +53,7 @@ The awaited `Task<Result<T>>` value and the ordinary cancellation/exception chan
 A progress conversation begins only after the method's initial cancellable callback-executor admission succeeds.
 Cancellation before that admission emits neither progress nor a finished pulse.
 Once admitted, each TaskService method that may publish progress emits exactly one finished pulse on its ordinary value, Error, exception, or cancellation path after callback-owner cleanup while the runtime owner remains live, whether or not it emitted a progress update.
+The callback executor's FIFO delivers any final queued progress update before that conversation's finished pulse.
 Scan-plan build and scan apply are independent progress conversations and therefore emit independent pulses.
 Resource loading, YAML export, and the import operations currently publish no task progress and emit no finished pulse.
 
@@ -94,7 +97,7 @@ Optional progress and per-item failure callbacks are contained at their local ad
 
 ## Test map
 
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, maintenance admission, errors, status-free progress finalization, callback containment, cancellation cleanup, maintenance release, and the mandatory post-commit barrier.
+- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, maintenance admission, errors, status-free progress finalization, callback containment, cancellation cleanup, maintenance release, and the mandatory post-commit barrier.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
 
 ## Related documents

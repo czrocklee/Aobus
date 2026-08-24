@@ -301,4 +301,34 @@ namespace ao::media::mp4::test
     CHECK(result->magicCookie()[0] == std::byte{0x12});
     CHECK(result->magicCookie()[1] == std::byte{0x10});
   }
+
+  TEST_CASE("MP4 Demuxer - seek lookup preserves packet-boundary semantics", "[media][regression][mp4][seek]")
+  {
+    constexpr std::uint32_t kSampleCount = 8;
+    constexpr std::uint32_t kSampleDelta = 1024;
+    constexpr std::uint64_t kTotalDuration = static_cast<std::uint64_t>(kSampleCount) * kSampleDelta;
+    auto body = std::vector<std::uint8_t>{};
+    auto const stsd = makeAlacStsd();
+    auto const stsz = ao::test::mp4::makeStszAtom(4, kSampleCount);
+    auto const stts = ao::test::mp4::makeSttsAtom(kSampleCount, kSampleDelta);
+    auto const stsc = ao::test::mp4::makeStscAtom(kSampleCount);
+    auto const stco = ao::test::mp4::makeStcoAtom();
+    body.insert(body.end(), stsd.begin(), stsd.end());
+    body.insert(body.end(), stsz.begin(), stsz.end());
+    body.insert(body.end(), stts.begin(), stts.end());
+    body.insert(body.end(), stsc.begin(), stsc.end());
+    body.insert(body.end(), stco.begin(), stco.end());
+    auto const stbl = ao::test::mp4::makeAtom("stbl", body);
+    auto const track = ao::test::mp4::makeTrackAtom("soun", stbl, 48000, kTotalDuration);
+    auto const fileData = makeFile(track);
+    auto const result = Demuxer::parse(fileData, "alac");
+
+    REQUIRE(result);
+    CHECK(result->sampleIndexAtTime(0) == 0);
+    CHECK(result->sampleIndexAtTime(kSampleDelta - 1) == 0);
+    CHECK(result->sampleIndexAtTime(kSampleDelta) == 1);
+    CHECK(result->sampleIndexAtTime(kTotalDuration - 1) == kSampleCount - 1);
+    CHECK(result->sampleIndexAtTime(kTotalDuration) == kSampleCount);
+    CHECK(result->sampleIndexAtTime(std::numeric_limits<std::uint64_t>::max()) == kSampleCount);
+  }
 } // namespace ao::media::mp4::test

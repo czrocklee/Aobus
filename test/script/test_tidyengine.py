@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -867,6 +868,39 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
 
             entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
             self.assertIn(f'"{header.resolve()}"', entries[0]["command"])
+
+    def test_unquoted_relative_input_quotes_a_replacement_path_with_spaces(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo with spaces"
+            build_dir = Path(temp_dir) / "build"
+            source = root / "lib" / "Player.cpp"
+            header = root / "include" / "ao" / "Player.h"
+            source.parent.mkdir(parents=True)
+            header.parent.mkdir(parents=True)
+            source.touch()
+            header.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "directory": str(root),
+                            "file": str(source),
+                            "command": "clang++ -c lib/Player.cpp",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            tidyengine.write_header_compile_database(
+                build_dir,
+                [tidyengine.CompileCommandTarget(header, source)],
+                Path(temp_dir) / "synthetic",
+            )
+
+            entries = json.loads((Path(temp_dir) / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
+            self.assertIn(str(header.resolve()), shlex.split(entries[0]["command"]))
 
     def test_string_command_accepts_absolute_input_when_source_and_build_are_on_different_volumes(self):
         with tempfile.TemporaryDirectory() as temp_dir:

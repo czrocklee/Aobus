@@ -10,6 +10,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ao::uimodel
 {
@@ -17,16 +18,31 @@ namespace ao::uimodel
     std::map<ListId, std::string>& presentations,
     rt::LibraryChanges const& changes,
     compat::MoveOnlyFunction<void(ListId)> onPreferenceRemoved)
-    : _presentations{presentations}, _onPreferenceRemoved{std::move(onPreferenceRemoved)}
   {
     _changesSubscription = changes.onChanged(
-      [this](rt::LibraryChangeSet const& changeSet)
+      [presentationMap = &presentations,
+       onPreferenceRemoved = std::move(onPreferenceRemoved)](rt::LibraryChangeSet const& changeSet) mutable
       {
+        auto removedListIds = std::vector<ListId>{};
+        removedListIds.reserve(changeSet.listsDeleted.size());
+
         for (auto const listId : changeSet.listsDeleted)
         {
-          if (_presentations.erase(listId) > 0 && _onPreferenceRemoved)
+          if (presentationMap->erase(listId) > 0)
           {
-            _onPreferenceRemoved(listId);
+            removedListIds.push_back(listId);
+          }
+        }
+
+        // Finish every access to the externally owned map before invoking an
+        // observer. The first callback may synchronously destroy both the
+        // lifecycle and the map; Signal pins this active handler until emit
+        // returns, so the snapshotted ids remain safe to deliver.
+        if (onPreferenceRemoved)
+        {
+          for (auto const listId : removedListIds)
+          {
+            onPreferenceRemoved(listId);
           }
         }
       });

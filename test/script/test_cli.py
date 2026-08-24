@@ -1052,6 +1052,14 @@ class CliParseTest(unittest.TestCase):
             self.assertEqual(test_command._lsan_env(Path("windows-debug-asan")), {})
             self.assertEqual(test_command._ubsan_env(Path("windows-debug-asan")), {})
 
+    def test_linux_asan_uses_the_repository_lsan_suppressions_without_writing_tmp(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            environment = test_command._lsan_env(Path("custom-build-tree"), enabled=True)
+
+        self.assertEqual(environment, {"LSAN_OPTIONS": f"suppressions={test_command._LSAN_SUPP_PATH}"})
+        self.assertTrue(test_command._LSAN_SUPP_PATH.is_file())
+        self.assertNotEqual(test_command._LSAN_SUPP_PATH.parent, Path("/tmp"))
+
     def test_windows_clang_test_is_rejected_before_build_or_run(self):
         args = self.parse(["test", "--core", "--clang", "-n", "-p", "/tmp/aobus-test-build"])
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):

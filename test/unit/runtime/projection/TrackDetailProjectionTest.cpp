@@ -26,7 +26,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -196,6 +195,40 @@ namespace ao::rt::test
     CHECK(aggregateString(snap.fields[static_cast<std::size_t>(F::Title)]) == "Song A");
   }
 
+  TEST_CASE("TrackDetailProjection - explicit view target is empty when its view is already gone",
+            "[runtime][regression][projection][lifecycle]")
+  {
+    auto env = TrackDetailProjectionFixture{};
+    auto const viewId = ao::test::requireValue(env.workspace.navigate({.target = kAllTracksListId}));
+    REQUIRE(env.workspace.closeView(viewId));
+
+    auto const projPtr = env.workspace.detailProjection(ExplicitViewTarget{viewId});
+
+    CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
+    CHECK(projPtr->snapshot().trackIds.empty());
+  }
+
+  TEST_CASE("TrackDetailProjection - explicit view target clears when its view closes",
+            "[runtime][regression][projection][lifecycle]")
+  {
+    auto env = TrackDetailProjectionFixture{};
+    auto const trackId = env.addTrack("Selected");
+    auto const viewId = ao::test::requireValue(env.workspace.navigate({.target = kAllTracksListId}));
+    REQUIRE(env.views.setSelection(viewId, {trackId}));
+    auto const projPtr = env.workspace.detailProjection(ExplicitViewTarget{viewId});
+    auto snapshots = std::vector<TrackDetailSnapshot>{};
+    auto const subscription =
+      projPtr->subscribe([&snapshots](TrackDetailSnapshot const& snapshot) { snapshots.push_back(snapshot); });
+    REQUIRE(snapshots.size() == 1);
+
+    REQUIRE(env.workspace.closeView(viewId));
+
+    REQUIRE(snapshots.size() == 2);
+    CHECK(snapshots.back().selectionKind == SelectionKind::None);
+    CHECK(snapshots.back().trackIds.empty());
+    CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
+  }
+
   TEST_CASE("TrackDetailProjection - focused view target follows focused view selection",
             "[runtime][unit][track-detail][workspace]")
   {
@@ -353,5 +386,32 @@ namespace ao::rt::test
       CHECK(item->value.mixed);
       CHECK_FALSE(item->value.optValue);
     }
+  }
+
+  TEST_CASE("TrackDetailProjection - single selection projects custom metadata without mixed state",
+            "[runtime][unit][projection][detail]")
+  {
+    auto env = TrackDetailProjectionFixture{};
+    auto const seedTrackId = env.addTrack("Seed");
+    auto const trackId = env.addTrack("Song");
+    auto seedPatch = MetadataPatch{};
+    seedPatch.customUpdates["Zulu"] = "Seed Value";
+    REQUIRE(env.writerFixture.updateMetadata(std::vector{seedTrackId}, seedPatch));
+    auto patch = MetadataPatch{};
+    patch.customUpdates["Alpha"] = "First";
+    patch.customUpdates["Zulu"] = "Last";
+    REQUIRE(env.writerFixture.updateMetadata(std::vector{trackId}, patch));
+
+    auto const projPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector{trackId}});
+    auto const snapshot = projPtr->snapshot();
+
+    REQUIRE(snapshot.customMetadata.size() == 2);
+    CHECK(snapshot.customMetadata.front().key == "Alpha");
+    CHECK(snapshot.customMetadata.back().key == "Zulu");
+    CHECK(snapshot.customMetadata.front().presentOnAll);
+    CHECK(snapshot.customMetadata.front().presentOnAny);
+    CHECK_FALSE(snapshot.customMetadata.front().value.mixed);
+    REQUIRE(snapshot.customMetadata.front().value.optValue);
+    CHECK(*snapshot.customMetadata.front().value.optValue == "First");
   }
 } // namespace ao::rt::test

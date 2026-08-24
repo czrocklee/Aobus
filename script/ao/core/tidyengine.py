@@ -778,7 +778,11 @@ def compile_command_plan(
     return CompileCommandPlan(tuple(targets), tuple(deferred), tuple(deferral_details))
 
 
-def _replace_compile_input(entry: _CompileDatabaseEntry, selected: Path) -> dict[str, object]:
+def _replace_compile_input(
+    entry: _CompileDatabaseEntry,
+    selected: Path,
+    command_line_style: Literal["posix", "windows"] = "posix",
+) -> dict[str, object]:
     """Clone one command while replacing its exact source token with ``selected``."""
     data = dict(entry.data)
     selected_text = str(absolute_path(selected))
@@ -822,7 +826,14 @@ def _replace_compile_input(entry: _CompileDatabaseEntry, selected: Path) -> dict
         replaced = 0
 
         def replace_source(match: re.Match[str]) -> str:
-            return f"{match.group(1)}{selected_text}"
+            prefix = match.group(1)
+            if prefix in {'"', "'"} or not any(character.isspace() for character in selected_text):
+                replacement = selected_text
+            elif command_line_style == "windows":
+                replacement = subprocess.list2cmdline([selected_text])
+            else:
+                replacement = shlex.quote(selected_text)
+            return f"{prefix}{replacement}"
 
         for spelling in sorted(spellings, key=len, reverse=True):
             normalized = spelling.replace("\\", "/")
@@ -870,7 +881,7 @@ def write_header_compile_database(
         entry = entries.get(_path_key(target.translation_unit))
         if entry is None:
             raise die(f"compile command disappeared for mapped translation unit {target.translation_unit}.")
-        data = _replace_compile_input(entry, target.selected)
+        data = _replace_compile_input(entry, target.selected, command_line_style)
         data = _without_compile_arguments(data, excluded_arguments, excluded_argument_patterns)
         arguments = data.get("arguments")
         if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):

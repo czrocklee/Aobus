@@ -35,6 +35,8 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <concepts>
@@ -541,6 +543,8 @@ namespace ao::rt
 
     void drainOutboundEvents()
     {
+      auto const resetDrainingOnExit = gsl_lite::finally([this] { drainingOutboundEvents = false; });
+
       while (!outboundEvents.empty())
       {
         if (isClosing())
@@ -618,8 +622,6 @@ namespace ao::rt
           },
           next);
       }
-
-      drainingOutboundEvents = false;
     }
 
     void disconnectSignals()
@@ -1958,7 +1960,7 @@ namespace ao::rt
 
   void PlaybackTransport::revealPlayingTrack()
   {
-    auto* const impl = _implPtr.get();
+    auto* const impl = checkedImpl();
     revealTrack(impl->state.nowPlaying.trackId, kInvalidViewId, impl->state.nowPlaying.sourceListId);
   }
 

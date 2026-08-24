@@ -367,6 +367,20 @@ namespace ao::rt
       async::Signal<LibraryTaskProgressUpdated const&> progress;
     };
 
+    struct ProgressDeliveryState final
+    {
+      ProgressDeliveryState(async::Executor& executor, std::weak_ptr<Signals> weakSignalsPtr)
+        : executorRaw{&executor}, weakSignalsPtr{std::move(weakSignalsPtr)}
+      {
+      }
+
+      async::Executor* executorRaw = nullptr;
+      std::weak_ptr<Signals> weakSignalsPtr;
+      std::mutex mutex;
+      std::vector<LibraryTaskProgressUpdated> pendingEvents;
+      bool deliveryPending = false;
+    };
+
     Impl(async::Runtime& runtimeRef,
          library::MusicLibrary& libraryRef,
          LibraryMutationService& mutationServiceRef,
@@ -457,24 +471,71 @@ namespace ao::rt
 
     LibraryTaskProgressPublisher makeProgressPublisher()
     {
-      auto* const executorRaw = &asyncRuntime.callbackExecutor();
-      auto const weakSignalsPtr = std::weak_ptr<Signals>{signalsPtr};
+      auto statePtr = std::make_shared<ProgressDeliveryState>(asyncRuntime.callbackExecutor(), signalsPtr);
 
-      return [executorRaw, weakSignalsPtr](LibraryTaskProgressKind kind, double fraction, std::string subject)
+      return [statePtr](LibraryTaskProgressKind kind, double fraction, std::string subject)
       {
-        executorRaw->dispatch(
-          [weakSignalsPtr, kind, fraction, subject = std::move(subject)]
+        bool scheduleDelivery = false;
+
+        {
+          auto const lock = std::scoped_lock{statePtr->mutex};
+          auto event = LibraryTaskProgressUpdated{
+            .kind = kind,
+            .fraction = fraction,
+            .subject = std::move(subject),
+          };
+
+          if (!statePtr->pendingEvents.empty() && statePtr->pendingEvents.back().kind == kind)
           {
-            if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
+            statePtr->pendingEvents.back() = std::move(event);
+          }
+          else
+          {
+            statePtr->pendingEvents.push_back(std::move(event));
+          }
+
+          scheduleDelivery = !statePtr->deliveryPending;
+          statePtr->deliveryPending = true;
+        }
+
+        if (!scheduleDelivery)
+        {
+          return;
+        }
+
+        try
+        {
+          statePtr->executorRaw->dispatch(
+            [statePtr]
             {
-              auto const event = LibraryTaskProgressUpdated{
-                .kind = kind,
-                .fraction = fraction,
-                .subject = std::move(subject),
-              };
-              signalsPtr->progress.emit(event);
-            }
-          });
+              auto events = std::vector<LibraryTaskProgressUpdated>{};
+
+              {
+                auto const lock = std::scoped_lock{statePtr->mutex};
+                events = std::move(statePtr->pendingEvents);
+                statePtr->pendingEvents.clear();
+                statePtr->deliveryPending = false;
+              }
+
+              if (auto const signalsPtr = statePtr->weakSignalsPtr.lock(); signalsPtr != nullptr)
+              {
+                for (auto const& event : events)
+                {
+                  signalsPtr->progress.emit(event);
+                }
+              }
+            });
+        }
+        catch (...)
+        {
+          {
+            auto const lock = std::scoped_lock{statePtr->mutex};
+            statePtr->pendingEvents.clear();
+            statePtr->deliveryPending = false;
+          }
+
+          throw;
+        }
       };
     }
 

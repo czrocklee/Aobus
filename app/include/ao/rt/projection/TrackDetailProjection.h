@@ -22,6 +22,7 @@ namespace ao::library
 namespace ao::rt
 {
   class LibraryChanges;
+  struct LibraryChangeSet;
   class ViewService;
   class WorkspaceService;
 
@@ -57,9 +58,16 @@ namespace ao::rt
     async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackDetailSnapshot const&)> handler);
 
   private:
-    TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
-    void refreshSnapshot(std::span<TrackId const> ids);
+    void initializeTarget(FocusedViewTarget const& target);
+    void initializeTarget(ExplicitViewTarget const& target);
+    void initializeTarget(ExplicitSelectionTarget const& target);
+    void handleFocusedViewChanged(ViewId viewId);
+    void handleViewDestroyed(ViewId viewId);
+    void handleSelectionChanged(ViewId viewId, std::span<TrackId const> ids);
+    void handleLibraryChanged(LibraryChangeSet const& changeSet);
     void publishSnapshot();
+    void refreshSnapshot(std::span<TrackId const> ids);
+    TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

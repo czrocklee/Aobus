@@ -17,8 +17,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <initializer_list>
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -178,5 +181,40 @@ namespace ao::uimodel::test
     CHECK(removed == std::vector{parentId, childId, grandchildId});
     REQUIRE(preferences.size() == 1);
     CHECK(preferences.contains(unrelatedId));
+  }
+
+  TEST_CASE("ListPresentationPreferenceLifecycle - deletion callback may destroy its owner and preference map",
+            "[uimodel][regression][presentation][lifecycle]")
+  {
+    auto storage = rt::test::MusicLibraryFixture{};
+    auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
+    auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
+    auto& writer = writerFixture.writer();
+    auto const parentId = ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.name = "Parent"}));
+    auto const childId =
+      ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.parentId = parentId, .name = "Child"}));
+    auto preferencesPtr = std::make_unique<std::map<ListId, std::string>>(
+      std::initializer_list<std::pair<ListId const, std::string>>{{parentId, "songs"}, {childId, "albums"}});
+    auto lifecyclePtr = std::unique_ptr<ListPresentationPreferenceLifecycle>{};
+    auto removed = std::vector<ListId>{};
+    lifecyclePtr = std::make_unique<ListPresentationPreferenceLifecycle>(
+      *preferencesPtr,
+      changes,
+      [&removed, &lifecyclePtr, &preferencesPtr](ListId const listId)
+      {
+        removed.push_back(listId);
+
+        if (removed.size() == 1)
+        {
+          lifecyclePtr.reset();
+          preferencesPtr.reset();
+        }
+      });
+
+    REQUIRE(writer.deleteListAndDescendants(parentId));
+
+    CHECK(removed == std::vector{parentId, childId});
+    CHECK(lifecyclePtr == nullptr);
+    CHECK(preferencesPtr == nullptr);
   }
 } // namespace ao::uimodel::test

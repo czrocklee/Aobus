@@ -16,6 +16,7 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -388,7 +389,11 @@ namespace ao::rt
 
       auto command = std::move(queuedCommands.front());
       queuedCommands.pop_front();
-      std::ignore = executeCommandAndContinue(command);
+
+      if (auto const result = executeCommandAndContinue(command); !result)
+      {
+        APP_LOG_WARN("Queued playback command rejected: {}", result.error().message);
+      }
     }
 
     bool insideBoundary() const noexcept { return commitDepth != 0 || publicationDepth != 0; }
