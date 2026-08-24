@@ -23,22 +23,33 @@ This contract belongs to the **application runtime** layer in the [system archit
 - Returned `Task<Result<T>>` values resume their caller on the callback executor.
 - Recoverable lower-layer failures remain `Result` errors across executor hops.
 - Unexpected invariant exceptions propagate to the callback boundary rather than being converted into external-data errors.
-- Import, import preview, scan apply, and identity backfill enter one exclusive coordinator maintenance interval on the callback executor before slow preparation begins.
-- Maintenance closes interactive admission for the whole interval but does not itself hold coordinator writer ownership or an LMDB write transaction.
-- YAML export and scan-plan construction rely on one LMDB read snapshot and do not enter maintenance.
+- Import and import preview enter one exclusive coordinator maintenance interval on the callback executor before slow preparation begins.
+- Scan apply and identity backfill acquire a background-task lease on the callback executor. That lease serializes scan, backfill, and import preparation without changing authoring availability.
+- Maintenance closes interactive admission for the whole import interval but does not itself hold coordinator writer ownership or an LMDB write transaction.
+- YAML export and scan-plan construction do not enter maintenance or acquire a background-task lease. Scan planning copies one short LMDB manifest snapshot and closes it before filesystem work.
 - Parsing, filesystem walking, media interpretation, and identity fingerprinting run without writer ownership.
-- Import and scan apply acquire one maintenance mutation for prepared apply; identity backfill acquires one per bounded write-back batch.
-- Every effective maintenance mutation commits and completes ordered change publication through the same coordinator as an interactive command.
+- Import acquires one maintenance mutation for preview or prepared apply; scan apply acquires one background mutation; identity backfill acquires one background mutation per bounded write-back batch.
+- Every effective maintenance, background, or interactive mutation commits and completes ordered change publication through the same coordinator.
 
-## Maintenance states
+## Background tasks and maintenance states
 
-`LibraryAuthoringAvailability` identifies active maintenance as `Import`, `ScanApply`, or `AudioIdentityBackfill`.
-Beginning another maintenance operation or any interactive command while maintenance is active returns `InvalidState`/`Unavailable` through its owning API.
+One background-task lease excludes another scan, identity backfill, or YAML import preparation.
+The lease survives worker hops, emits no availability notification, and leaves interactive mutation admission open.
+Each background write phase reserves writer intent before waiting for the coordinator writer or prior mandatory publication.
+A callback-executor interactive mutation that observes that reservation returns `Unavailable` instead of waiting; non-owner writers retain ordinary waiting semantics.
+The state check and physical writer acquisition remain separate, so a scheduler-scale window exists when callback-owner admission passes immediately before a background writer reserves and acquires the mutex; [Decision 0014](../../../decision/0014-admit-scan-plans-by-item-evidence.md#consequences) records that accepted tradeoff.
+
+`LibraryAuthoringAvailability` identifies active YAML import maintenance as `Import`.
+Beginning another task or any interactive command while maintenance is active returns `InvalidState`/`Unavailable` through its owning API.
+YAML import also holds the background-task lease, so scan or backfill cannot prepare concurrently with it.
 
 The maintenance guard survives worker hops.
 Every ordinary value, Error, exception, or cancellation path performs one non-cancellable return to the callback executor and explicitly finishes maintenance there.
 Guard destruction is only an idempotent fallback; it dispatches owner-affine finalization when the live runtime still exists and becomes a no-op after coordinated Closing retires the guard.
 Once a maintenance transaction may have committed, the same non-cancellable return is ordered after mandatory publication, so publication and cleanup cannot be skipped.
+
+The background-task lease uses the same lifetime-safe owner anchor but needs no callback-affine availability transition when it finishes.
+Scan and backfill still perform one non-cancellable return to the callback executor before releasing the lease and emitting their progress-finished pulse.
 
 ## Progress and outcome
 
@@ -67,37 +78,39 @@ Every task uses its stop token at worker/callback executor hops, but only operat
 | Operation | In-operation cancellation |
 |---|---|
 | YAML import/export | None after synchronous transfer work begins. |
-| Scan plan build | None during the synchronous filesystem walk. |
+| Scan plan build | Cooperative while copying the manifest, walking entries, reporting progress, matching moves, and hashing candidates. |
 | Scan plan apply | Cooperative between items and fingerprint chunks; cancellation aborts the plan transaction. |
 | Identity backfill | Cooperative between hash chunks; completed hashes in the current batch may be flushed. |
 
 Lifetime cancellation unwinds the coroutine and prevents post-cancellation access to destroyed borrowed owners.
 Business code does not reinterpret cancellation as a generic recoverable error or encode it in a successful value.
 Pre-admission cancellation has no progress-channel side effect; post-admission cancellation follows the admitted conversation's cleanup contract.
-Once scan apply or identity backfill has entered maintenance, task plumbing returns to the callback executor without consulting the stop token, finishes maintenance, emits the status-free progress pulse, and then propagates `OperationCancelled`.
+Once scan apply or identity backfill has acquired its background-task lease, task plumbing returns to the callback executor without consulting the stop token, finishes the lease, emits the status-free progress pulse, and then propagates `OperationCancelled`.
 The same cleanup occurs whether cancellation is observed as stop-token state or escapes from worker code as an exception.
 
 ## Failure behavior
 
 Worker-side `Result` failures resume as `Result` failures on the callback executor.
-If an unexpected exception escapes worker execution, task plumbing carries and rethrows it on the callback side after required maintenance and progress cleanup.
-Failure before commit releases maintenance without advancing the library revision.
-An ordinary successful task return is a materialization barrier: every revision committed by that operation has completed mandatory publication before maintenance is released.
+If an unexpected exception escapes worker execution, task plumbing carries and rethrows it on the callback side after required lease, maintenance, and progress cleanup.
+Failure before commit releases the owning guard or lease without advancing the library revision.
+An ordinary successful task return is a materialization barrier: every revision committed by that operation has completed mandatory publication before its guard or lease is released.
 Failure from native commit through mandatory publication in a live runtime is an infrastructure fault and terminates; task code does not reinterpret durable mutation as an uncommitted `Result` failure.
 Coordinated Closing may retire a not-yet-running publication or finalization callback and produces no task outcome.
 It may likewise retire an admitted progress conversation before its callback-owner finalization; that owner-lifetime boundary emits no synthetic finished pulse.
-Optional progress and per-item failure callbacks are contained at their local adapter boundary and logged; they cannot replace the task outcome.
+Optional progress and per-item failure callbacks run inside task execution rather than an exception-containment boundary.
+If one throws, required cleanup completes before that exception propagates and replaces the task outcome; a per-item failure is logged before its optional callback runs.
 
 ## Implementation map
 
 - [`LibraryTaskService.h`](../../../../app/include/ao/rt/library/LibraryTaskService.h) defines the async task surface.
 - [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns executor hops, coordinator composition, and notification adaptation.
-- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns maintenance admission and bounded write sessions.
+- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns background-task exclusion, maintenance admission, and bounded write sessions.
 - [`LibraryTaskEvents.h`](../../../../app/include/ao/rt/library/LibraryTaskEvents.h) defines the progress payload independently of the task-operation surface.
 
 ## Test map
 
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, maintenance admission, errors, status-free progress finalization, callback containment, cancellation cleanup, maintenance release, and the mandatory post-commit barrier.
+- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
+- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves that callback-owner authoring fails fast during a background writer reservation and succeeds again after release.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
 
 ## Related documents
@@ -106,3 +119,4 @@ Optional progress and per-item failure callbacks are contained at their local ad
 - [Library change publication](change-publication.md)
 - [Library scan and audio identity](scan-and-identity.md)
 - [Library YAML transfer](yaml-transfer.md)
+- [Decision 0014: admit scan plans by item evidence](../../../decision/0014-admit-scan-plans-by-item-evidence.md)

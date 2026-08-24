@@ -462,6 +462,13 @@ namespace ao::library
     return *this;
   }
 
+  TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::add(PictureType const type,
+                                                                    ObservedResourceDescriptor const& observed)
+  {
+    _entries.push_back({.type = type, .source = observed});
+    return *this;
+  }
+
   TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::erase(std::size_t index)
   {
     AO_EXPECTS(index < _entries.size());
@@ -550,15 +557,24 @@ namespace ao::library
     return transaction.resourceStoreWriter(resources).getOrCreate(descriptor);
   }
 
+  Result<ResourceId> TrackBuilder::observeResource(ObservedResourceDescriptor const& observed,
+                                                   WriteTransaction& transaction,
+                                                   ResourceStore const& resources)
+  {
+    return transaction.resourceStoreWriter(resources).getOrCreate(observed);
+  }
+
   Result<> TrackBuilder::validateHotSerializable() const
   {
     try
     {
       auto const titleLengthRes = detail::normalizedLibraryTextSize(_metadataBuilder._title, "Track title");
+
       if (!titleLengthRes)
       {
         return std::unexpected{titleLengthRes.error()};
       }
+
       checkedUint16(*titleLengthRes, "Hot title length");
 
       for (auto const& [value, context] : {
@@ -577,15 +593,19 @@ namespace ao::library
 
       auto normalizedTags = std::unordered_set<std::string>{};
       normalizedTags.reserve(_tagsBuilder._tagNames.size());
+
       for (auto const tag : _tagsBuilder._tagNames)
       {
         auto normalizedRes = detail::normalizeLibraryText(tag, "Track tag");
+
         if (!normalizedRes)
         {
           return std::unexpected{normalizedRes.error()};
         }
+
         normalizedTags.insert(std::move(*normalizedRes));
       }
+
       checkedPayloadBytes(normalizedTags.size(), sizeof(DictionaryId), "Hot tag payload length");
       return {};
     }
@@ -674,15 +694,19 @@ namespace ao::library
         for (auto const& [key, value] : _customMetadataBuilder._customPairs)
         {
           auto normalizedKeyRes = detail::normalizeLibraryText(key, "Custom metadata key");
+
           if (!normalizedKeyRes)
           {
             return std::unexpected{normalizedKeyRes.error()};
           }
+
           if (!normalizedKeys.insert(std::move(*normalizedKeyRes)).second)
           {
             return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
           }
+
           auto const valueLengthRes = detail::normalizedLibraryTextSize(value, "Custom metadata value");
+
           if (!valueLengthRes)
           {
             return std::unexpected{valueLengthRes.error()};
@@ -810,6 +834,7 @@ namespace ao::library
     auto prepared = PreparedHot{};
 
     auto titleRes = detail::normalizeLibraryText(builder->_metadataBuilder._title, "Track title");
+
     if (!titleRes)
     {
       detail::throwLibraryError(std::move(titleRes.error()));
@@ -826,6 +851,7 @@ namespace ao::library
     for (auto const& name : builder->_tagsBuilder._tagNames)
     {
       auto const tagId = TrackBuilder::internDictionaryId(name, transaction);
+
       if (seenTagIds.insert(tagId).second)
       {
         prepared._tagIds.push_back(tagId);
@@ -946,10 +972,12 @@ namespace ao::library
     for (auto const& [key, value] : builder->_customMetadataBuilder._customPairs)
     {
       auto normalizedValueRes = detail::normalizeLibraryText(value, "Custom metadata value");
+
       if (!normalizedValueRes)
       {
         detail::throwLibraryError(std::move(normalizedValueRes.error()));
       }
+
       resolvedPairs.emplace_back(TrackBuilder::internDictionaryId(key, transaction), std::move(*normalizedValueRes));
     }
 
@@ -971,12 +999,23 @@ namespace ao::library
         continue;
       }
 
-      // Which store call runs is what carries the evidence: content the caller
-      // holds is hashed and counted, while a declared descriptor only fills a gap.
-      auto resourceRes =
-        std::holds_alternative<ResourceDescriptor>(pending.source)
-          ? TrackBuilder::declareResource(std::get<ResourceDescriptor>(pending.source), transaction, resources)
-          : TrackBuilder::createResource(std::get<std::span<std::byte const>>(pending.source), transaction, resources);
+      // Which store call runs is what carries the evidence. Observed descriptors
+      // retain the counted evidence of bytes hashed before this transaction.
+      auto resourceRes = Result<ResourceId>{};
+
+      if (auto const* const observed = std::get_if<ObservedResourceDescriptor>(&pending.source); observed != nullptr)
+      {
+        resourceRes = TrackBuilder::observeResource(*observed, transaction, resources);
+      }
+      else if (auto const* const descriptor = std::get_if<ResourceDescriptor>(&pending.source); descriptor != nullptr)
+      {
+        resourceRes = TrackBuilder::declareResource(*descriptor, transaction, resources);
+      }
+      else
+      {
+        resourceRes =
+          TrackBuilder::createResource(std::get<std::span<std::byte const>>(pending.source), transaction, resources);
+      }
 
       if (!resourceRes)
       {

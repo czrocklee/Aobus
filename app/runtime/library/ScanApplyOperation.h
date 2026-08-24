@@ -83,8 +83,11 @@ namespace ao::rt
     };
 
     Result<> validatePlan() const;
-    Result<> validatePersistedTrackEvidence(library::TrackWriter const& trackWriter) const;
+    void admitItemsAgainstDatabase(library::TrackWriter const& trackWriter, std::stop_token stopToken);
     Result<std::filesystem::path> resolveItemPath(ScanItem const& item) const;
+    void revalidatePreparedRegularFile(std::size_t itemIndex);
+    void revalidateMissingPath(std::size_t itemIndex);
+    void revalidateMovedFile(std::size_t itemIndex, std::stop_token stopToken);
 
     Result<> applyScanItem(std::size_t itemIndex,
                            PreparedScanItem const* preparedItem,
@@ -100,6 +103,7 @@ namespace ao::rt
     void reportProgress(ScanItem const& item, std::size_t itemIndex, ScanApplyProgressStage stage, double itemFraction);
 
     void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);
+    void skipStaleItem(std::size_t itemIndex) noexcept;
 
     void applyMissingItem(ScanItem const& item, library::TrackWriter& trackWriter);
 
@@ -157,8 +161,10 @@ namespace ao::rt
 
     ScanApplyResult _result;
     std::vector<std::unique_ptr<PreparedScanItem>> _preparedItems;
+    std::vector<bool> _skippedItems;
     State _state = State::Created;
     bool _cancelled = false;
     bool _abortTransaction = false;
+    bool _manifestMutated = false;
   };
 } // namespace ao::rt

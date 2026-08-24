@@ -519,7 +519,10 @@ add_executable(ao_core_test
     unit/runtime/library/AudioIdentityIndexerTest.cpp
     unit/runtime/library/LibraryScanTest.cpp
     unit/runtime/library/ScanPlanTest.cpp
+    unit/runtime/library/ScanApplyDatabaseAdmissionTest.cpp
+    unit/runtime/library/ScanApplyFilesystemRevalidationTest.cpp
     unit/runtime/library/ScanApplyOperationTest.cpp
+    unit/runtime/library/TrackBuilderSnapshotTest.cpp
     unit/runtime/library/LibraryTaskServiceTest.cpp
     unit/runtime/library/ResourceMaterializationTest.cpp
     unit/runtime/library/RuntimeFatalProbeTest.cpp

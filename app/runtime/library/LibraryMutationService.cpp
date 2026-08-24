@@ -58,9 +58,10 @@ namespace ao::rt
     }
   }
 
-  struct LibraryMutationService::MaintenanceGuard::LifetimeState final
+  class detail::LibraryMutationLifetimeState final
   {
-    explicit LifetimeState(LibraryMutationService* ownerValue) noexcept
+  public:
+    explicit LibraryMutationLifetimeState(LibraryMutationService* ownerValue) noexcept
       : _owner{ownerValue}
     {
     }
@@ -154,8 +155,12 @@ namespace ao::rt
 
   LibraryMutationService::Mutation::Mutation(LibraryMutationService& owner,
                                              std::unique_lock<std::mutex> writerLock,
-                                             library::WriteTransaction transaction)
-    : _owner{&owner}, _writerLock{std::move(writerLock)}, _transaction{std::move(transaction)}
+                                             library::WriteTransaction transaction,
+                                             bool const backgroundWriter) noexcept
+    : _owner{&owner}
+    , _writerLock{std::move(writerLock)}
+    , _transaction{std::move(transaction)}
+    , _backgroundWriter{backgroundWriter}
   {
   }
 
@@ -170,6 +175,7 @@ namespace ao::rt
     , _transaction{std::move(other._transaction)}
     , _terminal{std::exchange(other._terminal, true)}
     , _executeEligible{std::exchange(other._executeEligible, false)}
+    , _backgroundWriter{std::exchange(other._backgroundWriter, false)}
   {
   }
 
@@ -185,12 +191,13 @@ namespace ao::rt
 
     if (_writerLock.owns_lock())
     {
-      _writerLock.unlock();
+      _owner->releaseMutationWriter(*this);
     }
   }
 
-  LibraryMutationService::MaintenanceGuard::MaintenanceGuard(std::weak_ptr<LifetimeState> lifetimeStatePtr,
-                                                             std::uint64_t generation) noexcept
+  LibraryMutationService::MaintenanceGuard::MaintenanceGuard(
+    std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
+    std::uint64_t generation) noexcept
     : _lifetimeStatePtr{std::move(lifetimeStatePtr)}, _generation{generation}
   {
   }
@@ -232,6 +239,39 @@ namespace ao::rt
     }
   }
 
+  LibraryMutationService::BackgroundTaskLease::BackgroundTaskLease(
+    std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
+    std::uint64_t const generation) noexcept
+    : _lifetimeStatePtr{std::move(lifetimeStatePtr)}, _generation{generation}
+  {
+  }
+
+  LibraryMutationService::BackgroundTaskLease::~BackgroundTaskLease()
+  {
+    finish();
+  }
+
+  LibraryMutationService::BackgroundTaskLease::BackgroundTaskLease(BackgroundTaskLease&& other) noexcept
+    : _lifetimeStatePtr{std::move(other._lifetimeStatePtr)}, _generation{std::exchange(other._generation, 0)}
+  {
+  }
+
+  void LibraryMutationService::BackgroundTaskLease::finish() noexcept
+  {
+    auto const generation = std::exchange(_generation, 0);
+
+    if (generation == 0)
+    {
+      return;
+    }
+
+    if (auto const lifetimeStatePtr = _lifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
+    {
+      lifetimeStatePtr->invokeIfAlive([generation](LibraryMutationService& owner) noexcept
+                                      { owner.finishBackgroundTask(generation); });
+    }
+  }
+
   LibraryMutationService::LibraryMutationService(async::Executor& callbackExecutor,
                                                  library::WritableMusicLibrary writableLibrary,
                                                  LibraryChanges& changes)
@@ -240,7 +280,7 @@ namespace ao::rt
     , _library{_writableLibrary.library()}
     , _changes{changes}
     , _runtimeInstanceId{nextRuntimeInstanceId()}
-    , _lifetimeStatePtr{std::make_shared<MaintenanceGuard::LifetimeState>(this)}
+    , _lifetimeStatePtr{std::make_shared<detail::LibraryMutationLifetimeState>(this)}
     , _lastCommittedRevision{currentLibraryRevision(_library)}
     , _availableRevision{_lastCommittedRevision}
   {
@@ -416,8 +456,11 @@ namespace ao::rt
   }
 
   Result<std::unique_lock<std::mutex>> LibraryMutationService::acquireWriter(LibraryAuthoringState requiredState,
-                                                                             std::string_view operation)
+                                                                             std::string_view operation,
+                                                                             WriterKind const writerKind)
   {
+    auto const rejectBackgroundWait = writerKind == WriterKind::Ordinary && _callbackExecutor.isCurrent();
+
     while (true)
     {
       {
@@ -426,6 +469,12 @@ namespace ao::rt
         if (_closing)
         {
           return makeError(Error::Code::InvalidState, std::format("{} is unavailable while closing", operation));
+        }
+
+        if (rejectBackgroundWait && _backgroundWriterReserved)
+        {
+          return makeError(
+            Error::Code::InvalidState, std::format("{} is unavailable during a background library update", operation));
         }
 
         if (writerAdmissionBlockedLocked())
@@ -457,6 +506,12 @@ namespace ao::rt
       if (_closing)
       {
         return makeError(Error::Code::InvalidState, std::format("{} is unavailable while closing", operation));
+      }
+
+      if (rejectBackgroundWait && _backgroundWriterReserved)
+      {
+        return makeError(
+          Error::Code::InvalidState, std::format("{} is unavailable during a background library update", operation));
       }
 
       if (writerAdmissionBlockedLocked())
@@ -557,6 +612,145 @@ namespace ao::rt
     return result;
   }
 
+  Result<LibraryMutationService::BackgroundTaskLease> LibraryMutationService::beginBackgroundTask(
+    BackgroundTaskKind const kind)
+  {
+    AO_EXPECTS(_callbackExecutor.isCurrent(), "Library background task must begin on the callback executor");
+
+    auto const stateLock = std::scoped_lock{_stateMutex};
+
+    if (_closing)
+    {
+      return makeError(Error::Code::InvalidState, "Library background task is unavailable while closing");
+    }
+
+    if (_state != LibraryAuthoringState::Available)
+    {
+      return makeError(Error::Code::InvalidState, "Library background task is unavailable during maintenance");
+    }
+
+    if (_optBackgroundTaskKind)
+    {
+      return makeError(Error::Code::InvalidState, "Another library background task is already active");
+    }
+
+    _optBackgroundTaskKind = kind;
+    auto const generation = ++_backgroundTaskGeneration;
+    return BackgroundTaskLease{_lifetimeStatePtr, generation};
+  }
+
+  Result<LibraryMutationService::Mutation> LibraryMutationService::beginBackgroundMutation(
+    BackgroundTaskLease const& lease)
+  {
+    {
+      auto const stateLock = std::scoped_lock{_stateMutex};
+
+      if (_closing)
+      {
+        return makeError(Error::Code::InvalidState, "Library background mutation is unavailable while closing");
+      }
+
+      if (_state != LibraryAuthoringState::Available || lease._lifetimeStatePtr.lock() != _lifetimeStatePtr ||
+          lease._generation != _backgroundTaskGeneration || !_optBackgroundTaskKind)
+      {
+        return makeError(Error::Code::InvalidState, "Library background task is no longer active");
+      }
+
+      if (_backgroundWriterReserved)
+      {
+        return makeError(Error::Code::InvalidState, "Another library background mutation is already active");
+      }
+
+      // Reserve before waiting for the physical writer. Otherwise a callback-
+      // executor authoring call can pass its state check and then block behind
+      // this background mutation.
+      _backgroundWriterReserved = true;
+    }
+
+    auto writerLockRes = [this]
+    {
+      try
+      {
+        return acquireWriter(LibraryAuthoringState::Available, "Library background mutation", WriterKind::Background);
+      }
+      catch (...)
+      {
+        cancelBackgroundWriterReservation();
+        throw;
+      }
+    }();
+
+    if (!writerLockRes)
+    {
+      cancelBackgroundWriterReservation();
+      return std::unexpected{writerLockRes.error()};
+    }
+
+    bool leaseIsCurrent = false;
+
+    {
+      auto const stateLock = std::scoped_lock{_stateMutex};
+      leaseIsCurrent = lease._lifetimeStatePtr.lock() == _lifetimeStatePtr &&
+                       lease._generation == _backgroundTaskGeneration && _optBackgroundTaskKind;
+    }
+
+    if (!leaseIsCurrent)
+    {
+      releaseBackgroundWriter(*writerLockRes);
+      return makeError(Error::Code::InvalidState, "Library background task is no longer active");
+    }
+
+    try
+    {
+      auto transaction = _writableLibrary.writeTransaction();
+      return Mutation{*this, std::move(*writerLockRes), std::move(transaction), true};
+    }
+    catch (...)
+    {
+      releaseBackgroundWriter(*writerLockRes);
+      throw;
+    }
+  }
+
+  void LibraryMutationService::cancelBackgroundWriterReservation() noexcept
+  {
+    {
+      auto const stateLock = std::scoped_lock{_stateMutex};
+      AO_INVARIANT(_backgroundWriterReserved);
+      _backgroundWriterReserved = false;
+    }
+
+    _writerAdmissionChanged.notify_all();
+  }
+
+  void LibraryMutationService::releaseBackgroundWriter(std::unique_lock<std::mutex>& writerLock) noexcept
+  {
+    AO_INVARIANT(writerLock.owns_lock());
+
+    {
+      auto const stateLock = std::scoped_lock{_stateMutex};
+      AO_INVARIANT(_backgroundWriterReserved);
+      _backgroundWriterReserved = false;
+      writerLock.unlock();
+    }
+
+    _writerAdmissionChanged.notify_all();
+  }
+
+  void LibraryMutationService::releaseMutationWriter(Mutation& mutation) noexcept
+  {
+    AO_INVARIANT(mutation._writerLock.owns_lock());
+
+    if (mutation._backgroundWriter)
+    {
+      releaseBackgroundWriter(mutation._writerLock);
+      mutation._backgroundWriter = false;
+      return;
+    }
+
+    mutation._writerLock.unlock();
+  }
+
   Result<LibraryMutationService::MaintenanceGuard> LibraryMutationService::beginMaintenance(LibraryMaintenanceKind kind)
   {
     if (kind == LibraryMaintenanceKind::None)
@@ -565,6 +759,16 @@ namespace ao::rt
     }
 
     AO_EXPECTS(_callbackExecutor.isCurrent(), "Library maintenance must begin on the callback executor");
+
+    {
+      auto const stateLock = std::scoped_lock{_stateMutex};
+
+      if (_optBackgroundTaskKind &&
+          (*_optBackgroundTaskKind != BackgroundTaskKind::Import || kind != LibraryMaintenanceKind::Import))
+      {
+        return makeError(Error::Code::InvalidState, "Library maintenance conflicts with an active background task");
+      }
+    }
 
     auto writerLockRes = acquireWriter(LibraryAuthoringState::Available, "Library maintenance");
 
@@ -627,10 +831,10 @@ namespace ao::rt
       // but retain its wrapper so those writers can observe the terminal state.
       mutation._transaction.abort();
     };
-    auto releaseMutation = [&mutation, &finishTransaction]
+    auto releaseMutation = [this, &mutation, &finishTransaction]
     {
       finishTransaction();
-      mutation._writerLock.unlock();
+      releaseMutationWriter(mutation);
     };
 
     auto const revision = _library.libraryRevision(mutation._transaction);
@@ -651,7 +855,7 @@ namespace ao::rt
 
     auto const submissionFromOwner = _callbackExecutor.isCurrent();
     auto publicationCompletion = compat::MoveOnlyFunction<void(std::string, std::string)>{
-      [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, revision](
+      [weakLifetimeStatePtr = std::weak_ptr<detail::LibraryMutationLifetimeState>{_lifetimeStatePtr}, revision](
         std::string libraryIdentity, std::string replicaName)
       {
         if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
@@ -694,7 +898,7 @@ namespace ao::rt
     // executor has accepted it.
     finishTransaction();
     changeSet.libraryRevision = revision;
-    mutation._writerLock.unlock();
+    releaseMutationWriter(mutation);
     AO_INVARIANT(!mutation._writerLock.owns_lock());
 
     _changes.publishFromCoordinator(std::move(changeSet), std::move(publicationCompletion));
@@ -744,12 +948,25 @@ namespace ao::rt
       AO_INVARIANT(!_publicationBarrier.submissionInProgress());
       _publicationBarrier.retire();
       _maintenanceKind = LibraryMaintenanceKind::None;
+      _optBackgroundTaskKind.reset();
       _changes.retireFromCoordinator();
       break;
     }
 
     _writerAdmissionChanged.notify_all();
     _lifetimeStatePtr->retire();
+  }
+
+  void LibraryMutationService::finishBackgroundTask(std::uint64_t const generation) noexcept
+  {
+    auto const stateLock = std::scoped_lock{_stateMutex};
+
+    if (_closing || generation != _backgroundTaskGeneration)
+    {
+      return;
+    }
+
+    _optBackgroundTaskKind.reset();
   }
 
   void LibraryMutationService::dispatchMaintenanceFinish(std::uint64_t const generation) noexcept
@@ -772,7 +989,8 @@ namespace ao::rt
     try
     {
       _callbackExecutor.dispatch(
-        [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, generation] noexcept
+        [weakLifetimeStatePtr = std::weak_ptr<detail::LibraryMutationLifetimeState>{_lifetimeStatePtr},
+         generation] noexcept
         {
           if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
           {

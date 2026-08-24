@@ -107,6 +107,7 @@ namespace ao::rt
     movedItem.classification = ScanClassification::Moved;
     movedItem.oldUri = missingItem->uri;
     movedItem.trackId = missingItem->trackId;
+    movedItem.optManifestEvidence = missingItem->optManifestEvidence;
 
     auto items = std::vector<ScanItem>{};
     items.reserve(1);

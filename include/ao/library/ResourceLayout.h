@@ -43,6 +43,18 @@ namespace ao::library
     std::uint32_t byteLength{};
   };
 
+  /**
+   * A descriptor derived from bytes the caller observed and counted.
+   *
+   * The wrapper adds evidence semantics without changing or duplicating the
+   * persisted descriptor payload. ResourceStore may therefore let its length
+   * correct an existing declared hint.
+   */
+  struct ObservedResourceDescriptor final
+  {
+    ResourceDescriptor descriptor{};
+  };
+
   constexpr std::size_t kResourceDescriptorSize = 36;
   constexpr std::size_t kResourceDescriptorAlignment = 4;
 

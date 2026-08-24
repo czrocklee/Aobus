@@ -61,6 +61,21 @@ namespace ao::uimodel::test
     CHECK(messageFor(applied(result)) == "Library scan complete");
   }
 
+  TEST_CASE("LibraryScanOutcome - stale items left for a later scan are not errors",
+            "[uimodel][regression][library][scan]")
+  {
+    auto result = rt::ScanApplyResult{};
+    result.staleCount = 2;
+
+    auto const outcome = decideLibraryScanOutcome(applied(result));
+
+    CHECK(outcome.verdict == LibraryScanVerdict::Complete);
+    CHECK(outcome.staleCount == 2);
+    CHECK(outcome.failureCount == 0);
+    CHECK(libraryScanSeverity(outcome.verdict) == rt::NotificationSeverity::Info);
+    CHECK(libraryScanLifetime(outcome.verdict).kind() == rt::NotificationLifetimeKind::Transient);
+  }
+
   TEST_CASE("LibraryScanOutcome - relinking a moved file is news, not a warning", "[uimodel][unit][library][scan]")
   {
     // Nothing was lost, so nobody has to do anything; saying so is a courtesy.

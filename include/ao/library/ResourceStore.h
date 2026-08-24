@@ -159,6 +159,14 @@ namespace ao::library
     Result<ResourceId> getOrCreate(ResourceDescriptor const& descriptor);
 
     /**
+     * @brief Records a descriptor computed from bytes the caller observed.
+     *
+     * The digest was already calculated before this writer began, while the
+     * wrapper preserves the same counted-length evidence as `create(data)`.
+     */
+    Result<ResourceId> getOrCreate(ObservedResourceDescriptor const& observed);
+
+    /**
      * @brief Deletes one row, which no production path does.
      *
      * `create` probes upward from the digest's initial key and stops at the

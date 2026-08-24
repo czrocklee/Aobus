@@ -8,6 +8,7 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -30,14 +31,17 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <expected>
-#include <functional>
+#include <future>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -298,12 +302,12 @@ namespace ao::rt::test
     CHECK(invalidRes.error().code == Error::Code::InvalidInput);
 
     {
-      auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
+      auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
       REQUIRE(maintenanceRes);
       auto maintenance = std::move(*maintenanceRes);
       auto const availability = mutationService.availability();
       CHECK(availability.state == LibraryAuthoringState::Maintenance);
-      CHECK(availability.maintenanceKind == LibraryMaintenanceKind::ScanApply);
+      CHECK(availability.maintenanceKind == LibraryMaintenanceKind::Import);
       CHECK_FALSE(mutationService.beginInteractiveMutation());
       auto const listOrderBindingRes = mutationService.bindListOrder(kAllTracksListId, std::span<TrackId const>{});
       REQUIRE_FALSE(listOrderBindingRes);
@@ -314,9 +318,126 @@ namespace ao::rt::test
     CHECK(availability.state == LibraryAuthoringState::Available);
     CHECK(availability.maintenanceKind == LibraryMaintenanceKind::None);
     REQUIRE(observed.size() == 2);
-    CHECK(observed.front().maintenanceKind == LibraryMaintenanceKind::ScanApply);
+    CHECK(observed.front().maintenanceKind == LibraryMaintenanceKind::Import);
     CHECK(observed.back().maintenanceKind == LibraryMaintenanceKind::None);
     CHECK(nestedMutationRejected);
+  }
+
+  TEST_CASE("Library authoring - background task leases serialize and finish idempotently",
+            "[runtime][unit][library-authoring][concurrency]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto executor = InlineExecutor{};
+    auto readTransaction = musicLibrary.readTransaction();
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
+    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
+    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
+    std::size_t availabilityCount = 0;
+    auto subscription = mutationService.onAvailabilityChanged(
+      [&availabilityCount](LibraryAuthoringAvailability const&) noexcept { ++availabilityCount; });
+
+    auto backgroundRes = mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
+    REQUIRE(backgroundRes);
+    auto background = std::move(*backgroundRes);
+    CHECK(mutationService.availability().state == LibraryAuthoringState::Available);
+    CHECK(availabilityCount == 0);
+
+    auto overlappingRes =
+      mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::AudioIdentityBackfill);
+    REQUIRE_FALSE(overlappingRes);
+    CHECK(overlappingRes.error().code == Error::Code::InvalidState);
+    auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
+    REQUIRE_FALSE(maintenanceRes);
+    CHECK(maintenanceRes.error().code == Error::Code::InvalidState);
+
+    auto backgroundMutationRes = mutationService.beginBackgroundMutation(background);
+    REQUIRE(backgroundMutationRes);
+    backgroundMutationRes->abort();
+
+    auto interactiveMutationRes = mutationService.beginInteractiveMutation();
+    REQUIRE(interactiveMutationRes);
+    interactiveMutationRes->abort();
+    CHECK(availabilityCount == 0);
+
+    background.finish();
+    background.finish();
+    auto staleMutationRes = mutationService.beginBackgroundMutation(background);
+    REQUIRE_FALSE(staleMutationRes);
+    CHECK(staleMutationRes.error().code == Error::Code::InvalidState);
+
+    auto nextBackgroundRes =
+      mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::AudioIdentityBackfill);
+    REQUIRE(nextBackgroundRes);
+
+    background.finish();
+    auto overlapAfterRepeatedFinishRes =
+      mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
+    REQUIRE_FALSE(overlapAfterRepeatedFinishRes);
+    CHECK(overlapAfterRepeatedFinishRes.error().code == Error::Code::InvalidState);
+  }
+
+  TEST_CASE("Library authoring - callback owner does not wait for a background writer",
+            "[runtime][regression][library-authoring][concurrency]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const trackId =
+      library::test::addTrackWithUniqueFixtureUri(musicLibrary, library::test::TrackSpec{.title = "Background target"});
+    auto executor = InlineExecutor{};
+    auto readTransaction = musicLibrary.readTransaction();
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
+    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
+    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
+    auto targetsRes = mutationService.bindTrackTargets(std::array{trackId});
+    REQUIRE(targetsRes);
+    auto backgroundRes = mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
+    REQUIRE(backgroundRes);
+    auto background = std::move(*backgroundRes);
+    auto backgroundReadyPromise = std::promise<bool>{};
+    auto backgroundReady = backgroundReadyPromise.get_future();
+    auto releaseBackground = AsyncBarrier{};
+    auto backgroundThread = std::jthread{[&]
+                                         {
+                                           auto mutationRes = mutationService.beginBackgroundMutation(background);
+                                           backgroundReadyPromise.set_value(mutationRes.has_value());
+
+                                           if (mutationRes)
+                                           {
+                                             releaseBackground.wait();
+                                             mutationRes->abort();
+                                           }
+                                         }};
+
+    REQUIRE(backgroundReady.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    REQUIRE(backgroundReady.get());
+
+    auto ownerReturnedPromise = std::promise<void>{};
+    auto ownerReturned = ownerReturnedPromise.get_future();
+    auto watchdogReleasedWriter = std::atomic_bool{false};
+    auto watchdog = std::jthread{[&]
+                                 {
+                                   if (ownerReturned.wait_for(std::chrono::seconds{5}) != std::future_status::ready)
+                                   {
+                                     watchdogReleasedWriter.store(true, std::memory_order_relaxed);
+                                     releaseBackground.release();
+                                   }
+                                 }};
+
+    auto authoringStart = mutationService.beginAuthoringMutation(*targetsRes);
+    ownerReturnedPromise.set_value();
+    releaseBackground.release();
+    backgroundThread.join();
+    watchdog.join();
+
+    CHECK(authoringStart.status == TrackAuthoringStatus::Unavailable);
+    CHECK_FALSE(authoringStart.optMutation);
+    CHECK_FALSE(watchdogReleasedWriter.load(std::memory_order_relaxed));
+
+    auto afterBackground = mutationService.beginAuthoringMutation(*targetsRes);
+    REQUIRE(afterBackground.optMutation);
+    CHECK(afterBackground.status == TrackAuthoringStatus::NoOp);
+    afterBackground.optMutation->abort();
   }
 
   TEST_CASE("Library authoring - foreign runtime binding is stale even during maintenance",
@@ -340,7 +461,7 @@ namespace ao::rt::test
     auto firstMutationService = LibraryMutationService{executor, std::move(firstWritable), firstChanges};
     auto secondMutationService = LibraryMutationService{executor, std::move(secondWritable), secondChanges};
     auto foreignTargets = ao::test::requireValue(firstMutationService.bindTrackTargets(std::array{firstTrackId}));
-    auto maintenanceRes = secondMutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    auto maintenanceRes = secondMutationService.beginMaintenance(LibraryMaintenanceKind::Import);
     REQUIRE(maintenanceRes);
     auto maintenance = std::move(*maintenanceRes);
 

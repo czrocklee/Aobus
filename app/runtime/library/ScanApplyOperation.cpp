@@ -25,6 +25,7 @@
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -41,11 +42,90 @@
 
 namespace ao::rt
 {
+  namespace
+  {
+    struct FileFacts final
+    {
+      std::uint64_t size = 0;
+      std::uint64_t mtime = 0;
+    };
+
+    Result<FileFacts> inspectRegularFile(std::filesystem::path const& path)
+    {
+      auto ec = std::error_code{};
+
+      if (!std::filesystem::is_regular_file(path, ec))
+      {
+        if (ec)
+        {
+          return makeError(Error::Code::IoError, "Failed to inspect file during scan revalidation: " + ec.message());
+        }
+
+        return makeError(Error::Code::NotFound, "File is no longer a regular file during scan revalidation");
+      }
+
+      auto const size = std::filesystem::file_size(path, ec);
+
+      if (ec)
+      {
+        return makeError(Error::Code::IoError, "Failed to read file size during scan revalidation: " + ec.message());
+      }
+
+      auto const lastWriteTime = std::filesystem::last_write_time(path, ec);
+
+      if (ec)
+      {
+        return makeError(
+          Error::Code::IoError, "Failed to read modification time during scan revalidation: " + ec.message());
+      }
+
+      return FileFacts{
+        .size = size,
+        .mtime = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()),
+      };
+    }
+
+    bool matchesPersistedEvidence(library::TrackWriter const& trackWriter,
+                                  ScanItem const& item,
+                                  std::string_view const manifestUri,
+                                  bool const requireAudioIdentity)
+    {
+      if (item.trackId == kInvalidTrackId || !item.optManifestEvidence)
+      {
+        return false;
+      }
+
+      auto const optManifest = trackWriter.manifest(manifestUri);
+
+      if (!optManifest)
+      {
+        return false;
+      }
+
+      auto const& expected = *item.optManifestEvidence;
+
+      if (optManifest->trackId() != item.trackId || optManifest->fileSize() != expected.fileSize ||
+          optManifest->mtime() != expected.mtime || optManifest->status() != expected.status)
+      {
+        return false;
+      }
+
+      if (requireAudioIdentity && (optManifest->audioPayloadLength() != expected.audioPayloadLength ||
+                                   optManifest->audioSignature() != expected.audioSignature))
+      {
+        return false;
+      }
+
+      auto const optTrack = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
+      return optTrack && optTrack->property().uri() == manifestUri;
+    }
+  } // namespace
+
   struct ScanApplyOperation::PreparedScanItem final
   {
-    explicit PreparedScanItem(library::TrackBuilder const& source,
-                              std::optional<library::AudioIdentity> optIdentityValue)
-      : builder{source}, optIdentity{std::move(optIdentityValue)}
+    explicit PreparedScanItem(TrackBuilderSnapshot source, std::optional<library::AudioIdentity> optIdentityValue)
+      : builder{std::move(source)}, optIdentity{std::move(optIdentityValue)}
     {
     }
 
@@ -76,6 +156,14 @@ namespace ao::rt
     {
       _itemFailureCallback(ScanFailure{.uri = uri, .stage = stage, .message = message});
     }
+  }
+
+  void ScanApplyOperation::skipStaleItem(std::size_t const itemIndex) noexcept
+  {
+    AO_EXPECTS(itemIndex < _skippedItems.size());
+    AO_INVARIANT(!_skippedItems[itemIndex], "Scan item was already skipped");
+    _skippedItems[itemIndex] = true;
+    ++_result.staleCount;
   }
 
   Result<ScanApplyResult> ScanApplyOperation::run(std::stop_token stopToken)
@@ -164,6 +252,7 @@ namespace ao::rt
     }
 
     _preparedItems.resize(_plan.size());
+    _skippedItems.assign(_plan.size(), false);
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
@@ -212,11 +301,19 @@ namespace ao::rt
         continue;
       }
 
-      _preparedItems[i] = std::make_unique<PreparedScanItem>(optMediaTrack->builder(), std::move(optIdentity));
+      auto snapshotRes = TrackBuilderSnapshot::make(optMediaTrack->builder());
+
+      if (!snapshotRes)
+      {
+        return std::unexpected{snapshotRes.error()};
+      }
+
+      _preparedItems[i] = std::make_unique<PreparedScanItem>(std::move(*snapshotRes), std::move(optIdentity));
     }
 
     if (_cancelled)
     {
+      _result.staleCount = 0;
       _result.failureCount = 0;
       _state = State::Terminal;
     }
@@ -237,11 +334,6 @@ namespace ao::rt
     if (auto const header = _ml.metadataHeader(transaction); header.libraryId != _plan._libraryId)
     {
       return makeError(Error::Code::InvalidInput, "Scan plan belongs to another library");
-    }
-
-    if (_ml.libraryRevision(transaction) != _plan._libraryRevision)
-    {
-      return makeError(Error::Code::Conflict, "Library changed since the scan plan was built");
     }
 
     return {};
@@ -265,64 +357,24 @@ namespace ao::rt
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
-      auto const& item = _plan.items()[i];
-
-      if (item.classification != ScanClassification::Moved)
-      {
-        continue;
-      }
-
       if (stopToken.stop_requested())
       {
         _cancelled = true;
         break;
       }
 
-      auto const* const preparedItem = _preparedItems[i].get();
-
-      if (preparedItem == nullptr || !preparedItem->optIdentity)
+      switch (_plan.items()[i].classification)
       {
-        _abortTransaction = true;
-        break;
+        case ScanClassification::New:
+        case ScanClassification::Changed: revalidatePreparedRegularFile(i); break;
+        case ScanClassification::Missing: revalidateMissingPath(i); break;
+        case ScanClassification::Moved: revalidateMovedFile(i, stopToken); break;
+        case ScanClassification::Unchanged:
+        case ScanClassification::Error: break;
       }
 
-      auto fullPathRes = resolveItemPath(item);
-
-      if (!fullPathRes)
+      if (_cancelled || _abortTransaction)
       {
-        reportFailure(item.uri, "resolve moved destination for", fullPathRes.error().message);
-        _abortTransaction = true;
-        break;
-      }
-
-      auto fileRes = media::file::File::open(*fullPathRes);
-
-      if (!fileRes)
-      {
-        reportFailure(item.uri, "open moved destination for", fileRes.error().message);
-        _abortTransaction = true;
-        break;
-      }
-
-      auto const optLiveIdentity = fingerprintAudioPayload(item, *fileRes, i, false, stopToken);
-
-      if (_cancelled)
-      {
-        break;
-      }
-
-      if (auto const& preparedIdentity = *preparedItem->optIdentity;
-          !optLiveIdentity || optLiveIdentity->payloadLength != preparedIdentity.payloadLength ||
-          optLiveIdentity->signature != preparedIdentity.signature ||
-          optLiveIdentity->payloadLength != item.audioPayloadLength ||
-          optLiveIdentity->signature != item.audioSignature)
-      {
-        if (optLiveIdentity)
-        {
-          reportFailure(item.uri, "relink", "audio identity changed after preparation");
-        }
-
-        _abortTransaction = true;
         break;
       }
     }
@@ -333,6 +385,7 @@ namespace ao::rt
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
       _result.missingCount = 0;
+      _result.staleCount = 0;
       _result.failureCount = 0;
       _state = State::Terminal;
     }
@@ -346,6 +399,139 @@ namespace ao::rt
     }
 
     return _result;
+  }
+
+  void ScanApplyOperation::revalidatePreparedRegularFile(std::size_t const itemIndex)
+  {
+    if (_preparedItems[itemIndex] == nullptr)
+    {
+      return;
+    }
+
+    auto const& item = _plan.items()[itemIndex];
+    auto fullPathRes = resolveItemPath(item);
+
+    if (!fullPathRes)
+    {
+      reportFailure(item.uri, "revalidate file", fullPathRes.error().message);
+      _skippedItems[itemIndex] = true;
+      return;
+    }
+
+    auto factsRes = inspectRegularFile(*fullPathRes);
+
+    if (!factsRes)
+    {
+      if (factsRes.error().code == Error::Code::NotFound)
+      {
+        skipStaleItem(itemIndex);
+      }
+      else
+      {
+        reportFailure(item.uri, "revalidate file", factsRes.error().message);
+        _skippedItems[itemIndex] = true;
+      }
+
+      return;
+    }
+
+    if (factsRes->size != item.fileSize || factsRes->mtime != item.mtime)
+    {
+      skipStaleItem(itemIndex);
+    }
+  }
+
+  void ScanApplyOperation::revalidateMissingPath(std::size_t const itemIndex)
+  {
+    auto const& item = _plan.items()[itemIndex];
+    auto fullPathRes = resolveItemPath(item);
+
+    if (!fullPathRes)
+    {
+      reportFailure(item.uri, "revalidate missing path", fullPathRes.error().message);
+      _skippedItems[itemIndex] = true;
+      return;
+    }
+
+    auto existsEc = std::error_code{};
+    auto const exists = std::filesystem::exists(*fullPathRes, existsEc);
+
+    if (existsEc)
+    {
+      reportFailure(item.uri, "revalidate missing path", existsEc.message());
+      _skippedItems[itemIndex] = true;
+    }
+    else if (exists)
+    {
+      skipStaleItem(itemIndex);
+    }
+  }
+
+  void ScanApplyOperation::revalidateMovedFile(std::size_t const itemIndex, std::stop_token const stopToken)
+  {
+    auto const& item = _plan.items()[itemIndex];
+    auto const* const preparedItem = _preparedItems[itemIndex].get();
+
+    if (preparedItem == nullptr || !preparedItem->optIdentity)
+    {
+      _abortTransaction = true;
+      return;
+    }
+
+    auto fullPathRes = resolveItemPath(item);
+
+    if (!fullPathRes)
+    {
+      reportFailure(item.uri, "resolve moved destination for", fullPathRes.error().message);
+      _abortTransaction = true;
+      return;
+    }
+
+    auto factsRes = inspectRegularFile(*fullPathRes);
+
+    if (!factsRes)
+    {
+      reportFailure(item.uri, "revalidate moved destination", factsRes.error().message);
+      _abortTransaction = true;
+      return;
+    }
+
+    if (factsRes->size != item.fileSize || factsRes->mtime != item.mtime)
+    {
+      reportFailure(
+        item.uri, "revalidate moved destination", "file size or modification time changed after preparation");
+      _abortTransaction = true;
+      return;
+    }
+
+    auto fileRes = media::file::File::open(*fullPathRes);
+
+    if (!fileRes)
+    {
+      reportFailure(item.uri, "open moved destination for", fileRes.error().message);
+      _abortTransaction = true;
+      return;
+    }
+
+    auto const optLiveIdentity = fingerprintAudioPayload(item, *fileRes, itemIndex, false, stopToken);
+
+    if (_cancelled)
+    {
+      return;
+    }
+
+    if (auto const& preparedIdentity = *preparedItem->optIdentity;
+        !optLiveIdentity || optLiveIdentity->payloadLength != preparedIdentity.payloadLength ||
+        optLiveIdentity->signature != preparedIdentity.signature ||
+        optLiveIdentity->payloadLength != item.audioPayloadLength || optLiveIdentity->signature != item.audioSignature)
+    {
+      if (optLiveIdentity)
+      {
+        reportFailure(item.uri, "relink", "audio identity changed after preparation");
+      }
+
+      _abortTransaction = true;
+    }
   }
 
   Result<ScanApplyResult> ScanApplyOperation::apply(library::LibraryWrite& write, std::stop_token stopToken)
@@ -372,36 +558,30 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "Scan plan belongs to another library");
     }
 
-    if (auto const transactionRevision = _ml.libraryRevision(write);
-        transactionRevision == 0 || transactionRevision - 1U != _plan._libraryRevision)
-    {
-      return makeError(Error::Code::Conflict, "Library changed since the scan plan was built");
-    }
-
     auto trackWriter = write.tracks();
     auto const& dictionary = _ml.dictionary();
 
-    if (auto validationRes = validatePersistedTrackEvidence(trackWriter); !validationRes)
+    admitItemsAgainstDatabase(trackWriter, stopToken);
+
+    if (!_cancelled && !_abortTransaction)
     {
-      return std::unexpected{validationRes.error()};
-    }
-
-    for (std::size_t i = 0; i < _plan.size(); ++i)
-    {
-      if (stopToken.stop_requested())
+      for (std::size_t i = 0; i < _plan.size(); ++i)
       {
-        _cancelled = true;
-        break;
-      }
+        if (stopToken.stop_requested())
+        {
+          _cancelled = true;
+          break;
+        }
 
-      if (auto itemRes = applyScanItem(i, _preparedItems[i].get(), trackWriter, dictionary); !itemRes)
-      {
-        return std::unexpected{std::move(itemRes.error())};
-      }
+        if (auto itemRes = applyScanItem(i, _preparedItems[i].get(), trackWriter, dictionary); !itemRes)
+        {
+          return std::unexpected{std::move(itemRes.error())};
+        }
 
-      if (_abortTransaction)
-      {
-        break;
+        if (_abortTransaction)
+        {
+          break;
+        }
       }
     }
 
@@ -412,7 +592,9 @@ namespace ao::rt
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
       _result.missingCount = 0;
+      _result.staleCount = 0;
       _result.failureCount = 0;
+      _manifestMutated = false;
       return _result;
     }
 
@@ -422,27 +604,79 @@ namespace ao::rt
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
       _result.missingCount = 0;
+      _manifestMutated = false;
       return _result;
     }
 
     return _result;
   }
 
-  Result<> ScanApplyOperation::validatePersistedTrackEvidence(library::TrackWriter const& trackWriter) const
+  void ScanApplyOperation::admitItemsAgainstDatabase(library::TrackWriter const& trackWriter,
+                                                     std::stop_token const stopToken)
   {
-    for (auto const& item : _plan.items())
+    for (std::size_t i = 0; i < _plan.size(); ++i)
     {
-      if (item.trackId == kInvalidTrackId)
+      if (stopToken.stop_requested())
+      {
+        _cancelled = true;
+        return;
+      }
+
+      if (_skippedItems[i])
       {
         continue;
       }
 
-      auto const optTrack = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
-      AO_INVARIANT(
-        optTrack, "Revision-matched scan item '{}' refers to missing Track {}", item.uri, item.trackId.raw());
-    }
+      switch (auto const& item = _plan.items()[i]; item.classification)
+      {
+        case ScanClassification::New:
+        {
+          if (trackWriter.manifest(item.uri))
+          {
+            skipStaleItem(i);
+          }
 
-    return {};
+          break;
+        }
+
+        case ScanClassification::Changed:
+        case ScanClassification::Missing:
+        {
+          if (!matchesPersistedEvidence(trackWriter, item, item.uri, false))
+          {
+            skipStaleItem(i);
+          }
+
+          break;
+        }
+
+        case ScanClassification::Moved:
+        {
+          if (!matchesPersistedEvidence(trackWriter, item, item.oldUri, true))
+          {
+            reportFailure(item.uri,
+                          "validate library evidence",
+                          "the stored source manifest or Track no longer matches the planned move");
+            _skippedItems[i] = true;
+            _abortTransaction = true;
+            return;
+          }
+
+          if (trackWriter.manifest(item.uri))
+          {
+            reportFailure(item.uri, "validate library evidence", "the moved destination manifest now exists");
+            _skippedItems[i] = true;
+            _abortTransaction = true;
+            return;
+          }
+
+          break;
+        }
+
+        case ScanClassification::Unchanged:
+        case ScanClassification::Error: break;
+      }
+    }
   }
 
   bool ScanApplyOperation::cancelled() const noexcept
@@ -459,7 +693,7 @@ namespace ao::rt
   {
     return _state == State::Applied && !_abortTransaction && !_cancelled &&
            (!_result.insertedIds.empty() || !_result.mutatedIds.empty() || !_result.relinkedIds.empty() ||
-            _result.missingCount != 0);
+            _manifestMutated);
   }
 
   Result<> ScanApplyOperation::applyScanItem(std::size_t itemIndex,
@@ -468,6 +702,11 @@ namespace ao::rt
                                              library::DictionaryStore const& dictionary)
   {
     auto const& item = _plan.items()[itemIndex];
+
+    if (_skippedItems[itemIndex])
+    {
+      return {};
+    }
 
     if (skipNonActionableItem(item))
     {
@@ -578,12 +817,19 @@ namespace ao::rt
       return;
     }
 
+    ++_result.missingCount;
+
+    if (optManifest->status() != library::FileStatus::Available)
+    {
+      return;
+    }
+
     auto builder = library::FileManifestBuilder::fromView(*optManifest);
     builder.status(library::FileStatus::Missing);
 
     if (writeManifest(trackWriter, optManifest->trackId(), item.uri, builder))
     {
-      ++_result.missingCount;
+      _manifestMutated = true;
     }
   }
 

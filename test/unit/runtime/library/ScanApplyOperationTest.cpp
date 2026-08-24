@@ -1096,7 +1096,8 @@ namespace ao::rt::test
     CHECK_FALSE(manifestReader.get("new.flac"));
   }
 
-  TEST_CASE("ScanApplyOperation - rejects a plan after the library revision changes", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanApplyOperation - an unrelated revision change does not invalidate a new item",
+            "[runtime][regression][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1112,22 +1113,24 @@ namespace ao::rt::test
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
     REQUIRE(executor.prepare());
 
-    {
-      auto writableRes = library::WritableMusicLibrary::acquire(ml);
-      REQUIRE(writableRes);
-      auto transaction = writableRes->writeTransaction();
-      REQUIRE(transaction.commit());
-    }
+    auto const revisionBeforeUnrelatedMutation = readLibraryRevision(ml);
+    auto unrelatedTrack = library::test::makeEmptyTrackSpec("unrelated.flac");
+    unrelatedTrack.title = "Unrelated Track";
+    auto const unrelatedTrackId = library::test::addTrack(ml, unrelatedTrack);
+    REQUIRE(readLibraryRevision(ml) == revisionBeforeUnrelatedMutation + 1U);
 
     auto runRes = executor.run();
-    REQUIRE_FALSE(runRes);
-    CHECK(runRes.error().code == Error::Code::Conflict);
+    REQUIRE(runRes);
+    REQUIRE(runRes->insertedIds.size() == 1);
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
     auto trackReader = ml.tracks().reader(transaction);
-    CHECK(trackReader.begin() == trackReader.end());
-    CHECK_FALSE(ml.manifest().reader(transaction).get("song.flac"));
+    CHECK(trackReader.get(unrelatedTrackId));
+    auto const optTrack = trackReader.get(runRes->insertedIds.front(), library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrack);
+    CHECK(optTrack->property().uri() == "song.flac");
+    CHECK(ml.manifest().reader(transaction).get("song.flac"));
   }
 
   TEST_CASE("ScanApplyOperation - rejects a plan built for another library", "[runtime][unit][library][scan]")
@@ -1158,8 +1161,8 @@ namespace ao::rt::test
     CHECK(trackReader.begin() == trackReader.end());
   }
 
-  TEST_CASE("ScanApplyOperation - rejects a second plan from an already applied snapshot",
-            "[runtime][unit][library][scan]")
+  TEST_CASE("ScanApplyOperation - a stale new item cannot replace a newly imported destination",
+            "[runtime][regression][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1176,12 +1179,20 @@ namespace ao::rt::test
     REQUIRE(firstRes->insertedIds.size() == 1);
 
     bool sawReplayProgress = false;
+    auto counts = FailureCounts{};
     auto secondOperation = ScanApplyOperation{
-      ml, std::move(secondPlan), [&sawReplayProgress](ScanApplyProgress const&) { sawReplayProgress = true; }, nullptr};
+      ml,
+      std::move(secondPlan),
+      [&sawReplayProgress](ScanApplyProgress const&) { sawReplayProgress = true; },
+      counts.callback(),
+    };
     auto secondRes = secondOperation.run();
-    REQUIRE_FALSE(secondRes);
-    CHECK(secondRes.error().code == Error::Code::Conflict);
-    CHECK_FALSE(sawReplayProgress);
+    REQUIRE(secondRes);
+    CHECK(secondRes->insertedIds.empty());
+    CHECK(secondRes->staleCount == 1);
+    CHECK(secondRes->failureCount == 0);
+    CHECK(counts.failed == 0);
+    CHECK(sawReplayProgress);
 
     auto transaction = ml.readTransaction();
     auto trackReader = ml.tracks().reader(transaction);

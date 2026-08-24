@@ -8,6 +8,7 @@
 #include <ao/rt/library/ScanPlan.h>
 
 #include <filesystem>
+#include <stop_token>
 
 namespace ao::library
 {
@@ -29,10 +30,10 @@ namespace ao::rt
 
     explicit LibraryScan(library::MusicLibrary const& library);
 
-    Result<ScanPlan> buildPlan(BuildProgressCallback progress = {});
+    Result<ScanPlan> buildPlan(BuildProgressCallback progress = {}, std::stop_token stopToken = {});
 
   private:
-    Result<ScanPlan> buildPlanUnchecked(BuildProgressCallback progress);
+    Result<ScanPlan> buildPlanUnchecked(BuildProgressCallback progress, std::stop_token stopToken);
 
     library::MusicLibrary const& _library;
   };

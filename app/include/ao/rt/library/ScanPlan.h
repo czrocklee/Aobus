@@ -6,12 +6,14 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
+#include <ao/library/FileManifestLayout.h>
 #include <ao/utility/Hash128.h>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -32,6 +34,23 @@ namespace ao::rt
     Error
   };
 
+  /**
+   * Persisted manifest facts observed by the planner for an existing Track.
+   *
+   * The owning ScanItem supplies the manifest key and TrackId. Keeping these
+   * facts separate from the item's destination-file facts matters for Moved
+   * items: their new path has current filesystem facts, while transaction-time
+   * admission must still validate the old manifest row.
+   */
+  struct ScanManifestEvidence final
+  {
+    std::uint64_t fileSize = 0;
+    std::uint64_t mtime = 0;
+    std::uint64_t audioPayloadLength = 0;
+    utility::Hash128 audioSignature = {};
+    library::FileStatus status = library::FileStatus::Available;
+  };
+
   struct ScanItem final
   {
     std::string uri;
@@ -43,6 +62,7 @@ namespace ao::rt
     std::uint64_t audioPayloadLength = 0;
     utility::Hash128 audioSignature = {};
     TrackId trackId = kInvalidTrackId;
+    std::optional<ScanManifestEvidence> optManifestEvidence = std::nullopt;
     std::string errorMessage = {};
   };
 
@@ -70,10 +90,10 @@ namespace ao::rt
     /**
      * Builds a single-item explicit relink plan from two unresolved items.
      *
-     * A successful derivation consumes the source plan so its library and
-     * revision binding cannot be separated from the derived operation. The
-     * destination must be New, the source must be Missing, and both planned
-     * audio identities must match.
+     * A successful derivation consumes the source plan so its library binding,
+     * planner provenance, and source evidence stay with the derived operation.
+     * The destination must be New, the source must be Missing, and both
+     * planned audio identities must match.
      */
     Result<ScanPlan> makeRelinkPlan(std::string_view oldUri, std::string_view newUri) &&;
 
@@ -133,8 +153,9 @@ namespace ao::rt
    * Result of applying a scan plan after its terminal no-op or commit decision.
    *
    * Per-item failures are counted here and streamed live through the apply
-   * failure callback; transaction-level failures use the Result error channel
-   * instead, so this value is only meaningful on success.
+   * failure callback. Ordinary evidence that became stale is counted separately
+   * and left for a later scan. Transaction-level failures use the Result error
+   * channel instead, so this value is only meaningful on success.
    */
   struct ScanApplyResult final
   {
@@ -143,6 +164,7 @@ namespace ao::rt
     std::vector<TrackId> mutatedIds;
     std::vector<TrackId> relinkedIds;
     std::int32_t missingCount = 0;
+    std::int32_t staleCount = 0;
     std::int32_t failureCount = 0;
   };
 } // namespace ao::rt

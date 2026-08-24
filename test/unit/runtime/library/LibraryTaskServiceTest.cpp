@@ -144,6 +144,16 @@ namespace ao::rt::test
       return completedPtr->load();
     }
 
+    void requireBackgroundTaskLeaseReleased(async::Runtime& runtime,
+                                            QueuedExecutor& executor,
+                                            LibraryTaskService& service)
+    {
+      auto completedPtr = std::make_shared<std::atomic_bool>(false);
+      auto future = spawnFuture(runtime, service.backfillAudioIdentityAsync(), completedPtr);
+      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(future.get());
+    }
+
     ResourceId writeResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
       auto transaction = library::test::writeTransaction(library);
@@ -811,8 +821,8 @@ namespace ao::rt::test
     CHECK_FALSE(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
-  TEST_CASE("LibraryTaskService - scan preparation keeps interactive authoring closed",
-            "[runtime][unit][library-task][concurrency]")
+  TEST_CASE("LibraryTaskService - scan preparation permits unrelated interactive authoring",
+            "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const authoringTarget = libraryFixture.addTrack("Before");
@@ -851,24 +861,62 @@ namespace ao::rt::test
     if (startedInTime)
     {
       auto const availability = runtimeLibraryPtr->authoringAvailability();
-      CHECK(availability.state == LibraryAuthoringState::Maintenance);
-      CHECK(availability.maintenanceKind == LibraryMaintenanceKind::ScanApply);
+      CHECK(availability.state == LibraryAuthoringState::Available);
+      CHECK(availability.maintenanceKind == LibraryMaintenanceKind::None);
 
       auto authoringRes =
-        runtimeLibraryPtr->writer().updateMetadata(*bindingRes, MetadataPatch{.optTitle = "Must not apply"});
-      REQUIRE(authoringRes);
-      CHECK(authoringRes->status == TrackAuthoringStatus::Unavailable);
+        runtimeLibraryPtr->writer().updateMetadata(*bindingRes, MetadataPatch{.optTitle = "Edited during scan"});
+      CHECK(authoringRes);
 
-      auto listRes = runtimeLibraryPtr->writer().createList(LibraryWriter::ListDraft{.name = "Blocked"});
-      REQUIRE_FALSE(listRes);
-      CHECK(listRes.error().code == Error::Code::InvalidState);
+      if (authoringRes)
+      {
+        CHECK(authoringRes->status == TrackAuthoringStatus::Applied);
+      }
+
+      executor.drain();
+
+      auto listRes = runtimeLibraryPtr->writer().createList(LibraryWriter::ListDraft{.name = "Created during scan"});
+      CHECK(listRes);
+
+      auto overlapCompletedPtr = std::make_shared<std::atomic_bool>(false);
+      auto overlapFuture =
+        spawnFuture(runtime, runtimeLibraryPtr->taskService().backfillAudioIdentityAsync(), overlapCompletedPtr);
+      auto const overlapCompleted =
+        executor.drainUntil([&overlapCompletedPtr] { return isReady(overlapCompletedPtr); });
+      CHECK(overlapCompleted);
+
+      if (overlapCompleted)
+      {
+        auto overlapRes = overlapFuture.get();
+        CHECK_FALSE(overlapRes);
+
+        if (!overlapRes)
+        {
+          CHECK(overlapRes.error().code == Error::Code::InvalidState);
+        }
+      }
     }
 
     releasePreparation.release();
     REQUIRE(startedInTime);
     REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
-    REQUIRE(future.get());
+    auto result = future.get();
+    REQUIRE(result);
+    REQUIRE(result->insertedIds.size() == 1);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      auto const optTrack = libraryFixture.library().tracks().reader(transaction).get(authoringTarget);
+      REQUIRE(optTrack);
+      CHECK(optTrack->metadata().title() == "Edited during scan");
+    }
+
+    auto postScanBindingRes = runtimeLibraryPtr->bindTrackTargets(std::array{authoringTarget});
+    REQUIRE(postScanBindingRes);
+    auto postScanAuthoringRes =
+      runtimeLibraryPtr->writer().updateMetadata(*postScanBindingRes, MetadataPatch{.optTitle = "Edited after scan"});
+    REQUIRE(postScanAuthoringRes);
+    CHECK(postScanAuthoringRes->status == TrackAuthoringStatus::Applied);
     runtime.requestStop();
     runtime.join();
   }
@@ -1100,12 +1148,13 @@ namespace ao::rt::test
     CHECK(libraryFixture.library().libraryRevision(transaction) == 0);
     CHECK(observed.empty());
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
+    requireBackgroundTaskLeaseReleased(runtime, executor, service);
 
     runtime.requestStop();
     runtime.join();
   }
 
-  TEST_CASE("LibraryTaskService - throwing scan progress callback propagates after maintenance cleanup",
+  TEST_CASE("LibraryTaskService - throwing scan progress callback propagates after background lease cleanup",
             "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -1136,11 +1185,12 @@ namespace ao::rt::test
     CHECK_THROWS_AS(future.get(), std::runtime_error);
     CHECK(callbackCount > 0);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
+    requireBackgroundTaskLeaseReleased(runtime, executor, service);
     runtime.requestStop();
     runtime.join();
   }
 
-  TEST_CASE("LibraryTaskService - throwing backfill progress callback propagates after maintenance cleanup",
+  TEST_CASE("LibraryTaskService - throwing backfill progress callback propagates after background lease cleanup",
             "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -1179,11 +1229,12 @@ namespace ao::rt::test
     CHECK_THROWS_AS(future.get(), std::runtime_error);
     CHECK(callbackCount > 0);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
+    requireBackgroundTaskLeaseReleased(runtime, executor, service);
     runtime.requestStop();
     runtime.join();
   }
 
-  TEST_CASE("LibraryTaskService - apply cancellation finishes maintenance before propagation",
+  TEST_CASE("LibraryTaskService - apply cancellation finishes the background lease before propagation",
             "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -1211,10 +1262,13 @@ namespace ao::rt::test
     REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     CHECK(progressFinished.load());
-    requireCancellation(future, runtime);
+    CHECK_THROWS_AS(future.get(), async::OperationCancelled);
+    requireBackgroundTaskLeaseReleased(runtime, executor, service);
+    runtime.requestStop();
+    runtime.join();
   }
 
-  TEST_CASE("LibraryTaskService - backfill cancellation finishes maintenance before propagation",
+  TEST_CASE("LibraryTaskService - backfill cancellation finishes the background lease before propagation",
             "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -1249,6 +1303,9 @@ namespace ao::rt::test
     REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     CHECK(progressFinished.load());
-    requireCancellation(future, runtime);
+    CHECK_THROWS_AS(future.get(), async::OperationCancelled);
+    requireBackgroundTaskLeaseReleased(runtime, executor, service);
+    runtime.requestStop();
+    runtime.join();
   }
 } // namespace ao::rt::test

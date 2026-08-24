@@ -137,7 +137,7 @@ namespace ao::rt
 
     Result<CoordinatedScanResult> applyCoordinatedScan(
       LibraryMutationService& mutationService,
-      LibraryMutationService::MaintenanceGuard const& maintenance,
+      LibraryMutationService::BackgroundTaskLease const& backgroundTask,
       library::MusicLibrary& library,
       ScanPlan plan,
       ScanApplyOptions options,
@@ -175,7 +175,7 @@ namespace ao::rt
         return CoordinatedScanResult{.result = std::move(*revalidationRes)};
       }
 
-      auto mutationRes = mutationService.beginMaintenanceMutation(maintenance);
+      auto mutationRes = mutationService.beginBackgroundMutation(backgroundTask);
 
       if (!mutationRes)
       {
@@ -284,12 +284,12 @@ namespace ao::rt
 
     AudioIdentityIndexer::CommitBatchCallback makeAudioIdentityCommitBatch(
       LibraryMutationService& mutationService,
-      LibraryMutationService::MaintenanceGuard const& maintenance)
+      LibraryMutationService::BackgroundTaskLease const& backgroundTask)
     {
-      return [mutationServiceRaw = &mutationService, maintenanceRaw = &maintenance](
+      return [mutationServiceRaw = &mutationService, backgroundTaskRaw = &backgroundTask](
                std::span<AudioIdentityWriteCandidate const> candidates) -> Result<AudioIdentityBatchCommitResult>
       {
-        auto mutationRes = mutationServiceRaw->beginMaintenanceMutation(*maintenanceRaw);
+        auto mutationRes = mutationServiceRaw->beginBackgroundMutation(*backgroundTaskRaw);
 
         if (!mutationRes)
         {
@@ -605,6 +605,15 @@ namespace ao::rt
                                                                                        std::stop_token const stopToken)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    auto backgroundTaskRes =
+      _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::Import);
+
+    if (!backgroundTaskRes)
+    {
+      co_return std::unexpected{backgroundTaskRes.error()};
+    }
+
+    auto backgroundTask = std::move(*backgroundTaskRes);
     auto maintenanceRes = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
 
     if (!maintenanceRes)
@@ -694,6 +703,7 @@ namespace ao::rt
     }
 
     maintenance.finish();
+    backgroundTask.finish();
 
     if (cancelledByException)
     {
@@ -721,6 +731,15 @@ namespace ao::rt
 
     AO_EXPECTS(plan._implPtr, "Import plan has already been consumed");
 
+    auto backgroundTaskRes =
+      _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::Import);
+
+    if (!backgroundTaskRes)
+    {
+      co_return std::unexpected{backgroundTaskRes.error()};
+    }
+
+    auto backgroundTask = std::move(*backgroundTaskRes);
     auto maintenanceRes = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
 
     if (!maintenanceRes)
@@ -832,6 +851,7 @@ namespace ao::rt
     }
 
     maintenance.finish();
+    backgroundTask.finish();
 
     if (cancelledByException)
     {
@@ -923,7 +943,8 @@ namespace ao::rt
       auto publishProgress = _implPtr->makeProgressPublisher();
       optPlanRes.emplace(scanService.buildPlan(
         [publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
-        { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, utility::pathToUtf8(path.filename())); }));
+        { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, utility::pathToUtf8(path.filename())); },
+        stopToken));
     }
     catch (std::exception const& error)
     {
@@ -971,15 +992,16 @@ namespace ao::rt
                                                                               ScanFailureCallback failureCallback)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
-    auto maintenanceRes = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    auto backgroundTaskRes =
+      _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
 
-    if (!maintenanceRes)
+    if (!backgroundTaskRes)
     {
       _implPtr->notifyProgressFinished();
-      co_return std::unexpected{maintenanceRes.error()};
+      co_return std::unexpected{backgroundTaskRes.error()};
     }
 
-    auto maintenance = std::move(*maintenanceRes);
+    auto backgroundTask = std::move(*backgroundTaskRes);
     auto coordinatedScanRes = Result<CoordinatedScanResult>{};
     auto const totalItems = plan.size();
     auto exceptionPtr = std::exception_ptr{};
@@ -994,7 +1016,7 @@ namespace ao::rt
       auto failure = makeScanFailureReporter(std::move(failureCallback));
 
       coordinatedScanRes = applyCoordinatedScan(_implPtr->mutationService,
-                                                maintenance,
+                                                backgroundTask,
                                                 _implPtr->library,
                                                 std::move(plan),
                                                 options,
@@ -1030,7 +1052,7 @@ namespace ao::rt
       async::throwOperationCancelled();
     }
 
-    maintenance.finish();
+    backgroundTask.finish();
     _implPtr->notifyProgressFinished();
 
     if (cancelledByException)
@@ -1053,6 +1075,12 @@ namespace ao::rt
       async::throwOperationCancelled();
     }
 
+    if (coordinatedScanRes->result.staleCount > 0)
+    {
+      APP_LOG_INFO("Scan skipped {} stale item(s); a later scan will evaluate current evidence",
+                   coordinatedScanRes->result.staleCount);
+    }
+
     co_return Result<ScanApplyResult>{std::move(coordinatedScanRes->result)};
   }
 
@@ -1062,15 +1090,16 @@ namespace ao::rt
     AudioIdentityIndexFailureCallback failureCallback)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
-    auto maintenanceRes = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::AudioIdentityBackfill);
+    auto backgroundTaskRes =
+      _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::AudioIdentityBackfill);
 
-    if (!maintenanceRes)
+    if (!backgroundTaskRes)
     {
       _implPtr->notifyProgressFinished();
-      co_return std::unexpected{maintenanceRes.error()};
+      co_return std::unexpected{backgroundTaskRes.error()};
     }
 
-    auto maintenance = std::move(*maintenanceRes);
+    auto backgroundTask = std::move(*backgroundTaskRes);
     auto backfillRes = Result<AudioIdentityIndexResult>{};
     auto exceptionPtr = std::exception_ptr{};
     bool cancelledByException = false;
@@ -1079,12 +1108,12 @@ namespace ao::rt
     {
       co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
       setCurrentThreadName("AudioBackfill");
-      auto commitBatch = makeAudioIdentityCommitBatch(_implPtr->mutationService, maintenance);
+      auto commitBatch = makeAudioIdentityCommitBatch(_implPtr->mutationService, backgroundTask);
       auto progress = makeAudioIdentityProgressReporter(_implPtr->makeProgressPublisher(), std::move(progressCallback));
       auto failure = makeAudioIdentityFailureReporter(std::move(failureCallback));
 
       // Fingerprinting runs without mutationService writer ownership; each
-      // bounded write-back acquires its own maintenance mutation.
+      // bounded write-back acquires its own background mutation.
       auto indexer = AudioIdentityIndexer{_implPtr->asyncRuntime, _implPtr->library};
       backfillRes =
         co_await indexer.indexPending(std::move(commitBatch), {}, std::move(progress), std::move(failure), stopToken);
@@ -1117,7 +1146,7 @@ namespace ao::rt
       async::throwOperationCancelled();
     }
 
-    maintenance.finish();
+    backgroundTask.finish();
     _implPtr->notifyProgressFinished();
 
     if (cancelledByException)

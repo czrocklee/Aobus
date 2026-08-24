@@ -200,22 +200,23 @@ namespace ao::library
       /**
        * One cover this builder will serialize, and what the writer knows about it.
        *
-       * The three sources differ in evidence, not in kind. A `ResourceId` names a
+       * The four sources differ in evidence, not in kind. A `ResourceId` names a
        * row this library already holds. Bytes are content the caller read, so the
-       * writer hashes them and stores the length it counted. A descriptor is a
-       * digest and length a document declared with no bytes to check them
-       * against, so it can only ever fill a gap: it creates a missing row and
-       * never overwrites the length of one that exists.
+       * writer hashes them and stores the length it counted. An observed
+       * descriptor carries that same evidence after hashing moved outside the
+       * writer. A plain descriptor is a digest and length a document declared
+       * with no bytes to check them against, so it can only ever fill a gap.
        */
       struct PendingCoverArt
       {
         PictureType type = PictureType::FrontCover;
-        std::variant<ResourceId, std::span<std::byte const>, ResourceDescriptor> source;
+        std::variant<ResourceId, std::span<std::byte const>, ResourceDescriptor, ObservedResourceDescriptor> source;
       };
 
       CoverArtBuilder& add(PictureType type, ResourceId resourceId);
       CoverArtBuilder& add(PictureType type, std::span<std::byte const> data);
       CoverArtBuilder& add(PictureType type, ResourceDescriptor const& descriptor);
+      CoverArtBuilder& add(PictureType type, ObservedResourceDescriptor const& observed);
       CoverArtBuilder& erase(std::size_t index);
       CoverArtBuilder& clear();
 
@@ -389,6 +390,11 @@ namespace ao::library
     /// Records a descriptor a document declared: creates a missing row and leaves
     /// an existing length alone, because nothing verified this one.
     static Result<ResourceId> declareResource(ResourceDescriptor const& descriptor,
+                                              WriteTransaction& transaction,
+                                              ResourceStore const& resources);
+    /// Records a descriptor whose digest and length were computed from observed
+    /// bytes before the write transaction began.
+    static Result<ResourceId> observeResource(ObservedResourceDescriptor const& observed,
                                               WriteTransaction& transaction,
                                               ResourceStore const& resources);
     Result<> validateHotSerializable() const;

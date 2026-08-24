@@ -18,7 +18,7 @@ There is no independent resource schema version; compatibility follows the libra
 
 ## Code boundary
 
-`ResourceId`, `ResourceDescriptor`, and `ResourceStore` belong to the **Core libraries** layer in the [system architecture](../../architecture/system-overview.md), under the [resource delivery](../../architecture/resource-delivery.md) and [library](../../architecture/library.md) architectures.
+`ResourceId`, `ResourceDescriptor`, `ObservedResourceDescriptor`, and `ResourceStore` belong to the **Core libraries** layer in the [system architecture](../../architecture/system-overview.md), under the [resource delivery](../../architecture/resource-delivery.md) and [library](../../architecture/library.md) architectures.
 The runtime reader exposes owned bytes materialized outside any transaction.
 
 ## Identity surface
@@ -55,6 +55,9 @@ Its evidence decides how it is written:
 | Counted | The writer hashed the bytes it counted. | Corrects a disagreeing stored length. |
 | Declared | A document stated it and nothing checked it. | Leaves the stored length alone; creates the row when absent. |
 
+`ObservedResourceDescriptor` is the typed counted-evidence wrapper around a `ResourceDescriptor`.
+It carries no payload and has no distinct persisted representation; it lets preparation hash and count bytes before writer ownership while preserving the counted update rule.
+
 ## Store surface
 
 | Role | Operation | Result |
@@ -65,6 +68,7 @@ Its evidence decides how it is written:
 | Writer | `get(id)` | Optional descriptor under the write transaction. |
 | Writer | `create(bytes)` | Existing id for equal content or a newly created id, with a counted length; `ValueTooLarge` above `UINT32_MAX`; typed error on storage failure or exhaustion. |
 | Writer | `getOrCreate(descriptor)` | Existing id for that digest, or a newly created row with the declared length. |
+| Writer | `getOrCreate(observed)` | Existing id for that digest, correcting a disagreeing length, or a newly created row with the counted length. |
 | Writer | `remove(id)` | `true` when a row existed and was removed. No production path calls it. |
 | Writer | `clear()` | Typed result from clearing all rows. |
 
@@ -119,7 +123,7 @@ If a `full` document declares length `1024` for a digest whose row already holds
 
 - [`CoreIds.h`](../../../include/ao/CoreIds.h) defines the strong type and invalid sentinel.
 - [`Sha256.h`](../../../include/ao/utility/Sha256.h) defines the digest, its hexadecimal spelling, and parsing.
-- [`ResourceLayout.h`](../../../include/ao/library/ResourceLayout.h) defines the descriptor, its persisted bytes, and id derivation.
+- [`ResourceLayout.h`](../../../include/ao/library/ResourceLayout.h) defines the descriptor, counted-evidence wrapper, persisted bytes, and id derivation.
 - [`ResourceStore.h`](../../../include/ao/library/ResourceStore.h) defines reader and writer operations.
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp) defines create, digest reuse, length evidence, and probing.
 - [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp) defines the administrative scoped read used by export.
@@ -130,7 +134,7 @@ If a `full` document declares length `1024` for a digest whose row already holds
 
 - [`Sha256Test.cpp`](../../../test/unit/utility/Sha256Test.cpp) protects published digest vectors, hexadecimal spelling, and parsing.
 - [`ResourceLayoutTest.cpp`](../../../test/unit/library/ResourceLayoutTest.cpp) protects descriptor size, alignment, byte order, and id derivation.
-- [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) protects id creation, digest reuse, collision probing, length evidence, reads, removal, clear, and errors.
+- [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) protects id creation, digest reuse, collision probing, declared and counted descriptor evidence, reads, removal, clear, and errors.
 - [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects valid references in track preparation.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, export by materialization, and both absence reports.
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects interactive size, ownership, affinity, absence, event silence, cancellation, and carrier-index rebuild behavior.

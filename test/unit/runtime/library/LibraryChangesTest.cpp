@@ -344,7 +344,7 @@ namespace ao::rt::test
     auto changes = LibraryChanges{executor, 0, "test-library"};
     auto mutationServicePtr = std::make_unique<LibraryMutationService>(
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes);
-    auto maintenanceRes = mutationServicePtr->beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    auto maintenanceRes = mutationServicePtr->beginMaintenance(LibraryMaintenanceKind::Import);
     REQUIRE(maintenanceRes);
     auto maintenance = std::move(*maintenanceRes);
 
@@ -370,7 +370,7 @@ namespace ao::rt::test
     auto changes = LibraryChanges{executor, 0, "test-library"};
     auto mutationService = LibraryMutationService{
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
-    auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    auto maintenanceRes = mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
     REQUIRE(maintenanceRes);
     auto phases = std::vector<std::string_view>{};
     auto changedSubscription =

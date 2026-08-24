@@ -25,8 +25,6 @@ namespace ao::rt
   {
     None,
     Import,
-    ScanApply,
-    AudioIdentityBackfill,
   };
 
   struct LibraryAuthoringAvailability final

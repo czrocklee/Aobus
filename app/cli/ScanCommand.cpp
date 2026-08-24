@@ -185,6 +185,12 @@ namespace ao::cli
 
     void printApplySummary(rt::ScanApplyResult const& result, std::ostream& os)
     {
+      if (result.staleCount > 0)
+      {
+        std::println(
+          os, "Skipped {} item{} that changed during the scan", result.staleCount, result.staleCount == 1 ? "" : "s");
+      }
+
       if (!result.relinkedIds.empty())
       {
         std::println(

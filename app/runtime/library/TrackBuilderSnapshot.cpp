@@ -4,10 +4,14 @@
 #include "TrackBuilderSnapshot.h"
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/utility/Sha256.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <format>
 #include <span>
 #include <variant>
 #include <vector>
@@ -48,32 +52,60 @@ namespace ao::rt
       _tags.emplace_back(tag);
     }
 
-    _covers.reserve(source.coverArt().entries().size());
-
-    for (auto const& entry : source.coverArt().entries())
-    {
-      if (auto const* const resourceId = std::get_if<ResourceId>(&entry.source); resourceId != nullptr)
-      {
-        _covers.push_back(Cover{.type = entry.type, .source = *resourceId});
-      }
-      else if (auto const* const descriptor = std::get_if<library::ResourceDescriptor>(&entry.source);
-               descriptor != nullptr)
-      {
-        _covers.push_back(Cover{.type = entry.type, .source = *descriptor});
-      }
-      else
-      {
-        auto const bytes = std::get<std::span<std::byte const>>(entry.source);
-        _covers.push_back(Cover{.type = entry.type, .source = std::vector<std::byte>{bytes.begin(), bytes.end()}});
-      }
-    }
-
     _customMetadata.reserve(source.customMetadata().pairs().size());
 
     for (auto const& [key, value] : source.customMetadata().pairs())
     {
       _customMetadata.emplace_back(key, value);
     }
+  }
+
+  Result<TrackBuilderSnapshot> TrackBuilderSnapshot::make(library::TrackBuilder const& source)
+  {
+    auto result = TrackBuilderSnapshot{source};
+    result._covers.reserve(source.coverArt().entries().size());
+
+    for (auto const& entry : source.coverArt().entries())
+    {
+      if (auto const* const resourceId = std::get_if<ResourceId>(&entry.source); resourceId != nullptr)
+      {
+        result._covers.push_back(Cover{.type = entry.type, .source = *resourceId});
+      }
+      else if (auto const* const observed = std::get_if<library::ObservedResourceDescriptor>(&entry.source);
+               observed != nullptr)
+      {
+        result._covers.push_back(Cover{.type = entry.type, .source = *observed});
+      }
+      else if (auto const* const descriptor = std::get_if<library::ResourceDescriptor>(&entry.source);
+               descriptor != nullptr)
+      {
+        result._covers.push_back(Cover{.type = entry.type, .source = *descriptor});
+      }
+      else
+      {
+        auto const bytes = std::get<std::span<std::byte const>>(entry.source);
+
+        if (!library::resourceByteLengthFits(bytes.size()))
+        {
+          return makeError(Error::Code::ValueTooLarge,
+                           std::format("Resource content of {} bytes exceeds the stored length field", bytes.size()));
+        }
+
+        result._covers.push_back(Cover{
+          .type = entry.type,
+          .source =
+            library::ObservedResourceDescriptor{
+              .descriptor =
+                library::ResourceDescriptor{
+                  .digest = utility::computeSha256(bytes),
+                  .byteLength = static_cast<std::uint32_t>(bytes.size()),
+                },
+            },
+        });
+      }
+    }
+
+    return result;
   }
 
   library::TrackBuilder TrackBuilderSnapshot::makeBuilder() const
@@ -118,15 +150,14 @@ namespace ao::rt
       {
         result.coverArt().add(cover.type, *resourceId);
       }
-      else if (auto const* const descriptor = std::get_if<library::ResourceDescriptor>(&cover.source);
-               descriptor != nullptr)
+      else if (auto const* const observed = std::get_if<library::ObservedResourceDescriptor>(&cover.source);
+               observed != nullptr)
       {
-        result.coverArt().add(cover.type, *descriptor);
+        result.coverArt().add(cover.type, *observed);
       }
       else
       {
-        auto const& bytes = std::get<std::vector<std::byte>>(cover.source);
-        result.coverArt().add(cover.type, std::span<std::byte const>{bytes});
+        result.coverArt().add(cover.type, std::get<library::ResourceDescriptor>(cover.source));
       }
     }
 

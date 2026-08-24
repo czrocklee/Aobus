@@ -106,13 +106,14 @@ No worker opens or reconfigures a backend or accesses Player, Engine, runtime se
 After the final worker phase resumes on the callback executor, upper request/source identity and Engine playback/route context are revalidated before adoption can allocate a source generation or publish any state.
 The old playback session remains authoritative during this round trip.
 
-Mutating library tasks enter coordinator maintenance on the callback executor before slow preparation begins.
-The maintenance guard may accompany worker preparation, but it carries no LMDB transaction and no writer mutex.
-Worker code acquires a coordinator-owned mutation only for its apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before maintenance exit can advertise authoring availability.
+Mutating library tasks acquire one coordinator background-task lease on the callback executor before slow preparation begins.
+The lease serializes scan, identity backfill, and YAML import preparation, but it carries no LMDB transaction or writer mutex and does not change authoring availability.
+YAML import additionally enters Maintenance and closes interactive admission; scan and backfill leave it open during preparation. Their background write phases reserve writer intent before waiting, so callback-owner authoring returns unavailable instead of blocking behind the worker transaction.
+Worker code acquires a coordinator-owned mutation only for its apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before task finalization.
 For a foreign commit, mandatory publication `P` is admitted before the same operation admits callback-owner finalization `C`; their shared `QueuedExecutorBase` FIFO therefore runs `P` before `C`.
 An owner-thread commit executes `P` inline.
-These two cases make an ordinary maintenance-task return a materialization barrier without a ticket, acknowledgement object, or callback-thread wait.
-Identity backfill already commits bounded batches, while scan apply currently commits its complete prepared plan at once.
+These two cases make an ordinary mutating-task return a materialization barrier without a ticket, acknowledgement object, or callback-thread wait.
+Identity backfill commits bounded batches, while scan apply commits its complete admitted plan at once.
 Read-only export and scan-plan construction need no maintenance admission.
 For progress-capable library tasks, successful cancellable callback-executor admission is the observer-side-effect boundary; the [library task execution specification](../spec/library/runtime/task-execution.md#progress-and-outcome) owns the exact conversation and terminal-pulse behavior.
 
@@ -169,19 +170,20 @@ callback executor: validate request and capture isolated audio evidence
 Optimistic preparation failure preserves the successful inspection so commit can retry after the backend chooses its exact mode.
 Gapless lookahead also opens, seeks, and prerolls its final decoder on the worker when it can reuse an already-open compatible PCM mode; workers never open or reconfigure a backend.
 
-A mutating library task refines the round trip:
+A scan or identity-backfill task refines the round trip:
 
 ```text
-callback executor: enter Maintenance(operationKind)
+callback executor: acquire background-task lease
   -> worker pool: parse, walk, hash, or otherwise prepare without writer ownership
-  -> coordinator mutation: revalidate, apply, commit revision R
+  -> background mutation: revalidate, apply, commit revision R
   -> admit callback publication P(R) while writer admission remains closed
   -> callback executor: P(R) applies the replica and emits observers
-  -> callback executor: later finalization C exits maintenance and publishes Available(runtimeInstanceId, R)
+  -> callback executor: later finalization C releases the lease and clears task progress
 ```
 
-Cancellation before commit releases maintenance without advancing the library revision.
-After a transaction may have committed, the coroutine returns to the callback executor without a cancellable hop so publication and maintenance cleanup cannot be skipped.
+YAML import uses the same lease around its stronger Maintenance interval.
+Cancellation before commit releases the lease or maintenance without advancing the library revision.
+After a transaction may have committed, the coroutine returns to the callback executor without a cancellable hop so publication and task cleanup cannot be skipped.
 
 For CLI, the callback executor is the invocation thread's `LoopExecutor` and the synchronous command boundary pumps it through `CliRuntime::runTask()` until terminal completion.
 An escaping executor callback completes the executor's mandatory queue bookkeeping and then enters AO fatal handling at the executor boundary.
@@ -205,7 +207,7 @@ The current Engine non-realtime queue and Player-to-executor task stream have no
 
 - An executor-affine service owns one serialized mutable state domain; adding a mutex is not a substitute for respecting that domain.
 - Background work carries values, stop tokens, and narrow thread-safe collaborators across the boundary, not references to frontend widgets or executor-affine view state.
-- A maintenance guard closes interactive admission across slow preparation but never grants storage write access by itself.
+- A background-task lease serializes long task preparation without closing authoring or granting storage write access; an import maintenance guard separately closes interactive admission.
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
 - A synchronous observer must not destroy the emitting owner or invoke composition-root shutdown on the same callback stack; it defers teardown to a later executor turn.
 - Reentrant notification mutations queue another immutable update, so every contract-fulfilling observer finishes the current snapshot before delivery moves to the next one.
@@ -295,6 +297,7 @@ Unexpected coroutine exceptions abort through the Core fatal backend after termi
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp), [`PlaybackSuccessionLaunchTest.cpp`](../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp), [`PlaybackSuccessionAdvanceTest.cpp`](../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp), and [`PlaybackSuccessionFailureTest.cpp`](../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp) exercise the public playback service and executor-affine internal succession owner.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, and reentrant commands.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
+- [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects task leases, interactive authoring during scan preparation, publication-before-finalization ordering, and cancellation cleanup.
 
 ## Related documents
 

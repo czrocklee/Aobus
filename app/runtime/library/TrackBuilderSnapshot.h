@@ -6,12 +6,12 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -25,18 +25,19 @@ namespace ao::rt
   class TrackBuilderSnapshot final
   {
   public:
-    explicit TrackBuilderSnapshot(library::TrackBuilder const& source);
+    static Result<TrackBuilderSnapshot> make(library::TrackBuilder const& source);
 
     library::TrackBuilder makeBuilder() const;
 
   private:
-    /// The three cover sources a builder can carry, in owning form: a handle this
-    /// library already minted, content the caller read, or a descriptor a document
-    /// declared. All three are values here, which is the point of a snapshot.
+    explicit TrackBuilderSnapshot(library::TrackBuilder const& source);
+
+    /// Cover bytes become observed descriptors while their media-file view is
+    /// alive. The snapshot therefore owns only compact values.
     struct Cover final
     {
       PictureType type = PictureType::FrontCover;
-      std::variant<ResourceId, std::vector<std::byte>, library::ResourceDescriptor> source;
+      std::variant<ResourceId, library::ObservedResourceDescriptor, library::ResourceDescriptor> source;
     };
 
     std::string _title;

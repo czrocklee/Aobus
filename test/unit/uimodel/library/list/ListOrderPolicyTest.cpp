@@ -87,7 +87,7 @@ namespace ao::uimodel::test
   {
     auto input = eligibleInput();
     input.authoring.state = rt::LibraryAuthoringState::Maintenance;
-    input.authoring.maintenanceKind = rt::LibraryMaintenanceKind::ScanApply;
+    input.authoring.maintenanceKind = rt::LibraryMaintenanceKind::Import;
 
     auto const state = describeListOrderCapabilities(ao::test::presentationTextCatalog("de-AT"), input);
 
@@ -120,7 +120,7 @@ namespace ao::uimodel::test
     SECTION("maintenance")
     {
       input.authoring.state = rt::LibraryAuthoringState::Maintenance;
-      input.authoring.maintenanceKind = rt::LibraryMaintenanceKind::ScanApply;
+      input.authoring.maintenanceKind = rt::LibraryMaintenanceKind::Import;
       auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("Library is busy"));

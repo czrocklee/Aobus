@@ -137,6 +137,7 @@ namespace ao::rt
         return makeError(Error::Code::FormatRejected,
                          std::format("{} cannot be represented in the library: {}", context, error.message));
       }
+
       return std::unexpected{std::move(error)};
     }
 
@@ -1665,10 +1666,17 @@ namespace ao::rt
         return std::unexpected{metadataRes.error()};
       }
 
+      auto snapshotRes = TrackBuilderSnapshot::make(builder);
+
+      if (!snapshotRes)
+      {
+        return std::unexpected{snapshotRes.error()};
+      }
+
       result.push_back(PreparedTrack{.yamlId = validatedTrack.yamlId,
                                      .uri = validatedTrack.uri,
                                      .optExistingTrackId = optExistingTrackId,
-                                     .builder = TrackBuilderSnapshot{builder},
+                                     .builder = std::move(*snapshotRes),
                                      .manifest = std::move(manifestBuilder)});
     }
 

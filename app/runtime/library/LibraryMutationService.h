@@ -68,6 +68,8 @@ namespace ao::rt
 
   namespace detail
   {
+    class LibraryMutationLifetimeState;
+
     template<typename Type>
     struct OperationResultTraits final
     {
@@ -92,6 +94,13 @@ namespace ao::rt
   class LibraryMutationService final
   {
   public:
+    enum class BackgroundTaskKind : std::uint8_t
+    {
+      Import,
+      ScanApply,
+      AudioIdentityBackfill,
+    };
+
     class [[nodiscard]] Mutation final
     {
     public:
@@ -188,12 +197,14 @@ namespace ao::rt
     private:
       Mutation(LibraryMutationService& owner,
                std::unique_lock<std::mutex> writerLock,
-               library::WriteTransaction transaction);
+               library::WriteTransaction transaction,
+               bool backgroundWriter = false) noexcept;
       LibraryMutationService* _owner = nullptr;
       std::unique_lock<std::mutex> _writerLock;
       library::WriteTransaction _transaction;
       bool _terminal = false;
       bool _executeEligible = true;
+      bool _backgroundWriter = false;
 
       friend class LibraryMutationService;
     };
@@ -211,11 +222,37 @@ namespace ao::rt
       void finish() noexcept;
 
     private:
-      struct LifetimeState;
+      MaintenanceGuard(std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
+                       std::uint64_t generation) noexcept;
 
-      MaintenanceGuard(std::weak_ptr<LifetimeState> lifetimeStatePtr, std::uint64_t generation) noexcept;
+      std::weak_ptr<detail::LibraryMutationLifetimeState> _lifetimeStatePtr;
+      std::uint64_t _generation = 0;
 
-      std::weak_ptr<LifetimeState> _lifetimeStatePtr;
+      friend class LibraryMutationService;
+    };
+
+    /**
+     * Serializes long-running library tasks without changing authoring
+     * availability. Each task still acquires ordinary writer ownership only
+     * for its bounded mutation phases.
+     */
+    class [[nodiscard]] BackgroundTaskLease final
+    {
+    public:
+      ~BackgroundTaskLease();
+
+      BackgroundTaskLease(BackgroundTaskLease const&) = delete;
+      BackgroundTaskLease& operator=(BackgroundTaskLease const&) = delete;
+      BackgroundTaskLease(BackgroundTaskLease&& other) noexcept;
+      BackgroundTaskLease& operator=(BackgroundTaskLease&&) = delete;
+
+      void finish() noexcept;
+
+    private:
+      BackgroundTaskLease(std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
+                          std::uint64_t generation) noexcept;
+
+      std::weak_ptr<detail::LibraryMutationLifetimeState> _lifetimeStatePtr;
       std::uint64_t _generation = 0;
 
       friend class LibraryMutationService;
@@ -259,10 +296,18 @@ namespace ao::rt
     Result<Mutation> beginInteractiveMutation(library::WriteTransaction::Options options = {});
     AuthoringStart beginAuthoringMutation(BoundTrackTargets const& targets);
     ListOrderAuthoringStart beginListOrderAuthoringMutation(BoundListOrder const& order);
+    Result<BackgroundTaskLease> beginBackgroundTask(BackgroundTaskKind kind);
+    Result<Mutation> beginBackgroundMutation(BackgroundTaskLease const& lease);
     Result<MaintenanceGuard> beginMaintenance(LibraryMaintenanceKind kind);
     Result<Mutation> beginMaintenanceMutation(MaintenanceGuard const& guard);
 
   private:
+    enum class WriterKind : std::uint8_t
+    {
+      Ordinary,
+      Background,
+    };
+
     struct PublicationDiagnosticContext final
     {
       std::string libraryIdentity;
@@ -307,8 +352,14 @@ namespace ao::rt
     };
 
     void beginClosing() noexcept;
-    Result<std::unique_lock<std::mutex>> acquireWriter(LibraryAuthoringState requiredState, std::string_view operation);
+    Result<std::unique_lock<std::mutex>> acquireWriter(LibraryAuthoringState requiredState,
+                                                       std::string_view operation,
+                                                       WriterKind writerKind = WriterKind::Ordinary);
     Result<std::uint64_t> commitMutation(Mutation& mutation, LibraryChangeSet changeSet);
+    void cancelBackgroundWriterReservation() noexcept;
+    void releaseBackgroundWriter(std::unique_lock<std::mutex>& writerLock) noexcept;
+    void releaseMutationWriter(Mutation& mutation) noexcept;
+    void finishBackgroundTask(std::uint64_t generation) noexcept;
     void dispatchMaintenanceFinish(std::uint64_t generation) noexcept;
     void handleFinalizationAdmissionFailure(std::exception_ptr exceptionPtr) noexcept;
     void finishMaintenance(std::uint64_t generation) noexcept;
@@ -327,7 +378,7 @@ namespace ao::rt
     library::MusicLibrary& _library;
     LibraryChanges& _changes;
     std::uint64_t const _runtimeInstanceId;
-    std::shared_ptr<MaintenanceGuard::LifetimeState> _lifetimeStatePtr;
+    std::shared_ptr<detail::LibraryMutationLifetimeState> _lifetimeStatePtr;
 
     mutable std::mutex _stateMutex;
     std::mutex _writerMutex;
@@ -337,6 +388,9 @@ namespace ao::rt
     std::uint64_t _availableRevision = 0;
     std::uint64_t _maintenanceGeneration = 0;
     LibraryMaintenanceKind _maintenanceKind = LibraryMaintenanceKind::None;
+    std::uint64_t _backgroundTaskGeneration = 0;
+    std::optional<BackgroundTaskKind> _optBackgroundTaskKind{};
+    bool _backgroundWriterReserved = false;
     PublicationBarrier _publicationBarrier;
     std::shared_ptr<PublicationDiagnosticContext const> _activePublicationDiagnosticContextPtr;
     bool _availabilityNotificationInProgress = false;

@@ -127,6 +127,11 @@ namespace ao::library
     return store(descriptor, LengthEvidence::Declared);
   }
 
+  Result<ResourceId> Writer::getOrCreate(ObservedResourceDescriptor const& observed)
+  {
+    return store(observed.descriptor, LengthEvidence::Counted);
+  }
+
   Result<ResourceId> Writer::store(ResourceDescriptor const& descriptor, LengthEvidence const evidence)
   {
     // The digest is the identity; the id is a 32-bit handle for it, so the probe

@@ -76,7 +76,8 @@ Resource creation hashes content with SHA-256, derives the initial key from the 
 An empty slot creates the row; an equal digest reuses the row; a different digest advances the key with wrap from maximum to `1`.
 A writer that hashed the content corrects a stored `byteLength` that disagrees with what it counted; a length merely declared by a document only fills a row that does not exist yet.
 
-Track preparation creates or reuses every cover resource in the same library mutation that writes the track reference, from bytes it hashes or from a descriptor a document declared.
+Track preparation creates or reuses every cover resource in the same library mutation that writes the track reference, from bytes it hashes, an observed descriptor whose bytes were already hashed and counted, or a descriptor a document declared.
+Scan preparation converts embedded picture bytes into observed descriptors before opening its write transaction, so neither the payload nor its SHA-256 work extends writer ownership.
 `primary()` returns the first entry whose type is `FrontCover`, otherwise the first entry, otherwise absence.
 
 ### Runtime read and propagation
@@ -210,6 +211,7 @@ Absence is reported as a row that does not exist or as a row no source could rep
 ## Failure and cancellation
 
 Resource create returns storage errors or `ResourceExhausted` after a complete probe without a free slot or an equal digest, and `ValueTooLarge` for content longer than `UINT32_MAX`.
+The scan checks that limit while producing observed descriptors; an oversized embedded picture fails complete scan preparation before a writer is acquired.
 Core read absence is not an error; operational storage faults follow the LMDB contract.
 
 A cover cache that cannot be created, written, enumerated, or pruned fails no request: the caller already holds verified content, so the only consequence is a later cold miss and a budget that may stay exceeded until a pass succeeds.
@@ -287,7 +289,8 @@ These degradation states do not remove or rewrite a track's cover reference.
 ## Test map
 
 - [`Sha256Test.cpp`](../../../test/unit/utility/Sha256Test.cpp) and [`ResourceLayoutTest.cpp`](../../../test/unit/library/ResourceLayoutTest.cpp) protect published digest vectors, descriptor bytes, and id derivation.
-- [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protect Core behavior, including a searched id collision resolved by the probe.
+- [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protect Core behavior, including counted observed descriptors and a searched id collision resolved by the probe.
+- [`TrackBuilderSnapshotTest.cpp`](../../../test/unit/runtime/library/TrackBuilderSnapshotTest.cpp) protects scan-time conversion from borrowed picture bytes to observed descriptors.
 - [`ResourceMaterializationTest.cpp`](../../../test/unit/runtime/library/ResourceMaterializationTest.cpp) protects the walk, its ceilings, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects lazy index construction, one rebuild per stale revision, that one stale stamp still costs one build with several workers, and the exact interactive limit.
 - [`RequestCoalescerTest.cpp`](../../../test/unit/async/RequestCoalescerTest.cpp) protects shared flight, cancellation, fanout, retry, and clear-generation behavior across frontend adapters.

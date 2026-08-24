@@ -3,8 +3,11 @@
 
 #include <ao/rt/library/LibraryScan.h>
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
+#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MetadataLayout.h>
@@ -14,12 +17,16 @@
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Path.h>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <functional>
+#include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -32,6 +39,73 @@ namespace ao::rt
 {
   namespace
   {
+    struct ManifestSnapshotEntry final
+    {
+      std::string uri;
+      TrackId trackId = kInvalidTrackId;
+      std::uint64_t fileSize = 0;
+      std::uint64_t mtime = 0;
+      std::uint64_t audioPayloadLength = 0;
+      utility::Hash128 audioSignature = {};
+      library::FileStatus status = library::FileStatus::Available;
+    };
+
+    class ManifestSnapshot final
+    {
+    public:
+      explicit ManifestSnapshot(std::vector<ManifestSnapshotEntry> entries)
+        : _entries{std::move(entries)}
+      {
+      }
+
+      ManifestSnapshotEntry const* find(std::string_view const uri) const
+      {
+        auto const it = std::ranges::lower_bound(_entries, uri, {}, &ManifestSnapshotEntry::uri);
+        return it != _entries.end() && it->uri == uri ? &*it : nullptr;
+      }
+
+      std::span<ManifestSnapshotEntry const> entries() const noexcept { return _entries; }
+
+    private:
+      std::vector<ManifestSnapshotEntry> _entries;
+    };
+
+    struct PlanSnapshot final
+    {
+      std::array<std::byte, 16> libraryId{};
+      std::uint64_t libraryRevision = 0;
+      ManifestSnapshot manifest{std::vector<ManifestSnapshotEntry>{}};
+    };
+
+    PlanSnapshot capturePlanSnapshot(library::MusicLibrary const& source, std::stop_token const stopToken)
+    {
+      async::throwIfStopRequested(stopToken);
+
+      auto transaction = source.readTransaction();
+      auto const header = source.metadataHeader(transaction);
+      auto const libraryRevision = source.libraryRevision(transaction);
+      auto const manifestReader = source.manifest().reader(transaction);
+      auto entries = std::vector<ManifestSnapshotEntry>{};
+
+      for (auto const& [uri, view] : manifestReader)
+      {
+        async::throwIfStopRequested(stopToken);
+        entries.push_back(ManifestSnapshotEntry{.uri = std::string{uri},
+                                                .trackId = view.trackId(),
+                                                .fileSize = view.fileSize(),
+                                                .mtime = view.mtime(),
+                                                .audioPayloadLength = view.audioPayloadLength(),
+                                                .audioSignature = view.audioSignature(),
+                                                .status = view.status()});
+      }
+
+      return PlanSnapshot{
+        .libraryId = header.libraryId,
+        .libraryRevision = libraryRevision,
+        .manifest = ManifestSnapshot{std::move(entries)},
+      };
+    }
+
     struct AudioIdentityKey final
     {
       std::uint64_t payloadLength = 0;
@@ -61,7 +135,7 @@ namespace ao::rt
 
     Result<> scanEntry(std::filesystem::path const& path,
                        std::string const& uri,
-                       library::FileManifestStore::Reader const& manifestReader,
+                       ManifestSnapshot const& manifest,
                        std::unordered_set<std::string>& seenUris,
                        std::vector<ScanItem>& items)
     {
@@ -100,27 +174,45 @@ namespace ao::rt
       auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
 
       item.fileSize = std::filesystem::file_size(path, entryEc);
-      item.mtime = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                std::filesystem::last_write_time(path, entryEc).time_since_epoch())
-                                                .count());
 
       if (entryEc)
       {
-        item.classification = ScanClassification::Error;
         item.errorMessage = entryEc.message();
+        items.push_back(std::move(item));
+        return {};
       }
-      else if (auto optManifest = manifestReader.get(uri); !optManifest)
+
+      auto const lastWriteTime = std::filesystem::last_write_time(path, entryEc);
+
+      if (entryEc)
+      {
+        item.errorMessage = entryEc.message();
+        items.push_back(std::move(item));
+        return {};
+      }
+
+      item.mtime = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count());
+
+      if (auto const* const manifestEntry = manifest.find(uri); manifestEntry == nullptr)
       {
         item.classification = ScanClassification::New;
       }
       else
       {
-        auto const& view = *optManifest;
-        item.trackId = view.trackId();
-        item.audioPayloadLength = view.audioPayloadLength();
-        item.audioSignature = view.audioSignature();
+        item.trackId = manifestEntry->trackId;
+        item.audioPayloadLength = manifestEntry->audioPayloadLength;
+        item.audioSignature = manifestEntry->audioSignature;
+        item.optManifestEvidence = ScanManifestEvidence{
+          .fileSize = manifestEntry->fileSize,
+          .mtime = manifestEntry->mtime,
+          .audioPayloadLength = manifestEntry->audioPayloadLength,
+          .audioSignature = manifestEntry->audioSignature,
+          .status = manifestEntry->status,
+        };
 
-        if (view.fileSize() == item.fileSize && view.mtime() == item.mtime)
+        if (manifestEntry->status != library::FileStatus::Missing && manifestEntry->fileSize == item.fileSize &&
+            manifestEntry->mtime == item.mtime)
         {
           item.classification = ScanClassification::Unchanged;
         }
@@ -156,34 +248,44 @@ namespace ao::rt
     }
 
     void addMissingEntries(std::vector<ScanItem>& items,
-                           library::FileManifestStore::Reader const& manifestReader,
+                           ManifestSnapshot const& manifest,
                            std::unordered_set<std::string> const& seenUris,
-                           std::unordered_set<std::string> const& blockedUriPrefixes)
+                           std::unordered_set<std::string> const& blockedUriPrefixes,
+                           std::stop_token const stopToken)
     {
-      for (auto const& [uriView, view] : manifestReader)
+      for (auto const& entry : manifest.entries())
       {
-        if (auto const uri = std::string{uriView};
-            !hasBlockedUriPrefix(uriView, blockedUriPrefixes) && !seenUris.contains(uri))
+        async::throwIfStopRequested(stopToken);
+
+        if (!hasBlockedUriPrefix(entry.uri, blockedUriPrefixes) && !seenUris.contains(entry.uri))
         {
-          auto item = ScanItem{.uri = uri,
+          auto item = ScanItem{.uri = entry.uri,
                                .classification = ScanClassification::Missing,
-                               .fileSize = view.fileSize(),
-                               .mtime = view.mtime(),
-                               .audioPayloadLength = view.audioPayloadLength(),
-                               .audioSignature = view.audioSignature(),
-                               .trackId = view.trackId()};
+                               .fileSize = entry.fileSize,
+                               .mtime = entry.mtime,
+                               .audioPayloadLength = entry.audioPayloadLength,
+                               .audioSignature = entry.audioSignature,
+                               .trackId = entry.trackId,
+                               .optManifestEvidence = ScanManifestEvidence{
+                                 .fileSize = entry.fileSize,
+                                 .mtime = entry.mtime,
+                                 .audioPayloadLength = entry.audioPayloadLength,
+                                 .audioSignature = entry.audioSignature,
+                                 .status = entry.status,
+                               }};
           items.push_back(std::move(item));
         }
       }
     }
 
-    void classifyMovedEntries(std::vector<ScanItem>& items)
+    void classifyMovedEntries(std::vector<ScanItem>& items, std::stop_token const stopToken)
     {
       auto missingByLength = std::unordered_map<std::uint64_t, std::vector<std::size_t>>{};
       auto missingByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
 
       for (std::size_t index = 0; index < items.size(); ++index)
       {
+        async::throwIfStopRequested(stopToken);
         auto const& item = items[index];
 
         if (item.classification != ScanClassification::Missing || !hasAudioIdentity(item))
@@ -205,6 +307,7 @@ namespace ao::rt
 
       for (std::size_t index = 0; index < items.size(); ++index)
       {
+        async::throwIfStopRequested(stopToken);
         auto& item = items[index];
 
         if (item.classification != ScanClassification::New)
@@ -233,10 +336,11 @@ namespace ao::rt
           continue;
         }
 
-        auto optIdentity = library::readAudioIdentity(payloadRes->bytes);
+        auto optIdentity = library::readAudioIdentity(payloadRes->bytes, {}, stopToken);
 
         if (!optIdentity)
         {
+          async::throwIfStopRequested(stopToken);
           continue;
         }
 
@@ -250,6 +354,7 @@ namespace ao::rt
 
       for (auto const& [key, newIndices] : newByIdentity)
       {
+        async::throwIfStopRequested(stopToken);
         auto const missingIt = missingByIdentity.find(key);
 
         if (missingIt == missingByIdentity.end())
@@ -269,6 +374,7 @@ namespace ao::rt
         newItem.classification = ScanClassification::Moved;
         newItem.oldUri = missingItem.uri;
         newItem.trackId = missingItem.trackId;
+        newItem.optManifestEvidence = missingItem.optManifestEvidence;
         matchedMissingIndices.insert(missingIndices.front());
       }
 
@@ -282,6 +388,8 @@ namespace ao::rt
 
       for (std::size_t index = 0; index < items.size(); ++index)
       {
+        async::throwIfStopRequested(stopToken);
+
         if (!matchedMissingIndices.contains(index))
         {
           filteredItems.push_back(std::move(items[index]));
@@ -297,13 +405,14 @@ namespace ao::rt
   {
   }
 
-  Result<ScanPlan> LibraryScan::buildPlan(BuildProgressCallback progress)
+  Result<ScanPlan> LibraryScan::buildPlan(BuildProgressCallback progress, std::stop_token const stopToken)
   {
-    return buildPlanUnchecked(std::move(progress));
+    return buildPlanUnchecked(std::move(progress), stopToken);
   }
 
-  Result<ScanPlan> LibraryScan::buildPlanUnchecked(BuildProgressCallback progress)
+  Result<ScanPlan> LibraryScan::buildPlanUnchecked(BuildProgressCallback progress, std::stop_token const stopToken)
   {
+    async::throwIfStopRequested(stopToken);
     auto const root = _library.rootPath();
 
     if (auto rootEc = std::error_code{}; !std::filesystem::exists(root, rootEc))
@@ -326,10 +435,7 @@ namespace ao::rt
                        "Failed to resolve library root path " + utility::pathToUtf8(root) + ": " + rootEc.message());
     }
 
-    auto transaction = _library.readTransaction();
-    auto const header = _library.metadataHeader(transaction);
-    auto const libraryRevision = _library.libraryRevision(transaction);
-    auto const manifestReader = _library.manifest().reader(transaction);
+    auto snapshot = capturePlanSnapshot(_library, stopToken);
     auto items = std::vector<ScanItem>{};
 
     // Track which URIs we've seen on disk to identify MISSING tracks later
@@ -351,12 +457,14 @@ namespace ao::rt
     while (it != std::filesystem::recursive_directory_iterator{})
 
     {
+      async::throwIfStopRequested(stopToken);
       auto entryEc = std::error_code{};
       auto const& entry = *it;
 
       if (progress)
       {
         progress(entry.path());
+        async::throwIfStopRequested(stopToken);
       }
 
       auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(entry.path().lexically_relative(root)));
@@ -437,7 +545,7 @@ namespace ao::rt
       }
 
       if (auto result =
-            scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, manifestReader, seenUris, items);
+            scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, snapshot.manifest, seenUris, items);
           !result)
       {
         return std::unexpected{result.error()};
@@ -452,9 +560,9 @@ namespace ao::rt
     }
 
     // 2. Identify MISSING (In manifest but not on disk)
-    addMissingEntries(items, manifestReader, seenUris, blockedUriPrefixes);
-    classifyMovedEntries(items);
+    addMissingEntries(items, snapshot.manifest, seenUris, blockedUriPrefixes, stopToken);
+    classifyMovedEntries(items, stopToken);
 
-    return ScanPlan{header.libraryId, libraryRevision, std::move(items)};
+    return ScanPlan{snapshot.libraryId, snapshot.libraryRevision, std::move(items)};
   }
 } // namespace ao::rt

@@ -12,6 +12,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileManifestLayout.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
@@ -359,6 +360,13 @@ namespace ao::rt::test
     CHECK(item.trackId == trackId);
     CHECK(item.audioPayloadLength == identity.payloadLength);
     CHECK(item.audioSignature == identity.signature);
+    REQUIRE(item.optManifestEvidence);
+    CHECK(item.optManifestEvidence->fileSize == 0);
+    CHECK(item.optManifestEvidence->mtime == 0);
+    CHECK(item.optManifestEvidence->audioPayloadLength == identity.payloadLength);
+    CHECK(item.optManifestEvidence->audioSignature == identity.signature);
+    CHECK(item.optManifestEvidence->status == library::FileStatus::Available);
+    CHECK(item.fileSize != item.optManifestEvidence->fileSize);
     CHECK(plan.count(ScanClassification::Missing) == 0);
     CHECK(plan.count(ScanClassification::New) == 0);
   }

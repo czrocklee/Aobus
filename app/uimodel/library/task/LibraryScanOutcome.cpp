@@ -139,6 +139,7 @@ namespace ao::uimodel
     auto const& applied = *completed.optApplyResult;
     outcome.relinkedCount = applied.relinkedIds.size();
     outcome.missingCount = nonNegative(applied.missingCount);
+    outcome.staleCount = nonNegative(applied.staleCount);
     outcome.failureCount = nonNegative(applied.failureCount);
 
     if (outcome.failureCount > 0)

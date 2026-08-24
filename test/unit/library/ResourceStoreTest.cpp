@@ -241,6 +241,31 @@ namespace ao::library::test
       CHECK(optDescriptor->byteLength == buffer.size());
       CHECK(rowCount(store.reader(readTxn)) == 1);
     }
+
+    SECTION("an observed descriptor corrects a length after hashing finished outside the writer")
+    {
+      auto declareTxn = writeTransaction(library);
+      auto declaredRes =
+        physicalWriter(store, declareTxn).getOrCreate(ResourceDescriptor{.digest = digest, .byteLength = 4096});
+      REQUIRE(declaredRes);
+      REQUIRE(declareTxn.commit());
+
+      auto observeTxn = writeTransaction(library);
+      auto const observed = ObservedResourceDescriptor{.descriptor = ResourceDescriptor{
+                                                         .digest = digest,
+                                                         .byteLength = static_cast<std::uint32_t>(buffer.size()),
+                                                       }};
+      auto observedRes = physicalWriter(store, observeTxn).getOrCreate(observed);
+      REQUIRE(observedRes);
+      CHECK(*observedRes == *declaredRes);
+      REQUIRE(observeTxn.commit());
+
+      auto const readTxn = library.readTransaction();
+      auto const optDescriptor = store.reader(readTxn).get(*observedRes);
+      REQUIRE(optDescriptor);
+      CHECK(optDescriptor->byteLength == buffer.size());
+      CHECK(rowCount(store.reader(readTxn)) == 1);
+    }
   }
 
   TEST_CASE("ResourceStore - a removed row is gone", "[library][unit][resource]")

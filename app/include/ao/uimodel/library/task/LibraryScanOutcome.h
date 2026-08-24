@@ -19,7 +19,8 @@ namespace ao::uimodel
   {
     /// The library already matched what is on disk.
     UpToDate,
-    /// Everything the plan asked for was applied.
+    /// The scan completed without item failures. Items whose evidence became
+    /// stale may have been left for a later scan.
     Complete,
     /// Applied, but files the library knows about are no longer where it left
     /// them, which only a person can settle.
@@ -47,6 +48,7 @@ namespace ao::uimodel
     LibraryScanPlanSummary summary{};
     std::size_t relinkedCount = 0;
     std::size_t missingCount = 0;
+    std::size_t staleCount = 0;
     std::size_t failureCount = 0;
     /// Set only when @ref verdict is Failed.
     std::optional<Error> optError{};

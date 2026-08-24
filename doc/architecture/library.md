@@ -160,7 +160,7 @@ It exposes four cooperating roles and owns one private mutation coordinator:
 - `LibraryWriter` owns synchronous semantic commands; every effective command commits and publishes through the coordinator.
 - `LibraryTaskService` owns long-running asynchronous operations such as scan, import/export, and identity backfill, including best-effort progress and its status-free presentation finalization pulse.
 - `LibraryChanges` is the read-only committed-revision observation boundary.
-- `LibraryMutationService` exclusively owns the writable core capability, interactive/maintenance admission, commit revision checks, and publication completion.
+- `LibraryMutationService` exclusively owns the writable core capability, interactive/background/maintenance admission, commit revision checks, and publication completion.
 
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
 It groups roles and lifetime; the coordinator is an application control plane over the existing LMDB transaction system rather than another database or nested transaction layer.
@@ -171,7 +171,9 @@ Applying consumes that plan once and revalidates every binding before opening th
 Frontends may present the report or drop the plan, but cannot manufacture or retarget commit evidence.
 
 The coordinator publishes `LibraryAuthoringAvailability` as `Available` or `Maintenance`.
-Maintenance identifies import, scan apply, or audio-identity backfill and rejects every interactive command for the whole operation, including slow preparation outside writer ownership.
+Maintenance identifies YAML import and rejects every interactive command for the whole operation, including slow preparation outside writer ownership.
+Scan apply and audio-identity backfill instead hold a non-presentational background-task lease that serializes them with each other and with import preparation while leaving authoring `Available` between their short writer phases.
+Background writer intent is reserved before physical writer acquisition so callback-owner authoring can fail fast on observed background contention; non-owner writers retain ordinary waiting semantics, and the [task execution specification](../spec/library/runtime/task-execution.md#background-tasks-and-maintenance-states) owns the exact admission behavior.
 Before synchronous availability delivery, the coordinator establishes a logical notification gate.
 Observers therefore run without the coordinator writer mutex, while reentrant callback-owner writes are rejected and foreign writers wait until delivery completes.
 Maintenance-state emitters reacquire writer ownership before clearing that gate, while revision-only availability remains enclosed by the publication gate; the [change publication specification](../spec/library/runtime/change-publication.md#ordering-and-delivery) owns the exact commit-to-callback handoff.
@@ -255,7 +257,8 @@ runtime command
   -> Available(runtimeInstanceId, committedRevision)
 ```
 
-An asynchronous mutating operation enters exclusive maintenance before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a coordinator mutation only for preview or apply/commit.
+An asynchronous mutating operation acquires its task-level exclusion before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a coordinator mutation only for preview or apply/commit.
+Import uses exclusive maintenance plus the background-task lease; scan apply and identity backfill use only the lease and therefore permit unrelated interactive authoring during preparation.
 Export and scan-plan construction remain independent read snapshots.
 After successful cancellable callback-owner admission, best-effort progress and a status-free finished pulse return through `LibraryTaskService`, while the awaited task owns its outcome and committed content changes use `LibraryChangeSet` exclusively; the [task execution specification](../spec/library/runtime/task-execution.md#progress-and-outcome) owns the exact conversation boundary.
 
@@ -269,11 +272,12 @@ strict parse + prepared data + uncommitted preview
   -> one atomic import commit + LibraryChanges publication
 ```
 
-A scan plan is an opaque move-only runtime value whose immutable items are bound to the persisted library id and committed revision from the planner's read snapshot.
-Scan apply validates that evidence after maintenance admission and again at its single write boundary, so callers cannot fabricate items, cross libraries, or replay an already superseded snapshot.
-The current write transaction covers every prepared item and preserves whole-plan atomicity.
-New and changed items currently retain plan-time file facts after preparation, while missing items are not checked for reappearance.
-Explicit relink is a constrained plan derivation that preserves the same binding rather than a separate caller-authored mutation description.
+A scan plan is an opaque move-only runtime value whose immutable items are bound to the persisted library id and carry planner revision plus per-item manifest evidence from one short read snapshot.
+Planning owns a copy of that manifest state and releases the LMDB snapshot before filesystem traversal and identity hashing.
+Scan apply validates the library id before preparation and at its single write boundary, revalidates filesystem evidence before opening the writer, and admits each actionable item against live manifest and Track evidence before the first mutation.
+Unrelated revisions do not invalidate a plan; stale ordinary items are counted separately from failures and skipped, while stale move evidence aborts the complete apply.
+Scan apply crosses one coordinator mutation boundary; the [scan specification](../spec/library/runtime/scan-and-identity.md#plan-application) owns its item admission and atomicity behavior.
+Explicit relink is a constrained plan derivation that preserves the same source evidence rather than a separate caller-authored mutation description.
 
 A read-oriented workflow obtains one `LibraryReader`, performs the related reads under its single transaction snapshot, and releases the reader before retaining application values.
 
@@ -320,7 +324,7 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 - An unvalidated metadata DBI exists only inside unpublished `MusicLibrary` initialization and cannot escape as a Store token or be reopened during classification.
 - Every persisted Track has exactly one manifest row at its canonical URI, that row names the same Track id, and no extra manifest row exists.
 - One prepared Track write reaches mutable reservation storage only through the source-private reservation access and fills and validates each value inside its synchronous no-throw encoder invocation; reservation pointers never cross that callback boundary.
-- A scan plan can mutate only the library id and immediate successor revision captured by its construction snapshot.
+- A scan plan can mutate only its captured library id and items admitted against their transaction-current manifest and Track evidence.
 - A library import plan can mutate only its captured runtime, library identity, committed revision, and exact source-byte snapshot, and applying it consumes the plan.
 - Manifest keys and runtime-created track URIs are canonical `LibraryUri` values; every file-access boundary re-resolves them beneath the music root.
 - A library transaction is accepted only by stores carrying the same stable `MusicLibrary` identity.
@@ -361,7 +365,7 @@ LMDB mutation faults may use a private `lmdb::detail::TransactionFailure` as sho
 No failed root can be continued or committed, even while its C++ wrapper remains alive.
 Once durable commit succeeds, revision-admission, publication admission, or delivery failure in a live runtime is an infrastructure fault and terminates the process.
 It is not translated to a transaction `Result` or a recoverable authoring state; the next process open reconstructs runtime state from the durable database.
-Coordinated Closing is the only exception: it seals writer and task admission before callback admission closes and may retire publication or maintenance-finalization work that has not begun.
+Coordinated Closing is the only exception: it seals writer and task admission before callback admission closes and may retire publication, background-lease, or maintenance-finalization work that has not begun.
 `MusicLibrary::readTransaction()` and `WritableMusicLibrary::writeTransaction()` treat native begin failure as fatal because a live library has no alternate storage authority.
 Malformed current-schema catalog, metadata, dictionary, Resource, Track, List, or manifest state that can be inspected safely before exposure rejects `MusicLibrary::open()` with `CorruptData`; a valid non-current metadata version returns `NotSupported` before current-schema closure.
 A later Store structural breach is an `AO_INVARIANT` failure, and a later non-miss native read fault is `AO_FATAL`, because supported writers preserve the validated facts and no safe partial-result or degraded-library contract exists.
@@ -395,7 +399,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`LibraryUri`](../../include/ao/library/LibraryUri.h) owns the canonical music-root-relative path namespace and resolved containment check.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
-- [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns live-runtime write admission, revision validation, commit, and publication completion.
+- [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns live-runtime task and write admission, revision validation, commit, and publication completion.
 - [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped read and synchronous mutation boundaries.
 - [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations, best-effort progress, and status-free progress finalization.
 - [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
