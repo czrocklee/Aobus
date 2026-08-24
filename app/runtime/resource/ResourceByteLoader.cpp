@@ -120,11 +120,11 @@ namespace ao::rt
                                     Requests::FlightToken const& token,
                                     std::vector<std::byte> bytes)
   {
-    auto resourceBytes = ResourceBytes{};
+    auto resourceBytes = ResourceBytes{std::move(bytes)};
 
-    if (_cache.store(resourceId, ResourceBytes{std::move(bytes)}))
+    if (!resourceBytes.empty())
     {
-      resourceBytes = _cache.cached(resourceId);
+      std::ignore = _cache.store(resourceId, resourceBytes);
     }
 
     _requests.complete(token, resourceBytes);

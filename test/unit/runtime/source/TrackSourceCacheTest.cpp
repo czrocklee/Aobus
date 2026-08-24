@@ -965,6 +965,30 @@ namespace ao::rt::test
     CHECK(&first.source() != &different.source());
   }
 
+  TEST_CASE("TrackSourceCache - acquiring a new ad-hoc source prunes expired unrelated specs",
+            "[runtime][unit][source][source-spec]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    libraryFixture.addTrack("First");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    cache.reloadAllTracks();
+
+    {
+      [[maybe_unused]] auto expired = ao::test::requireValue(
+        cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year = 1999"}));
+    }
+
+    auto const before = cache.operationCounts();
+    auto live = ao::test::requireValue(
+      cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year >= 2000"}));
+    auto sameLive = ao::test::requireValue(
+      cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year >= 2000"}));
+
+    CHECK(cache.operationCounts().expiredAdHocSourcesPruned == before.expiredAdHocSourcesPruned + 1);
+    CHECK(&live.source() == &sameLive.source());
+  }
+
   TEST_CASE("TrackSourceCache - a list stored at the root derives from All Tracks",
             "[runtime][unit][source][track-source-cache]")
   {

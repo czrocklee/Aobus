@@ -30,6 +30,9 @@ not those internal collaborators.
 
 ### `PlaybackService`
 
+Every member below is callback-executor-affine; borrowing a role does not make
+that role safe to call or destroy from another thread.
+
 | Member | Type | Meaning |
 |---|---|---|
 | `snapshot()` | `PlaybackSnapshot const&` | Borrows the last coherent state; stable until the next publication or service destruction. |
@@ -150,6 +153,9 @@ retain their call-level `Result` on `AppRuntime`.
   identities make discontinuities part of semantic equality.
 - `PlaybackSeekMode` accepts only `Final` and `Preview`.
 - Reveal requests default unspecified view and list fields to their invalid ids.
+- Service access, command calls, subscriptions, subscription release, and
+  shutdown require the runtime callback executor; off-executor access is a
+  fail-fast contract violation.
 
 Command admission, ordering, supersession, snapshot coherence, publication,
 failure, and shutdown behavior belong to the
@@ -177,6 +183,8 @@ keeps no source-compatibility constraint for it.
   protects surface closure, coherent state, position identities,
   elapsed-insensitive equality, observer deferral, supersession, queue lifetime,
   and end-of-turn coalescing.
+- Fatal subprocess coverage protects off-executor snapshot, command, and event
+  access.
 
 ## Related documents
 

@@ -1238,14 +1238,12 @@ namespace ao::rt
       return true;
     }
 
-    struct SectionDescriptor final
+    struct SectionFingerprint final
     {
-      std::string groupIdentityFirst;
-      std::string groupIdentitySecond;
-      TrackGroupHeading heading;
-      ResourceId imageId{kInvalidResourceId};
+      std::size_t sectionCount = 0;
+      std::size_t hash = 0;
 
-      bool operator==(SectionDescriptor const&) const = default;
+      bool operator==(SectionFingerprint const&) const = default;
     };
 
     using TrackIndexMap = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>;
@@ -1263,27 +1261,51 @@ namespace ao::rt
       return trackIds;
     }
 
-    std::vector<SectionDescriptor> sectionDescriptors() const
+    static void combineHash(std::size_t& seed, std::size_t const value) noexcept
     {
-      auto descriptors = std::vector<SectionDescriptor>{};
-      descriptors.reserve(sections.size());
+      constexpr std::size_t kGoldenRatio = 0x9e3779b9U;
+      constexpr std::size_t kLeftShift = 6;
+      constexpr std::size_t kRightShift = 2;
+      seed ^= value + kGoldenRatio + (seed << kLeftShift) + (seed >> kRightShift);
+    }
+
+    static void combineHeadingHash(std::size_t& seed, GroupSection::HeadingValue const& heading) noexcept
+    {
+      combineHash(seed, heading.index());
+      std::visit(
+        [&seed]<typename Value>(Value const& value)
+        {
+          if constexpr (std::same_as<Value, std::monostate>)
+          {
+            combineHash(seed, 0);
+          }
+          else if constexpr (std::same_as<Value, MissingTrackValueKind>)
+          {
+            combineHash(seed, static_cast<std::size_t>(value));
+          }
+          else
+          {
+            combineHash(seed, std::hash<Value>{}(value));
+          }
+        },
+        heading);
+    }
+
+    SectionFingerprint sectionFingerprint() const noexcept
+    {
+      auto fingerprint = SectionFingerprint{.sectionCount = sections.size()};
 
       for (auto const& section : sections)
       {
-        descriptors.push_back(SectionDescriptor{
-          .groupIdentityFirst = std::string{section.identity.first},
-          .groupIdentitySecond = std::string{section.identity.second},
-          .heading =
-            TrackGroupHeading{
-              .primary = ownHeadingValue(section.primary),
-              .secondary = ownHeadingValue(section.secondary),
-              .tertiary = ownHeadingValue(section.tertiary),
-            },
-          .imageId = section.imageId,
-        });
+        combineHash(fingerprint.hash, std::hash<std::string_view>{}(section.identity.first));
+        combineHash(fingerprint.hash, std::hash<std::string_view>{}(section.identity.second));
+        combineHeadingHash(fingerprint.hash, section.primary);
+        combineHeadingHash(fingerprint.hash, section.secondary);
+        combineHeadingHash(fingerprint.hash, section.tertiary);
+        combineHash(fingerprint.hash, std::hash<ResourceId>{}(section.imageId));
       }
 
-      return descriptors;
+      return fingerprint;
     }
 
     static TrackIndexMap makeTrackIndex(std::span<TrackId const> trackIds)
@@ -1441,7 +1463,7 @@ namespace ao::rt
 
       auto const previousSize = orderIndex.size();
       auto const previousTrackIds = projectionTrackIds();
-      auto const previousSections = sectionDescriptors();
+      auto const previousSections = sectionFingerprint();
 
       if (std::holds_alternative<SourceReset>(sourceBatch))
       {
@@ -1459,7 +1481,7 @@ namespace ao::rt
         return;
       }
 
-      if (previousSections != sectionDescriptors())
+      if (previousSections != sectionFingerprint())
       {
         publishReset(previousSize);
         return;

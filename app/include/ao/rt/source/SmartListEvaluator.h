@@ -92,13 +92,17 @@ namespace ao::rt
     void handleRegularBatch(SourceBucket& bucket,
                             delta::RegularTrackEditScript const& script,
                             bool verifyFinalSnapshot = true);
+    void handleUpdateBatch(SourceBucket& bucket, delta::RegularTrackEditScript const& script, bool verifyFinalSnapshot);
     void handleSourceInvalidated(SourceBucket& bucket);
 
-    std::vector<DerivedWork> buildDerivedWorks(SourceBucket const& bucket,
-                                               std::vector<SmartListSource*>& evaluatableLists) const;
-    TrackMatches evaluateTouchedTracks(std::span<DerivedWork const> works,
-                                       std::span<SmartListSource* const> evaluatableLists,
+    std::vector<DerivedWork> buildDerivedWorks(SourceBucket const& bucket) const;
+    TrackMatches evaluateTouchedTracks(std::span<SmartListSource* const> lists,
                                        std::span<TrackId const> touchedTrackIds) const;
+    delta::RegularTrackEditScript buildUpdateScript(SmartListSource const& list,
+                                                    std::size_t listIndex,
+                                                    std::span<TrackId const> updatedTrackIds,
+                                                    TrackMatches const& matchesByTrackId,
+                                                    IndexedTrackSequence const& upstreamTracks) const;
     static void updateDerivedWorks(std::span<DerivedWork> works,
                                    IndexedTrackSequence const& upstreamTracks,
                                    TrackMatches const& matchesByTrackId,
@@ -109,6 +113,7 @@ namespace ao::rt
     void evaluatePendingLists(SourceBucket& bucket);
     void rebuildLists(SourceBucket& bucket, std::span<SmartListSource*> lists);
 
+    static bool isEvaluatable(SmartListSource const& list);
     static query::AccessProfile unionAccessProfile(std::span<SmartListSource* const> lists);
 
     library::MusicLibrary const& _ml;

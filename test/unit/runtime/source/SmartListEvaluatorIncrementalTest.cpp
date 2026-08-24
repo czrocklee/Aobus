@@ -106,6 +106,7 @@ namespace ao::rt::test
     filtered.reload();
 
     auto spy = TrackSourceBatchSpy{filtered};
+    auto const operationCountsBefore = engine.operationCounts();
 
     libraryFixture.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.year = 2022; });
     source.update(trackId);
@@ -135,6 +136,8 @@ namespace ao::rt::test
     CHECK(removal.start == 0);
     CHECK(removal.trackIds == std::vector{trackId});
     CHECK(filtered.size() == 0);
+    CHECK(engine.operationCounts().upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
+    CHECK(engine.operationCounts().membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 
   TEST_CASE("SmartListEvaluator - child filtered lists track parent membership as their source",

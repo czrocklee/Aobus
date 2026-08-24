@@ -92,10 +92,20 @@ namespace ao::rt::test
     libraryFixture.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2025; });       // Insert
     libraryFixture.updateTrack(t3, [](library::test::TrackSpec& spec) { spec.title = "Updated"; }); // Update
 
+    auto spy = TrackSourceBatchSpy{list};
+    auto const operationCountsBefore = engine.operationCounts();
     auto const updateTrackIds = std::array{t1, t2, t3};
     source.batchUpdate(updateTrackIds);
 
-    CHECK(list.size() == 2); // t1 and t3
+    CHECK(sourceTrackIds(list) == std::vector{t3, t1});
+    REQUIRE(spy.batches.size() == 1);
+    auto const& script = sourceEditScript(spy.batches.front());
+    REQUIRE(script.edits.size() == 3);
+    CHECK(std::get<delta::RemoveRange>(script.edits[0]) == delta::RemoveRange{.start = 0, .trackIds = {t2}});
+    CHECK(std::get<delta::InsertRange>(script.edits[1]) == delta::InsertRange{.start = 1, .trackIds = {t1}});
+    CHECK(std::get<delta::UpdateRange>(script.edits[2]) == delta::UpdateRange{.start = 0, .trackIds = {t3}});
+    CHECK(engine.operationCounts().upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
+    CHECK(engine.operationCounts().membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 
   TEST_CASE("SmartListEvaluator - filtered membership is an atomic stable subsequence of upstream order",
@@ -133,5 +143,46 @@ namespace ao::rt::test
     auto const& insert = std::get<delta::InsertRange>(sourceEditScript(batches.front()).edits[1]);
     CHECK(insert.start == 2);
     CHECK(insert.trackIds == std::vector{second});
+  }
+
+  TEST_CASE("SmartListEvaluator - update-only batches preserve upstream order across several membership changes",
+            "[runtime][regression][smart-list][batch]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const t0 = libraryFixture.addTrack(makeSmartListSpec("t0", 2024));
+    auto const t1 = libraryFixture.addTrack(makeSmartListSpec("t1", 2010));
+    auto const t2 = libraryFixture.addTrack(makeSmartListSpec("t2", 2024));
+    auto const t3 = libraryFixture.addTrack(makeSmartListSpec("t3", 2010));
+    auto const t4 = libraryFixture.addTrack(makeSmartListSpec("t4", 2024));
+    auto const t5 = libraryFixture.addTrack(makeSmartListSpec("t5", 2010));
+    auto const t6 = libraryFixture.addTrack(makeSmartListSpec("t6", 2024));
+    auto const t7 = libraryFixture.addTrack(makeSmartListSpec("t7", 2010));
+    auto sourcePtr = makeMutableTrackSource({t0, t1, t2, t3, t4, t5, t6, t7});
+    auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    list.setExpression("$year >= 2020");
+    list.reload();
+    auto const previousMembers = sourceTrackIds(list);
+    REQUIRE(previousMembers == std::vector{t0, t2, t4, t6});
+
+    libraryFixture.updateTrack(t0, [](library::test::TrackSpec& spec) { spec.year = 2010; });
+    libraryFixture.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2024; });
+    libraryFixture.updateTrack(t2, [](library::test::TrackSpec& spec) { spec.title = "updated t2"; });
+    libraryFixture.updateTrack(t4, [](library::test::TrackSpec& spec) { spec.year = 2010; });
+    libraryFixture.updateTrack(t5, [](library::test::TrackSpec& spec) { spec.year = 2024; });
+    libraryFixture.updateTrack(t6, [](library::test::TrackSpec& spec) { spec.title = "updated t6"; });
+
+    auto spy = TrackSourceBatchSpy{list};
+    auto const operationCountsBefore = engine.operationCounts();
+    sourcePtr->batchUpdate(std::array{t0, t1, t2, t4, t5, t6});
+
+    auto const expectedMembers = std::vector{t1, t2, t5, t6};
+    CHECK(sourceTrackIds(list) == expectedMembers);
+    REQUIRE(spy.batches.size() == 1);
+    auto const appliedRes = delta::apply(previousMembers, sourceEditScript(spy.batches.front()));
+    REQUIRE(appliedRes);
+    CHECK(*appliedRes == expectedMembers);
+    CHECK(engine.operationCounts().upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
+    CHECK(engine.operationCounts().membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 } // namespace ao::rt::test

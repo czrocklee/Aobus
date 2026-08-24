@@ -209,6 +209,22 @@ namespace ao::rt
       }
 
       _adHocSources.erase(cached);
+      ++_operationCounts.expiredAdHocSourcesPruned;
+    }
+
+    for (auto it = _adHocSources.begin(); it != _adHocSources.end();)
+    {
+      auto const sourcePtr = it->second.lock();
+
+      if (sourcePtr == nullptr || sourcePtr->state() != TrackSourceState::Live)
+      {
+        it = _adHocSources.erase(it);
+        ++_operationCounts.expiredAdHocSourcesPruned;
+      }
+      else
+      {
+        ++it;
+      }
     }
 
     auto baseRes = acquire(spec.baseListId);

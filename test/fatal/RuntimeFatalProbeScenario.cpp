@@ -795,6 +795,58 @@ namespace ao::rt::test
       return 3;
     }
 
+    std::int32_t runPlaybackServiceSnapshotOffExecutor(std::string_view const scratchName)
+    {
+      auto executorPtr = std::make_unique<ProbeQueuedExecutor>();
+      auto runtimeRes = makePlaybackProbeRuntime(scratchName, std::move(executorPtr));
+
+      if (!runtimeRes)
+      {
+        return 3;
+      }
+
+      auto runtimePtr = std::move(*runtimeRes);
+      auto* const playback = &runtimePtr->playback();
+      auto worker = std::jthread{[playback] { [[maybe_unused]] auto const& snapshot = playback->snapshot(); }};
+      worker.join();
+      return 3;
+    }
+
+    std::int32_t runPlaybackServiceCommandOffExecutor(std::string_view const scratchName)
+    {
+      auto executorPtr = std::make_unique<ProbeQueuedExecutor>();
+      auto runtimeRes = makePlaybackProbeRuntime(scratchName, std::move(executorPtr));
+
+      if (!runtimeRes)
+      {
+        return 3;
+      }
+
+      auto runtimePtr = std::move(*runtimeRes);
+      auto* const commands = &runtimePtr->playback().commands();
+      auto worker = std::jthread{[commands] { commands->setMuted(true); }};
+      worker.join();
+      return 3;
+    }
+
+    std::int32_t runPlaybackServiceEventOffExecutor(std::string_view const scratchName)
+    {
+      auto executorPtr = std::make_unique<ProbeQueuedExecutor>();
+      auto runtimeRes = makePlaybackProbeRuntime(scratchName, std::move(executorPtr));
+
+      if (!runtimeRes)
+      {
+        return 3;
+      }
+
+      auto runtimePtr = std::move(*runtimeRes);
+      auto* const events = &runtimePtr->playback().events();
+      auto worker = std::jthread{
+        [events] { [[maybe_unused]] auto subscription = events->onSnapshot([](PlaybackSnapshot const&) noexcept {}); }};
+      worker.join();
+      return 3;
+    }
+
     std::int32_t runWorkspaceObservationAdmissionException(std::string_view const scratchName)
     {
       auto executorPtr = std::make_unique<RejectingDeferExecutor>();
@@ -883,6 +935,31 @@ namespace ao::rt::test
       auto signal = async::Signal<>{};
       [[maybe_unused]] auto subscription = signal.connect([] { throw std::runtime_error{"probe exception"}; });
       signal.emit();
+      return 3;
+    }
+
+    std::int32_t runSignalConnectOffOwner()
+    {
+      auto signal = async::Signal<>{};
+      auto worker = std::jthread{[&signal] { [[maybe_unused]] auto subscription = signal.connect([] noexcept {}); }};
+      worker.join();
+      return 3;
+    }
+
+    std::int32_t runSignalDisconnectOffOwner()
+    {
+      auto signal = async::Signal<>{};
+      auto subscription = signal.connect([] noexcept {});
+      auto worker = std::jthread{[&subscription] { subscription.reset(); }};
+      worker.join();
+      return 3;
+    }
+
+    std::int32_t runSignalEmitOffOwner()
+    {
+      auto signal = async::Signal<>{};
+      auto worker = std::jthread{[&signal] { signal.emit(); }};
+      worker.join();
       return 3;
     }
 
@@ -1035,6 +1112,21 @@ namespace ao::rt::test
       return runPlaybackRevealOffExecutor(scratchName);
     }
 
+    if (name == "playback-service-snapshot-off-executor")
+    {
+      return runPlaybackServiceSnapshotOffExecutor(scratchName);
+    }
+
+    if (name == "playback-service-command-off-executor")
+    {
+      return runPlaybackServiceCommandOffExecutor(scratchName);
+    }
+
+    if (name == "playback-service-event-off-executor")
+    {
+      return runPlaybackServiceEventOffExecutor(scratchName);
+    }
+
     if (name == "workspace-observation-admission-exception")
     {
       return runWorkspaceObservationAdmissionException(scratchName);
@@ -1053,6 +1145,21 @@ namespace ao::rt::test
     if (name == "signal-observer-exception")
     {
       return runSignalObserverException();
+    }
+
+    if (name == "signal-connect-off-owner")
+    {
+      return runSignalConnectOffOwner();
+    }
+
+    if (name == "signal-disconnect-off-owner")
+    {
+      return runSignalDisconnectOffOwner();
+    }
+
+    if (name == "signal-emit-off-owner")
+    {
+      return runSignalEmitOffOwner();
     }
 
     if (name == "task-future-missing-result")

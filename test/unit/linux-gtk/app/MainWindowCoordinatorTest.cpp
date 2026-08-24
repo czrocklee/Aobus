@@ -5,6 +5,7 @@
 
 #include "app/AppConfigStore.h"
 #include "app/ThemeCoordinator.h"
+#include "app/WindowState.h"
 #include "portal/ImportExportCoordinator.h"
 #include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -99,6 +100,30 @@ namespace ao::gtk::test
     auto loadedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(loadedSession);
     CHECK(loadedSession.lastLibraryPath == runtime.musicLibrary().rootPath().string());
+  }
+
+  TEST_CASE("MainWindowCoordinator - maximized checkpoint retains current-session normal geometry",
+            "[gtk][regression][main-window][geometry]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    configStorePtr->saveWindow(WindowState{.width = 720, .height = 540, .maximized = false});
+    auto window = Gtk::Window{};
+    auto coordinator = MainWindowCoordinator{
+      window, fixture.runtime(), configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    coordinator.loadSession();
+
+    coordinator.recordWindowSnapshot(WindowState{.width = 900, .height = 700, .maximized = false});
+    coordinator.recordWindowSnapshot(WindowState{.width = 1280, .height = 1024, .maximized = true});
+    coordinator.saveSession(MainWindowCoordinator::SessionSavePolicy::ExcludeSelectedRootAndPlayback);
+
+    auto restored = WindowState{};
+    configStorePtr->loadWindow(restored);
+    CHECK(restored.width == 900);
+    CHECK(restored.height == 700);
+    CHECK(restored.maximized);
   }
 
   TEST_CASE("MainWindowCoordinator - main-window output requests update only the preferred route",

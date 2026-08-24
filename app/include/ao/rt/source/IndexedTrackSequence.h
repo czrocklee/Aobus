@@ -9,6 +9,7 @@
 #include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
@@ -18,6 +19,7 @@ namespace ao::rt
   struct IndexedTrackSequenceOperationCounts final
   {
     std::size_t indexRebuilds = 0;
+    std::size_t incrementalScriptApplications = 0;
   };
 
   class IndexedTrackSequence final
@@ -41,6 +43,7 @@ namespace ao::rt
 
   private:
     void replace(std::vector<TrackId> trackIds);
+    void updateIndicesFrom(std::size_t start);
 
     std::vector<TrackId> _trackIds;
     boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> _indexByTrackId;

@@ -38,7 +38,38 @@ namespace ao::rt::test
 
     cache.reset();
     CHECK(cache.cachedCount() == 0);
+    CHECK(cache.cachedBytes() == 0);
     REQUIRE(replaced.view().size() == 1);
     CHECK(replaced.view()[0] == std::byte{0x0A});
+  }
+
+  TEST_CASE("ResourceByteCache - aggregate bytes evict least recently used entries and reject oversized values",
+            "[runtime][unit][resource-byte]")
+  {
+    auto cache = ResourceByteCache{4, 5};
+
+    CHECK(cache.maximumEntries() == 4);
+    CHECK(cache.maximumBytes() == 5);
+    CHECK(cache.store(ResourceId{1}, ResourceBytes{{std::byte{0x01}, std::byte{0x02}}}));
+    CHECK(cache.store(ResourceId{2}, ResourceBytes{{std::byte{0x03}, std::byte{0x04}}}));
+    CHECK_FALSE(cache.cached(ResourceId{1}).empty());
+
+    CHECK(cache.store(ResourceId{3}, ResourceBytes{{std::byte{0x05}, std::byte{0x06}}}));
+    CHECK(cache.cachedCount() == 2);
+    CHECK(cache.cachedBytes() == 4);
+    CHECK_FALSE(cache.cached(ResourceId{1}).empty());
+    CHECK(cache.cached(ResourceId{2}).empty());
+    CHECK_FALSE(cache.cached(ResourceId{3}).empty());
+
+    CHECK_FALSE(cache.store(ResourceId{4}, ResourceBytes{ResourceBytes::Storage(6, std::byte{0x07})}));
+    CHECK(cache.cachedCount() == 2);
+    CHECK(cache.cachedBytes() == 4);
+
+    CHECK(
+      cache.store(ResourceId{1}, ResourceBytes{{std::byte{0x08}, std::byte{0x09}, std::byte{0x0A}, std::byte{0x0B}}}));
+    CHECK(cache.cachedCount() == 1);
+    CHECK(cache.cachedBytes() == 4);
+    CHECK_FALSE(cache.cached(ResourceId{1}).empty());
+    CHECK(cache.cached(ResourceId{3}).empty());
   }
 } // namespace ao::rt::test

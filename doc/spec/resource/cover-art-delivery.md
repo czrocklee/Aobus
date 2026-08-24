@@ -60,7 +60,7 @@ A composition root that supplies no cache directory leaves the cache inert, and 
 GTK maintains an LRU pixbuf cache with distinct full-size and physical-thumbnail keys plus one coalesced flight per key.
 A `ResourceImageController` maintains one optional active image interest, while `CoverArtView` distinguishes empty, no-cover placeholder, and decoded-image presentation and delegates decoded-image rendering to `ImageWidget`.
 
-Runtime shares coalesced encoded-byte loads and an at-most-128-entry cache among GTK, TUI, WinUI, and MPRIS consumers bound to one library runtime.
+Runtime shares coalesced encoded-byte loads and a cache bounded to 128 entries and 128 MiB of aggregate encoded bytes among GTK, TUI, WinUI, and MPRIS consumers bound to one library runtime.
 Each delivered `ResourceBytes` value owns immutable shared storage and remains valid after cache eviction or loader unbinding.
 Each presenter retains one generation-fenced selection.
 Its visible XAML cover state is hidden when there is no group or Inspector entity, remains the configured placeholder when Now Playing has no entity, uses a placeholder for an invalid id, is empty for pending or failed valid-resource delivery, and shows a decoded image for successful delivery.
@@ -97,6 +97,8 @@ Its default shared and borrowed `CoreRuntime` bindings adapt `LibraryTaskService
 An unbound loader or invalid id rejects a request without invoking its callback.
 On a cache miss, equal ids share one source read and each active interest receives completion on the bound callback executor.
 On a cache hit, `request()` invokes the callback synchronously before returning and returns an empty request registration.
+A successful read inserts its immutable bytes into the cache after evicting least-recently-used entries until both limits hold.
+An individual value larger than the configured aggregate budget is delivered but not cached.
 A consumer must therefore establish replacement or generation state before calling `request()`.
 
 Track rows, list projections, detail projections, and playback state publish the selected primary id.
@@ -233,6 +235,7 @@ Decode or file-export failure degrades to no image/URL and logs where the adapte
 | Boundary | Limit | Result when exceeded |
 | --- | ---: | --- |
 | Materialized resource bytes for GTK, WinUI, TUI, or MPRIS | 32 MiB | `ValueTooLarge`, adapted to no decoded image/URL |
+| Runtime encoded-byte cache per binding | 128 entries and 128 MiB aggregate | least-recently-used entries are evicted |
 | GTK or TUI source width or height | 8192 pixels | no image |
 | GTK or TUI decoded source pixels | 32,000,000 | no image |
 | TUI generated Kitty PNG retained bytes | 8 MiB | no image |
@@ -288,7 +291,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`ResourceMaterializationTest.cpp`](../../../test/unit/runtime/library/ResourceMaterializationTest.cpp) protects the walk, its ceilings, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects lazy index construction, one rebuild per stale revision, that one stale stamp still costs one build with several workers, and the exact interactive limit.
 - [`RequestCoalescerTest.cpp`](../../../test/unit/async/RequestCoalescerTest.cpp) protects shared flight, cancellation, fanout, retry, and clear-generation behavior across frontend adapters.
-- [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded retention, real and adapter-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, idempotent unbinding, and rebinding.
+- [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage, real and adapter-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, idempotent unbinding, and rebinding.
 - [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects the grouped-section cover slot across album and non-album presentations.
 - [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, decoded-image tooltip gating, authored visibility, hover timing, and action retention.

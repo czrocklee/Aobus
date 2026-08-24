@@ -186,6 +186,8 @@ namespace ao::gtk
     auto const persistenceReady = _playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready;
     auto const policy = persistenceReady ? MainWindowCoordinator::SessionSavePolicy::Full
                                          : MainWindowCoordinator::SessionSavePolicy::ExcludeSelectedRootAndPlayback;
+    _mainWindowCoordinatorPtr->recordWindowSnapshot(
+      WindowState{.width = get_width(), .height = get_height(), .maximized = is_maximized()});
     _mainWindowCoordinatorPtr->saveSession(policy);
   }
 
@@ -244,6 +246,17 @@ namespace ao::gtk
   {
     saveSession();
     Gtk::ApplicationWindow::on_hide();
+  }
+
+  void MainWindow::size_allocate_vfunc(int const width, int const height, int const baseline)
+  {
+    Gtk::ApplicationWindow::size_allocate_vfunc(width, height, baseline);
+
+    if (_mainWindowCoordinatorPtr)
+    {
+      _mainWindowCoordinatorPtr->recordWindowSnapshot(
+        WindowState{.width = width, .height = height, .maximized = is_maximized()});
+    }
   }
 
   portal::ImportExportCoordinator& MainWindow::importExportCoordinator()

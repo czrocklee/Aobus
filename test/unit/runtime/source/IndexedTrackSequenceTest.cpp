@@ -12,7 +12,32 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("IndexedTrackSequence - one batch rebuilds its index once",
+  TEST_CASE("IndexedTrackSequence - one move updates its index in place",
+            "[runtime][unit][source][indexed-track-sequence]")
+  {
+    auto sequence = IndexedTrackSequence{std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
+    auto const before = sequence.operationCounts();
+    auto script = delta::RegularTrackEditScript{
+      .edits =
+        {
+          delta::RemoveRange{.start = 1, .trackIds = {TrackId{2}}},
+          delta::InsertRange{.start = 2, .trackIds = {TrackId{2}}},
+          delta::UpdateRange{.start = 1, .trackIds = {TrackId{3}}},
+        },
+    };
+
+    sequence.applyScript(script);
+
+    CHECK(sequence.vector() == std::vector{TrackId{1}, TrackId{3}, TrackId{2}, TrackId{4}});
+    CHECK(sequence.indexOf(TrackId{1}) == 0);
+    CHECK(sequence.indexOf(TrackId{3}) == 1);
+    CHECK(sequence.indexOf(TrackId{2}) == 2);
+    CHECK(sequence.indexOf(TrackId{4}) == 3);
+    CHECK(sequence.operationCounts().indexRebuilds == before.indexRebuilds);
+    CHECK(sequence.operationCounts().incrementalScriptApplications == before.incrementalScriptApplications + 1);
+  }
+
+  TEST_CASE("IndexedTrackSequence - multi-range batch rebuilds its index once",
             "[runtime][unit][source][indexed-track-sequence]")
   {
     auto sequence = IndexedTrackSequence{std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
@@ -34,5 +59,6 @@ namespace ao::rt::test
     CHECK(sequence.indexOf(TrackId{6}) == 2);
     CHECK_FALSE(sequence.contains(TrackId{1}));
     CHECK(sequence.operationCounts().indexRebuilds == before.indexRebuilds + 1);
+    CHECK(sequence.operationCounts().incrementalScriptApplications == before.incrementalScriptApplications);
   }
 } // namespace ao::rt::test

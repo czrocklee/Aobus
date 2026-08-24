@@ -284,21 +284,7 @@ namespace ao::gtk
   {
     auto const fullSave = policy == SessionSavePolicy::Full;
 
-    // Window state
-    auto windowState = WindowState{};
-
-    if (auto const width = _window.get_width(); width > 0)
-    {
-      windowState.width = width;
-    }
-
-    if (auto const height = _window.get_height(); height > 0)
-    {
-      windowState.height = height;
-    }
-
-    windowState.maximized = _window.is_maximized();
-    _configStorePtr->saveWindow(windowState);
+    _configStorePtr->saveWindow(_windowState);
 
     saveColumnLayout();
 
@@ -332,11 +318,10 @@ namespace ao::gtk
   void MainWindowCoordinator::loadSession()
   {
     // Window state
-    auto windowState = WindowState{};
-    _configStorePtr->loadWindow(windowState);
-    _window.set_default_size(windowState.width, windowState.height);
+    _configStorePtr->loadWindow(_windowState);
+    _window.set_default_size(_windowState.width, _windowState.height);
 
-    if (windowState.maximized)
+    if (_windowState.maximized)
     {
       _window.maximize();
     }
@@ -368,6 +353,26 @@ namespace ao::gtk
 
     _implPtr->themeCoordinator.load(*_configStorePtr);
     _optThemeToken = _implPtr->themeCoordinator.registerToplevel(_window);
+  }
+
+  void MainWindowCoordinator::recordWindowSnapshot(WindowState const snapshot) noexcept
+  {
+    _windowState.maximized = snapshot.maximized;
+
+    if (snapshot.maximized)
+    {
+      return;
+    }
+
+    if (snapshot.width > 0)
+    {
+      _windowState.width = snapshot.width;
+    }
+
+    if (snapshot.height > 0)
+    {
+      _windowState.height = snapshot.height;
+    }
   }
 
   GtkUiDependencies MainWindowCoordinator::uiDependencies()

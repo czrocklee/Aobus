@@ -12,9 +12,6 @@
 #include <giomm/file.h>
 #include <giomm/filemonitor.h>
 #include <giomm/resource.h>
-#include <giomm/settings.h>
-#include <giomm/settingsschema.h>
-#include <giomm/settingsschemasource.h>
 #include <glib.h>
 #include <glibmm/error.h>
 #include <glibmm/keyfile.h>
@@ -38,18 +35,6 @@ namespace ao::gtk
   namespace
   {
     constexpr auto kReloadDebounceInterval = std::chrono::milliseconds{150};
-
-    Glib::RefPtr<Gio::SettingsSchema> lookupSettingsSchema(char const* schemaId)
-    {
-      auto const sourcePtr = Gio::SettingsSchemaSource::get_default();
-
-      if (!sourcePtr)
-      {
-        return {};
-      }
-
-      return sourcePtr->lookup(schemaId, true);
-    }
   } // namespace
 
   void GtkStyleRuntime::initialize()
@@ -285,38 +270,23 @@ namespace ao::gtk
     {
       auto const keyfilePtr = Glib::KeyFile::create();
       keyfilePtr->load_from_file(settingsPath.native());
+      // User GTK settings are inputs to this process, not desktop-wide preferences to rewrite.
+      auto const settingsPtr = Gtk::Settings::get_default();
 
-      if (auto const schemaPtr = lookupSettingsSchema("org.gnome.desktop.interface"); schemaPtr)
+      if (!settingsPtr)
       {
-        auto const gsettingsPtr = Gio::Settings::create("org.gnome.desktop.interface");
-        auto const hasSchemaKey = [&schemaPtr](char const* key) { return schemaPtr->has_key(key); };
-
-        if (keyfilePtr->has_key("Settings", "gtk-theme-name") && hasSchemaKey("gtk-theme-name"))
-        {
-          gsettingsPtr->set_string("gtk-theme-name", keyfilePtr->get_string("Settings", "gtk-theme-name"));
-        }
-
-        if (keyfilePtr->has_key("Settings", "gtk-application-prefer-dark-theme") &&
-            hasSchemaKey("gtk-application-prefer-dark-theme"))
-        {
-          gsettingsPtr->set_boolean("gtk-application-prefer-dark-theme",
-                                    keyfilePtr->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
-        }
+        return;
       }
-      else
+
+      if (keyfilePtr->has_key("Settings", "gtk-theme-name"))
       {
-        auto const settingsPtr = Gtk::Settings::get_default();
+        settingsPtr->property_gtk_theme_name().set_value(keyfilePtr->get_string("Settings", "gtk-theme-name"));
+      }
 
-        if (keyfilePtr->has_key("Settings", "gtk-theme-name"))
-        {
-          settingsPtr->property_gtk_theme_name().set_value(keyfilePtr->get_string("Settings", "gtk-theme-name"));
-        }
-
-        if (keyfilePtr->has_key("Settings", "gtk-application-prefer-dark-theme"))
-        {
-          settingsPtr->property_gtk_application_prefer_dark_theme().set_value(
-            keyfilePtr->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
-        }
+      if (keyfilePtr->has_key("Settings", "gtk-application-prefer-dark-theme"))
+      {
+        settingsPtr->property_gtk_application_prefer_dark_theme().set_value(
+          keyfilePtr->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
       }
     }
     catch (Glib::Error const& err)

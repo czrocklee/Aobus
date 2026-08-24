@@ -107,6 +107,13 @@ namespace ao::rt
 
       return result;
     }
+
+    bool isUpdateOnlyBatch(delta::RegularTrackEditScript const& script)
+    {
+      return std::ranges::all_of(script.edits,
+                                 [](delta::RegularTrackEdit const& edit)
+                                 { return std::holds_alternative<delta::UpdateRange>(edit); });
+    }
   } // namespace
 
   SmartListEvaluator::SmartListEvaluator(library::MusicLibrary const& ml)
@@ -232,13 +239,16 @@ namespace ao::rt
     rebuildLists(bucket, bucket.lists);
   }
 
-  std::vector<SmartListEvaluator::DerivedWork> SmartListEvaluator::buildDerivedWorks(
-    SourceBucket const& bucket,
-    std::vector<SmartListSource*>& evaluatableLists) const
+  bool SmartListEvaluator::isEvaluatable(SmartListSource const& list)
+  {
+    return list.state() == TrackSourceState::Live && !list._optPending && !list._current.optError &&
+           list._current.planPtr != nullptr;
+  }
+
+  std::vector<SmartListEvaluator::DerivedWork> SmartListEvaluator::buildDerivedWorks(SourceBucket const& bucket) const
   {
     auto works = std::vector<DerivedWork>{};
     works.reserve(bucket.lists.size());
-    evaluatableLists.reserve(bucket.lists.size());
 
     for (auto* const list : bucket.lists)
     {
@@ -246,14 +256,8 @@ namespace ao::rt
         .list = list,
         .oldMembers = list->_members.vector(),
         .members = list->_members.vector(),
-        .active = list->state() == TrackSourceState::Live && !list->_optPending && !list->_current.optError &&
-                  list->_current.planPtr != nullptr,
+        .active = isEvaluatable(*list),
       };
-
-      if (work.active)
-      {
-        evaluatableLists.push_back(list);
-      }
 
       works.push_back(std::move(work));
     }
@@ -262,44 +266,64 @@ namespace ao::rt
   }
 
   SmartListEvaluator::TrackMatches SmartListEvaluator::evaluateTouchedTracks(
-    std::span<DerivedWork const> const works,
-    std::span<SmartListSource* const> const evaluatableLists,
+    std::span<SmartListSource* const> const lists,
     std::span<TrackId const> const touchedTrackIds) const
   {
-    auto const transaction = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(transaction);
-    auto const storeMode = loadModeForAccessProfile(unionAccessProfile(evaluatableLists));
-    auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
-    auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
-    auto bindings = std::vector<std::optional<query::PlanBinding>>(works.size());
+    auto evaluatableLists = std::vector<SmartListSource*>{};
+    evaluatableLists.reserve(lists.size());
 
-    for (std::size_t index = 0; index < works.size(); ++index)
+    for (auto* const list : lists)
     {
-      if (auto const& work = works[index]; work.active)
+      if (isEvaluatable(*list))
       {
-        bindings[index].emplace(*work.list->_current.planPtr, dictionaryContext);
+        evaluatableLists.push_back(list);
       }
     }
 
     auto matchesByTrackId = TrackMatches{};
     matchesByTrackId.reserve(touchedTrackIds.size());
 
+    if (touchedTrackIds.empty() || evaluatableLists.empty())
+    {
+      for (auto const trackId : touchedTrackIds)
+      {
+        matchesByTrackId.emplace(trackId, std::vector<bool>(lists.size(), false));
+      }
+
+      return matchesByTrackId;
+    }
+
+    auto const transaction = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(transaction);
+    auto const storeMode = loadModeForAccessProfile(unionAccessProfile(evaluatableLists));
+    auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
+    auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
+    auto bindings = std::vector<std::optional<query::PlanBinding>>(lists.size());
+
+    for (std::size_t index = 0; index < lists.size(); ++index)
+    {
+      if (auto* const list = lists[index]; isEvaluatable(*list))
+      {
+        bindings[index].emplace(*list->_current.planPtr, dictionaryContext);
+      }
+    }
+
     for (auto const trackId : touchedTrackIds)
     {
-      auto matches = std::vector<bool>(works.size(), false);
+      auto matches = std::vector<bool>(lists.size(), false);
 
       if (auto const optView = reader.get(trackId, storeMode); optView)
       {
-        for (std::size_t index = 0; index < works.size(); ++index)
+        for (std::size_t index = 0; index < lists.size(); ++index)
         {
-          if (auto const& work = works[index]; work.active)
+          if (auto* const list = lists[index]; isEvaluatable(*list))
           {
             auto const& binding = bindings[index];
             AO_INVARIANT(binding);
 
-            if (query::hasRequiredTrackData(work.list->_current.planPtr->accessProfile, *optView))
+            if (query::hasRequiredTrackData(list->_current.planPtr->accessProfile, *optView))
             {
-              matches[index] = work.list->_planEvaluator.matches(*binding, *optView);
+              matches[index] = list->_planEvaluator.matches(*binding, *optView);
             }
           }
         }
@@ -309,6 +333,170 @@ namespace ao::rt
     }
 
     return matchesByTrackId;
+  }
+
+  delta::RegularTrackEditScript SmartListEvaluator::buildUpdateScript(SmartListSource const& list,
+                                                                      std::size_t const listIndex,
+                                                                      std::span<TrackId const> const updatedTrackIds,
+                                                                      TrackMatches const& matchesByTrackId,
+                                                                      IndexedTrackSequence const& upstreamTracks) const
+  {
+    struct IndexedTrack final
+    {
+      std::size_t index = 0;
+      TrackId trackId = kInvalidTrackId;
+    };
+
+    auto removals = std::vector<IndexedTrack>{};
+    auto insertions = std::vector<IndexedTrack>{};
+    auto retainedUpdates = std::vector<IndexedTrack>{};
+    removals.reserve(updatedTrackIds.size());
+    insertions.reserve(updatedTrackIds.size());
+    retainedUpdates.reserve(updatedTrackIds.size());
+
+    for (auto const trackId : updatedTrackIds)
+    {
+      auto const matchesIt = matchesByTrackId.find(trackId);
+      AO_INVARIANT(matchesIt != matchesByTrackId.end() && listIndex < matchesIt->second.size());
+      auto const matches = matchesIt->second[listIndex];
+
+      if (auto const optMemberIndex = list._members.indexOf(trackId); optMemberIndex && !matches)
+      {
+        removals.push_back(IndexedTrack{.index = *optMemberIndex, .trackId = trackId});
+      }
+      else if (!optMemberIndex && matches)
+      {
+        auto const optUpstreamIndex = upstreamTracks.indexOf(trackId);
+        AO_INVARIANT(optUpstreamIndex);
+        insertions.push_back(IndexedTrack{.index = *optUpstreamIndex, .trackId = trackId});
+      }
+      else if (optMemberIndex && matches)
+      {
+        retainedUpdates.push_back(IndexedTrack{.index = *optMemberIndex, .trackId = trackId});
+      }
+    }
+
+    auto removalIndices = std::vector<std::size_t>{};
+    removalIndices.reserve(removals.size());
+
+    for (auto const& removal : removals)
+    {
+      removalIndices.push_back(removal.index);
+    }
+
+    std::ranges::sort(removalIndices);
+    std::ranges::sort(removals, std::greater{}, &IndexedTrack::index);
+    std::ranges::sort(insertions, {}, &IndexedTrack::index);
+
+    auto const countBefore = [](auto const& sorted, std::size_t const value)
+    { return static_cast<std::size_t>(std::ranges::lower_bound(sorted, value) - sorted.begin()); };
+    auto const upstreamIndexOf = [&upstreamTracks](TrackId const trackId)
+    {
+      auto const optIndex = upstreamTracks.indexOf(trackId);
+      AO_INVARIANT(optIndex);
+      return *optIndex;
+    };
+
+    auto coalescer = delta::Coalescer{};
+
+    for (auto const& removal : removals)
+    {
+      coalescer.appendRemove(removal.index, std::span{&removal.trackId, std::size_t{1}});
+    }
+
+    auto const oldMembers = list._members.ids();
+
+    for (std::size_t insertionIndex = 0; insertionIndex < insertions.size(); ++insertionIndex)
+    {
+      auto const& insertion = insertions[insertionIndex];
+      auto const oldPosition = static_cast<std::size_t>(
+        std::ranges::lower_bound(oldMembers, insertion.index, {}, upstreamIndexOf) - oldMembers.begin());
+      auto const position = oldPosition - countBefore(removalIndices, oldPosition) + insertionIndex;
+      coalescer.appendInsert(position, std::span{&insertion.trackId, std::size_t{1}});
+    }
+
+    for (auto& update : retainedUpdates)
+    {
+      auto const upstreamIndex = upstreamIndexOf(update.trackId);
+      auto const insertedBefore = static_cast<std::size_t>(
+        std::ranges::lower_bound(insertions, upstreamIndex, {}, &IndexedTrack::index) - insertions.begin());
+      update.index = update.index - countBefore(removalIndices, update.index) + insertedBefore;
+    }
+
+    std::ranges::sort(retainedUpdates, {}, &IndexedTrack::index);
+
+    for (auto const& update : retainedUpdates)
+    {
+      coalescer.appendUpdate(update.index, std::span{&update.trackId, std::size_t{1}});
+    }
+
+    return coalescer.take();
+  }
+
+  void SmartListEvaluator::handleUpdateBatch(SourceBucket& bucket,
+                                             delta::RegularTrackEditScript const& script,
+                                             bool const verifyFinalSnapshot)
+  {
+    AO_INVARIANT(delta::validate(script, bucket.upstreamTracks.size()));
+    AO_INVARIANT(!verifyFinalSnapshot || bucket.source->size() == bucket.upstreamTracks.size());
+
+    for (auto const& edit : script.edits)
+    {
+      auto const& update = std::get<delta::UpdateRange>(edit);
+      auto const mirrored = bucket.upstreamTracks.ids().subspan(update.start, update.trackIds.size());
+      AO_INVARIANT(std::ranges::equal(mirrored, update.trackIds));
+
+      if (verifyFinalSnapshot)
+      {
+        for (std::size_t offset = 0; offset < update.trackIds.size(); ++offset)
+        {
+          AO_INVARIANT(bucket.source->trackIdAt(update.start + offset) == update.trackIds[offset]);
+        }
+      }
+    }
+
+    bucket.upstreamTracks.applyScript(script);
+    auto const changes = summarizeTrackChanges(script);
+    auto const matchesByTrackId = evaluateTouchedTracks(bucket.lists, changes.updatedTrackIds);
+
+    struct IncrementalWork final
+    {
+      SmartListSource* list = nullptr;
+      delta::RegularTrackEditScript script{};
+      std::size_t previousSize = 0;
+    };
+
+    auto works = std::vector<IncrementalWork>{};
+    works.reserve(bucket.lists.size());
+
+    for (std::size_t listIndex = 0; listIndex < bucket.lists.size(); ++listIndex)
+    {
+      auto* const list = bucket.lists[listIndex];
+
+      if (!isEvaluatable(*list))
+      {
+        continue;
+      }
+
+      auto derivedScript =
+        buildUpdateScript(*list, listIndex, changes.updatedTrackIds, matchesByTrackId, bucket.upstreamTracks);
+
+      if (!derivedScript.edits.empty())
+      {
+        works.push_back(
+          IncrementalWork{.list = list, .script = std::move(derivedScript), .previousSize = list->_members.size()});
+      }
+    }
+
+    for (auto& work : works)
+    {
+      work.list->_members.applyScript(work.script);
+    }
+
+    for (auto& work : works)
+    {
+      std::ignore = work.list->publishDelta(std::move(work.script), work.previousSize);
+    }
   }
 
   void SmartListEvaluator::updateDerivedWorks(std::span<DerivedWork> const works,
@@ -383,16 +571,21 @@ namespace ao::rt
                                               bool const verifyFinalSnapshot)
   {
     auto const timer = rt::ScopedTimer{"SmartListEvaluator::handleRegularBatch"};
+
+    if (isUpdateOnlyBatch(script))
+    {
+      handleUpdateBatch(bucket, script, verifyFinalSnapshot);
+      return;
+    }
+
     auto upstreamTracks = bucket.upstreamTracks;
     upstreamTracks.applyScript(script);
     ++_operationCounts.upstreamIndexRebuilds;
     AO_INVARIANT(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
 
-    auto evaluatableLists = std::vector<SmartListSource*>{};
-    auto works = buildDerivedWorks(bucket, evaluatableLists);
+    auto works = buildDerivedWorks(bucket);
     auto changes = summarizeTrackChanges(script);
-    auto const matchesByTrackId =
-      evaluateTouchedTracks(works, std::span<SmartListSource* const>{evaluatableLists}, changes.touchedTrackIds);
+    auto const matchesByTrackId = evaluateTouchedTracks(bucket.lists, changes.touchedTrackIds);
     updateDerivedWorks(works, upstreamTracks, matchesByTrackId, changes.updatedTrackIds, changes.preferredMovedIds);
     commitDerivedWorks(bucket, std::move(upstreamTracks), works);
   }

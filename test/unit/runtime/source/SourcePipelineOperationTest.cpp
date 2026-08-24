@@ -74,8 +74,8 @@ namespace ao::rt::test
     sourcePtr->batchUpdate(updatedIds);
 
     auto const evaluatorAfter = evaluator.operationCounts();
-    CHECK(evaluatorAfter.upstreamIndexRebuilds - evaluatorBefore.upstreamIndexRebuilds == 1);
-    CHECK(evaluatorAfter.membershipIndexRebuilds - evaluatorBefore.membershipIndexRebuilds == smartSources.size());
+    CHECK(evaluatorAfter.upstreamIndexRebuilds == evaluatorBefore.upstreamIndexRebuilds);
+    CHECK(evaluatorAfter.membershipIndexRebuilds == evaluatorBefore.membershipIndexRebuilds);
 
     for (auto const& projectionPtr : projections)
     {

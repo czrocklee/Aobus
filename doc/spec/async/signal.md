@@ -25,7 +25,7 @@ Application runtime, UIModel, and frontend code may depend on these core types; 
 
 ## Terminology
 
-- The **owner domain** is the serialized executor or thread selected by the object that owns a signal.
+- The **owner thread** is the thread that constructs the signal; a service normally constructs it on its serialized executor.
 - A **slot** is one connected handler and its connection state.
 - An **emission** is one synchronous `emit` traversal over the slots eligible when that traversal begins.
 - A **posted emission** is a decayed payload deferred through an `async::Executor` before synchronous signal delivery begins.
@@ -33,7 +33,7 @@ Application runtime, UIModel, and frontend code may depend on these core types; 
 ## Invariants
 
 - `Signal` is unsynchronized.
-  Construction, `connect`, `emit`, synchronous disconnection, `disconnectAll`, inspection, and destruction occur on the owner domain.
+  `connect`, `emit`, synchronous disconnection, `disconnectAll`, inspection, and destruction occur on the construction thread.
 - A service cannot use a mutex or `Signal::post` to avoid defining its own executor-affinity contract.
 - Connected handlers run in connection order.
 - One emission snapshots the slot count at its start.
@@ -57,6 +57,7 @@ Mutations made by a handler affect any later eligible turn according to the inva
 
 `post(executor, args...)` decays and owns its payload, then uses `Executor::defer` to schedule a later turn.
 The queued callback retains a weak reference to signal state and starts a normal synchronous emission only when that state is still active.
+A supplied executor must run that callback on the signal's construction thread.
 A post requested by a handler cannot run inside that handler and remains subject to the supplied executor's turn semantics.
 
 `disconnectAll()` tombstones all current slots.
@@ -73,6 +74,7 @@ Contract-fulfilling handlers are visited in connection order; after a handler es
 `emit` and the deferred callback installed by `post` catch at their owning
 boundary and invoke `AO_FATAL_EXCEPTION()` with signal context.
 Allocation failure while constructing or admitting a posted emission follows the enclosing executor call's exception contract; once accepted, an escaping callback or payload fault is fatal at the deferred emission boundary.
+Calling an owner-affine operation, including subscription disconnection or a posted callback's eventual emission, from another thread violates the primitive contract and enters the AO fatal backend before touching slot state.
 
 Signals are therefore for notification only.
 A mandatory single-consumer replication phase is a different topology, not an exception protocol; [library change
@@ -93,7 +95,7 @@ Destroying a signal before a posted callback runs turns that callback into a suc
 ## Test map
 
 - [`SignalTest.cpp`](../../../test/unit/async/SignalTest.cpp) covers connection order, move-only handlers, connect/disconnect during emission, nested emission, self-disconnection lifetime, `disconnectAll`, subscription moves, owner destruction, decayed posts, later turns, and destroyed-owner posts.
-- Fatal subprocess coverage protects escaping observer diagnostics and abort behavior.
+- Fatal subprocess coverage protects off-owner connect, disconnect, and emission diagnostics plus escaping observer diagnostics and abort behavior.
 - [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) proves that the reporting owner adds immutable reentrant-update queuing above the generic primitive.
 
 ## Related documents

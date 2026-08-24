@@ -74,7 +74,7 @@ Entries are verified against the digest on read, installed after a carrier answe
 A cache that is absent, unwritable, or destroyed costs re-extraction and never a failed request.
 
 The task service owns the derived cover cache above and nothing else: it holds no in-memory or decoded resource state, publishes no maintenance progress, and introduces no resource-state owner.
-Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a bounded per-binding byte cache, and delivers immutable copyable `ResourceBytes` values through the bound runtime's callback executor.
+Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a per-binding byte cache bounded by both entry count and aggregate bytes, and delivers immutable copyable `ResourceBytes` values through the bound runtime's callback executor.
 `ResourceBytes` shares owned storage across callbacks and remains valid after loader unbinding or cache eviction.
 The loader has one asynchronous byte-source port regardless of whether its default adapter reads through `CoreRuntime` or a focused test/composition adapter supplies bytes directly.
 WinUI, GTK, and TUI use borrowed-runtime bindings whose `CoreRuntime` must outlive the loader and its cancelled work; each composition root destroys the loader before releasing that runtime.

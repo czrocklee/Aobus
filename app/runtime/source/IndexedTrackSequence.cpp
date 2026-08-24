@@ -7,10 +7,12 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <span>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -33,9 +35,105 @@ namespace ao::rt
 
   void IndexedTrackSequence::applyScript(delta::RegularTrackEditScript const& script)
   {
-    auto result = delta::apply(_trackIds, script);
-    AO_INVARIANT(result);
-    replace(std::move(*result));
+    AO_INVARIANT(delta::validate(script, _trackIds.size()));
+
+    if (script.edits.empty())
+    {
+      return;
+    }
+
+    std::size_t structuralEditCount = 0;
+
+    for (auto const& edit : script.edits)
+    {
+      if (!std::holds_alternative<delta::UpdateRange>(edit))
+      {
+        ++structuralEditCount;
+      }
+    }
+
+    constexpr std::size_t kMaximumInPlaceStructuralEdits = 2;
+
+    if (structuralEditCount > kMaximumInPlaceStructuralEdits)
+    {
+      auto appliedRes = delta::apply(_trackIds, script);
+      AO_INVARIANT(appliedRes);
+      replace(std::move(*appliedRes));
+      return;
+    }
+
+    auto optFirstChangedIndex = std::optional<std::size_t>{};
+    auto recordChangedIndex = [&optFirstChangedIndex](std::size_t const index)
+    {
+      if (!optFirstChangedIndex || index < *optFirstChangedIndex)
+      {
+        optFirstChangedIndex = index;
+      }
+    };
+
+    for (auto const& edit : script.edits)
+    {
+      auto const* const removal = std::get_if<delta::RemoveRange>(&edit);
+
+      if (removal == nullptr)
+      {
+        break;
+      }
+
+      auto const existing = std::span<TrackId const>{_trackIds}.subspan(removal->start, removal->trackIds.size());
+      AO_INVARIANT(std::ranges::equal(existing, removal->trackIds));
+
+      for (auto const trackId : removal->trackIds)
+      {
+        auto const erased = _indexByTrackId.erase(trackId);
+        AO_INVARIANT(erased == 1);
+      }
+
+      auto const first = _trackIds.begin() + static_cast<std::ptrdiff_t>(removal->start);
+      _trackIds.erase(first, first + static_cast<std::ptrdiff_t>(removal->trackIds.size()));
+      recordChangedIndex(removal->start);
+    }
+
+    for (auto const& edit : script.edits)
+    {
+      auto const* const insertion = std::get_if<delta::InsertRange>(&edit);
+
+      if (insertion == nullptr)
+      {
+        continue;
+      }
+
+      auto const position = _trackIds.begin() + static_cast<std::ptrdiff_t>(insertion->start);
+      _trackIds.insert(position, insertion->trackIds.begin(), insertion->trackIds.end());
+
+      for (std::size_t offset = 0; offset < insertion->trackIds.size(); ++offset)
+      {
+        auto const inserted = _indexByTrackId.emplace(insertion->trackIds[offset], insertion->start + offset).second;
+        AO_INVARIANT(inserted);
+      }
+
+      recordChangedIndex(insertion->start);
+    }
+
+    if (optFirstChangedIndex)
+    {
+      updateIndicesFrom(*optFirstChangedIndex);
+    }
+
+    for (auto const& edit : script.edits)
+    {
+      auto const* const update = std::get_if<delta::UpdateRange>(&edit);
+
+      if (update == nullptr)
+      {
+        continue;
+      }
+
+      auto const existing = std::span<TrackId const>{_trackIds}.subspan(update->start, update->trackIds.size());
+      AO_INVARIANT(std::ranges::equal(existing, update->trackIds));
+    }
+
+    ++_operationCounts.incrementalScriptApplications;
   }
 
   std::optional<std::size_t> IndexedTrackSequence::indexOf(TrackId const trackId) const
@@ -62,5 +160,15 @@ namespace ao::rt
     _trackIds = std::move(trackIds);
     _indexByTrackId = std::move(indexByTrackId);
     ++_operationCounts.indexRebuilds;
+  }
+
+  void IndexedTrackSequence::updateIndicesFrom(std::size_t const start)
+  {
+    for (auto index = start; index < _trackIds.size(); ++index)
+    {
+      auto const it = _indexByTrackId.find(_trackIds[index]);
+      AO_INVARIANT(it != _indexByTrackId.end());
+      it->second = index;
+    }
   }
 } // namespace ao::rt

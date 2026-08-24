@@ -1777,6 +1777,7 @@ namespace ao::rt
   void PlaybackTransport::pause()
   {
     auto* const impl = checkedImpl();
+    auto const previousTransport = impl->state.transport;
 
     impl->playerPtr->pause();
 
@@ -1786,7 +1787,11 @@ namespace ao::rt
     }
 
     impl->refreshState();
-    impl->enqueueOutbound(Impl::PausedEvent{});
+
+    if (previousTransport != audio::Transport::Paused && impl->state.transport == audio::Transport::Paused)
+    {
+      impl->enqueueOutbound(Impl::PausedEvent{});
+    }
   }
 
   void PlaybackTransport::resume()
@@ -1805,6 +1810,7 @@ namespace ao::rt
       return;
     }
 
+    auto const previousTransport = impl->state.transport;
     impl->playerPtr->resume();
 
     if (impl->isClosing())
@@ -1813,7 +1819,11 @@ namespace ao::rt
     }
 
     impl->refreshState();
-    impl->enqueueOutbound(Impl::StartedEvent{});
+
+    if (previousTransport != audio::Transport::Playing && impl->state.transport == audio::Transport::Playing)
+    {
+      impl->enqueueOutbound(Impl::StartedEvent{});
+    }
   }
 
   PreparedCancellationBarrier PlaybackTransport::stop()

@@ -13,6 +13,8 @@
 #include <deque>
 #include <exception>
 #include <memory>
+#include <source_location>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -26,8 +28,11 @@ namespace ao::async
    * cannot be undone. The owning emission boundary diagnoses and aborts an
    * escaping exception rather than stepping over a diverged observer.
    *
-   * `emit` provides the non-throwing terminal boundary. `post` may still fail
-   * before executor admission while it constructs or submits the owned payload.
+   * The signal and every subscription are confined to the thread that constructs
+   * the signal. `post` is the cross-thread delivery path, and its executor must
+   * deliver on that owner thread. `emit` provides the non-throwing terminal
+   * boundary. `post` may still fail before executor admission while it constructs
+   * or submits the owned payload.
    */
   template<typename... Args>
   class Signal final
@@ -62,6 +67,8 @@ namespace ao::async
     public:
       std::size_t connect(Handler handler)
       {
+        ensureOnOwnerThread();
+
         if (!_active)
         {
           return 0;
@@ -74,6 +81,8 @@ namespace ao::async
 
       void emit(Args... args)
       {
+        ensureOnOwnerThread();
+
         if (!_active)
         {
           return;
@@ -97,11 +106,14 @@ namespace ao::async
 
       bool hasConnectedHandlers() const
       {
+        ensureOnOwnerThread();
         return _active && std::ranges::any_of(_handlers, [](auto const& slot) { return slot.connected; });
       }
 
       void disconnect(std::size_t id)
       {
+        ensureOnOwnerThread();
+
         for (auto& slot : _handlers)
         {
           if (slot.id == id)
@@ -117,18 +129,25 @@ namespace ao::async
 
       void disconnectAll()
       {
+        ensureOnOwnerThread();
         tombstoneHandlers();
         compactIfIdle();
       }
 
       void close()
       {
+        ensureOnOwnerThread();
         _active = false;
         tombstoneHandlers();
         compactIfIdle();
       }
 
     private:
+      void ensureOnOwnerThread(std::source_location location = std::source_location::current()) const
+      {
+        AO_EXPECTS_AT(location, std::this_thread::get_id() == _ownerThread, "Signal invoked off the owner thread");
+      }
+
       class [[nodiscard]] EmitGuard final
       {
       public:
@@ -182,6 +201,7 @@ namespace ao::async
       std::size_t _emitDepth = 0;
       bool _needsCompact = false;
       bool _active = true;
+      std::thread::id _ownerThread{std::this_thread::get_id()};
     };
 
     std::shared_ptr<State> _statePtr;

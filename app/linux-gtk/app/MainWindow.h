@@ -93,6 +93,7 @@ namespace ao::gtk
 
   protected:
     void on_hide() override;
+    void size_allocate_vfunc(int width, int height, int baseline) override;
 
   private:
     enum class PlaybackPersistenceAdmission : std::uint8_t

@@ -46,6 +46,8 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
 
 - A logical commit publishes exactly one snapshot when semantic content changes
   and publishes nothing for a no-op.
+- Snapshot access, command/event role access, subscription, command submission,
+  and shutdown are confined to the runtime callback executor.
 - A snapshot is assembled only after matching transport and succession changes
   have settled.
 - While succession is active, transport and succession identify the same current
@@ -148,6 +150,9 @@ observations are coalesced into one external-settlement publication.
 Pause, resume, final seek, volume, mute, shuffle, repeat, stop, clear, and output
 selection execute inside a service commit. Lower signals mark the commit changed;
 composition waits until the command returns.
+Pause and resume publish their lower transient events only when the refreshed
+transport actually enters `Paused` or `Playing`; idle and duplicate commands
+publish no false transition.
 
 A final seek advances both position identities. Subject replacement,
 same-subject restart, terminal idle, and successful restore advance only the
@@ -218,6 +223,8 @@ admission retries the drain without overtaking queued commands.
 
 Command supersession is independent from prepared-next tokens, Engine item ids,
 audio cancellation barriers, and persisted session state.
+Calling the public playback surface off the callback executor is an invariant
+fault and enters AO fatal handling before service state is read or mutated.
 
 ## Shutdown
 
@@ -254,6 +261,9 @@ producers while succession and the remaining runtime graph are alive.
   rejection, and deferred nested commands.
 - [`PlaybackTransportTokenTest.cpp`](../../../test/unit/runtime/PlaybackTransportTokenTest.cpp)
   protects internal event delivery order across an accepted replacement.
+- [`PlaybackTransportControlTest.cpp`](../../../test/unit/runtime/PlaybackTransportControlTest.cpp)
+  protects pause/resume transient events against idle and duplicate commands;
+  fatal subprocess coverage protects off-executor snapshot, command, and event access.
 
 ## Related documents
 

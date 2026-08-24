@@ -32,6 +32,7 @@
 #include <exception>
 #include <expected>
 #include <memory>
+#include <source_location>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -88,28 +89,41 @@ namespace ao::rt
 
     ~Impl() override
     {
+      ensureOnExecutor();
       subscriptions.clear();
       deferredControlPtr->owner = nullptr;
       deferredControlPtr.reset();
     }
 
+    void ensureOnExecutor(std::source_location location = std::source_location::current()) const
+    {
+      AO_EXPECTS_AT(location, executor.isCurrent(), "PlaybackService invoked off the executor thread");
+    }
+
     // Playback snapshot and events -------------------------------------------
 
-    PlaybackSnapshot const& snapshot() const noexcept { return lastSnapshot; }
+    PlaybackSnapshot const& snapshot() const noexcept
+    {
+      ensureOnExecutor();
+      return lastSnapshot;
+    }
 
     async::Subscription onSnapshot(PlaybackSnapshotObserver observer) override
     {
+      ensureOnExecutor();
       return snapshotSignal.connect(std::move(observer));
     }
 
     async::Subscription onSeekPreview(compat::MoveOnlyFunction<void(std::chrono::milliseconds)> handler) override
     {
+      ensureOnExecutor();
       return seekPreviewSignal.connect(std::move(handler));
     }
 
     async::Subscription onRevealTrackRequested(
       compat::MoveOnlyFunction<void(PlaybackRevealTrackRequest const&)> handler) override
     {
+      ensureOnExecutor();
       return revealTrackSignal.connect(std::move(handler));
     }
 
@@ -221,8 +235,11 @@ namespace ao::rt
 
     Result<> submitResult(compat::MoveOnlyFunction<Result<bool>()> operation,
                           bool const invalidatesOlderCommand,
-                          bool const staleWhenSuperseded)
+                          bool const staleWhenSuperseded,
+                          std::source_location location = std::source_location::current())
     {
+      ensureOnExecutor(location);
+
       if (closed)
       {
         return makeError(Error::Code::InvalidState, "Playback service is closed");
@@ -256,7 +273,8 @@ namespace ao::rt
 
     void submitVoid(compat::MoveOnlyFunction<void()> operation,
                     bool const invalidatesOlderCommand,
-                    bool const staleWhenSuperseded)
+                    bool const staleWhenSuperseded,
+                    std::source_location location = std::source_location::current())
     {
       std::ignore = submitResult(
         [operation = std::move(operation)] mutable -> Result<bool>
@@ -265,16 +283,19 @@ namespace ao::rt
           return false;
         },
         invalidatesOlderCommand,
-        staleWhenSuperseded);
+        staleWhenSuperseded,
+        location);
     }
 
     void submitPositioning(compat::MoveOnlyFunction<bool()> operation,
                            bool const invalidatesOlderCommand,
-                           bool const staleWhenSuperseded)
+                           bool const staleWhenSuperseded,
+                           std::source_location location = std::source_location::current())
     {
       std::ignore = submitResult([operation = std::move(operation)] mutable -> Result<bool> { return operation(); },
                                  invalidatesOlderCommand,
-                                 staleWhenSuperseded);
+                                 staleWhenSuperseded,
+                                 location);
     }
 
     Result<> executeCommand(QueuedCommand& command)
@@ -331,6 +352,8 @@ namespace ao::rt
 
     bool runSynchronousCommand(compat::MoveOnlyFunction<bool()> operation)
     {
+      ensureOnExecutor();
+
       if (closed || insideBoundary() || hasQueuedCommandBacklog())
       {
         return false;
@@ -668,7 +691,11 @@ namespace ao::rt
       }
     }
 
-    void shutdown() noexcept { closeService(); }
+    void shutdown() noexcept
+    {
+      ensureOnExecutor();
+      closeService();
+    }
 
     PlaybackSnapshot composeContent() const
     {
@@ -776,11 +803,13 @@ namespace ao::rt
 
   PlaybackCommands& PlaybackService::commands() noexcept
   {
+    _implPtr->ensureOnExecutor();
     return *_implPtr;
   }
 
   PlaybackEvents& PlaybackService::events() noexcept
   {
+    _implPtr->ensureOnExecutor();
     return *_implPtr;
   }
 

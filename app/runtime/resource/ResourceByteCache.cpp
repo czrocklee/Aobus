@@ -14,8 +14,8 @@
 
 namespace ao::rt
 {
-  ResourceByteCache::ResourceByteCache(std::size_t const maximumEntries)
-    : _maximumEntries{std::max<std::size_t>(1, maximumEntries)}
+  ResourceByteCache::ResourceByteCache(std::size_t const maximumEntries, std::size_t const maximumBytes)
+    : _maximumEntries{std::max<std::size_t>(1, maximumEntries)}, _maximumBytes{std::max<std::size_t>(1, maximumBytes)}
   {
     _entries.reserve(_maximumEntries);
   }
@@ -23,6 +23,7 @@ namespace ao::rt
   void ResourceByteCache::reset()
   {
     _entries.clear();
+    _cachedBytes = 0;
     _useSequence = 0;
   }
 
@@ -33,19 +34,35 @@ namespace ao::rt
       return false;
     }
 
+    auto const byteCount = bytes.view().size();
+
+    if (byteCount > _maximumBytes)
+    {
+      return false;
+    }
+
     if (auto it = _entries.find(resourceId); it != _entries.end())
     {
+      _cachedBytes -= it->second.bytes.view().size();
       it->second.bytes = std::move(bytes);
       it->second.lastUse = ++_useSequence;
+      _cachedBytes += byteCount;
+
+      while (_cachedBytes > _maximumBytes)
+      {
+        evictLeastRecentlyUsed();
+      }
+
       return true;
     }
 
-    if (_entries.size() == _maximumEntries)
+    while (_entries.size() >= _maximumEntries || _cachedBytes > _maximumBytes - byteCount)
     {
       evictLeastRecentlyUsed();
     }
 
     _entries.emplace(resourceId, Entry{.bytes = std::move(bytes), .lastUse = ++_useSequence});
+    _cachedBytes += byteCount;
     return true;
   }
 
@@ -76,6 +93,7 @@ namespace ao::rt
 
     if (oldest != _entries.end())
     {
+      _cachedBytes -= oldest->second.bytes.view().size();
       _entries.erase(oldest);
     }
   }

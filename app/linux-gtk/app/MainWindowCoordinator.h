@@ -5,6 +5,7 @@
 
 #include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
+#include "app/WindowState.h"
 #include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 
@@ -65,6 +66,7 @@ namespace ao::gtk
 
     void saveSession(SessionSavePolicy policy);
     void loadSession();
+    void recordWindowSnapshot(WindowState snapshot) noexcept;
 
     GtkUiDependencies uiDependencies();
 
@@ -89,6 +91,7 @@ namespace ao::gtk
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
 
+    WindowState _windowState;
     std::optional<ThemeRegistrationToken> _optThemeToken;
     bool _restoringLayoutState = false;
 

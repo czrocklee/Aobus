@@ -89,12 +89,15 @@ Expression syntax and per-track truth belong to the [predicate language](../../.
 
 `SmartListEvaluator` unions the plans' access profiles for each batch and maps that semantic requirement to one physical TrackStore mode: `NoTrackData` and `HotOnly` use `Hot`, `ColdOnly` uses `Cold`, and `HotAndCold` uses `Both`.
 `NoTrackData` still uses the least expensive concrete row side because source traversal and point updates must confirm Track existence, while the predicate itself reads no Track fields and TrackStore has no no-row mode.
+For a metadata-only batch, the evaluator reads and evaluates only the touched tracks, derives membership edits against the installed buckets, and installs every bucket's final state before publishing any one bucket.
+Structural insert, remove, and move batches retain the general rebuild path.
 Membership transitions are published as one atomic batch after the final state is installed.
 
 ### Ad-hoc filters
 
 `TrackSourceCache` acquires ad-hoc smart sources by `SourceSpec`, consisting of a base list and expression.
 Equal specs share one weak-cached source identity while leased.
+Before creating a new ad-hoc source, the cache removes every expired weak entry, including entries for unrelated specs; live identities remain shared and untouched.
 An ad-hoc source reports its own expression error first; when its expression is valid, it propagates any error from its saved-List base source.
 
 ## Cache and dependency behavior
@@ -119,7 +122,8 @@ Repairing an invalid saved ancestor therefore clears the contextual error in eve
 `delta::RegularTrackEditScript` is the dependency-neutral remove/insert/update representation shared by library changes, sources, and projections.
 `TrackSourceDelta` is a variant of that regular script, `SourceReset`, or `SourceInvalidated`; reset and invalidation remain singleton alternatives.
 
-`IndexedTrackSequence` applies one regular script with one merge and one index rebuild.
+`IndexedTrackSequence` applies update-only scripts and a bounded small structural script in place, then repairs the affected index suffix once after the final sequence is installed.
+A larger multi-range script uses the linear edit reducer and rebuilds the index once, preserving O(n + k) work instead of repeatedly shifting and reindexing the remaining sequence.
 Malformed coordinates, empty ranges, divergent reducer state, and a final sequence inconsistent with the installed source are fail-fast programming errors rather than recoverable cache-healing events.
 
 ## Failure and lifetime
@@ -147,8 +151,8 @@ Subscriptions release before their source or changes owner; source destruction d
 
 ## Test map
 
-- [`TrackSourceCacheTest.cpp`](../../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, dependency composition, and contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership.
-- Source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) prove edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
+- [`TrackSourceCacheTest.cpp`](../../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, expired ad-hoc pruning, dependency composition, and contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership.
+- Source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) prove in-place indexed edits, update-only smart-list membership transitions, edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
 
 ## Related documents
 

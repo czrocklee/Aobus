@@ -42,6 +42,11 @@ namespace ao::rt
     std::size_t operator()(SourceSpec const& spec) const noexcept;
   };
 
+  struct TrackSourceCacheOperationCounts final
+  {
+    std::size_t expiredAdHocSourcesPruned = 0;
+  };
+
   class LibraryChanges;
   struct LibraryChangeSet;
   class CachedListSource;
@@ -61,6 +66,7 @@ namespace ao::rt
     Result<TrackSourceLease> acquire(ListId listId);
     Result<TrackSourceLease> acquire(SourceSpec const& spec);
     std::optional<Error> sourceError(TrackSourceLease const& lease) const;
+    TrackSourceCacheOperationCounts operationCounts() const noexcept { return _operationCounts; }
 
     void reloadAllTracks();
 
@@ -97,5 +103,6 @@ namespace ao::rt
     boost::unordered_flat_map<ListId, ListId, std::hash<ListId>> _parentIds;
     boost::unordered_flat_map<ListId, std::vector<ListId>, std::hash<ListId>> _childIds;
     boost::unordered_flat_map<SourceSpec, std::weak_ptr<TrackSource>, SourceSpecHash> _adHocSources;
+    TrackSourceCacheOperationCounts _operationCounts;
   };
 } // namespace ao::rt

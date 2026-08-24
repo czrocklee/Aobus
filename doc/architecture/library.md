@@ -197,6 +197,7 @@ All Tracks is the permanent upstream source and has no writable rank overlay.
 
 One `SmartListEvaluator` bucket rebuild creates one batch-local dictionary read cache/context, binds each immutable plan once, and shares those bindings across the tracks evaluated in that batch.
 Binding resolves all plan symbols under one shared dictionary lock; later id-to-text cache misses take bounded point-read locks rather than delaying dictionary writers for a whole scan.
+Metadata-only batches use a touched-track path that updates installed membership without rebuilding unaffected bucket indices; structural batches retain the general rebuild path.
 
 Callers acquire leases rather than taking raw ownership of cached sources.
 The cache observes `LibraryChanges` and turns committed storage changes into source refreshes or incremental source deltas.
@@ -340,7 +341,7 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 - Source caches and projections derive state from storage plus the ordered change stream; they are not independent persistence authorities.
 - Saved rank is a persistence overlay on a saved List, never membership and never All Tracks state.
 - Cached list sources retain stable identity until deletion or cache teardown; a lease keeps its exact source and
-  upstream dependencies alive beyond cache teardown. Ad-hoc filtered sources remain weak-cached while leased.
+  upstream dependencies alive beyond cache teardown. Ad-hoc filtered sources remain weak-cached while leased, and acquiring a new ad-hoc identity prunes expired weak entries.
 - Dictionary read caches never extend a store view beyond the owning `MusicLibrary`, and they do not provide transaction isolation or a dictionary snapshot.
 - Projection raw-text caches borrow stable dictionary storage, while normalized projection keys never outlive the projection arena that owns them.
 - Exact persistence records and exact delta operations are delegated to reference and specification documents.

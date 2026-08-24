@@ -9,12 +9,14 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <limits>
 
 namespace ao::rt::test
@@ -101,6 +103,42 @@ namespace ao::rt::test
     CHECK(stoppedFired);
     CHECK(idleFired);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("PlaybackTransport control - pause and resume publish only real transitions",
+            "[runtime][unit][playback][control]")
+  {
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+    std::int32_t pausedCount = 0;
+    std::int32_t startedCount = 0;
+    auto pausedSub = fixture.playbackTransport.onPaused([&] noexcept { ++pausedCount; });
+    auto startedSub = fixture.playbackTransport.onStarted([&] noexcept { ++startedCount; });
+
+    fixture.playbackTransport.pause();
+    fixture.playbackTransport.resume();
+
+    CHECK(pausedCount == 0);
+    CHECK(startedCount == 0);
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const request =
+      playbackRequest(TrackId{2}, fixturePath, "Transition Track", "Transition Artist", std::chrono::minutes{2});
+
+    REQUIRE(fixture.playbackTransport.play(request, ListId{1}));
+    startedCount = 0;
+
+    fixture.playbackTransport.pause();
+    fixture.playbackTransport.pause();
+
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Paused);
+    CHECK(pausedCount == 1);
+
+    fixture.playbackTransport.resume();
+    fixture.playbackTransport.resume();
+
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
+    CHECK(startedCount == 1);
   }
 
   TEST_CASE("PlaybackTransport control - seek updates state and fires event", "[runtime][unit][playback][control]")
