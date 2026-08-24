@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
@@ -35,8 +36,8 @@ namespace ao::winui
   class [[nodiscard]] LibraryWindowSession final
   {
   public:
-    using RestartRequest = std::move_only_function<Result<>(std::filesystem::path)>;
-    using ClosedCallback = std::move_only_function<void()>;
+    using RestartRequest = compat::MoveOnlyFunction<Result<>(std::filesystem::path)>;
+    using ClosedCallback = compat::MoveOnlyFunction<void()>;
 
     LibraryWindowSession(std::filesystem::path stateRoot,
                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/utility/FromChars.h>
 
 #include <c4/std/string_view.hpp>
 #include <ryml.hpp>
@@ -118,7 +119,7 @@ namespace ao::yaml
     }
 
     T parsed = {};
-    auto const [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
+    auto const [ptr, ec] = utility::fromChars(text.data(), text.data() + text.size(), parsed);
 
     if (ec != std::errc{} || ptr != text.data() + text.size())
     {

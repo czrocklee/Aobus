@@ -4,10 +4,10 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
@@ -19,7 +19,7 @@ namespace ao::rt
   public:
     static constexpr std::size_t kHistoryCapacity = 64;
 
-    using CandidateChooser = std::move_only_function<TrackId(std::span<TrackId const>)>;
+    using CandidateChooser = compat::MoveOnlyFunction<TrackId(std::span<TrackId const>)>;
 
     enum class TransitionOrigin : std::uint8_t
     {

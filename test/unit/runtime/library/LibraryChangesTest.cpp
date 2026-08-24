@@ -13,6 +13,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -29,7 +30,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <future>
 #include <memory>
 #include <optional>
@@ -57,8 +57,8 @@ namespace ao::rt::test
         return current;
       }
 
-      void dispatch(std::move_only_function<void()> task) override { _delegate.dispatch(std::move(task)); }
-      void defer(std::move_only_function<void()> task) override { _delegate.defer(std::move(task)); }
+      void dispatch(compat::MoveOnlyFunction<void()> task) override { _delegate.dispatch(std::move(task)); }
+      void defer(compat::MoveOnlyFunction<void()> task) override { _delegate.defer(std::move(task)); }
 
       void drain() { _delegate.drain(); }
       std::size_t queuedCount() const { return _delegate.queuedCount(); }
@@ -74,7 +74,7 @@ namespace ao::rt::test
     public:
       bool isCurrent() const noexcept override { return _delegate.isCurrent(); }
 
-      void dispatch(std::move_only_function<void()> task) override
+      void dispatch(compat::MoveOnlyFunction<void()> task) override
       {
         if (isCurrent())
         {
@@ -100,7 +100,7 @@ namespace ao::rt::test
         _foreignDispatchReturned.set(true);
       }
 
-      void defer(std::move_only_function<void()> task) override { _delegate.defer(std::move(task)); }
+      void defer(compat::MoveOnlyFunction<void()> task) override { _delegate.defer(std::move(task)); }
       void drain() { _delegate.drain(); }
       bool waitUntilQueued() const { return _delegate.waitUntilQueued(); }
       bool foreignDispatchReturned() const { return _foreignDispatchReturned.load(); }

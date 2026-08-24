@@ -1,9 +1,10 @@
 # Aobus Agent Guide
 
 Aobus is a C++26 music application: a GTK4 (gtkmm) desktop frontend, a TUI, and
-a CLI tool over a shared core library. CMake builds the project. On Linux,
-dependencies come from `nix-shell`, which needs `shell.nix` in the current
-directory, so always work from the project root. On native Windows, use
+a CLI tool over a shared core library. CMake builds the project. On Linux and
+macOS, dependencies come from `nix-shell`, which needs `shell.nix` in the
+current directory, so always work from the project root. Read
+`doc/development/macos.md` before native macOS work. On native Windows, use
 `ao.bat` with the same command vocabulary and read
 `doc/development/windows.md` first.
 
@@ -21,6 +22,7 @@ Read the human docs for project policy instead of duplicating them here:
 - `doc/development/test.md` for testing policy.
 - `doc/development/linting.md` for lint policy (warning fix/suppress rules, NOLINT playbook).
 - `doc/development/commit-message.md` for commit message rules.
+- `doc/development/macos.md` for the native macOS support boundary and workflow.
 
 ## Working Rules
 
@@ -32,10 +34,11 @@ Read the human docs for project policy instead of duplicating them here:
    select the authoritative documentation type and owner.
 6. **Tests:** All changes include appropriate test coverage.
 7. **Scratch files:** Agent throwaway artifacts go to `/tmp`, never into the repo.
-8. **Hygiene:** Do not run format or lint tools mid-session unless the user
-   explicitly asks for linting.
+8. **Hygiene:** Do not run format or tidy tools mid-session unless the user
+   explicitly asks for linting. The final check-only `./ao hygiene` pass is
+   part of completed-work validation.
 9. **Validation:** Follow `doc/development/test/validation-and-review.md`; completed
-   work normally uses one full `./ao check`.
+   work normally runs one full `./ao check`, then `./ao hygiene`.
 10. **Concurrency:** Follow `doc/development/test/concurrency-and-sanitizer.md` for
     concurrency-sensitive changes.
 11. **Proportionality:** Aobus is a music application, not a flight-control or
@@ -47,16 +50,19 @@ Read the human docs for project policy instead of duplicating them here:
 
 ## Build and Validation
 
-Everything goes through the `./ao` portal (Python package in `script/ao/`; re-enters nix-shell automatically). `./ao help` lists commands; `./ao <cmd> --help` has all options.
+On Linux and macOS, everything goes through the `./ao` portal (Python package
+in `script/ao/`; re-enters nix-shell automatically). Platform suite groups and
+available frontends differ; `./ao help` lists commands and `./ao <cmd> --help`
+has all options.
 
 ```bash
-./ao check                    # full gate: build everything + all test suites (--clang/--asan/--tsan)
+./ao check                    # build/test gate: everything + all native suites (--clang/--asan/--tsan)
 ./ao build [release] [--clean] [--target <t>]    # incremental build, no tests
-./ao run <cli|tui|gtk> [release] [-n] [-- args]  # incremental build + launch a frontend
-./ao test [--core|--gtk|--all|...] "[tag]"       # default: core+gtk; "[a],[b]"=OR, "[a][b]"=AND
-./ao test --tooling           # ao tooling itself: Ruff + mypy + unit tests (test/script/)
+./ao run <app> [release] [-n] [-- args]           # apps follow the native platform profile
+./ao test [--core|--gtk|--all|...] "[tag]"       # suite groups are platform-specific
+./ao test --tooling           # Linux tooling gate; use ao.bat on Windows; unavailable on macOS
 ./ao test --concurrency       # all native Catch2 [concurrency] contracts
-./ao hygiene                  # check-only commit gate: format --check + tidy on changed files
+./ao hygiene                  # completion hygiene gate: format/audits/tidy on changed files
 ./ao tidy [paths|--folder <d>|--all]             # C++ clang-tidy + Python Ruff/mypy (opt-in, rule 8)
 ./ao analyze                  # Clang Static Analyzer, report-only
 ./ao coverage "rt::Foo"       # gcov coverage for a test subset

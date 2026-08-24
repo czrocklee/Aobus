@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -23,7 +24,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -260,7 +260,7 @@ namespace ao::rt
   }
 
   async::Subscription TrackDetailProjection::subscribe(
-    std::move_only_function<void(TrackDetailSnapshot const&)> handler)
+    compat::MoveOnlyFunction<void(TrackDetailSnapshot const&)> handler)
   {
     handler(_implPtr->cachedSnapshot);
     return _implPtr->changedSignal.connect(std::move(handler));

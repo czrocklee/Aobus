@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
@@ -19,7 +20,6 @@
 #include <exception>
 #include <expected>
 #include <format>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -250,7 +250,7 @@ namespace ao::rt
     // Handlers must defer owner destruction or runtime shutdown to a later
     // callback-executor turn instead of tearing down the active emitter.
     async::Subscription onAvailabilityChanged(
-      std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const;
+      compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;

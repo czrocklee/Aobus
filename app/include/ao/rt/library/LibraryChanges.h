@@ -5,10 +5,10 @@
 
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/TrackEditScript.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <variant>
@@ -76,20 +76,20 @@ namespace ao::rt
     // is active. Unbinding does not interrupt a replica already pinned for the
     // current delivery; it only prevents later deliveries.
     async::Subscription bindReplica(std::string replicaName,
-                                    std::move_only_function<void(LibraryChangeSet const&)> apply) const;
+                                    compat::MoveOnlyFunction<void(LibraryChangeSet const&)> apply) const;
 
     // Phase two announces an applied revision. Reaching an observer means
     // the replica applied the revision and the library is readable at it.
     // Escaping observer exceptions are diagnosed by this publication boundary
     // with the pinned replica and revision context.
-    async::Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const;
+    async::Subscription onChanged(compat::MoveOnlyFunction<void(LibraryChangeSet const&)> handler) const;
 
   private:
     friend class LibraryMutationService;
 
     void publishFromCoordinator(
       LibraryChangeSet changeSet,
-      std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept;
+      compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept;
     void retireFromCoordinator() noexcept;
 
     struct Impl;

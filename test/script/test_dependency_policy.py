@@ -147,8 +147,9 @@ class DependencyPolicyTest(unittest.TestCase):
     def test_initial_contract_is_valid(self):
         self.assertEqual(
             set(self.contract["dependencies"]),
-            {"boost", "ftxui", "icu", "spdlog", "windows-app-sdk", "cppwinrt"},
+            {"boost", "fast-float", "ftxui", "icu", "spdlog", "windows-app-sdk", "cppwinrt"},
         )
+        self.assertEqual(self.contract["dependencies"]["fast-float"]["policy"]["version"], "8.2.10")
         self.assertEqual(self.contract["dependencies"]["icu"]["policy"]["version"], "78.3")
         self.assertEqual(self.contract["dependencies"]["windows-app-sdk"]["policy"]["version"], "2.4.0")
         self.assertEqual(self.contract["dependencies"]["cppwinrt"]["policy"]["version"], "3.0.260715.1")
@@ -364,30 +365,52 @@ class DependencyPolicyTest(unittest.TestCase):
         self.assertEqual(packages["spdlog"].version, "1.17.0#1")
         self.assertEqual(packages["spdlog"].upstream_version, "1.17.0")
 
+    def _write_nix_resolution(self, root, platform, revision):
+        pin_file = dependency_policy.NIXPKGS_PIN_FILES[platform]
+        (root / pin_file).write_text(json.dumps({"rev": revision}), encoding="utf-8")
+        nix_report_path = root / "nix-dependencies.json"
+        nix_report = {
+            "schemaVersion": dependency_policy.SUPPORTED_NIX_REPORT_SCHEMA,
+            "nixpkgsRevision": revision,
+            "dependencies": {
+                name: {
+                    "version": definition["policy"]["version"],
+                    "storePath": f"/nix/store/test-{name}",
+                }
+                for name, definition in self.contract["dependencies"].items()
+                if platform in definition["platforms"]
+            },
+        }
+        nix_report_path.write_text(json.dumps(nix_report), encoding="utf-8")
+        return {"host": {"nixReportPath": str(nix_report_path)}}
+
     def test_nix_resolution_schema_is_independent_from_contract_schema(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            revision = "test-nixpkgs-revision"
-            (root / "nixpkgs.json").write_text(json.dumps({"rev": revision}), encoding="utf-8")
-            nix_report_path = root / "nix-dependencies.json"
-            nix_report = {
-                "schemaVersion": dependency_policy.SUPPORTED_NIX_REPORT_SCHEMA,
-                "nixpkgsRevision": revision,
-                "dependencies": {
-                    name: {
-                        "version": definition["policy"]["version"],
-                        "storePath": f"/nix/store/test-{name}",
-                    }
-                    for name, definition in self.contract["dependencies"].items()
-                    if "linux" in definition["platforms"]
-                },
-            }
-            nix_report_path.write_text(json.dumps(nix_report), encoding="utf-8")
-            report = {"host": {"nixReportPath": str(nix_report_path)}}
+        for platform in sorted(dependency_policy.NIX_PLATFORMS):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                report = self._write_nix_resolution(root, platform, "test-nixpkgs-revision")
 
-            resolved = dependency_policy._verify_nix_resolution(self.contract, report, root)
+                resolved = dependency_policy._verify_nix_resolution(self.contract, report, root, platform=platform)
 
-        self.assertEqual(resolved["schemaVersion"], 1)
+                self.assertEqual(resolved["schemaVersion"], 1)
+
+    def test_each_nix_platform_verifies_against_its_own_nixpkgs_pin(self):
+        # macOS cannot follow the main pin: nixpkgs dropped x86_64-darwin after
+        # 26.05. Each Nix platform must therefore be checked against its own pin
+        # file, and a report from the wrong pin must not pass.
+        self.assertEqual(
+            dependency_policy.NIXPKGS_PIN_FILES,
+            {"linux": "nixpkgs.json", "macos": "nixpkgs-darwin.json"},
+        )
+        for platform in sorted(dependency_policy.NIX_PLATFORMS):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                report = self._write_nix_resolution(root, platform, "expected-revision")
+                other = root / dependency_policy.NIXPKGS_PIN_FILES[platform]
+                other.write_text(json.dumps({"rev": "some-other-revision"}), encoding="utf-8")
+
+                with self.assertRaises(dependency_policy.DependencyPolicyError):
+                    dependency_policy._verify_nix_resolution(self.contract, report, root, platform=platform)
 
     def test_vcpkg_status_counts_only_installed_packages(self):
         packages = dependency_policy.parse_vcpkg_status(

@@ -7,11 +7,11 @@
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstdint>
 #include <exception>
 #include <format>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -26,13 +26,13 @@ namespace ao::rt
     struct PendingPublication final
     {
       LibraryChangeSet changeSet{};
-      std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion{};
+      compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion{};
     };
 
     struct ReplicaSlot final
     {
       std::string name{};
-      std::move_only_function<void(LibraryChangeSet const&)> apply{};
+      compat::MoveOnlyFunction<void(LibraryChangeSet const&)> apply{};
     };
 
     static std::string_view replicaNameOf(std::shared_ptr<ReplicaSlot> const& replicaPtr) noexcept
@@ -46,7 +46,7 @@ namespace ao::rt
       AO_EXPECTS(!libraryIdentity.empty(), "Library changes require a diagnostic identity");
     }
 
-    void bindReplica(std::string name, std::move_only_function<void(LibraryChangeSet const&)> apply)
+    void bindReplica(std::string name, compat::MoveOnlyFunction<void(LibraryChangeSet const&)> apply)
     {
       auto const lock = std::scoped_lock{mutex};
 
@@ -65,7 +65,7 @@ namespace ao::rt
 
     void publish(
       LibraryChangeSet changeSet,
-      std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
+      compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
     {
       auto const revision = changeSet.libraryRevision;
 
@@ -206,7 +206,7 @@ namespace ao::rt
       }
     }
 
-    async::Subscription connectObserver(std::move_only_function<void(LibraryChangeSet const&)> handler)
+    async::Subscription connectObserver(compat::MoveOnlyFunction<void(LibraryChangeSet const&)> handler)
     {
       return changedSignal.connect(
         [weakImplPtr = weak_from_this(),
@@ -272,7 +272,7 @@ namespace ao::rt
   LibraryChanges::~LibraryChanges() = default;
 
   async::Subscription LibraryChanges::bindReplica(std::string replicaName,
-                                                  std::move_only_function<void(LibraryChangeSet const&)> apply) const
+                                                  compat::MoveOnlyFunction<void(LibraryChangeSet const&)> apply) const
   {
     _implPtr->bindReplica(std::move(replicaName), std::move(apply));
 
@@ -285,14 +285,14 @@ namespace ao::rt
                                }};
   }
 
-  async::Subscription LibraryChanges::onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const
+  async::Subscription LibraryChanges::onChanged(compat::MoveOnlyFunction<void(LibraryChangeSet const&)> handler) const
   {
     return _implPtr->connectObserver(std::move(handler));
   }
 
   void LibraryChanges::publishFromCoordinator(
     LibraryChangeSet changeSet,
-    std::move_only_function<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
+    compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
   {
     _implPtr->publish(std::move(changeSet), std::move(completion));
   }

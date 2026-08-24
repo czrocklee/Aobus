@@ -15,6 +15,7 @@
 #include <ao/async/Signal.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
@@ -34,7 +35,6 @@
 #include <cstdlib>
 #include <expected>
 #include <format>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <random>
@@ -1241,27 +1241,27 @@ namespace ao::rt
   }
 
   async::Subscription PlaybackSuccession::onChanged(
-    std::move_only_function<void(PlaybackSuccessionState const&)> handler)
+    compat::MoveOnlyFunction<void(PlaybackSuccessionState const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->changedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackSuccession::onExplicitStartSettled(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSuccession::onExplicitStartSettled(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->explicitStartSettledSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackSuccession::onShuffleModeChanged(
-    std::move_only_function<void(ShuffleModeChanged const&)> handler)
+    compat::MoveOnlyFunction<void(ShuffleModeChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->shuffleModeChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackSuccession::onRepeatModeChanged(
-    std::move_only_function<void(RepeatModeChanged const&)> handler)
+    compat::MoveOnlyFunction<void(RepeatModeChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->repeatModeChangedSignal.connect(std::move(handler));
@@ -1354,7 +1354,7 @@ namespace ao::rt
     impl->optLastRestorableSnapshot.reset();
   }
 
-  async::Subscription PlaybackSuccession::onRestorableStateChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSuccession::onRestorableStateChanged(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->restorableStateChangedSignal.connect(std::move(handler));

@@ -4,12 +4,12 @@
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <expected>
 #include <format>
-#include <functional>
 #include <memory>
 #include <utility>
 
@@ -52,7 +52,7 @@ namespace ao::uimodel
   }
 
   Result<ShellGenerationId> ShellGenerationSequence::publish(ShellGenerationId const candidate,
-                                                             std::move_only_function<Result<>()> attach)
+                                                             compat::MoveOnlyFunction<Result<>()> attach)
   {
     auto candidateGatePtr = takeStaged(candidate);
 

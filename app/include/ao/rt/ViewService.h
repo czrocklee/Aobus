@@ -12,10 +12,10 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <chrono>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -90,11 +90,11 @@ namespace ao::rt
     Result<> setSelection(ViewId viewId, std::vector<TrackId> selection);
     Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
-    async::Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
-    async::Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
-    async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
-    async::Subscription onViewDestroyed(std::move_only_function<void(ViewDestroyed const&)> handler);
-    async::Subscription onFilterErrorChanged(std::move_only_function<void(FilterErrorChanged const&)> handler);
+    async::Subscription onProjectionChanged(compat::MoveOnlyFunction<void(TrackListProjectionChanged const&)> handler);
+    async::Subscription onPresentationChanged(compat::MoveOnlyFunction<void(PresentationChanged const&)> handler);
+    async::Subscription onSelectionChanged(compat::MoveOnlyFunction<void(SelectionChanged const&)> handler);
+    async::Subscription onViewDestroyed(compat::MoveOnlyFunction<void(ViewDestroyed const&)> handler);
+    async::Subscription onFilterErrorChanged(compat::MoveOnlyFunction<void(FilterErrorChanged const&)> handler);
 
     // View lookups come in two forms. The precondition form assumes the caller
     // already holds a live view id, so an unknown id is a programming error and

@@ -4,11 +4,11 @@
 #pragma once
 
 #include <ao/async/Executor.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <thread>
 #include <tuple>
@@ -33,8 +33,8 @@ namespace ao::rt::test
     ManualExecutor& operator=(ManualExecutor&&) = delete;
 
     bool isCurrent() const noexcept override;
-    void dispatch(std::move_only_function<void()> task) override;
-    void defer(std::move_only_function<void()> task) override;
+    void dispatch(compat::MoveOnlyFunction<void()> task) override;
+    void defer(compat::MoveOnlyFunction<void()> task) override;
     bool runOne();
     void runUntilIdle();
 
@@ -84,11 +84,11 @@ namespace ao::rt::test
     InlineExecutor& operator=(InlineExecutor&&) = delete;
 
     bool isCurrent() const noexcept override;
-    void dispatch(std::move_only_function<void()> task) override;
-    void defer(std::move_only_function<void()> task) override;
+    void dispatch(compat::MoveOnlyFunction<void()> task) override;
+    void defer(compat::MoveOnlyFunction<void()> task) override;
 
   private:
-    void execute(std::move_only_function<void()> task) const;
+    void execute(compat::MoveOnlyFunction<void()> task) const;
 
     std::thread::id _ownerThread;
   };
@@ -107,8 +107,8 @@ namespace ao::rt::test
     QueuedExecutor& operator=(QueuedExecutor&&) = delete;
 
     bool isCurrent() const noexcept override;
-    void dispatch(std::move_only_function<void()> task) override;
-    void defer(std::move_only_function<void()> task) override;
+    void dispatch(compat::MoveOnlyFunction<void()> task) override;
+    void defer(compat::MoveOnlyFunction<void()> task) override;
     void drain();
 
     template<typename Predicate>
@@ -148,13 +148,13 @@ namespace ao::rt::test
 
   private:
     bool runReadyTurn();
-    void enqueue(std::move_only_function<void()> task);
+    void enqueue(compat::MoveOnlyFunction<void()> task);
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };
 
   bool runLoopUntil(async::LoopExecutor& executor,
-                    std::move_only_function<bool()> predicate,
+                    compat::MoveOnlyFunction<bool()> predicate,
                     std::chrono::milliseconds timeout = std::chrono::seconds{5});
 } // namespace ao::rt::test

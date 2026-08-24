@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <functional>
+#include <ao/compat/MoveOnlyFunction.h>
 
 namespace ao::utility
 {
@@ -11,7 +11,7 @@ namespace ao::utility
   {
   public:
     ScopedRegistration() = default;
-    explicit ScopedRegistration(std::move_only_function<void()> unregister);
+    explicit ScopedRegistration(compat::MoveOnlyFunction<void()> unregister);
     ~ScopedRegistration();
 
     ScopedRegistration(ScopedRegistration const&) = delete;
@@ -25,6 +25,6 @@ namespace ao::utility
     explicit operator bool() const noexcept { return static_cast<bool>(_unregister); }
 
   private:
-    std::move_only_function<void()> _unregister;
+    compat::MoveOnlyFunction<void()> _unregister;
   };
 } // namespace ao::utility

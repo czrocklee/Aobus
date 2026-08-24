@@ -24,7 +24,9 @@ Use the [development guide template](../template/development.md) for a new contr
 - [Dependency governance](dependency-governance.md) owns cross-platform dependency policy, reproducibility, and exceptions.
 - [Dependency upgrade](dependency-upgrade.md) gives the supported procedure for changing dependency and tool pins.
 - [Optimized builds](optimized-builds.md) defines Release, IPO/LTO, and sampling-oriented profiling roles and workflows.
+- [macOS development](macos.md) covers native prerequisites, portal bootstrap, local state, supported commands, and current limitations.
 - [Windows development](windows.md) covers the native Windows portal, local state, tool bootstrap, and mapped-source workflow.
+- [macOS portability compromises](macos-portability.md) registers every macOS-driven deviation with the condition and procedure for removing it.
 - [Managed-state schemas](managed-state-schemas.md) defines owner-local YAML schema policy, implementation workflow, test evidence, and schema guardrails.
 
 ## Testing

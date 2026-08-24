@@ -10,6 +10,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -72,7 +73,7 @@ namespace ao::rt
     void notifyMetadataUpdates(LibraryChangeSet const& event);
     void refreshList(ListId listId);
     void eraseList(ListId listId);
-    void applyListMutation(std::move_only_function<void()> mutation);
+    void applyListMutation(compat::MoveOnlyFunction<void()> mutation);
     void drainPendingRefreshes();
     void refreshListNow(ListId listId);
     std::shared_ptr<CachedListSource> findSource(ListId listId);

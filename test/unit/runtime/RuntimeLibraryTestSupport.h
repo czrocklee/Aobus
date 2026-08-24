@@ -6,6 +6,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -14,7 +15,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -37,11 +37,11 @@ namespace ao::rt::test
 
   TrackId addRuntimeTrack(AppRuntime& runtime,
                           library::test::TrackSpec const& spec,
-                          std::move_only_function<void()> settlePublication = {});
+                          compat::MoveOnlyFunction<void()> settlePublication = {});
 
   void updateRuntimeTrack(AppRuntime& runtime,
                           TrackId trackId,
-                          std::move_only_function<void(library::test::TrackSpec&)> updater);
+                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater);
 
   class MusicLibraryFixture final
   {
@@ -58,7 +58,7 @@ namespace ao::rt::test
     library::MusicLibrary const& library() const;
     std::filesystem::path const& root() const;
     TrackId addTrack(library::test::TrackSpec const& spec);
-    void updateTrack(TrackId id, std::move_only_function<void(library::test::TrackSpec&)> updater);
+    void updateTrack(TrackId id, compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater);
     TrackId addTrack(std::string_view title);
 
   private:

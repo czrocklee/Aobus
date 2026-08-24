@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -32,7 +33,6 @@
 #include <exception>
 #include <expected>
 #include <format>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -246,29 +246,29 @@ namespace ao::rt
   ViewService::~ViewService() = default;
 
   async::Subscription ViewService::onProjectionChanged(
-    std::move_only_function<void(TrackListProjectionChanged const&)> handler)
+    compat::MoveOnlyFunction<void(TrackListProjectionChanged const&)> handler)
   {
     return _implPtr->projectionChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onPresentationChanged(
-    std::move_only_function<void(PresentationChanged const&)> handler)
+    compat::MoveOnlyFunction<void(PresentationChanged const&)> handler)
   {
     return _implPtr->presentationChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription ViewService::onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler)
+  async::Subscription ViewService::onSelectionChanged(compat::MoveOnlyFunction<void(SelectionChanged const&)> handler)
   {
     return _implPtr->selectionChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription ViewService::onViewDestroyed(std::move_only_function<void(ViewDestroyed const&)> handler)
+  async::Subscription ViewService::onViewDestroyed(compat::MoveOnlyFunction<void(ViewDestroyed const&)> handler)
   {
     return _implPtr->viewDestroyedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onFilterErrorChanged(
-    std::move_only_function<void(FilterErrorChanged const&)> handler)
+    compat::MoveOnlyFunction<void(FilterErrorChanged const&)> handler)
   {
     return _implPtr->filterErrorChangedSignal.connect(std::move(handler));
   }

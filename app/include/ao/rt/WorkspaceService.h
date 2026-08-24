@@ -11,9 +11,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -90,7 +90,7 @@ namespace ao::rt
 
     std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target);
 
-    async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler);
+    async::Subscription onChanged(compat::MoveOnlyFunction<void(WorkspaceChanged const&)> handler);
 
     std::span<CustomTrackPresentationPreset const> customPresets() const;
     Result<> addCustomPreset(CustomTrackPresentationPreset const& preset);

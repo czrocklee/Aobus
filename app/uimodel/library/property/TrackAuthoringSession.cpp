@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -178,7 +179,7 @@ namespace ao::uimodel
     return _implPtr->targets.trackIds();
   }
 
-  async::Subscription TrackAuthoringSession::onInvalidated(std::move_only_function<void()> handler) const
+  async::Subscription TrackAuthoringSession::onInvalidated(compat::MoveOnlyFunction<void()> handler) const
   {
     return _implPtr->invalidated.connect(std::move(handler));
   }

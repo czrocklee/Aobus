@@ -10,7 +10,7 @@ summary: Defines the test suites, suite groups, filters, and supported portal co
 For test authoring standards, layer placement, tags, assertion quality, and
 helper boundaries, see `doc/development/test.md`.
 
-The `./ao test` command exposes individual suites and two suite groups:
+The `./ao test` command exposes individual suites and four suite groups:
 
 - `core`: core library Catch2 tests (`ao_core_test`).
 - `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
@@ -19,7 +19,7 @@ The `./ao test` command exposes individual suites and two suite groups:
 - `integration`: standalone integration tests (`ao_integration_test`).
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
-- `default`: the native fast-loop group. Linux runs core and GTK; Windows runs core and TUI.
+- `default`: the native fast-loop group. Linux runs core and GTK; macOS and Windows run core and TUI.
 - `all`: every suite enabled by the native build profile.
 - `tsan`: suites with a clean ThreadSanitizer baseline.
 - `concurrency`: every native Catch2 suite, filtered to `[concurrency]` tests.
@@ -32,9 +32,16 @@ build GTK or the lint integration suite. Native `ao.bat tidy`
 uses a separate `windows-tidy` preset that builds the self-contained
 `AobusClangTidy.exe`.
 
+The macOS `all` group contains core, TUI, CLI, integration, and lint. GTK is not
+built. Python tooling remains unavailable because the Darwin Nix pin does not
+own the exact repository-tooling contract; native clang-tidy and its integration
+fixtures do have a Darwin baseline. `./ao test --all` and `./ao check` resolve
+the same supported five-suite group.
+
 The tooling gate uses the pinned Ruff and mypy environment supplied by Nix on
 Linux and the checkout-specific managed environment supplied by `ao.bat` on
-Windows. It probes the running Python, Ruff, and mypy versions against
+Windows. It is not exposed on macOS. On its supported hosts it probes the
+running Python, Ruff, and mypy versions against
 `script/ao/toolchain.json`, verifies the Windows hash lock agrees with that
 contract, and runs the same documentation structure validation exposed by
 `./ao docs check`. It never depends on unrelated tools from the ambient Windows
@@ -50,6 +57,7 @@ ThreadSanitizer is intentionally different. `ao test --tsan` and
 `ao check --tsan` resolve `default`/`all` to the native `tsan` group. Explicit
 suite selection, such as `ao test --gtk --tsan`, remains available for focused diagnosis.
 The Linux TSan group contains core and GTK; reviewed uninstrumented UI dependencies use module-scoped interceptor suppressions.
+The macOS TSan group contains core.
 Windows has no TSan suite group because the MSVC toolchain does not provide
 ThreadSanitizer; requesting `--tsan` is an error. `ao.bat check --asan` runs the
 entire native Windows `all` group with MSVC AddressSanitizer in its own build
@@ -63,7 +71,7 @@ tests.
 `--no-build` applies uniformly. Catch2 executables and the native lint artifact
 must already exist in the selected build tree; tooling tests never need a CMake
 build. `--path`, compiler, and sanitizer options select the same tree for C++
-and lint integration suites. On both platforms, build and test commands reuse
+and lint integration suites. On every native platform, build and test commands reuse
 the same flavor tree. Tests are configured by default, while `cmake --build
 --target ...` limits an incremental build to the selected suite targets.
 

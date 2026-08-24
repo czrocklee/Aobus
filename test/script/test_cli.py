@@ -3,6 +3,8 @@
 import contextlib
 import io
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,7 +22,7 @@ from ao.command.build import BuildResult
 from ao.core import builddir
 
 
-class LinuxShellPortalTest(unittest.TestCase):
+class NixShellPortalTest(unittest.TestCase):
     def test_nix_reentry_discards_python_paths_from_a_stale_shell(self):
         portal = Path(__file__).resolve().parents[2] / "ao"
         content = portal.read_text(encoding="utf-8")
@@ -29,6 +31,66 @@ class LinuxShellPortalTest(unittest.TestCase):
         reentry_offset = content.index('exec nix-shell "$ROOT/shell.nix"')
 
         self.assertLess(unset_offset, reentry_offset)
+
+    def test_darwin_bootstrap_recovers_nix_build_from_a_profile(self):
+        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "darwin-nix-bootstrap.sh"
+        bash = shutil.which("bash")
+        if bash is None:
+            self.skipTest("bash is unavailable on this host")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            empty_bin = temp / "empty-bin"
+            profile_bin = temp / "profile" / "bin"
+            empty_bin.mkdir()
+            profile_bin.mkdir(parents=True)
+            nix_build = profile_bin / "nix-build"
+            nix_build.touch()
+            nix_build.chmod(0o755)
+            result = subprocess.run(
+                [
+                    bash,
+                    "-c",
+                    'source "$1"; aobus_require_nix_build "$2" "$3"; command -v nix-build',
+                    "aobus-bootstrap-test",
+                    str(helper),
+                    str(temp / "missing-profile"),
+                    str(profile_bin),
+                ],
+                capture_output=True,
+                text=True,
+                env={"HOME": str(temp), "PATH": str(empty_bin)},
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), str(nix_build))
+
+    def test_darwin_bootstrap_returns_127_when_nix_is_unavailable(self):
+        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "darwin-nix-bootstrap.sh"
+        bash = shutil.which("bash")
+        if bash is None:
+            self.skipTest("bash is unavailable on this host")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            empty_bin = temp / "empty-bin"
+            empty_bin.mkdir()
+            result = subprocess.run(
+                [
+                    bash,
+                    "-c",
+                    'source "$1"; aobus_require_nix_build "$2"',
+                    "aobus-bootstrap-test",
+                    str(helper),
+                    str(temp / "missing-profile"),
+                ],
+                capture_output=True,
+                text=True,
+                env={"HOME": str(temp), "PATH": str(empty_bin)},
+            )
+
+        self.assertEqual(result.returncode, 127)
+        self.assertIn("nix-build is unavailable", result.stderr)
 
 
 class WindowsBatchPortalTest(unittest.TestCase):
@@ -674,6 +736,7 @@ class CliParseTest(unittest.TestCase):
             test_filter="",
             list_only=False,
             repeat=1,
+            asan=False,
             tsan=False,
         )
 
@@ -746,6 +809,7 @@ class CliParseTest(unittest.TestCase):
             test_filter="",
             list_only=False,
             repeat=1,
+            asan=False,
             tsan=False,
         )
 
@@ -779,6 +843,7 @@ class CliParseTest(unittest.TestCase):
         run_suites.assert_called_once_with(
             test_command.SUITE_GROUPS["all"],
             result.build_dir,
+            asan=False,
             tsan=False,
             log=result.log,
         )
@@ -811,7 +876,34 @@ class CliParseTest(unittest.TestCase):
         run_suites.assert_called_once_with(
             ("core", "gtk"),
             result.build_dir,
+            asan=False,
             tsan=True,
+            log=result.log,
+        )
+
+    def test_macos_check_runs_only_supported_native_suites(self):
+        args = self.parse(["check"])
+        result = BuildResult(
+            build_dir=Path("/tmp/aobus-macos-build"),
+            log=Path("/tmp/aobus-macos-build/build.log"),
+            compiler="clang",
+            preset="macos-debug",
+        )
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+            with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
+                with mock.patch.object(check_command.dependency_policy, "verified_report") as verify:
+                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
+                        with mock.patch.object(check_command.build, "print_summary"):
+                            self.assertEqual(check_command.run_command(args), 0)
+
+        do_build.assert_called_once_with(args, targets=["all", "ao_perf_baseline"])
+        verify.assert_called_once_with(result.build_dir)
+        run_suites.assert_called_once_with(
+            ("core", "tui", "cli", "integration", "lint"),
+            result.build_dir,
+            asan=False,
+            tsan=False,
             log=result.log,
         )
 
@@ -839,6 +931,7 @@ class CliParseTest(unittest.TestCase):
             test_filter="",
             list_only=False,
             repeat=1,
+            asan=False,
             tsan=False,
         )
 
@@ -875,6 +968,7 @@ class CliParseTest(unittest.TestCase):
         run_suites.assert_called_once_with(
             ("core", "tui", "cli", "integration", "tooling"),
             result.build_dir,
+            asan=False,
             tsan=False,
             log=result.log,
         )
@@ -944,6 +1038,7 @@ class CliParseTest(unittest.TestCase):
             test_filter="",
             list_only=False,
             repeat=1,
+            asan=False,
             tsan=True,
         )
 
@@ -952,9 +1047,10 @@ class CliParseTest(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "1"):
                 test_command.suites_for("core", tsan=True)
 
-    def test_windows_asan_does_not_configure_linux_leak_suppressions(self):
+    def test_windows_asan_does_not_configure_unavailable_sanitizers(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
             self.assertEqual(test_command._lsan_env(Path("windows-debug-asan")), {})
+            self.assertEqual(test_command._ubsan_env(Path("windows-debug-asan")), {})
 
     def test_windows_clang_test_is_rejected_before_build_or_run(self):
         args = self.parse(["test", "--core", "--clang", "-n", "-p", "/tmp/aobus-test-build"])
@@ -979,6 +1075,7 @@ class CliParseTest(unittest.TestCase):
             list_only=False,
             allow_no_tests=True,
             repeat=3,
+            asan=False,
             tsan=False,
         )
 
@@ -996,6 +1093,7 @@ class CliParseTest(unittest.TestCase):
             list_only=False,
             allow_no_tests=True,
             repeat=1,
+            asan=False,
             tsan=True,
         )
 
@@ -1042,6 +1140,34 @@ class CliParseTest(unittest.TestCase):
                     f"history_size=7:suppressions={test_command._TSAN_SUPP_PATH}:"
                     "halt_on_error=1:second_deadlock_stack=1"
                 )
+            },
+            log=None,
+            append=False,
+        )
+
+    def test_macos_asan_suite_enforces_fail_fast_ubsan_runtime_options(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "custom-build-tree"
+            # The test selects the macOS profile even when its Python host is
+            # Windows, so create the profile-owned suffix rather than the
+            # ambient host's executable spelling.
+            binary = build_dir / "test" / "ao_core_test"
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+                with mock.patch.dict(
+                    "os.environ",
+                    {"UBSAN_OPTIONS": "silence_unsigned_overflow=1:halt_on_error=0:print_stacktrace=0"},
+                    clear=True,
+                ):
+                    with mock.patch.object(test_command, "run", return_value=0) as run:
+                        self.assertEqual(test_command.run_suite("core", build_dir, asan=True), 0)
+
+        run.assert_called_once_with(
+            [str(binary)],
+            env={
+                "UBSAN_OPTIONS": "silence_unsigned_overflow=1:halt_on_error=1:print_stacktrace=1",
             },
             log=None,
             append=False,

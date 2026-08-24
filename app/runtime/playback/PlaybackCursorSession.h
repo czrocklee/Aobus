@@ -10,13 +10,13 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -39,7 +39,7 @@ namespace ao::rt
   {
   public:
     using ProjectionBatchHandler =
-      std::move_only_function<void(PlaybackCursor::Changes changes, bool sourceInvalidated)>;
+      compat::MoveOnlyFunction<void(PlaybackCursor::Changes changes, bool sourceInvalidated)>;
 
     static Result<std::unique_ptr<PlaybackCursorSession>> create(
       PlaybackLaunchSpec launchSpec,

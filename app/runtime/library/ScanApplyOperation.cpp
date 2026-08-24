@@ -9,6 +9,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -29,7 +30,6 @@
 #include <expected>
 #include <filesystem>
 #include <format>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -55,8 +55,8 @@ namespace ao::rt
 
   ScanApplyOperation::ScanApplyOperation(library::MusicLibrary& ml,
                                          ScanPlan plan,
-                                         std::move_only_function<void(ScanApplyProgress const& progress)> progress,
-                                         std::move_only_function<void(ScanFailure const& failure)> itemFailure,
+                                         compat::MoveOnlyFunction<void(ScanApplyProgress const& progress)> progress,
+                                         compat::MoveOnlyFunction<void(ScanFailure const& failure)> itemFailure,
                                          ScanApplyOptions options)
     : _ml{ml}
     , _plan{std::move(plan)}

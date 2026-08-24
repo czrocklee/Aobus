@@ -145,12 +145,7 @@ namespace ao::rt::test
     REQUIRE(isDrained);
     fixture.renderTarget->handleDrainComplete();
 
-    for (std::int32_t i = 0; i < 100000 && idleCount == 0; ++i)
-    {
-      fixture.executor.drain();
-    }
-
-    REQUIRE(idleCount > 0);
+    REQUIRE(fixture.executor.drainUntil([&idleCount] { return idleCount > 0; }));
     CHECK(idleCount == 1);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
   }

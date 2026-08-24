@@ -10,6 +10,7 @@
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NavigationHistory.h>
@@ -30,7 +31,6 @@
 #include <exception>
 #include <expected>
 #include <format>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <source_location>
@@ -672,7 +672,7 @@ namespace ao::rt
     return _implPtr->views.detailProjection(target, *this, _implPtr->changes);
   }
 
-  async::Subscription WorkspaceService::onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler)
+  async::Subscription WorkspaceService::onChanged(compat::MoveOnlyFunction<void(WorkspaceChanged const&)> handler)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->changedSignal.connect(std::move(handler));

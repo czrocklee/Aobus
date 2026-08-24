@@ -4,9 +4,9 @@
 #pragma once
 
 #include "CompletionItem.h"
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstddef>
-#include <functional>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -23,5 +23,5 @@ namespace ao::rt
   };
 
   using CompletionProvider =
-    std::move_only_function<std::optional<CompletionResult>(std::string_view text, std::size_t cursor)>;
+    compat::MoveOnlyFunction<std::optional<CompletionResult>(std::string_view text, std::size_t cursor)>;
 } // namespace ao::rt

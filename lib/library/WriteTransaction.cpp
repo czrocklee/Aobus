@@ -10,6 +10,7 @@
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryWrite.h>
@@ -299,7 +300,7 @@ namespace ao::library
     return _implPtr->candidateHeader;
   }
 
-  Result<> WriteTransaction::applyBoundary(std::move_only_function<Result<>(LibraryWrite&)> function)
+  Result<> WriteTransaction::applyBoundary(compat::MoveOnlyFunction<Result<>(LibraryWrite&)> function)
   {
     AO_EXPECTS(
       (_implPtr != nullptr && _implPtr->transaction.isActive()), "Library write transaction is no longer active");

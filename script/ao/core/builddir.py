@@ -154,8 +154,15 @@ WINDOWS_PRESETS = {
 }
 WINDOWS_WINUI_PRESET = "windows-winui"
 
+MACOS_PRESETS = {
+    "debug": "macos-debug",
+    "release": "macos-release",
+    "profile": "profile",
+}
+
 TIDY_PRESETS = {
     "linux": "linux-debug",
+    "macos": "macos-debug",
     "windows": "windows-tidy",
 }
 
@@ -187,6 +194,23 @@ LINUX_PROFILE = PlatformProfile(
     compiler="gcc",
 )
 
+# macOS builds the terminal and command-line frontends only: there is no GTK
+# frontend and no native audio backend there yet, so the app runs silently and
+# the gtk suites do not exist. Python repository tooling remains owned by Linux
+# and Windows because the Darwin Nix pin intentionally has a different Python
+# toolchain. Native clang-tidy integration is supported on Darwin.
+MACOS_PROFILE = PlatformProfile(
+    name="macos",
+    build_root=BUILD_ROOT,
+    presets=MACOS_PRESETS,
+    executable_suffix="",
+    apps=("cli", "tui"),
+    default_suites=("core", "tui"),
+    all_suites=("core", "tui", "cli", "integration", "lint"),
+    tsan_suites=("core",),
+    compiler="clang",
+)
+
 WINDOWS_PROFILE = PlatformProfile(
     name="windows",
     build_root=WINDOWS_BUILD_ROOT,
@@ -207,9 +231,14 @@ def platform_profile(os_name: str | None = None) -> PlatformProfile:
     """Return the native development profile for an ``os.name`` value."""
     if (os.name if os_name is None else os_name) == "nt":
         return replace(WINDOWS_PROFILE, build_root=windows_build_root())
+    # os.name is "posix" for both Linux and macOS, so the two are separated by
+    # sys.platform. An explicit os_name still selects the Linux profile, which
+    # keeps cross-profile queries working from any host.
+    if os_name is None and sys.platform == "darwin":
+        return replace(MACOS_PROFILE, build_root=linux_build_root())
     if os_name is None and sys.platform != "linux":
         raise RuntimeError(
-            f"Aobus native development supports Linux and Windows; there is no profile for {sys.platform!r}."
+            f"Aobus native development supports Linux, macOS, and Windows; there is no profile for {sys.platform!r}."
         )
     return replace(LINUX_PROFILE, build_root=linux_build_root())
 

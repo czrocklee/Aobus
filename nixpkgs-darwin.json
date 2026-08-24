@@ -1,0 +1,7 @@
+{
+  "owner": "NixOS",
+  "repo": "nixpkgs",
+  "ref": "nixpkgs-26.05-darwin",
+  "rev": "6062ba1a1b8b6281b12533c9075a2dbeb38f7e49",
+  "sha256": "1dfmhgmairiq0k50vflzqfqaiz6v9dfvbf60yh6fhnkna312daiy"
+}

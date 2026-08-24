@@ -5,10 +5,10 @@
 
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <exception>
 #include <format>
-#include <functional>
 #include <string_view>
 #include <utility>
 
@@ -42,7 +42,7 @@ namespace ao::winui
       return {};
     }
 
-    void report(std::move_only_function<void(Error const&)>& reportFailure, Error const& error) noexcept
+    void report(compat::MoveOnlyFunction<void(Error const&)>& reportFailure, Error const& error) noexcept
     {
       if (!reportFailure)
       {
@@ -59,7 +59,7 @@ namespace ao::winui
       }
     }
 
-    void exitProcess(std::move_only_function<void()>& exitOperation) noexcept
+    void exitProcess(compat::MoveOnlyFunction<void()>& exitOperation) noexcept
     {
       if (!exitOperation)
       {

@@ -4,9 +4,9 @@
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
 
 #include <ao/CoreIds.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/library/LibraryChanges.h>
 
-#include <functional>
 #include <map>
 #include <string>
 #include <utility>
@@ -16,7 +16,7 @@ namespace ao::uimodel
   ListPresentationPreferenceLifecycle::ListPresentationPreferenceLifecycle(
     std::map<ListId, std::string>& presentations,
     rt::LibraryChanges const& changes,
-    std::move_only_function<void(ListId)> onPreferenceRemoved)
+    compat::MoveOnlyFunction<void(ListId)> onPreferenceRemoved)
     : _presentations{presentations}, _onPreferenceRemoved{std::move(onPreferenceRemoved)}
   {
     _changesSubscription = changes.onChanged(

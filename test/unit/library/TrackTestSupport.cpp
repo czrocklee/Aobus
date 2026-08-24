@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
@@ -21,7 +22,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
-#include <functional>
 #include <string_view>
 
 namespace ao::library::test
@@ -226,7 +226,7 @@ namespace ao::library::test
     return *idRes;
   }
 
-  void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate)
+  void mutateTrack(MusicLibrary& library, TrackId id, compat::MoveOnlyFunction<void(TrackBuilder&)> mutate)
   {
     auto transaction = writeTransaction(library);
     auto mutationRes = transaction.apply(
@@ -254,7 +254,7 @@ namespace ao::library::test
     REQUIRE(transaction.commit());
   }
 
-  void updateTrackSpec(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackSpec&)> updater)
+  void updateTrackSpec(MusicLibrary& library, TrackId id, compat::MoveOnlyFunction<void(TrackSpec&)> updater)
   {
     auto spec = TrackSpec{};
     {

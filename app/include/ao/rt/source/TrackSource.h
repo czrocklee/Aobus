@@ -7,10 +7,10 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <span>
 
@@ -44,7 +44,7 @@ namespace ao::rt
 
     TrackSourceState state() const noexcept { return _state; }
 
-    async::Subscription subscribe(std::move_only_function<void(TrackSourceDelta const&)> handler);
+    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackSourceDelta const&)> handler);
     void invalidate() noexcept;
 
   protected:

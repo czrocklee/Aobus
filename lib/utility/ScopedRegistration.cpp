@@ -3,12 +3,13 @@
 
 #include <ao/utility/ScopedRegistration.h>
 
-#include <functional>
+#include <ao/compat/MoveOnlyFunction.h>
+
 #include <utility>
 
 namespace ao::utility
 {
-  ScopedRegistration::ScopedRegistration(std::move_only_function<void()> unregister)
+  ScopedRegistration::ScopedRegistration(compat::MoveOnlyFunction<void()> unregister)
     : _unregister{std::move(unregister)}
   {
   }

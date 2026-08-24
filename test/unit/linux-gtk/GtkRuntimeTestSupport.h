@@ -4,10 +4,10 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <chrono>
 #include <filesystem>
-#include <functional>
 #include <memory>
 
 namespace ao::library
@@ -36,12 +36,12 @@ namespace ao::gtk::test
   TrackId addRuntimeTrack(rt::AppRuntime& runtime, library::test::TrackSpec const& spec);
   void updateRuntimeTrack(rt::AppRuntime& runtime,
                           TrackId trackId,
-                          std::move_only_function<void(library::test::TrackSpec&)> updater);
+                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater);
 
   class GtkRuntimeFixture final
   {
   public:
-    explicit GtkRuntimeFixture(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {},
+    explicit GtkRuntimeFixture(compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary = {},
                                rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~GtkRuntimeFixture();
 
@@ -68,7 +68,7 @@ namespace ao::gtk::test
 
   std::unique_ptr<rt::AppRuntime> makeRuntime(
     ao::test::TempDir const& tempDir,
-    std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {},
+    compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary = {},
     rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
   bool waitForPlaybackSettlement(rt::AppRuntime& runtime,

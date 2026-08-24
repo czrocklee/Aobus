@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstdint>
-#include <functional>
 
 namespace ao::winui
 {
@@ -29,7 +29,7 @@ namespace ao::winui
   struct DestructiveLibraryRestartOperations final
   {
     /** Checkpoint and terminally retire persistence while the active graph remains usable on failure. */
-    std::move_only_function<Result<>()> prepareActiveGraph;
+    compat::MoveOnlyFunction<Result<>()> prepareActiveGraph;
 
     /**
      * @brief Release the window, session, runtime, and application-state stores.
@@ -39,11 +39,11 @@ namespace ao::winui
      * Naming the steps separately here would be a second, hand-maintained copy of
      * a guarantee the type system already gives.
      */
-    std::move_only_function<void()> releaseActiveGraph;
-    std::move_only_function<Result<>()> launchSuccessor;
-    std::move_only_function<void(Error const&)> reportPreparationFailure;
-    std::move_only_function<void(Error const&)> reportLaunchFailure;
-    std::move_only_function<void()> exitProcess;
+    compat::MoveOnlyFunction<void()> releaseActiveGraph;
+    compat::MoveOnlyFunction<Result<>()> launchSuccessor;
+    compat::MoveOnlyFunction<void(Error const&)> reportPreparationFailure;
+    compat::MoveOnlyFunction<void(Error const&)> reportLaunchFailure;
+    compat::MoveOnlyFunction<void()> exitProcess;
   };
 
   /**

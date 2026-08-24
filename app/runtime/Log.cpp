@@ -4,6 +4,7 @@
 #include <ao/rt/Log.h>
 
 #include <ao/Contract.h>
+#include <ao/compat/AtomicSharedPtr.h>
 #include <ao/utility/Path.h>
 
 #include <spdlog/async.h>
@@ -44,7 +45,7 @@ namespace ao::rt
   // Null loggers must exist before initialize().
   std::shared_ptr<spdlog::logger> Log::_appLoggerPtr = makeNullLogger("app");
   std::shared_ptr<spdlog::logger> Log::_audioLoggerPtr = makeNullLogger("audio");
-  std::atomic<std::shared_ptr<spdlog::logger>> Log::_fatalLoggerPtr{makeNullLogger("fatal")};
+  compat::AtomicSharedPtr<spdlog::logger> Log::_fatalLoggerPtr{makeNullLogger("fatal")};
   bool Log::_initialized = false;
   std::mutex Log::_lifecycleMutex;
 

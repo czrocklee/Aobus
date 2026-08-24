@@ -7,6 +7,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
@@ -286,7 +287,7 @@ namespace ao::rt
     sourcePtr->rebind(std::move(definition), std::move(implementationPtr));
   }
 
-  void TrackSourceCache::applyListMutation(std::move_only_function<void()> mutation)
+  void TrackSourceCache::applyListMutation(compat::MoveOnlyFunction<void()> mutation)
   {
     ++_listMutationDepth;
     mutation();

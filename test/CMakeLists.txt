@@ -20,7 +20,7 @@ add_library(ao_fatal_probe_support STATIC
     fatal/RuntimeFatalProbeProtocol.cpp
 )
 target_include_directories(ao_fatal_probe_support PUBLIC "${CMAKE_SOURCE_DIR}")
-if(LINUX)
+if(NOT WIN32)
   target_sources(ao_fatal_probe_support PRIVATE fatal/ProbeProcessPosix.cpp)
 endif()
 if(WIN32)
@@ -175,6 +175,7 @@ endif()
 add_executable(ao_core_test
     CoreTestMain.cpp
     fatal/RuntimeFatalProbeScenario.cpp
+    unit/FilesystemTestSupport.cpp
 
     # async tests
     unit/async/RequestCoalescerTest.cpp
@@ -201,6 +202,14 @@ add_executable(ao_core_test
     unit/utility/ScopedRegistrationTest.cpp
     unit/utility/YamlSerializationTest.cpp
     unit/utility/TestFixtureSupportTest.cpp
+    unit/utility/FromCharsTest.cpp
+
+    # compatibility tests
+    unit/compat/MoveOnlyFunctionTest.cpp
+    unit/compat/EnumerateTest.cpp
+    unit/compat/AtomicSharedPtrTest.cpp
+
+    # core tests
     unit/core/AudioCodecTest.cpp
     unit/core/ErrorTest.cpp
     unit/core/FatalTest.cpp
@@ -624,9 +633,11 @@ target_link_libraries(ao_core_test PRIVATE
     FakeIt::FakeIt-catch
     ICU::uc
 )
+if(NOT WIN32)
+  target_sources(ao_core_test PRIVATE unit/FilesystemTestSupportPosix.cpp)
+endif()
 if(LINUX)
   target_sources(ao_core_test PRIVATE
-    unit/FilesystemTestSupportPosix.cpp
     unit/audio/backend/PipeWireMonitorTest.cpp
     unit/audio/backend/AlsaExclusiveBackendTest.cpp
     unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp

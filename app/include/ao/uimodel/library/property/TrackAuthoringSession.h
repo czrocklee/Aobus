@@ -6,10 +6,10 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
-#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -54,7 +54,7 @@ namespace ao::uimodel
 
     bool isCurrent() const noexcept;
     std::span<TrackId const> targetIds() const noexcept;
-    async::Subscription onInvalidated(std::move_only_function<void()> handler) const;
+    async::Subscription onInvalidated(compat::MoveOnlyFunction<void()> handler) const;
 
     Result<TrackMetadataSubmitResult> submitMetadata(rt::MetadataPatch const& patch);
     Result<TrackTagSubmitResult> submitTags(std::span<std::string const> tagsToAdd,

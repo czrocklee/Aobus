@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -257,7 +258,7 @@ namespace ao::rt
   }
 
   async::Subscription LibraryMutationService::onAvailabilityChanged(
-    std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const
+    compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const
   {
     return _availabilityChanged.connect(
       [this, handler = std::move(handler)](LibraryAuthoringAvailability const& availability) mutable noexcept
@@ -649,7 +650,7 @@ namespace ao::rt
     }
 
     auto const submissionFromOwner = _callbackExecutor.isCurrent();
-    auto publicationCompletion = std::move_only_function<void(std::string, std::string)>{
+    auto publicationCompletion = compat::MoveOnlyFunction<void(std::string, std::string)>{
       [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, revision](
         std::string libraryIdentity, std::string replicaName)
       {

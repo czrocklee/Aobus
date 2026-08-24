@@ -13,6 +13,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
@@ -30,7 +31,6 @@
 #include <expected>
 #include <filesystem>
 #include <format>
-#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -80,7 +80,7 @@ namespace ao::rt::test
 
   TrackId addRuntimeTrack(AppRuntime& runtime,
                           library::test::TrackSpec const& spec,
-                          std::move_only_function<void()> settlePublication)
+                          compat::MoveOnlyFunction<void()> settlePublication)
   {
     static auto nextFixtureTrack = std::atomic<std::uint64_t>{0};
     auto sourcePath = std::filesystem::path{spec.uri};
@@ -147,7 +147,7 @@ namespace ao::rt::test
 
   void updateRuntimeTrack(AppRuntime& runtime,
                           TrackId const trackId,
-                          std::move_only_function<void(library::test::TrackSpec&)> updater)
+                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater)
   {
     auto spec = library::test::TrackSpec{};
     {
@@ -201,7 +201,7 @@ namespace ao::rt::test
   }
 
   void MusicLibraryFixture::updateTrack(TrackId const id,
-                                        std::move_only_function<void(library::test::TrackSpec&)> updater)
+                                        compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater)
   {
     library::test::updateTrackSpec(_implPtr->library, id, std::move(updater));
   }

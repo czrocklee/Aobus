@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/async/RequestCoalescer.h>
 #include <ao/async/Task.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/resource/ResourceByteCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -45,7 +46,7 @@ namespace ao::rt
   class ResourceByteLoader final
   {
   public:
-    using OnReady = std::move_only_function<void(ResourceBytes)>;
+    using OnReady = compat::MoveOnlyFunction<void(ResourceBytes)>;
     using ReadBytes =
       std::function<async::Task<Result<std::optional<std::vector<std::byte>>>>(ResourceId, std::stop_token)>;
     using Request = utility::ScopedRegistration;

@@ -7,11 +7,11 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <cstddef>
-#include <functional>
 #include <limits>
 #include <span>
 #include <tuple>
@@ -23,7 +23,7 @@ namespace ao::rt
 {
   TrackSource::~TrackSource() = default;
 
-  async::Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDelta const&)> handler)
+  async::Subscription TrackSource::subscribe(compat::MoveOnlyFunction<void(TrackSourceDelta const&)> handler)
   {
     AO_EXPECTS(static_cast<bool>(handler), "Track source subscription handler must not be empty");
 

@@ -3,9 +3,10 @@
 
 #pragma once
 
+#include <ao/compat/MoveOnlyFunction.h>
+
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <string>
 
 namespace ao::rt
@@ -39,6 +40,6 @@ namespace ao::rt
     std::string message{};
   };
 
-  using AudioIdentityIndexProgressCallback = std::move_only_function<void(AudioIdentityIndexProgress const& progress)>;
-  using AudioIdentityIndexFailureCallback = std::move_only_function<void(AudioIdentityIndexFailure const& failure)>;
+  using AudioIdentityIndexProgressCallback = compat::MoveOnlyFunction<void(AudioIdentityIndexProgress const& progress)>;
+  using AudioIdentityIndexFailureCallback = compat::MoveOnlyFunction<void(AudioIdentityIndexFailure const& failure)>;
 } // namespace ao::rt

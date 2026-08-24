@@ -5,6 +5,7 @@
 
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
@@ -147,7 +148,7 @@ namespace ao::library
                                           Options options,
                                           std::shared_ptr<void const> writerSessionAnchorPtr = {});
     explicit WriteTransaction(std::unique_ptr<Impl> implPtr);
-    Result<> applyBoundary(std::move_only_function<Result<>(LibraryWrite&)> function);
+    Result<> applyBoundary(compat::MoveOnlyFunction<Result<>(LibraryWrite&)> function);
 
     lmdb::WriteTransaction& native(detail::LibraryIdentity const& identity);
     lmdb::WriteTransaction const& native(detail::LibraryIdentity const& identity) const;

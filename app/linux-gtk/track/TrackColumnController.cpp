@@ -5,6 +5,7 @@
 
 #include "common/UStringConvert.h"
 #include <ao/CoreIds.h>
+#include <ao/compat/Enumerate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
@@ -149,7 +150,7 @@ namespace ao::gtk
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
       // Reorder columns to match visibleFields order
-      for (auto const& [index, field] : std::views::enumerate(visibleFields))
+      for (auto const& [index, field] : compat::views::enumerate(visibleFields))
       {
         auto* const binding = findColumnBinding(field);
 

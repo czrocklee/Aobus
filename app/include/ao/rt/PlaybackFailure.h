@@ -6,9 +6,9 @@
 #include "PreparedPlayback.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <string>
 
@@ -42,5 +42,5 @@ namespace ao::rt
     PlaybackFailureDisposition disposition = PlaybackFailureDisposition::Unhandled;
   };
 
-  using PlaybackFailureRecoveryHandler = std::move_only_function<PlaybackFailureDisposition(PlaybackFailure const&)>;
+  using PlaybackFailureRecoveryHandler = compat::MoveOnlyFunction<PlaybackFailureDisposition(PlaybackFailure const&)>;
 } // namespace ao::rt

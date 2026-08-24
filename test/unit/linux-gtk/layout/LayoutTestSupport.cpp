@@ -12,6 +12,7 @@
 #include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -79,7 +80,7 @@ namespace ao::gtk::layout::test
   struct LayoutRuntimeFixture::State final
   {
     explicit State(std::string_view applicationId,
-                   std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                   compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                    std::string_view locale,
                    rt::TextOrderingPolicy const* const textOrderingPolicy)
       : appPtr{Gtk::Application::create(std::string{applicationId})}
@@ -142,7 +143,7 @@ namespace ao::gtk::layout::test
   };
 
   LayoutRuntimeFixture::LayoutRuntimeFixture(std::string_view const applicationId,
-                                             std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                                             compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                                              std::string_view const locale,
                                              rt::TextOrderingPolicy const* const textOrderingPolicy)
     : _statePtr{std::make_unique<State>(applicationId, std::move(initializeLibrary), locale, textOrderingPolicy)}

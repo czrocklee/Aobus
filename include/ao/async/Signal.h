@@ -6,12 +6,12 @@
 #include <ao/Contract.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <algorithm>
 #include <cstddef>
 #include <deque>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -33,7 +33,7 @@ namespace ao::async
   class Signal final
   {
   public:
-    using Handler = std::move_only_function<void(Args...)>;
+    using Handler = compat::MoveOnlyFunction<void(Args...)>;
 
     Signal();
     ~Signal();

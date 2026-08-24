@@ -368,27 +368,43 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
     stem = path.stem.casefold()
     profile = builddir.platform_profile().name
 
+    # Each rule below names the profile that owns a tree, not the one asking.
+    # Stating ownership once and selecting foreign owners per profile is what
+    # keeps a new profile from silently inheriting an empty rule set: adding
+    # macOS to the dispatch without these groups would have left it deferring
+    # nothing at all, which is how PlatformBackendProvidersMacos.cpp came to
+    # fail the Linux gate as a coverage hole rather than a platform deferral.
+    owned_by_windows = (
+        parts[:2] in {("app", "windows"), ("app", "windows-winui")}
+        or parts[:3] == ("test", "unit", "windows")
+        or parts[:3] == ("test", "unit", "winui")
+        or "wasapi" in joined
+        or "win32" in joined
+        or "winui" in joined
+        or stem.endswith("windows")
+        # tool/lint builds this driver under if(WIN32); every other profile
+        # runs clang-tidy from its own toolchain instead.
+        or joined == "tool/lint/aobusclangtidymain.cpp"
+    )
+    owned_by_linux = (
+        parts[:2] == ("app", "linux-gtk")
+        or parts[:3] == ("test", "unit", "linux-gtk")
+        or parts[:3] == ("test", "integration", "linux-gtk")
+        or "alsa" in joined
+        or "pipewire" in joined
+        or stem.endswith("linux")
+    )
+    owned_by_macos = stem.endswith("macos")
+    # POSIX sources belong to Linux and macOS alike, so only Windows defers
+    # them. They are deliberately not part of owned_by_linux for that reason.
+    owned_by_posix = stem.endswith("posix")
+
     if profile == "linux":
-        return (
-            parts[:2] in {("app", "windows"), ("app", "windows-winui")}
-            or parts[:3] == ("test", "unit", "windows")
-            or parts[:3] == ("test", "unit", "winui")
-            or "wasapi" in joined
-            or "win32" in joined
-            or "winui" in joined
-            or stem.endswith("windows")
-            or joined == "tool/lint/aobusclangtidymain.cpp"
-        )
+        return owned_by_windows or owned_by_macos
     if profile == "windows":
-        return (
-            parts[:2] == ("app", "linux-gtk")
-            or parts[:3] == ("test", "unit", "linux-gtk")
-            or parts[:3] == ("test", "integration", "linux-gtk")
-            or "alsa" in joined
-            or "pipewire" in joined
-            or stem.endswith("linux")
-            or stem.endswith("posix")
-        )
+        return owned_by_linux or owned_by_macos or owned_by_posix
+    if profile == "macos":
+        return owned_by_windows or owned_by_linux
     return False
 
 
@@ -1017,13 +1033,21 @@ def system_include_args() -> list[str]:
         )
     except FileNotFoundError:
         return []
-    args = []
+    paths: list[str] = []
+    # clang-tidy prepends these paths ahead of the compile database. On macOS,
+    # that would otherwise put the driver's real libc++ directory ahead of the
+    # expected shim already present in the native command and defeat the shim.
+    # Preserve the native compiler's override by making it the first explicit
+    # system directory here as well.
+    if expected_shim := os.environ.get("AOBUS_LIBCXX_EXPECTED_SHIM"):
+        if Path(expected_shim).is_dir():
+            paths.append(expected_shim)
     for line in result.stderr.splitlines():
         if line.startswith(" /nix"):
             path = line.strip()
-            if Path(path).is_dir():
-                args.append(f"--extra-arg-before=-isystem{path}")
-    return args
+            if Path(path).is_dir() and path not in paths:
+                paths.append(path)
+    return [f"--extra-arg-before=-isystem{path}" for path in paths]
 
 
 @dataclass

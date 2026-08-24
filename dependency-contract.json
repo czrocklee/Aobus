@@ -5,6 +5,7 @@
     "boost": {
       "platforms": [
         "linux",
+        "macos",
         "windows"
       ],
       "policy": {
@@ -40,9 +41,36 @@
         ]
       }
     },
+    "fast-float": {
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "policy": {
+        "kind": "exact",
+        "version": "8.2.10"
+      },
+      "nix": {
+        "attribute": "aobus-fast-float"
+      },
+      "vcpkg": {
+        "strategy": "baseline",
+        "ports": [
+          "fast-float"
+        ]
+      },
+      "cmake": {
+        "package": "FastFloat",
+        "targets": [
+          "FastFloat::fast_float"
+        ]
+      }
+    },
     "ftxui": {
       "platforms": [
         "linux",
+        "macos",
         "windows"
       ],
       "policy": {
@@ -71,6 +99,7 @@
     "icu": {
       "platforms": [
         "linux",
+        "macos",
         "windows"
       ],
       "policy": {
@@ -105,6 +134,7 @@
     "spdlog": {
       "platforms": [
         "linux",
+        "macos",
         "windows"
       ],
       "policy": {

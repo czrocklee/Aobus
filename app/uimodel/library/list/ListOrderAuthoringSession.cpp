@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -317,7 +318,7 @@ namespace ao::uimodel
     return _implPtr->order.effectiveTrackIds();
   }
 
-  async::Subscription ListOrderAuthoringSession::onInvalidated(std::move_only_function<void()> handler) const
+  async::Subscription ListOrderAuthoringSession::onInvalidated(compat::MoveOnlyFunction<void()> handler) const
   {
     return _implPtr->invalidated.connect(std::move(handler));
   }

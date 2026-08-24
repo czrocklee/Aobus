@@ -4,10 +4,10 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/library/ScanPlan.h>
 
 #include <filesystem>
-#include <functional>
 
 namespace ao::library
 {
@@ -25,7 +25,7 @@ namespace ao::rt
   class LibraryScan final
   {
   public:
-    using BuildProgressCallback = std::move_only_function<void(std::filesystem::path const& path)>;
+    using BuildProgressCallback = compat::MoveOnlyFunction<void(std::filesystem::path const& path)>;
 
     explicit LibraryScan(library::MusicLibrary const& library);
 

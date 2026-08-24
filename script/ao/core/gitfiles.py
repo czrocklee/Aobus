@@ -1,7 +1,10 @@
 """Source file discovery: git change sets and folder scans."""
 
+import functools
 import os
 import subprocess
+import sys
+from pathlib import Path
 
 from .paths import PROJECT_ROOT
 from .proc import die
@@ -14,9 +17,47 @@ SOURCE_SUFFIXES = (*CPP_SUFFIXES, *PYTHON_SUFFIXES)
 LINT_INTEGRATION_DIR = "test/integration/lint"
 
 
-def _git_command(*args: str, os_name: str | None = None) -> list[str]:
+def _path_is_on_smb_mount(path: Path, mount_output: str) -> bool:
+    """Return whether a Darwin mount table places path on an smbfs mount."""
+    resolved_path = path.resolve()
+    for line in mount_output.splitlines():
+        _source, separator, mount_description = line.rpartition(" on ")
+        if not separator:
+            continue
+        mount_point_text, options_separator, options = mount_description.rpartition(" (")
+        if not options_separator or options.removesuffix(")").split(",", 1)[0] != "smbfs":
+            continue
+        try:
+            resolved_path.relative_to(Path(mount_point_text).resolve())
+        except ValueError:
+            continue
+        return True
+    return False
+
+
+@functools.cache
+def _darwin_checkout_uses_smb() -> bool:
+    try:
+        result = subprocess.run(
+            ["/sbin/mount", "-t", "smbfs"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0 and _path_is_on_smb_mount(PROJECT_ROOT, result.stdout)
+
+
+def _git_command(
+    *args: str,
+    os_name: str | None = None,
+    platform_name: str | None = None,
+    checkout_uses_smb: bool | None = None,
+) -> list[str]:
     command = ["git"]
-    if (os.name if os_name is None else os_name) == "nt":
+    resolved_os_name = os.name if os_name is None else os_name
+    resolved_platform_name = sys.platform if platform_name is None else platform_name
+    if resolved_os_name == "nt":
         # Windows cannot preserve Unix executable bits on ordinary or mapped
         # worktrees. Keep both overrides process-local; no global Git config is
         # changed, and safe.directory is limited to this checkout.
@@ -26,6 +67,12 @@ def _git_command(*args: str, os_name: str | None = None) -> list[str]:
             "-c",
             "core.filemode=false",
         ]
+    elif resolved_platform_name == "darwin" and (
+        _darwin_checkout_uses_smb() if checkout_uses_smb is None else checkout_uses_smb
+    ):
+        # SMB presents ordinary files as executable on macOS. Ignore that
+        # transport artifact without hiding meaningful mode changes on APFS.
+        command += ["-c", "core.filemode=false"]
     return [*command, *args]
 
 

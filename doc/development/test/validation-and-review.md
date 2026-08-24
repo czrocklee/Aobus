@@ -62,11 +62,20 @@ Do not perform a broad test-file split as drive-by cleanup unless it is necessar
 
 ## Validation
 
-Recommended broad check from the project root:
+Completed work runs both parts of the native completion gate from the project
+root, in this order:
 
 ```bash
 ./ao check
+./ao hygiene
 ```
+
+`check` builds the enabled graph, verifies dependency resolution, and runs
+every suite in the native `all` group. `hygiene` is check-only and validates
+formatting, repository source audits, Python files in scope, and native
+clang-tidy coverage for changed files. Keeping the stages explicit lets
+sanitizer and release checks retain their own build trees without implicitly
+provisioning a second tidy tree.
 
 Concurrency-sensitive changes additionally follow `concurrency-and-sanitizer.md` and run:
 
@@ -84,7 +93,7 @@ a concrete failure or hypothesis needs a tighter feedback loop:
 ./ao test --integration "Component - behavior"
 ```
 
-Do not run a ladder of suite filters as a substitute for `./ao check`.
+Do not run a ladder of suite filters as a substitute for the completion gate.
 
 Do not run clang-tidy for ordinary test changes unless the user explicitly asks for linting, clang-tidy, tidy cleanup, or lint findings in the current session. If requested, use:
 
@@ -128,3 +137,4 @@ Before finishing, confirm:
 - Testability seams follow [fixtures and helpers](fixture-and-helper.md).
 - New files are listed in `test/CMakeLists.txt`.
 - Focused validation has been run when practical, or skipped with an honest reason.
+- The native `./ao check` and subsequent `./ao hygiene` both pass.

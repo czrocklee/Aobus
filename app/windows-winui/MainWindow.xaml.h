@@ -6,6 +6,7 @@
 #include "MainWindow.g.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/utility/ScopedRegistration.h>
 // The loaded theme override is held here, so its type is part of the frame.
@@ -59,7 +60,7 @@ namespace winrt::Aobus::implementation
       Retired,
     };
 
-    using RestartLibraryCallback = std::move_only_function<ao::Result<>(std::filesystem::path)>;
+    using RestartLibraryCallback = ao::compat::MoveOnlyFunction<ao::Result<>(std::filesystem::path)>;
 
     MainWindow();
     ~MainWindow();

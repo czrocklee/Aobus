@@ -164,6 +164,11 @@ namespace ao::audio::test
       callbackEntered.acquire();
     }
 
+#if defined(__linux__) || defined(_WIN32)
+    // macOS builds no platform graph observer, so AudioFatalProbeProtocol omits
+    // this scenario there and the probe is never asked to run it. Without this
+    // guard the #else below would select the WASAPI registry on macOS, whose
+    // header is only included under _WIN32.
     if (scenario == "platform-graph-observer-exception")
     {
 #ifdef __linux__
@@ -174,6 +179,8 @@ namespace ao::audio::test
       [[maybe_unused]] auto subscription =
         registry.subscribe("probe-route", [](auto const&) { throw std::runtime_error{"probe exception"}; });
     }
+
+#endif
 
 #ifdef _WIN32
 

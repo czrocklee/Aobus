@@ -13,16 +13,22 @@ page hard to scan.
 | `doc/development/naming-convention.md` | Identifier, type/contract, vocabulary, file, helper, and support naming |
 | `doc/development/commit-message.md` | Commit message format, scopes, subject/body guidance, and examples |
 | `doc/development/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
+| `doc/development/macos.md` | Native macOS prerequisites, portal bootstrap, local state, supported commands, and current limitations |
 | `doc/development/windows.md` | Native Windows portal, local state and tool bootstrap, mapped-source workflow, and migration guidance |
 | `doc/architecture/failure-and-reporting.md` | Failure ownership, recovery, reporting, and presentation boundaries |
 | `doc/development/test.md` | Testing policy and detailed test-writing references |
 
 ## Development Workflow
 
-Run repository operations through `./ao` on Linux or `ao.bat` on Windows from
-the project root. Windows source checkouts may be mapped, while build trees and
-managed Python/LLVM state default to the local `%LOCALAPPDATA%\Aobus` directory;
-see `doc/development/windows.md` before overriding those locations.
+Run repository operations through `./ao` on Linux or macOS and `ao.bat` on
+Windows from the project root. macOS and Windows source checkouts may be
+network-backed, but generated state must remain on the native host's local
+disk. Read `doc/development/macos.md` or `doc/development/windows.md` before
+overriding platform state locations.
+
+Complete a change with the native `check` command followed by `hygiene`; see
+`doc/development/test/validation-and-review.md` for the exact contract and
+platform-specific additions.
 
 ## Coding Style Highlights
 

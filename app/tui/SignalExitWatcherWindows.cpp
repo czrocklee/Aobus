@@ -3,6 +3,8 @@
 
 #include "SignalExitWatcher.h"
 #include <ao/Contract.h>
+#include <ao/compat/AtomicSharedPtr.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -27,8 +29,8 @@ namespace ao::tui
     class ExitCallbackState final
     {
     public:
-      explicit ExitCallbackState(std::move_only_function<void()> onExit)
-        : _callbackPtr{std::make_shared<std::move_only_function<void()>>(std::move(onExit))}
+      explicit ExitCallbackState(compat::MoveOnlyFunction<void()> onExit)
+        : _callbackPtr{std::make_shared<compat::MoveOnlyFunction<void()>>(std::move(onExit))}
       {
       }
 
@@ -62,11 +64,11 @@ namespace ao::tui
 
     private:
       std::recursive_mutex _callbackMutex;
-      std::shared_ptr<std::move_only_function<void()>> _callbackPtr;
+      std::shared_ptr<compat::MoveOnlyFunction<void()>> _callbackPtr;
     };
 
     // The Windows console-control C callback requires process-reachable state.
-    std::atomic<std::shared_ptr<ExitCallbackState>>
+    compat::AtomicSharedPtr<ExitCallbackState>
       gActiveStatePtr{}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
     // Mirrors the POSIX watcher, which handles SIGTERM/SIGHUP and leaves
@@ -110,7 +112,7 @@ namespace ao::tui
   class SignalExitWatcher::Impl final
   {
   public:
-    explicit Impl(std::move_only_function<void()> onExit)
+    explicit Impl(compat::MoveOnlyFunction<void()> onExit)
       : _statePtr{std::make_shared<ExitCallbackState>(std::move(onExit))}
     {
       auto expectedPtr = std::shared_ptr<ExitCallbackState>{};
@@ -159,7 +161,7 @@ namespace ao::tui
     bool _installed = false;
   };
 
-  SignalExitWatcher::SignalExitWatcher(std::move_only_function<void()> onExit)
+  SignalExitWatcher::SignalExitWatcher(compat::MoveOnlyFunction<void()> onExit)
     : _implPtr{std::make_unique<Impl>(std::move(onExit))}
   {
   }

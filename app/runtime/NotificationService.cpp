@@ -9,6 +9,7 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
@@ -21,7 +22,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -402,7 +402,7 @@ namespace ao::rt
   NotificationService::~NotificationService() = default;
 
   async::Subscription NotificationService::onFeedUpdated(
-    std::move_only_function<void(NotificationFeedUpdate const&)> handler)
+    compat::MoveOnlyFunction<void(NotificationFeedUpdate const&)> handler)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->feedUpdatedSignal.connect(std::move(handler));

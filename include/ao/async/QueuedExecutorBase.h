@@ -4,9 +4,9 @@
 #pragma once
 
 #include "Executor.h"
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstddef>
-#include <functional>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -24,8 +24,8 @@ namespace ao::async
     QueuedExecutorBase& operator=(QueuedExecutorBase&&) = delete;
 
     bool isCurrent() const noexcept override;
-    void dispatch(std::move_only_function<void()> task) override;
-    void defer(std::move_only_function<void()> task) override;
+    void dispatch(compat::MoveOnlyFunction<void()> task) override;
+    void defer(compat::MoveOnlyFunction<void()> task) override;
 
   protected:
     QueuedExecutorBase();
@@ -33,15 +33,15 @@ namespace ao::async
     void drainQueuedTasks();
 
   private:
-    void enqueueAndWake(std::move_only_function<void()> task);
+    void enqueueAndWake(compat::MoveOnlyFunction<void()> task);
 
     // Admission is complete before wake. Event-loop wake failures are fatal
     // because an accepted task cannot be rolled back safely.
     virtual void wake() noexcept = 0;
     std::thread::id _ownerThread;
     std::mutex _mutex;
-    std::vector<std::move_only_function<void()>> _pendingTasks;
-    std::vector<std::move_only_function<void()>> _drainTasks;
+    std::vector<compat::MoveOnlyFunction<void()>> _pendingTasks;
+    std::vector<compat::MoveOnlyFunction<void()>> _drainTasks;
     std::size_t _nextDrainTaskIndex = 0;
     bool _draining = false;
   };

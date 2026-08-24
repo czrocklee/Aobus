@@ -15,6 +15,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -29,7 +30,6 @@
 #include <deque>
 #include <exception>
 #include <expected>
-#include <functional>
 #include <memory>
 #include <tuple>
 #include <type_traits>
@@ -66,7 +66,7 @@ namespace ao::rt
     {
       std::uint64_t generation = 0;
       bool staleWhenSuperseded = false;
-      std::move_only_function<Result<bool>()> operation;
+      compat::MoveOnlyFunction<Result<bool>()> operation;
     };
 
     Impl(async::Executor& executorRef, PlaybackTransport& transportRef, PlaybackSuccession& successionRef)
@@ -101,13 +101,13 @@ namespace ao::rt
       return snapshotSignal.connect(std::move(observer));
     }
 
-    async::Subscription onSeekPreview(std::move_only_function<void(std::chrono::milliseconds)> handler) override
+    async::Subscription onSeekPreview(compat::MoveOnlyFunction<void(std::chrono::milliseconds)> handler) override
     {
       return seekPreviewSignal.connect(std::move(handler));
     }
 
     async::Subscription onRevealTrackRequested(
-      std::move_only_function<void(PlaybackRevealTrackRequest const&)> handler) override
+      compat::MoveOnlyFunction<void(PlaybackRevealTrackRequest const&)> handler) override
     {
       return revealTrackSignal.connect(std::move(handler));
     }
@@ -218,7 +218,7 @@ namespace ao::rt
                  false);
     }
 
-    Result<> submitResult(std::move_only_function<Result<bool>()> operation,
+    Result<> submitResult(compat::MoveOnlyFunction<Result<bool>()> operation,
                           bool const invalidatesOlderCommand,
                           bool const staleWhenSuperseded)
     {
@@ -253,7 +253,7 @@ namespace ao::rt
       return executeCommandAndContinue(command);
     }
 
-    void submitVoid(std::move_only_function<void()> operation,
+    void submitVoid(compat::MoveOnlyFunction<void()> operation,
                     bool const invalidatesOlderCommand,
                     bool const staleWhenSuperseded)
     {
@@ -267,7 +267,7 @@ namespace ao::rt
         staleWhenSuperseded);
     }
 
-    void submitPositioning(std::move_only_function<bool()> operation,
+    void submitPositioning(compat::MoveOnlyFunction<bool()> operation,
                            bool const invalidatesOlderCommand,
                            bool const staleWhenSuperseded)
     {
@@ -328,7 +328,7 @@ namespace ao::rt
       return result;
     }
 
-    bool runSynchronousCommand(std::move_only_function<bool()> operation)
+    bool runSynchronousCommand(compat::MoveOnlyFunction<bool()> operation)
     {
       if (closed || insideBoundary() || hasQueuedCommandBacklog())
       {
@@ -779,7 +779,7 @@ namespace ao::rt
     return *_implPtr;
   }
 
-  bool PlaybackService::runSynchronousCommand(std::move_only_function<bool()> operation)
+  bool PlaybackService::runSynchronousCommand(compat::MoveOnlyFunction<bool()> operation)
   {
     return _implPtr->runSynchronousCommand(std::move(operation));
   }

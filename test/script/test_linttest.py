@@ -268,6 +268,35 @@ class LintTestRunnerTest(unittest.TestCase):
                 log.read_text(encoding="utf-8"),
             )
 
+    def test_fixture_copy_transfers_contents_without_cross_filesystem_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture_dir = root / "aobus-example"
+            fixture_dir.mkdir()
+            case_dir = root / "case"
+            case_dir.mkdir()
+            fixture_path = fixture_dir / "BasicFixture.cpp"
+            fixture_path.write_text("int fixture;\n", encoding="utf-8")
+            sibling_path = fixture_dir / "FixtureSupport.h"
+            sibling_path.write_text("struct FixtureSupport {};\n", encoding="utf-8")
+            (root / "TestHelpers.h").write_text("struct TestHelper {};\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+
+            with mock.patch.object(linttest, "FIXTURE_DIR", root):
+                with mock.patch.object(
+                    linttest.shutil,
+                    "copy2",
+                    side_effect=AssertionError("metadata-preserving copy is not portable"),
+                ):
+                    fixed = linttest._copy_fixture_context(fixture, case_dir)
+
+            self.assertEqual(fixed.read_text(encoding="utf-8"), "int fixture;\n")
+            self.assertEqual(
+                (case_dir / sibling_path.name).read_text(encoding="utf-8"),
+                "struct FixtureSupport {};\n",
+            )
+            self.assertEqual((case_dir / "TestHelpers.h").read_text(encoding="utf-8"), "struct TestHelper {};\n")
+
     def test_fix_stage_rejects_unchanged_files_with_fix_expectations(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -303,7 +332,7 @@ class LintTestRunnerTest(unittest.TestCase):
             fixture = linttest.Fixture(fixture_path, "aobus-example")
 
             def run_fix_or_syntax(command, **_kwargs):
-                if command[0] == "g++":
+                if "-fsyntax-only" in command:
                     return linttest.subprocess.CompletedProcess(command, 0, stdout="")
 
                 fixed = Path(command[-1])
@@ -318,6 +347,33 @@ class LintTestRunnerTest(unittest.TestCase):
 
             self.assertTrue(success)
             self.assertNotIn("ERROR:", log.read_text(encoding="utf-8"))
+
+    def test_syntax_command_uses_configured_compiler_and_libcxx_shim(self):
+        fixed = Path("/tmp/fixed fixture.cpp")
+        case_dir = Path("/tmp/fixture context")
+
+        with mock.patch.dict(
+            linttest.os.environ,
+            {
+                "CXX": "/nix/store/compiler/bin/clang++ --target=arm64-apple-darwin",
+                "AOBUS_LIBCXX_EXPECTED_SHIM": "/nix/store/expected shim/include",
+            },
+            clear=True,
+        ):
+            command = linttest._syntax_command(fixed, case_dir)
+
+        self.assertEqual(
+            command[:2],
+            ["/nix/store/compiler/bin/clang++", "--target=arm64-apple-darwin"],
+        )
+        self.assertEqual(command[-3:], ["-isystem", "/nix/store/expected shim/include", str(fixed)])
+
+    def test_syntax_command_defaults_to_clang_on_darwin(self):
+        with mock.patch.dict(linttest.os.environ, {}, clear=True):
+            with mock.patch.object(linttest.sys, "platform", "darwin"):
+                command = linttest._syntax_command(Path("fixture.cpp"), Path("case"))
+
+        self.assertEqual(command[0], "clang++")
 
     def test_runner_aggregates_all_stages_and_removes_success_workspace(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -4,12 +4,12 @@
 #pragma once
 
 #include "app/linux-gtk/layout/component/track/TrackDetailScope.h"
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <sigc++/signal.h>
 
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <string_view>
 
@@ -81,7 +81,7 @@ namespace ao::gtk::layout::test
   {
   public:
     explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test",
-                                  std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {},
+                                  compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary = {},
                                   std::string_view locale = "en",
                                   rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~LayoutRuntimeFixture() noexcept;

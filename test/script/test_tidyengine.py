@@ -86,6 +86,38 @@ class ClangToolDiscoveryTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 tidyengine.llvm_sdk_version(build_dir, os_name="nt")
 
+    def test_expected_shim_precedes_discovered_system_includes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            expected_shim = root / "expected-shim"
+            # Keep the compiler probe's POSIX spelling independent of the
+            # Python host running this cross-platform portal test.
+            libcxx = "/nix/store/libcxx/include/c++/v1"
+            expected_shim.mkdir()
+            compiler_probe = subprocess.CompletedProcess(
+                args=["clang++"],
+                returncode=0,
+                stderr=f"search starts here:\n {libcxx}\nEnd of search list.\n",
+            )
+            platform_profile = mock.Mock()
+            platform_profile.name = "macos"
+
+            with (
+                mock.patch.object(tidyengine.builddir, "platform_profile", return_value=platform_profile),
+                mock.patch.object(tidyengine.subprocess, "run", return_value=compiler_probe),
+                mock.patch.object(Path, "is_dir", return_value=True),
+                mock.patch.dict(os.environ, {"AOBUS_LIBCXX_EXPECTED_SHIM": str(expected_shim)}),
+            ):
+                args = tidyengine.system_include_args()
+
+            self.assertEqual(
+                args,
+                [
+                    f"--extra-arg-before=-isystem{expected_shim}",
+                    f"--extra-arg-before=-isystem{libcxx}",
+                ],
+            )
+
     def test_windows_automatic_sdk_with_invalid_marker_is_reconfigured(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -404,6 +436,58 @@ class CompileCommandCoverageTest(unittest.TestCase):
             return_value=tidyengine.builddir.WINDOWS_PROFILE,
         ):
             self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+
+    def test_macos_backend_source_is_incompatible_with_every_other_native_graph(self):
+        root = Path("/repo")
+        source = root / "lib" / "audio" / "PlatformBackendProvidersMacos.cpp"
+
+        for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
+            with self.subTest(profile=profile.name):
+                with mock.patch.object(
+                    tidyengine.builddir,
+                    "platform_profile",
+                    return_value=profile,
+                ):
+                    self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+
+    def test_foreign_frontends_are_incompatible_with_the_macos_native_graph(self):
+        root = Path("/repo")
+        paths = (
+            root / "lib" / "audio" / "PlatformBackendProvidersWindows.cpp",
+            root / "lib" / "audio" / "PlatformBackendProvidersLinux.cpp",
+            root / "lib" / "audio" / "backend" / "detail" / "PipeWireRuntime.cpp",
+            root / "app" / "linux-gtk" / "Application.cpp",
+            root / "app" / "windows" / "Main.cpp",
+            root / "test" / "unit" / "winui" / "ThemeTest.cpp",
+            root / "tool" / "lint" / "AobusClangTidyMain.cpp",
+        )
+
+        with mock.patch.object(
+            tidyengine.builddir,
+            "platform_profile",
+            return_value=tidyengine.builddir.MACOS_PROFILE,
+        ):
+            for path in paths:
+                with self.subTest(path=path):
+                    self.assertTrue(tidyengine._is_platform_incompatible(path, root))
+
+    def test_posix_and_shared_sources_stay_compatible_with_the_macos_native_graph(self):
+        root = Path("/repo")
+        paths = (
+            root / "lib" / "utility" / "AtomicFilePosix.cpp",
+            root / "app" / "tui" / "SignalExitWatcherPosix.cpp",
+            root / "lib" / "audio" / "Player.cpp",
+            root / "test" / "unit" / "core" / "EnumerateTest.cpp",
+        )
+
+        with mock.patch.object(
+            tidyengine.builddir,
+            "platform_profile",
+            return_value=tidyengine.builddir.MACOS_PROFILE,
+        ):
+            for path in paths:
+                with self.subTest(path=path):
+                    self.assertFalse(tidyengine._is_platform_incompatible(path, root))
 
     def test_explicit_lint_fixture_can_borrow_native_flags(self):
         with tempfile.TemporaryDirectory() as temp_dir:

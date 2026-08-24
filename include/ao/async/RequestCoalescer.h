@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <atomic>
@@ -39,7 +40,7 @@ namespace ao::async
   class RequestCoalescer final
   {
   public:
-    using Callback = std::move_only_function<void(Value const&)>;
+    using Callback = compat::MoveOnlyFunction<void(Value const&)>;
     using Request = utility::ScopedRegistration;
 
     class FlightToken final

@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 
@@ -68,7 +69,7 @@ namespace ao::rt
   public:
     /// Progress and failure callbacks are serialized by the indexer but may be
     /// invoked from any worker-pool thread, never concurrently.
-    using CommitBatchCallback = std::move_only_function<Result<AudioIdentityBatchCommitResult>(
+    using CommitBatchCallback = compat::MoveOnlyFunction<Result<AudioIdentityBatchCommitResult>(
       std::span<AudioIdentityWriteCandidate const> candidates)>;
     using FingerprintFunction = AudioIdentityFingerprintFunction;
     using Options = AudioIdentityIndexOptions;

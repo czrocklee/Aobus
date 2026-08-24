@@ -7,6 +7,8 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/Enumerate.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -41,7 +43,6 @@
 #include <limits>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -126,7 +127,7 @@ namespace ao::rt
       ResourceId imageId{kInvalidResourceId};
     };
 
-    using Comparator = std::move_only_function<bool(OrderEntry const&, OrderEntry const&)>;
+    using Comparator = compat::MoveOnlyFunction<bool(OrderEntry const&, OrderEntry const&)>;
 
     constexpr std::size_t kArticleAnLength = 3;
 
@@ -905,7 +906,7 @@ namespace ao::rt
       rowIndexByTrackId.clear();
       rowIndexByTrackId.reserve(orderIndex.size());
 
-      for (auto const& [index, entry] : std::ranges::views::enumerate(orderIndex))
+      for (auto const& [index, entry] : compat::views::enumerate(orderIndex))
       {
         rowIndexByTrackId[entry.trackId] = static_cast<std::size_t>(index);
       }
@@ -1659,7 +1660,7 @@ namespace ao::rt
   }
 
   async::Subscription TrackListProjection::subscribe(
-    std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler)
+    compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler)
   {
     AO_EXPECTS(static_cast<bool>(handler), "Track-list projection subscription handler must not be empty");
 
@@ -1670,7 +1671,7 @@ namespace ao::rt
     }
 
     auto handlerPtr =
-      std::make_shared<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>>(std::move(handler));
+      std::make_shared<compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)>>(std::move(handler));
     auto subscription = _implPtr->changedSignal.connect([handlerPtr](TrackListProjectionDeltaBatch const& batch)
                                                         { (*handlerPtr)(batch); });
 

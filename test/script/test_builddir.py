@@ -1,5 +1,6 @@
 """Tests for ao.core.builddir — flavor/preset/build-tree mapping."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -55,12 +56,62 @@ class BuildDirTest(unittest.TestCase):
         host_os.name = "posix"
         with (
             mock.patch("ao.core.builddir.os", host_os),
-            mock.patch("ao.core.builddir.sys.platform", "darwin"),
+            mock.patch("ao.core.builddir.sys.platform", "freebsd14"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "darwin"):
+            with self.assertRaisesRegex(RuntimeError, "freebsd14"):
                 builddir.platform_profile()
             # Explicit os_name values keep working for cross-profile queries.
             self.assertEqual(builddir.platform_profile("posix").name, "linux")
+
+    def test_macos_is_a_native_posix_profile_distinct_from_linux(self):
+        # os.name is "posix" on macOS too, so only sys.platform separates them.
+        host_os = mock.Mock(environ=os.environ)
+        host_os.name = "posix"
+        with (
+            mock.patch("ao.core.builddir.os", host_os),
+            mock.patch("ao.core.builddir.sys.platform", "darwin"),
+        ):
+            profile = builddir.platform_profile()
+            self.assertEqual(profile.name, "macos")
+            self.assertEqual(profile.presets["debug"], "macos-debug")
+            self.assertEqual(profile.compiler, "clang")
+            self.assertEqual(profile.apps, ("cli", "tui"))
+            self.assertEqual(profile.default_suites, ("core", "tui"))
+            self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "lint"))
+            self.assertEqual(profile.tsan_suites, ("core",))
+            # GTK and Python repository tooling are not supported by this
+            # native profile; native clang-tidy integration is.
+            self.assertNotIn("gtk", profile.apps)
+            self.assertNotIn("gtk", profile.all_suites)
+            self.assertNotIn("tooling", profile.all_suites)
+            self.assertIn("lint", profile.all_suites)
+            self.assertEqual(builddir.tidy_preset(), "macos-debug")
+            # An explicit os_name still selects the Linux profile.
+            self.assertEqual(builddir.platform_profile("posix").name, "linux")
+
+    def test_macos_presets_and_portal_share_the_default_build_trees(self):
+        presets = json.loads((builddir.PROJECT_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))[
+            "configurePresets"
+        ]
+        preset_by_name = {preset["name"]: preset for preset in presets}
+        host_os = mock.Mock(environ=os.environ)
+        host_os.name = "posix"
+
+        with (
+            mock.patch("ao.core.builddir.os", host_os),
+            mock.patch("ao.core.builddir.sys.platform", "darwin"),
+            mock.patch.dict("os.environ", {}, clear=False),
+        ):
+            os.environ.pop("BUILD_DIR", None)
+            os.environ.pop("AOBUS_BUILD_ROOT", None)
+            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
+            for flavor in ("debug", "release"):
+                preset_name = builddir.preset(flavor)
+                self.assertEqual(builddir.build_dir(flavor), root / flavor)
+                self.assertEqual(
+                    preset_by_name[preset_name]["binaryDir"],
+                    f"/tmp/build/${{sourceDirName}}/{flavor}",
+                )
 
     def test_windows_builds_and_tests_share_one_flavor_tree(self):
         environment = {

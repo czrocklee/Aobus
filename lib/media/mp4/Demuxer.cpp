@@ -5,6 +5,7 @@
 
 #include "../detail/MediaError.h"
 #include <ao/Error.h>
+#include <ao/compat/Enumerate.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/TrackSelection.h>
@@ -465,7 +466,7 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : compat::views::enumerate(*optEntries))
     {
       auto const unsignedIndex = static_cast<std::size_t>(index);
       out[unsignedIndex].sampleCount = entry.sampleCount.value();
@@ -494,7 +495,7 @@ namespace ao::media::mp4
 
       _samples.resize(count);
 
-      for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
+      for (auto const& [index, entry] : compat::views::enumerate(*optEntries))
       {
         _samples[static_cast<std::size_t>(index)].size = entry.size.value();
       }
@@ -533,7 +534,7 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : compat::views::enumerate(*optEntries))
     {
       auto const unsignedIndex = static_cast<std::size_t>(index);
       out[unsignedIndex].firstChunk = entry.firstChunk.value();
@@ -560,7 +561,7 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : compat::views::enumerate(*optEntries))
     {
       out[static_cast<std::size_t>(index)] = entry.chunkOffset.value();
     }
@@ -584,7 +585,7 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : compat::views::enumerate(*optEntries))
     {
       out[static_cast<std::size_t>(index)] = entry.chunkOffset.value();
     }

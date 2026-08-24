@@ -1,4 +1,4 @@
-"""ao check — the pre-commit gate: full build and every registered test suite."""
+"""ao check — native build, dependency, and registered-suite validation."""
 
 import argparse
 import copy
@@ -70,7 +70,7 @@ def run_command(args: argparse.Namespace) -> int:
         print("WinUI build skipped for the MSVC AddressSanitizer profile.")
 
     print("Running tests...")
-    if (status := test.run_suites(suites, result.build_dir, tsan=args.tsan, log=result.log)) != 0:
+    if (status := test.run_suites(suites, result.build_dir, asan=args.asan, tsan=args.tsan, log=result.log)) != 0:
         return status
 
     build.print_summary(args, result, tests=f"all native suites ({', '.join(suites)})")

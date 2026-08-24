@@ -25,6 +25,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
@@ -146,7 +147,7 @@ namespace ao::rt::test
     class RejectingDeferExecutor final : public async::QueuedExecutorBase
     {
     public:
-      void defer(std::move_only_function<void()> task) override
+      void defer(compat::MoveOnlyFunction<void()> task) override
       {
         if (_rejectNext.exchange(false))
         {
@@ -169,19 +170,19 @@ namespace ao::rt::test
     {
     public:
       bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
+      void dispatch(compat::MoveOnlyFunction<void()> task) override { task(); }
+      void defer(compat::MoveOnlyFunction<void()> task) override { task(); }
     };
 
     class RejectingPublicationExecutor final : public async::Executor
     {
     public:
       bool isCurrent() const noexcept override { return false; }
-      void dispatch(std::move_only_function<void()> /*task*/) override
+      void dispatch(compat::MoveOnlyFunction<void()> /*task*/) override
       {
         throw std::runtime_error{"probe publication admission rejection"};
       }
-      void defer(std::move_only_function<void()> /*task*/) override {}
+      void defer(compat::MoveOnlyFunction<void()> /*task*/) override {}
     };
 
     class ThrowingVolumeArm final

@@ -6,8 +6,8 @@
 #include "PlaybackCommands.h"
 #include "PlaybackEvents.h"
 #include "PlaybackSnapshot.h"
+#include <ao/compat/MoveOnlyFunction.h>
 
-#include <functional>
 #include <memory>
 
 namespace ao::rt
@@ -53,7 +53,7 @@ namespace ao::rt
 
     // Reports only whether immediate admission was available. Invariant faults
     // from an admitted operation remain exceptions after commit bookkeeping.
-    bool runSynchronousCommand(std::move_only_function<bool()> operation);
+    bool runSynchronousCommand(compat::MoveOnlyFunction<bool()> operation);
     void shutdown() noexcept;
 
     std::unique_ptr<Impl> _implPtr;

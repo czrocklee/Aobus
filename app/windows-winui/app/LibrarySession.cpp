@@ -13,6 +13,7 @@
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/rt/AppRuntime.h>
@@ -67,7 +68,7 @@ namespace ao::winui
   namespace
   {
     using LibraryScanResult = std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure>;
-    using PresentLibraryScan = std::move_only_function<void(LibraryScanResult)>;
+    using PresentLibraryScan = compat::MoveOnlyFunction<void(LibraryScanResult)>;
 
     void checkpointWorkspaceBestEffort(rt::AppRuntime& runtime) noexcept
     {

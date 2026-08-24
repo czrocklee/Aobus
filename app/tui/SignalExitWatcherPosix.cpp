@@ -3,22 +3,27 @@
 
 #include "SignalExitWatcher.h"
 #include <ao/Contract.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <fcntl.h>
+#include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX signal APIs require this header.
 #include <unistd.h>
 
 #include <array>
 #include <atomic>
 #include <cerrno>
-#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <thread>
 #include <tuple>
 #include <utility>
+
+// Apple SDKs declare this POSIX function before defining a function-like
+// macro with the same name. Remove the macro so the qualified call resolves to
+// the declared function; #undef is a no-op on implementations without it.
+#undef sigemptyset
 
 namespace ao::tui
 {
@@ -53,7 +58,7 @@ namespace ao::tui
   class SignalExitWatcher::Impl final
   {
   public:
-    explicit Impl(std::move_only_function<void()> onExit);
+    explicit Impl(compat::MoveOnlyFunction<void()> onExit);
     ~Impl();
 
     Impl(Impl const&) = delete;
@@ -67,7 +72,7 @@ namespace ao::tui
     class State final
     {
     public:
-      explicit State(std::move_only_function<void()> onExit)
+      explicit State(compat::MoveOnlyFunction<void()> onExit)
         : _onExit{std::move(onExit)}
       {
         if (::pipe(_pipe.data()) == 0 && !makeWriteEndNonBlocking())
@@ -185,7 +190,7 @@ namespace ao::tui
         }
       }
 
-      std::move_only_function<void()> _onExit;
+      compat::MoveOnlyFunction<void()> _onExit;
       std::array<int, 2> _pipe{-1, -1};
       std::atomic_bool _running{true};
     };
@@ -217,7 +222,7 @@ namespace ao::tui
     std::thread _thread{};
   };
 
-  SignalExitWatcher::Impl::Impl(std::move_only_function<void()> onExit)
+  SignalExitWatcher::Impl::Impl(compat::MoveOnlyFunction<void()> onExit)
     : _statePtr{std::make_shared<State>(std::move(onExit))}
   {
     if (!_statePtr->hasPipe())
@@ -275,7 +280,7 @@ namespace ao::tui
     statePtr->requestExit();
   }
 
-  SignalExitWatcher::SignalExitWatcher(std::move_only_function<void()> onExit)
+  SignalExitWatcher::SignalExitWatcher(compat::MoveOnlyFunction<void()> onExit)
     : _implPtr{std::make_unique<Impl>(std::move(onExit))}
   {
   }

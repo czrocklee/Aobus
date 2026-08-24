@@ -11,6 +11,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/Enumerate.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
@@ -640,7 +641,7 @@ namespace ao::rt::test
       auto ranks = StringRanks{};
       ranks.reserve(sortedViews.size());
 
-      for (auto const& [index, value] : sortedViews | std::views::enumerate)
+      for (auto const& [index, value] : sortedViews | compat::views::enumerate)
       {
         ranks.emplace(value, static_cast<std::uint32_t>(index + 1));
       }
@@ -954,7 +955,7 @@ namespace ao::rt::test
       auto positionIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
       positionIndex.reserve(entries.size());
 
-      for (auto const& [index, entry] : entries | std::views::enumerate)
+      for (auto const& [index, entry] : entries | compat::views::enumerate)
       {
         positionIndex[entry.trackId] = static_cast<std::size_t>(index);
       }

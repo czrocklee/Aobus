@@ -7,8 +7,8 @@
 #include "TrackDetailSnapshot.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
-#include <functional>
 #include <memory>
 #include <span>
 #include <variant>
@@ -54,7 +54,7 @@ namespace ao::rt
     TrackDetailProjection& operator=(TrackDetailProjection&&) = delete;
 
     TrackDetailSnapshot snapshot() const;
-    async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler);
+    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackDetailSnapshot const&)> handler);
 
   private:
     TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;

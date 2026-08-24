@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <functional>
+#include <ao/compat/MoveOnlyFunction.h>
+
 #include <memory>
 
 namespace ao::tui
@@ -11,7 +12,7 @@ namespace ao::tui
   class SignalExitWatcher final
   {
   public:
-    explicit SignalExitWatcher(std::move_only_function<void()> onExit);
+    explicit SignalExitWatcher(compat::MoveOnlyFunction<void()> onExit);
     ~SignalExitWatcher();
 
     void requestExit();

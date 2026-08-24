@@ -24,6 +24,12 @@
 #include <unistd.h>
 #endif
 
+// Apple SDKs declare these POSIX functions before defining function-like
+// macros with the same names. Remove the macros so qualified calls resolve to
+// the declared functions; #undef is a no-op on implementations without them.
+#undef sigaddset
+#undef sigemptyset
+
 namespace ao
 {
   namespace
@@ -100,7 +106,11 @@ namespace ao
 #ifdef _WIN32
       [[maybe_unused]] auto const written = ::_write(2, text.data(), static_cast<std::uint32_t>(text.size()));
 #else
+#ifdef __APPLE__
+      ::sigset_t blockedSignals = 0;
+#else
       auto blockedSignals = ::sigset_t{};
+#endif
       ::sigemptyset(&blockedSignals);
       ::sigaddset(&blockedSignals, SIGPIPE);
       [[maybe_unused]] auto const maskResult = ::pthread_sigmask(SIG_BLOCK, &blockedSignals, nullptr);

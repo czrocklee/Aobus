@@ -48,6 +48,8 @@ endif()
 
 if(WIN32)
   set(AOBUS_DEPENDENCY_PLATFORM "windows")
+elseif(APPLE)
+  set(AOBUS_DEPENDENCY_PLATFORM "macos")
 else()
   set(AOBUS_DEPENDENCY_PLATFORM "linux")
 endif()
@@ -123,6 +125,11 @@ function(aobus_policy_find_arguments dependency output_arguments output_version 
 endfunction()
 
 aobus_policy_find_arguments(boost AOBUS_BOOST_FIND_ARGUMENTS AOBUS_BOOST_REQUESTED_VERSION AOBUS_BOOST_EXCEPTION)
+aobus_policy_find_arguments(
+  fast-float
+  AOBUS_FAST_FLOAT_FIND_ARGUMENTS
+  AOBUS_FAST_FLOAT_REQUESTED_VERSION
+  AOBUS_FAST_FLOAT_EXCEPTION)
 aobus_policy_find_arguments(icu AOBUS_ICU_FIND_ARGUMENTS AOBUS_ICU_REQUESTED_VERSION AOBUS_ICU_EXCEPTION)
 aobus_policy_find_arguments(spdlog AOBUS_SPDLOG_FIND_ARGUMENTS AOBUS_SPDLOG_REQUESTED_VERSION AOBUS_SPDLOG_EXCEPTION)
 aobus_policy_find_arguments(ftxui AOBUS_FTXUI_FIND_ARGUMENTS AOBUS_FTXUI_REQUESTED_VERSION AOBUS_FTXUI_EXCEPTION)
@@ -198,6 +205,14 @@ if(NOT Boost_FOUND)
     "Aobus dependency 'boost' requires ${AOBUS_BOOST_REQUESTED_VERSION}, but the active resolver "
     "could not provide an exact compatible package. Considered versions: "
     "'${Boost_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
+endif()
+
+find_package(FastFloat ${AOBUS_FAST_FLOAT_FIND_ARGUMENTS} CONFIG QUIET)
+if(NOT FastFloat_FOUND)
+  message(FATAL_ERROR
+    "Aobus dependency 'fast-float' requires ${AOBUS_FAST_FLOAT_REQUESTED_VERSION}, but the active resolver "
+    "could not provide an exact compatible package. Considered versions: "
+    "'${FastFloat_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
 endif()
 
 find_package(ICU ${AOBUS_ICU_FIND_ARGUMENTS} QUIET COMPONENTS i18n uc data)
@@ -301,6 +316,7 @@ function(aobus_validate_dependency_targets dependency)
 endfunction()
 
 aobus_validate_dependency_targets(boost)
+aobus_validate_dependency_targets(fast-float)
 aobus_validate_dependency_targets(icu)
 aobus_validate_dependency_targets(spdlog)
 if(AOBUS_BUILD_TUI)
@@ -312,6 +328,7 @@ if(DEFINED Boost_VERSION_STRING)
 else()
   set(AOBUS_BOOST_RESOLVED_VERSION "${Boost_VERSION}")
 endif()
+set(AOBUS_FAST_FLOAT_RESOLVED_VERSION "${FastFloat_VERSION}")
 set(AOBUS_ICU_RESOLVED_VERSION "${ICU_VERSION}")
 set(AOBUS_SPDLOG_RESOLVED_VERSION "${spdlog_VERSION}")
 if(AOBUS_BUILD_TUI)
@@ -353,12 +370,14 @@ if(SPDLOG_FMT_EXTERNAL IN_LIST AOBUS_SPDLOG_COMPILE_DEFINITIONS)
     "uses SPDLOG_FMT_EXTERNAL. spdlog_DIR='${spdlog_DIR}'.")
 endif()
 
-if(NOT AOBUS_BOOST_RESOLVED_VERSION OR NOT AOBUS_ICU_RESOLVED_VERSION
+if(NOT AOBUS_BOOST_RESOLVED_VERSION OR NOT AOBUS_FAST_FLOAT_RESOLVED_VERSION
+   OR NOT AOBUS_ICU_RESOLVED_VERSION
    OR NOT AOBUS_SPDLOG_RESOLVED_VERSION
    OR (AOBUS_BUILD_TUI AND NOT AOBUS_FTXUI_RESOLVED_VERSION))
   message(FATAL_ERROR
     "A governed dependency package did not expose its resolved version. "
-    "Boost='${AOBUS_BOOST_RESOLVED_VERSION}', ICU='${AOBUS_ICU_RESOLVED_VERSION}', "
+    "Boost='${AOBUS_BOOST_RESOLVED_VERSION}', "
+    "fast-float='${AOBUS_FAST_FLOAT_RESOLVED_VERSION}', ICU='${AOBUS_ICU_RESOLVED_VERSION}', "
     "spdlog='${AOBUS_SPDLOG_RESOLVED_VERSION}', "
     "ftxui='${AOBUS_FTXUI_RESOLVED_VERSION}'. See doc/development/dependency-upgrade.md.")
 endif()
@@ -445,6 +464,7 @@ function(aobus_nuget_dependency_report output dependency requested resolved exce
 endfunction()
 
 aobus_dependency_target_results(boost AOBUS_BOOST_TARGET_RESULTS)
+aobus_dependency_target_results(fast-float AOBUS_FAST_FLOAT_TARGET_RESULTS)
 aobus_dependency_target_results(icu AOBUS_ICU_TARGET_RESULTS)
 aobus_dependency_target_results(spdlog AOBUS_SPDLOG_TARGET_RESULTS)
 if(AOBUS_BUILD_TUI)
@@ -488,6 +508,9 @@ string(JSON AOBUS_ICU_CAPABILITIES SET
 aobus_dependency_report_entry(AOBUS_BOOST_REPORT boost
   "${AOBUS_BOOST_REQUESTED_VERSION}" "${AOBUS_BOOST_RESOLVED_VERSION}"
   "${AOBUS_BOOST_EXCEPTION}" "${AOBUS_BOOST_TARGET_RESULTS}" "{}")
+aobus_dependency_report_entry(AOBUS_FAST_FLOAT_REPORT fast-float
+  "${AOBUS_FAST_FLOAT_REQUESTED_VERSION}" "${AOBUS_FAST_FLOAT_RESOLVED_VERSION}"
+  "${AOBUS_FAST_FLOAT_EXCEPTION}" "${AOBUS_FAST_FLOAT_TARGET_RESULTS}" "{}")
 aobus_dependency_report_entry(AOBUS_ICU_REPORT icu
   "${AOBUS_ICU_REQUESTED_VERSION}" "${AOBUS_ICU_RESOLVED_VERSION}"
   "${AOBUS_ICU_EXCEPTION}" "${AOBUS_ICU_TARGET_RESULTS}" "${AOBUS_ICU_CAPABILITIES}")
@@ -624,6 +647,8 @@ string(JSON AOBUS_DEPENDENCY_REPORT SET "${AOBUS_DEPENDENCY_REPORT}" dependencie
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies boost "${AOBUS_BOOST_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
+  "${AOBUS_DEPENDENCY_REPORT}" dependencies fast-float "${AOBUS_FAST_FLOAT_REPORT}")
+string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies ftxui "${AOBUS_FTXUI_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies icu "${AOBUS_ICU_REPORT}")
@@ -729,18 +754,22 @@ else()
   target_link_libraries(PkgOpus INTERFACE PkgConfig::OPUS)
 
   # PipeWire and ALSA are the only Linux audio backends, so both are hard
-  # requirements: lib/audio unconditionally compiles their providers.
-  pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
-  add_library(PkgPipeWire INTERFACE)
-  target_link_libraries(PkgPipeWire INTERFACE PkgConfig::PIPEWIRE)
+  # requirements there: lib/audio unconditionally compiles their providers.
+  # They are Linux-only libraries, so this block cannot be shared with the
+  # other UNIX host (macOS), which builds no native provider yet.
+  if(LINUX)
+    pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
+    add_library(PkgPipeWire INTERFACE)
+    target_link_libraries(PkgPipeWire INTERFACE PkgConfig::PIPEWIRE)
 
-  pkg_check_modules(ALSA REQUIRED IMPORTED_TARGET alsa)
-  add_library(PkgALSA INTERFACE)
-  target_link_libraries(PkgALSA INTERFACE PkgConfig::ALSA)
+    pkg_check_modules(ALSA REQUIRED IMPORTED_TARGET alsa)
+    add_library(PkgALSA INTERFACE)
+    target_link_libraries(PkgALSA INTERFACE PkgConfig::ALSA)
 
-  pkg_check_modules(UDEV REQUIRED IMPORTED_TARGET libudev)
-  add_library(PkgUDEV INTERFACE)
-  target_link_libraries(PkgUDEV INTERFACE PkgConfig::UDEV)
+    pkg_check_modules(UDEV REQUIRED IMPORTED_TARGET libudev)
+    add_library(PkgUDEV INTERFACE)
+    target_link_libraries(PkgUDEV INTERFACE PkgConfig::UDEV)
+  endif()
 
   pkg_check_modules(LMDB REQUIRED IMPORTED_TARGET lmdb)
   add_library(PkgLMDB INTERFACE)

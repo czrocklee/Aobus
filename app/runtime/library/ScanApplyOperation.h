@@ -6,6 +6,7 @@
 #include "MediaTrack.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/TrackBuilder.h>
@@ -16,7 +17,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -47,8 +47,8 @@ namespace ao::rt
   public:
     ScanApplyOperation(library::MusicLibrary& ml,
                        ScanPlan plan,
-                       std::move_only_function<void(ScanApplyProgress const& progress)> progressCallback,
-                       std::move_only_function<void(ScanFailure const& failure)> itemFailureCallback,
+                       compat::MoveOnlyFunction<void(ScanApplyProgress const& progress)> progressCallback,
+                       compat::MoveOnlyFunction<void(ScanFailure const& failure)> itemFailureCallback,
                        ScanApplyOptions options = {});
 
     ~ScanApplyOperation();
@@ -152,8 +152,8 @@ namespace ao::rt
     library::MusicLibrary& _ml;
     ScanPlan _plan;
     ScanApplyOptions _options{};
-    std::move_only_function<void(ScanApplyProgress const& progress)> _progressCallback;
-    std::move_only_function<void(ScanFailure const& failure)> _itemFailureCallback;
+    compat::MoveOnlyFunction<void(ScanApplyProgress const& progress)> _progressCallback;
+    compat::MoveOnlyFunction<void(ScanFailure const& failure)> _itemFailureCallback;
 
     ScanApplyResult _result;
     std::vector<std::unique_ptr<PreparedScanItem>> _preparedItems;

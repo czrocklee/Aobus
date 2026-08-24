@@ -10,6 +10,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -31,7 +32,7 @@ namespace ao::gtk::test
 
   void updateRuntimeTrack(rt::AppRuntime& runtime,
                           TrackId const trackId,
-                          std::move_only_function<void(library::test::TrackSpec&)> updater)
+                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater)
   {
     rt::test::updateRuntimeTrack(runtime, trackId, std::move(updater));
     drainGtkEvents();
@@ -44,7 +45,7 @@ namespace ao::gtk::test
 
   struct GtkRuntimeFixture::State final
   {
-    explicit State(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+    explicit State(compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                    rt::TextOrderingPolicy const* const textOrderingPolicy)
     {
       auto const musicRoot = tempDir.path() / "music";
@@ -77,7 +78,7 @@ namespace ao::gtk::test
     std::unique_ptr<rt::AppRuntime> runtimePtr;
   };
 
-  GtkRuntimeFixture::GtkRuntimeFixture(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+  GtkRuntimeFixture::GtkRuntimeFixture(compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                                        rt::TextOrderingPolicy const* const textOrderingPolicy)
     : _statePtr{std::make_unique<State>(std::move(initializeLibrary), textOrderingPolicy)}
   {
@@ -101,7 +102,7 @@ namespace ao::gtk::test
   }
 
   std::unique_ptr<rt::AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
-                                              std::move_only_function<void(library::MusicLibrary&)> initializeLibrary,
+                                              compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                                               rt::TextOrderingPolicy const* const textOrderingPolicy)
   {
     auto const databasePath = rt::LibraryPaths{tempDir.path()}.databasePath();

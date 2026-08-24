@@ -5,6 +5,7 @@
 
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <exception>
 #include <functional>
@@ -19,7 +20,7 @@ namespace ao::async
 {
   struct LifetimeScopeTask final
   {
-    std::move_only_function<void()> cancel;
+    compat::MoveOnlyFunction<void()> cancel;
     bool completed{false};
   };
 

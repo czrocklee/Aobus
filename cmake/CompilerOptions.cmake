@@ -55,6 +55,37 @@ if(MSVC)
     add_link_options(/INCREMENTAL:NO)
   endif()
 else()
+  # libc++ constrains std::expected's equality operators only in C++26 mode, and
+  # those constraints are self-referential: satisfying
+  #
+  #   { *__x == __v } -> __core_convertible_to<bool>
+  #
+  # re-enters the same hidden-friend candidate whenever the right operand's
+  # associated entities include std::expected. std::reverse_iterator<expected*>
+  # does -- vector's reallocation guard compares exactly those -- and so does
+  # asio's promise_executor over a Result-returning coroutine. Satisfaction that
+  # depends on itself is an error, so the translation unit fails outright.
+  # Reproduced on libc++ 21 and 22; libstdc++ and the MSVC STL do not implement
+  # P2944 yet, which is why only macOS breaks.
+  #
+  # shell.nix builds a copy of that one header with the C++26 clauses disabled
+  # and exports its directory. Prepending it on the command line is what makes
+  # it win: the real libc++ include directory is built into the compiler driver
+  # rather than passed as an argument, and a command-line -isystem is searched
+  # before the driver's own directories. CPLUS_INCLUDE_PATH and
+  # NIX_CFLAGS_COMPILE were both measured to lose that race.
+  #
+  # Retirement condition: doc/development/macos-portability.md.
+  if(APPLE)
+    if(NOT DEFINED ENV{AOBUS_LIBCXX_EXPECTED_SHIM})
+      message(FATAL_ERROR
+        "AOBUS_LIBCXX_EXPECTED_SHIM is unset. Configure through the ./ao portal, "
+        "which enters shell.nix and exports it; without it libc++ cannot compile "
+        "std::expected comparisons in C++26 mode.")
+    endif()
+    add_compile_options(-isystem $ENV{AOBUS_LIBCXX_EXPECTED_SHIM})
+  endif()
+
   # Sanitizers
   if(AOBUS_ENABLE_ASAN)
     if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -111,6 +142,14 @@ else()
       $<$<COMPILE_LANGUAGE:CXX>:-Wno-old-style-cast>
       -Wno-float-conversion
     )
+
+  endif()
+
+  # fakeit's Method() macro expands to __COUNTER__, which Clang 22 reports as
+  # a C2y extension under -Wpedantic. Sanitizer builds need the suppression too;
+  # the construct is third-party, not project code.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-c2y-extensions>)
   endif()
 
   # Fast Linker

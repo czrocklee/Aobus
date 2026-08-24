@@ -18,7 +18,12 @@ CONTRACT_FILE = PROJECT_ROOT / "dependency-contract.json"
 BUILD_REPORT_NAME = "aobus-dependencies.json"
 SUPPORTED_SCHEMA = 2
 SUPPORTED_NIX_REPORT_SCHEMA = 1
-SUPPORTED_PLATFORMS = frozenset({"linux", "windows"})
+SUPPORTED_PLATFORMS = frozenset({"linux", "macos", "windows"})
+# Platforms whose native dependencies are resolved by Nix rather than vcpkg.
+# Each one pins its own nixpkgs: macOS cannot follow the main pin because
+# nixpkgs dropped x86_64-darwin after 26.05.
+NIX_PLATFORMS = frozenset({"linux", "macos"})
+NIXPKGS_PIN_FILES = {"linux": "nixpkgs.json", "macos": "nixpkgs-darwin.json"}
 SUPPORTED_BUILD_CONDITIONS = frozenset({"AOBUS_BUILD_TUI", "AOBUS_BUILD_WINUI"})
 _VERSION_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 
@@ -186,7 +191,7 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
         else:
             raise DependencyPolicyError(f"dependencies.{name}.policy.kind must be 'exact' or 'range'")
 
-        if "linux" in platforms:
+        if NIX_PLATFORMS.intersection(platforms):
             nix = _mapping(dependency.get("nix"), f"dependencies.{name}.nix")
             _string(nix.get("attribute"), f"dependencies.{name}.nix.attribute")
         elif "nix" in dependency:
@@ -476,23 +481,29 @@ def load_build_report(build_dir: Path) -> dict[str, Any]:
 
 
 def _verify_nix_resolution(
-    contract: dict[str, Any], report: dict[str, Any], project_root: Path, *, today: date | None = None
+    contract: dict[str, Any],
+    report: dict[str, Any],
+    project_root: Path,
+    *,
+    platform: str,
+    today: date | None = None,
 ) -> dict[str, Any]:
     host = _mapping(report["host"], "report.host")
     path_value = _string(host.get("nixReportPath"), "report.host.nixReportPath")
     nix_report = read_json(Path(path_value))
     if nix_report.get("schemaVersion") != SUPPORTED_NIX_REPORT_SCHEMA:
         raise DependencyPolicyError("unsupported Nix dependency report schema")
-    nixpkgs = read_json(project_root / "nixpkgs.json")
+    pin_file = NIXPKGS_PIN_FILES[platform]
+    nixpkgs = read_json(project_root / pin_file)
     if nix_report.get("nixpkgsRevision") != nixpkgs.get("rev"):
-        raise DependencyPolicyError("Nix dependency report does not come from the current nixpkgs revision")
+        raise DependencyPolicyError(f"Nix dependency report does not come from the {pin_file} revision")
     resolved = _mapping(nix_report.get("dependencies"), "Nix report dependencies")
     for name, raw_definition in _mapping(contract["dependencies"], "dependencies").items():
         definition = _mapping(raw_definition, f"dependencies.{name}")
-        if "linux" not in _dependency_platforms(definition, f"dependencies.{name}"):
+        if platform not in _dependency_platforms(definition, f"dependencies.{name}"):
             continue
         package = _mapping(resolved.get(name), f"Nix report dependency {name}")
-        policy = effective_policy(contract, name, "linux", today=today)
+        policy = effective_policy(contract, name, platform, today=today)
         version = _string(package.get("version"), f"Nix report dependency {name}.version")
         if not policy.accepts(version):
             raise DependencyPolicyError(f"Nix resolved {name} {version}; contract requires {policy.requested}")
@@ -738,10 +749,10 @@ def verified_report(
     )
     platform = _string(_mapping(report["host"], "report.host")["platform"], "report.host.platform")
     enriched = dict(report)
-    if platform == "linux":
+    if platform in NIX_PLATFORMS:
         enriched["nativeResolution"] = {
             "kind": "nix",
-            "report": _verify_nix_resolution(contract, report, project_root, today=today),
+            "report": _verify_nix_resolution(contract, report, project_root, platform=platform, today=today),
         }
     else:
         host = _mapping(report["host"], "report.host")

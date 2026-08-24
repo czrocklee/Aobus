@@ -10,6 +10,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/PreparedPlayback.h>
@@ -17,7 +18,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <source_location>
@@ -137,20 +137,20 @@ namespace ao::rt
     // handler must not synchronously destroy this transport; Debug contracts
     // require teardown to be deferred to a later executor turn.
 
-    async::Subscription onPreparing(std::move_only_function<void()> handler);
-    async::Subscription onStarted(std::move_only_function<void()> handler);
-    async::Subscription onPaused(std::move_only_function<void()> handler);
-    async::Subscription onIdle(std::move_only_function<void()> handler);
-    async::Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
+    async::Subscription onPreparing(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onStarted(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onPaused(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onIdle(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onNowPlayingChanged(compat::MoveOnlyFunction<void(NowPlayingChanged const&)> handler);
     async::Subscription onOutputDeviceChanged(
-      std::move_only_function<void(audio::OutputDeviceSelection const&)> handler);
-    async::Subscription onStopped(std::move_only_function<void()> handler);
-    async::Subscription onOutputDevicesChanged(std::move_only_function<void()> handler);
-    async::Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
-    async::Subscription onVolumeChanged(std::move_only_function<void(float)> handler);
-    async::Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
-    async::Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
-    async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
+      compat::MoveOnlyFunction<void(audio::OutputDeviceSelection const&)> handler);
+    async::Subscription onStopped(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onOutputDevicesChanged(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onQualityChanged(compat::MoveOnlyFunction<void(QualityChanged const&)> handler);
+    async::Subscription onVolumeChanged(compat::MoveOnlyFunction<void(float)> handler);
+    async::Subscription onMutedChanged(compat::MoveOnlyFunction<void(bool)> handler);
+    async::Subscription onRevealTrackRequested(compat::MoveOnlyFunction<void(RevealTrackRequested const&)> handler);
+    async::Subscription onSeekUpdate(compat::MoveOnlyFunction<void(SeekUpdate const&)> handler);
 
     // Starts a track by id. Succession passes announce=false because it
     // publishes its own now-playing story for automatic transitions.
@@ -198,12 +198,12 @@ namespace ao::rt
     Result<PreparedCancellationBarrier> commitStagedPlayback(PreparedPlaybackStart&& preparedStart, bool announce);
     Result<> stageSuccessionPlaybackAsync(PlaybackRequest request,
                                           ListId sourceListId,
-                                          std::move_only_function<bool()> acceptance,
-                                          std::move_only_function<void(Result<PreparedPlaybackStart>)> completion);
+                                          compat::MoveOnlyFunction<bool()> acceptance,
+                                          compat::MoveOnlyFunction<void(Result<PreparedPlaybackStart>)> completion);
     Result<> prepareSuccessionNextAsync(TrackId trackId,
                                         ListId sourceListId,
-                                        std::move_only_function<bool()> acceptance,
-                                        std::move_only_function<void(Result<PreparedNextToken>)> completion);
+                                        compat::MoveOnlyFunction<bool()> acceptance,
+                                        compat::MoveOnlyFunction<void(Result<PreparedNextToken>)> completion);
     void cancelSuccessionStartPreparation();
     void cancelSuccessionLookaheadPreparation();
     Result<PreparedNextToken> prepareNextRequest(PlaybackRequest const& request, ListId sourceListId);

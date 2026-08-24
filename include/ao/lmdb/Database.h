@@ -286,6 +286,9 @@ namespace ao::lmdb
 
   /**
    * IntegerKeyDatabase::Writer - Integer-key write access within a transaction.
+   *
+   * The referenced transaction must outlive the writer, including after move
+   * assignment replaces the borrowed transaction.
    */
   class [[nodiscard]] IntegerKeyDatabase::Writer final
   {
@@ -329,6 +332,9 @@ namespace ao::lmdb
 
   /**
    * ByteKeyDatabase::Writer - Copied-value byte-key write access within a transaction.
+   *
+   * The referenced transaction must outlive the writer, including after move
+   * assignment replaces the borrowed transaction.
    */
   class [[nodiscard]] ByteKeyDatabase::Writer final
   {

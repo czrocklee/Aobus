@@ -4,6 +4,7 @@ add_library(ao_utility STATIC
     Base64.cpp
     ByteView.cpp
     Fatal.cpp
+    FromChars.cpp
     Hash128.cpp
     MappedFile.cpp
     Path.cpp
@@ -34,7 +35,7 @@ target_include_directories(ao_utility PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_utility PUBLIC PkgRapidYaml Boost::headers gsl-lite::gsl-lite)
 # xxhash is an implementation detail of Xxh3.cpp; keep it out of the public
 # link interface so ao/utility/Xxh3.h consumers never see <xxhash.h>.
-target_link_libraries(ao_utility PRIVATE PkgXXHash)
+target_link_libraries(ao_utility PRIVATE FastFloat::fast_float PkgXXHash)
 
 # Keep ICU behind the Unicode-text facade so its API and dependency contract do
 # not leak into the general utility library. Current applications consume the

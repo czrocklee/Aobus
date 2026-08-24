@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -199,13 +200,13 @@ namespace ao::uimodel
     return false;
   }
 
-  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(compat::MoveOnlyFunction<void()> handler)
   {
     return _availabilityChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackCommandSurface::onAvailabilityChanged(PlaybackCommand const command,
-                                                                    std::move_only_function<void()> handler)
+                                                                    compat::MoveOnlyFunction<void()> handler)
   {
     return _commandAvailabilityChangedSignals[commandIndex(command)].connect(std::move(handler));
   }

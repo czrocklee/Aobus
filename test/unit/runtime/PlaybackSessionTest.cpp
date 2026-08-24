@@ -27,6 +27,7 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
@@ -97,7 +98,7 @@ namespace ao::rt::test
     TrackId addPlayableTrack(AppRuntime& runtime,
                              std::string title,
                              std::uint16_t const year = 2020,
-                             std::move_only_function<void()> settlePublication = {})
+                             compat::MoveOnlyFunction<void()> settlePublication = {})
     {
       auto const uri = audio::test::installAudioFixture(
         runtime.musicLibrary().rootPath(), "basic_metadata.flac", "session-playable.flac");

@@ -15,6 +15,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
@@ -41,7 +42,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <iterator>
 #include <limits>
@@ -69,7 +69,7 @@ namespace ao::rt::test
       std::string lastStage;
       std::string lastMessage;
 
-      std::move_only_function<void(ScanFailure const&)> callback()
+      compat::MoveOnlyFunction<void(ScanFailure const&)> callback()
       {
         return [this](ScanFailure const& failure)
         {
@@ -521,7 +521,7 @@ namespace ao::rt::test
     REQUIRE(plan.size() == 1);
 
     auto progressEvents = std::vector<ScanApplyProgress>{};
-    auto progress = std::move_only_function<void(ScanApplyProgress const&)>{
+    auto progress = compat::MoveOnlyFunction<void(ScanApplyProgress const&)>{
       [&progressEvents](ScanApplyProgress const& progress) { progressEvents.push_back(progress); }};
 
     auto counts = FailureCounts{};
@@ -559,7 +559,7 @@ namespace ao::rt::test
     auto stopSource = std::stop_source{};
     std::int32_t progressCount = 0;
     bool sawFingerprinting = false;
-    auto progress = std::move_only_function<void(ScanApplyProgress const&)>{
+    auto progress = compat::MoveOnlyFunction<void(ScanApplyProgress const&)>{
       [&stopSource, &progressCount, &sawFingerprinting](ScanApplyProgress const& progress)
       {
         ++progressCount;
@@ -609,7 +609,7 @@ namespace ao::rt::test
 
     auto stopSource = std::stop_source{};
     bool sawChunkProgress = false;
-    auto progress = std::move_only_function<void(ScanApplyProgress const&)>{
+    auto progress = compat::MoveOnlyFunction<void(ScanApplyProgress const&)>{
       [&stopSource, &sawChunkProgress](ScanApplyProgress const& progress)
       {
         if (progress.stage == ScanApplyProgressStage::Fingerprinting && progress.itemFraction > 0.0 &&
@@ -658,7 +658,7 @@ namespace ao::rt::test
     }
 
     auto stopSource = std::stop_source{};
-    auto progress = std::move_only_function<void(ScanApplyProgress const&)>{
+    auto progress = compat::MoveOnlyFunction<void(ScanApplyProgress const&)>{
       [&stopSource, &cancelPath](ScanApplyProgress const& progress)
       {
         if (progress.path == cancelPath && progress.stage == ScanApplyProgressStage::Fingerprinting)
@@ -893,7 +893,7 @@ namespace ao::rt::test
 
     bool sawFingerprinting = false;
     auto progressFractions = std::vector<double>{};
-    auto progress = std::move_only_function<void(ScanApplyProgress const&)>{
+    auto progress = compat::MoveOnlyFunction<void(ScanApplyProgress const&)>{
       [&sawFingerprinting, &progressFractions](ScanApplyProgress const& progress)
       {
         progressFractions.push_back(progress.itemFraction);
@@ -982,7 +982,7 @@ namespace ao::rt::test
     REQUIRE(plan.items().front().classification == ScanClassification::Moved);
 
     bool sawFingerprinting = false;
-    auto progress = std::move_only_function<void(ScanApplyProgress const&)>{
+    auto progress = compat::MoveOnlyFunction<void(ScanApplyProgress const&)>{
       [&sawFingerprinting](ScanApplyProgress const& progress)
       {
         if (progress.stage == ScanApplyProgressStage::Fingerprinting)

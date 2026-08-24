@@ -4,11 +4,11 @@
 #pragma once
 
 #include <ao/Contract.h>
+#include <ao/compat/AtomicSharedPtr.h>
 
 #include <spdlog/common.h>
 #include <spdlog/logger.h>
 
-#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -51,7 +51,7 @@ namespace ao::rt
 
     static std::shared_ptr<spdlog::logger> _appLoggerPtr;
     static std::shared_ptr<spdlog::logger> _audioLoggerPtr;
-    static std::atomic<std::shared_ptr<spdlog::logger>> _fatalLoggerPtr;
+    static compat::AtomicSharedPtr<spdlog::logger> _fatalLoggerPtr;
     static bool _initialized;
     static std::mutex _lifecycleMutex;
   };

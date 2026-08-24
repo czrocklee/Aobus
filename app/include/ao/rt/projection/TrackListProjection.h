@@ -9,12 +9,12 @@
 #include "../source/TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <boost/container/small_vector.hpp>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -152,7 +152,7 @@ namespace ao::rt
     TrackListProjectionOperationCounts operationCounts() const noexcept;
     void setPresentation(TrackPresentationSpec const& presentation);
 
-    async::Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler);
+    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler);
 
   private:
     struct Impl;

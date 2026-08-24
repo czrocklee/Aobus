@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/utility/FromChars.h>
 
-#include <charconv>
 #include <cstdint>
 #include <format>
 #include <memory>
@@ -26,7 +26,7 @@ namespace ao::uimodel
       T parsed = {};
       auto const* const begin = value.data();
       auto const* const end = value.data() + value.size();
-      auto const [ptr, ec] = std::from_chars(begin, end, parsed);
+      auto const [ptr, ec] = utility::fromChars(begin, end, parsed);
 
       if (ec == std::errc{} && ptr == end)
       {

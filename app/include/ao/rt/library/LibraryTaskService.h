@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
@@ -16,7 +17,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -63,8 +63,8 @@ namespace ao::rt
     // Returning a Result, including an error Result, resumes the caller on the callback executor.
     // Unexpected exceptions may still propagate from the executor where they occur; UI callers should
     // present them through a boundary that returns to the callback executor first.
-    using ScanProgressCallback = std::move_only_function<void(ScanApplyProgress const& progress)>;
-    using ScanFailureCallback = std::move_only_function<void(ScanFailure const& failure)>;
+    using ScanProgressCallback = compat::MoveOnlyFunction<void(ScanApplyProgress const& progress)>;
+    using ScanFailureCallback = compat::MoveOnlyFunction<void(ScanFailure const& failure)>;
 
     async::Task<Result<LibraryImportPlan>> prepareLibraryImportAsync(std::filesystem::path path,
                                                                      ImportMode mode,
@@ -120,8 +120,8 @@ namespace ao::rt
     // presentation pulse occurs exactly once on every ordinary terminal path
     // while the owner remains live. Task values, errors, and cancellation
     // remain exclusively on the awaited task channel.
-    async::Subscription onProgressFinished(std::move_only_function<void()> handler) const;
-    async::Subscription onProgress(std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
+    async::Subscription onProgressFinished(compat::MoveOnlyFunction<void()> handler) const;
+    async::Subscription onProgress(compat::MoveOnlyFunction<void(LibraryTaskProgressUpdated const&)> handler) const;
 
     LibraryTaskService(LibraryTaskService const&) = delete;
     LibraryTaskService& operator=(LibraryTaskService const&) = delete;

@@ -21,6 +21,8 @@ namespace ao::lmdb
   using DbiHandle = unsigned int; // == MDB_dbi
 #ifdef _MSC_VER
   using EnvMode = int; // == mdb_mode_t
+#elifdef __APPLE__
+  using EnvMode = unsigned short; // == mdb_mode_t; Darwin's mode_t is __uint16_t
 #else
   using EnvMode = unsigned int; // == mdb_mode_t
 #endif

@@ -18,6 +18,8 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/compat/AtomicSharedPtr.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
@@ -47,7 +49,6 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -100,7 +101,7 @@ namespace ao::rt
   namespace
   {
     using LibraryTaskProgressPublisher =
-      std::move_only_function<void(LibraryTaskProgressKind kind, double fraction, std::string subject)>;
+      compat::MoveOnlyFunction<void(LibraryTaskProgressKind kind, double fraction, std::string subject)>;
 
     LibraryTaskProgressKind scanApplyProgressKind(ScanApplyProgress const& progress)
     {
@@ -134,14 +135,15 @@ namespace ao::rt
       bool cancelled = false;
     };
 
-    Result<CoordinatedScanResult> applyCoordinatedScan(LibraryMutationService& mutationService,
-                                                       LibraryMutationService::MaintenanceGuard const& maintenance,
-                                                       library::MusicLibrary& library,
-                                                       ScanPlan plan,
-                                                       ScanApplyOptions options,
-                                                       std::move_only_function<void(ScanApplyProgress const&)> progress,
-                                                       std::move_only_function<void(ScanFailure const&)> failure,
-                                                       std::stop_token stopToken)
+    Result<CoordinatedScanResult> applyCoordinatedScan(
+      LibraryMutationService& mutationService,
+      LibraryMutationService::MaintenanceGuard const& maintenance,
+      library::MusicLibrary& library,
+      ScanPlan plan,
+      ScanApplyOptions options,
+      compat::MoveOnlyFunction<void(ScanApplyProgress const&)> progress,
+      compat::MoveOnlyFunction<void(ScanFailure const&)> failure,
+      std::stop_token stopToken)
     {
       auto operation = ScanApplyOperation{library, std::move(plan), std::move(progress), std::move(failure), options};
       auto prepareRes = operation.prepare(stopToken);
@@ -488,7 +490,7 @@ namespace ao::rt
     /// it is a separate object and needs its own rule, so it is atomic. A request
     /// loads it once and then needs no synchronization at all, because the graph
     /// behind its own copy cannot change.
-    std::atomic<std::shared_ptr<ResourceCarrierIndex const>> carrierIndexSlot{};
+    compat::AtomicSharedPtr<ResourceCarrierIndex const> carrierIndexSlot{};
     std::mutex carrierIndexMutex;
     std::atomic<std::uint64_t> carrierIndexBuildCount{0};
   };
@@ -503,13 +505,13 @@ namespace ao::rt
 
   LibraryTaskService::~LibraryTaskService() = default;
 
-  async::Subscription LibraryTaskService::onProgressFinished(std::move_only_function<void()> handler) const
+  async::Subscription LibraryTaskService::onProgressFinished(compat::MoveOnlyFunction<void()> handler) const
   {
     return _implPtr->signalsPtr->progressFinished.connect(std::move(handler));
   }
 
   async::Subscription LibraryTaskService::onProgress(
-    std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const
+    compat::MoveOnlyFunction<void(LibraryTaskProgressUpdated const&)> handler) const
   {
     return _implPtr->signalsPtr->progress.connect(std::move(handler));
   }

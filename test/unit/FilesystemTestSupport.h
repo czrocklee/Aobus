@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <catch2/catch_tostring.hpp>
+
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string>
 
 namespace ao::test
 {
@@ -72,4 +75,30 @@ namespace ao::test
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };
+
+  std::string formatFileTime(std::filesystem::file_time_type fileTime);
 } // namespace ao::test
+
+namespace Catch
+{
+  /**
+   * Teaches Catch2 to print a file timestamp.
+   *
+   * Darwin counts std::filesystem::file_time_type in __int128 nanoseconds, and
+   * no operator<< accepts that type, so Catch2's default stringifier fails to
+   * compile as soon as a comparison of two file times is decomposed -- which it
+   * is for every CHECK that compares them. Formatting the tick count by hand
+   * keeps those assertions building, and reports the same text everywhere
+   * rather than only fixing the platform that breaks.
+   *
+   * Retirement condition: doc/development/macos-portability.md.
+   */
+  template<>
+  struct StringMaker<std::filesystem::file_time_type>
+  {
+    static std::string convert(std::filesystem::file_time_type const& fileTime)
+    {
+      return ao::test::formatFileTime(fileTime);
+    }
+  };
+} // namespace Catch

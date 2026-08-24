@@ -6,13 +6,13 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <source_location>
@@ -106,10 +106,10 @@ namespace ao::rt
 
     // Handlers run synchronously on the executor thread. Callers must defer
     // emitting-owner teardown to a later executor turn.
-    async::Subscription onChanged(std::move_only_function<void(PlaybackSuccessionState const&)> handler);
-    async::Subscription onExplicitStartSettled(std::move_only_function<void()> handler);
-    async::Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
-    async::Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
+    async::Subscription onChanged(compat::MoveOnlyFunction<void(PlaybackSuccessionState const&)> handler);
+    async::Subscription onExplicitStartSettled(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onShuffleModeChanged(compat::MoveOnlyFunction<void(ShuffleModeChanged const&)> handler);
+    async::Subscription onRepeatModeChanged(compat::MoveOnlyFunction<void(RepeatModeChanged const&)> handler);
 
   private:
     friend class PlaybackSessionPersistence;
@@ -128,7 +128,7 @@ namespace ao::rt
                                       RepeatMode repeatMode,
                                       std::chrono::milliseconds elapsed) noexcept;
     void discardPlaybackSessionSnapshot();
-    async::Subscription onRestorableStateChanged(std::move_only_function<void()> handler);
+    async::Subscription onRestorableStateChanged(compat::MoveOnlyFunction<void()> handler);
 
     struct Impl;
 

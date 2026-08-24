@@ -19,6 +19,7 @@
 #include <ao/audio/Player.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryUri.h>
@@ -1351,82 +1352,82 @@ namespace ao::rt
     checkedImpl()->shutdown();
   }
 
-  async::Subscription PlaybackTransport::onPreparing(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onPreparing(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->preparingSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onStarted(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onStarted(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->startedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onPaused(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onPaused(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->pausedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onIdle(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onIdle(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->idleSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onNowPlayingChanged(
-    std::move_only_function<void(NowPlayingChanged const&)> handler)
+    compat::MoveOnlyFunction<void(NowPlayingChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->nowPlayingChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onOutputDeviceChanged(
-    std::move_only_function<void(audio::OutputDeviceSelection const&)> handler)
+    compat::MoveOnlyFunction<void(audio::OutputDeviceSelection const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->outputDeviceChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onStopped(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onStopped(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->stoppedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onOutputDevicesChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onOutputDevicesChanged(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
     return impl->outputDevicesChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
+  async::Subscription PlaybackTransport::onQualityChanged(compat::MoveOnlyFunction<void(QualityChanged const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->qualityChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onVolumeChanged(std::move_only_function<void(float)> handler)
+  async::Subscription PlaybackTransport::onVolumeChanged(compat::MoveOnlyFunction<void(float)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->volumeChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onMutedChanged(std::move_only_function<void(bool)> handler)
+  async::Subscription PlaybackTransport::onMutedChanged(compat::MoveOnlyFunction<void(bool)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->mutedChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onRevealTrackRequested(
-    std::move_only_function<void(RevealTrackRequested const&)> handler)
+    compat::MoveOnlyFunction<void(RevealTrackRequested const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->revealTrackRequestedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler)
+  async::Subscription PlaybackTransport::onSeekUpdate(compat::MoveOnlyFunction<void(SeekUpdate const&)> handler)
   {
     auto* const impl = checkedImpl();
     return impl->seekUpdateSignal.connect(std::move(handler));
@@ -1445,14 +1446,14 @@ namespace ao::rt
   void PlaybackTransport::unbindPlaybackFailureRecovery()
   {
     auto* const impl = checkedImpl();
-    impl->playbackFailureRecoveryHandlerPtr.reset();
+    impl->playbackFailureRecoveryHandlerPtr = nullptr;
   }
 
   Result<> PlaybackTransport::stageSuccessionPlaybackAsync(
     PlaybackRequest request,
     ListId const sourceListId,
-    std::move_only_function<bool()> acceptance,
-    std::move_only_function<void(Result<PreparedPlaybackStart>)> completion)
+    compat::MoveOnlyFunction<bool()> acceptance,
+    compat::MoveOnlyFunction<void(Result<PreparedPlaybackStart>)> completion)
   {
     auto* const impl = checkedImpl();
     impl->ensureReady();
@@ -1515,8 +1516,8 @@ namespace ao::rt
   Result<> PlaybackTransport::prepareSuccessionNextAsync(
     TrackId const trackId,
     ListId const sourceListId,
-    std::move_only_function<bool()> acceptance,
-    std::move_only_function<void(Result<PreparedNextToken>)> completion)
+    compat::MoveOnlyFunction<bool()> acceptance,
+    compat::MoveOnlyFunction<void(Result<PreparedNextToken>)> completion)
   {
     auto* const impl = checkedImpl();
     impl->ensureReady();

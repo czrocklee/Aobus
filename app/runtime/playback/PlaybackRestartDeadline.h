@@ -3,8 +3,9 @@
 
 #pragma once
 
+#include <ao/compat/MoveOnlyFunction.h>
+
 #include <chrono>
-#include <functional>
 #include <memory>
 
 namespace ao::async
@@ -25,8 +26,8 @@ namespace ao::rt
   {
   public:
     using Elapsed = std::chrono::milliseconds;
-    using LiveElapsedReader = std::move_only_function<Elapsed()>;
-    using AvailabilityChangedHandler = std::move_only_function<void(bool)>;
+    using LiveElapsedReader = compat::MoveOnlyFunction<Elapsed()>;
+    using AvailabilityChangedHandler = compat::MoveOnlyFunction<void(bool)>;
 
     static constexpr Elapsed kRestartThreshold{3000};
     static constexpr Elapsed kFirstRestartAvailableElapsed{3001};

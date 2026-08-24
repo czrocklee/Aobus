@@ -48,15 +48,21 @@ drive-by lint sweep.
 ## Platform coverage
 
 Clang-format does not depend on a compile database, so the same source can be
-formatted on either host. Linux gets clang-format from Nix; Windows resolves
+formatted on any native host. Linux and macOS get clang-format from Nix; Windows resolves
 the formatter from the pinned LLVM SDK used by tidy (version pinned in
 `cmake/LlvmSdk.cmake`) and never falls back to `PATH`. Clang-tidy must use compiler flags, defines, generated headers, and
-SDK headers from a real native compile command. A complete Aobus C++ lint gate
-is therefore the combination of Linux and Windows runs:
+SDK headers from a real native compile command. Complete cross-platform C++
+lint coverage is therefore the combination of Linux, macOS, and Windows runs:
 
 - Linux owns PipeWire, ALSA, POSIX, and GTK translation units.
+- macOS owns Darwin translation units and independently covers POSIX and shared translation units.
 - Windows owns WASAPI and other Windows-only translation units.
-- Shared translation units are intentionally checked on both hosts.
+- Shared translation units are intentionally checked on every host that builds them.
+
+Darwin's available Python, Ruff, and mypy versions still check changed Python
+files through `./ao hygiene`, but they do not establish the exact Python
+toolchain contract. The `tooling` suite on Linux and Windows owns that version
+and behavior gate.
 
 Changed-file, folder, and `--all` scopes may defer only files that are incompatible with the current host, such as WinUI or WASAPI code on Linux and GTK, ALSA, or PipeWire code on Windows.
 The portal prints those platform deferrals and continues with the native files.
@@ -66,7 +72,7 @@ Run the normal `./ao build` or `./ao check` workflow (`ao.bat` on Windows) to re
 
 A header first uses a same-component implementation with the same stem, including a recognized platform suffix such as `Windows`, `Linux`, or `Posix`.
 When no paired implementation exists, the portal reads the native Ninja dependency graph and selects the lexicographically first repository translation unit that actually consumed the header.
-With the default build selection, this read-only lookup consults the dedicated tidy Ninja tree and an existing normal debug tree: `debug` on Linux or `windows-debug` on Windows.
+With the default build selection, this read-only lookup consults the dedicated tidy Ninja tree and an existing normal debug tree: `debug` on Linux and macOS, or `windows-debug` on Windows.
 Each dependency tree uses its own `compile_commands.json` output-to-translation-unit mapping, including when an MSVC dependency record names only an object output and omits the source.
 The selected consumer must also exist in the primary tidy compilation database, and the header always borrows the exact command from that primary database rather than flags from the dependency-only tree.
 The portal never builds the full product graph merely to populate dependency records.

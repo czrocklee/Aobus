@@ -8,6 +8,7 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Sleeper.h>
 #include <ao/async/Task.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -237,8 +238,8 @@ namespace ao::async
                           { finishFireAndForget(std::move(exceptionPtr), fatalContext); });
   }
 
-  std::move_only_function<void()> Runtime::startCancellable(CancellableTask task,
-                                                            std::function<void(std::exception_ptr)> completion)
+  compat::MoveOnlyFunction<void()> Runtime::startCancellable(CancellableTask task,
+                                                             std::function<void(std::exception_ptr)> completion)
   {
     auto stopSourcePtr = std::make_shared<std::stop_source>();
     boost::asio::co_spawn(workerPool(),

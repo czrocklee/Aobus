@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#ifdef __APPLE__
+// nixpkgs' Darwin SDK omits the global declaration that libc++ imports into
+// std. The fixture is parsed but never linked, so provide that declaration to
+// preserve coverage of both forbidden spellings.
+extern "C"
+{
+  [[noreturn]] void quick_exit(int);
+}
+#endif
+
 #include <cstdlib>
 #include <exception>
 
@@ -72,7 +82,13 @@ void importedTerminateIsRejected()
   terminate();
 }
 
-void quickExitIsRejected()
+void globalQuickExitIsRejected()
+{
+  // POSITIVE
+  ::quick_exit(1);
+}
+
+void stdQuickExitIsRejected()
 {
   // POSITIVE
   std::quick_exit(1);

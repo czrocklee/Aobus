@@ -29,13 +29,17 @@ Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for au
 
 ## 🛠 Building
 
-Aobus uses CMake with pinned Nix dependencies on Linux and vcpkg on Windows.
+Aobus uses CMake with platform-specific development profiles: pinned Nix
+dependencies on Linux and macOS, and vcpkg on Windows.
 
 ### Linux
 
 ```bash
-# Debug build + full test suites (the standard validation gate)
+# Debug build + full native test suites
 ./ao check
+
+# Check-only formatting, source audits, and lint for changed files
+./ao hygiene
 
 # Incremental debug build only
 ./ao build
@@ -59,6 +63,25 @@ Governed dependency versions and native resolver identities can be inspected
 with `./ao deps report`. Follow the [dependency upgrade workflow](doc/development/dependency-upgrade.md)
 when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
 
+### macOS
+
+The current macOS profile is a headless development port for the shared core,
+CLI, and TUI. It has no native desktop frontend or audio backend. Nix and the
+Xcode Command Line Tools are required; the `./ao` portal bootstraps its own Bash
+and enters the Darwin-specific pinned Nix environment.
+
+```bash
+./ao build
+./ao run cli
+./ao run tui
+./ao test --all
+./ao check
+./ao hygiene
+```
+
+See [macOS development](doc/development/macos.md) for the validated host,
+local-state paths, SMB workflow, supported suites, and known limitations.
+
 ### Windows
 
 Install Visual Studio Build Tools with the C++ x64 toolset, then use the Windows
@@ -81,17 +104,20 @@ for prerequisites, build trees, and suite availability.
 Aobus takes stability seriously. We maintain a comprehensive suite of unit and integration tests. All suites run through the development portal:
 
 ```bash
-# Run the default fast loop (core + GTK on Linux)
+# Run the native default fast loop
 ./ao test
 
 # Run every registered suite
 ./ao test --all
 
-# Run tests for the development tooling
+# Run tests for the development tooling (Linux only; use ao.bat on Windows)
 ./ao test --tooling
 
-# Full validation gate: build everything + all test suites
+# Build/test half of the completion gate
 ./ao check
+
+# Check-only hygiene half of the completion gate
+./ao hygiene
 ```
 
 The portal resolves the correct build tree, including when

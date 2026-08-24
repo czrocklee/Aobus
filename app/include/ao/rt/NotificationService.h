@@ -6,8 +6,8 @@
 #include "NotificationIds.h"
 #include "NotificationState.h"
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
-#include <functional>
 #include <memory>
 #include <string>
 
@@ -41,7 +41,7 @@ namespace ao::rt
 
     // The update reference is callback-scoped; copy feedPtr to retain the
     // immutable snapshot beyond the callback.
-    async::Subscription onFeedUpdated(std::move_only_function<void(NotificationFeedUpdate const&)> handler);
+    async::Subscription onFeedUpdated(compat::MoveOnlyFunction<void(NotificationFeedUpdate const&)> handler);
 
   private:
     struct Impl;

@@ -225,9 +225,9 @@ _TSAN_MERGED_SUPP_PATH = Path("/tmp") / f"aobus-tsan-{os.getpid()}.supp"
 _SANITIZER_OPTION_SEPARATOR = re.compile(r":(?=[A-Za-z_][A-Za-z0-9_]*=)")
 
 
-def _lsan_env(build_dir: Path) -> dict[str, str]:
+def _lsan_env(build_dir: Path, *, enabled: bool = False) -> dict[str, str]:
     """Return Linux LeakSanitizer options when *build_dir* is an ASan tree."""
-    if builddir.platform_profile().name != "linux" or "asan" not in build_dir.name:
+    if builddir.platform_profile().name != "linux" or (not enabled and "asan" not in build_dir.name):
         return {}
     _LSAN_SUPP_PATH.write_text(_LSAN_SUPPRESSIONS)
     return {"LSAN_OPTIONS": f"suppressions={_LSAN_SUPP_PATH}"}
@@ -235,6 +235,21 @@ def _lsan_env(build_dir: Path) -> dict[str, str]:
 
 def _split_sanitizer_options(value: str) -> list[str]:
     return [option for option in _SANITIZER_OPTION_SEPARATOR.split(value.strip(":")) if option]
+
+
+def _ubsan_env(build_dir: Path, *, enabled: bool = False) -> dict[str, str]:
+    """Preserve caller options while making ASan/UBSan test trees fail closed."""
+    if builddir.platform_profile().name == "windows" or (not enabled and "asan" not in build_dir.name):
+        return {}
+
+    retained_options = []
+    for option in _split_sanitizer_options(os.environ.get("UBSAN_OPTIONS", "")):
+        key, _, _ = option.partition("=")
+        if key not in {"halt_on_error", "print_stacktrace"}:
+            retained_options.append(option)
+
+    required_options = ["halt_on_error=1", "print_stacktrace=1"]
+    return {"UBSAN_OPTIONS": ":".join((*retained_options, *required_options))}
 
 
 def _tsan_env(build_dir: Path, *, enabled: bool) -> dict[str, str]:
@@ -281,6 +296,7 @@ def run_suite(
     test_filter: str = "",
     list_only: bool = False,
     allow_no_tests: bool = False,
+    asan: bool = False,
     tsan: bool = False,
     log: Path | None = None,
 ) -> int:
@@ -305,7 +321,11 @@ def run_suite(
     print(f"CMD: {' '.join(command)}")
     print("=====================================")
 
-    sanitizer_env = {**_lsan_env(build_dir), **_tsan_env(build_dir, enabled=tsan)}
+    sanitizer_env = {
+        **_lsan_env(build_dir, enabled=asan),
+        **_ubsan_env(build_dir, enabled=asan),
+        **_tsan_env(build_dir, enabled=tsan),
+    }
 
     if name == "gtk" and not list_only:
         with virtual_gtk_display() as env:
@@ -341,6 +361,7 @@ def run_suites(
     list_only: bool = False,
     allow_no_tests: bool = False,
     repeat: int = 1,
+    asan: bool = False,
     tsan: bool = False,
     log: Path | None = None,
 ) -> int:
@@ -361,6 +382,7 @@ def run_suites(
                     test_filter=test_filter,
                     list_only=list_only,
                     allow_no_tests=allow_no_tests,
+                    asan=asan,
                     tsan=tsan,
                     log=log,
                 )
@@ -404,6 +426,7 @@ def run_command(args: argparse.Namespace) -> int:
         "test_filter": test_filter,
         "list_only": args.list,
         "repeat": args.repeat,
+        "asan": args.asan,
         "tsan": args.tsan,
     }
     if args.suite == "concurrency":

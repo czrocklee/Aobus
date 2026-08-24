@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -26,7 +26,7 @@ namespace ao::library
     return payloadLength != 0 && signature != utility::Hash128{};
   }
 
-  using AudioIdentityProgressCallback = std::move_only_function<void(double fraction)>;
+  using AudioIdentityProgressCallback = compat::MoveOnlyFunction<void(double fraction)>;
 
   /**
    * Compute the identity of the file's encoded audio payload.

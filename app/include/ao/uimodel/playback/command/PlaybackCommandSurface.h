@@ -5,6 +5,7 @@
 
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -35,8 +36,8 @@ namespace ao::uimodel
     bool isEnabled(PlaybackCommand command) const;
     bool isCapable(PlaybackCommand command) const;
 
-    async::Subscription onAvailabilityChanged(std::move_only_function<void()> handler);
-    async::Subscription onAvailabilityChanged(PlaybackCommand command, std::move_only_function<void()> handler);
+    async::Subscription onAvailabilityChanged(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onAvailabilityChanged(PlaybackCommand command, compat::MoveOnlyFunction<void()> handler);
 
   private:
     static constexpr std::size_t kCommandCount = 8;

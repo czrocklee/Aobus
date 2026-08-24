@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/ListMutation.h>
@@ -19,7 +20,6 @@
 
 #include <expected>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <span>
 #include <utility>
@@ -144,7 +144,7 @@ namespace ao::rt
   }
 
   async::Subscription Library::onAuthoringAvailabilityChanged(
-    std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const
+    compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const
   {
     return _implPtr->mutationService.onAvailabilityChanged(std::move(handler));
   }

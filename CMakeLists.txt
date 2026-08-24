@@ -2,17 +2,19 @@ cmake_minimum_required(VERSION 3.30)
 
 project(aobus VERSION 0.1.0)
 
-if(NOT WIN32 AND NOT LINUX)
+if(NOT WIN32 AND NOT LINUX AND NOT APPLE)
   message(FATAL_ERROR
-    "Aobus supports Linux and Windows hosts only; no audio backend or "
+    "Aobus supports Linux, Windows, and macOS hosts only; no audio backend or "
     "development profile exists for this platform.")
 endif()
 
 option(AOBUS_ENABLE_ASAN "Enable AddressSanitizer and UndefinedBehaviorSanitizer where available (debug builds only)" OFF)
 option(AOBUS_ENABLE_TSAN "Enable thread sanitizer (debug builds only)" OFF)
 
+# GTK is the Linux desktop frontend. macOS is also UNIX, so this has to test
+# LINUX: testing UNIX would make a macOS configure demand gtk4 and gtkmm-4.0.
 set(AOBUS_DEFAULT_BUILD_GTK OFF)
-if(UNIX AND NOT WIN32)
+if(LINUX)
   set(AOBUS_DEFAULT_BUILD_GTK ON)
 endif()
 

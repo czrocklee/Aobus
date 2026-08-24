@@ -6,10 +6,10 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <chrono>
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -65,6 +65,6 @@ namespace ao::library::test
   TrackId addTrack(MusicLibrary& library, TrackSpec const& spec);
   TrackId addTrackWithUniqueFixtureUri(MusicLibrary& library, LibraryWrite& write, TrackSpec const& spec);
   TrackId addTrackWithUniqueFixtureUri(MusicLibrary& library, TrackSpec const& spec);
-  void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate);
-  void updateTrackSpec(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackSpec&)> updater);
+  void mutateTrack(MusicLibrary& library, TrackId id, compat::MoveOnlyFunction<void(TrackBuilder&)> mutate);
+  void updateTrackSpec(MusicLibrary& library, TrackId id, compat::MoveOnlyFunction<void(TrackSpec&)> updater);
 } // namespace ao::library::test

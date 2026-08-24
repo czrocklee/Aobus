@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -748,14 +749,23 @@ namespace ao::lmdb::test
 
     auto firstTransaction = beginWriteTransaction(env);
     auto db = openIntegerKeyDatabase(firstTransaction, "test");
-    auto writer = db.writer(firstTransaction);
-    REQUIRE(writer.create(1, createStringData("first")));
+    auto optWriter = std::optional{db.writer(firstTransaction)};
+    REQUIRE(optWriter->create(1, createStringData("first")));
     REQUIRE(firstTransaction.commit());
 
     auto secondTransaction = beginWriteTransaction(env);
     auto replacement = db.writer(secondTransaction);
-    writer = std::move(replacement);
-    REQUIRE(writer.create(2, createStringData("second")));
+    *optWriter = std::move(replacement);
+    REQUIRE(optWriter->create(2, createStringData("second")));
     REQUIRE(secondTransaction.commit());
+
+    // Writers borrow their current transaction. End the reassigned writer's
+    // lifetime while the replacement transaction object is still alive.
+    optWriter.reset();
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const reader = db.reader(readTransaction);
+    REQUIRE(reader.get(1));
+    REQUIRE(reader.get(2));
   }
 } // namespace ao::lmdb::test

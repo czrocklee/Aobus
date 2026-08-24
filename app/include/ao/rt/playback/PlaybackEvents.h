@@ -6,14 +6,14 @@
 #include "PlaybackSnapshot.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/ViewIds.h>
 
 #include <chrono>
-#include <functional>
 
 namespace ao::rt
 {
-  using PlaybackSnapshotObserver = std::move_only_function<void(PlaybackSnapshot const&)>;
+  using PlaybackSnapshotObserver = compat::MoveOnlyFunction<void(PlaybackSnapshot const&)>;
 
   /** Transient application-navigation request emitted by the playback boundary. */
   struct PlaybackRevealTrackRequest final
@@ -44,9 +44,9 @@ namespace ao::rt
     PlaybackEvents& operator=(PlaybackEvents&&) = delete;
 
     virtual async::Subscription onSnapshot(PlaybackSnapshotObserver observer) = 0;
-    virtual async::Subscription onSeekPreview(std::move_only_function<void(std::chrono::milliseconds)> handler) = 0;
+    virtual async::Subscription onSeekPreview(compat::MoveOnlyFunction<void(std::chrono::milliseconds)> handler) = 0;
     virtual async::Subscription onRevealTrackRequested(
-      std::move_only_function<void(PlaybackRevealTrackRequest const&)> handler) = 0;
+      compat::MoveOnlyFunction<void(PlaybackRevealTrackRequest const&)> handler) = 0;
 
   protected:
     PlaybackEvents() = default;

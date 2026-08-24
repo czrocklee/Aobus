@@ -4,10 +4,10 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <vector>
 
@@ -92,7 +92,7 @@ namespace ao::uimodel
      *         @p candidate has been discarded. An unexpected attachment
      *         exception is rethrown after the same rollback.
      */
-    Result<ShellGenerationId> publish(ShellGenerationId candidate, std::move_only_function<Result<>()> attach);
+    Result<ShellGenerationId> publish(ShellGenerationId candidate, compat::MoveOnlyFunction<Result<>()> attach);
 
     /**
      * @brief Retire the live generation without publishing a replacement.

@@ -3,6 +3,7 @@
 import concurrent.futures
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -212,13 +213,38 @@ def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[b
 
 def _copy_fixture_context(fixture: Fixture, case_dir: Path) -> Path:
     fixed = case_dir / fixture.path.name
-    shutil.copy2(fixture.path, fixed)
-    shutil.copy2(FIXTURE_DIR / "TestHelpers.h", case_dir / "TestHelpers.h")
+    # The source may live on SMB while case_dir is guest-local. Fixture runs
+    # need file contents only; copy2's metadata propagation asks Darwin to apply
+    # SMB flags with chflags and can fail even though the data copy succeeded.
+    shutil.copyfile(fixture.path, fixed)
+    shutil.copyfile(FIXTURE_DIR / "TestHelpers.h", case_dir / "TestHelpers.h")
     for sibling in fixture.path.parent.glob("*.h"):
         destination = case_dir / sibling.name
         if destination != fixed:
-            shutil.copy2(sibling, destination)
+            shutil.copyfile(sibling, destination)
     return fixed
+
+
+def _syntax_command(fixed: Path, case_dir: Path) -> list[str]:
+    """Return a syntax-only compile command from the active native toolchain."""
+    configured = os.environ.get("CXX")
+    if configured:
+        compiler = shlex.split(configured)
+    else:
+        compiler = ["clang++" if sys.platform == "darwin" else "g++"]
+
+    command = [
+        *compiler,
+        "-std=c++26",
+        "-fsyntax-only",
+        f"-I{PROJECT_ROOT / 'include'}",
+        f"-I{PROJECT_ROOT / 'lib'}",
+        f"-I{case_dir}",
+    ]
+    if expected_shim := os.environ.get("AOBUS_LIBCXX_EXPECTED_SHIM"):
+        command.extend(("-isystem", expected_shim))
+    command.append(str(fixed))
+    return command
 
 
 def _run_fix(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Path]:
@@ -245,15 +271,7 @@ def _run_fix(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Pa
     errors.extend(verify_fixes(source, fixed_text))
 
     syntax = subprocess.run(
-        [
-            "g++",
-            "-std=c++26",
-            "-fsyntax-only",
-            f"-I{PROJECT_ROOT / 'include'}",
-            f"-I{PROJECT_ROOT / 'lib'}",
-            f"-I{case_dir}",
-            str(fixed),
-        ],
+        _syntax_command(fixed, case_dir),
         cwd=PROJECT_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

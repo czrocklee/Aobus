@@ -6,11 +6,11 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
 
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -43,7 +43,7 @@ namespace ao::uimodel
     bool isCurrent() const noexcept;
     ListOrderCapabilityState const& capabilities() const noexcept;
     std::span<TrackId const> effectiveTrackIds() const noexcept;
-    async::Subscription onInvalidated(std::move_only_function<void()> handler) const;
+    async::Subscription onInvalidated(compat::MoveOnlyFunction<void()> handler) const;
 
     Result<rt::LibraryWriter::MoveOrderAuthoringResult> moveBefore(std::span<TrackId const> selectedTrackIds,
                                                                    std::optional<TrackId> optBeforeTrackId);

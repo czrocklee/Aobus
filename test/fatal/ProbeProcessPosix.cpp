@@ -3,6 +3,12 @@
 
 #include "test/fatal/ProbeProcess.h"
 
+#ifdef __APPLE__
+#include <crt_externs.h>
+#include <mach-o/dyld.h>
+#endif
+
+#include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX process control owns kill and SIGKILL.
 #include <spawn.h>
 #include <unistd.h>
 
@@ -22,6 +28,17 @@ namespace ao::test
 {
   namespace
   {
+    // Darwin only declares `environ` for the main executable, so a library
+    // translation unit has to go through _NSGetEnviron() instead.
+    char** currentEnvironment() noexcept
+    {
+#ifdef __APPLE__
+      return *::_NSGetEnviron();
+#else
+      return environ;
+#endif
+    }
+
     void closeFileDescriptor(int descriptor) noexcept
     {
       if (descriptor >= 0)
@@ -71,8 +88,27 @@ namespace ao::test
 
   std::filesystem::path currentProbeExecutablePath()
   {
+#ifdef __APPLE__
+    // Darwin has no procfs. _NSGetExecutablePath reports the path the image was
+    // loaded from, which may be relative or run through symlinks, so it is
+    // resolved before the caller derives sibling probe paths from it. The first
+    // call fails on purpose: it reports the buffer size the second one needs.
+    std::uint32_t size = 0;
+    [[maybe_unused]] auto const sizeQueryStatus = ::_NSGetExecutablePath(nullptr, &size);
+
+    auto buffer = std::string(size, '\0');
+
+    if (::_NSGetExecutablePath(buffer.data(), &size) != 0)
+    {
+      return {};
+    }
+
+    auto error = std::error_code{};
+    auto executablePath = std::filesystem::canonical(buffer.c_str(), error);
+#else
     auto error = std::error_code{};
     auto executablePath = std::filesystem::read_symlink("/proc/self/exe", error);
+#endif
 
     if (error)
     {
@@ -122,7 +158,11 @@ namespace ao::test
       return result;
     }
 
+#ifdef __APPLE__
+    posix_spawn_file_actions_t actions = nullptr;
+#else
     auto actions = posix_spawn_file_actions_t{};
+#endif
     auto const initializationStatus = ::posix_spawn_file_actions_init(&actions);
     auto actionStatus = initializationStatus;
 
@@ -177,7 +217,7 @@ namespace ao::test
     auto arguments = std::array<char*, 4>{executable.data(), probeOption.data(), scenario.data(), nullptr};
     pid_t processId = 0;
     auto const spawnStatus =
-      ::posix_spawn(&processId, executable.c_str(), &actions, nullptr, arguments.data(), environ);
+      ::posix_spawn(&processId, executable.c_str(), &actions, nullptr, arguments.data(), currentEnvironment());
     [[maybe_unused]] auto const destroyResult = ::posix_spawn_file_actions_destroy(&actions);
     closeFileDescriptor(standardOutputPipe[1]);
     standardOutputPipe[1] = -1;

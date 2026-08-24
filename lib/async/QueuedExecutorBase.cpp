@@ -4,9 +4,9 @@
 #include <ao/async/QueuedExecutorBase.h>
 
 #include <ao/Contract.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <exception>
-#include <functional>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -24,7 +24,7 @@ namespace ao::async
     return std::this_thread::get_id() == _ownerThread;
   }
 
-  void QueuedExecutorBase::dispatch(std::move_only_function<void()> task)
+  void QueuedExecutorBase::dispatch(compat::MoveOnlyFunction<void()> task)
   {
     if (!task)
     {
@@ -48,7 +48,7 @@ namespace ao::async
     enqueueAndWake(std::move(task));
   }
 
-  void QueuedExecutorBase::defer(std::move_only_function<void()> task)
+  void QueuedExecutorBase::defer(compat::MoveOnlyFunction<void()> task)
   {
     enqueueAndWake(std::move(task));
   }
@@ -118,7 +118,7 @@ namespace ao::async
     }
   }
 
-  void QueuedExecutorBase::enqueueAndWake(std::move_only_function<void()> task)
+  void QueuedExecutorBase::enqueueAndWake(compat::MoveOnlyFunction<void()> task)
   {
     if (!task)
     {

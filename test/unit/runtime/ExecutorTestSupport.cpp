@@ -4,6 +4,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 
 #include <ao/async/LoopExecutor.h>
+#include <ao/compat/MoveOnlyFunction.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -12,7 +13,6 @@
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -24,7 +24,7 @@ namespace ao::rt::test
   struct ManualExecutor::Impl final
   {
     mutable std::mutex mutex;
-    std::deque<std::move_only_function<void()>> tasks;
+    std::deque<compat::MoveOnlyFunction<void()>> tasks;
     mutable std::condition_variable cv;
     std::thread::id ownerThread = std::this_thread::get_id();
   };
@@ -41,7 +41,7 @@ namespace ao::rt::test
     return std::this_thread::get_id() == _implPtr->ownerThread;
   }
 
-  void ManualExecutor::dispatch(std::move_only_function<void()> task)
+  void ManualExecutor::dispatch(compat::MoveOnlyFunction<void()> task)
   {
     {
       auto const lock = std::scoped_lock{_implPtr->mutex};
@@ -51,7 +51,7 @@ namespace ao::rt::test
     _implPtr->cv.notify_all();
   }
 
-  void ManualExecutor::defer(std::move_only_function<void()> task)
+  void ManualExecutor::defer(compat::MoveOnlyFunction<void()> task)
   {
     dispatch(std::move(task));
   }
@@ -63,7 +63,7 @@ namespace ao::rt::test
       throw std::runtime_error{"ManualExecutor can only be drained on its owner thread"};
     }
 
-    auto task = std::move_only_function<void()>{};
+    auto task = compat::MoveOnlyFunction<void()>{};
 
     {
       auto const lock = std::scoped_lock{_implPtr->mutex};
@@ -116,17 +116,17 @@ namespace ao::rt::test
     return std::this_thread::get_id() == _ownerThread;
   }
 
-  void InlineExecutor::dispatch(std::move_only_function<void()> task)
+  void InlineExecutor::dispatch(compat::MoveOnlyFunction<void()> task)
   {
     execute(std::move(task));
   }
 
-  void InlineExecutor::defer(std::move_only_function<void()> task)
+  void InlineExecutor::defer(compat::MoveOnlyFunction<void()> task)
   {
     execute(std::move(task));
   }
 
-  void InlineExecutor::execute(std::move_only_function<void()> task) const
+  void InlineExecutor::execute(compat::MoveOnlyFunction<void()> task) const
   {
     if (!task)
     {
@@ -161,12 +161,12 @@ namespace ao::rt::test
     return _implPtr->loopExecutor.isCurrent();
   }
 
-  void QueuedExecutor::dispatch(std::move_only_function<void()> task)
+  void QueuedExecutor::dispatch(compat::MoveOnlyFunction<void()> task)
   {
     enqueue(std::move(task));
   }
 
-  void QueuedExecutor::defer(std::move_only_function<void()> task)
+  void QueuedExecutor::defer(compat::MoveOnlyFunction<void()> task)
   {
     enqueue(std::move(task));
   }
@@ -207,7 +207,7 @@ namespace ao::rt::test
     REQUIRE(waitUntilQueued(timeout));
   }
 
-  void QueuedExecutor::enqueue(std::move_only_function<void()> task)
+  void QueuedExecutor::enqueue(compat::MoveOnlyFunction<void()> task)
   {
     if (!task)
     {
@@ -242,7 +242,7 @@ namespace ao::rt::test
   }
 
   bool runLoopUntil(async::LoopExecutor& executor,
-                    std::move_only_function<bool()> predicate,
+                    compat::MoveOnlyFunction<bool()> predicate,
                     std::chrono::milliseconds const timeout)
   {
     auto const deadline = std::chrono::steady_clock::now() + timeout;

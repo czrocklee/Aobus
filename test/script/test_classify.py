@@ -98,6 +98,13 @@ class TidyChecksTest(unittest.TestCase):
     def test_boost_process_definition_header_is_narrowly_ignored_by_include_cleaner(self):
         self.assertIn(r".*boost[/\\]process[/\\]v2[/\\]process\.hpp$", tidyconfig.CONFIG_BASE)
 
+    def test_darwin_posix_provider_headers_are_narrowly_ignored_by_include_cleaner(self):
+        self.assertIn(r".*sys[/\\]_types[/\\]_pid_t\.h$", tidyconfig.CONFIG_BASE)
+        self.assertIn(r".*sys[/\\]_types[/\\]_sigset_t\.h$", tidyconfig.CONFIG_BASE)
+        self.assertIn(r".*sys[/\\]fcntl\.h$", tidyconfig.CONFIG_BASE)
+        self.assertIn(r".*sys[/\\]signal\.h$", tidyconfig.CONFIG_BASE)
+        self.assertNotIn(r".*sys[/\\]_types[/\\].*", tidyconfig.CONFIG_BASE)
+
 
 class StaleNolintAuditTest(unittest.TestCase):
     def test_reports_only_checks_disabled_for_the_file_mode(self):

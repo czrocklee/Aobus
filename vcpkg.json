@@ -21,6 +21,7 @@
     "cli11",
     "c4core",
     "fdk-aac",
+    "fast-float",
     "ftxui",
     "foonathan-lexy",
     "gsl-lite",

@@ -68,6 +68,12 @@ elseif(LINUX)
         backend/detail/AlsaPrewarmCache.cpp
     )
     target_link_libraries(ao_audio PRIVATE PkgALSA PkgPipeWire PkgUDEV)
+elseif(APPLE)
+    # No CoreAudio provider yet. PlatformBackendProvidersMacos.cpp returns no
+    # providers, which Player handles as a supported state rather than an
+    # error: every engine starts on NullBackend and only switches once a
+    # provider offers a device. macOS therefore builds and runs silently.
+    target_sources(ao_audio PRIVATE PlatformBackendProvidersMacos.cpp)
 else()
     message(FATAL_ERROR "ao_audio has no native backend for this platform.")
 endif()

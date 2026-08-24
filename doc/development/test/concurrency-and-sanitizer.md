@@ -58,9 +58,10 @@ selection and `--repeat` behavior.
 
 ## Sanitizer findings
 
-Run the full native AddressSanitizer gate on both supported hosts:
+Run the full native AddressSanitizer gate on each supported host:
 
 ```bash
+# Linux and macOS
 ./ao check --asan
 ```
 
@@ -68,21 +69,24 @@ Run the full native AddressSanitizer gate on both supported hosts:
 ao.bat check --asan
 ```
 
-Linux combines AddressSanitizer and UndefinedBehaviorSanitizer. Windows uses
-MSVC AddressSanitizer for Aobus translation units. Dependencies from the normal
-vcpkg triplet remain uninstrumented, so the Windows build disables MSVC STL
-container annotations at that binary boundary. MSVC provides neither
-UndefinedBehaviorSanitizer nor ThreadSanitizer, and resumable coroutine bodies
-are not fully instrumented. Windows `--tsan` therefore fails before
-configuration rather than silently running an unsanitized gate.
+Linux and macOS combine AddressSanitizer and UndefinedBehaviorSanitizer. The
+test portal preserves caller-supplied `UBSAN_OPTIONS` but forces
+`halt_on_error=1` and `print_stacktrace=1`, so an undefined-behavior report
+cannot leave the gate green. Windows uses MSVC AddressSanitizer for Aobus
+translation units. Dependencies from the normal vcpkg triplet remain
+uninstrumented, so the Windows build disables MSVC STL container annotations at
+that binary boundary. MSVC provides neither UndefinedBehaviorSanitizer nor
+ThreadSanitizer, and resumable coroutine bodies are not fully instrumented.
+Windows `--tsan` therefore fails before configuration rather than silently
+running an unsanitized gate.
 
-The green Linux TSan gate covers core and GTK:
+The green Linux TSan gate covers core and GTK; the macOS gate covers core:
 
 ```bash
 ./ao check --tsan
 ```
 
-The Nix GTK dependency closure is not TSan-instrumented, so TSan cannot observe its internal synchronization even though it observes calls into intercepted runtime functions.
+The Linux Nix GTK dependency closure is not TSan-instrumented, so TSan cannot observe its internal synchronization even though it observes calls into intercepted runtime functions.
 `script/ao/tsan.supp` treats the reviewed UI dependency modules as opaque by using only `called_from_lib` rules.
 Those rules ignore interceptor accesses originating in the named modules while leaving Aobus code instrumented, including Aobus callbacks entered from GTK.
 They are injected for every TSan run but are inert in binaries that do not load the named modules.

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <functional>
+#include <ao/compat/MoveOnlyFunction.h>
 
 namespace ao::async
 {
@@ -21,13 +21,13 @@ namespace ao::async
 
     // Thread-safe: run immediately when already on the owning thread; otherwise
     // enqueue and wake the executor's owning thread.
-    virtual void dispatch(std::move_only_function<void()> task) = 0;
+    virtual void dispatch(compat::MoveOnlyFunction<void()> task) = 0;
 
     // Always deferred: run in a later executor turn, even when already on the
     // owning thread. For a non-empty task, a normal return means the executor
     // accepted it. If this operation throws, the executor has not retained the
     // task and will not execute it.
-    virtual void defer(std::move_only_function<void()> task) = 0;
+    virtual void defer(compat::MoveOnlyFunction<void()> task) = 0;
 
   protected:
     Executor() = default;
