@@ -32,6 +32,9 @@ namespace ao::utility
 
     /**
      * @brief Maps the specified file into memory (read-only).
+     *
+     * A moved-from object is valid but unmapped; calling map() reinitializes
+     * its internal state and makes it usable again.
      * @param filePath The path to the file to map.
      * @return Result<>::ok() on success, or an error with message on failure.
      */

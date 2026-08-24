@@ -6,6 +6,7 @@
 #include <ao/Contract.h>
 #include <ao/compat/MoveOnlyFunction.h>
 
+#include <cstddef>
 #include <exception>
 #include <mutex>
 #include <thread>
@@ -14,6 +15,11 @@
 
 namespace ao::async
 {
+  namespace
+  {
+    constexpr std::size_t kMaxFinalDrainTurns = 1024;
+  } // namespace
+
   QueuedExecutorBase::QueuedExecutorBase()
     : _ownerThread{std::this_thread::get_id()}
   {
@@ -55,6 +61,31 @@ namespace ao::async
 
   void QueuedExecutorBase::drainQueuedTasks()
   {
+    drainQueuedTasksTurn(true);
+  }
+
+  void QueuedExecutorBase::drainQueuedTasksUntilIdle()
+  {
+    AO_EXPECTS(isCurrent());
+
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      AO_EXPECTS(!_draining, "Queued executor final drain cannot reenter an active callback turn");
+    }
+
+    for (std::size_t turn = 0; turn < kMaxFinalDrainTurns; ++turn)
+    {
+      if (!drainQueuedTasksTurn(false))
+      {
+        return;
+      }
+    }
+
+    AO_FATAL("Queued executor final drain did not reach quiescence after {} turns", kMaxFinalDrainTurns);
+  }
+
+  bool QueuedExecutorBase::drainQueuedTasksTurn(bool const wakeRemaining)
+  {
     AO_EXPECTS(isCurrent());
 
     {
@@ -62,7 +93,7 @@ namespace ao::async
 
       if (_draining)
       {
-        return;
+        return false;
       }
 
       _draining = true;
@@ -107,7 +138,7 @@ namespace ao::async
       shouldWake = _nextDrainTaskIndex < _drainTasks.size() || !_pendingTasks.empty();
     }
 
-    if (shouldWake)
+    if (shouldWake && wakeRemaining)
     {
       wake();
     }
@@ -116,6 +147,8 @@ namespace ao::async
     {
       AO_FATAL_EXCEPTION(std::move(taskException), "queued executor callback");
     }
+
+    return shouldWake;
   }
 
   void QueuedExecutorBase::enqueueAndWake(compat::MoveOnlyFunction<void()> task)

@@ -28,16 +28,17 @@ The exact common error vocabulary belongs to the [error value reference](../fail
 | Condition | Code |
 | --- | --- |
 | `.flac`, `.mp3`, or `.wav` extension with valid supported media | ready matching session value |
-| `.m4a` or `.mp4` with a valid supported `alac` sample entry | ready ALAC session value |
-| `.m4a` or `.mp4` with a valid supported `mp4a` sample entry | ready AAC session value |
-| supported MP4 extension cannot be mapped | `IoError` |
-| supported MP4 extension has no audio track | `NotSupported` |
+| `.m4a` with a valid supported `alac` sample entry | ready ALAC session value |
+| `.m4a` with a valid supported `mp4a` sample entry | ready AAC session value |
+| `.m4a` cannot be mapped | `IoError` |
+| `.m4a` has no audio track | `NotSupported` |
 | unsupported MP4 audio sample entry | `NotSupported` |
 | malformed MP4 structure encountered before audio-track selection | propagated `CorruptData` or `FormatRejected` |
 | selected decoder initialization fails | propagated `IoError`, `CorruptData`, or `FormatRejected`; codec `InitFailed`, `DecodeFailed`, or `NotSupported` |
 | unsupported extension | `NotSupported` |
 
 Extension matching is ASCII case-insensitive.
+The `.mp4` extension is unsupported; Aobus accepts MP4 audio only through the music-specific `.m4a` extension.
 MP4 route selection stops after the first usable audio track and does not validate unrelated later siblings.
 Construction initializes the selected concrete decoder before returning it; initialization failures are returned instead of publishing a partial session.
 WAV construction uses the RIFF parser's `RequiredAudio` extent and therefore does not surface malformed chunk boundaries after the first complete supported `fmt` and non-empty `data` pair.

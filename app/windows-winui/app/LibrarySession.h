@@ -47,6 +47,8 @@ namespace ao::uimodel
 
 namespace ao::winui
 {
+  class DispatcherQueueExecutor;
+
   struct LibrarySessionCallbacks final
   {
     std::function<void(std::string)> onStatus;
@@ -145,6 +147,7 @@ namespace ao::winui
     uimodel::KeymapModel _keymap{};
     std::optional<std::filesystem::path> _optSelectedRootCommit;
     std::unique_ptr<rt::AppRuntime> _runtimePtr;
+    DispatcherQueueExecutor* _dispatcherExecutor = nullptr;
     std::unique_ptr<uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
     std::unique_ptr<uimodel::ListPresentationPreferenceLifecycle> _presentationPreferenceLifecyclePtr;
     std::unique_ptr<uimodel::PlaybackCommandSurface> _playbackCommandsPtr;

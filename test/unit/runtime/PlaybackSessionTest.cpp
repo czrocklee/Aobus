@@ -5,6 +5,7 @@
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "runtime/playback/PlaybackCursorSession.h"
+#include "runtime/playback/ShuffleHistory.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -35,6 +36,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -596,6 +598,40 @@ namespace ao::rt::test
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
     }
+  }
+
+  TEST_CASE("PlaybackCursorSession - stale lookahead keeps a latched prepared winner resolvable",
+            "[runtime][regression][playback-session][token]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const firstTrackId = libraryFixture.addTrack("First");
+    auto const secondTrackId = libraryFixture.addTrack("Second");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto sources = TrackSourceCache{libraryFixture.library(), changes};
+    sources.reloadAllTracks();
+    auto sessionPtr = ao::test::requireValue(
+      PlaybackCursorSession::create(PlaybackLaunchSpec{.sourceListId = kAllTracksListId},
+                                    firstTrackId,
+                                    sources,
+                                    libraryFixture.library(),
+                                    RepeatMode::Off,
+                                    ShuffleMode::Off,
+                                    [](std::span<TrackId const> const candidates)
+                                    { return candidates.empty() ? kInvalidTrackId : candidates.front(); }));
+    auto const token = PreparedNextToken{.value = 17, .issuedGeneration = 3};
+    auto const anchor = sessionPtr->anchorFor(secondTrackId, sessionPtr->cursor().anchor().anchorIndex());
+
+    // A stale completion must register before attempting to disarm. If render
+    // already latched the token, invalidation retires it until natural advance.
+    sessionPtr->preparedNextRegistry().activate(token, anchor);
+    sessionPtr->invalidatePreparedNext(std::nullopt);
+
+    REQUIRE(sessionPtr->preparedNextRegistry().isRetired(token));
+    auto const adoptedRes = sessionPtr->adoptCurrent(secondTrackId, token, ShuffleHistory::TransitionOrigin::Forward);
+
+    REQUIRE(adoptedRes);
+    CHECK(sessionPtr->cursor().currentTrackId() == secondTrackId);
+    CHECK(sessionPtr->preparedNextRegistry().size() == 0);
   }
 
   TEST_CASE("PlaybackSession - schema v4 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")

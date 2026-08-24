@@ -31,12 +31,16 @@ namespace ao::async
     QueuedExecutorBase();
 
     void drainQueuedTasks();
+    // Final owner teardown only: foreign admission must already be sealed.
+    // Owner-thread continuations queued by drained callbacks are included.
+    void drainQueuedTasksUntilIdle();
 
   private:
+    bool drainQueuedTasksTurn(bool wakeRemaining);
     void enqueueAndWake(compat::MoveOnlyFunction<void()> task);
 
-    // Admission is complete before wake. Event-loop wake failures are fatal
-    // because an accepted task cannot be rolled back safely.
+    // Admission is complete before wake. Subclasses own event-loop rejection
+    // policy because an accepted task cannot be rolled back safely.
     virtual void wake() noexcept = 0;
     std::thread::id _ownerThread;
     std::mutex _mutex;

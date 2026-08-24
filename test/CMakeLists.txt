@@ -338,6 +338,7 @@ add_executable(ao_core_test
     unit/audio/detail/MappedFileCursorTest.cpp
     unit/audio/detail/Mp4PacketSourceTest.cpp
     unit/audio/detail/TimeConversionTest.cpp
+    unit/audio/AudioTimeTest.cpp
     unit/audio/detail/StreamingBufferPolicyTest.cpp
     unit/audio/DecoderErrorTest.cpp
     unit/audio/AacDecoderSessionTest.cpp
@@ -576,6 +577,7 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopOutputSelection.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopSettingsYamlSchema.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DestructiveLibraryRestart.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DispatcherQueueAdmission.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SelectedRootCommit.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutCatalog.cpp
@@ -592,6 +594,7 @@ add_executable(ao_core_test
     unit/winui/ThemeTest.cpp
     unit/winui/app/DesktopOutputSelectionTest.cpp
     unit/winui/app/DestructiveLibraryRestartTest.cpp
+    unit/winui/app/DispatcherQueueAdmissionTest.cpp
     unit/winui/app/SelectedRootCommitTest.cpp
     unit/winui/input/KeyChordAcceleratorTest.cpp
     unit/winui/input/KeymapAcceleratorPlanTest.cpp

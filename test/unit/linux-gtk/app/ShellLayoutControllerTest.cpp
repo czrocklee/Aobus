@@ -205,6 +205,41 @@ namespace ao::gtk::test
       CHECK(controller.editorDialog() != nullptr);
     }
 
+    SECTION("layout editor retirement is deferred beyond its hide callback")
+    {
+      auto const topLevelCount = Gtk::Window::list_toplevels().size();
+      controller.openEditor(*configStorePtr);
+      drainGtkEvents();
+      auto* const dialog = controller.editorDialog();
+      REQUIRE(dialog != nullptr);
+      REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+
+      dialog->hide();
+
+      CHECK(controller.editorDialog() == nullptr);
+      CHECK_FALSE(controller.runtimeState().editMode);
+      CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+
+      controller.openEditor(*configStorePtr);
+      auto* const replacementDialog = controller.editorDialog();
+      REQUIRE(replacementDialog != nullptr);
+      REQUIRE(replacementDialog != dialog);
+      REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount + 2);
+
+      ::g_signal_emit_by_name(dialog->gobj(), "hide");
+      CHECK(controller.editorDialog() == replacementDialog);
+      CHECK(controller.runtimeState().editMode);
+
+      drainGtkEvents();
+      CHECK(controller.editorDialog() == replacementDialog);
+      CHECK(controller.runtimeState().editMode);
+      CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+
+      replacementDialog->hide();
+      drainGtkEvents();
+      CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
+    }
+
     SECTION("Soul window retirement is deferred beyond the hide callback")
     {
       REQUIRE(controller.soulWindow() == nullptr);

@@ -55,7 +55,7 @@ namespace ao::audio
       return openConcreteSession<FlacDecoderSession>(filePath, optOutputEncoding);
     }
 
-    if (ext == ".m4a" || ext == ".mp4")
+    if (ext == ".m4a")
     {
       auto mappedFile = utility::MappedFile{};
 

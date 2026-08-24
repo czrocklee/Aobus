@@ -11,6 +11,11 @@ namespace ao::audio
   constexpr std::uint64_t durationToSamples(std::chrono::milliseconds const duration,
                                             std::uint32_t const sampleRate) noexcept
   {
+    if (duration.count() <= 0)
+    {
+      return 0;
+    }
+
     return (static_cast<std::uint64_t>(duration.count()) * sampleRate) / 1000U;
   }
 

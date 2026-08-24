@@ -140,6 +140,7 @@ namespace ao::rt::test
     {
     public:
       void drain() { drainQueuedTasks(); }
+      void finish() { drainQueuedTasksUntilIdle(); }
       std::atomic_uint32_t& wakeCount() noexcept { return _wakeCount; }
 
     private:
@@ -147,6 +148,11 @@ namespace ao::rt::test
 
       std::atomic_uint32_t _wakeCount{0};
     };
+
+    void enqueueFinalDrainContinuation(ProbeQueuedExecutor& executor)
+    {
+      executor.defer([&executor] { enqueueFinalDrainContinuation(executor); });
+    }
 
     class RejectingDeferExecutor final : public async::QueuedExecutorBase
     {
@@ -666,6 +672,20 @@ namespace ao::rt::test
       return 3;
     }
 
+    std::int32_t runQueuedExecutorFinalDrainLimit()
+    {
+      auto executor = ProbeQueuedExecutor{};
+
+      if (!registerFatalSink(probeFatalSink))
+      {
+        return 3;
+      }
+
+      enqueueFinalDrainContinuation(executor);
+      executor.finish();
+      return 3;
+    }
+
     std::int32_t runPlaybackPublicationAdmissionException(std::string_view const scratchName)
     {
       auto executorPtr = std::make_unique<RejectingDeferExecutor>();
@@ -988,6 +1008,11 @@ namespace ao::rt::test
     if (name == "queued-executor-callback-exception")
     {
       return runQueuedExecutorException();
+    }
+
+    if (name == "queued-executor-final-drain-limit")
+    {
+      return runQueuedExecutorFinalDrainLimit();
     }
 
     if (name == "playback-publication-admission-exception")

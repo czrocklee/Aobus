@@ -476,13 +476,26 @@ namespace ao::rt
         return preparedRes.error().code != Error::Code::Conflict && retryLookahead(std::move(pending));
       }
 
-      if (!isLookaheadCandidateCurrent(pending))
+      if (!sessionPtr)
       {
+        std::ignore = transport.clearPreparedNext();
         return false;
       }
 
-      sessionPtr->preparedNextRegistry().activate(
-        *preparedRes, sessionPtr->anchorFor(pending.trackId, sessionPtr->cursor().anchor().anchorIndex()));
+      auto& session = *sessionPtr;
+      session.preparedNextRegistry().activate(
+        *preparedRes, session.anchorFor(pending.trackId, session.cursor().anchor().anchorIndex()));
+
+      if (!isLookaheadCandidateCurrent(pending))
+      {
+        // Register before disarming: the render thread may already have
+        // latched this token. An exact disarm forgets it, while a missing
+        // acknowledgement retires the commitment until the winner arrives.
+        auto const optDisarmedToken = transport.clearPreparedNext();
+        session.invalidatePreparedNext(optDisarmedToken);
+        return false;
+      }
+
       return true;
     }
 

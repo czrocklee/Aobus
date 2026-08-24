@@ -29,6 +29,8 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   app/DestructiveLibraryRestart.cpp
   app/DesktopOutputSelection.cpp
   app/DesktopSettingsYamlSchema.cpp
+  app/DispatcherQueueAdmission.cpp
+  app/DispatcherQueueAdmission.h
   app/DispatcherQueueExecutor.cpp
   app/DispatcherQueueExecutor.h
   app/LibraryWindowSession.cpp

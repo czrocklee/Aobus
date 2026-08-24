@@ -256,6 +256,13 @@ namespace ao::winui
 
     _shutdown = true;
 
+    // Classify native wake rejection as expected before any cancellation path
+    // can publish its final dispatcher continuation.
+    if (_dispatcherExecutor != nullptr)
+    {
+      _dispatcherExecutor->beginClosing();
+    }
+
     // Invalidate every callback target before requesting cancellation. A task
     // or queued dispatcher continuation may still exist until the runtime joins,
     // but its weak lifetime token must already be dead.
@@ -277,8 +284,18 @@ namespace ao::winui
     _presentationPreferenceLifecyclePtr.reset();
     _presentationCatalogPtr.reset();
 
-    // AppRuntime::shutdown() requests stop and joins worker work before its
-    // stores and the session's dispatcher are destroyed.
+    // Stop and join every foreign producer while runtime callback consumers
+    // remain alive. The executor can then synchronously settle accepted work,
+    // including owner-thread continuations queued by that work, before those
+    // consumers are destroyed.
+    if (_runtimePtr != nullptr)
+    {
+      AO_INVARIANT(_dispatcherExecutor != nullptr);
+      _runtimePtr->shutdown();
+      _dispatcherExecutor->completeClosing();
+      _dispatcherExecutor = nullptr;
+    }
+
     _runtimePtr.reset();
   }
 
@@ -408,9 +425,11 @@ namespace ao::winui
 
   Result<std::unique_ptr<rt::AppRuntime>> LibrarySession::createRuntime(std::filesystem::path const& root)
   {
+    _dispatcherExecutor = nullptr;
     auto const paths = rt::LibraryPaths{root};
     auto workspaceStorePtr = std::make_unique<rt::ConfigStore>(paths.databasePath() / "workspace.yaml");
     auto executorPtr = std::make_unique<DispatcherQueueExecutor>(_dispatcher);
+    auto* const createdDispatcherExecutor = executorPtr.get();
 
     // A missing cache location is not a startup failure the way a missing state
     // root is: what lives there is derived, so the session opens without it and
@@ -445,6 +464,7 @@ namespace ao::winui
                    restoredRes.error().message);
     }
 
+    _dispatcherExecutor = createdDispatcherExecutor;
     return runtimePtr;
   }
 

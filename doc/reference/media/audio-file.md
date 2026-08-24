@@ -27,7 +27,7 @@ The public Core surface is `ao::media::file::File`, `Visitor`, and `PayloadView`
 | `.wav` | RIFF/WAVE | `Wav` |
 | `.opus` | Ogg Opus | `Opus` |
 
-Other paths are unsupported. In particular, ADTS `.aac`, literal `.alac`, images, and playlists are not recognized scan inputs. `.ogg` is also unrecognized: it names a container rather than a codec, and its common Vorbis payload has no reader, so accepting it would make scanning report errors for most real files. Opus is recognized only under its own `.opus` extension.
+Other paths are unsupported. In particular, `.mp4`, ADTS `.aac`, literal `.alac`, images, and playlists are not recognized scan inputs. `.m4a` is the only accepted MP4 audio extension. `.ogg` is also unrecognized: it names a container rather than a codec, and its common Vorbis payload has no reader, so accepting it would make scanning report errors for most real files. Opus is recognized only under its own `.opus` extension.
 
 ## Visitor surface and order
 

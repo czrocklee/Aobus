@@ -3,6 +3,8 @@
 
 #include <ao/async/LoopExecutor.h>
 
+#include <ao/async/QueuedExecutorBase.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <barrier>
@@ -14,6 +16,18 @@
 
 namespace ao::async::test
 {
+  namespace
+  {
+    class FinalDrainExecutor final : public QueuedExecutorBase
+    {
+    public:
+      void finish() { drainQueuedTasksUntilIdle(); }
+
+    private:
+      void wake() noexcept override {}
+    };
+  } // namespace
+
   TEST_CASE("LoopExecutor - owner dispatch runs inline", "[runtime][unit][async]")
   {
     auto executor = LoopExecutor{};
@@ -163,6 +177,30 @@ namespace ao::async::test
 
     CHECK(order == std::vector<int>{1, 2});
     REQUIRE(executor.runReadyTurn());
+    CHECK(order == std::vector<int>{1, 2, 3});
+  }
+
+  TEST_CASE("QueuedExecutorBase - final drain includes deferred continuations", "[runtime][unit][async][regression]")
+  {
+    auto executor = FinalDrainExecutor{};
+    auto order = std::vector<int>{};
+
+    executor.defer(
+      [&]
+      {
+        order.push_back(1);
+        executor.defer(
+          [&]
+          {
+            order.push_back(2);
+            executor.defer([&] { order.push_back(3); });
+          });
+      });
+
+    executor.finish();
+
+    CHECK(order == std::vector<int>{1, 2, 3});
+    executor.finish();
     CHECK(order == std::vector<int>{1, 2, 3});
   }
 } // namespace ao::async::test

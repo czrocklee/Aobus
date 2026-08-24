@@ -10,6 +10,7 @@
 #include <ao/Error.h>
 #include <ao/audio/SampleEncoding.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -62,26 +63,18 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("DecoderFactory - MP4 extension selects a ready AAC session", "[audio][unit][decoder]")
-  {
-    auto const fixture = requireAudioFixture("basic_metadata.m4a");
-    auto const mp4 = ao::test::TempFile{readFileBytes(fixture), ".mp4"};
-
-    auto sessionRes = openDecoderSession(mp4.path, SampleEncoding::Signed16Le);
-
-    REQUIRE(sessionRes);
-    REQUIRE(*sessionRes != nullptr);
-    CHECK((*sessionRes)->streamInfo().codec == AudioCodec::Aac);
-  }
-
   TEST_CASE("DecoderFactory - reports selection and initialization failures", "[audio][unit][decoder][error]")
   {
     SECTION("Unsupported extension")
     {
-      auto const result = openDecoderSession("song.ogg", SampleEncoding::Signed16Le);
+      for (auto const path : std::array<std::string_view, 2>{"song.ogg", "video.mp4"})
+      {
+        CAPTURE(path);
+        auto const result = openDecoderSession(path, SampleEncoding::Signed16Le);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+        REQUIRE_FALSE(result);
+        CHECK(result.error().code == Error::Code::NotSupported);
+      }
     }
 
     SECTION("Unrecognized MP4 audio codec")

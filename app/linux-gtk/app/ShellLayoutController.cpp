@@ -204,6 +204,7 @@ namespace ao::gtk
     , _themeCoordinator{requireThemeCoordinator(_dependencies)}
     , _callbackScope{[this]
                      {
+                       _queuedEditorDialogRetirementConnection.disconnect();
                        _queuedSoulWindowRetirementConnection.disconnect();
                        _queuedOpenEditorConnection.disconnect();
                      }}
@@ -257,6 +258,7 @@ namespace ao::gtk
   ShellLayoutController::~ShellLayoutController()
   {
     _callbackScope.close();
+    _queuedEditorDialogRetirementConnection.disconnect();
     _queuedSoulWindowRetirementConnection.disconnect();
     _soulWindowHideConnection.disconnect();
     _soulWindowRetirementQueued = false;
@@ -839,12 +841,26 @@ namespace ao::gtk
                                            { return this->handleEditorSaveRequested(result); });
 
     dialogRaw->signal_hide().connect(
-      [this]
+      [this, dialogRaw]
       {
+        if (_editorDialogPtr.get() != dialogRaw)
+        {
+          return;
+        }
+
         _runtimeState.editMode = false;
         _runtimeState.onNodeMoved = nullptr;
         _optEditorThemeToken.reset();
-        _editorDialogPtr.reset();
+        auto hiddenDialogPtr = std::exchange(_editorDialogPtr, {});
+        auto retireDialog =
+          _callbackScope.guard([hiddenDialogPtr = std::move(hiddenDialogPtr)] mutable { hiddenDialogPtr.reset(); });
+        _queuedEditorDialogRetirementConnection.disconnect();
+        _queuedEditorDialogRetirementConnection = Glib::signal_idle().connect(
+          [retireDialog = std::move(retireDialog)] mutable
+          {
+            retireDialog();
+            return false;
+          });
       });
 
     dialogRaw->signal_response().connect(

@@ -9,6 +9,7 @@
 #include <fstream>
 #include <ios>
 #include <string_view>
+#include <utility>
 
 namespace ao::utility::test
 {
@@ -56,6 +57,56 @@ namespace ao::utility::test
       CHECK(!result.has_value());
       CHECK(mappedFile.isMapped() == false);
       CHECK(mappedFile.bytes().empty() == true);
+    }
+
+    SECTION("Move construction leaves the source safe and reusable")
+    {
+      auto source = MappedFile{};
+      REQUIRE(source.map(testFilePath));
+
+      auto moved = MappedFile{std::move(source)};
+      REQUIRE(moved.isMapped());
+      auto const movedBytes = moved.bytes();
+      REQUIRE(movedBytes.size() == testContent.size());
+      CHECK(std::string_view{reinterpret_cast<char const*>(movedBytes.data()), movedBytes.size()} == testContent);
+
+      // NOLINTNEXTLINE(bugprone-use-after-move): Moved-from behavior is the contract under test.
+      CHECK(source.isMapped() == false);
+      CHECK(source.bytes().empty() == true);
+      source.unmap();
+      CHECK(source.isMapped() == false);
+
+      REQUIRE(source.map(testFilePath));
+      CHECK(source.isMapped() == true);
+      auto const reusedBytes = source.bytes();
+      REQUIRE(reusedBytes.size() == testContent.size());
+      CHECK(std::string_view{reinterpret_cast<char const*>(reusedBytes.data()), reusedBytes.size()} == testContent);
+    }
+
+    SECTION("Move assignment leaves the source safe and reusable")
+    {
+      auto source = MappedFile{};
+      REQUIRE(source.map(testFilePath));
+      auto target = MappedFile{};
+      REQUIRE(target.map(testFilePath));
+
+      target = std::move(source);
+      REQUIRE(target.isMapped());
+      auto const targetBytes = target.bytes();
+      REQUIRE(targetBytes.size() == testContent.size());
+      CHECK(std::string_view{reinterpret_cast<char const*>(targetBytes.data()), targetBytes.size()} == testContent);
+
+      // NOLINTNEXTLINE(bugprone-use-after-move): Moved-from behavior is the contract under test.
+      CHECK(source.isMapped() == false);
+      CHECK(source.bytes().empty() == true);
+      source.unmap();
+      CHECK(source.isMapped() == false);
+
+      REQUIRE(source.map(testFilePath));
+      CHECK(source.isMapped() == true);
+      auto const reusedBytes = source.bytes();
+      REQUIRE(reusedBytes.size() == testContent.size());
+      CHECK(std::string_view{reinterpret_cast<char const*>(reusedBytes.data()), reusedBytes.size()} == testContent);
     }
 
     std::filesystem::remove_all(tempDir);

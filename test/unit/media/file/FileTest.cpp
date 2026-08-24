@@ -51,6 +51,16 @@ namespace ao::media::file::test
       CHECK(fileRes.error().code == Error::Code::NotSupported);
     }
 
+    SECTION("video container extension")
+    {
+      auto const temp = TempFile{".mp4"};
+      CHECK_FALSE(File::isSupported(temp.path));
+
+      auto fileRes = File::open(temp.path);
+      REQUIRE_FALSE(fileRes);
+      CHECK(fileRes.error().code == Error::Code::NotSupported);
+    }
+
     SECTION("missing supported file")
     {
       auto fileRes = File::open("/tmp/aobus-missing-file.mp3");

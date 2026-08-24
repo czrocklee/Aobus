@@ -285,8 +285,7 @@ namespace ao::audio
 
     // Playback positions are measured from the first audible sample, which sits
     // at the timeline origin advanced past the pre-skip.
-    auto const requestedFrames = static_cast<std::int64_t>(
-      durationToSamples(std::max(offset, std::chrono::milliseconds{0}), media::opus::kDecodedSampleRate));
+    auto const requestedFrames = static_cast<std::int64_t>(durationToSamples(offset, media::opus::kDecodedSampleRate));
     auto const targetGranule = _implPtr->timeline.playbackStartGranule + requestedFrames;
     // Resuming on the page group that merely contains the target leaves the
     // decoder cold for the first block it emits. Aiming the search a pre-roll

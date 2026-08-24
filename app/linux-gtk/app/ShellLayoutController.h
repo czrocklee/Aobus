@@ -179,6 +179,7 @@ namespace ao::gtk
     ThemeCoordinator& _themeCoordinator;
     std::optional<ThemeRegistrationToken> _optEditorThemeToken;
     std::shared_ptr<layout::editor::LayoutEditorDialog> _editorDialogPtr;
+    sigc::scoped_connection _queuedEditorDialogRetirementConnection;
     async::LifetimeScope _tasks;
     ConfirmPromotionFn _confirmPromotionFn;
     std::unique_ptr<AobusSoulWindow> _soulWindowPtr;

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/DispatcherQueueAdmission.h"
 #include <ao/async/QueuedExecutorBase.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -23,6 +24,16 @@ namespace ao::winui
     DispatcherQueueExecutor(DispatcherQueueExecutor&&) = delete;
     DispatcherQueueExecutor& operator=(DispatcherQueueExecutor&&) = delete;
 
+    // Begin closure before stopping runtime producers. Closing still accepts
+    // their final publications even when the native queue rejects a wake.
+    void beginClosing() noexcept;
+    // Call after every foreign producer has joined and while runtime callback
+    // consumers are still alive.
+    void completeClosing() noexcept;
+
+    void dispatch(compat::MoveOnlyFunction<void()> task) override;
+    void defer(compat::MoveOnlyFunction<void()> task) override;
+
   private:
     struct DispatchState final
     {
@@ -31,6 +42,7 @@ namespace ao::winui
 
     void wake() noexcept override;
 
+    detail::DispatcherQueueAdmission _admission;
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     std::shared_ptr<DispatchState> _dispatchStatePtr;
   };

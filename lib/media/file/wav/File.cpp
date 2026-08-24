@@ -164,7 +164,7 @@ namespace ao::media::file::wav
       }
     }
 
-    void copyTextMetadata(detail::ContentBuilder& target, detail::ContentBuilder const& source)
+    void copyId3Content(detail::ContentBuilder& target, detail::ContentBuilder const& source)
     {
       auto const& metadata = source.metadata();
       auto copyText = [&target](std::string_view value, auto setter)
@@ -221,6 +221,11 @@ namespace ao::media::file::wav
       {
         target.metadata().movementTotal(metadata.movementTotal());
       }
+
+      for (auto const& picture : source.coverArt().entries())
+      {
+        target.coverArt().add(picture.type, picture.bytes);
+      }
     }
 
     bool hasValidSyncSafeSize(mpeg::id3v2::EncodedSize const& size) noexcept
@@ -254,7 +259,7 @@ namespace ao::media::file::wav
 
       if (auto optId3Builder = mpeg::id3v2::readFrames(*header, frames); optId3Builder)
       {
-        copyTextMetadata(builder, *optId3Builder);
+        copyId3Content(builder, *optId3Builder);
       }
     }
   } // namespace

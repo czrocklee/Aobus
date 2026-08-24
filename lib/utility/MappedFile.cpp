@@ -36,6 +36,11 @@ namespace ao::utility
 
   Result<> MappedFile::map(std::filesystem::path const& filePath)
   {
+    if (!_implPtr)
+    {
+      _implPtr = std::make_unique<Impl>();
+    }
+
     unmap();
 
     try
@@ -54,6 +59,11 @@ namespace ao::utility
 
   void MappedFile::unmap()
   {
+    if (!_implPtr)
+    {
+      return;
+    }
+
     _implPtr->isMapped = false;
     _implPtr->mappedRegion = boost::interprocess::mapped_region{};
     _implPtr->fileMapping = boost::interprocess::file_mapping{};
@@ -61,7 +71,7 @@ namespace ao::utility
 
   std::span<std::byte const> MappedFile::bytes() const
   {
-    if (!_implPtr->isMapped)
+    if (!_implPtr || !_implPtr->isMapped)
     {
       return {};
     }
@@ -71,6 +81,6 @@ namespace ao::utility
 
   bool MappedFile::isMapped() const
   {
-    return _implPtr->isMapped;
+    return _implPtr != nullptr && _implPtr->isMapped;
   }
 } // namespace ao::utility
