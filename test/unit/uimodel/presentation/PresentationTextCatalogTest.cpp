@@ -158,6 +158,13 @@ namespace ao::uimodel::test
     auto const wasapi = catalog.audioBackend(audio::kBackendWasapi);
     CHECK(wasapi.outputDeviceDescriptionFallback == "WASAPI render endpoint");
 
+    auto const coreAudio = catalog.audioBackend(audio::kBackendCoreAudio);
+    CHECK(coreAudio.label == "Core Audio");
+    CHECK(coreAudio.description == "macOS shared audio output through Core Audio");
+    CHECK(coreAudio.shortLabel == "Core Audio");
+    CHECK(coreAudio.outputDeviceDescriptionFallback == "Core Audio output device");
+    CHECK(coreAudio.iconKind == AudioIconKind::OutputDevice);
+
     auto const unknown = catalog.audioBackend(audio::BackendId{"extension-backend"});
     CHECK(unknown.label == "extension-backend");
     CHECK(unknown.shortLabel == "extension-backend");

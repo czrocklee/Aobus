@@ -115,6 +115,7 @@ namespace ao::audio::backend::test
 
     CHECK(packet.renderedFrames == 2);
     CHECK(packet.framesToRelease == 4);
+    CHECK(packet.positionFrames == 1);
     CHECK(packet.underrun);
     CHECK_FALSE(packet.drained);
 

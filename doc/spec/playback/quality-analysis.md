@@ -124,6 +124,16 @@ Software fallback applies gain in the PCM path and reports its current gain magn
 The analyzer classifies attenuation as software-volume intervention; any provider-reported gain above unity uses the amplification finding.
 The application volume state simultaneously changes its hardware-assisted observation, so frontend volume presentation no longer claims hardware control.
 
+### Core Audio route evidence
+
+The Core Audio shared backend publishes the exact client PCM stream separately
+from the device-side AUHAL signal description. That downstream description can
+prove resampling or channel/domain changes in the shared path, but it is not a
+direct-hardware endpoint claim. The per-instance AUHAL volume parameter is
+classified as software gain; non-unity gain or mute therefore invalidates
+bit-perfect and integer round-trip proof in the same way as other software
+volume intervention.
+
 ## Failure and cancellation
 
 Unknown or incomplete provider evidence is not an analyzer failure.
@@ -185,6 +195,7 @@ The architectural requirement that pipeline panels consume ordered assessments a
 - [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp) proves axes, findings, attribution, precision, verification, float conversion, and proof invalidation.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) proves merged-graph handling, generation gating, incomplete provider evidence, callback marshalling, and readiness.
 - [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication.
+- [`CoreAudioGraphTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioGraphTest.cpp) proves Core Audio client/device format separation and software-gain evidence.
 - [`PlaybackTransportOutputTest.cpp`](../../../test/unit/runtime/PlaybackTransportOutputTest.cpp) proves lower snapshot/event agreement and route-ready publication; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) proves public output/readiness/quality correlation.
 - [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, and headline precedence.
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) proves transport-aware aura and motion policy.

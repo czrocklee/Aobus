@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <ao/audio/RenderTarget.h>
+#include "backend/detail/AudioBackendRenderBuffer.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -16,6 +15,7 @@ namespace ao::audio::backend::detail
   {
     std::uint32_t renderedFrames = 0;
     std::uint32_t framesToRelease = 0;
+    std::uint32_t positionFrames = 0;
     bool underrun = false;
     bool drained = false;
   };
@@ -32,29 +32,16 @@ namespace ao::audio::backend::detail
                                                       std::size_t const bytesPerFrame,
                                                       RenderPcmResult const& result) noexcept
   {
-    if (bytesPerFrame == 0)
+    if (bytesPerFrame == 0 || (result.drained && result.bytesWritten < bytesPerFrame))
     {
       return {.drained = result.drained};
     }
 
-    auto const requestedFrames = static_cast<std::uint32_t>(buffer.size() / bytesPerFrame);
-    auto const renderedFrames =
-      static_cast<std::uint32_t>(std::min<std::size_t>(result.bytesWritten / bytesPerFrame, requestedFrames));
-
-    if (renderedFrames == 0 && result.drained)
-    {
-      return {.renderedFrames = 0, .framesToRelease = 0, .underrun = false, .drained = true};
-    }
-
-    if (renderedFrames < requestedFrames)
-    {
-      auto const renderedBytes = static_cast<std::size_t>(renderedFrames) * bytesPerFrame;
-      std::ranges::fill(buffer.subspan(renderedBytes), std::byte{0});
-    }
-
-    return {.renderedFrames = renderedFrames,
-            .framesToRelease = requestedFrames,
-            .underrun = renderedFrames < requestedFrames && !result.drained,
-            .drained = result.drained};
+    auto const prepared = prepareAudioBackendRenderBuffer(buffer, bytesPerFrame, result);
+    return {.renderedFrames = prepared.renderedFrames,
+            .framesToRelease = prepared.framesProvided,
+            .positionFrames = prepared.positionFrames,
+            .underrun = prepared.underrun,
+            .drained = prepared.drained};
   }
 } // namespace ao::audio::backend::detail

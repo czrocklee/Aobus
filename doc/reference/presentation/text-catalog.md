@@ -252,6 +252,7 @@ Node names, device names, track metadata, and external application names pass th
 | `pipewire` | PipeWire | Modern Linux audio server with low latency | PW | PipeWire | `AudioServer` |
 | `alsa` | ALSA | Advanced Linux Sound Architecture (Direct Hardware Access) | ALSA | empty | `OutputDevice` |
 | `wasapi` | WASAPI | Windows Audio Session API | WASAPI | WASAPI render endpoint | `OutputDevice` |
+| `coreaudio` | Core Audio | macOS shared audio output through Core Audio | Core Audio | Core Audio output device | `OutputDevice` |
 
 | Profile id | Label | Description |
 |---|---|---|

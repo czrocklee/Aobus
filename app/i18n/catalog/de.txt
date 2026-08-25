@@ -83,6 +83,8 @@ de:table {
     audio_backend_alsa_description { "Advanced Linux Sound Architecture (direkter Hardwarezugriff)" }
     audio_backend_wasapi_description { "Windows Audio Session API" }
     audio_backend_wasapi_output_fallback { "WASAPI-Wiedergabeendpunkt" }
+    audio_backend_coreaudio_description { "Gemeinsame macOS-Audioausgabe über Core Audio" }
+    audio_backend_coreaudio_output_fallback { "Core-Audio-Ausgabegerät" }
     audio_profile_shared { "Gemeinsam genutzter Modus" }
     audio_profile_shared_description { "Systemweite Mischung mit anderen Anwendungen" }
     audio_profile_exclusive { "Exklusiver Modus" }

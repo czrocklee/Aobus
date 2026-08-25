@@ -17,6 +17,7 @@ namespace ao::audio
   inline BackendId const kBackendPipeWire{"pipewire"};
   inline BackendId const kBackendAlsa{"alsa"};
   inline BackendId const kBackendWasapi{"wasapi"};
+  inline BackendId const kBackendCoreAudio{"coreaudio"};
 
   inline ProfileId const kProfileShared{"shared"};
   inline ProfileId const kProfileExclusive{"exclusive"};

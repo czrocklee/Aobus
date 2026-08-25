@@ -104,6 +104,8 @@ namespace ao::i18n::detail
     {.id = MessageId::AudioBackendAlsaDescription, .key = "audio_backend_alsa_description"},
     {.id = MessageId::AudioBackendWasapiDescription, .key = "audio_backend_wasapi_description"},
     {.id = MessageId::AudioBackendWasapiOutputFallback, .key = "audio_backend_wasapi_output_fallback"},
+    {.id = MessageId::AudioBackendCoreAudioDescription, .key = "audio_backend_coreaudio_description"},
+    {.id = MessageId::AudioBackendCoreAudioOutputFallback, .key = "audio_backend_coreaudio_output_fallback"},
     {.id = MessageId::AudioProfileShared, .key = "audio_profile_shared"},
     {.id = MessageId::AudioProfileSharedDescription, .key = "audio_profile_shared_description"},
     {.id = MessageId::AudioProfileExclusive, .key = "audio_profile_exclusive"},

@@ -440,7 +440,12 @@ class CompileCommandCoverageTest(unittest.TestCase):
 
     def test_macos_backend_source_is_incompatible_with_every_other_native_graph(self):
         root = Path("/repo")
-        source = root / "lib" / "audio" / "PlatformBackendProvidersMacos.cpp"
+        sources = (
+            root / "lib" / "audio" / "PlatformBackendProvidersMacos.cpp",
+            root / "lib" / "audio" / "backend" / "CoreAudioBackend.cpp",
+            root / "lib" / "audio" / "backend" / "detail" / "CoreFoundationString.cpp",
+            root / "test" / "unit" / "audio" / "backend" / "CoreAudioProviderTest.cpp",
+        )
 
         for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
             with self.subTest(profile=profile.name):
@@ -449,7 +454,9 @@ class CompileCommandCoverageTest(unittest.TestCase):
                     "platform_profile",
                     return_value=profile,
                 ):
-                    self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+                    for source in sources:
+                        with self.subTest(source=source):
+                            self.assertTrue(tidyengine._is_platform_incompatible(source, root))
 
     def test_foreign_frontends_are_incompatible_with_the_macos_native_graph(self):
         root = Path("/repo")

@@ -83,6 +83,8 @@ ja:table {
     audio_backend_alsa_description { "Advanced Linux Sound Architecture（直接ハードウェアアクセス）" }
     audio_backend_wasapi_description { "Windows Audio Session API" }
     audio_backend_wasapi_output_fallback { "WASAPI レンダリングエンドポイント" }
+    audio_backend_coreaudio_description { "Core Audio による macOS 共有オーディオ出力" }
+    audio_backend_coreaudio_output_fallback { "Core Audio 出力デバイス" }
     audio_profile_shared { "共有モード" }
     audio_profile_shared_description { "システム側で他のアプリケーションの音声とミキシング" }
     audio_profile_exclusive { "排他モード" }

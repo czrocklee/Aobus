@@ -356,7 +356,12 @@ add_executable(ao_core_test
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/PcmRingBufferTest.cpp
+    unit/audio/backend/detail/AudioBackendRenderBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
+    unit/audio/backend/detail/AudioBackendDrainTailTest.cpp
+    unit/audio/backend/detail/BackendDeviceRegistryTest.cpp
+    unit/audio/backend/detail/BackendGraphRegistryTest.cpp
+    unit/audio/backend/detail/CallbackFenceTest.cpp
     unit/audio/PcmConversionTest.cpp
     unit/audio/PlayerTest.cpp
     unit/audio/EngineDrainTest.cpp
@@ -654,6 +659,19 @@ if(LINUX)
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
   )
 endif()
+if(APPLE)
+  target_sources(ao_core_test PRIVATE
+    unit/audio/backend/CoreAudioBackendTest.cpp
+    unit/audio/backend/CoreAudioProviderTest.cpp
+    unit/audio/backend/detail/CoreAudioErrorTest.cpp
+    unit/audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
+    unit/audio/backend/detail/CoreAudioFormatTest.cpp
+    unit/audio/backend/detail/CoreAudioGraphTest.cpp
+    unit/audio/backend/detail/CoreAudioLatencyTest.cpp
+    unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
+    unit/audio/backend/detail/CoreFoundationStringTest.cpp
+  )
+endif()
 if(WIN32)
   add_executable(ao_detached_process_probe
     helper/DetachedProcessProbeWindows.cpp
@@ -745,6 +763,13 @@ target_link_libraries(ao_tui_test PRIVATE
 )
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
 
+if(APPLE)
+  target_sources(ao_tui_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/app/tui/AudioBackendBootstrap.cpp"
+    unit/tui/AudioBackendBootstrapTest.cpp
+  )
+endif()
+
 # ao_tui_bench: allocation-bound TUI render micro-benchmarks. EXCLUDE_FROM_ALL so
 # it is never built by the gate -- it links mimalloc to mirror the shipping
 # aobus-tui allocator, which would collide with the ASan/TSan interceptors that
@@ -799,6 +824,10 @@ endif()
 
 if(WIN32)
   target_sources(ao_integration_test PRIVATE integration/audio/backend/WasapiProviderTest.cpp)
+endif()
+
+if(APPLE)
+  target_sources(ao_integration_test PRIVATE integration/audio/backend/CoreAudioProviderTest.cpp)
 endif()
 
 # Not using add_test() here to keep it out of default 'ctest' runs, 

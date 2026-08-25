@@ -3,7 +3,6 @@
 
 #include "backend/WasapiSharedBackend.h"
 
-#include "backend/detail/AudioBackendRenderProgress.h"
 #include "backend/detail/WasapiFormat.h"
 #include "backend/detail/WasapiGraphRegistry.h"
 #include "backend/detail/WasapiRenderBuffer.h"
@@ -417,12 +416,9 @@ namespace ao::audio::backend
         renderTarget->handleUnderrun();
       }
 
-      auto const committedPositionFrames = detail::committedPositionFrames(
-        packet.renderedFrames, renderResult.positionFrameOffset, renderResult.positionFrames);
-
-      if (committedPositionFrames > 0)
+      if (packet.positionFrames > 0)
       {
-        renderTarget->handlePositionAdvanced(committedPositionFrames);
+        renderTarget->handlePositionAdvanced(packet.positionFrames);
       }
     }
 

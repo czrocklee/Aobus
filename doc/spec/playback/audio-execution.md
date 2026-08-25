@@ -333,10 +333,18 @@ An exact rate is required rather than a nearest match, both because the admissib
 A single `snd_pcm_hw_params()` applies the chosen mode, and the applied mode is read back and compared before the handle is published.
 Integer and float domain changes outside the documented bit-transparent output set are rejected.
 
-PipeWire and WASAPI negotiate a client stream in front of a graph that may resample, remix, or requantize without reporting a direct endpoint.
+PipeWire, WASAPI, and Core Audio negotiate a client stream in front of a graph that may resample, remix, or requantize without reporting a direct endpoint.
 They therefore offer only lossless client encodings and leave `ConfirmedEndpoint` absent, in both shared and exclusive mode.
 PipeWire shared mode offers only the first ordered lossless client encoding, while PipeWire exclusive mode retains the complete lossless candidate set and returns the negotiated client stream format.
 WASAPI shared mode selects the first ordered lossless client encoding and separately reports endpoint mix format in its graph.
+Core Audio shared mode tries the complete ordered lossless encoding set on a
+playback-only AUHAL output unit, reads the client stream description back, and
+accepts only an exact match. Its graph reports that client PCM stream and the
+separately read device-side AUHAL signal format. The latter is downstream route
+evidence, not a direct endpoint confirmation. Core Audio device selection uses
+the persistent device UID; the transient `AudioDeviceID` is resolved again for
+each open, and an explicit selection does not follow later system-default
+changes.
 Shared backends may convert after accepting that client
 stream, but their returned input mode must still be a member of the track's
 lossless candidate set rather than an unconditional echo of source metadata.
@@ -358,12 +366,21 @@ PipeWire closes its project-owned admission in the process callback and posts
 the native main-loop drained event back to the stream data loop, so the two
 Engine-facing producer calls cannot overlap; only an explicit start reopens
 admission.
+Core Audio stops calling `renderPcm` as soon as the AUHAL callback observes
+drain, fills the remainder and later callbacks with silence, and counts a
+conservative presentation tail from the device I/O buffer, safety offset,
+device and stream latency, plus AudioUnit latency. A non-realtime control worker
+closes callback admission, fences the last callback, stops AUHAL, and emits the
+single ordered drain completion after that silent tail.
 The target remains open, permitting stop/flush/start seek flows, while non-render route, property, and error callbacks remain protected by generation checks and the `close()` lifetime boundary.
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
 
 Volume and mute are Engine runtime state.
 A backend accepting properties before stream open caches and reapplies them when the stream becomes live.
+Core Audio applies both through the per-instance AUHAL linear-gain parameter;
+mute writes zero while preserving the cached volume to restore, and graph
+evidence classifies the gain as software rather than device hardware control.
 
 ### Shutdown
 

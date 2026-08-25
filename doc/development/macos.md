@@ -10,10 +10,18 @@ summary: Defines native macOS prerequisites, portal bootstrap, local state, supp
 ## Scope
 
 The native macOS profile supports development of the shared core libraries,
-CLI, FTXUI terminal application, and native tests. It does not provide a Cocoa
-or GTK desktop frontend, and it has no native audio backend. CLI and TUI
-commands therefore run, but playback has no provider and the TUI reports `--`
-for the backend.
+CLI, FTXUI terminal application, native tests, and shared-mode playback through
+Core Audio. It does not provide a Cocoa or GTK desktop frontend. The TUI uses
+the same interactive playback stack as the other native frontends and can play
+through any live Core Audio output device published by macOS.
+
+The Core Audio provider publishes concrete devices by their persistent Core
+Audio UID and orders the current system default first. Selecting that device is
+an explicit route: a later system-default change updates ordering but does not
+silently move an active or persisted selection. The backend uses the playback-
+only AUHAL output unit, disables input, and does not request microphone access.
+It uses the shared profile; macOS may resample, remap channels, or convert the
+lossless client PCM stream downstream of Aobus.
 
 The build targets macOS 14.0 or newer. The project-maintained validation host is
 macOS 15.7.9 on x86_64. The repository also defines an arm64 vcpkg triplet, but
@@ -128,9 +136,22 @@ optimizer-sensitive code also run `./ao check release`. Sanitizer-sensitive chan
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md) and
 run the relevant `--asan` or `--tsan` gate.
 
-The macOS `all` group is exactly core, TUI, CLI, integration, and lint. A
-passing gate does not claim GUI, audio, or the exact Python tooling contract.
-Linux and Windows remain required for those platform-specific contracts.
+The macOS `all` group is exactly core, TUI, CLI, integration, and lint. Its core
+suite opens the native AUHAL path and exercises a silent render/drain cycle on
+a live output when the host exposes one. A passing gate does not claim a GUI or
+the exact Python tooling contract. Linux and Windows remain required for those
+platform-specific contracts.
+
+Audio-backend changes also run the opt-in audible probe on a host where a short,
+quiet tone is acceptable:
+
+```bash
+./ao test --integration "[coreaudio][.manual]"
+```
+
+Then use `./ao run tui` with a local track to verify output selection,
+pause/resume, seek/flush, end-of-track drain, and device removal. The silent
+automated probe does not by itself claim audible hardware behavior.
 
 ## Troubleshooting
 
@@ -149,6 +170,12 @@ Linux and Windows remain required for those platform-specific contracts.
 - If a build tree appears under the SMB checkout, stop and choose a local
   `AOBUS_BUILD_ROOT`; network and case-insensitive filesystems are unsupported
   for generated state.
+- If the TUI lists no outputs, confirm that macOS shows a live output device in
+  Audio MIDI Setup. Aobus does not synthesize a default route when Core Audio
+  publishes no concrete device.
+- If a selected output disappears, choose one of the newly published concrete
+  devices. Aobus reports device loss and does not redirect the stream to a new
+  system default behind the user's selection.
 - macOS has no `timeout` command by default. Put command timeouts on the
   controlling host when operating the validation VM.
 - A cold vcpkg build is expected to be slow. Preserve `/tmp/build/...` and the

@@ -83,6 +83,8 @@ zh_Hant:table {
     audio_backend_alsa_description { "Advanced Linux Sound Architecture（直接存取硬體）" }
     audio_backend_wasapi_description { "Windows 音訊會話 API" }
     audio_backend_wasapi_output_fallback { "WASAPI 轉譯端點" }
+    audio_backend_coreaudio_description { "透過 Core Audio 的 macOS 共用音訊輸出" }
+    audio_backend_coreaudio_output_fallback { "Core Audio 輸出裝置" }
     audio_profile_shared { "共用模式" }
     audio_profile_shared_description { "由系統與其他應用程式進行混音" }
     audio_profile_exclusive { "獨佔模式" }

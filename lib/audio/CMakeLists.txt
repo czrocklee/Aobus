@@ -32,6 +32,11 @@ add_library(ao_audio STATIC
     StreamingSource.cpp
     detail/RouteTracker.cpp
     detail/TimeConversion.cpp
+    backend/detail/AudioBackendRenderBuffer.cpp
+    backend/detail/AudioBackendDrainTail.cpp
+    backend/detail/BackendDeviceRegistry.cpp
+    backend/detail/BackendGraphRegistry.cpp
+    backend/detail/CallbackFence.cpp
 )
 target_include_directories(ao_audio
     PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR}
@@ -69,11 +74,23 @@ elseif(LINUX)
     )
     target_link_libraries(ao_audio PRIVATE PkgALSA PkgPipeWire PkgUDEV)
 elseif(APPLE)
-    # No CoreAudio provider yet. PlatformBackendProvidersMacos.cpp returns no
-    # providers, which Player handles as a supported state rather than an
-    # error: every engine starts on NullBackend and only switches once a
-    # provider offers a device. macOS therefore builds and runs silently.
-    target_sources(ao_audio PRIVATE PlatformBackendProvidersMacos.cpp)
+    target_sources(ao_audio PRIVATE
+        PlatformBackendProvidersMacos.cpp
+        backend/CoreAudioBackend.cpp
+        backend/CoreAudioProvider.cpp
+        backend/detail/CoreAudioError.cpp
+        backend/detail/CoreAudioDeviceDiscovery.cpp
+        backend/detail/CoreAudioFormat.cpp
+        backend/detail/CoreAudioGraph.cpp
+        backend/detail/CoreAudioLatency.cpp
+        backend/detail/CoreAudioRenderBuffer.cpp
+        backend/detail/CoreFoundationString.cpp
+    )
+    target_link_libraries(ao_audio PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreAudio"
+        "-framework CoreFoundation"
+    )
 else()
     message(FATAL_ERROR "ao_audio has no native backend for this platform.")
 endif()

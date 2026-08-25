@@ -146,7 +146,7 @@ GTK maps the semantic kind to a symbolic icon and TUI remains free to select ter
 It consumes runtime snapshots and commands and does not construct Player, Engine, decoder, backend, or library-source state.
 
 Frontend composition calls `createPlatformBackendProviders()` and transfers its fresh owning provider values to `AppRuntime`.
-Core audio owns the platform-specific provider set and preference order: Linux returns PipeWire before ALSA, while Windows returns WASAPI.
+Core audio owns the platform-specific provider set and preference order: Linux returns PipeWire before ALSA, Windows returns WASAPI, and macOS returns Core Audio.
 This keeps frontend composition independent of concrete provider types and gives every interactive frontend the same native fallback policy.
 Frontend widgets and platform endpoints issue runtime/UIModel commands and render observations; they do not calculate succession or call audio control-plane objects directly.
 

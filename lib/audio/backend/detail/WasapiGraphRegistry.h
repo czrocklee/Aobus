@@ -60,9 +60,7 @@ namespace ao::audio::backend::detail
      * @param callback The function to invoke whenever the graph changes.
      * @return A Subscription that removes the callback on destruction.
      *
-     * The returned subscription must be reset before this registry is
-     * destroyed. A callback must not synchronously destroy the registry; defer
-     * owner teardown until after publication returns.
+     * The returned subscription may safely outlive this registry.
      */
     Subscription subscribe(std::string_view routeAnchor, Callback callback);
 

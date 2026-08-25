@@ -150,4 +150,42 @@ namespace ao::tui::test
     CHECK(controller.selectRow(2));
     CHECK(controller.selectedRow() == 2);
   }
+
+  TEST_CASE("OutputDeviceController - presents Core Audio shared outputs",
+            "[tui][unit][output][coreaudio]")
+  {
+    auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
+    fixture.status.descriptor.id = audio::kBackendCoreAudio;
+    fixture.status.devices = {
+      audio::Device{.id = audio::DeviceId{"coreaudio-device"},
+                    .displayName = "Built-in Output",
+                    .description = "Apple Inc.",
+                    .isDefault = true,
+                    .backendId = audio::kBackendCoreAudio},
+    };
+    fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto controllerPlayback = ControllerPlayback{fixture};
+    auto optRecorded = std::optional<audio::OutputDeviceSelection>{};
+    auto controller = OutputDeviceController{
+      controllerPlayback.playback,
+      ao::test::englishPresentationTextCatalog(),
+      uimodel::OutputDeviceIntent::recordedBy([&optRecorded](audio::OutputDeviceSelection const& selection)
+                                              { optRecorded = selection; })};
+    REQUIRE(controller.selectRow(1));
+
+    auto const& view = controller.viewState();
+    REQUIRE(view.rows.size() == 2U);
+    CHECK(view.rows[0].kind == uimodel::OutputDeviceRow::Kind::BackendHeader);
+    CHECK(view.rows[0].title == "Core Audio");
+    CHECK(view.rows[1].backendId == audio::kBackendCoreAudio);
+    CHECK(view.rows[1].deviceId == audio::DeviceId{"coreaudio-device"});
+    CHECK(view.rows[1].profileId == audio::kProfileShared);
+    CHECK(view.rows[1].title == "Built-in Output");
+    CHECK(view.rows[1].description == "Apple Inc.");
+    REQUIRE(optRecorded);
+    CHECK(optRecorded->backendId == audio::kBackendCoreAudio);
+    CHECK(optRecorded->deviceId == audio::DeviceId{"coreaudio-device"});
+    CHECK(optRecorded->profileId == audio::kProfileShared);
+  }
 } // namespace ao::tui::test

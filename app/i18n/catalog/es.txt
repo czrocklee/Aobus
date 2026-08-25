@@ -83,6 +83,8 @@ es:table {
     audio_backend_alsa_description { "Arquitectura de sonido avanzada para Linux (acceso directo a hardware)" }
     audio_backend_wasapi_description { "API de sesión de audio de Windows" }
     audio_backend_wasapi_output_fallback { "Punto de conexión de representación WASAPI" }
+    audio_backend_coreaudio_description { "Salida de audio compartida de macOS mediante Core Audio" }
+    audio_backend_coreaudio_output_fallback { "Dispositivo de salida Core Audio" }
     audio_profile_shared { "Modo compartido" }
     audio_profile_shared_description { "Mezcla a nivel del sistema con otras aplicaciones" }
     audio_profile_exclusive { "Modo exclusivo" }

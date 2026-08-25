@@ -101,6 +101,8 @@ namespace ao::i18n
     AudioBackendAlsaDescription,
     AudioBackendWasapiDescription,
     AudioBackendWasapiOutputFallback,
+    AudioBackendCoreAudioDescription,
+    AudioBackendCoreAudioOutputFallback,
     AudioProfileShared,
     AudioProfileSharedDescription,
     AudioProfileExclusive,

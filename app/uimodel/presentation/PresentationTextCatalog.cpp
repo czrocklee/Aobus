@@ -258,6 +258,17 @@ namespace ao::uimodel
       };
     }
 
+    if (id == audio::kBackendCoreAudio)
+    {
+      return AudioBackendPresentation{
+        .label = "Core Audio",
+        .description = std::string{text(MessageId::AudioBackendCoreAudioDescription)},
+        .shortLabel = "Core Audio",
+        .outputDeviceDescriptionFallback = std::string{text(MessageId::AudioBackendCoreAudioOutputFallback)},
+        .iconKind = AudioIconKind::OutputDevice,
+      };
+    }
+
     auto const& fallback = id.raw();
     return AudioBackendPresentation{.label = std::string{fallback}, .shortLabel = std::string{fallback}};
   }
