@@ -195,6 +195,42 @@ namespace ao::rt::test
       void defer(compat::MoveOnlyFunction<void()> /*task*/) override {}
     };
 
+    class ClosingRaceRejectingExecutor final : public async::Executor
+    {
+    public:
+      bool isCurrent() const noexcept override { return true; }
+
+      void dispatch(compat::MoveOnlyFunction<void()> /*task*/) override
+      {
+        auto lock = std::unique_lock{_mutex};
+        _dispatchStarted = true;
+        _cv.notify_all();
+        _cv.wait(lock, [this] { return _releaseRejection; });
+        throw std::runtime_error{"probe control-delivery rejection"};
+      }
+
+      void defer(compat::MoveOnlyFunction<void()> task) override { task(); }
+
+      bool waitUntilDispatchStarted()
+      {
+        auto lock = std::unique_lock{_mutex};
+        return _cv.wait_for(lock, std::chrono::seconds{5}, [this] { return _dispatchStarted; });
+      }
+
+      void releaseRejection()
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _releaseRejection = true;
+        _cv.notify_all();
+      }
+
+    private:
+      std::mutex _mutex;
+      std::condition_variable _cv;
+      bool _dispatchStarted = false;
+      bool _releaseRejection = false;
+    };
+
     class ThrowingVolumeArm final
     {
     public:
@@ -455,14 +491,15 @@ namespace ao::rt::test
         return 3;
       }
 
-      auto immediateExecutor = ImmediateProbeExecutor{};
+      auto callbackExecutor = async::LoopExecutor{};
       auto rejectingExecutor = RejectingPublicationExecutor{};
       auto& executor = phase == PublicationFailurePhase::Admission ? static_cast<async::Executor&>(rejectingExecutor)
-                                                                   : static_cast<async::Executor&>(immediateExecutor);
+                                                                   : static_cast<async::Executor&>(callbackExecutor);
       auto transaction = musicLibrary.readTransaction();
       auto changes =
         LibraryChanges{executor, musicLibrary.libraryRevision(transaction), utility::pathToUtf8(databasePath)};
-      auto mutationService = LibraryMutationService{executor, std::move(*writableRes), changes};
+      auto asyncRuntime = async::Runtime{executor, 1};
+      auto mutationService = LibraryMutationService{asyncRuntime.callbackExecutor(), std::move(*writableRes), changes};
       auto replicaBinding = changes.bindReplica("ProbeReplica",
                                                 [phase](LibraryChangeSet const&)
                                                 {
@@ -487,15 +524,28 @@ namespace ao::rt::test
             throw std::runtime_error{"probe publication completion exception"};
           }
         });
-      auto mutationRes = mutationService.beginInteractiveMutation();
-
-      if (!mutationRes)
+      auto submission = mutationService.captureSubmission();
+      auto task = [](LibraryMutationService::Submission submission) -> async::Task<void>
       {
-        return 3;
+        auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
+
+        if (!mutationRes)
+        {
+          co_return;
+        }
+
+        std::ignore =
+          co_await mutationRes->executeAsync([](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                             { return Changed<std::uint8_t>{.value = 1, .changeSet = {}}; });
+      }(std::move(submission));
+      auto future = asyncRuntime.spawn(std::move(task));
+
+      if (phase != PublicationFailurePhase::Admission)
+      {
+        callbackExecutor.runOneTurn();
       }
 
-      std::ignore = mutationRes->execute([](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
-                                         { return Changed<std::uint8_t>{.value = 1, .changeSet = {}}; });
+      future.get();
       return 3;
     }
 
@@ -527,32 +577,38 @@ namespace ao::rt::test
       auto executor = ImmediateProbeExecutor{};
       auto transaction = libraryRes->readTransaction();
       auto changes = LibraryChanges{executor, libraryRes->libraryRevision(transaction), "mutation-execute-probe"};
-      auto mutationService = LibraryMutationService{executor, std::move(*writableRes), changes};
-      auto mutationRes = mutationService.beginInteractiveMutation();
-
-      if (!mutationRes)
+      auto asyncRuntime = async::Runtime{executor, 1};
+      auto mutationService = LibraryMutationService{asyncRuntime.callbackExecutor(), std::move(*writableRes), changes};
+      auto submission = mutationService.captureSubmission();
+      auto task = [](LibraryMutationService::Submission submission, bool const applyFirst) -> async::Task<void>
       {
-        return 3;
-      }
+        auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
 
-      if (applyFirst)
-      {
-        auto applyRes = mutationRes->apply([](library::LibraryWrite&) -> Result<> { return {}; });
-
-        if (!applyRes)
+        if (!mutationRes)
         {
-          return 3;
+          co_return;
         }
-      }
 
-      std::ignore = mutationRes->execute(
-        [applyFirst](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+        if (applyFirst)
         {
-          return Changed<std::uint8_t>{
-            .value = 1,
-            .changeSet = LibraryChangeSet{.libraryRevision = applyFirst ? 0U : 1U},
-          };
-        });
+          auto applyRes = mutationRes->apply([](library::LibraryWrite&) -> Result<> { return {}; });
+
+          if (!applyRes)
+          {
+            co_return;
+          }
+        }
+
+        std::ignore = co_await mutationRes->executeAsync(
+          [applyFirst](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+          {
+            return Changed<std::uint8_t>{
+              .value = 1,
+              .changeSet = LibraryChangeSet{.libraryRevision = applyFirst ? 0U : 1U},
+            };
+          });
+      }(std::move(submission), applyFirst);
+      asyncRuntime.spawn(std::move(task)).get();
       return 3;
     }
 
@@ -560,6 +616,111 @@ namespace ao::rt::test
     {
       detail::requireMatchingPublicationCompletion(false, 1, 1, "slice-h-publication-library", "ProbeReplica");
       return 3;
+    }
+
+    std::int32_t runControlDeliveryClosingRace(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes =
+        library::MusicLibrary::open(scratchPath,
+                                    scratchPath / "db",
+                                    library::MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        return 3;
+      }
+
+      auto writableRes = library::WritableMusicLibrary::acquire(*libraryRes);
+
+      if (!writableRes)
+      {
+        return 3;
+      }
+
+      auto executor = ClosingRaceRejectingExecutor{};
+      auto transaction = libraryRes->readTransaction();
+      auto changes = LibraryChanges{executor, libraryRes->libraryRevision(transaction), "control-delivery-close-probe"};
+      auto asyncRuntime = async::Runtime{executor, 1};
+      auto probeRuntime = async::Runtime{executor, 1};
+      auto servicePtr =
+        std::make_unique<LibraryMutationService>(asyncRuntime.callbackExecutor(), std::move(*writableRes), changes);
+      auto* const service = servicePtr.get();
+      auto backgroundTaskRes = service->beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::Import);
+
+      if (!backgroundTaskRes)
+      {
+        return 3;
+      }
+
+      auto backgroundTask = std::move(*backgroundTaskRes);
+      auto const probeSubmission = service->captureSubmission();
+      constexpr std::size_t kProbeAttemptCount = 32;
+      bool closingObserved = false;
+
+      auto task = [](LibraryMutationService::Submission submission) -> async::Task<void>
+      {
+        auto guardRes = co_await LibraryMutationService::beginMaintenanceAsync(std::move(submission));
+
+        if (guardRes)
+        {
+          co_await guardRes->finishAsync();
+        }
+      }(service->captureSubmission());
+      auto future = asyncRuntime.spawn(std::move(task));
+
+      if (!executor.waitUntilDispatchStarted())
+      {
+        executor.releaseRejection();
+        return 3;
+      }
+
+      {
+        auto coordinator = std::jthread{
+          [&]
+          {
+            for (std::size_t attempt = 0; attempt < kProbeAttemptCount; ++attempt)
+            {
+              auto probeFuture = probeRuntime.spawn(
+                LibraryMutationService::beginBackgroundMutationAsync(probeSubmission, backgroundTask));
+
+              if (auto probeRes = probeFuture.get(); !probeRes && probeRes.error().message.contains("while closing"))
+              {
+                closingObserved = true;
+                break;
+              }
+
+              std::this_thread::yield();
+            }
+
+            executor.releaseRejection();
+          }};
+
+        servicePtr.reset();
+      }
+
+      bool cancelled = false;
+
+      try
+      {
+        future.get();
+      }
+      catch (async::OperationCancelled const&)
+      {
+        cancelled = true;
+      }
+
+      return closingObserved && cancelled && servicePtr == nullptr ? 0 : 3;
+    }
+
+    std::int32_t runEmptyExceptionRethrow()
+    {
+      async::rethrowException({});
     }
 
     std::int32_t runSpawnLoggedException()
@@ -1047,6 +1208,11 @@ namespace ao::rt::test
       return runLibraryPublicationCompletionAckFailure();
     }
 
+    if (name == "library-control-delivery-closing-race")
+    {
+      return runControlDeliveryClosingRace(scratchName);
+    }
+
     if (name == "library-mutation-execute-after-apply")
     {
       return runLibraryMutationExecuteContract(scratchName, true);
@@ -1055,6 +1221,11 @@ namespace ao::rt::test
     if (name == "library-mutation-prestamped-changeset")
     {
       return runLibraryMutationExecuteContract(scratchName, false);
+    }
+
+    if (name == "operation-cancelled-empty-rethrow")
+    {
+      return runEmptyExceptionRethrow();
     }
 
     if (name == "runtime-spawn-logged-exception")

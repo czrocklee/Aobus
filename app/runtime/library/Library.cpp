@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
@@ -43,7 +44,7 @@ namespace ao::rt
       : storage{libraryStorage}
       , changeBus{changes}
       , mutationService{asyncRuntime.callbackExecutor(), std::move(writableStorage), changes}
-      , writer{libraryStorage, mutationService}
+      , writer{libraryStorage, mutationService, asyncRuntime}
       , taskService{asyncRuntime, libraryStorage, mutationService, std::move(cacheDirectory)}
     {
     }
@@ -107,33 +108,34 @@ namespace ao::rt
     return _implPtr->taskService;
   }
 
-  Result<ListId> Library::createList(LibraryListDraft const& draft)
+  async::Task<Result<ListId>> Library::createList(ListDraft draft)
   {
-    return _implPtr->writer.createList(draft);
+    return _implPtr->writer.createList(std::move(draft));
   }
 
-  Result<UpdateListReply> Library::updateList(LibraryListDraft const& draft)
+  async::Task<Result<UpdateListReply>> Library::updateList(ListDraft draft)
   {
-    return _implPtr->writer.updateList(draft);
+    return _implPtr->writer.updateList(std::move(draft));
   }
 
-  Result<DeleteListReply> Library::deleteList(ListId const listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> Library::deleteList(ListId const listId, DeleteListOptions const options)
   {
     return _implPtr->writer.deleteList(listId, options);
   }
 
-  Result<DeleteListReply> Library::previewDeleteList(ListId const listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> Library::previewDeleteList(ListId const listId, DeleteListOptions const options)
   {
     return _implPtr->writer.previewDeleteList(listId, options);
   }
 
-  Result<DeleteListSubtreeReply> Library::deleteListAndDescendants(ListId const listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListSubtreeReply>> Library::deleteListAndDescendants(ListId const listId,
+                                                                                DeleteListOptions const options)
   {
     return _implPtr->writer.deleteListAndDescendants(listId, options);
   }
 
-  Result<DeleteListSubtreeReply> Library::previewDeleteListAndDescendants(ListId const listId,
-                                                                          DeleteListOptions const options)
+  async::Task<Result<DeleteListSubtreeReply>> Library::previewDeleteListAndDescendants(ListId const listId,
+                                                                                       DeleteListOptions const options)
   {
     return _implPtr->writer.previewDeleteListAndDescendants(listId, options);
   }

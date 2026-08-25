@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/AppDialog.h"
+#include "common/MainContextCallbackScope.h"
 #include "i18n/GtkTextCatalog.h"
 #include "list/QueryExpressionBox.h"
 #include <ao/CoreIds.h>
@@ -23,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace Gtk
 {
@@ -73,7 +75,7 @@ namespace ao::gtk
     ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
-    rt::LibraryListDraft draft() const;
+    rt::ListDraft draft() const;
 
     // Returns the selected presentation ID. Auto is resolved to a concrete ID.
     std::string presentationId() const;
@@ -81,6 +83,14 @@ namespace ao::gtk
     void configurePlaylistTemplate(std::string_view initialName = {}, std::string_view initialTag = {});
     void setLocalExpression(std::string_view expression);
     void showError(std::string_view message);
+    bool beginSubmission();
+    void completeSubmission();
+
+    template<typename Callback>
+    auto guardPresentationCallback(Callback callback) const
+    {
+      return _presentationCallbacks.guard(std::move(callback));
+    }
 
   private:
     void buildUi();
@@ -129,5 +139,7 @@ namespace ao::gtk
     bool _playlistTemplate = false;
     bool _membershipTagEdited = false;
     bool _syncingMembershipTag = false;
+    bool _submissionPending = false;
+    MainContextCallbackScope _presentationCallbacks;
   };
 } // namespace ao::gtk

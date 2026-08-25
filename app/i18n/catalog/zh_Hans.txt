@@ -108,6 +108,7 @@ zh_Hans:table {
     notification_grouped_info { "{count, plural, one {# 条通知} other {# 条通知}}" }
     notification_grouped_warning { "{count, plural, one {# 条警告} other {# 条警告}}" }
     notification_grouped_error { "{count, plural, one {# 个错误} other {# 个错误}}" }
+    library_busy_try_again { "音乐库正忙。请重试。" }
     library_task_scanning { "扫描中" }
     library_task_updating { "更新中" }
     library_task_fingerprinting { "提取音频指纹中" }

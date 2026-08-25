@@ -41,6 +41,16 @@ struct OptionalOwner
 OptionalOwner makeOwner();
 void acceptBool(bool value);
 
+template<typename... Values>
+void acceptGeneric(
+  // NEGATIVE
+  Values... values)
+{
+  // NEGATIVE
+  auto callback = [... values = values] {};
+  callback();
+}
+
 void testHasValueUsage(OptionalOwner const& owner, std::optional<int> const& optParameter)
 {
   auto optLocal = std::optional<int>{42};
@@ -126,4 +136,6 @@ void testHasValueUsage(OptionalOwner const& owner, std::optional<int> const& opt
   if (PASSTHROUGH(static_cast<bool>(optLocal)))
   {
   }
+
+  acceptGeneric(std::optional<int>{42});
 }

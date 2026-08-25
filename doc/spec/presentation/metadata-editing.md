@@ -62,11 +62,11 @@ The field-grid schema divides supported definitions into metadata, composite met
 Visibility policy depends on category enablement, selection, section expansion, show-empty state, editor activity, and current display text.
 
 `TrackAuthoringSession` exposes only whether its retained binding is current and a one-shot invalidation observation.
-It has no public submission lifecycle: submission is synchronous, and frontends only need to know whether another command may use the same binding.
+Submission is asynchronous, and one session admits at most one pending command; another submission receives non-terminal `Busy` without replacing the retained draft or binding.
 Beginning a session binds its explicit targets and immediately reconciles current runtime availability after subscribing, closing the bind-to-subscribe event gap.
 During its own submission, the session defers availability invalidation until the runtime result supplies the next binding.
 An applied submission replaces the retained binding with that next-revision binding; a later effective commit invalidates it.
-Operational failure, stale or unavailable status, or mismatched post-submit availability also invalidates it.
+Operational failure, stale or unavailable status, maintenance observed during submission, or mismatched post-submit availability also invalidates it.
 
 ## Commands and transitions
 
@@ -74,7 +74,7 @@ Operational failure, stale or unavailable status, or mismatched post-submit avai
 
 The frontend decodes edit text through the shared field codec and creates a typed `MetadataPatch`.
 Applying the patch through the retained authoring session updates the complete bound target set or none of it.
-The result is `Applied`, `NoOp`, `Stale`, or `Unavailable`; `Result` errors remain operational or validation failures.
+The result is `Applied`, `NoOp`, `Busy`, `Stale`, or `Unavailable`; `Result` errors remain operational or validation failures.
 An empty metadata display value remains hidden by default unless show-empty is active or its editor is open.
 
 ### Custom metadata
@@ -91,7 +91,7 @@ Any intervening effective commit makes undo stale instead of overwriting newer w
 ### Tags
 
 `applyTagEdit()` submits additions/removals through the targets already bound to its `TrackAuthoringSession`; it does not copy or rebind a second selected-id set.
-Its result reuses `TrackAuthoringStatus` and carries display text only when the frontend has something to report.
+Its result reuses `AuthoringStatus` and carries display text only when the frontend has something to report.
 Suggested tags are a presentation aid; only the final add/remove command is authoritative.
 
 GTK adapts the shared tag-frequency result before applying its visible limit:

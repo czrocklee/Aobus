@@ -16,6 +16,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -72,8 +73,8 @@ namespace ao::rt::test
       {
         auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
         audio::test::installAudioFixture(application.libraryFixture.root(), "basic_metadata.flac", playableUri);
-        auto const created =
-          ao::test::requireValue(writer().createTrackFromFile(application.libraryFixture.root() / playableUri));
+        auto const created = ao::test::requireValue(application.writerFixture.runTask(
+          writer().createTrackFromFile(application.libraryFixture.root() / playableUri)));
 
         if constexpr (requires { application.executor.drain(); })
         {
@@ -97,9 +98,8 @@ namespace ao::rt::test
         secondTrackId = addPlayableTrack("Second");
         thirdTrackId = addPlayableTrack("Third");
         application.sources.reloadAllTracks();
-        listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
-          .name = "Playback order",
-        }));
+        listId = ao::test::requireValue(
+          application.writerFixture.runTask(writer().createList(ListDraft{.name = "Playback order"})));
         viewId = ao::test::requireValue(application.workspace.navigate({.target = listId}));
         application.addReadyProvider();
         application.executor.drain();

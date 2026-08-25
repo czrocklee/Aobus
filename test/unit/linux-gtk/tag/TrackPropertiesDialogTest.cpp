@@ -3,6 +3,7 @@
 
 #include "tag/TrackPropertiesDialog.h"
 
+#include "app/AppDialog.h"
 #include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -18,6 +19,7 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/dialog.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/label.h>
 #include <gtkmm/window.h>
@@ -77,8 +79,13 @@ namespace ao::gtk::test
 
     SECTION("dialog creation and data loading")
     {
-      auto dialog = TrackPropertiesDialog{
-        window, runtime.library(), runtime.completion(), ao::test::englishPresentationTextCatalog(), cache, {trackId1}};
+      auto dialog = TrackPropertiesDialog{window,
+                                          runtime.async(),
+                                          runtime.library(),
+                                          runtime.completion(),
+                                          ao::test::englishPresentationTextCatalog(),
+                                          cache,
+                                          {trackId1}};
       drainGtkEvents();
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
@@ -101,7 +108,7 @@ namespace ao::gtk::test
     {
       auto const& textCatalog = ao::test::englishPresentationTextCatalog();
       auto dialog = TrackPropertiesDialog{
-        window, runtime.library(), runtime.completion(), textCatalog, cache, {trackId1, trackId2}};
+        window, runtime.async(), runtime.library(), runtime.completion(), textCatalog, cache, {trackId1, trackId2}};
       drainGtkEvents();
 
       CHECK(dialog.get_title() == "Properties — 2 tracks selected");
@@ -118,6 +125,7 @@ namespace ao::gtk::test
     SECTION("missing authoring targets show why editing is unavailable")
     {
       auto dialog = TrackPropertiesDialog{window,
+                                          runtime.async(),
                                           runtime.library(),
                                           runtime.completion(),
                                           ao::test::englishPresentationTextCatalog(),
@@ -134,6 +142,50 @@ namespace ao::gtk::test
       auto* const saveButton = findButtonByLabel(dialog, "Save");
       REQUIRE(saveButton != nullptr);
       CHECK_FALSE(saveButton->get_sensitive());
+    }
+
+    SECTION("a busy save tells the user to retry")
+    {
+      auto dialog = TrackPropertiesDialog{window,
+                                          runtime.async(),
+                                          runtime.library(),
+                                          runtime.completion(),
+                                          ao::test::englishPresentationTextCatalog(),
+                                          cache,
+                                          {trackId1}};
+      drainGtkEvents();
+
+      auto const entries = collectAll<Gtk::Entry>(dialog);
+      auto const titleEntryIter =
+        std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Track 1"; });
+      REQUIRE(titleEntryIter != entries.end());
+      (*titleEntryIter)->set_text("Concurrent save");
+      auto* const saveButton = findButtonByLabel(dialog, "Save");
+      REQUIRE(saveButton != nullptr);
+
+      emitClicked(*saveButton);
+      emitClicked(*saveButton);
+
+      AppDialog* busyDialog = nullptr;
+      REQUIRE(pumpGtkEventsUntil(
+        [&busyDialog, &dialog]
+        {
+          for (auto* const topLevel : Gtk::Window::list_toplevels())
+          {
+            if (topLevel == &dialog || findLabelByText(*topLevel, "Library is busy. Try again.") == nullptr)
+            {
+              continue;
+            }
+
+            busyDialog = dynamic_cast<AppDialog*>(topLevel);
+            return busyDialog != nullptr;
+          }
+
+          return false;
+        }));
+
+      busyDialog->response(Gtk::ResponseType::CLOSE);
+      drainGtkEvents();
     }
   }
 } // namespace ao::gtk::test

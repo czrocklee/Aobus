@@ -6,8 +6,11 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
+#include <ao/async/Task.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/WritableTagList.h>
 #include <ao/rt/library/Library.h>
@@ -17,6 +20,8 @@
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <exception>
 #include <expected>
 #include <memory>
 #include <span>
@@ -32,6 +37,16 @@ namespace ao::uimodel
     std::string tagExpression(std::string_view const tag)
     {
       return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
+    }
+
+    std::size_t forgottenPositionCount(rt::AddTracksToListReply const& /*reply*/) noexcept
+    {
+      return 0;
+    }
+
+    std::size_t forgottenPositionCount(rt::RemoveTracksFromListReply const& reply) noexcept
+    {
+      return reply.forgottenPositionTrackIds.size();
     }
   } // namespace
 
@@ -108,9 +123,87 @@ namespace ao::uimodel
 
   struct ListMembershipAuthoringSession::Impl final
   {
+    template<typename Submit>
+    static async::Task<Result<ListMembershipEditResult>> finishEditAsync(std::shared_ptr<Impl> implPtr,
+                                                                         ListId const listId,
+                                                                         ListMembershipOperation const operation,
+                                                                         Submit submit)
+    {
+      if (implPtr->submitting)
+      {
+        co_return ListMembershipEditResult{.status = rt::AuthoringStatus::Busy, .listId = listId};
+      }
+
+      implPtr->submitting = true;
+      auto deferredException = std::exception_ptr{};
+
+      try
+      {
+        auto result = co_await submit(*implPtr, listId);
+
+        if (!result)
+        {
+          implPtr->submitting = false;
+          co_return std::unexpected{result.error()};
+        }
+
+        auto completed = std::move(*result);
+        auto uiResult = ListMembershipEditResult{
+          .status = completed.status,
+          .listId = completed.reply.listId,
+          .listName = completed.reply.listName,
+          .tag = completed.reply.tag,
+          .targetTrackCount = completed.reply.targetTrackIds.size(),
+          .changedTrackCount = completed.reply.tagEdit.changes.size(),
+          .forgottenPositionCount = forgottenPositionCount(completed.reply),
+        };
+        uiResult.notificationText = implPtr->textCatalog.listMembershipNotification(uiResult.status,
+                                                                                    operation,
+                                                                                    uiResult.listName,
+                                                                                    tagExpression(uiResult.tag),
+                                                                                    uiResult.changedTrackCount,
+                                                                                    uiResult.forgottenPositionCount);
+
+        if (completed.optNextTargets)
+        {
+          implPtr->targets = std::move(*completed.optNextTargets);
+        }
+
+        implPtr->submitting = false;
+        co_return uiResult;
+      }
+      catch (...)
+      {
+        deferredException = std::current_exception();
+        implPtr->submitting = false;
+        async::rethrowException(deferredException);
+      }
+    }
+
+    static async::Task<Result<ListMembershipEditResult>> editAsync(std::shared_ptr<Impl> implPtr,
+                                                                   ListId const listId,
+                                                                   ListMembershipOperation const operation)
+    {
+      if (operation == ListMembershipOperation::Add)
+      {
+        return finishEditAsync(std::move(implPtr),
+                               listId,
+                               operation,
+                               [](Impl& impl, ListId const targetListId)
+                               { return impl.library.writer().addTracksToList(targetListId, impl.targets); });
+      }
+
+      return finishEditAsync(std::move(implPtr),
+                             listId,
+                             operation,
+                             [](Impl& impl, ListId const targetListId)
+                             { return impl.library.writer().removeTracksFromList(targetListId, impl.targets); });
+    }
+
     rt::Library& library;
     rt::BoundTrackTargets targets;
     PresentationTextCatalog textCatalog;
+    bool submitting = false;
   };
 
   Result<std::unique_ptr<ListMembershipAuthoringSession>> ListMembershipAuthoringSession::begin(
@@ -126,10 +219,10 @@ namespace ao::uimodel
     }
 
     return std::unique_ptr<ListMembershipAuthoringSession>{new ListMembershipAuthoringSession{
-      std::make_unique<Impl>(Impl{.library = library, .targets = std::move(*targetsRes), .textCatalog = textCatalog})}};
+      std::make_shared<Impl>(Impl{.library = library, .targets = std::move(*targetsRes), .textCatalog = textCatalog})}};
   }
 
-  ListMembershipAuthoringSession::ListMembershipAuthoringSession(std::unique_ptr<Impl> implPtr)
+  ListMembershipAuthoringSession::ListMembershipAuthoringSession(std::shared_ptr<Impl> implPtr)
     : _implPtr{std::move(implPtr)}
   {
   }
@@ -141,68 +234,13 @@ namespace ao::uimodel
     return _implPtr->targets.trackIds();
   }
 
-  Result<ListMembershipEditResult> ListMembershipAuthoringSession::addToList(ListId const listId)
+  async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::addToList(ListId const listId)
   {
-    auto result = _implPtr->library.writer().addTracksToList(listId, _implPtr->targets);
-
-    if (!result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    auto uiResult = ListMembershipEditResult{
-      .status = result->status,
-      .listId = result->reply.listId,
-      .listName = result->reply.listName,
-      .tag = result->reply.tag,
-      .targetTrackCount = result->reply.targetTrackIds.size(),
-      .changedTrackCount = result->reply.tagEdit.changes.size(),
-    };
-    uiResult.notificationText = _implPtr->textCatalog.listMembershipNotification(uiResult.status,
-                                                                                 ListMembershipOperation::Add,
-                                                                                 uiResult.listName,
-                                                                                 tagExpression(uiResult.tag),
-                                                                                 uiResult.changedTrackCount,
-                                                                                 uiResult.forgottenPositionCount);
-
-    if (result->optNextTargets)
-    {
-      _implPtr->targets = *result->optNextTargets;
-    }
-
-    return uiResult;
+    return Impl::editAsync(_implPtr, listId, ListMembershipOperation::Add);
   }
 
-  Result<ListMembershipEditResult> ListMembershipAuthoringSession::removeFromList(ListId const listId)
+  async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::removeFromList(ListId const listId)
   {
-    auto result = _implPtr->library.writer().removeTracksFromList(listId, _implPtr->targets);
-
-    if (!result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    auto uiResult = ListMembershipEditResult{
-      .status = result->status,
-      .listId = result->reply.listId,
-      .listName = result->reply.listName,
-      .tag = result->reply.tag,
-      .targetTrackCount = result->reply.targetTrackIds.size(),
-      .changedTrackCount = result->reply.tagEdit.changes.size(),
-      .forgottenPositionCount = result->reply.forgottenPositionTrackIds.size(),
-    };
-    uiResult.notificationText = _implPtr->textCatalog.listMembershipNotification(uiResult.status,
-                                                                                 ListMembershipOperation::Remove,
-                                                                                 uiResult.listName,
-                                                                                 tagExpression(uiResult.tag),
-                                                                                 uiResult.changedTrackCount,
-                                                                                 uiResult.forgottenPositionCount);
-
-    if (result->optNextTargets)
-    {
-      _implPtr->targets = *result->optNextTargets;
-    }
-
-    return uiResult;
+    return Impl::editAsync(_implPtr, listId, ListMembershipOperation::Remove);
   }
 } // namespace ao::uimodel

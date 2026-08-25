@@ -21,6 +21,9 @@
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -41,15 +44,15 @@
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/window.h>
 
-#include <array>
+#include <algorithm>
 #include <cstdint>
 #include <format>
 #include <memory>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::gtk::test
@@ -160,11 +163,33 @@ namespace ao::gtk::test
     {
       auto const selection =
         TrackSelection{.listId = rt::kAllTracksListId, .selectedIds = {firstTrackId, secondTrackId}};
-      auto const tagsToAdd = std::array<std::string, 1>{"ControllerTag"};
 
-      controller.submitTagChanges(selection, tagsToAdd, std::span<std::string const>{});
+      controller.submitTagChanges(selection, {"ControllerTag"}, {});
 
+      REQUIRE(pumpGtkEventsUntil([&mutationCallbacks] { return mutationCallbacks == 1; }));
       CHECK(mutationCallbacks == 1);
+    }
+
+    SECTION("submitTagChanges reports a concurrent retry as busy")
+    {
+      auto const selection =
+        TrackSelection{.listId = rt::kAllTracksListId, .selectedIds = {firstTrackId, secondTrackId}};
+
+      controller.submitTagChanges(selection, {"FirstConcurrentTag"}, {});
+      controller.submitTagChanges(selection, {"SecondConcurrentTag"}, {});
+
+      REQUIRE(pumpGtkEventsUntil(
+        [&fixture]
+        {
+          auto const feed = fixture.runtime().notifications().feed();
+          return std::ranges::any_of(feed.entries,
+                                     [](auto const& entry)
+                                     {
+                                       auto const* message = std::get_if<std::string>(&entry.message);
+                                       return entry.severity == rt::NotificationSeverity::Warning &&
+                                              message != nullptr && *message == "Library is busy. Try again.";
+                                     });
+        }));
     }
   }
 
@@ -313,10 +338,10 @@ namespace ao::gtk::test
       [&](library::MusicLibrary& library)
       { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
-    auto const writableId = ao::test::requireValue(runtime.library().writer().createList(
-      rt::LibraryWriter::ListDraft{.name = "Road Trip", .expression = "#roadtrip"}));
-    auto const computedId = ao::test::requireValue(runtime.library().writer().createList(
-      rt::LibraryWriter::ListDraft{.name = "Recent", .expression = "$year >= 2020"}));
+    auto const writableId = ao::test::requireValue(runGtkTask(
+      runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Road Trip", .expression = "#roadtrip"})));
+    auto const computedId = ao::test::requireValue(runGtkTask(
+      runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Recent", .expression = "$year >= 2020"})));
     auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
@@ -384,8 +409,8 @@ namespace ao::gtk::test
       [&](library::MusicLibrary& library)
       { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
-    auto const listId =
-      ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Ordered"}));
+    auto const listId = ao::test::requireValue(
+      runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Ordered"})));
     auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(manual != nullptr);
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{

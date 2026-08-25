@@ -29,12 +29,14 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
 #include <giomm/simpleactiongroup.h>
 #include <gtkmm/checkbutton.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listview.h>
 #include <gtkmm/scrolledwindow.h>
@@ -56,16 +58,17 @@ namespace ao::gtk::test
 {
   namespace
   {
-    ListId createList(rt::Library& library,
+    ListId createList(rt::AppRuntime& runtime,
                       std::string const& name,
                       ListId parentId = kInvalidListId,
                       std::string expression = {})
     {
-      return ao::test::requireValue(library.createList(rt::LibraryListDraft{
-        .parentId = parentId,
-        .name = name,
-        .expression = std::move(expression),
-      }));
+      return ao::test::requireValue(runGtkTask(runtime,
+                                               runtime.library().createList(rt::ListDraft{
+                                                 .parentId = parentId,
+                                                 .name = name,
+                                                 .expression = std::move(expression),
+                                               })));
     }
 
     Glib::RefPtr<Gio::SimpleAction> simpleAction(Gio::ActionMap& actionMap, std::string const& name)
@@ -78,6 +81,55 @@ namespace ao::gtk::test
       auto transaction = library.readTransaction();
       auto reader = library.lists().reader(transaction);
       return reader.get(listId);
+    }
+
+    std::size_t countListsNamed(library::MusicLibrary const& library, std::string_view const name)
+    {
+      auto transaction = library.readTransaction();
+      std::size_t count = 0;
+
+      for (auto const& item : library.lists().reader(transaction))
+      {
+        count += static_cast<std::size_t>(item.second.name() == name);
+      }
+
+      return count;
+    }
+
+    Gtk::Entry* listNameEntry(SmartListDialog& dialog)
+    {
+      for (auto* const entry : collectAll<Gtk::Entry>(dialog))
+      {
+        if (entry->get_placeholder_text() == "List name")
+        {
+          return entry;
+        }
+      }
+
+      return nullptr;
+    }
+
+    AppDialog* findAppDialog(std::string const& title);
+
+    SmartListDialog* openNewListDialog(ListNavigationController& controller, TrackRowCache& cache)
+    {
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
+      auto const actionPtr = simpleAction(*groupPtr, "list-new-smart-list");
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+      controller.select(rt::kAllTracksListId);
+      drainGtkEvents();
+
+      if (!actionPtr || !actionPtr->get_enabled())
+      {
+        return nullptr;
+      }
+
+      actionPtr->activate();
+      drainGtkEvents();
+      return dynamic_cast<SmartListDialog*>(findAppDialog("New List"));
     }
 
     bool trackHasTag(library::MusicLibrary const& library, TrackId const trackId, std::string_view const tag)
@@ -162,7 +214,7 @@ namespace ao::gtk::test
 
     SECTION("rebuildTree populates the navigation panel")
     {
-      auto const testListId = createList(fixture.runtime().library(), "Test List");
+      auto const testListId = createList(fixture.runtime(), "Test List");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -174,7 +226,7 @@ namespace ao::gtk::test
 
     SECTION("select triggers callback")
     {
-      auto const testListId = createList(fixture.runtime().library(), "Select Target");
+      auto const testListId = createList(fixture.runtime(), "Select Target");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -187,7 +239,7 @@ namespace ao::gtk::test
 
     SECTION("rebuildTree selects the active workspace list restored before the navigation model exists")
     {
-      auto const restoredListId = createList(fixture.runtime().library(), "Restored Selection");
+      auto const restoredListId = createList(fixture.runtime(), "Restored Selection");
       REQUIRE(fixture.runtime().workspace().navigate({.target = restoredListId}));
       drainGtkEvents();
 
@@ -235,7 +287,7 @@ namespace ao::gtk::test
       CHECK_FALSE(deleteActionPtr->get_enabled());
       CHECK_FALSE(deleteSubtreeActionPtr->get_enabled());
 
-      auto const leafListId = createList(fixture.runtime().library(), "Leaf List");
+      auto const leafListId = createList(fixture.runtime(), "Leaf List");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -272,10 +324,30 @@ namespace ao::gtk::test
       drainGtkEvents();
     }
 
+    SECTION("New List dialog ignores duplicate OK responses while submission is pending")
+    {
+      auto* const dialog = openNewListDialog(controller, cache);
+      REQUIRE(dialog != nullptr);
+      auto* const nameEntry = listNameEntry(*dialog);
+      REQUIRE(nameEntry != nullptr);
+      auto* const okButton = findButtonByLabel(*dialog, "Create");
+      REQUIRE(okButton != nullptr);
+      nameEntry->set_text("Single submission");
+      drainGtkEvents();
+      REQUIRE(okButton->get_sensitive());
+
+      dialog->response(Gtk::ResponseType::OK);
+      CHECK_FALSE(okButton->get_sensitive());
+      dialog->response(Gtk::ResponseType::OK);
+
+      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
+      CHECK(countListsNamed(fixture.runtime().musicLibrary(), "Single submission") == 1);
+    }
+
     SECTION("presentation changes do not re-drive list selection")
     {
-      auto const activeListId = createList(fixture.runtime().library(), "Active List");
-      auto const browsedListId = createList(fixture.runtime().library(), "Browsed List");
+      auto const activeListId = createList(fixture.runtime(), "Active List");
+      auto const browsedListId = createList(fixture.runtime(), "Browsed List");
       controller.rebuildTree(cache);
       REQUIRE(fixture.runtime().workspace().navigate({.target = activeListId}));
       drainGtkEvents();
@@ -293,57 +365,61 @@ namespace ao::gtk::test
       CHECK(selectedId == kInvalidListId);
     }
 
-    SECTION("submitListDraft creates a list and selects it on rebuild")
+    SECTION("list submission selects after synchronous publication rebuilds the tree")
     {
-      auto draft = rt::LibraryListDraft{};
-      draft.name = "Recently Played";
-      draft.description = "Tracks touched this week";
-      draft.expression = "$title ~ \"Recent\"";
-
-      auto const listRes = controller.submitListDraft(draft, "compact");
-      REQUIRE(listRes);
-      auto const listId = *listRes;
-
-      auto const optList = findList(fixture.runtime().musicLibrary(), listId);
-      REQUIRE(optList);
-      CHECK_FALSE(optList->name().empty());
-      CHECK(savedPresentationListId == listId);
-      CHECK(savedPresentationId == "compact");
-
-      controller.rebuildTree(cache);
-      drainGtkEvents();
-
+      auto* const dialog = openNewListDialog(controller, cache);
+      REQUIRE(dialog != nullptr);
+      auto* const nameEntry = listNameEntry(*dialog);
+      REQUIRE(nameEntry != nullptr);
+      nameEntry->set_text("Published selection");
+      auto const presentationId = dialog->presentationId();
+      selectedId = kInvalidListId;
+      std::size_t rebuildCount = 0;
+      auto changedSubscription = fixture.runtime().library().changes().onChanged(
+        [&](rt::LibraryChangeSet const&)
+        {
+          ++rebuildCount;
+          controller.rebuildTree(cache);
+        });
+      dialog->response(Gtk::ResponseType::OK);
+      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
+      auto const listId = savedPresentationListId;
+      REQUIRE(listId != kInvalidListId);
+      CHECK(rebuildCount == 1);
       CHECK(selectedId == listId);
+      CHECK(selectedNavigationListId(controller) == listId);
+      CHECK(savedPresentationId == presentationId);
     }
 
     SECTION("a failed pending selection is retried after the next complete rebuild")
     {
-      auto draft = rt::LibraryListDraft{};
-      draft.name = "Retry selection";
-      draft.expression = "true";
-      auto const listRes = controller.submitListDraft(draft, {});
-      REQUIRE(listRes);
-      auto const listId = *listRes;
+      auto* const dialog = openNewListDialog(controller, cache);
+      REQUIRE(dialog != nullptr);
+      auto* const nameEntry = listNameEntry(*dialog);
+      REQUIRE(nameEntry != nullptr);
+      nameEntry->set_text("Retry selection");
       rejectSelection = true;
-
-      controller.rebuildTree(cache);
-      drainGtkEvents();
+      auto const attemptsBeforeSubmission = selectionAttemptCount;
+      dialog->response(Gtk::ResponseType::OK);
+      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
+      auto const listId = savedPresentationListId;
+      REQUIRE(listId != kInvalidListId);
 
       CHECK(selectedId != listId);
-      CHECK(selectionAttemptCount == 1);
+      CHECK(selectionAttemptCount == attemptsBeforeSubmission + 1);
 
       rejectSelection = false;
       controller.rebuildTree(cache);
       drainGtkEvents();
 
       CHECK(selectedId == listId);
-      CHECK(selectionAttemptCount == 2);
+      CHECK(selectionAttemptCount == attemptsBeforeSubmission + 2);
     }
 
     SECTION("a newer successful selection supersedes an earlier failed one")
     {
-      auto const rejectedListId = createList(fixture.runtime().library(), "Rejected Target");
-      auto const acceptedListId = createList(fixture.runtime().library(), "Accepted Target");
+      auto const rejectedListId = createList(fixture.runtime(), "Rejected Target");
+      auto const acceptedListId = createList(fixture.runtime(), "Accepted Target");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -369,8 +445,8 @@ namespace ao::gtk::test
 
     SECTION("an authoritative workspace selection supersedes an earlier failed one")
     {
-      auto const rejectedListId = createList(fixture.runtime().library(), "Rejected Target");
-      auto const navigatedListId = createList(fixture.runtime().library(), "Navigated Target");
+      auto const rejectedListId = createList(fixture.runtime(), "Rejected Target");
+      auto const navigatedListId = createList(fixture.runtime(), "Navigated Target");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -397,7 +473,7 @@ namespace ao::gtk::test
 
     SECTION("closing the last workspace view discards an earlier failed selection")
     {
-      auto const rejectedListId = createList(fixture.runtime().library(), "Rejected Target");
+      auto const rejectedListId = createList(fixture.runtime(), "Rejected Target");
       auto const activeViewId =
         ao::test::requireValue(fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId}));
       controller.rebuildTree(cache);
@@ -421,43 +497,38 @@ namespace ao::gtk::test
       CHECK(selectionAttemptCount == attemptsBeforeRebuild);
     }
 
-    SECTION("submitListDraft updates an existing list and preserves the presentation callback")
+    SECTION("editing a list preserves the presentation callback")
     {
-      auto const listId = createList(fixture.runtime().library(), "Old Name");
-
-      auto draft = rt::LibraryListDraft{};
-      draft.listId = listId;
-      draft.name = "High Energy";
-      draft.description = "Updated description";
-      draft.expression = "$title ~ \"Energy\"";
-
-      auto const savedRes = controller.submitListDraft(draft, "wide");
-      REQUIRE(savedRes);
+      auto const listId = createList(fixture.runtime(), "Old Name");
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
+      auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
+      REQUIRE(editActionPtr);
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+      controller.select(listId);
+      drainGtkEvents();
+      editActionPtr->activate();
+      drainGtkEvents();
+      auto* const dialog = dynamic_cast<SmartListDialog*>(findAppDialog("Edit List"));
+      REQUIRE(dialog != nullptr);
+      auto* const nameEntry = listNameEntry(*dialog);
+      REQUIRE(nameEntry != nullptr);
+      nameEntry->set_text("High Energy");
+      auto const presentationId = dialog->presentationId();
+      dialog->response(Gtk::ResponseType::OK);
+      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("Edit List") == nullptr; }));
 
       auto const optList = findList(fixture.runtime().musicLibrary(), listId);
       REQUIRE(optList);
-      CHECK(*savedRes == listId);
-      CHECK_FALSE(optList->name().empty());
+      CHECK(optList->name() == "High Energy");
       CHECK(savedPresentationListId == listId);
-      CHECK(savedPresentationId == "wide");
+      CHECK(savedPresentationId == presentationId);
 
       controller.rebuildTree(cache);
       drainGtkEvents();
 
       CHECK(selectedId == listId);
-    }
-
-    SECTION("submitListDraft rejects invalid drafts without saving presentation")
-    {
-      auto draft = rt::LibraryListDraft{};
-      draft.name = "Invalid";
-      draft.expression = "(";
-
-      auto const listRes = controller.submitListDraft(draft, "wide");
-
-      REQUIRE_FALSE(listRes);
-      CHECK(savedPresentationListId == kInvalidListId);
-      CHECK(savedPresentationId.empty());
     }
 
     SECTION("stale edit response keeps the dialog and draft visible")
@@ -466,7 +537,7 @@ namespace ao::gtk::test
       controller.addActionsTo(*groupPtr);
       auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
       REQUIRE(editActionPtr);
-      auto const listId = createList(fixture.runtime().library(), "Draft to Preserve");
+      auto const listId = createList(fixture.runtime(), "Draft to Preserve");
       controller.rebuildTree(cache);
       drainGtkEvents();
       controller.select(listId);
@@ -478,22 +549,29 @@ namespace ao::gtk::test
       REQUIRE(dialog != nullptr);
       REQUIRE(dialog->get_visible());
       CHECK(dialog->draft().name == "Draft to Preserve");
-      REQUIRE(fixture.runtime().library().deleteList(listId));
+      REQUIRE(runGtkTask(fixture.runtime(), fixture.runtime().library().deleteList(listId)));
 
       dialog->response(Gtk::ResponseType::OK);
-      drainGtkEvents();
 
       CHECK(dialog->get_visible());
       CHECK(dialog->draft().name == "Draft to Preserve");
       bool visibleError = false;
 
-      for (auto* const label : collectAll<Gtk::Label>(*dialog))
-      {
-        visibleError = visibleError ||
-                       (label->get_visible() && label->has_css_class("ao-layout-error") && !label->get_text().empty());
-      }
+      REQUIRE(pumpGtkEventsUntil(
+        [&]
+        {
+          for (auto* const label : collectAll<Gtk::Label>(*dialog))
+          {
+            visibleError = visibleError || (label->get_visible() && label->has_css_class("ao-layout-error") &&
+                                            !label->get_text().empty());
+          }
+
+          return visibleError;
+        }));
 
       CHECK(visibleError);
+      CHECK(savedPresentationListId == kInvalidListId);
+      CHECK(savedPresentationId.empty());
       dialog->close();
       drainGtkEvents();
     }
@@ -507,7 +585,7 @@ namespace ao::gtk::test
       REQUIRE(deleteActionPtr);
 
       auto const& library = fixture.runtime().musicLibrary();
-      auto const listId = createList(fixture.runtime().library(), "Delete Target");
+      auto const listId = createList(fixture.runtime(), "Delete Target");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -517,18 +595,27 @@ namespace ao::gtk::test
       REQUIRE(deleteActionPtr->get_enabled());
 
       deleteActionPtr->activate();
-      drainGtkEvents();
 
       CHECK(findList(library, listId));
-      auto* const confirmation = findAppDialog("Delete List?");
+      AppDialog* confirmation = nullptr;
+      REQUIRE(pumpGtkEventsUntil(
+        [&confirmation]
+        {
+          confirmation = findAppDialog("Delete List?");
+          return confirmation != nullptr;
+        }));
       REQUIRE(confirmation != nullptr);
       confirmation->response(Gtk::ResponseType::YES);
-      drainGtkEvents();
+      REQUIRE(pumpGtkEventsUntil([&library, listId] { return !findList(library, listId); }));
 
       CHECK(!findList(library, listId));
 
-      controller.rebuildTree(cache);
-      drainGtkEvents();
+      REQUIRE(pumpGtkEventsUntil(
+        [&]
+        {
+          controller.rebuildTree(cache);
+          return selectedId == rt::kAllTracksListId;
+        }));
 
       CHECK(selectedId == rt::kAllTracksListId);
     }
@@ -543,9 +630,9 @@ namespace ao::gtk::test
       REQUIRE(deleteSubtreeActionPtr);
 
       auto const& library = fixture.runtime().musicLibrary();
-      auto const parentId = createList(fixture.runtime().library(), "Delete Tree");
-      auto const childId = createList(fixture.runtime().library(), "Delete Child", parentId);
-      auto const grandchildId = createList(fixture.runtime().library(), "Delete Grandchild", childId);
+      auto const parentId = createList(fixture.runtime(), "Delete Tree");
+      auto const childId = createList(fixture.runtime(), "Delete Child", parentId);
+      auto const grandchildId = createList(fixture.runtime(), "Delete Grandchild", childId);
       controller.rebuildTree(cache);
       drainGtkEvents();
       controller.select(parentId);
@@ -554,9 +641,14 @@ namespace ao::gtk::test
       CHECK_FALSE(deleteActionPtr->get_enabled());
       REQUIRE(deleteSubtreeActionPtr->get_enabled());
       deleteSubtreeActionPtr->activate();
-      drainGtkEvents();
 
-      auto* const confirmation = findAppDialog("Delete List and Descendants?");
+      AppDialog* confirmation = nullptr;
+      REQUIRE(pumpGtkEventsUntil(
+        [&confirmation]
+        {
+          confirmation = findAppDialog("Delete List and Descendants?");
+          return confirmation != nullptr;
+        }));
       REQUIRE(confirmation != nullptr);
       auto const labels = collectAll<Gtk::Label>(*confirmation);
       auto previewText = std::string{};
@@ -570,7 +662,9 @@ namespace ao::gtk::test
       CHECK(previewText.contains("Delete Child"));
       CHECK(previewText.contains("Delete Grandchild"));
       confirmation->response(Gtk::ResponseType::YES);
-      drainGtkEvents();
+      REQUIRE(pumpGtkEventsUntil(
+        [&library, parentId, childId, grandchildId]
+        { return !findList(library, parentId) && !findList(library, childId) && !findList(library, grandchildId); }));
 
       CHECK_FALSE(findList(library, parentId));
       CHECK_FALSE(findList(library, childId));
@@ -583,18 +677,23 @@ namespace ao::gtk::test
       controller.addActionsTo(*groupPtr);
       auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       REQUIRE(deleteActionPtr);
-      auto const listId = createList(fixture.runtime().library(), "Stale Delete Target");
+      auto const listId = createList(fixture.runtime(), "Stale Delete Target");
       controller.rebuildTree(cache);
       drainGtkEvents();
       controller.select(listId);
       drainGtkEvents();
       REQUIRE(selectedId == listId);
-      REQUIRE(fixture.runtime().library().deleteList(listId));
+      REQUIRE(runGtkTask(fixture.runtime(), fixture.runtime().library().deleteList(listId)));
 
       deleteActionPtr->activate();
-      drainGtkEvents();
 
-      auto* const dialog = findAppDialog("Unable to Delete List");
+      AppDialog* dialog = nullptr;
+      REQUIRE(pumpGtkEventsUntil(
+        [&dialog]
+        {
+          dialog = findAppDialog("Unable to Delete List");
+          return dialog != nullptr;
+        }));
       REQUIRE(dialog != nullptr);
       CHECK(dialog->get_transient_for() == &window);
       CHECK(selectedId == listId);
@@ -627,7 +726,7 @@ namespace ao::gtk::test
     controller.addActionsTo(*groupPtr);
     auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
     REQUIRE(deleteActionPtr);
-    auto const listId = createList(fixture.runtime().library(), "Road Trip", kInvalidListId, R"(#"road-trip")");
+    auto const listId = createList(fixture.runtime(), "Road Trip", kInvalidListId, R"(#"road-trip")");
 
     controller.rebuildTree(cache);
     drainGtkEvents();
@@ -635,9 +734,14 @@ namespace ao::gtk::test
     drainGtkEvents();
     REQUIRE(deleteActionPtr->get_enabled());
     deleteActionPtr->activate();
-    drainGtkEvents();
 
-    auto* const confirmation = findAppDialog("Delete List?");
+    AppDialog* confirmation = nullptr;
+    REQUIRE(pumpGtkEventsUntil(
+      [&confirmation]
+      {
+        confirmation = findAppDialog("Delete List?");
+        return confirmation != nullptr;
+      }));
     REQUIRE(confirmation != nullptr);
     auto const checkButtons = collectAll<Gtk::CheckButton>(*confirmation);
     REQUIRE(checkButtons.size() == 1);
@@ -645,7 +749,12 @@ namespace ao::gtk::test
     CHECK(checkButtons.front()->get_label().find("#") != Glib::ustring::npos);
     checkButtons.front()->set_active(true);
     confirmation->response(Gtk::ResponseType::YES);
-    drainGtkEvents();
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture, listId, trackId]
+      {
+        return !findList(fixture.runtime().musicLibrary(), listId) &&
+               !trackHasTag(fixture.runtime().musicLibrary(), trackId, "road-trip");
+      }));
 
     CHECK_FALSE(findList(fixture.runtime().musicLibrary(), listId));
     CHECK_FALSE(trackHasTag(fixture.runtime().musicLibrary(), trackId, "road-trip"));
@@ -655,7 +764,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    [[maybe_unused]] auto const listId = createList(fixture.runtime().library(), "Retired Selection Source");
+    [[maybe_unused]] auto const listId = createList(fixture.runtime(), "Retired Selection Source");
     std::int32_t selectionChangedCount = 0;
     auto panel = ListNavigationPanel{
       ao::test::englishPresentationTextCatalog(),
@@ -712,12 +821,12 @@ namespace ao::gtk::test
     host.present();
     CHECK(visibleSeparatorCount() == 0);
 
-    auto const listId = createList(fixture.runtime().library(), "Separated List");
+    auto const listId = createList(fixture.runtime(), "Separated List");
     panel.rebuildTree(fixture.runtime().library());
     host.drain();
     CHECK(visibleSeparatorCount() == 1);
 
-    REQUIRE(fixture.runtime().library().deleteList(listId));
+    REQUIRE(runGtkTask(fixture.runtime(), fixture.runtime().library().deleteList(listId)));
     panel.rebuildTree(fixture.runtime().library());
     host.drain();
     CHECK(visibleSeparatorCount() == 0);

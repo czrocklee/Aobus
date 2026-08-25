@@ -6,14 +6,17 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
 
 #include <memory>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace ao::rt
 {
@@ -45,19 +48,21 @@ namespace ao::uimodel
     std::span<TrackId const> effectiveTrackIds() const noexcept;
     async::Subscription onInvalidated(compat::MoveOnlyFunction<void()> handler) const;
 
-    Result<rt::LibraryWriter::MoveOrderAuthoringResult> moveBefore(std::span<TrackId const> selectedTrackIds,
-                                                                   std::optional<TrackId> optBeforeTrackId);
-    Result<rt::LibraryWriter::MoveOrderAuthoringResult> moveUp(std::span<TrackId const> selectedTrackIds);
-    Result<rt::LibraryWriter::MoveOrderAuthoringResult> moveDown(std::span<TrackId const> selectedTrackIds);
-    Result<rt::LibraryWriter::MoveOrderAuthoringResult> moveToTop(std::span<TrackId const> selectedTrackIds);
-    Result<rt::LibraryWriter::MoveOrderAuthoringResult> moveToBottom(std::span<TrackId const> selectedTrackIds);
-    Result<rt::LibraryWriter::ResetOrderAuthoringResult> resetOrder();
-    Result<rt::LibraryWriter::ForgetHiddenOrderAuthoringResult> forgetHiddenPositions();
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveBefore(
+      std::vector<TrackId> selectedTrackIds,
+      std::optional<TrackId> optBeforeTrackId);
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveUp(std::vector<TrackId> selectedTrackIds);
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveDown(std::vector<TrackId> selectedTrackIds);
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveToTop(std::vector<TrackId> selectedTrackIds);
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveToBottom(
+      std::vector<TrackId> selectedTrackIds);
+    async::Task<Result<rt::AuthoringResult<rt::ResetListOrderReply>>> resetOrder();
+    async::Task<Result<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>> forgetHiddenPositions();
 
   private:
     struct Impl;
-    explicit ListOrderAuthoringSession(std::unique_ptr<Impl> implPtr);
+    explicit ListOrderAuthoringSession(std::shared_ptr<Impl> implPtr);
 
-    std::unique_ptr<Impl> _implPtr;
+    std::shared_ptr<Impl> _implPtr;
   };
 } // namespace ao::uimodel

@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include "AudioIdentityIndexer.h"
 #include <ao/Error.h>
-#include <ao/rt/library/AudioIdentityIndexer.h>
 
 #include <span>
 

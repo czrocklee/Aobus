@@ -4,6 +4,20 @@
 #include <coroutine>
 #include <exception>
 
+namespace std
+{
+  struct NestedExceptionTypes
+  {
+    struct exception
+    {};
+
+    struct exception_ptr
+    {
+      exception_ptr& operator=(std::exception_ptr);
+    };
+  };
+}
+
 namespace ao::async
 {
   class OperationCancelled final : public std::exception
@@ -31,6 +45,7 @@ namespace ao::async
   Awaitable resumeOnWorker();
 
   bool isOperationCancelled(std::exception const& e) noexcept;
+  [[noreturn]] void rethrowException(std::exception_ptr const& exceptionPtr);
   void rethrowIfOperationCancelled(std::exception const& e);
   void rethrowIfOperationCancelled();
 }
@@ -40,6 +55,8 @@ namespace
   void report(std::exception const&);
   void reportUnknown();
   std::exception const& otherException();
+
+  std::exception_ptr currentExceptionLookalike();
 
   ao::async::Task missingStdExceptionGuard()
   {
@@ -244,6 +261,89 @@ namespace
     }
   }
 
+  ao::async::Task capturesCatchAllForDeferredHandling()
+  {
+    std::exception_ptr deferredException;
+
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // NEGATIVE
+    catch (...)
+    {
+      deferredException = std::current_exception();
+      reportUnknown();
+    }
+
+    ao::async::rethrowException(deferredException);
+  }
+
+  ao::async::Task capturesStdExceptionForDeferredHandling()
+  {
+    std::exception_ptr deferredException;
+
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // NEGATIVE
+    catch (std::exception const&)
+    {
+      deferredException = std::current_exception();
+      reportUnknown();
+    }
+
+    ao::async::rethrowException(deferredException);
+  }
+
+  ao::async::Task currentExceptionLookalikeIsRejected()
+  {
+    std::exception_ptr deferredException;
+
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (...)
+    {
+      deferredException = currentExceptionLookalike();
+      reportUnknown();
+    }
+  }
+
+  ao::async::Task deferredHandlingMustComeFirst()
+  {
+    std::exception_ptr deferredException;
+
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (...)
+    {
+      reportUnknown();
+      deferredException = std::current_exception();
+    }
+  }
+
+  ao::async::Task deferredHandlingMustOutliveCatch()
+  {
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (...)
+    {
+      auto deferredException = std::current_exception();
+      reportUnknown();
+      static_cast<void>(deferredException);
+    }
+  }
+
   void nonCoroutineBroadCatchIsOutOfScope()
   {
     try
@@ -293,5 +393,34 @@ namespace
 
     reportLater();
     co_await ao::async::resumeOnWorker();
+  }
+
+  ao::async::Task exceptionNestedInStdRecordIsNotBroad()
+  {
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // NEGATIVE
+    catch (std::NestedExceptionTypes::exception const&)
+    {
+      reportUnknown();
+    }
+  }
+
+  ao::async::Task exceptionPtrNestedInStdRecordDoesNotOwnTheException()
+  {
+    std::NestedExceptionTypes::exception_ptr deferredException;
+
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (...)
+    {
+      deferredException = std::current_exception();
+      reportUnknown();
+    }
   }
 }

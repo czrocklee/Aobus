@@ -14,9 +14,9 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
-#include <span>
 #include <stop_token>
 #include <string>
+#include <vector>
 
 namespace ao::async
 {
@@ -69,8 +69,8 @@ namespace ao::rt
   public:
     /// Progress and failure callbacks are serialized by the indexer but may be
     /// invoked from any worker-pool thread, never concurrently.
-    using CommitBatchCallback = compat::MoveOnlyFunction<Result<AudioIdentityBatchCommitResult>(
-      std::span<AudioIdentityWriteCandidate const> candidates)>;
+    using CommitBatchCallback = compat::MoveOnlyFunction<async::Task<Result<AudioIdentityBatchCommitResult>>(
+      std::vector<AudioIdentityWriteCandidate> candidates)>;
     using FingerprintFunction = AudioIdentityFingerprintFunction;
     using Options = AudioIdentityIndexOptions;
 

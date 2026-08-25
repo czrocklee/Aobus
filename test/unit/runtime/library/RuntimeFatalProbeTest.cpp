@@ -66,7 +66,10 @@ namespace ao::rt::test
     for (auto const scenario : runtimeCleanProbeScenarios())
     {
       INFO("probe: " << scenario);
-      auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
+      auto scratch = ao::test::TempDir{};
+      auto scenarioArgument = std::string{scenario};
+      scenarioArgument.append(":").append(scratch.path().filename().string());
+      auto const result = ao::test::runProbeProcess(executablePath, scenarioArgument, kTimeout);
 
       REQUIRE(result.hasSuccessfulExit());
       CHECK_FALSE(result.standardError.contains("AOBUS_FATAL"));

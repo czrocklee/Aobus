@@ -5,6 +5,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/PlaybackSuccessionBaseTestSupport.h"
 #include <ao/audio/Transport.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
@@ -39,7 +40,7 @@ namespace ao::rt::test
 
     auto const movedRes = fixture.moveListOrder(std::array{fixture.thirdTrackId}, fixture.secondTrackId);
     REQUIRE(movedRes);
-    REQUIRE(movedRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(movedRes->status == AuthoringStatus::Applied);
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(succession.state().optResolvedSuccessor == fixture.thirdTrackId);
@@ -50,7 +51,7 @@ namespace ao::rt::test
 
     auto const noOpRes = fixture.moveListOrder(std::array{fixture.thirdTrackId}, fixture.secondTrackId);
     REQUIRE(noOpRes);
-    CHECK(noOpRes->status == ListOrderAuthoringStatus::NoOp);
+    CHECK(noOpRes->status == AuthoringStatus::NoOp);
     CHECK(succession.state().optResolvedSuccessor == fixture.thirdTrackId);
     CHECK(changedCount == 1);
   }
@@ -63,10 +64,8 @@ namespace ao::rt::test
     fixture.secondTrackId = fixture.addPlayableTrack("Second", 2000);
     fixture.thirdTrackId = fixture.addPlayableTrack("Third", 2010);
     fixture.sources.reloadAllTracks();
-    fixture.listId = ao::test::requireValue(fixture.writer().createList(LibraryWriter::ListDraft{
-      .name = "Recent",
-      .expression = "$year >= 2000",
-    }));
+    fixture.listId = ao::test::requireValue(fixture.writerFixture.runTask(
+      fixture.writer().createList(ListDraft{.name = "Recent", .expression = "$year >= 2000"})));
     fixture.viewId = ao::test::requireValue(fixture.workspace.navigate(navigationRequest(TrackListViewConfig{
       .listId = fixture.listId,
       .optPresentation =
@@ -123,7 +122,7 @@ namespace ao::rt::test
     CHECK(emptyLive.optResolvedSuccessor == fixture.firstTrackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
-    REQUIRE(fixture.writer().deleteList(fixture.listId));
+    REQUIRE(fixture.writerFixture.runTask(fixture.writer().deleteList(fixture.listId)));
     auto const invalidated = succession.state();
     CHECK(invalidated.sourceState == PlaybackSuccessionSourceState::Invalidated);
     CHECK_FALSE(invalidated.hasNext);

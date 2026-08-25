@@ -4,10 +4,12 @@
 #include "track/TrackOrderDragController.h"
 
 #include "common/AccessibleLabel.h"
+#include "common/UiWorkflow.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -166,6 +168,7 @@ namespace ao::gtk
     void close()
     {
       closing = true;
+      tasks.cancelAll();
       clearActiveDrag();
     }
 
@@ -343,34 +346,45 @@ namespace ao::gtk
         return false;
       }
 
-      auto result = sessionPtr->moveBefore(selectedTrackIds, *anchorRes);
-
-      if (!result)
-      {
-        APP_LOG_ERROR("Track order drop failed: {}", result.error().message);
-        showStatus(result.error().message);
-        clearActiveDrag();
-        return false;
-      }
-
-      switch (result->status)
-      {
-        case rt::ListOrderAuthoringStatus::Applied:
-          showStatus(
-            textCatalog.format(i18n::MessageId::ListOrderMoved, {{"count", result->reply.selectedTrackIds.size()}}));
-          break;
-        case rt::ListOrderAuthoringStatus::NoOp:
-          showStatus(std::string{textCatalog.text(i18n::MessageId::ListOrderUnchanged)});
-          break;
-        case rt::ListOrderAuthoringStatus::Stale:
-          showStatus(std::string{textCatalog.text(i18n::MessageId::ListOrderChanged)});
-          break;
-        case rt::ListOrderAuthoringStatus::Unavailable:
-          showStatus(std::string{textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable)});
-          break;
-      }
-
+      auto dropSessionPtr = std::move(sessionPtr);
+      auto selectedIds = std::move(selectedTrackIds);
+      auto submission = dropSessionPtr->moveBefore(std::move(selectedIds), *anchorRes);
       clearActiveDrag();
+      spawnUiTask(
+        runtime.async(),
+        tasks,
+        *this,
+        "track order drop",
+        std::move(submission),
+        [](State* state, auto result)
+        {
+          if (!result)
+          {
+            APP_LOG_ERROR("Track order drop failed: {}", result.error().message);
+            state->showStatus(result.error().message);
+            return;
+          }
+
+          switch (result->status)
+          {
+            case rt::AuthoringStatus::Applied:
+              state->showStatus(state->textCatalog.format(
+                i18n::MessageId::ListOrderMoved, {{"count", result->reply.selectedTrackIds.size()}}));
+              break;
+            case rt::AuthoringStatus::NoOp:
+              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderUnchanged)});
+              break;
+            case rt::AuthoringStatus::Busy:
+              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderLibraryBusy)});
+              break;
+            case rt::AuthoringStatus::Stale:
+              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderChanged)});
+              break;
+            case rt::AuthoringStatus::Unavailable:
+              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable)});
+              break;
+          }
+        });
       return true;
     }
 
@@ -387,6 +401,7 @@ namespace ao::gtk
     Gtk::Widget* indicatorRow = nullptr;
     bool invalidated = false;
     bool closing = false;
+    async::LifetimeScope tasks;
   };
 
   TrackOrderDragController::TrackOrderDragController(rt::AppRuntime& runtime,

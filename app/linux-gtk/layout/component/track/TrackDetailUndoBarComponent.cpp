@@ -3,10 +3,13 @@
 
 #include "TrackComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
+#include "common/UiWorkflow.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/Error.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
@@ -35,6 +38,7 @@ namespace ao::gtk::layout
     public:
       TrackDetailUndoBarComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _undoController{ctx.detailUndo}
+        , _runtime{ctx.runtime}
         , _notifications{ctx.runtime.notifications()}
         , _textCatalog{ctx.dependencies.textCatalog}
       {
@@ -58,11 +62,32 @@ namespace ao::gtk::layout
           {
             if (_undoController != nullptr)
             {
-              if (auto const result = _undoController->undo(); !result)
-              {
-                _notifications.post(
-                  rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
-              }
+              spawnUiTask(_runtime.async(),
+                          _tasks,
+                          *this,
+                          "metadata undo",
+                          _undoController->undo(),
+                          [](TrackDetailUndoBarComponent* owner, Result<> result)
+                          {
+                            if (result)
+                            {
+                              return;
+                            }
+
+                            if (result.error().code == Error::Code::ResourceBusy)
+                            {
+                              owner->_notifications.post(
+                                rt::NotificationSeverity::Warning,
+                                std::string{owner->_textCatalog.text(i18n::MessageId::LibraryBusyTryAgain)},
+                                rt::NotificationLifetime::transient());
+                            }
+                            else
+                            {
+                              owner->_notifications.post(rt::NotificationSeverity::Error,
+                                                         result.error().message,
+                                                         rt::NotificationLifetime::history());
+                            }
+                          });
             }
           });
         _bar.append(_undoButton);
@@ -82,6 +107,8 @@ namespace ao::gtk::layout
 
       ~TrackDetailUndoBarComponent() override
       {
+        _tasks.cancelAll();
+
         if (_changedConn)
         {
           _changedConn.disconnect();
@@ -107,12 +134,14 @@ namespace ao::gtk::layout
       }
 
       TrackDetailUndoController* _undoController = nullptr;
+      rt::AppRuntime& _runtime;
       rt::NotificationService& _notifications;
       uimodel::PresentationTextCatalog _textCatalog;
       Gtk::Box _bar{Gtk::Orientation::HORIZONTAL, 0};
       Gtk::Label _label;
       Gtk::Button _undoButton;
       sigc::connection _changedConn;
+      async::LifetimeScope _tasks;
     };
 
     std::unique_ptr<LayoutComponent> createTrackDetailUndoBar(LayoutBuildContext& ctx, LayoutNode const& node)

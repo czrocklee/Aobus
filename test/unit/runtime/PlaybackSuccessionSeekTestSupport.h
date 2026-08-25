@@ -46,7 +46,6 @@ namespace ao::rt::test::playback_succession
 
     MusicLibraryFixture libraryFixture;
     QueuedExecutor executor;
-    InlineExecutor libraryChangesExecutor;
     async::Runtime asyncRuntime;
     LibraryChanges changes;
     LibraryWriterFixture writerFixture;

@@ -112,7 +112,6 @@ namespace ao::rt::test::playback_succession
     std::shared_ptr<DecoderActivationProbe> decoderProbePtr;
     PlaybackTransportFixture<QueuedExecutor> transport;
     ControlledSleeper sleeper;
-    InlineExecutor libraryChangesExecutor;
     async::Runtime asyncRuntime;
     LibraryChanges changes;
     LibraryWriterFixture writerFixture;

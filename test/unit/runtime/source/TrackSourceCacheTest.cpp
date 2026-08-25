@@ -10,10 +10,12 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/VirtualListIds.h>
@@ -29,6 +31,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -130,7 +133,7 @@ namespace ao::rt::test
       auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
       auto& writer = writerFixture.writer();
 
-      CHECK(writer.deleteTrack(trackId).has_value());
+      CHECK(writerFixture.runTask(writer.deleteTrack(trackId)).has_value());
       CHECK(allTracks->size() == 0);
       REQUIRE(spy.batches.size() == 1);
       REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
@@ -157,7 +160,7 @@ namespace ao::rt::test
       auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
       auto& writer = writerFixture.writer();
 
-      REQUIRE(writer.deleteList(listId));
+      REQUIRE(writerFixture.runTask(writer.deleteList(listId)));
 
       CHECK(lease->state() == TrackSourceState::Invalidated);
       auto const result = cache.acquire(listId);
@@ -302,10 +305,10 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Leased",
       .expression = "false",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
@@ -317,11 +320,11 @@ namespace ao::rt::test
     auto batches = std::vector<TrackSourceDelta>{};
     auto subscription = lease->subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
-    REQUIRE(writer.updateList(LibraryWriter::ListDraft{
+    REQUIRE(writerFixture.runTask(writer.updateList(ListDraft{
       .listId = listId,
       .name = "Leased",
       .expression = "true",
-    }));
+    })));
 
     REQUIRE(lease->size() == 1);
     CHECK(lease->trackIdAt(0) == trackId);
@@ -329,7 +332,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceReset>(batches[0]));
     batches.clear();
 
-    REQUIRE(writer.deleteList(listId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(listId)));
 
     CHECK(lease->state() == TrackSourceState::Invalidated);
     REQUIRE(batches.size() == 1);
@@ -346,9 +349,9 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Original",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto oldLease = ao::test::requireValue(cache.acquire(listId));
     auto* const oldIdentity = &oldLease.source();
@@ -356,14 +359,14 @@ namespace ao::rt::test
     auto oldSubscription =
       oldLease->subscribe([&](TrackSourceDelta const& batch) noexcept { oldBatches.push_back(batch); });
 
-    REQUIRE(writer.deleteList(listId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(listId)));
     REQUIRE(oldLease->state() == TrackSourceState::Invalidated);
     REQUIRE(oldBatches.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(oldBatches[0]));
 
-    auto const recreatedId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const recreatedId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Recreated",
-    }));
+    })));
     REQUIRE(recreatedId == listId);
     auto newLease = ao::test::requireValue(cache.acquire(recreatedId));
 
@@ -380,13 +383,13 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const parentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Parent",
-    }));
-    auto const childId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const childId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .parentId = parentId,
       .name = "Child",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto parentLease = ao::test::requireValue(cache.acquire(parentId));
     auto childLease = ao::test::requireValue(cache.acquire(childId));
@@ -400,7 +403,7 @@ namespace ao::rt::test
     auto childSubscription =
       childLease->subscribe([&](TrackSourceDelta const& batch) noexcept { childBatches.push_back(batch); });
 
-    auto const rejectedRes = writer.deleteList(parentId);
+    auto const rejectedRes = writerFixture.runTask(writer.deleteList(parentId));
     REQUIRE_FALSE(rejectedRes);
     CHECK(rejectedRes.error().code == Error::Code::Conflict);
 
@@ -409,14 +412,14 @@ namespace ao::rt::test
     CHECK(parentBatches.empty());
     CHECK(childBatches.empty());
 
-    REQUIRE(writer.deleteList(childId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(childId)));
     CHECK(parentAgain->state() == TrackSourceState::Live);
     CHECK(childLease->state() == TrackSourceState::Invalidated);
     CHECK(parentBatches.empty());
     REQUIRE(childBatches.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(childBatches[0]));
 
-    REQUIRE(writer.deleteList(parentId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(parentId)));
     CHECK(parentAgain->state() == TrackSourceState::Invalidated);
     REQUIRE(parentBatches.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(parentBatches[0]));
@@ -429,16 +432,16 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const oldParentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Old parent",
-    }));
-    auto const newParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const newParentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "New parent",
-    }));
-    auto const childId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const childId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .parentId = oldParentId,
       .name = "Child",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto childLease = ao::test::requireValue(cache.acquire(childId));
     auto* const childIdentity = &childLease.source();
@@ -446,32 +449,32 @@ namespace ao::rt::test
     auto childSubscription =
       childLease->subscribe([&](TrackSourceDelta const& batch) noexcept { childBatches.push_back(batch); });
 
-    REQUIRE(writer.updateList(LibraryWriter::ListDraft{
+    REQUIRE(writerFixture.runTask(writer.updateList(ListDraft{
       .parentId = newParentId,
       .listId = childId,
       .name = "Child",
-    }));
+    })));
 
     CHECK(&childLease.source() == childIdentity);
     CHECK(childLease->state() == TrackSourceState::Live);
     REQUIRE(childBatches.size() == 1);
     CHECK(std::holds_alternative<SourceReset>(childBatches[0]));
 
-    REQUIRE(writer.deleteList(oldParentId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(oldParentId)));
     CHECK(childLease->state() == TrackSourceState::Live);
     CHECK(childBatches.size() == 1);
 
-    auto const rejectedRes = writer.deleteList(newParentId);
+    auto const rejectedRes = writerFixture.runTask(writer.deleteList(newParentId));
     REQUIRE_FALSE(rejectedRes);
     CHECK(rejectedRes.error().code == Error::Code::Conflict);
     CHECK(childLease->state() == TrackSourceState::Live);
     CHECK(childBatches.size() == 1);
 
-    REQUIRE(writer.deleteList(childId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(childId)));
     CHECK(childLease->state() == TrackSourceState::Invalidated);
     REQUIRE(childBatches.size() == 2);
     CHECK(std::holds_alternative<SourceInvalidated>(childBatches[1]));
-    REQUIRE(writer.deleteList(newParentId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(newParentId)));
   }
 
   TEST_CASE("TrackSourceCache - definition rebind keeps identity and metadata-only updates emit nothing",
@@ -481,10 +484,10 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto draft = LibraryWriter::ListDraft{
+    auto draft = ListDraft{
       .name = "Before",
     };
-    auto const listId = ao::test::requireValue(writer.createList(draft));
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(draft)));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto lease = ao::test::requireValue(cache.acquire(listId));
     auto* const identity = &lease.source();
@@ -493,11 +496,11 @@ namespace ao::rt::test
 
     draft.listId = listId;
     draft.name = "Metadata only";
-    REQUIRE(writer.updateList(draft));
+    REQUIRE(writerFixture.runTask(writer.updateList(draft)));
     CHECK(batches.empty());
 
     draft.expression = "true";
-    REQUIRE(writer.updateList(draft));
+    REQUIRE(writerFixture.runTask(writer.updateList(draft)));
 
     CHECK(&lease.source() == identity);
     CHECK(lease->state() == TrackSourceState::Live);
@@ -515,9 +518,9 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Detailed",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
@@ -527,9 +530,9 @@ namespace ao::rt::test
 
     auto effectiveTrackIds = sourceTrackIds(lease.source());
     auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(listId, effectiveTrackIds));
-    auto const moveRes = writer.moveListOrder(binding, std::array{second}, first);
+    auto const moveRes = writerFixture.runTask(writer.moveListOrder(binding, {second}, first));
     REQUIRE(moveRes);
-    REQUIRE(moveRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(moveRes->status == AuthoringStatus::Applied);
     REQUIRE(batches.size() == 1);
     REQUIRE(sourceEditScript(batches[0]).edits.size() == 2);
     CHECK(std::holds_alternative<delta::RemoveRange>(sourceEditScript(batches[0]).edits[0]));
@@ -538,9 +541,9 @@ namespace ao::rt::test
 
     effectiveTrackIds = sourceTrackIds(lease.source());
     binding = ao::test::requireValue(writerFixture.library().bindListOrder(listId, effectiveTrackIds));
-    auto const resetRes = writer.resetListOrder(binding);
+    auto const resetRes = writerFixture.runTask(writer.resetListOrder(binding));
     REQUIRE(resetRes);
-    REQUIRE(resetRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(resetRes->status == AuthoringStatus::Applied);
     REQUIRE(batches.size() == 2);
     CHECK(std::holds_alternative<SourceReset>(batches[1]));
     CHECK(sourceTrackIds(lease.source()) == std::vector{first, second, third});
@@ -555,9 +558,9 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Before",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
@@ -565,6 +568,7 @@ namespace ao::rt::test
     auto batches = std::vector<TrackSourceDelta>{};
     bool handledMove = false;
     auto nestedError = Error::Code::Generic;
+    auto optNestedTask = std::optional<async::Task<Result<UpdateListReply>>>{};
     [[maybe_unused]] auto subscription = lease->subscribe(
       [&](TrackSourceDelta const& batch) noexcept
       {
@@ -576,23 +580,26 @@ namespace ao::rt::test
         }
 
         handledMove = true;
-        auto const result = writer.updateList(LibraryWriter::ListDraft{
+        optNestedTask.emplace(writerFixture.writer().updateList(ListDraft{
           .listId = listId,
           .name = "Renamed while publishing",
-        });
-
-        if (!result)
-        {
-          nestedError = result.error().code;
-        }
+        }));
       });
 
     auto const effectiveTrackIds = sourceTrackIds(lease.source());
     auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(listId, effectiveTrackIds));
-    auto const result = writer.moveListOrder(binding, std::array{inserted}, first);
+    auto const result = writerFixture.runTask(writer.moveListOrder(binding, {inserted}, first));
 
     REQUIRE(result);
-    REQUIRE(result->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(result->status == AuthoringStatus::Applied);
+    REQUIRE(optNestedTask);
+    auto const nestedRes = writerFixture.runTask(std::move(*optNestedTask));
+
+    if (!nestedRes)
+    {
+      nestedError = nestedRes.error().code;
+    }
+
     CHECK(nestedError == Error::Code::InvalidState);
     CHECK(&lease.source() == identity);
     CHECK(lease->state() == TrackSourceState::Live);
@@ -617,16 +624,16 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const oldParentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Old parent",
-    }));
-    auto const newParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const newParentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "New parent",
-    }));
-    auto const childId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const childId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .parentId = oldParentId,
       .name = "Child",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
@@ -636,6 +643,7 @@ namespace ao::rt::test
     auto snapshotAfterNestedUpdate = std::vector<TrackId>{};
     bool handledMove = false;
     auto nestedError = Error::Code::Generic;
+    auto optNestedTask = std::optional<async::Task<Result<UpdateListReply>>>{};
     [[maybe_unused]] auto subscription = childLease->subscribe(
       [&](TrackSourceDelta const& batch) noexcept
       {
@@ -647,16 +655,11 @@ namespace ao::rt::test
         }
 
         handledMove = true;
-        auto const result = writer.updateList(LibraryWriter::ListDraft{
+        optNestedTask.emplace(writerFixture.writer().updateList(ListDraft{
           .parentId = newParentId,
           .listId = childId,
           .name = "Child",
-        });
-
-        if (!result)
-        {
-          nestedError = result.error().code;
-        }
+        }));
 
         snapshotAfterNestedUpdate = sourceTrackIds(childLease.source());
       });
@@ -665,10 +668,18 @@ namespace ao::rt::test
 
     auto const effectiveTrackIds = sourceTrackIds(childLease.source());
     auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(childId, effectiveTrackIds));
-    auto const result = writer.moveListOrder(binding, std::array{inserted}, first);
+    auto const result = writerFixture.runTask(writer.moveListOrder(binding, {inserted}, first));
 
     REQUIRE(result);
-    REQUIRE(result->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(result->status == AuthoringStatus::Applied);
+    REQUIRE(optNestedTask);
+    auto const nestedRes = writerFixture.runTask(std::move(*optNestedTask));
+
+    if (!nestedRes)
+    {
+      nestedError = nestedRes.error().code;
+    }
+
     CHECK(nestedError == Error::Code::InvalidState);
     CHECK(snapshotAfterNestedUpdate == std::vector{inserted, first});
     CHECK(&childLease.source() == identity);
@@ -688,19 +699,19 @@ namespace ao::rt::test
       CHECK(optView->parentId() == oldParentId);
     }
 
-    REQUIRE(writer.deleteList(newParentId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(newParentId)));
     CHECK(childLease->state() == TrackSourceState::Live);
     CHECK(batches.size() == 1);
 
-    auto const parentDeleteRes = writer.deleteList(oldParentId);
+    auto const parentDeleteRes = writerFixture.runTask(writer.deleteList(oldParentId));
     REQUIRE_FALSE(parentDeleteRes);
     CHECK(parentDeleteRes.error().code == Error::Code::Conflict);
 
-    REQUIRE(writer.deleteList(childId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(childId)));
     CHECK(childLease->state() == TrackSourceState::Invalidated);
     REQUIRE(batches.size() == 2);
     CHECK(std::holds_alternative<SourceInvalidated>(batches[1]));
-    REQUIRE(writer.deleteList(oldParentId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(oldParentId)));
   }
 
   TEST_CASE("TrackSourceCache - mutations reentered from a delta observer are rejected",
@@ -713,28 +724,31 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const oldParentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Old parent",
-    }));
-    auto const intermediateParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const intermediateParentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Intermediate parent",
-    }));
-    auto const finalParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const finalParentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Final parent",
-    }));
-    auto const childId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const childId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .parentId = oldParentId,
       .name = "Child",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
     auto* const identity = &childLease.source();
     auto batches = std::vector<TrackSourceDelta>{};
     bool callbackInvoked = false;
-    auto nestedMoveStatus = ListOrderAuthoringStatus::NoOp;
+    auto nestedMoveStatus = AuthoringStatus::NoOp;
     auto intermediateReparentError = Error::Code::Generic;
     auto finalReparentError = Error::Code::Generic;
+    auto optNestedMoveTask = std::optional<async::Task<Result<AuthoringResult<MoveListOrderReply>>>>{};
+    auto optIntermediateTask = std::optional<async::Task<Result<UpdateListReply>>>{};
+    auto optFinalTask = std::optional<async::Task<Result<UpdateListReply>>>{};
     auto const initialTrackIds = sourceTrackIds(childLease.source());
     auto outerBinding = ao::test::requireValue(writerFixture.library().bindListOrder(childId, initialTrackIds));
     auto nestedBinding = outerBinding;
@@ -749,45 +763,52 @@ namespace ao::rt::test
         }
 
         callbackInvoked = true;
-        auto const nestedMoveRes = writer.moveListOrder(nestedBinding, std::array{third}, first);
-
-        if (nestedMoveRes)
-        {
-          nestedMoveStatus = nestedMoveRes->status;
-        }
-        else
-        {
-          nestedMoveStatus = ListOrderAuthoringStatus::Unavailable;
-        }
-
-        auto const intermediateRes = writer.updateList(LibraryWriter::ListDraft{
+        optNestedMoveTask.emplace(writerFixture.writer().moveListOrder(nestedBinding, std::vector{third}, first));
+        optIntermediateTask.emplace(writerFixture.writer().updateList(ListDraft{
           .parentId = intermediateParentId,
           .listId = childId,
           .name = "Child",
-        });
-
-        if (!intermediateRes)
-        {
-          intermediateReparentError = intermediateRes.error().code;
-        }
-
-        auto const finalRes = writer.updateList(LibraryWriter::ListDraft{
+        }));
+        optFinalTask.emplace(writerFixture.writer().updateList(ListDraft{
           .parentId = finalParentId,
           .listId = childId,
           .name = "Child",
-        });
-
-        if (!finalRes)
-        {
-          finalReparentError = finalRes.error().code;
-        }
+        }));
       });
 
-    auto const outerMoveRes = writer.moveListOrder(outerBinding, std::array{second}, first);
+    auto const outerMoveRes = writerFixture.runTask(writer.moveListOrder(outerBinding, {second}, first));
     REQUIRE(outerMoveRes);
-    REQUIRE(outerMoveRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(outerMoveRes->status == AuthoringStatus::Applied);
+    REQUIRE(optNestedMoveTask);
+    REQUIRE(optIntermediateTask);
+    REQUIRE(optFinalTask);
 
-    CHECK(nestedMoveStatus == ListOrderAuthoringStatus::Unavailable);
+    auto const nestedMoveRes = writerFixture.runTask(std::move(*optNestedMoveTask));
+
+    if (nestedMoveRes)
+    {
+      nestedMoveStatus = nestedMoveRes->status;
+    }
+    else
+    {
+      nestedMoveStatus = AuthoringStatus::Unavailable;
+    }
+
+    auto const intermediateRes = writerFixture.runTask(std::move(*optIntermediateTask));
+
+    if (!intermediateRes)
+    {
+      intermediateReparentError = intermediateRes.error().code;
+    }
+
+    auto const finalRes = writerFixture.runTask(std::move(*optFinalTask));
+
+    if (!finalRes)
+    {
+      finalReparentError = finalRes.error().code;
+    }
+
+    CHECK(nestedMoveStatus == AuthoringStatus::Unavailable);
     CHECK(intermediateReparentError == Error::Code::InvalidState);
     CHECK(finalReparentError == Error::Code::InvalidState);
     CHECK(&childLease.source() == identity);
@@ -806,7 +827,7 @@ namespace ao::rt::test
     }
 
     // Rejecting the reentrant attempts is not a fault: authoring stays open.
-    CHECK(writer.deleteList(finalParentId));
+    CHECK(writerFixture.runTask(writer.deleteList(finalParentId)));
   }
 
   TEST_CASE("TrackSourceCache - hidden rank re-enters at its stored position",
@@ -820,14 +841,14 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
     auto const membershipTag = std::array{std::string{"parentmember"}};
     REQUIRE(writerFixture.editTags(std::array{visible, hidden}, membershipTag, {}));
-    auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const parentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Parent",
       .expression = "#parentmember",
-    }));
-    auto const childId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    })));
+    auto const childId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .parentId = parentId,
       .name = "Child",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
@@ -837,15 +858,15 @@ namespace ao::rt::test
 
     auto effectiveTrackIds = sourceTrackIds(childLease.source());
     auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(childId, effectiveTrackIds));
-    auto firstMoveRes = writer.moveListOrder(binding, std::array{hidden}, visible);
+    auto firstMoveRes = writerFixture.runTask(writer.moveListOrder(binding, {hidden}, visible));
     REQUIRE(firstMoveRes);
-    REQUIRE(firstMoveRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(firstMoveRes->status == AuthoringStatus::Applied);
 
     effectiveTrackIds = sourceTrackIds(childLease.source());
     binding = ao::test::requireValue(writerFixture.library().bindListOrder(childId, effectiveTrackIds));
-    auto secondMoveRes = writer.moveListOrder(binding, std::array{visible}, hidden);
+    auto secondMoveRes = writerFixture.runTask(writer.moveListOrder(binding, {visible}, hidden));
     REQUIRE(secondMoveRes);
-    REQUIRE(secondMoveRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(secondMoveRes->status == AuthoringStatus::Applied);
     CHECK(sourceTrackIds(childLease.source()) == std::vector{visible, hidden});
 
     REQUIRE(writerFixture.editTags(std::array{hidden}, {}, membershipTag));
@@ -873,9 +894,9 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Delete target",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
@@ -885,12 +906,12 @@ namespace ao::rt::test
 
     auto effectiveTrackIds = sourceTrackIds(lease.source());
     auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(listId, effectiveTrackIds));
-    auto moveRes = writer.moveListOrder(binding, std::array{deleted}, first);
+    auto moveRes = writerFixture.runTask(writer.moveListOrder(binding, {deleted}, first));
     REQUIRE(moveRes);
-    REQUIRE(moveRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(moveRes->status == AuthoringStatus::Applied);
     batches.clear();
 
-    auto const result = writer.deleteTrack(deleted);
+    auto const result = writerFixture.runTask(writer.deleteTrack(deleted));
 
     REQUIRE(result);
     auto const expected = std::vector{first, third};
@@ -913,10 +934,10 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
     auto const membershipTag = std::array{std::string{"roadtrip"}};
     REQUIRE(writerFixture.editTags(std::array{first, removed}, membershipTag, {}));
-    auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{
       .name = "Road Trip",
       .expression = "#roadtrip",
-    }));
+    })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
@@ -926,17 +947,17 @@ namespace ao::rt::test
 
     auto effectiveTrackIds = sourceTrackIds(lease.source());
     auto orderBinding = ao::test::requireValue(writerFixture.library().bindListOrder(listId, effectiveTrackIds));
-    auto const moveRes = writer.moveListOrder(orderBinding, std::array{removed}, first);
+    auto const moveRes = writerFixture.runTask(writer.moveListOrder(orderBinding, {removed}, first));
     REQUIRE(moveRes);
-    REQUIRE(moveRes->status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(moveRes->status == AuthoringStatus::Applied);
     CHECK(sourceTrackIds(lease.source()) == std::vector{removed, first});
     batches.clear();
 
     auto const targets = ao::test::requireValue(writerFixture.library().bindTrackTargets(std::array{removed}));
-    auto const result = writer.removeTracksFromList(listId, targets);
+    auto const result = writerFixture.runTask(writer.removeTracksFromList(listId, targets));
 
     REQUIRE(result);
-    REQUIRE(result->status == TrackAuthoringStatus::Applied);
+    REQUIRE(result->status == AuthoringStatus::Applied);
     REQUIRE(result->reply.forgottenPositionTrackIds == std::vector{removed});
     REQUIRE(batches.size() == 1);
     auto const& script = sourceEditScript(batches.front());
@@ -997,11 +1018,11 @@ namespace ao::rt::test
     libraryFixture.addTrack("Drop");
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto const listId = ao::test::requireValue(writerFixture.writer().createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writerFixture.writer().createList(ListDraft{
       .parentId = kInvalidListId,
       .name = "Root smart list",
       .expression = "$title = \"Keep\"",
-    }));
+    })));
 
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();

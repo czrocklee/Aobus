@@ -34,6 +34,7 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
@@ -204,18 +205,19 @@ namespace ao::rt::test
       auto targetsRes = runtime.library().bindTrackTargets(trackIds);
       INFO((targetsRes ? "initial membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
-      auto membershipResultValueRes = runtime.library().writer().editTags(*targetsRes, membershipTag, {});
+      auto membershipResultValueRes = runRuntimeTask(
+        runtime, runtime.library().writer().editTags(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {}));
       INFO((membershipResultValueRes ? "initial membership updated" : membershipResultValueRes.error().message));
       REQUIRE(membershipResultValueRes);
       auto const& membershipRes = *membershipResultValueRes;
-      REQUIRE(
-        (membershipRes.status == TrackAuthoringStatus::Applied || membershipRes.status == TrackAuthoringStatus::NoOp));
+      REQUIRE((membershipRes.status == AuthoringStatus::Applied || membershipRes.status == AuthoringStatus::NoOp));
       executor.drain();
       runtime.reloadAllTracks();
-      auto listRes = runtime.library().writer().createList(LibraryWriter::ListDraft{
-        .name = "Playback session order",
-        .expression = "#playbacksessionorder",
-      });
+      auto listRes = runRuntimeTask(runtime,
+                                    runtime.library().writer().createList(ListDraft{
+                                      .name = "Playback session order",
+                                      .expression = "#playbacksessionorder",
+                                    }));
       INFO((listRes ? "playback List created" : listRes.error().message));
       REQUIRE(listRes);
       auto const listId = *listRes;
@@ -242,23 +244,29 @@ namespace ao::rt::test
       auto targetsRes = runtime.library().bindTrackTargets(trackIds);
       INFO((targetsRes ? "membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
-      auto resultValueRes = included ? runtime.library().writer().editTags(*targetsRes, membershipTag, {})
-                                     : runtime.library().writer().editTags(*targetsRes, {}, membershipTag);
+      auto resultValueRes = included ? runRuntimeTask(runtime,
+                                                      runtime.library().writer().editTags(
+                                                        *targetsRes, {membershipTag.begin(), membershipTag.end()}, {}))
+                                     : runRuntimeTask(runtime,
+                                                      runtime.library().writer().editTags(
+                                                        *targetsRes, {}, {membershipTag.begin(), membershipTag.end()}));
       INFO((resultValueRes ? "membership updated" : resultValueRes.error().message));
       REQUIRE(resultValueRes);
       auto const& result = *resultValueRes;
-      REQUIRE((result.status == TrackAuthoringStatus::Applied || result.status == TrackAuthoringStatus::NoOp));
+      REQUIRE((result.status == AuthoringStatus::Applied || result.status == AuthoringStatus::NoOp));
     }
 
-    LibraryWriter::MoveOrderAuthoringResult moveOrderedListViewOrder(AppRuntime& runtime,
-                                                                     OrderedListView const& view,
-                                                                     std::span<TrackId const> const selectedTrackIds,
-                                                                     std::optional<TrackId> const optBeforeTrackId)
+    AuthoringResult<MoveListOrderReply> moveOrderedListViewOrder(AppRuntime& runtime,
+                                                                 OrderedListView const& view,
+                                                                 std::span<TrackId const> const selectedTrackIds,
+                                                                 std::optional<TrackId> const optBeforeTrackId)
     {
       auto const effectiveTrackIds = ao::test::requireValue(runtime.views().listSourceTrackIds(view.viewId));
       auto binding = ao::test::requireValue(runtime.library().bindListOrder(view.listId, effectiveTrackIds));
       return ao::test::requireValue(
-        runtime.library().writer().moveListOrder(binding, selectedTrackIds, optBeforeTrackId));
+        runRuntimeTask(runtime,
+                       runtime.library().writer().moveListOrder(
+                         binding, {selectedTrackIds.begin(), selectedTrackIds.end()}, optBeforeTrackId)));
     }
 
     std::vector<TrackId> projectionTrackIds(TrackListProjection const& projection)
@@ -1450,9 +1458,8 @@ namespace ao::rt::test
       auto const first = addPlayableTrack(*runtimePtr, *executor, "First");
       addPlayableTrack(*runtimePtr, *executor, "Second");
       runtimePtr->reloadAllTracks();
-      auto const listId = ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{
-        .name = "Temporary source",
-      }));
+      auto const listId = ao::test::requireValue(
+        runRuntimeTask(*runtimePtr, runtimePtr->library().writer().createList(ListDraft{.name = "Temporary source"})));
       auto const viewRes = runtimePtr->workspace().navigate({.target = listId});
       REQUIRE(viewRes);
       REQUIRE(startFromViewAndWait(*runtimePtr, *executor, *viewRes, first));
@@ -1460,7 +1467,7 @@ namespace ao::rt::test
 
       auto const selected = runtimePtr->playback().snapshot().transport.output.selectedDevice;
       runtimePtr->playback().commands().setOutputDevice(selected.backendId, selected.deviceId, selected.profileId);
-      REQUIRE(runtimePtr->library().writer().deleteList(listId));
+      REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().writer().deleteList(listId)));
       executor->drain();
       CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Invalidated);
       CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == first);
@@ -1525,7 +1532,7 @@ namespace ao::rt::test
     REQUIRE(runtimePtr->savePlaybackSession());
     CHECK(storedSession(runtimePtr->playbackSessionConfigStore()).positionMs == 450);
 
-    REQUIRE(runtimePtr->library().writer().deleteTrack(first));
+    REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().writer().deleteTrack(first)));
     executor->drain();
     REQUIRE(runtimePtr->savePlaybackSession());
     auto const moved = storedSession(runtimePtr->playbackSessionConfigStore());
@@ -1546,7 +1553,7 @@ namespace ao::rt::test
     auto const orderedList = createOrderedListView(*runtimePtr, *executor, {alpha, bravo, charlie});
     auto const movedIds = std::vector{charlie};
     auto const moved = moveOrderedListViewOrder(*runtimePtr, orderedList, movedIds, alpha);
-    REQUIRE(moved.status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(moved.status == AuthoringStatus::Applied);
     executor->drain();
 
     auto viewProjectionPtr = ao::test::requireValue(runtimePtr->views().findTrackListProjection(orderedList.viewId));
@@ -1625,7 +1632,7 @@ namespace ao::rt::test
 
     auto const movedIds = std::vector{charlie};
     auto const moved = moveOrderedListViewOrder(*runtimePtr, orderedList, movedIds, alpha);
-    REQUIRE(moved.status == ListOrderAuthoringStatus::Applied);
+    REQUIRE(moved.status == AuthoringStatus::Applied);
     executor->drain();
 
     CHECK(projectionBatchCount == 0);

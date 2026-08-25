@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <sigc++/connection.h>
@@ -49,7 +51,7 @@ namespace ao::gtk::layout
                                           std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr);
     void clearIfAffectsCustomMetadata(std::string_view key, std::vector<TrackId> const& trackIds);
     void clear();
-    Result<> undo();
+    async::Task<Result<>> undo();
 
     sigc::signal<void()>& signalChanged();
 
@@ -61,5 +63,6 @@ namespace ao::gtk::layout
     std::optional<TrackDetailCustomMetadataUndo> _optPendingCustomMetadataUndo;
     sigc::signal<void()> _changed;
     sigc::connection _timerConn;
+    MainContextCallbackScope _presentationCallbacks;
   };
 } // namespace ao::gtk::layout

@@ -7,10 +7,13 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -67,6 +70,13 @@ namespace ao::rt::test
         return writerFixturePtr->writer();
       }
 
+      template<typename T>
+      T run(async::Task<T> task)
+      {
+        ensureRuntime();
+        return writerFixturePtr->runTask(std::move(task));
+      }
+
       BoundListOrder bind(ListId listId, std::span<TrackId const> effectiveTrackIds)
       {
         return ao::test::requireValue(library().bindListOrder(listId, effectiveTrackIds));
@@ -83,7 +93,7 @@ namespace ao::rt::test
       void clearEvents() { events.clear(); }
 
       MusicLibraryFixture storage;
-      InlineExecutor executor;
+      async::LoopExecutor executor;
       std::unique_ptr<LibraryChanges> changesPtr;
       std::unique_ptr<LibraryWriterFixture> writerFixturePtr;
       std::vector<LibraryChangeSet> events;
@@ -100,7 +110,7 @@ namespace ao::rt::test
         auto const transaction = storage.library().readTransaction();
         changesPtr =
           std::make_unique<LibraryChanges>(executor, storage.library().libraryRevision(transaction), "test-library");
-        writerFixturePtr = std::make_unique<LibraryWriterFixture>(storage.library(), *changesPtr);
+        writerFixturePtr = std::make_unique<LibraryWriterFixture>(storage.library(), *changesPtr, executor);
         changeSubscription =
           changesPtr->onChanged([this](LibraryChangeSet const& event) noexcept { events.push_back(event); });
       }
@@ -129,10 +139,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second, third});
     fixture.clearEvents();
 
-    auto const result = fixture.writer().moveListOrder(binding, std::array{third}, first);
+    auto const result = fixture.run(fixture.writer().moveListOrder(binding, std::vector{third}, first));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::Applied);
+    CHECK(result->status == AuthoringStatus::Applied);
     CHECK(result->reply.selectedTrackIds == std::vector{third});
     CHECK(result->reply.optBeforeTrackId == std::optional{first});
     CHECK(fixture.storedOrder(listId) == std::vector{third, first, hidden, second});
@@ -150,10 +160,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second});
     fixture.clearEvents();
 
-    auto const result = fixture.writer().moveListOrder(binding, std::array{first}, second);
+    auto const result = fixture.run(fixture.writer().moveListOrder(binding, std::vector{first}, second));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::NoOp);
+    CHECK(result->status == AuthoringStatus::NoOp);
     CHECK(fixture.storedOrder(listId).empty());
     CHECK(fixture.events.empty());
   }
@@ -169,10 +179,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second, third});
     fixture.clearEvents();
 
-    auto const result = fixture.writer().moveListOrder(binding, std::array{second}, std::nullopt);
+    auto const result = fixture.run(fixture.writer().moveListOrder(binding, std::vector{second}, std::nullopt));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::Applied);
+    CHECK(result->status == AuthoringStatus::Applied);
     CHECK(result->reply.optBeforeTrackId == std::nullopt);
     CHECK(fixture.storedOrder(listId) == std::vector{first, third, second});
     std::ignore = onlyOrderScript(fixture);
@@ -188,10 +198,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second});
     fixture.clearEvents();
 
-    auto const result = fixture.writer().moveListOrder(binding, std::span<TrackId const>{}, std::nullopt);
+    auto const result = fixture.run(fixture.writer().moveListOrder(binding, {}, std::nullopt));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::NoOp);
+    CHECK(result->status == AuthoringStatus::NoOp);
     CHECK(result->reply.selectedTrackIds.empty());
     CHECK(fixture.storedOrder(listId).empty());
     CHECK(fixture.events.empty());
@@ -210,10 +220,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, effective);
     fixture.clearEvents();
 
-    auto const result = fixture.writer().moveListOrder(binding, std::array{fourth, second}, first);
+    auto const result = fixture.run(fixture.writer().moveListOrder(binding, std::vector{fourth, second}, first));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::Applied);
+    CHECK(result->status == AuthoringStatus::Applied);
     CHECK(result->reply.selectedTrackIds == std::vector{second, fourth});
     CHECK(fixture.storedOrder(listId) == std::vector{second, fourth, first, third});
   }
@@ -228,10 +238,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{visible});
     fixture.clearEvents();
 
-    auto const result = fixture.writer().resetListOrder(binding);
+    auto const result = fixture.run(fixture.writer().resetListOrder(binding));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::Applied);
+    CHECK(result->status == AuthoringStatus::Applied);
     CHECK(result->reply.forgottenPositionCount == 2);
     CHECK(fixture.storedOrder(listId).empty());
     REQUIRE(fixture.events.size() == 1);
@@ -250,10 +260,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{second, first});
     fixture.clearEvents();
 
-    auto const result = fixture.writer().forgetHiddenListOrder(binding);
+    auto const result = fixture.run(fixture.writer().forgetHiddenListOrder(binding));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::Applied);
+    CHECK(result->status == AuthoringStatus::Applied);
     CHECK(result->reply.forgottenPositionCount == 1);
     CHECK(fixture.storedOrder(listId) == std::vector{second, first});
     std::ignore = onlyOrderScript(fixture);
@@ -267,13 +277,13 @@ namespace ao::rt::test
     auto const second = fixture.addTrack("Second");
     auto const listId = fixture.seedList();
     auto binding = fixture.bind(listId, std::array{first, second});
-    REQUIRE(fixture.writer().createList(LibraryWriter::ListDraft{.name = "Unrelated"}));
+    REQUIRE(fixture.run(fixture.writer().createList(ListDraft{.name = "Unrelated"})));
     fixture.clearEvents();
 
-    auto const result = fixture.writer().moveListOrder(binding, std::array{second}, first);
+    auto const result = fixture.run(fixture.writer().moveListOrder(binding, std::vector{second}, first));
 
     REQUIRE(result);
-    CHECK(result->status == ListOrderAuthoringStatus::Stale);
+    CHECK(result->status == AuthoringStatus::Stale);
     CHECK(fixture.storedOrder(listId).empty());
     CHECK(fixture.events.empty());
   }
@@ -289,7 +299,7 @@ namespace ao::rt::test
     SECTION("selection outside the bound source")
     {
       auto binding = fixture.bind(listId, std::array{first, second});
-      auto const result = fixture.writer().moveListOrder(binding, std::array{TrackId{9999}}, first);
+      auto const result = fixture.run(fixture.writer().moveListOrder(binding, std::vector{TrackId{9999}}, first));
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::InvalidInput);
@@ -298,7 +308,7 @@ namespace ao::rt::test
     SECTION("selected anchor")
     {
       auto binding = fixture.bind(listId, std::array{first, second});
-      auto const result = fixture.writer().moveListOrder(binding, std::array{first}, first);
+      auto const result = fixture.run(fixture.writer().moveListOrder(binding, std::vector{first}, first));
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::InvalidInput);

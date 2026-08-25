@@ -154,6 +154,16 @@ namespace ao::rt::test
     }
   } // namespace
 
+  TEST_CASE("AsyncRuntime - ready task eagerly owns and returns its value", "[runtime][unit][async]")
+  {
+    auto executor = InlineExecutor{};
+    auto runtime = Runtime{executor};
+    auto valuePtr = std::make_unique<std::int32_t>(42);
+    auto future = runtime.spawn(makeReadyTask(std::move(valuePtr)));
+    CHECK_FALSE(valuePtr);
+    CHECK(*future.get() == 42);
+  }
+
   TEST_CASE("AsyncRuntime - spawn switches to worker and returns through callback executor",
             "[runtime][unit][async][concurrency]")
   {

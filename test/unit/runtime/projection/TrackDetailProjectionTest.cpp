@@ -5,10 +5,9 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/async/Runtime.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
@@ -50,8 +49,7 @@ namespace ao::rt::test
     struct TrackDetailProjectionFixture final
     {
       MusicLibraryFixture libraryFixture;
-      InlineExecutor executor;
-      async::Runtime runtime;
+      async::LoopExecutor executor;
       LibraryChanges changes;
       LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
@@ -60,9 +58,8 @@ namespace ao::rt::test
 
       TrackDetailProjectionFixture()
         : libraryFixture{}
-        , runtime{executor}
         , changes{executor, 0, "test-library"}
-        , writerFixture{libraryFixture.library(), changes}
+        , writerFixture{libraryFixture.library(), changes, executor}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources, changes}
         , workspace{executor, views, changes}
@@ -71,10 +68,7 @@ namespace ao::rt::test
 
       LibraryWriter& writer() { return writerFixture.writer(); }
 
-      TrackId addTrack(library::test::TrackSpec const& spec)
-      {
-        return addTrackAndPublish(libraryFixture.library(), changes, spec);
-      }
+      TrackId addTrack(library::test::TrackSpec const& spec) { return writerFixture.addTrack(spec); }
 
       TrackId addTrack(std::string_view const title)
       {
@@ -264,18 +258,42 @@ namespace ao::rt::test
     CHECK(callCount == 1); // Called immediately
 
     auto const reply1 = ao::test::requireValue(env.workspace.navigate({.target = kAllTracksListId}));
+
+    while (env.executor.runReadyTurn())
+    {
+    }
+
     REQUIRE(env.views.setSelection(reply1, {id1}));
+
+    while (env.executor.runReadyTurn())
+    {
+    }
+
     REQUIRE(env.workspace.navigate({.target = GlobalViewKind::AllTracks}));
+
+    while (env.executor.runReadyTurn())
+    {
+    }
 
     CHECK(callCount >= 2);
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
 
     // Change selection in the focused view
     REQUIRE(env.views.setSelection(reply1, {id2}));
+
+    while (env.executor.runReadyTurn())
+    {
+    }
+
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
 
     // Change focus away
     REQUIRE(env.workspace.closeView(reply1));
+
+    while (env.executor.runReadyTurn())
+    {
+    }
+
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
 
     // Unsubscribe

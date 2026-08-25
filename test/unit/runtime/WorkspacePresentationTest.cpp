@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/WorkspaceTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -260,6 +261,7 @@ namespace ao::rt::test
     preset.spec.groupBy = TrackGroupKey::Composer;
 
     REQUIRE(runtime.workspace().addCustomPreset(preset));
+    settleRuntimeCallbacks(runtime);
     CHECK(emitCount == 1);
 
     auto presets = runtime.workspace().customPresets();
@@ -268,6 +270,7 @@ namespace ao::rt::test
 
     preset.spec.groupBy = TrackGroupKey::Work;
     REQUIRE(runtime.workspace().addCustomPreset(preset));
+    settleRuntimeCallbacks(runtime);
     CHECK(emitCount == 2);
     presets = runtime.workspace().customPresets();
     REQUIRE(presets.size() == 1);
@@ -278,6 +281,7 @@ namespace ao::rt::test
     CHECK(presentation.groupBy == TrackGroupKey::Work);
 
     REQUIRE(runtime.workspace().removeCustomPreset("custom1_id"));
+    settleRuntimeCallbacks(runtime);
     CHECK(emitCount == 3);
     CHECK(runtime.workspace().customPresets().empty());
   }

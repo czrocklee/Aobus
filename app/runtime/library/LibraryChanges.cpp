@@ -9,6 +9,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
 
+#include <atomic>
 #include <cstdint>
 #include <exception>
 #include <format>
@@ -26,7 +27,9 @@ namespace ao::rt
     struct PendingPublication final
     {
       LibraryChangeSet changeSet{};
-      compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion{};
+      compat::MoveOnlyFunction<
+        void(detail::LibraryPublicationTerminal terminal, std::string libraryIdentity, std::string replicaName)>
+        completion{};
     };
 
     struct ReplicaSlot final
@@ -63,9 +66,10 @@ namespace ao::rt
       replicaSlotPtr.reset();
     }
 
-    void publish(
-      LibraryChangeSet changeSet,
-      compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
+    void publish(LibraryChangeSet changeSet,
+                 compat::MoveOnlyFunction<void(detail::LibraryPublicationTerminal terminal,
+                                               std::string libraryIdentity,
+                                               std::string replicaName)> completion) noexcept
     {
       auto const revision = changeSet.libraryRevision;
 
@@ -160,6 +164,8 @@ namespace ao::rt
                      replicaName);
       }
 
+      deliveryInProgress.store(true, std::memory_order_release);
+
       if (pinnedReplicaPtr)
       {
         try
@@ -179,6 +185,7 @@ namespace ao::rt
 
       // Phase two. Reaching an observer states that the replica is current.
       changedSignal.emit(optPending->changeSet);
+      deliveryInProgress.store(false, std::memory_order_release);
 
       {
         auto const lock = std::scoped_lock{mutex};
@@ -191,7 +198,9 @@ namespace ao::rt
       {
         try
         {
-          optPending->completion(std::string{libraryIdentity}, std::string{replicaNameOf(pinnedReplicaPtr)});
+          optPending->completion(detail::LibraryPublicationTerminal::Published,
+                                 std::string{libraryIdentity},
+                                 std::string{replicaNameOf(pinnedReplicaPtr)});
         }
         catch (...)
         {
@@ -238,15 +247,28 @@ namespace ao::rt
       return activeReplicaPtr;
     }
 
-    void retire() noexcept
-    {
-      auto const lock = std::scoped_lock{mutex};
-      closing = true;
+    bool isDeliveryInProgress() const noexcept { return deliveryInProgress.load(std::memory_order_acquire); }
 
-      if (optPendingPublication)
+    void sealAndRetire() noexcept
+    {
+      auto retiredCompletion =
+        compat::MoveOnlyFunction<void(detail::LibraryPublicationTerminal, std::string, std::string)>{};
+
       {
-        optPendingPublication.reset();
-        publicationInProgress = false;
+        auto const lock = std::scoped_lock{mutex};
+        closing = true;
+
+        if (optPendingPublication)
+        {
+          retiredCompletion = std::move(optPendingPublication->completion);
+          optPendingPublication.reset();
+          publicationInProgress = false;
+        }
+      }
+
+      if (retiredCompletion)
+      {
+        retiredCompletion(detail::LibraryPublicationTerminal::RetiredByClosing, {}, {});
       }
     }
 
@@ -258,6 +280,7 @@ namespace ao::rt
     mutable std::mutex mutex;
     std::optional<PendingPublication> optPendingPublication;
     std::uint64_t expectedRevision = 1;
+    std::atomic_bool deliveryInProgress = false;
     bool publicationInProgress = false;
     bool closing = false;
   };
@@ -292,13 +315,20 @@ namespace ao::rt
 
   void LibraryChanges::publishFromCoordinator(
     LibraryChangeSet changeSet,
-    compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept
+    compat::MoveOnlyFunction<void(detail::LibraryPublicationTerminal terminal,
+                                  std::string libraryIdentity,
+                                  std::string replicaName)> completion) noexcept
   {
     _implPtr->publish(std::move(changeSet), std::move(completion));
   }
 
-  void LibraryChanges::retireFromCoordinator() noexcept
+  bool LibraryChanges::publicationDeliveryInProgressFromCoordinator() const noexcept
   {
-    _implPtr->retire();
+    return _implPtr->isDeliveryInProgress();
+  }
+
+  void LibraryChanges::sealAndRetireFromCoordinator() noexcept
+  {
+    _implPtr->sealAndRetire();
   }
 } // namespace ao::rt

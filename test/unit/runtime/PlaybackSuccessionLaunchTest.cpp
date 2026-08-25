@@ -452,7 +452,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
 
-    REQUIRE(fixture.writer().deleteList(fixture.listId));
+    REQUIRE(fixture.writerFixture.runTask(fixture.writer().deleteList(fixture.listId)));
     auto const invalidated = succession.state();
     CHECK(invalidated.sourceState == PlaybackSuccessionSourceState::Invalidated);
     CHECK(invalidated.currentTrackId == fixture.firstTrackId);
@@ -521,7 +521,7 @@ namespace ao::rt::test
     {
       auto fixture = PlaybackSuccessionFixture{};
       fixture.buildThreeTrackManualView();
-      REQUIRE(fixture.writer().deleteList(fixture.listId));
+      REQUIRE(fixture.writerFixture.runTask(fixture.writer().deleteList(fixture.listId)));
 
       auto const result = fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId);
 

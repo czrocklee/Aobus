@@ -11,6 +11,7 @@
 #include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/LibraryNavigation.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -48,8 +49,8 @@ namespace ao::tui::test
 
       ListId addList(std::string name) const
       {
-        return ao::test::requireValue(
-          runtimePtr->library().writer().createList(rt::LibraryWriter::ListDraft{.name = std::move(name)}));
+        return ao::test::requireValue(rt::test::runRuntimeTask(
+          *runtimePtr, runtimePtr->library().writer().createList(rt::ListDraft{.name = std::move(name)})));
       }
     };
 
@@ -296,6 +297,7 @@ namespace ao::tui::test
       .basePresetId = "songs",
       .spec = customSpec,
     }));
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
 
     REQUIRE(controller.presentationEntries().size() == initialCount + 1);
     CHECK(controller.presentationEntries().back().id == "custom-songs");

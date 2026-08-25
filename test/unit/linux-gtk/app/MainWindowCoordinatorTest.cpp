@@ -25,6 +25,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -292,9 +293,10 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime);
     auto& playback = runtime.playback();
-    auto const sourceListId = ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{
-      .name = "Temporary sequence source",
-    }));
+    auto const sourceListId = ao::test::requireValue(runGtkTask(runtime,
+                                                                runtime.library().writer().createList(rt::ListDraft{
+                                                                  .name = "Temporary sequence source",
+                                                                })));
     runtime.reloadAllTracks();
     auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigate({.target = sourceListId}));
     REQUIRE(playback.commands().startFromView(sourceViewId, trackId));
@@ -303,7 +305,7 @@ namespace ao::gtk::test
     playback.commands().setShuffleMode(rt::ShuffleMode::On);
     playback.commands().setRepeatMode(rt::RepeatMode::All);
     REQUIRE(runtime.savePlaybackSession());
-    REQUIRE(runtime.library().writer().deleteList(sourceListId));
+    REQUIRE(runGtkTask(runtime, runtime.library().writer().deleteList(sourceListId)));
     playback.commands().stop();
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";

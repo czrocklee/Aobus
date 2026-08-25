@@ -28,7 +28,8 @@ namespace clang::tidy::readability
     // (and deduced auto types); qualType(hasDeclaration(...)) alone cannot see
     // through template specializations.
     finder->addMatcher(declaratorDecl(hasType(qualType(hasUnqualifiedDesugaredType(recordType(
-                                        hasDeclaration(classTemplateSpecializationDecl(hasName("::ao::Result"))))))))
+                                        hasDeclaration(classTemplateSpecializationDecl(hasName("::ao::Result"))))))),
+                                      unless(hasAncestor(functionDecl(clang::ast_matchers::isTemplateInstantiation()))))
                          .bind("result_decl"),
                        this);
   }

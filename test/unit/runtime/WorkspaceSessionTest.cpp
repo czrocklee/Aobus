@@ -4,7 +4,9 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -25,6 +27,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace
 {
@@ -70,6 +73,15 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
+  namespace
+  {
+    ListId createList(AppRuntime& runtime, std::string name)
+    {
+      return ao::test::requireValue(
+        runRuntimeTask(runtime, runtime.library().writer().createList(ListDraft{.name = std::move(name)})));
+    }
+  } // namespace
+
   TEST_CASE("WorkspaceService - missing workspace config is a successful empty restore",
             "[runtime][unit][workspace][session]")
   {
@@ -88,8 +100,7 @@ namespace ao::rt::test
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const listId =
-      ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Existing"}));
+    auto const listId = createList(*runtimePtr, "Existing");
     REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
     auto const before = runtimePtr->workspace().snapshot();
     auto const configPath = tempDir.path() / "other-group.yaml";
@@ -110,8 +121,7 @@ namespace ao::rt::test
 
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      listId =
-        ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Restored"}));
+      listId = createList(*runtimePtr, "Restored");
       REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
     }
@@ -134,10 +144,8 @@ namespace ao::rt::test
 
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      firstListId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First restored"}));
-      secondListId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "After restore"}));
+      firstListId = createList(*runtimePtr, "First restored");
+      secondListId = createList(*runtimePtr, "After restore");
       REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
     }
@@ -174,10 +182,8 @@ namespace ao::rt::test
 
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      listId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Shared list"}));
-      nextListId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "After restore"}));
+      listId = createList(*runtimePtr, "Shared list");
+      nextListId = createList(*runtimePtr, "After restore");
       auto const* songsPreset = builtinTrackPresentationPreset("songs");
       auto const* albumsPreset = builtinTrackPresentationPreset("albums");
       REQUIRE(songsPreset != nullptr);
@@ -236,10 +242,8 @@ namespace ao::rt::test
 
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      auto const firstListId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First snapshot"}));
-      auto const secondListId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Second snapshot"}));
+      auto const firstListId = createList(*runtimePtr, "First snapshot");
+      auto const secondListId = createList(*runtimePtr, "Second snapshot");
       REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
       REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
@@ -256,6 +260,7 @@ namespace ao::rt::test
       });
 
     REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
+    runRuntimeTask(*runtimePtr, runtimePtr->async().resumeOnCallbackExecutor());
 
     CHECK(changeCount == 1);
     CHECK(changed.cause == WorkspaceChangeCause::Restore);
@@ -293,12 +298,9 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
 
-    auto const existingListId =
-      ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Existing"}));
-    auto const storedListId =
-      ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Stored"}));
-    auto const nextListId =
-      ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Next"}));
+    auto const existingListId = createList(*runtimePtr, "Existing");
+    auto const storedListId = createList(*runtimePtr, "Stored");
+    auto const nextListId = createList(*runtimePtr, "Next");
     auto const existingViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = existingListId}));
     auto const* songsPreset = builtinTrackPresentationPreset("songs");
     REQUIRE(songsPreset != nullptr);
@@ -347,10 +349,8 @@ namespace ao::rt::test
     SECTION("Existing workspace selects its first view")
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      auto const firstListId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First existing"}));
-      auto const secondListId = ao::test::requireValue(
-        runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Second existing"}));
+      auto const firstListId = createList(*runtimePtr, "First existing");
+      auto const secondListId = createList(*runtimePtr, "Second existing");
       auto const firstViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = firstListId}));
       REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
       auto const beforeViews = runtimePtr->workspace().snapshot().openViews;
@@ -366,8 +366,7 @@ namespace ao::rt::test
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const listId =
-      ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
+    auto const listId = createList(*runtimePtr, "Valid");
     auto const configPath = tempDir.path() / "partial.yaml";
 
     writeWorkspaceConfig(configPath, {listId.raw(), 999999}, 0);
@@ -389,8 +388,7 @@ namespace ao::rt::test
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const listId =
-      ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
+    auto const listId = createList(*runtimePtr, "Valid");
     auto const configPath = tempDir.path() / "versioned.yaml";
     auto expectedCode = Error::Code::FormatRejected;
 

@@ -175,7 +175,7 @@ namespace ao::rt::test
     auto recorder = ChangeRecorder{changes};
     auto const patch = MetadataPatch{.optTitle = "After"};
 
-    auto const dryRunRes = writer.previewUpdateMetadata(std::array{trackId}, patch);
+    auto const dryRunRes = writerFixture.runTask(writer.previewUpdateMetadata(std::vector{trackId}, patch));
 
     REQUIRE(dryRunRes);
     REQUIRE(dryRunRes->changes.size() == 1);
@@ -209,7 +209,7 @@ namespace ao::rt::test
     auto patch = MetadataPatch{.optArtist = "Preview Artist"};
     patch.customUpdates.emplace("Preview Key", "Preview Value");
 
-    auto const previewRes = writer.previewUpdateMetadata(std::array{trackId}, patch);
+    auto const previewRes = writerFixture.runTask(writer.previewUpdateMetadata(std::vector{trackId}, patch));
 
     REQUIRE(previewRes);
     CHECK(dictionary.size() == initialSize);
@@ -240,7 +240,8 @@ namespace ao::rt::test
     auto const initialSize = dictionary.size();
     auto const initialGeneration = dictionary.generation();
 
-    auto const dryRunRes = writer.previewEditTags(std::array{trackId}, tags, {});
+    auto const dryRunRes =
+      writerFixture.runTask(writer.previewEditTags(std::vector{trackId}, {tags.begin(), tags.end()}, {}));
 
     REQUIRE(dryRunRes);
     REQUIRE(dryRunRes->changes.size() == 1);
@@ -268,15 +269,15 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
-    auto draft = LibraryWriter::ListDraft{.name = "Draft"};
+    auto draft = ListDraft{.name = "Draft"};
 
-    auto const dryRunRes = writer.previewCreateList(draft);
+    auto const dryRunRes = writerFixture.runTask(writer.previewCreateList(draft));
 
     REQUIRE(dryRunRes);
     CHECK(listCount(libraryFixture) == 0);
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = writer.createList(draft);
+    auto const commitRes = writerFixture.runTask(writer.createList(draft));
     REQUIRE(commitRes);
     CHECK(listExists(libraryFixture, *commitRes));
     CHECK(recorder.listsMutated == 1);
@@ -291,9 +292,9 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
-    auto draft = LibraryWriter::ListDraft{.listId = listId, .name = "After"};
+    auto draft = ListDraft{.listId = listId, .name = "After"};
 
-    auto const dryRunRes = writer.previewUpdateList(draft);
+    auto const dryRunRes = writerFixture.runTask(writer.previewUpdateList(draft));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->changed);
@@ -302,7 +303,7 @@ namespace ao::rt::test
     CHECK(listOrderContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = writer.updateList(draft);
+    auto const commitRes = writerFixture.runTask(writer.updateList(draft));
     REQUIRE(commitRes);
     CHECK(*commitRes == *dryRunRes);
     CHECK(listName(libraryFixture, listId) == "After");
@@ -320,7 +321,7 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
 
-    auto const dryRunRes = writer.previewDeleteList(listId);
+    auto const dryRunRes = writerFixture.runTask(writer.previewDeleteList(listId));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->name == "Delete Me");
@@ -328,7 +329,7 @@ namespace ao::rt::test
     CHECK(listExists(libraryFixture, listId));
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = writer.deleteList(listId);
+    auto const commitRes = writerFixture.runTask(writer.deleteList(listId));
     REQUIRE(commitRes);
     CHECK(*commitRes == *dryRunRes);
     CHECK_FALSE(listExists(libraryFixture, listId));
@@ -345,7 +346,7 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
 
-    auto const dryRunRes = writer.previewDeleteTrack(trackId);
+    auto const dryRunRes = writerFixture.runTask(writer.previewDeleteTrack(trackId));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->trackId == trackId);
@@ -357,7 +358,7 @@ namespace ao::rt::test
     CHECK(recorder.collectionChanged == 0);
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = writer.deleteTrack(trackId);
+    auto const commitRes = writerFixture.runTask(writer.deleteTrack(trackId));
     REQUIRE(commitRes);
     CHECK(*commitRes == *dryRunRes);
     CHECK_FALSE(trackExists(libraryFixture, trackId));
@@ -382,7 +383,7 @@ namespace ao::rt::test
       return;
     }
 
-    auto const dryRunRes = writer.previewCreateTrackFromFile(absValidFile);
+    auto const dryRunRes = writerFixture.runTask(writer.previewCreateTrackFromFile(absValidFile));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->uri == "music/song.flac");
@@ -392,7 +393,7 @@ namespace ao::rt::test
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 0);
 
-    auto const commitRes = writer.createTrackFromFile(absValidFile);
+    auto const commitRes = writerFixture.runTask(writer.createTrackFromFile(absValidFile));
     REQUIRE(commitRes);
     CHECK(commitRes->uri == dryRunRes->uri);
     CHECK(commitRes->title == dryRunRes->title);

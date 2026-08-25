@@ -136,7 +136,9 @@ Metadata and tag editors use a platform-neutral `TrackAuthoringSession`.
 Session creation asks runtime to bind one exact target order to the current runtime instance and committed library revision.
 The session owns that evidence and its current/invalid lifetime; it never owns a storage transaction and never silently rebinds a draft after a library change.
 Maintenance, runtime replacement, any intervening effective commit, or a rejected/missing target makes the corresponding edit non-committable.
-An applied submission receives evidence for the new committed revision, enabling a guarded follow-up edit or undo without weakening the original target set.
+Submission is asynchronous and the session permits only one pending command at a time.
+It retains the draft and binding across non-terminal lane `Busy`, while `Stale` or `Unavailable` invalidates the session according to the owning editor policy.
+An applied submission receives evidence for the new settled revision, enabling a guarded follow-up edit or undo without weakening the original target set.
 
 The public namespace remains `ao::uimodel`; feature ownership is expressed by singular folders mirrored across public headers, sources, and tests.
 
@@ -246,8 +248,9 @@ Metadata/tag authoring adds an explicit revision boundary:
 runtime projection target ids
   -> UIModel TrackAuthoringSession binds (runtime instance, revision, exact ids)
   -> GTK/TUI edits a local value
-  -> session submits a metadata/tag command with the retained binding
-  -> Applied + next binding | NoOp | Stale | Unavailable
+  -> session submits one owning metadata/tag Task with the retained binding
+  -> pending until transaction abort or revision settlement
+  -> Applied + next binding | NoOp | Busy | Stale | Unavailable
 ```
 
 Purely platform concerns, such as CSS application, popover dismissal, terminal hit regions, and native file selection, stay within the frontend.
@@ -286,6 +289,7 @@ A quick filter narrows the active membership while retaining the active presenta
 - Layout component factories receive an explicit dependency bundle and runtime-state carrier rather than reaching through global frontend singletons.
 - Narrow GTK evaluator composition may borrow the const core-library view; committing authority remains inaccessible to GTK and UIModel.
 - An open authoring session never retargets when GTK recycles a row, selection changes, or a detail projection refreshes.
+- A pending authoring session rejects another local submission, and transient `Busy` never destroys its draft or binding.
 - UIModel owns binding invalidation and guarded undo policy; frontend code owns editor lifetime and rendering.
 
 ## Failure, cancellation, and lifetime boundaries
@@ -294,8 +298,12 @@ Runtime failures arrive as typed results, snapshots, or observational events.
 UIModel converts semantic state into platform-neutral display or action state but does not choose runtime recovery behavior.
 Frontends decide how and where to render an error and own cancellation tied to widget/dialog/terminal lifetime.
 
+GTK one-shot command adapters retain only owning result values and a weak main-context owner scope across the await.
+Owner teardown suppresses late completion without cancelling or reinterpreting a command that may already have committed.
+Multi-stage workflows keep explicit coroutines because their intermediate values and branch-specific result types are part of the workflow rather than a generic one-shot completion.
+
 `TrackAuthoringSession` observes authoring availability and invalidates itself when its runtime instance/revision is no longer current.
-Runtime revalidates the same facts under writer ownership at submission, so delayed availability delivery cannot permit a stale commit.
+Runtime revalidates the same facts during the command's active transaction turn, so delayed availability delivery cannot permit a stale commit.
 
 GTK main-window teardown releases controllers, widgets, view models, and subscriptions before the window-owned `AppRuntime` is destroyed.
 TUI releases its event/render collaborators before leaving the runtime scope.
@@ -356,6 +364,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 
 ## Related documents
 
+- [Decision 0015: sequence live-runtime library writes](../decision/0015-sequence-live-runtime-library-writes.md)
 - [System architecture](system-overview.md)
 - [Runtime execution architecture](runtime-execution.md)
 - [Failure and reporting architecture](failure-and-reporting.md)

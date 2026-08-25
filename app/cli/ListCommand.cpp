@@ -176,15 +176,15 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::ListOrderReportDto>
 
 namespace ao::cli
 {
-  Result<> validateListOrderCommandStatus(rt::ListOrderAuthoringStatus const status)
+  Result<> validateListOrderCommandStatus(rt::AuthoringStatus const status)
   {
     switch (status)
     {
-      case rt::ListOrderAuthoringStatus::Applied:
-      case rt::ListOrderAuthoringStatus::NoOp: return {};
-      case rt::ListOrderAuthoringStatus::Stale:
-        return makeError(Error::Code::Conflict, "List order target became stale");
-      case rt::ListOrderAuthoringStatus::Unavailable: return makeError(Error::Code::InvalidState, "Library is busy");
+      case rt::AuthoringStatus::Applied:
+      case rt::AuthoringStatus::NoOp: return {};
+      case rt::AuthoringStatus::Stale: return makeError(Error::Code::Conflict, "List order target became stale");
+      case rt::AuthoringStatus::Busy:
+      case rt::AuthoringStatus::Unavailable: return makeError(Error::Code::InvalidState, "Library is busy");
     }
 
     AO_FATAL("Unknown List order authoring status");
@@ -370,9 +370,9 @@ namespace ao::cli
       printPlainTrackRows(cli.io().out, rows);
     }
 
-    rt::LibraryWriter::ListDraft draftFromNode(rt::ListNode const& node)
+    rt::ListDraft draftFromNode(rt::ListNode const& node)
     {
-      return rt::LibraryWriter::ListDraft{
+      return rt::ListDraft{
         .parentId = node.parentId,
         .listId = node.id,
         .name = node.name,
@@ -381,7 +381,7 @@ namespace ao::cli
       };
     }
 
-    rt::LibraryWriter::ListDraft requireListDraft(ListId const listId, rt::LibraryReader& reader)
+    rt::ListDraft requireListDraft(ListId const listId, rt::LibraryReader& reader)
     {
       auto optNode = reader.listNode(listId);
 
@@ -395,7 +395,7 @@ namespace ao::cli
 
     void printListCreateMutation(CliRuntime& cli,
                                  std::optional<ListId> optListId,
-                                 rt::LibraryWriter::ListDraft const& draft,
+                                 rt::ListDraft const& draft,
                                  bool const dryRun)
     {
       if (cli.options().format != OutputFormat::Plain)
@@ -430,7 +430,7 @@ namespace ao::cli
                     ListId const parentListId,
                     bool const dryRun)
     {
-      auto const draft = rt::LibraryWriter::ListDraft{
+      auto const draft = rt::ListDraft{
         .parentId = parentListId,
         .name = name,
         .description = description,
@@ -439,7 +439,7 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const result = cli.library().writer().previewCreateList(draft);
+        auto const result = cli.runTask(cli.library().writer().previewCreateList(draft));
 
         if (!result)
         {
@@ -450,7 +450,7 @@ namespace ao::cli
         return;
       }
 
-      auto const result = cli.library().writer().createList(draft);
+      auto const result = cli.runTask(cli.library().writer().createList(draft));
 
       if (!result)
       {
@@ -518,8 +518,8 @@ namespace ao::cli
         draft.parentId = ListId{*optParent};
       }
 
-      auto const result =
-        dryRun ? cli.library().writer().previewUpdateList(draft) : cli.library().writer().updateList(draft);
+      auto const result = cli.runTask(dryRun ? cli.library().writer().previewUpdateList(draft)
+                                             : cli.library().writer().updateList(draft));
 
       if (!result)
       {
@@ -586,20 +586,21 @@ namespace ao::cli
       }
     }
 
-    std::string_view orderStatusName(rt::ListOrderAuthoringStatus const status)
+    std::string_view orderStatusName(rt::AuthoringStatus const status)
     {
       switch (status)
       {
-        case rt::ListOrderAuthoringStatus::Applied: return "applied";
-        case rt::ListOrderAuthoringStatus::NoOp: return "no-op";
-        case rt::ListOrderAuthoringStatus::Stale: return "stale";
-        case rt::ListOrderAuthoringStatus::Unavailable: return "unavailable";
+        case rt::AuthoringStatus::Applied: return "applied";
+        case rt::AuthoringStatus::NoOp: return "no-op";
+        case rt::AuthoringStatus::Stale: return "stale";
+        case rt::AuthoringStatus::Busy: return "busy";
+        case rt::AuthoringStatus::Unavailable: return "unavailable";
       }
 
       return "unknown";
     }
 
-    void requireSuccessfulListOrderStatus(rt::ListOrderAuthoringStatus const status)
+    void requireSuccessfulListOrderStatus(rt::AuthoringStatus const status)
     {
       if (auto result = validateListOrderCommandStatus(status); !result)
       {
@@ -690,7 +691,7 @@ namespace ao::cli
       {
         if (add)
         {
-          auto result = cli.library().writer().previewAddTracksToList(listId, targets);
+          auto result = cli.runTask(cli.library().writer().previewAddTracksToList(listId, targets));
 
           if (!result)
           {
@@ -711,7 +712,7 @@ namespace ao::cli
           return;
         }
 
-        auto result = cli.library().writer().previewRemoveTracksFromList(listId, targets);
+        auto result = cli.runTask(cli.library().writer().previewRemoveTracksFromList(listId, targets));
 
         if (!result)
         {
@@ -743,19 +744,19 @@ namespace ao::cli
 
       if (add)
       {
-        auto result = cli.library().writer().addTracksToList(listId, *bindingRes);
+        auto result = cli.runTask(cli.library().writer().addTracksToList(listId, *bindingRes));
 
         if (!result)
         {
           throwCommandError(result.error());
         }
 
-        if (result->status == rt::TrackAuthoringStatus::Stale)
+        if (result->status == rt::AuthoringStatus::Stale)
         {
           throwCommandError(Error::Code::Conflict, "List membership targets became stale");
         }
 
-        if (result->status == rt::TrackAuthoringStatus::Unavailable)
+        if (result->status == rt::AuthoringStatus::Busy || result->status == rt::AuthoringStatus::Unavailable)
         {
           throwCommandError(Error::Code::InvalidState, "Library is busy");
         }
@@ -766,26 +767,26 @@ namespace ao::cli
                                       .listId = result->reply.listId,
                                       .listName = result->reply.listName,
                                       .tag = result->reply.tag,
-                                      .changed = result->status == rt::TrackAuthoringStatus::Applied,
+                                      .changed = result->status == rt::AuthoringStatus::Applied,
                                       .targetTrackIds = result->reply.targetTrackIds,
                                       .changes = result->reply.tagEdit.changes,
                                     });
         return;
       }
 
-      auto result = cli.library().writer().removeTracksFromList(listId, *bindingRes);
+      auto result = cli.runTask(cli.library().writer().removeTracksFromList(listId, *bindingRes));
 
       if (!result)
       {
         throwCommandError(result.error());
       }
 
-      if (result->status == rt::TrackAuthoringStatus::Stale)
+      if (result->status == rt::AuthoringStatus::Stale)
       {
         throwCommandError(Error::Code::Conflict, "List membership targets became stale");
       }
 
-      if (result->status == rt::TrackAuthoringStatus::Unavailable)
+      if (result->status == rt::AuthoringStatus::Busy || result->status == rt::AuthoringStatus::Unavailable)
       {
         throwCommandError(Error::Code::InvalidState, "Library is busy");
       }
@@ -796,7 +797,7 @@ namespace ao::cli
                                     .listId = result->reply.listId,
                                     .listName = result->reply.listName,
                                     .tag = result->reply.tag,
-                                    .changed = result->status == rt::TrackAuthoringStatus::Applied,
+                                    .changed = result->status == rt::AuthoringStatus::Applied,
                                     .targetTrackIds = result->reply.targetTrackIds,
                                     .changes = result->reply.tagEdit.changes,
                                     .forgottenPositionTrackIds = result->reply.forgottenPositionTrackIds,
@@ -848,7 +849,7 @@ namespace ao::cli
       auto const selectedTrackIds = trackIds(rawTrackIds);
       auto const optBeforeTrackId = optRawBeforeTrackId ? std::optional{TrackId{*optRawBeforeTrackId}} : std::nullopt;
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.library().writer().moveListOrder(binding, selectedTrackIds, optBeforeTrackId);
+      auto result = cli.runTask(cli.library().writer().moveListOrder(binding, selectedTrackIds, optBeforeTrackId));
 
       if (!result)
       {
@@ -869,7 +870,7 @@ namespace ao::cli
     void resetListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.library().writer().resetListOrder(binding);
+      auto result = cli.runTask(cli.library().writer().resetListOrder(binding));
 
       if (!result)
       {
@@ -889,7 +890,7 @@ namespace ao::cli
     void forgetHiddenListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.library().writer().forgetHiddenListOrder(binding);
+      auto result = cli.runTask(cli.library().writer().forgetHiddenListOrder(binding));
 
       if (!result)
       {
@@ -1078,8 +1079,8 @@ namespace ao::cli
 
         if (deleteDescendants->count() > 0)
         {
-          auto const result = dryRun ? cli.library().writer().previewDeleteListAndDescendants(listId)
-                                     : cli.library().writer().deleteListAndDescendants(listId);
+          auto const result = cli.runTask(dryRun ? cli.library().writer().previewDeleteListAndDescendants(listId)
+                                                 : cli.library().writer().deleteListAndDescendants(listId));
 
           if (!result)
           {
@@ -1090,8 +1091,8 @@ namespace ao::cli
           return;
         }
 
-        auto const result =
-          dryRun ? cli.library().writer().previewDeleteList(listId) : cli.library().writer().deleteList(listId);
+        auto const result = cli.runTask(dryRun ? cli.library().writer().previewDeleteList(listId)
+                                               : cli.library().writer().deleteList(listId));
 
         if (!result)
         {

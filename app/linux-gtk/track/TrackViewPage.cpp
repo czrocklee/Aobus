@@ -4,6 +4,7 @@
 #include "track/TrackViewPage.h"
 
 #include "app/GtkStyleRuntime.h"
+#include "common/UiWorkflow.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
@@ -21,6 +22,7 @@
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
@@ -63,6 +65,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -76,6 +79,21 @@ namespace ao::gtk
 {
   namespace
   {
+    std::size_t affectedTrackCount(rt::MoveListOrderReply const& reply)
+    {
+      return reply.selectedTrackIds.size();
+    }
+
+    std::size_t affectedTrackCount(rt::ResetListOrderReply const& reply)
+    {
+      return reply.forgottenPositionCount;
+    }
+
+    std::size_t affectedTrackCount(rt::ForgetHiddenListOrderReply const& reply)
+    {
+      return reply.forgottenPositionCount;
+    }
+
     void configureSectionLabel(Gtk::Label& label)
     {
       label.set_halign(Gtk::Align::START);
@@ -320,6 +338,7 @@ namespace ao::gtk
 
   TrackViewPage::~TrackViewPage()
   {
+    _tasks.cancelAll();
     _orderDragControllerPtr.reset();
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
     _scrolledWindow.unset_child();
@@ -634,73 +653,63 @@ namespace ao::gtk
       return;
     }
 
-    auto& session = **sessionRes;
-    auto const selectedIds = _viewHostPtr->selectionController().selectedTrackIds();
-    auto const handleStatus = [this](rt::ListOrderAuthoringStatus const status, std::string const& appliedMessage)
+    auto submit = [this](auto task, i18n::MessageId const appliedMessage)
     {
-      switch (status)
-      {
-        case rt::ListOrderAuthoringStatus::Applied: setStatusMessage(appliedMessage); return;
-        case rt::ListOrderAuthoringStatus::NoOp:
-          setStatusMessage(_textCatalog.text(i18n::MessageId::ListOrderUnchanged));
-          return;
-        case rt::ListOrderAuthoringStatus::Stale:
-          setStatusMessage(_textCatalog.text(i18n::MessageId::ListOrderChanged));
-          return;
-        case rt::ListOrderAuthoringStatus::Unavailable:
-          setStatusMessage(_textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable));
-          return;
-      }
-    };
-    auto const handleMove = [this, &handleStatus](auto result)
-    {
-      if (!result)
-      {
-        setStatusMessage(result.error().message);
-        return;
-      }
+      spawnUiTask(_runtime.async(),
+                  _tasks,
+                  *this,
+                  "list order command",
+                  std::move(task),
+                  [appliedMessage](TrackViewPage* owner, auto result)
+                  {
+                    if (!result)
+                    {
+                      owner->setStatusMessage(result.error().message);
+                      return;
+                    }
 
-      handleStatus(
-        result->status,
-        _textCatalog.format(i18n::MessageId::ListOrderMoved, {{"count", result->reply.selectedTrackIds.size()}}));
+                    switch (result->status)
+                    {
+                      case rt::AuthoringStatus::Applied:
+                        owner->setStatusMessage(
+                          owner->_textCatalog.format(appliedMessage, {{"count", affectedTrackCount(result->reply)}}));
+                        return;
+                      case rt::AuthoringStatus::NoOp:
+                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderUnchanged));
+                        return;
+                      case rt::AuthoringStatus::Busy:
+                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderLibraryBusy));
+                        return;
+                      case rt::AuthoringStatus::Stale:
+                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderChanged));
+                        return;
+                      case rt::AuthoringStatus::Unavailable:
+                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable));
+                        return;
+                    }
+                  });
     };
+    auto& session = **sessionRes;
+    auto selectedIds = _viewHostPtr->selectionController().selectedTrackIds();
 
     switch (command)
     {
-      case TrackOrderCommand::MoveUp: handleMove(session.moveUp(selectedIds)); return;
-      case TrackOrderCommand::MoveDown: handleMove(session.moveDown(selectedIds)); return;
-      case TrackOrderCommand::MoveToTop: handleMove(session.moveToTop(selectedIds)); return;
-      case TrackOrderCommand::MoveToBottom: handleMove(session.moveToBottom(selectedIds)); return;
-      case TrackOrderCommand::Reset:
-      {
-        auto result = session.resetOrder();
-
-        if (!result)
-        {
-          setStatusMessage(result.error().message);
-          return;
-        }
-
-        handleStatus(
-          result->status,
-          _textCatalog.format(i18n::MessageId::ListOrderReset, {{"count", result->reply.forgottenPositionCount}}));
+      case TrackOrderCommand::MoveUp:
+        submit(session.moveUp(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
         return;
-      }
+      case TrackOrderCommand::MoveDown:
+        submit(session.moveDown(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
+        return;
+      case TrackOrderCommand::MoveToTop:
+        submit(session.moveToTop(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
+        return;
+      case TrackOrderCommand::MoveToBottom:
+        submit(session.moveToBottom(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
+        return;
+      case TrackOrderCommand::Reset: submit(session.resetOrder(), i18n::MessageId::ListOrderReset); return;
       case TrackOrderCommand::ForgetHidden:
-      {
-        auto result = session.forgetHiddenPositions();
-
-        if (!result)
-        {
-          setStatusMessage(result.error().message);
-          return;
-        }
-
-        handleStatus(result->status,
-                     _textCatalog.format(
-                       i18n::MessageId::ListOrderForgotHidden, {{"count", result->reply.forgottenPositionCount}}));
+        submit(session.forgetHiddenPositions(), i18n::MessageId::ListOrderForgotHidden);
         return;
-      }
     }
   }
 
@@ -755,7 +764,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const editValueRes = uiDef->parseInlineEdit(newValue);
+    auto editValueRes = uiDef->parseInlineEdit(newValue);
 
     if (!editValueRes)
     {
@@ -770,29 +779,39 @@ namespace ao::gtk
       return;
     }
 
-    auto const replyRes = session.submitMetadata(patch);
+    spawnUiTask(_runtime.async(),
+                _tasks,
+                *this,
+                "inline metadata edit",
+                session.submitMetadata(std::move(patch)),
+                [rowPtr, field, editValue = std::move(*editValueRes), uiDef](
+                  TrackViewPage* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
+                {
+                  if (!replyRes)
+                  {
+                    APP_LOG_ERROR("Metadata update failed: {}", replyRes.error().message);
+                    owner->setStatusMessage(replyRes.error().message);
+                    return;
+                  }
 
-    if (!replyRes)
-    {
-      APP_LOG_ERROR("Metadata update failed: {}", replyRes.error().message);
-      setStatusMessage(replyRes.error().message);
-      return;
-    }
+                  switch (replyRes->status)
+                  {
+                    case rt::AuthoringStatus::NoOp: return;
+                    case rt::AuthoringStatus::Busy:
+                      owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::TrackEditingUnavailable));
+                      return;
+                    case rt::AuthoringStatus::Stale:
+                      owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::TrackEditStale));
+                      return;
+                    case rt::AuthoringStatus::Unavailable:
+                      owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::TrackEditingUnavailable));
+                      return;
+                    case rt::AuthoringStatus::Applied: break;
+                  }
 
-    switch (replyRes->status)
-    {
-      case rt::TrackAuthoringStatus::NoOp: return;
-      case rt::TrackAuthoringStatus::Stale:
-        setStatusMessage(_textCatalog.text(i18n::MessageId::TrackEditStale));
-        return;
-      case rt::TrackAuthoringStatus::Unavailable:
-        setStatusMessage(_textCatalog.text(i18n::MessageId::TrackEditingUnavailable));
-        return;
-      case rt::TrackAuthoringStatus::Applied: break;
-    }
-
-    uiDef->applyRowEditValue(*rowPtr, *editValueRes, field);
-    clearStatusMessage();
+                  uiDef->applyRowEditValue(*rowPtr, editValue, field);
+                  owner->clearStatusMessage();
+                });
   }
 
   void TrackViewPage::applyColumnViewStyles(Gtk::ColumnView& view)

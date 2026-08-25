@@ -178,11 +178,11 @@ A notification message is likewise not a substitute for the structured error or 
 
 ## Data and control flow
 
-### Synchronous command rejection
+### Command-scoped rejection
 
 ```text
 frontend or CLI command
-  -> runtime/core operation
+  -> runtime/core operation or awaited command Task
   -> Result<T> rejection carrying Error
   -> initiating adapter keeps structured failure
   -> editor/dialog/CLI presents command-scoped result

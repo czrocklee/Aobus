@@ -10,6 +10,7 @@
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/library/LibraryMutationTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -376,11 +377,11 @@ namespace ao::rt::test
 
     REQUIRE(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"First Tag", 1}});
 
-    auto mutationExecutor = InlineExecutor{};
+    auto asyncRuntime = async::Runtime{changesExecutor};
     auto mutationService = LibraryMutationService{
-      mutationExecutor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
-    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto executionRes = mutation.execute(
+      asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(libraryFixture.library()), changes};
+    auto task = executeInteractiveMutation(
+      mutationService.captureSubmission(),
       [&libraryFixture](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
       {
         auto const trackId = library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
@@ -394,8 +395,8 @@ namespace ao::rt::test
                                                                          });
         return Changed<TrackId>{.value = trackId, .changeSet = LibraryChangeSet{.tracksInserted = {trackId}}};
       });
-    REQUIRE(executionRes);
-    REQUIRE(executionRes->value != kInvalidTrackId);
+    auto future = asyncRuntime.spawn(std::move(task));
+    changesExecutor.checkQueued();
 
     // Storage is committed, but publication is still queued. Every vocabulary
     // must keep using the same already-built snapshot until phase two arrives.
@@ -414,6 +415,9 @@ namespace ao::rt::test
           });
 
     changesExecutor.runUntilIdle();
+    auto executionRes = future.get();
+    REQUIRE(executionRes);
+    REQUIRE(executionRes->value != kInvalidTrackId);
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"First Tag", 1},
@@ -487,7 +491,7 @@ namespace ao::rt::test
     SECTION("Deletion")
     {
       auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-      REQUIRE(writerFixture.writer().deleteTrack(originalId));
+      REQUIRE(writerFixture.runTask(writerFixture.writer().deleteTrack(originalId)));
       CHECK(vocabulary().empty());
     }
 
@@ -621,7 +625,7 @@ namespace ao::rt::test
       REQUIRE_FALSE(service.valuesFor(field).empty());
     }
 
-    REQUIRE(writerFixture.writer().deleteTrack(trackId));
+    REQUIRE(writerFixture.runTask(writerFixture.writer().deleteTrack(trackId)));
 
     CHECK(service.tags().empty());
     CHECK(service.customKeys().empty());

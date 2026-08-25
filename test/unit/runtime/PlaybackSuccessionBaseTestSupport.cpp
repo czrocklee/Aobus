@@ -13,6 +13,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
@@ -20,6 +21,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -31,6 +33,7 @@
 #include <optional>
 #include <span>
 #include <utility>
+#include <vector>
 
 namespace ao::rt::test::playback_succession
 {
@@ -81,8 +84,8 @@ namespace ao::rt::test::playback_succession
 
   PlaybackSuccessionFixture::PlaybackSuccessionFixture()
     : asyncRuntime{executor, 1, &sleeper}
-    , changes{libraryChangesExecutor, 0, "test-library"}
-    , writerFixture{libraryFixture.library(), changes}
+    , changes{executor, 0, "test-library"}
+    , writerFixture{libraryFixture.library(), changes, executor}
     , sources{libraryFixture.library(), changes}
     , views{executor, libraryFixture.library(), sources, changes}
     , workspace{executor, views, changes}
@@ -103,7 +106,8 @@ namespace ao::rt::test::playback_succession
   {
     auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
     audio::test::installAudioFixture(libraryFixture.root(), "basic_metadata.flac", playableUri);
-    auto const created = ao::test::requireValue(writer().createTrackFromFile(libraryFixture.root() / playableUri));
+    auto const created =
+      ao::test::requireValue(writerFixture.runTask(writer().createTrackFromFile(libraryFixture.root() / playableUri)));
     executor.drain();
     REQUIRE(
       writerFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title, .optYear = year}));
@@ -125,10 +129,10 @@ namespace ao::rt::test::playback_succession
     auto const membershipTag = std::array{std::string{"playbackorder"}};
     REQUIRE(writerFixture.editTags(trackIds, membershipTag, {}));
     sources.reloadAllTracks();
-    listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
+    listId = ao::test::requireValue(writerFixture.runTask(writer().createList(ListDraft{
       .name = "Playback order",
       .expression = "#playbackorder",
-    }));
+    })));
 
     if (!config.optPresentation)
     {
@@ -147,14 +151,15 @@ namespace ao::rt::test::playback_succession
     REQUIRE(writerFixture.editTags(trackIds, {}, membershipTag));
   }
 
-  Result<LibraryWriter::MoveOrderAuthoringResult> PlaybackSuccessionFixture::moveListOrder(
+  Result<AuthoringResult<MoveListOrderReply>> PlaybackSuccessionFixture::moveListOrder(
     std::span<TrackId const> const selectedTrackIds,
     std::optional<TrackId> const optBeforeTrackId)
   {
     auto lease = ao::test::requireValue(sources.acquire(listId));
     auto const effectiveTrackIds = sourceTrackIds(lease.source());
     auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(listId, effectiveTrackIds));
-    return writer().moveListOrder(binding, selectedTrackIds, optBeforeTrackId);
+    return writerFixture.runTask(writer().moveListOrder(
+      binding, std::vector<TrackId>{selectedTrackIds.begin(), selectedTrackIds.end()}, optBeforeTrackId));
   }
 
   void PlaybackSuccessionFixture::buildThreeTrackManualView(TrackListViewConfig config)

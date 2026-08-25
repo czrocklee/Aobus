@@ -81,7 +81,8 @@ It becomes invalid when any of these occurs:
 - the view replaces its projection, including a quick-filter change;
 - the projection publishes a membership/order delta;
 - the view is destroyed;
-- a submitted command returns any status other than `NoOp`.
+- a submitted command returns any status other than `NoOp` or `Busy`;
+- an invalidating event observed while a `NoOp` or `Busy` submission is pending remains deferred until that submission completes.
 
 Invalidation clears every capability and notifies the current gesture.
 The session does not silently rebind to newer rows.
@@ -141,8 +142,9 @@ Reset and Forget Hidden Positions remain menu/action commands without shipped gl
 
 ## Failure and cancellation
 
-Writer results are `Applied`, `NoOp`, `Stale`, or `Unavailable`.
+Writer results are `Applied`, `NoOp`, `Busy`, `Stale`, or `Unavailable`.
 Applied and NoOp receive explicit success/status text.
+Busy preserves a still-current session for an explicit retry, unless an independently observed revision, view, presentation, or projection change invalidated it while the command was pending.
 Stale tells the user that the List changed and to start again.
 Unavailable reports that editing is currently unavailable; maintenance has the more specific library-busy reason before submission.
 

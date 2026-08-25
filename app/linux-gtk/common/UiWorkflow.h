@@ -6,8 +6,10 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
+#include <functional>
 #include <stop_token>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace ao::async
@@ -46,5 +48,44 @@ namespace ao::gtk
         std::stop_token const stopToken) mutable
       { return runUiWorkflow(runtimeHandle, ownerHandle, std::move(workflow), stopToken); },
       exceptionContext);
+  }
+
+  template<typename Owner, typename Value, typename Completion>
+    requires(!std::is_void_v<Value>)
+  async::Task<void> completeUiTask(async::Runtime* runtime,
+                                   Owner* owner,
+                                   async::Task<Value> task,
+                                   Completion completion,
+                                   std::stop_token const stopToken)
+  {
+    auto completedRes = co_await std::move(task);
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    std::invoke(std::move(completion), owner, std::move(completedRes));
+  }
+
+  /**
+   * Starts one result-bearing task and delivers its result to the live owner.
+   *
+   * The caller starts the operation synchronously. Task ownership, suspension,
+   * callback-executor resumption, cancellation, and exception reporting stay in
+   * this workflow boundary rather than being repeated by every GTK caller.
+   */
+  template<typename Owner, typename Value, typename Completion>
+    requires(!std::is_void_v<Value>)
+  void spawnUiTask(async::Runtime& runtime,
+                   async::LifetimeScope& scope,
+                   Owner& owner,
+                   std::string_view const exceptionContext,
+                   async::Task<Value> task,
+                   Completion completion)
+  {
+    spawnUiWorkflow(
+      runtime,
+      scope,
+      owner,
+      exceptionContext,
+      [runtimeHandle = &runtime, task = std::move(task), completion = std::move(completion)](
+        Owner* ownerHandle, std::stop_token const stopToken) mutable
+      { return completeUiTask(runtimeHandle, ownerHandle, std::move(task), std::move(completion), stopToken); });
   }
 } // namespace ao::gtk

@@ -2,12 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/library/LibraryMutationService.h"
-#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/library/LibraryMutationTestSupport.h"
 #include <ao/Error.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -86,7 +87,10 @@ namespace ao::rt::test
       };
     }
 
-    VocabularyTiming measureVocabularyRebuilds(CompletionService& service, LibraryMutationService& mutationService)
+    VocabularyTiming measureVocabularyRebuilds(CompletionService& service,
+                                               async::Runtime& asyncRuntime,
+                                               async::LoopExecutor& executor,
+                                               LibraryMutationService& mutationService)
     {
       auto aggregateSamples = std::vector<std::int64_t>{};
       auto tagSamples = std::vector<std::int64_t>{};
@@ -115,10 +119,14 @@ namespace ao::rt::test
 
       for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
       {
-        auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-        REQUIRE(mutation.execute(
-          [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
-          { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
+        auto resetRes =
+          runLoopTask(asyncRuntime,
+                      executor,
+                      executeInteractiveMutation(
+                        mutationService.captureSubmission(),
+                        [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
+                        { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
+        REQUIRE(resetRes);
         auto const [currentAggregateSize, aggregateElapsed] = timedSize(
           [&]
           {
@@ -263,13 +271,14 @@ namespace ao::rt::test
     REQUIRE(populateRes);
     REQUIRE(transaction.commit());
 
-    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-    auto executor = InlineExecutor{};
-    auto mutationService =
-      LibraryMutationService{executor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
+    auto executor = async::LoopExecutor{};
+    auto asyncRuntime = async::Runtime{executor};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto mutationService = LibraryMutationService{
+      asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(libraryFixture.library()), changes};
     auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
     auto service = CompletionService{libraryFixture.library(), changes, nullptr, aliasPolicyPtr.get()};
-    auto const vocabulary = measureVocabularyRebuilds(service, mutationService);
+    auto const vocabulary = measureVocabularyRebuilds(service, asyncRuntime, executor, mutationService);
 
     APP_LOG_INFO("=== Shared completion vocabulary snapshot: {} tracks ===", kTrackCount);
     APP_LOG_INFO("  rebuild + aggregate: median/p95 {} / {} us, {} values from {} dictionary entries",

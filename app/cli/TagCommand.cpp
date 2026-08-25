@@ -20,7 +20,6 @@
 
 #include <CLI/App.hpp>
 
-#include <array>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -198,13 +197,12 @@ namespace ao::cli
                   bool dryRun)
     {
       auto const trackIds = resolveTargets(cli, rawIds, filter);
-      auto const tags = std::array{tagName};
+      auto const tags = std::vector{tagName};
 
       if (dryRun)
       {
-        auto const replyRes =
-          add ? cli.library().writer().previewEditTags(trackIds, tags, std::span<std::string const>{})
-              : cli.library().writer().previewEditTags(trackIds, std::span<std::string const>{}, tags);
+        auto const replyRes = cli.runTask(add ? cli.library().writer().previewEditTags(trackIds, tags, {})
+                                              : cli.library().writer().previewEditTags(trackIds, {}, tags));
 
         if (!replyRes)
         {
@@ -222,8 +220,8 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = add ? cli.library().writer().editTags(*bindingRes, tags, std::span<std::string const>{})
-                                : cli.library().writer().editTags(*bindingRes, std::span<std::string const>{}, tags);
+      auto const replyRes = cli.runTask(add ? cli.library().writer().editTags(*bindingRes, tags, {})
+                                            : cli.library().writer().editTags(*bindingRes, {}, tags));
 
       if (!replyRes)
       {
@@ -232,11 +230,12 @@ namespace ao::cli
 
       switch (replyRes->status)
       {
-        case rt::TrackAuthoringStatus::Applied:
-        case rt::TrackAuthoringStatus::NoOp: break;
-        case rt::TrackAuthoringStatus::Stale:
+        case rt::AuthoringStatus::Applied:
+        case rt::AuthoringStatus::NoOp: break;
+        case rt::AuthoringStatus::Stale:
           throwCommandError(Error::Code::Conflict, "library changed while preparing the tag edit");
-        case rt::TrackAuthoringStatus::Unavailable:
+        case rt::AuthoringStatus::Busy:
+        case rt::AuthoringStatus::Unavailable:
           throwCommandError(Error::Code::Conflict, "library authoring is unavailable");
       }
 

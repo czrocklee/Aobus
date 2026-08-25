@@ -211,15 +211,15 @@ namespace ao::cli::test
 
   TEST_CASE("CLI - List order authoring statuses preserve command failure semantics", "[cli][unit][list][list-order]")
   {
-    CHECK(validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Applied));
-    CHECK(validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::NoOp));
+    CHECK(validateListOrderCommandStatus(rt::AuthoringStatus::Applied));
+    CHECK(validateListOrderCommandStatus(rt::AuthoringStatus::NoOp));
 
-    auto const staleRes = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Stale);
+    auto const staleRes = validateListOrderCommandStatus(rt::AuthoringStatus::Stale);
     REQUIRE_FALSE(staleRes);
     CHECK(staleRes.error().code == Error::Code::Conflict);
     CHECK(staleRes.error().message == "List order target became stale");
 
-    auto const unavailableRes = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Unavailable);
+    auto const unavailableRes = validateListOrderCommandStatus(rt::AuthoringStatus::Unavailable);
     REQUIRE_FALSE(unavailableRes);
     CHECK(unavailableRes.error().code == Error::Code::InvalidState);
     CHECK(unavailableRes.error().message == "Library is busy");

@@ -62,7 +62,7 @@ namespace ao::uimodel::test
     ao::test::TempDir temp;
     library::MusicLibrary musicLibrary;
     std::vector<TrackId> trackIds;
-    rt::test::InlineExecutor executor;
+    rt::test::ManualExecutor executor;
     async::Runtime asyncRuntime;
     std::unique_ptr<rt::LibraryChanges> changesPtr;
     std::unique_ptr<rt::Library> libraryPtr;
@@ -83,6 +83,16 @@ namespace ao::uimodel::test
   rt::LibraryChanges& TrackAuthoringFixture::changes() const
   {
     return *_implPtr->changesPtr;
+  }
+
+  async::Runtime& TrackAuthoringFixture::runtime() const
+  {
+    return _implPtr->asyncRuntime;
+  }
+
+  rt::test::ManualExecutor& TrackAuthoringFixture::executor() const
+  {
+    return _implPtr->executor;
   }
 
   std::span<TrackId const> TrackAuthoringFixture::trackIds() const noexcept

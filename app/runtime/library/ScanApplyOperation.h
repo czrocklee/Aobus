@@ -61,8 +61,9 @@ namespace ao::rt
     // Offline composition: prepares media outside the write transaction, then
     // acquires and commits an isolated writable-library session.
     Result<ScanApplyResult> run(std::stop_token stopToken = {});
-    // Runtime composition must call prepare before acquiring its coordinator
-    // mutation. apply performs no filesystem reads or audio hashing.
+    // Runtime composition prepares before submitting its background command,
+    // then performs final filesystem revalidation during that command's active
+    // pre-transaction turn. apply performs no filesystem reads or audio hashing.
     Result<ScanApplyResult> prepare(std::stop_token stopToken = {});
     Result<ScanApplyResult> revalidatePreparedFiles(std::stop_token stopToken = {});
     Result<ScanApplyResult> apply(library::LibraryWrite& write, std::stop_token stopToken = {});

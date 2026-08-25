@@ -107,6 +107,7 @@ zh_Hant:table {
     notification_grouped_info { "{count, plural, one {# 條通知} other {# 條通知}}" }
     notification_grouped_warning { "{count, plural, one {# 條警告} other {# 條警告}}" }
     notification_grouped_error { "{count, plural, one {# 個錯誤} other {# 個錯誤}}" }
+    library_busy_try_again { "音樂庫正忙。請再試一次。" }
     library_task_scanning { "掃描中" }
     library_task_updating { "更新中" }
     library_task_fingerprinting { "提取音訊指紋中" }

@@ -56,6 +56,18 @@ namespace ao::async
     throw OperationCancelled{};
   }
 
+  [[noreturn]] void rethrowException(std::exception_ptr const& exceptionPtr)
+  {
+    AO_EXPECTS(exceptionPtr, "Cannot rethrow an empty exception");
+
+    if (isOperationCancelled(exceptionPtr))
+    {
+      throwOperationCancelled();
+    }
+
+    std::rethrow_exception(exceptionPtr);
+  }
+
   void throwIfStopRequested(std::stop_token const stopToken)
   {
     if (stopToken.stop_requested())

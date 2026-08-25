@@ -111,7 +111,10 @@ namespace clang::tidy::readability
       recordType(hasDeclaration(classTemplateSpecializationDecl(hasName("::std::optional")))))));
 
     // Rule 1: Match all variables and fields of type std::optional
-    finder->addMatcher(declaratorDecl(isOptionalType).bind("optional_decl"), this);
+    finder->addMatcher(
+      declaratorDecl(isOptionalType, unless(hasAncestor(functionDecl(clang::ast_matchers::isTemplateInstantiation()))))
+        .bind("optional_decl"),
+      this);
 
     // Rule 2: Match .has_value() only when the receiver is a named optional variable or field.
     // Temporary optional expressions such as reader.get(id).has_value() are intentionally allowed.

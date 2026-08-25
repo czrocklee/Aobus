@@ -281,7 +281,7 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const replyRes = cli.library().writer().previewUpdateMetadata(targetIds, patch);
+        auto const replyRes = cli.runTask(cli.library().writer().previewUpdateMetadata(targetIds, patch));
 
         if (!replyRes)
         {
@@ -300,7 +300,7 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = cli.library().writer().updateMetadata(*bindingRes, patch);
+      auto const replyRes = cli.runTask(cli.library().writer().updateMetadata(*bindingRes, patch));
 
       if (!replyRes)
       {
@@ -309,11 +309,12 @@ namespace ao::cli
 
       switch (replyRes->status)
       {
-        case rt::TrackAuthoringStatus::Applied:
-        case rt::TrackAuthoringStatus::NoOp: break;
-        case rt::TrackAuthoringStatus::Stale:
+        case rt::AuthoringStatus::Applied:
+        case rt::AuthoringStatus::NoOp: break;
+        case rt::AuthoringStatus::Stale:
           throwCommandError(Error::Code::Conflict, "library changed while preparing the track update");
-        case rt::TrackAuthoringStatus::Unavailable:
+        case rt::AuthoringStatus::Busy:
+        case rt::AuthoringStatus::Unavailable:
           throwCommandError(Error::Code::Conflict, "library authoring is unavailable");
       }
 
@@ -988,7 +989,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const trackRes = cli.library().writer().previewCreateTrackFromFile(trackPath);
+            auto const trackRes = cli.runTask(cli.library().writer().previewCreateTrackFromFile(trackPath));
 
             if (!trackRes)
             {
@@ -1001,7 +1002,7 @@ namespace ao::cli
             return;
           }
 
-          auto const trackRes = cli.library().writer().createTrackFromFile(trackPath);
+          auto const trackRes = cli.runTask(cli.library().writer().createTrackFromFile(trackPath));
 
           if (trackRes)
           {
@@ -1163,7 +1164,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const deleteRes = cli.library().writer().previewDeleteTrack(trackId);
+            auto const deleteRes = cli.runTask(cli.library().writer().previewDeleteTrack(trackId));
 
             if (!deleteRes)
             {
@@ -1174,7 +1175,7 @@ namespace ao::cli
             return;
           }
 
-          auto const deleteRes = cli.library().writer().deleteTrack(trackId);
+          auto const deleteRes = cli.runTask(cli.library().writer().deleteTrack(trackId));
 
           if (deleteRes)
           {

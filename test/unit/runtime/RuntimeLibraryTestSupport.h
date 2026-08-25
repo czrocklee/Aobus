@@ -4,8 +4,10 @@
 #pragma once
 
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/TrackMutation.h>
@@ -19,6 +21,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::rt
 {
@@ -29,6 +32,7 @@ namespace ao::rt
 namespace ao::async
 {
   class Executor;
+  class Runtime;
 }
 
 namespace ao::rt::test
@@ -41,7 +45,8 @@ namespace ao::rt::test
 
   void updateRuntimeTrack(AppRuntime& runtime,
                           TrackId trackId,
-                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater);
+                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater,
+                          compat::MoveOnlyFunction<void()> settlePublication = {});
 
   class MusicLibraryFixture final
   {
@@ -70,20 +75,25 @@ namespace ao::rt::test
   // boundary must use makeLibraryChanges with an explicitly driven executor.
   LibraryChanges makeStateOnlyLibraryChanges(std::uint64_t lastPublishedRevision = 0);
   LibraryChanges makeStateOnlyLibraryChanges(library::MusicLibrary const& storage);
+  async::Executor& stateOnlyLibraryExecutor();
   LibraryChanges makeLibraryChanges(async::Executor& executor, std::uint64_t lastPublishedRevision = 0);
   LibraryChanges makeLibraryChanges(async::Executor& executor, library::MusicLibrary const& storage);
 
   TrackId addTrackAndPublish(library::MusicLibrary& storage,
                              LibraryChanges& changes,
-                             library::test::TrackSpec const& spec);
+                             library::test::TrackSpec const& spec,
+                             async::Executor& executor = stateOnlyLibraryExecutor());
   TrackId addTrackAndPublishReset(library::MusicLibrary& storage,
                                   LibraryChanges& changes,
-                                  library::test::TrackSpec const& spec);
+                                  library::test::TrackSpec const& spec,
+                                  async::Executor& executor = stateOnlyLibraryExecutor());
 
   class LibraryWriterFixture final
   {
   public:
-    LibraryWriterFixture(library::MusicLibrary& storage, LibraryChanges& changes);
+    LibraryWriterFixture(library::MusicLibrary& storage,
+                         LibraryChanges& changes,
+                         async::Executor& executor = stateOnlyLibraryExecutor());
     ~LibraryWriterFixture();
 
     LibraryWriterFixture(LibraryWriterFixture const&) = delete;
@@ -93,7 +103,16 @@ namespace ao::rt::test
 
     Library& library();
     LibraryWriter& writer();
+    async::Runtime& runtime();
+
+    template<typename T>
+    T runTask(async::Task<T> task)
+    {
+      return runTestTask(runtime(), runtime().callbackExecutor(), std::move(task));
+    }
+
     void releaseLibrary();
+    TrackId addTrack(library::test::TrackSpec const& spec);
     BoundTrackTargets bind(std::span<TrackId const> trackIds);
     Result<UpdateTrackMetadataReply> updateMetadata(std::span<TrackId const> trackIds, MetadataPatch const& patch);
     Result<EditTrackTagsReply> editTags(std::span<TrackId const> trackIds,

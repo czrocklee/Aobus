@@ -12,6 +12,7 @@
 #include <boost/asio/error.hpp>
 #include <boost/system/system_error.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include <barrier>
 #include <cstddef>
@@ -246,6 +247,15 @@ namespace ao::rt::test
       std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted})));
     CHECK_FALSE(isOperationCancelled(std::make_exception_ptr(std::runtime_error{"not cancellation"})));
     CHECK_FALSE(isOperationCancelled(std::make_exception_ptr(42)));
+  }
+
+  TEST_CASE("OperationCancelled - exception rethrow normalizes cancellation", "[runtime][unit][async][cancellation]")
+  {
+    CHECK_THROWS_WITH(
+      rethrowException(std::make_exception_ptr(std::runtime_error{"deferred failure"})), "deferred failure");
+    CHECK_THROWS_AS(
+      rethrowException(std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted})),
+      OperationCancelled);
   }
 
   TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][lifetime]")

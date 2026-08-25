@@ -7,6 +7,7 @@
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -36,13 +37,14 @@ namespace ao::rt::test
   ListId WorkspaceRuntimeFixture::createList(std::string name) const
   {
     return ao::test::requireValue(
-      runtime().library().writer().createList(LibraryWriter::ListDraft{.name = std::move(name)}));
+      runRuntimeTask(runtime(), runtime().library().writer().createList(ListDraft{.name = std::move(name)})));
   }
 
   ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request)
   {
     auto result = runtime.workspace().navigate(request);
     REQUIRE(result);
+    settleRuntimeCallbacks(runtime);
     return *result;
   }
 
@@ -55,6 +57,7 @@ namespace ao::rt::test
   {
     auto result = runtime.workspace().goBack();
     REQUIRE(result);
+    settleRuntimeCallbacks(runtime);
     return runtime.workspace().snapshot().activeViewId;
   }
 
@@ -62,6 +65,7 @@ namespace ao::rt::test
   {
     auto result = runtime.workspace().goForward();
     REQUIRE(result);
+    settleRuntimeCallbacks(runtime);
     return runtime.workspace().snapshot().activeViewId;
   }
 } // namespace ao::rt::test

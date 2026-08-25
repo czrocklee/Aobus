@@ -3,7 +3,9 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -17,10 +19,21 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <string>
+#include <utility>
 
 namespace ao::rt::test
 {
   using namespace ao::test;
+
+  namespace
+  {
+    ListId createList(AppRuntime& runtime, std::string name)
+    {
+      return ao::test::requireValue(
+        runRuntimeTask(runtime, runtime.library().writer().createList(ListDraft{.name = std::move(name)})));
+    }
+  } // namespace
 
   TEST_CASE("HeadlessShell - navigation and session persistence update layout", "[runtime][unit][headless]")
   {
@@ -38,8 +51,7 @@ namespace ao::rt::test
     SECTION("Navigate to list ID creates a view and marks it active")
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      auto const listId =
-        ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Headless"}));
+      auto const listId = createList(*runtimePtr, "Headless");
       REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
 
       auto const layout = runtimePtr->workspace().snapshot();
@@ -75,10 +87,8 @@ namespace ao::rt::test
     SECTION("Closing a view updates the layout")
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      auto const firstListId =
-        ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First"}));
-      auto const secondListId =
-        ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Second"}));
+      auto const firstListId = createList(*runtimePtr, "First");
+      auto const secondListId = createList(*runtimePtr, "Second");
       REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
       REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
 
@@ -99,10 +109,8 @@ namespace ao::rt::test
     {
       {
         auto runtimePtr = makeStateOnlyRuntime(tempDir);
-        auto const firstListId = ao::test::requireValue(
-          runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First saved"}));
-        auto const secondListId = ao::test::requireValue(
-          runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Second saved"}));
+        auto const firstListId = createList(*runtimePtr, "First saved");
+        auto const secondListId = createList(*runtimePtr, "Second saved");
         REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
         REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
         runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
@@ -128,8 +136,7 @@ namespace ao::rt::test
     {
       {
         auto runtimePtr = makeStateOnlyRuntime(tempDir);
-        auto const listId = ao::test::requireValue(
-          runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Grouped saved"}));
+        auto const listId = createList(*runtimePtr, "Grouped saved");
         REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
         auto const viewId = runtimePtr->workspace().snapshot().activeViewId;
         auto const* artistPreset = builtinTrackPresentationPreset("artists");
@@ -163,8 +170,7 @@ namespace ao::rt::test
     {
       {
         auto runtimePtr = makeStateOnlyRuntime(tempDir);
-        auto const listId = ao::test::requireValue(
-          runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Flat saved"}));
+        auto const listId = createList(*runtimePtr, "Flat saved");
         REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
         runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
       }

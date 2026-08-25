@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include <ao/CoreIds.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
@@ -35,6 +36,11 @@ namespace ao::rt
   class LibraryReader;
 }
 
+namespace ao::async
+{
+  class Runtime;
+}
+
 namespace ao::uimodel
 {
   class TrackAuthoringSession;
@@ -49,6 +55,7 @@ namespace ao::gtk
   {
   public:
     TrackPropertiesDialog(Gtk::Window& parent,
+                          async::Runtime& asyncRuntime,
                           rt::Library& library,
                           rt::CompletionService& completion,
                           uimodel::PresentationTextCatalog textCatalog,
@@ -91,6 +98,7 @@ namespace ao::gtk
     void setEditorMixed(Gtk::Widget* widget, std::string_view text);
 
     rt::Library& _library;
+    async::Runtime& _asyncRuntime;
     rt::CompletionService& _completion;
     uimodel::PresentationTextCatalog _textCatalog;
     TrackRowCache& _rowCache;
@@ -114,5 +122,6 @@ namespace ao::gtk
     std::vector<FieldEditor> _editors;
     std::vector<FieldEditor> _readonlyRows;
     std::vector<CompletionControllerBinding> _completionControllers;
+    async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

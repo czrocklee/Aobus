@@ -18,7 +18,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
-#include <ao/async/Task.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -29,6 +28,7 @@
 #include <ao/audio/Subscription.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
@@ -115,16 +115,6 @@ namespace ao::rt::test
       std::shared_ptr<AppRuntimeAudioState> _statePtr;
       Status _status;
     };
-
-    async::Task<void> attemptWriterDuringQueuedPublication(CoreRuntime* runtime,
-                                                           AsyncTestState<bool> started,
-                                                           AsyncTestState<bool> rejectedByClosing)
-    {
-      started.set(true);
-      auto const result = runtime->library().createList(LibraryWriter::ListDraft{.name = "Closing writer"});
-      rejectedByClosing.set(!result && result.error().code == Error::Code::InvalidState);
-      co_return;
-    }
   } // namespace
 
   TEST_CASE("AppRuntime - missing workspace config store is rejected", "[runtime][unit][app-runtime]")
@@ -270,7 +260,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->library().storageCapacity().mapBytes == library::test::kTestMusicLibraryMapBytes);
   }
 
-  TEST_CASE("CoreRuntime - shutdown wakes a writer behind queued publication",
+  TEST_CASE("CoreRuntime - shutdown retires a queued library publication",
             "[runtime][regression][core-runtime][concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -282,20 +272,13 @@ namespace ao::rt::test
                                                                  tempDir.path() / "cache",
                                                                  library::test::kTestMusicLibraryMapBytes));
 
-    REQUIRE(runtimePtr->library().createList(LibraryWriter::ListDraft{.name = "Committed before close"}));
+    [[maybe_unused]] auto future =
+      runtimePtr->async().spawn(runtimePtr->library().createList(ListDraft{.name = "Committed before close"}));
+    REQUIRE(executor->waitUntilQueued());
     REQUIRE(executor->queuedCount() == 1);
-
-    auto started = AsyncTestState<bool>::create(false);
-    auto rejectedByClosing = AsyncTestState<bool>::create(false);
-    auto future =
-      runtimePtr->async().spawn(attemptWriterDuringQueuedPublication(runtimePtr.get(), started, rejectedByClosing));
-    REQUIRE(started.waitUntil(true));
-    CHECK_FALSE(rejectedByClosing.load());
 
     runtimePtr->shutdown();
 
-    CHECK(rejectedByClosing.load());
-    CHECK_NOTHROW(future.get());
     CHECK_NOTHROW(executor->drain());
   }
 
@@ -331,9 +314,10 @@ namespace ao::rt::test
                       library::test::TrackSpec{.title = "Second", .uri = fixtureUri, .codec = AudioCodec::Flac},
                       [executor] { executor->drain(); });
     appPtr->sources().reloadAllTracks();
-    auto const listId = ao::test::requireValue(appPtr->library().writer().createList(LibraryWriter::ListDraft{
-      .name = "Teardown order",
-    }));
+    auto const listId = ao::test::requireValue(runRuntimeTask(*appPtr,
+                                                              appPtr->library().writer().createList(ListDraft{
+                                                                .name = "Teardown order",
+                                                              })));
     auto const viewId = ao::test::requireValue(appPtr->workspace().navigate({.target = listId}));
     auto const previousPositionRevision = appPtr->playback().snapshot().transport.positionRevision;
     REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));

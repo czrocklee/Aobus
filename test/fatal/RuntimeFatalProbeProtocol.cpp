@@ -76,6 +76,14 @@ namespace ao::rt::test
                                    "commitMutation",
                                    {},
                                    {}},
+      RuntimeFatalProbeExpectation{"operation-cancelled-empty-rethrow",
+                                   "expects",
+                                   "exceptionPtr",
+                                   "Cannot rethrow an empty exception",
+                                   "OperationCancelled.cpp:",
+                                   "rethrowException",
+                                   {},
+                                   {}},
       RuntimeFatalProbeExpectation{"runtime-spawn-logged-exception",
                                    "unhandled-exception",
                                    {},
@@ -269,7 +277,10 @@ namespace ao::rt::test
 
   std::span<std::string_view const> runtimeCleanProbeScenarios() noexcept
   {
-    static constexpr auto kScenarios = std::array<std::string_view, 1>{"runtime-shutdown-cancellation"};
+    static constexpr auto kScenarios = std::array{
+      std::string_view{"runtime-shutdown-cancellation"},
+      std::string_view{"library-control-delivery-closing-race"},
+    };
     return kScenarios;
   }
 } // namespace ao::rt::test

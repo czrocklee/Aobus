@@ -296,6 +296,20 @@ add_library(ao_app_runtime STATIC
     runtime/ViewService.cpp
     runtime/Log.cpp
 )
+
+# GCC 15 misclassifies Boost.Asio coroutine-frame aligned_alloc/free pairs in
+# these coroutine-heavy translation units after inlining. Keep the workaround
+# local so unrelated runtime and frontend code retains the warning.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 15
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
+  set_property(
+    SOURCE
+      runtime/library/LibraryTaskService.cpp
+      runtime/library/LibraryWriter.cpp
+    APPEND PROPERTY COMPILE_OPTIONS -Wno-mismatched-new-delete)
+endif()
+
 target_include_directories(ao_app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml spdlog::spdlog)
@@ -453,6 +467,9 @@ add_dependencies(ao_app_uimodel ao_uimodel_frontend_vocabulary_guardrail)
 # ao_layering_boundary_report remains as an aggregate entry point.
 set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)")
 set(AO_FORBIDDEN_WRITE_AUTHORITY_REGEX "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
+set(AO_RUNTIME_WRITE_TRANSACTION_REGEX "(^|[^A-Za-z0-9_])writeTransaction[ \t\r\n]*\\(")
+set(AO_RUNTIME_WRITE_TRANSACTION_OWNER_REGEX
+  "/app/runtime/library/(LibraryMutationService|LibraryYamlImporter|ScanApplyOperation)[.]cpp$")
 set(AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX "\"([.]aobus|data[.]mdb)")
 # CMake regexes have no word-boundary escape, so delimit the exact legacy
 # vocabulary without rejecting adjacent type or namespace names.
@@ -518,6 +535,16 @@ set(AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX
   "#[ \t]*include[ \t]*[<\\\"]ao/(CoreIds[.]h|rt/|uimodel/)|APP_LOG_|#[ \t]*include[ \t]*[<\\\"]spdlog/")
 
 ao_write_guardrail_regex(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE "rt-public" "${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}")
+ao_write_guardrail_regex(
+  AO_RUNTIME_WRITE_TRANSACTION_REGEX_FILE
+  "runtime-write-transaction"
+  "${AO_RUNTIME_WRITE_TRANSACTION_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_RUNTIME_WRITE_TRANSACTION_OWNER_REGEX_FILE
+  "runtime-write-transaction-owners"
+  "${AO_RUNTIME_WRITE_TRANSACTION_OWNER_REGEX}"
+)
 ao_write_guardrail_regex(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE "uimodel-core" "${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}")
 ao_write_guardrail_regex(
   AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX_FILE
@@ -610,6 +637,19 @@ add_custom_target(ao_shared_signal_boundary_check
 )
 
 add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
+
+add_custom_target(ao_runtime_write_transaction_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/runtime"
+          "-DFORBIDDEN_REGEX_FILE=${AO_RUNTIME_WRITE_TRANSACTION_REGEX_FILE}"
+          "-DEXCLUDE_REGEX_FILE=${AO_RUNTIME_WRITE_TRANSACTION_OWNER_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking live runtime write transactions have one sequencer owner"
+  VERBATIM
+)
+
+add_dependencies(ao_app_runtime ao_runtime_write_transaction_boundary_check)
 
 add_custom_target(ao_playback_internal_boundary_check
   COMMAND ${CMAKE_COMMAND}

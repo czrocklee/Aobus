@@ -351,7 +351,7 @@ namespace clang::tidy::readability
     }
 
     diag(location,
-         "broad catch must rethrow, enter AO fatal handling, capture std::current_exception for later ownership, or "
+         "broad catch must rethrow, enter AO fatal handling, capture the current exception for later ownership, or "
          "begin with AO_AUDITED_CATCH(reason); catch the exact adapter exception type otherwise");
   }
 } // namespace clang::tidy::readability

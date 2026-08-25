@@ -4,12 +4,14 @@
 #include "tag/TagEditController.h"
 
 #include "app/ThemeCoordinator.h"
+#include "common/UiWorkflow.h"
 #include "i18n/GtkTextCatalog.h"
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
@@ -145,8 +147,13 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _runtime.library(), _runtime.completion(), _textCatalog, *_dataProvider, selection.selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
+                                                                  _runtime.async(),
+                                                                  _runtime.library(),
+                                                                  _runtime.completion(),
+                                                                  _textCatalog,
+                                                                  *_dataProvider,
+                                                                  selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -180,8 +187,8 @@ namespace ao::gtk
   }
 
   void TagEditController::submitTagChanges(TrackSelection const& selection,
-                                           std::span<std::string const> tagsToAdd,
-                                           std::span<std::string const> tagsToRemove)
+                                           std::vector<std::string> tagsToAdd,
+                                           std::vector<std::string> tagsToRemove)
   {
     if (_tagEditSessionPtr == nullptr || !std::ranges::equal(_tagEditSessionPtr->targetIds(), selection.selectedIds))
     {
@@ -191,35 +198,55 @@ namespace ao::gtk
       }
     }
 
-    auto const result = ao::uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, tagsToAdd, tagsToRemove);
+    auto const sessionGeneration = _tagEditSessionGeneration;
+    spawnUiTask(
+      _runtime.async(),
+      _tasks,
+      *this,
+      "tag edit",
+      ao::uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove)),
+      [sessionGeneration](TagEditController* owner, Result<uimodel::TagEditResult> result)
+      {
+        if (!result)
+        {
+          owner->_runtime.notifications().post(
+            rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+          return;
+        }
 
-    if (!result)
-    {
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
-      return;
-    }
+        if (result->status == rt::AuthoringStatus::Busy)
+        {
+          owner->_runtime.notifications().post(
+            rt::NotificationSeverity::Warning, result->notificationText, rt::NotificationLifetime::transient());
+          return;
+        }
 
-    if (result->status == rt::TrackAuthoringStatus::Stale || result->status == rt::TrackAuthoringStatus::Unavailable)
-    {
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
-      _tagEditSessionPtr.reset();
-      return;
-    }
+        if (result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable)
+        {
+          owner->_runtime.notifications().post(
+            rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
 
-    if (result->status != rt::TrackAuthoringStatus::Applied)
-    {
-      return;
-    }
+          if (owner->_tagEditSessionGeneration == sessionGeneration)
+          {
+            owner->_tagEditSessionPtr.reset();
+          }
 
-    if (_callbacks.onTagsMutated)
-    {
-      _callbacks.onTagsMutated();
-    }
+          return;
+        }
 
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
+        if (result->status != rt::AuthoringStatus::Applied)
+        {
+          return;
+        }
+
+        if (owner->_callbacks.onTagsMutated)
+        {
+          owner->_callbacks.onTagsMutated();
+        }
+
+        owner->_runtime.notifications().post(
+          rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
+      });
   }
 
   void TagEditController::createActions()
@@ -455,25 +482,42 @@ namespace ao::gtk
       return;
     }
 
-    auto result = add ? (*sessionRes)->addToList(listId) : (*sessionRes)->removeFromList(listId);
+    auto sessionPtr = std::move(*sessionRes);
+    auto submission = add ? sessionPtr->addToList(listId) : sessionPtr->removeFromList(listId);
+    spawnUiTask(_runtime.async(),
+                _tasks,
+                *this,
+                "list membership edit",
+                std::move(submission),
+                [](TagEditController* owner, Result<uimodel::ListMembershipEditResult> result)
+                {
+                  if (!result)
+                  {
+                    owner->_runtime.notifications().post(
+                      rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+                    return;
+                  }
 
-    if (!result)
-    {
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
-      return;
-    }
+                  if (result->status == rt::AuthoringStatus::Busy)
+                  {
+                    owner->_runtime.notifications().post(rt::NotificationSeverity::Warning,
+                                                         result->notificationText,
+                                                         rt::NotificationLifetime::transient());
+                    return;
+                  }
 
-    auto const failed =
-      result->status == rt::TrackAuthoringStatus::Stale || result->status == rt::TrackAuthoringStatus::Unavailable;
-    _runtime.notifications().post(failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
-                                  result->notificationText,
-                                  failed ? rt::NotificationLifetime::history() : rt::NotificationLifetime::transient());
+                  auto const failed =
+                    result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable;
+                  owner->_runtime.notifications().post(
+                    failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
+                    result->notificationText,
+                    failed ? rt::NotificationLifetime::history() : rt::NotificationLifetime::transient());
 
-    if (result->status == rt::TrackAuthoringStatus::Applied && _callbacks.onTagsMutated)
-    {
-      _callbacks.onTagsMutated();
-    }
+                  if (result->status == rt::AuthoringStatus::Applied && owner->_callbacks.onTagsMutated)
+                  {
+                    owner->_callbacks.onTagsMutated();
+                  }
+                });
   }
 
   void TagEditController::applyListOrderToCurrentSelection(TrackOrderCommand const action)
@@ -522,6 +566,7 @@ namespace ao::gtk
     }
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
+                                                                  _runtime.async(),
                                                                   _runtime.library(),
                                                                   _runtime.completion(),
                                                                   _textCatalog,
@@ -621,7 +666,9 @@ namespace ao::gtk
       return;
     }
 
-    submitTagChanges(*_optActiveSelection, tagsToAdd, tagsToRemove);
+    submitTagChanges(*_optActiveSelection,
+                     std::vector<std::string>{tagsToAdd.begin(), tagsToAdd.end()},
+                     std::vector<std::string>{tagsToRemove.begin(), tagsToRemove.end()});
   }
 
   bool TagEditController::beginTagEditSession(std::span<TrackId const> trackIds)
@@ -637,6 +684,7 @@ namespace ao::gtk
     }
 
     _tagEditSessionPtr = std::move(*sessionRes);
+    ++_tagEditSessionGeneration;
     return true;
   }
 } // namespace ao::gtk

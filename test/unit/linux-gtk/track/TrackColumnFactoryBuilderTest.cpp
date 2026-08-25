@@ -15,6 +15,7 @@
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -203,12 +204,22 @@ namespace ao::gtk::test
 
         stack->set_visible_child("edit");
         REQUIRE(emitFocusEnter(*entry));
-        REQUIRE(fixture.runtime().library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+        auto const initialRevision = fixture.runtime().library().authoringAvailability().libraryRevision;
+        bool replacementRequested = false;
+        auto replacementSubscription = fixture.runtime().library().onAuthoringAvailabilityChanged(
+          [entry, initialRevision, &replacementRequested](rt::LibraryAuthoringAvailability const& availability)
+          {
+            if (availability.libraryRevision != initialRevision)
+            {
+              replacementRequested = emitFocusEnter(*entry);
+            }
+          });
+        REQUIRE(runGtkTask(
+          fixture.runtime(), fixture.runtime().library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
 
         // Replace the invalidated session before its deferred teardown runs.
         // Clearing the old session must disconnect that exact idle callback.
-        REQUIRE(emitFocusEnter(*entry));
-        drainGtkEvents();
+        REQUIRE(replacementRequested);
 
         CHECK(stack->get_visible_child_name() == "edit");
         REQUIRE(emitFocusLeave(*entry));

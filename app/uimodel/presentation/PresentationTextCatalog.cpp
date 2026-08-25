@@ -527,7 +527,7 @@ namespace ao::uimodel
     return format(MessageId::SmartListShowingFirstMatches, {{"visible", kMaxPreview}, {"count", count}});
   }
 
-  std::string PresentationTextCatalog::listMembershipNotification(rt::TrackAuthoringStatus const status,
+  std::string PresentationTextCatalog::listMembershipNotification(rt::AuthoringStatus const status,
                                                                   ListMembershipOperation const operation,
                                                                   std::string_view const listName,
                                                                   std::string_view const tagExpression,
@@ -538,11 +538,12 @@ namespace ao::uimodel
     {
       switch (status)
       {
-        case rt::TrackAuthoringStatus::Stale: return std::string{text(MessageId::ListMembershipAddStale)};
-        case rt::TrackAuthoringStatus::Unavailable: return std::string{text(MessageId::ListMembershipAddUnavailable)};
-        case rt::TrackAuthoringStatus::NoOp:
+        case rt::AuthoringStatus::Busy: return std::string{text(MessageId::LibraryBusyTryAgain)};
+        case rt::AuthoringStatus::Stale: return std::string{text(MessageId::ListMembershipAddStale)};
+        case rt::AuthoringStatus::Unavailable: return std::string{text(MessageId::ListMembershipAddUnavailable)};
+        case rt::AuthoringStatus::NoOp:
           return format(MessageId::ListMembershipAddNoOp, {{"list", listName}, {"tag", tagExpression}});
-        case rt::TrackAuthoringStatus::Applied:
+        case rt::AuthoringStatus::Applied:
           return format(
             MessageId::ListMembershipAdded, {{"tag", tagExpression}, {"count", changedTrackCount}, {"list", listName}});
       }
@@ -550,11 +551,12 @@ namespace ao::uimodel
 
     switch (status)
     {
-      case rt::TrackAuthoringStatus::Stale: return std::string{text(MessageId::ListMembershipRemoveStale)};
-      case rt::TrackAuthoringStatus::Unavailable: return std::string{text(MessageId::ListMembershipRemoveUnavailable)};
-      case rt::TrackAuthoringStatus::NoOp:
+      case rt::AuthoringStatus::Busy: return std::string{text(MessageId::LibraryBusyTryAgain)};
+      case rt::AuthoringStatus::Stale: return std::string{text(MessageId::ListMembershipRemoveStale)};
+      case rt::AuthoringStatus::Unavailable: return std::string{text(MessageId::ListMembershipRemoveUnavailable)};
+      case rt::AuthoringStatus::NoOp:
         return format(MessageId::ListMembershipRemoveNoOp, {{"tag", tagExpression}, {"list", listName}});
-      case rt::TrackAuthoringStatus::Applied:
+      case rt::AuthoringStatus::Applied:
       {
         if (forgottenPositionCount == 0)
         {

@@ -107,6 +107,7 @@ de:table {
     notification_grouped_info { "{count, plural, one {# Benachrichtigung} other {# Benachrichtigungen}}" }
     notification_grouped_warning { "{count, plural, one {# Warnung} other {# Warnungen}}" }
     notification_grouped_error { "{count, plural, one {# Fehler} other {# Fehler}}" }
+    library_busy_try_again { "Die Bibliothek ist beschäftigt. Versuchen Sie es erneut." }
     library_task_scanning { "Scannen" }
     library_task_updating { "Aktualisieren" }
     library_task_fingerprinting { "Fingerabdruck erstellen" }

@@ -17,6 +17,7 @@ namespace ao::async
   bool isOperationCancelled(std::exception const& exception) noexcept;
   bool isOperationCancelled(std::exception_ptr const& exceptionPtr) noexcept;
   [[noreturn]] void throwOperationCancelled();
+  [[noreturn]] void rethrowException(std::exception_ptr const& exceptionPtr);
   void throwIfStopRequested(std::stop_token stopToken);
   void rethrowIfOperationCancelled(std::exception const& exception);
   void rethrowIfOperationCancelled();

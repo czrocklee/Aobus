@@ -67,9 +67,10 @@ namespace ao::gtk::test
 
     ListId createList(rt::AppRuntime& runtime, std::string name)
     {
-      return ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{
-        .name = std::move(name),
-      }));
+      return ao::test::requireValue(runGtkTask(runtime,
+                                               runtime.library().writer().createList(rt::ListDraft{
+                                                 .name = std::move(name),
+                                               })));
     }
 
     TrackId addPlayableTrack(rt::AppRuntime& runtime, std::string_view const title)

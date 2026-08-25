@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/library/AudioIdentityIndexer.h>
+#include "AudioIdentityIndexer.h"
 
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
@@ -465,9 +465,9 @@ namespace ao::rt
       }
 
       // Phase 3: serial write-back. Flush even on cancellation so already-computed
-      // hashes are not lost. Runtime maintenance supplies the coordinator-owned
-      // commit callback; explicitly offline composition uses its writer mutex.
-      auto const candidates = makeWriteCandidates(rows, slots);
+      // hashes are not lost. Runtime composition supplies the sequencer-owned
+      // commit callback; explicit offline composition uses the core writer gate.
+      auto candidates = makeWriteCandidates(rows, slots);
 
       if (candidates.empty())
       {
@@ -479,7 +479,7 @@ namespace ao::rt
         continue;
       }
 
-      auto commitRes = commitBatchCallback(candidates);
+      auto commitRes = co_await commitBatchCallback(std::move(candidates));
 
       if (!commitRes)
       {

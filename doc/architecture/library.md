@@ -157,10 +157,10 @@ This narrows path races but is not an adversarial filesystem sandbox: the music 
 It exposes four cooperating roles and owns one private mutation coordinator:
 
 - `LibraryReader` owns one read transaction for a coherent point-in-time read batch.
-- `LibraryWriter` owns synchronous semantic commands; every effective command commits and publishes through the coordinator.
+- `LibraryWriter` owns asynchronous semantic commands and exact previews; every effective command commits and publishes through the coordinator.
 - `LibraryTaskService` owns long-running asynchronous operations such as scan, import/export, and identity backfill, including best-effort progress and its status-free presentation finalization pulse.
 - `LibraryChanges` is the read-only committed-revision observation boundary.
-- `LibraryMutationService` exclusively owns the writable core capability, interactive/background/maintenance admission, commit revision checks, and publication completion.
+- `LibraryMutationService` exclusively owns the writable core capability and the one live-runtime command lane, including interactive/background/Maintenance admission, commit revision checks, publication settlement, and Closing quiescence.
 
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
 It groups roles and lifetime; the coordinator is an application control plane over the existing LMDB transaction system rather than another database or nested transaction layer.
@@ -171,12 +171,16 @@ Applying consumes that plan once and revalidates every binding before opening th
 Frontends may present the report or drop the plan, but cannot manufacture or retarget commit evidence.
 
 The coordinator publishes `LibraryAuthoringAvailability` as `Available` or `Maintenance`.
-Maintenance identifies YAML import and rejects every interactive command for the whole operation, including slow preparation outside writer ownership.
-Scan apply and audio-identity backfill instead hold a non-presentational background-task lease that serializes them with each other and with import preparation while leaving authoring `Available` between their short writer phases.
-Background writer intent is reserved before physical writer acquisition so callback-owner authoring can fail fast on observed background contention; non-owner writers retain ordinary waiting semantics, and the [task execution specification](../spec/library/runtime/task-execution.md#background-tasks-and-maintenance-states) owns the exact admission behavior.
-Before synchronous availability delivery, the coordinator establishes a logical notification gate.
-Observers therefore run without the coordinator writer mutex, while reentrant callback-owner writes are rejected and foreign writers wait until delivery completes.
-Maintenance-state emitters reacquire writer ownership before clearing that gate, while revision-only availability remains enclosed by the publication gate; the [change publication specification](../spec/library/runtime/change-publication.md#ordering-and-delivery) owns the exact commit-to-callback handoff.
+Maintenance identifies YAML import and rejects every interactive command for the whole operation, including slow preparation outside transaction ownership.
+Scan apply and audio-identity backfill instead hold a non-presentational background-task lease that serializes them with each other and with import preparation while leaving authoring `Available` during preparation.
+Their write phases enter the same FIFO lane as interactive commands; once one background mutation is queued or active, later interactive authoring reports non-terminal `Busy` and ordinary mutation/preview commands report `ResourceBusy` rather than blocking an executor thread.
+An interactive command accepted first retains its lane position.
+
+Queue waits and publication-settlement waits suspend their coroutines.
+After a command receives the active turn, it resumes on a worker and runs one synchronous, non-coroutine transaction kernel; the command retains the turn through `Published` or coordinated-Closing retirement.
+Maintenance entry and exit are themselves sequenced control commands, and availability delivery runs on the serialized callback executor without the coordinator state mutex.
+Mutation attempted from a publication or availability observer is rejected as reentrant rather than queued for a later causal turn.
+The [task execution specification](../spec/library/runtime/task-execution.md#background-tasks-and-maintenance-states) and [change publication specification](../spec/library/runtime/change-publication.md#ordering-and-delivery) own the exact admission and settlement behavior.
 Closing is private lifetime coordination rather than a public authoring state.
 Metadata and tag authoring additionally requires runtime-created `BoundTrackTargets` containing the runtime instance id, committed library revision, and exact target order.
 
@@ -239,13 +243,14 @@ Before either factory exposes a runtime, `CoreRuntime` performs the initial comp
 
 ## Data and control flow
 
-A synchronous mutation follows this path:
+An asynchronous live mutation follows this path:
 
 ```text
-runtime command
-  -> LibraryWriter
-  -> LibraryMutationService admission
-  -> WriteTransaction + transaction-local dictionary overlay
+callback/CLI command captures owning inputs
+  -> LibraryWriter Task
+  -> LibraryMutationService FIFO admission
+  -> active worker turn
+  -> synchronous WriteTransaction + transaction-local dictionary overlay
   -> root execute boundary + callback-scoped LibraryWrite ports
   -> operation-owned Changed(value, LibraryChangeSet) or Unchanged(value)
   -> one LMDB commit with records, dictionary rows, and new library revision
@@ -255,9 +260,14 @@ runtime command
   -> live projections
   -> view/playback/UI observers
   -> Available(runtimeInstanceId, committedRevision)
+  -> publication event resumes the command on a worker
+  -> caller receives the owned result on its executor
 ```
 
-An asynchronous mutating operation acquires its task-level exclusion before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a coordinator mutation only for preview or apply/commit.
+`Unchanged`, preview, and pre-commit failure paths abort the native transaction and release the lane without publication.
+The caller continuation is not part of lane ownership.
+
+An asynchronous mutating task acquires its task-level exclusion before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without transaction ownership, and submits a coordinator command only for preview or apply/commit.
 Import uses exclusive maintenance plus the background-task lease; scan apply and identity backfill use only the lease and therefore permit unrelated interactive authoring during preparation.
 Export and scan-plan construction remain independent read snapshots.
 After successful cancellable callback-owner admission, best-effort progress and a status-free finished pulse return through `LibraryTaskService`, while the awaited task owns its outcome and committed content changes use `LibraryChangeSet` exclusively; the [task execution specification](../spec/library/runtime/task-execution.md#progress-and-outcome) owns the exact conversation boundary.
@@ -274,7 +284,7 @@ strict parse + prepared data + uncommitted preview
 
 A scan plan is an opaque move-only runtime value whose immutable items are bound to the persisted library id and carry planner revision plus per-item manifest evidence from one short read snapshot.
 Planning owns a copy of that manifest state and releases the LMDB snapshot before filesystem traversal and identity hashing.
-Scan apply validates the library id before preparation and at its single write boundary, revalidates filesystem evidence before opening the writer, and admits each actionable item against live manifest and Track evidence before the first mutation.
+Scan apply validates the library id before preparation and at its single write boundary, revalidates filesystem evidence after its command receives the active turn but before opening the transaction, and admits each actionable item against live manifest and Track evidence before the first mutation.
 Unrelated revisions do not invalidate a plan; stale ordinary items are counted separately from failures and skipped, while stale move evidence aborts the complete apply.
 Scan apply crosses one coordinator mutation boundary; the [scan specification](../spec/library/runtime/scan-and-identity.md#plan-application) owns its item admission and atomicity behavior.
 Explicit relink is a constrained plan derivation that preserves the same source evidence rather than a separate caller-authored mutation description.
@@ -282,8 +292,8 @@ Explicit relink is a constrained plan derivation that preserves the same source 
 A read-oriented workflow obtains one `LibraryReader`, performs the related reads under its single transaction snapshot, and releases the reader before retaining application values.
 
 Metadata and tag authoring first binds the exact targets to one runtime instance and one available committed revision.
-Commit rechecks runtime identity, availability, revision, and every target under coordinator writer ownership.
-A foreign or superseded binding is `Stale`, maintenance is `Unavailable`, and an effective commit returns a binding advanced to the published revision.
+Commit rechecks runtime identity, availability, revision, and every target inside the command's active transaction turn.
+A foreign or superseded binding is `Stale`, maintenance is `Unavailable`, lane contention is non-terminal `Busy`, and an effective commit returns a binding advanced to the published revision.
 Creating a binding validates that every target exists and returns `NotFound` otherwise; disappearance under an accepted exact-revision binding is an invariant violation rather than another authoring status.
 
 Saved-order authoring uses the parallel `BoundListOrder` evidence shape: runtime instance, committed revision, List id, and complete effective TrackId sequence.
@@ -336,8 +346,8 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 - A noncommitting apply cannot later be upgraded to execute on the same mutation.
 - A write transaction exposes one in-memory candidate successor revision, persists it immediately before native commit, and does not consume it on abort or failed commit.
 - A mutation becomes observable through the revisioned change bus only after its write transaction commits and the cached metadata state publishes that candidate.
-- The coordinator admits the next mutation only after publication completion, and callback-thread reentrant mutation during publication is rejected.
-- Availability observers execute without coordinator mutex ownership, while a logical notification gate keeps writer admission closed until synchronous delivery completes.
+- The sequencer grants only one active live-runtime command; an effective command retains that turn through revision settlement, and callback-thread reentrant mutation during publication is rejected.
+- Availability observers execute without coordinator mutex ownership, while the active publication or Maintenance control-delivery phase keeps the next command closed until synchronous delivery completes.
 - One replica applies a revision before it is announced; notification observers only learn of revisions that replica already applied.
 - Task-progress finalization and frontend workflow callbacks never refresh committed data; consumers derive such refresh only from `LibraryChanges`.
 - Consumers use published track and list identities to refresh state; they do not retain transaction-bound core views beyond their scope.
@@ -352,7 +362,8 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 
 ## Failure, cancellation, and lifetime boundaries
 
-Synchronous readers and writers finish their transaction scope before returning application values or publishing events.
+Synchronous readers finish their snapshot scope before returning application values.
+Asynchronous writers run their transaction scope entirely inside one worker-side synchronous kernel and return only after the command has aborted or reached revision settlement.
 `LibraryTaskService` owns the worker/callback transition for long-running operations and accepts cooperative stop tokens.
 Executor hops honor cancellation, while only operations with explicit synchronous checkpoints can stop during their core work; [library task execution](../spec/library/runtime/task-execution.md#cancellation) owns the operation matrix.
 Cancellation never reinterprets an already committed transaction as uncommitted.
@@ -360,12 +371,13 @@ Cancellation never reinterprets an already committed transaction as uncommitted.
 Failure before commit returns through the operation's typed error channel and leaves the prior availability intact.
 LMDB mutation faults may use a private `lmdb::detail::TransactionFailure` as short-range unwind control below the library wrapper.
 `WriteTransaction::apply()` and `commit()` are the exact lower containment owners: they explicitly abort and terminalize the root before translating the carried `Error` to `Result`, and no runtime writer, task, scan, or importer catches the marker.
-`LibraryMutationService::Mutation::apply()` and `execute()` additionally terminalize the live mutation and release coordinator admission before returning an error or rethrowing an unexpected exception.
-`execute()` is the only live commit boundary; `Unchanged` and preview `apply()` paths explicitly abort and cannot publish.
+`LibraryMutationService::Mutation::apply()` and `executeAsync()` additionally terminalize the live mutation and release its sequencer turn before returning an error or rethrowing an unexpected exception.
+`executeAsync()` is the only live commit boundary; `Unchanged` and preview `apply()` paths explicitly abort and cannot publish.
 No failed root can be continued or committed, even while its C++ wrapper remains alive.
 Once durable commit succeeds, revision-admission, publication admission, or delivery failure in a live runtime is an infrastructure fault and terminates the process.
 It is not translated to a transaction `Result` or a recoverable authoring state; the next process open reconstructs runtime state from the durable database.
-Coordinated Closing is the only exception: it seals writer and task admission before callback admission closes and may retire publication, background-lease, or maintenance-finalization work that has not begun.
+Coordinated Closing is the only exception: it seals command and task admission, retires queued commands, requests stop from active pre-transaction work, and may retire a queued publication or unclaimed Maintenance control delivery before callback admission closes.
+It does not stop the runtime until the command lane is idle and `LibraryChanges` is sealed.
 `MusicLibrary::readTransaction()` and `WritableMusicLibrary::writeTransaction()` treat native begin failure as fatal because a live library has no alternate storage authority.
 Malformed current-schema catalog, metadata, dictionary, Resource, Track, List, or manifest state that can be inspected safely before exposure rejects `MusicLibrary::open()` with `CorruptData`; a valid non-current metadata version returns `NotSupported` before current-schema closure.
 A later Store structural breach is an `AO_INVARIANT` failure, and a later non-miss native read fault is `AO_FATAL`, because supported writers preserve the validated facts and no safe partial-result or degraded-library contract exists.
@@ -399,8 +411,8 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`LibraryUri`](../../include/ao/library/LibraryUri.h) owns the canonical music-root-relative path namespace and resolved containment check.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
-- [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns live-runtime task and write admission, revision validation, commit, and publication completion.
-- [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped read and synchronous mutation boundaries.
+- [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns the live-runtime FIFO command lane, task admission, revision validation, commit, publication settlement, Maintenance, and Closing.
+- [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped reads and owning asynchronous mutation commands.
 - [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations, best-effort progress, and status-free progress finalization.
 - [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
 - [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned committed changes.
@@ -425,8 +437,8 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects NFC identity, malformed-input rejection, overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
 - [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.
 - [`LibraryReaderTest.cpp`](../../test/unit/runtime/library/LibraryReaderTest.cpp) and [`LibraryWriterTest.cpp`](../../test/unit/runtime/library/LibraryWriterTest.cpp) protect runtime access roles.
-- [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering and callback publication.
-- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects availability, binding validation, all-or-none authoring, and publication barriers.
+- [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering, callback publication, signal-before-await settlement, Maintenance workflow ordering, and Closing retirement.
+- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects availability, binding validation, non-terminal contention, all-or-none authoring, pre-transaction Closing cancellation, and reentrant publication closure.
 - [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects worker/callback task boundaries.
 - [`TrackSourceCacheTest.cpp`](../../test/unit/runtime/source/TrackSourceCacheTest.cpp) protects source lifetime, reuse, and refresh composition.
 - [`ListOrderSourceTest.cpp`](../../test/unit/runtime/source/ListOrderSourceTest.cpp) and [`ListOrderSourceObserverTest.cpp`](../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp) protect rank derivation, hidden ranks, parent changes, and delta translation.
@@ -435,6 +447,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 
 ## Related documents
 
+- [Decision 0015: sequence live-runtime library writes](../decision/0015-sequence-live-runtime-library-writes.md)
 - [System architecture](system-overview.md)
 - [Runtime execution architecture](runtime-execution.md)
 - [Failure and reporting architecture](failure-and-reporting.md)

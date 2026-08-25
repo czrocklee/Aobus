@@ -6,9 +6,11 @@
 #include "runtime/library/LibraryMutationService.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/library/LibraryMutationTestSupport.h"
 #include <ao/Error.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/DictionaryStore.h>
@@ -142,14 +144,18 @@ namespace ao::rt::test
     struct CompletionReviewHarness final
     {
       CompletionReviewHarness(MusicLibraryFixture& libraryFixture, CompletionAliasPolicy const* aliasPolicy)
-        : changes{makeStateOnlyLibraryChanges(libraryFixture.library())}
+        : asyncRuntime{executor}
+        , changes{makeLibraryChanges(executor, libraryFixture.library())}
         , service{libraryFixture.library(), changes, nullptr, aliasPolicy}
-        , mutationService{executor, library::test::requireWritableLibrary(libraryFixture.library()), changes}
+        , mutationService{asyncRuntime.callbackExecutor(),
+                          library::test::requireWritableLibrary(libraryFixture.library()),
+                          changes}
         , completer{service}
       {
       }
 
-      InlineExecutor executor;
+      async::LoopExecutor executor;
+      async::Runtime asyncRuntime;
       LibraryChanges changes;
       CompletionService service;
       LibraryMutationService mutationService;
@@ -688,16 +694,13 @@ namespace ao::rt::test
 
     void invalidateCompletionSnapshot(CompletionReviewHarness& harness)
     {
-      auto mutationRes = harness.mutationService.beginInteractiveMutation();
-
-      if (!mutationRes)
-      {
-        throw std::runtime_error{mutationRes.error().message};
-      }
-
-      auto executionRes = mutationRes->execute(
-        [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
-        { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; });
+      auto executionRes =
+        runLoopTask(harness.asyncRuntime,
+                    harness.executor,
+                    executeInteractiveMutation(
+                      harness.mutationService.captureSubmission(),
+                      [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
+                      { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
 
       if (!executionRes)
       {

@@ -22,6 +22,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/Library.h>
@@ -189,13 +190,6 @@ namespace ao::rt::test
       co_return executor->isCurrent();
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> loadResource(LibraryTaskService* service,
-                                                                            ResourceId resourceId,
-                                                                            ResourceSizeLimit limit)
-    {
-      co_return co_await service->loadResourceAsync(resourceId, limit);
-    }
-
     template<typename T>
     async::Task<T> countCompletion(std::shared_ptr<std::atomic<std::size_t>> counterPtr, async::Task<T> task)
     {
@@ -297,10 +291,10 @@ namespace ao::rt::test
 
       // Administrative export keeps the exemption the delivery specification
       // grants it, over the same walk.
-      auto administrativeRes =
-        runQueuedTask(runtime,
-                      executor,
-                      loadResource(&runtimeLibraryPtr->taskService(), resourceId, ResourceSizeLimit::Administrative));
+      auto administrativeRes = runQueuedTask(
+        runtime,
+        executor,
+        runtimeLibraryPtr->taskService().loadResourceAsync(resourceId, ResourceSizeLimit::Administrative));
       REQUIRE(administrativeRes);
       REQUIRE(*administrativeRes);
       CHECK((*administrativeRes)->size() == bytes.size());
@@ -349,7 +343,7 @@ namespace ao::rt::test
     {
       // The runtime holds the writer session, so the revision has to move through
       // it; a stale stamp is all the next miss needs to rebuild.
-      REQUIRE(runtimeLibraryPtr->createList(LibraryWriter::ListDraft{.name = "Revision bump"}));
+      REQUIRE(runQueuedTask(runtime, executor, runtimeLibraryPtr->createList(ListDraft{.name = "Revision bump"})));
       executor.drain();
       REQUIRE(runQueuedTask(runtime, executor, service.loadResourceAsync(resourceId)));
       CHECK(service.resourceCarrierIndexBuildCount() == 2);
@@ -488,7 +482,7 @@ namespace ao::rt::test
 
     SECTION("changed target revision is rejected")
     {
-      auto deleteRes = runtimeLibraryPtr->writer().deleteTrack(existingTrackId);
+      auto deleteRes = runQueuedTask(runtime, executor, runtimeLibraryPtr->writer().deleteTrack(existingTrackId));
       INFO((deleteRes ? "target changed" : deleteRes.error().message));
       REQUIRE(deleteRes);
       auto result = runQueuedTask(runtime, executor, service.applyLibraryImportPlanAsync(std::move(*planRes)));
@@ -862,20 +856,22 @@ namespace ao::rt::test
     {
       auto const availability = runtimeLibraryPtr->authoringAvailability();
       CHECK(availability.state == LibraryAuthoringState::Available);
-      CHECK(availability.maintenanceKind == LibraryMaintenanceKind::None);
 
-      auto authoringRes =
-        runtimeLibraryPtr->writer().updateMetadata(*bindingRes, MetadataPatch{.optTitle = "Edited during scan"});
+      auto authoringRes = runQueuedTask(
+        runtime,
+        executor,
+        runtimeLibraryPtr->writer().updateMetadata(*bindingRes, MetadataPatch{.optTitle = "Edited during scan"}));
       CHECK(authoringRes);
 
       if (authoringRes)
       {
-        CHECK(authoringRes->status == TrackAuthoringStatus::Applied);
+        CHECK(authoringRes->status == AuthoringStatus::Applied);
       }
 
       executor.drain();
 
-      auto listRes = runtimeLibraryPtr->writer().createList(LibraryWriter::ListDraft{.name = "Created during scan"});
+      auto listRes = runQueuedTask(
+        runtime, executor, runtimeLibraryPtr->writer().createList(ListDraft{.name = "Created during scan"}));
       CHECK(listRes);
 
       auto overlapCompletedPtr = std::make_shared<std::atomic_bool>(false);
@@ -892,7 +888,7 @@ namespace ao::rt::test
 
         if (!overlapRes)
         {
-          CHECK(overlapRes.error().code == Error::Code::InvalidState);
+          CHECK(overlapRes.error().code == Error::Code::ResourceBusy);
         }
       }
     }
@@ -913,10 +909,12 @@ namespace ao::rt::test
 
     auto postScanBindingRes = runtimeLibraryPtr->bindTrackTargets(std::array{authoringTarget});
     REQUIRE(postScanBindingRes);
-    auto postScanAuthoringRes =
-      runtimeLibraryPtr->writer().updateMetadata(*postScanBindingRes, MetadataPatch{.optTitle = "Edited after scan"});
+    auto postScanAuthoringRes = runQueuedTask(
+      runtime,
+      executor,
+      runtimeLibraryPtr->writer().updateMetadata(*postScanBindingRes, MetadataPatch{.optTitle = "Edited after scan"}));
     REQUIRE(postScanAuthoringRes);
-    CHECK(postScanAuthoringRes->status == TrackAuthoringStatus::Applied);
+    CHECK(postScanAuthoringRes->status == AuthoringStatus::Applied);
     runtime.requestStop();
     runtime.join();
   }

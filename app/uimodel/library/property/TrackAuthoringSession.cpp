@@ -6,19 +6,24 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 
+#include <exception>
 #include <expected>
 #include <functional>
 #include <memory>
 #include <span>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ao::uimodel
 {
@@ -32,17 +37,11 @@ namespace ao::uimodel
       handleAvailability(library.authoringAvailability());
     }
 
-    bool bindingIsCurrent() const
-    {
-      auto const availability = library.authoringAvailability();
-      return availability.state == rt::LibraryAuthoringState::Available &&
-             availability.runtimeInstanceId == targets.runtimeInstanceId() &&
-             availability.libraryRevision == targets.libraryRevision();
-    }
+    bool bindingIsCurrent() const { return targets.matches(library.authoringAvailability()); }
 
-    void invalidate(rt::TrackAuthoringStatus const nextStatus)
+    void invalidate(rt::AuthoringStatus const nextStatus)
     {
-      if (!current || submitting)
+      if (!current)
       {
         return;
       }
@@ -59,12 +58,23 @@ namespace ao::uimodel
         return;
       }
 
-      if (availability.state != rt::LibraryAuthoringState::Available ||
-          availability.runtimeInstanceId != targets.runtimeInstanceId() ||
-          availability.libraryRevision != targets.libraryRevision())
+      if (!targets.matches(availability))
       {
-        invalidate(rt::TrackAuthoringStatus::Stale);
+        if (submitting)
+        {
+          maintenanceObservedDuringSubmission =
+            maintenanceObservedDuringSubmission || availability.state == rt::LibraryAuthoringState::Maintenance;
+          return;
+        }
+
+        invalidate(rt::AuthoringStatus::Stale);
       }
+    }
+
+    bool bindingInvalidAfterSubmission()
+    {
+      auto const maintenanceObserved = std::exchange(maintenanceObservedDuringSubmission, false);
+      return maintenanceObserved || !bindingIsCurrent();
     }
 
     template<typename RuntimeResult, typename SubmitResult>
@@ -72,7 +82,7 @@ namespace ao::uimodel
     {
       if (!runtimeRes)
       {
-        invalidate(bindingIsCurrent() ? rt::TrackAuthoringStatus::Unavailable : rt::TrackAuthoringStatus::Stale);
+        invalidate(bindingInvalidAfterSubmission() ? rt::AuthoringStatus::Stale : rt::AuthoringStatus::Unavailable);
         return std::unexpected{runtimeRes.error()};
       }
 
@@ -81,26 +91,20 @@ namespace ao::uimodel
 
       switch (completed.status)
       {
-        case rt::TrackAuthoringStatus::Applied:
+        case rt::AuthoringStatus::Applied:
           AO_INVARIANT(completed.optNextTargets, "Applied authoring result did not return a next binding");
 
           targets = std::move(*completed.optNextTargets);
-
-          if (!bindingIsCurrent())
-          {
-            invalidate(rt::TrackAuthoringStatus::Stale);
-          }
-
           break;
-        case rt::TrackAuthoringStatus::NoOp:
-          if (!bindingIsCurrent())
-          {
-            invalidate(rt::TrackAuthoringStatus::Stale);
-          }
+        case rt::AuthoringStatus::NoOp:
+        case rt::AuthoringStatus::Busy: break;
+        case rt::AuthoringStatus::Stale:
+        case rt::AuthoringStatus::Unavailable: invalidate(rt::AuthoringStatus::Stale); break;
+      }
 
-          break;
-        case rt::TrackAuthoringStatus::Stale:
-        case rt::TrackAuthoringStatus::Unavailable: invalidate(rt::TrackAuthoringStatus::Stale); break;
+      if (current && bindingInvalidAfterSubmission())
+      {
+        invalidate(rt::AuthoringStatus::Stale);
       }
 
       return result;
@@ -110,7 +114,7 @@ namespace ao::uimodel
     {
       try
       {
-        invalidate(bindingIsCurrent() ? rt::TrackAuthoringStatus::Unavailable : rt::TrackAuthoringStatus::Stale);
+        invalidate(bindingInvalidAfterSubmission() ? rt::AuthoringStatus::Stale : rt::AuthoringStatus::Unavailable);
       }
       catch (...)
       {
@@ -121,21 +125,33 @@ namespace ao::uimodel
     }
 
     template<typename RuntimeResult, typename SubmitResult, typename Operation>
-    Result<SubmitResult> runSubmission(Operation&& operation)
+    static async::Task<Result<SubmitResult>> runSubmissionAsync(std::shared_ptr<Impl> implPtr, Operation operation)
     {
-      submitting = true;
+      if (!implPtr->current)
+      {
+        co_return SubmitResult{.status = implPtr->invalidStatus};
+      }
+
+      if (implPtr->submitting)
+      {
+        co_return SubmitResult{.status = rt::AuthoringStatus::Busy};
+      }
+
+      implPtr->submitting = true;
+      auto deferredException = std::exception_ptr{};
 
       try
       {
-        auto runtimeRes = std::invoke(std::forward<Operation>(operation));
-        submitting = false;
-        return finishSubmission<RuntimeResult, SubmitResult>(std::move(runtimeRes));
+        auto runtimeRes = co_await std::invoke(std::move(operation), *implPtr);
+        implPtr->submitting = false;
+        co_return implPtr->finishSubmission<RuntimeResult, SubmitResult>(std::move(runtimeRes));
       }
       catch (...)
       {
-        submitting = false;
-        finishExceptionalSubmission();
-        throw;
+        deferredException = std::current_exception();
+        implPtr->submitting = false;
+        implPtr->finishExceptionalSubmission();
+        async::rethrowException(deferredException);
       }
     }
 
@@ -143,7 +159,8 @@ namespace ao::uimodel
     rt::BoundTrackTargets targets;
     bool current = true;
     bool submitting = false;
-    rt::TrackAuthoringStatus invalidStatus = rt::TrackAuthoringStatus::Unavailable;
+    bool maintenanceObservedDuringSubmission = false;
+    rt::AuthoringStatus invalidStatus = rt::AuthoringStatus::Unavailable;
     async::Subscription availabilitySubscription;
     mutable async::Signal<> invalidated;
   };
@@ -159,10 +176,10 @@ namespace ao::uimodel
     }
 
     return std::unique_ptr<TrackAuthoringSession>{
-      new TrackAuthoringSession{std::make_unique<Impl>(library, std::move(*targetsRes))}};
+      new TrackAuthoringSession{std::make_shared<Impl>(library, std::move(*targetsRes))}};
   }
 
-  TrackAuthoringSession::TrackAuthoringSession(std::unique_ptr<Impl> implPtr)
+  TrackAuthoringSession::TrackAuthoringSession(std::shared_ptr<Impl> implPtr)
     : _implPtr{std::move(implPtr)}
   {
   }
@@ -184,27 +201,20 @@ namespace ao::uimodel
     return _implPtr->invalidated.connect(std::move(handler));
   }
 
-  Result<TrackMetadataSubmitResult> TrackAuthoringSession::submitMetadata(rt::MetadataPatch const& patch)
+  async::Task<Result<TrackMetadataSubmitResult>> TrackAuthoringSession::submitMetadata(rt::MetadataPatch patch)
   {
-    if (!_implPtr->current)
-    {
-      return TrackMetadataSubmitResult{.status = _implPtr->invalidStatus};
-    }
-
-    return _implPtr->runSubmission<rt::LibraryWriter::MetadataAuthoringResult, TrackMetadataSubmitResult>(
-      [this, &patch] { return _implPtr->library.writer().updateMetadata(_implPtr->targets, patch); });
+    return Impl::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackMetadataReply>, TrackMetadataSubmitResult>(
+      _implPtr,
+      [patch = std::move(patch)](Impl& impl) mutable
+      { return impl.library.writer().updateMetadata(impl.targets, std::move(patch)); });
   }
 
-  Result<TrackTagSubmitResult> TrackAuthoringSession::submitTags(std::span<std::string const> tagsToAdd,
-                                                                 std::span<std::string const> tagsToRemove)
+  async::Task<Result<TrackTagSubmitResult>> TrackAuthoringSession::submitTags(std::vector<std::string> tagsToAdd,
+                                                                              std::vector<std::string> tagsToRemove)
   {
-    if (!_implPtr->current)
-    {
-      return TrackTagSubmitResult{.status = _implPtr->invalidStatus};
-    }
-
-    return _implPtr->runSubmission<rt::LibraryWriter::TagAuthoringResult, TrackTagSubmitResult>(
-      [this, tagsToAdd, tagsToRemove]
-      { return _implPtr->library.writer().editTags(_implPtr->targets, tagsToAdd, tagsToRemove); });
+    return Impl::runSubmissionAsync<rt::TrackAuthoringResult<rt::EditTrackTagsReply>, TrackTagSubmitResult>(
+      _implPtr,
+      [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](Impl& impl) mutable
+      { return impl.library.writer().editTags(impl.targets, std::move(tagsToAdd), std::move(tagsToRemove)); });
   }
 } // namespace ao::uimodel

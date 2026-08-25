@@ -3,6 +3,7 @@
 
 #include "common/UiWorkflow.h"
 
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
@@ -11,9 +12,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <mutex>
+#include <cstdint>
+#include <memory>
 #include <stop_token>
 #include <thread>
 
@@ -21,27 +21,21 @@ namespace ao::gtk::test
 {
   namespace
   {
+    using rt::test::AsyncBarrier;
+    using rt::test::AsyncTestState;
     using rt::test::ManualExecutor;
 
     struct WorkflowOwner final
     {
       std::atomic<bool> bodyEntered{false};
-      std::atomic<bool> bodyFinished{false};
+      AsyncTestState<bool> bodyFinished = AsyncTestState<bool>::create(false);
       std::atomic<std::thread::id> bodyEntryThread{};
-      std::mutex mutex;
-      std::condition_variable cv;
+      std::atomic<std::int32_t> result{0};
+      std::atomic<std::thread::id> completionThread{};
 
-      void markBodyFinished()
-      {
-        bodyFinished = true;
-        cv.notify_all();
-      }
+      void markBodyFinished() const { bodyFinished.set(true); }
 
-      bool waitBodyFinished(std::chrono::milliseconds timeout = std::chrono::seconds{2})
-      {
-        auto lock = std::unique_lock{mutex};
-        return cv.wait_for(lock, timeout, [this] { return bodyFinished.load(); });
-      }
+      bool waitBodyFinished() const { return bodyFinished.waitUntil(true); }
     };
 
     async::Task<void> succeedingWorkflowBody(async::Runtime* runtime,
@@ -58,6 +52,22 @@ namespace ao::gtk::test
     {
       owner->bodyEntered = true;
       co_return;
+    }
+
+    async::Task<std::int32_t> produceResult(async::Runtime* runtime)
+    {
+      co_await runtime->resumeOnWorker();
+      co_return 42;
+    }
+
+    async::Task<std::int32_t> produceDelayedResult(async::Runtime* runtime,
+                                                   AsyncTestState<bool> entered,
+                                                   AsyncBarrier* release)
+    {
+      co_await runtime->resumeOnWorker();
+      entered.set(true);
+      release->wait();
+      co_return 42;
     }
   } // namespace
 
@@ -110,6 +120,80 @@ namespace ao::gtk::test
     runtime.join();
 
     CHECK_FALSE(owner.bodyEntered.load());
+    CHECK(scope.empty());
+  }
+
+  TEST_CASE("UiWorkflow - result tasks complete on the callback executor", "[gtk][unit][uiworkflow][concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto scope = async::LifetimeScope{};
+    auto owner = WorkflowOwner{};
+
+    spawnUiTask(runtime,
+                scope,
+                owner,
+                "test UI result workflow",
+                produceResult(&runtime),
+                [](WorkflowOwner* self, std::int32_t const result)
+                {
+                  self->result = result;
+                  self->completionThread = std::this_thread::get_id();
+                  self->markBodyFinished();
+                });
+
+    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.drainUntil([&owner] { return owner.bodyFinished.load(); }));
+    REQUIRE(executor.drainUntil([&scope] { return scope.empty(); }));
+
+    runtime.requestStop();
+    runtime.join();
+
+    CHECK(owner.result.load() == 42);
+    CHECK(owner.completionThread.load() == std::this_thread::get_id());
+    CHECK(scope.empty());
+  }
+
+  TEST_CASE("UiWorkflow - owner cancellation suppresses a late result callback",
+            "[gtk][regression][uiworkflow][concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto scope = async::LifetimeScope{};
+    auto ownerPtr = std::make_unique<WorkflowOwner>();
+    auto taskEntered = AsyncTestState<bool>::create(false);
+    auto releaseTask = AsyncBarrier{};
+    auto completionCalled = std::atomic<bool>{false};
+
+    spawnUiTask(runtime,
+                scope,
+                *ownerPtr,
+                "test late UI result",
+                produceDelayedResult(&runtime, taskEntered, &releaseTask),
+                [&completionCalled](WorkflowOwner*, std::int32_t) { completionCalled = true; });
+
+    REQUIRE(executor.waitUntilQueued());
+    executor.runUntilIdle();
+    auto const entered = taskEntered.waitUntil(true);
+
+    if (!entered)
+    {
+      releaseTask.release();
+      runtime.requestStop();
+      runtime.join();
+    }
+
+    REQUIRE(entered);
+
+    scope.cancelAll();
+    ownerPtr.reset();
+    releaseTask.release();
+    REQUIRE(executor.drainUntil([&scope] { return scope.empty(); }));
+
+    runtime.requestStop();
+    runtime.join();
+
+    CHECK_FALSE(completionCalled.load());
     CHECK(scope.empty());
   }
 } // namespace ao::gtk::test

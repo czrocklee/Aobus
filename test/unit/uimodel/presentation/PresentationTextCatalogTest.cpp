@@ -33,6 +33,7 @@ namespace ao::uimodel::test
   {
     auto const& english = ao::test::englishPresentationTextCatalog();
     CHECK(english.text(MessageId::GtkPreferencesTitle) == "Preferences");
+    CHECK(english.text(MessageId::LibraryBusyTryAgain) == "Library is busy. Try again.");
     CHECK(english.format(MessageId::GtkShortcutConflictMessage, {{"chord", "Ctrl+P"}, {"owner", "Play/Pause"}}) ==
           "Ctrl+P is already assigned to \"Play/Pause\". Reassign it to this action?");
     CHECK(english.playbackActionLabel(PlaybackCommand::PlayPause) == "Play/Pause");
@@ -297,13 +298,16 @@ namespace ao::uimodel::test
           "Reset Manual Order and forgot 2 saved positions.");
     CHECK(catalog.format(MessageId::ListOrderForgotHidden, {{"count", 1}}) == "Forgot 1 hidden saved position.");
     CHECK(catalog.listMembershipNotification(
-            rt::TrackAuthoringStatus::Applied, ListMembershipOperation::Add, "Road", "#road", 2, 0) ==
+            rt::AuthoringStatus::Applied, ListMembershipOperation::Add, "Road", "#road", 2, 0) ==
           "Added #road to 2 tracks in Road.");
     CHECK(catalog.listMembershipNotification(
-            rt::TrackAuthoringStatus::NoOp, ListMembershipOperation::Remove, "Road", "#road", 0, 0) ==
+            rt::AuthoringStatus::Busy, ListMembershipOperation::Add, "Road", "#road", 0, 0) ==
+          "Library is busy. Try again.");
+    CHECK(catalog.listMembershipNotification(
+            rt::AuthoringStatus::NoOp, ListMembershipOperation::Remove, "Road", "#road", 0, 0) ==
           "No #road membership or saved position remained in Road.");
     CHECK(catalog.listMembershipNotification(
-            rt::TrackAuthoringStatus::Applied, ListMembershipOperation::Remove, "Road", "#road", 2, 1) ==
+            rt::AuthoringStatus::Applied, ListMembershipOperation::Remove, "Road", "#road", 2, 1) ==
           "Removed #road from 2 tracks and forgot 1 saved position in Road.");
 
     CHECK(catalog.text(MessageId::LibraryAudioIdentityIndexingComplete) == "Audio identity indexing complete");
@@ -366,7 +370,7 @@ namespace ao::uimodel::test
     CHECK(catalog.format(MessageId::ListOrderMoved, {{"count", 2}}) ==
           "2 Titel wurden in der manuellen Sortierung verschoben.");
     CHECK(catalog.listMembershipNotification(
-            rt::TrackAuthoringStatus::Applied, ListMembershipOperation::Add, "Straße", "#straße", 2, 0) ==
+            rt::AuthoringStatus::Applied, ListMembershipOperation::Add, "Straße", "#straße", 2, 0) ==
           "#straße wurde für 2 Titel in Straße hinzugefügt.");
     CHECK(catalog.format(MessageId::LibraryExportFailed, {{"error", "Datenträger voll"}}) ==
           "Export fehlgeschlagen: Datenträger voll");

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/library/AudioIdentityIndexer.h>
+#include "runtime/library/AudioIdentityIndexer.h"
 
 #include "runtime/library/AudioIdentityBatchWriter.h"
 #include "runtime/library/ScanApplyOperation.h"
@@ -16,6 +16,7 @@
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -121,42 +122,48 @@ namespace ao::rt::test
       std::filesystem::last_write_time(path, oldMtimePoint + std::chrono::seconds{10});
     }
 
+    async::Task<Result<AudioIdentityBatchCommitResult>> commitOfflineBatch(
+      library::MusicLibrary* musicLibrary,
+      std::mutex* optCommitMutex,
+      std::vector<AudioIdentityWriteCandidate> candidates)
+    {
+      REQUIRE(musicLibrary != nullptr);
+      auto commitLock = std::unique_lock<std::mutex>{};
+
+      if (optCommitMutex != nullptr)
+      {
+        commitLock = std::unique_lock{*optCommitMutex};
+      }
+
+      auto writableRes = library::WritableMusicLibrary::acquire(*musicLibrary);
+
+      if (!writableRes)
+      {
+        co_return std::unexpected{writableRes.error()};
+      }
+
+      auto transaction = writableRes->writeTransaction();
+      auto result = transaction.apply([&candidates](library::LibraryWrite& write)
+                                      { return applyAudioIdentityBatch(write, candidates); });
+
+      if (!result || result->completedCount == 0)
+      {
+        co_return result;
+      }
+
+      if (auto commitRes = transaction.commit(); !commitRes)
+      {
+        co_return std::unexpected{commitRes.error()};
+      }
+
+      co_return result;
+    }
+
     AudioIdentityIndexer::CommitBatchCallback makeOfflineBatchCommit(library::MusicLibrary& library,
                                                                      std::mutex* optCommitMutex = nullptr)
     {
-      return [&library, optCommitMutex](
-               std::span<AudioIdentityWriteCandidate const> candidates) -> Result<AudioIdentityBatchCommitResult>
-      {
-        auto commitLock = std::unique_lock<std::mutex>{};
-
-        if (optCommitMutex != nullptr)
-        {
-          commitLock = std::unique_lock{*optCommitMutex};
-        }
-
-        auto writableRes = library::WritableMusicLibrary::acquire(library);
-
-        if (!writableRes)
-        {
-          return std::unexpected{writableRes.error()};
-        }
-
-        auto transaction = writableRes->writeTransaction();
-        auto result = transaction.apply([candidates](library::LibraryWrite& write)
-                                        { return applyAudioIdentityBatch(write, candidates); });
-
-        if (!result || result->completedCount == 0)
-        {
-          return result;
-        }
-
-        if (auto commitRes = transaction.commit(); !commitRes)
-        {
-          return std::unexpected{commitRes.error()};
-        }
-
-        return result;
-      };
+      return [&library, optCommitMutex](std::vector<AudioIdentityWriteCandidate> candidates)
+      { return commitOfflineBatch(&library, optCommitMutex, std::move(candidates)); };
     }
 
     struct PendingManifestFixture final

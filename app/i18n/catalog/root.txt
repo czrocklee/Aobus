@@ -109,6 +109,7 @@ root:table {
     notification_grouped_info { "{count, plural, one {# notification} other {# notifications}}" }
     notification_grouped_warning { "{count, plural, one {# warning} other {# warnings}}" }
     notification_grouped_error { "{count, plural, one {# error} other {# errors}}" }
+    library_busy_try_again { "Library is busy. Try again." }
     library_task_scanning { "Scanning" }
     library_task_updating { "Updating" }
     library_task_fingerprinting { "Fingerprinting" }

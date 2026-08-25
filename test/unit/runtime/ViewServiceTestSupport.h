@@ -7,6 +7,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
@@ -23,7 +24,7 @@ namespace ao::rt::test
   struct ViewServiceFixture final
   {
     MusicLibraryFixture libraryFixture;
-    InlineExecutor executor;
+    async::LoopExecutor executor;
     LibraryChanges changes;
     LibraryWriterFixture writerFixture;
     std::unique_ptr<TrackSourceCache> cachePtr;
@@ -35,6 +36,8 @@ namespace ao::rt::test
     LibraryWriter& writer();
 
     TrackId addTrack(library::test::TrackSpec const& spec);
+
+    void drainCallbacks();
 
     ViewId requireView(TrackListViewConfig const& config = {});
 

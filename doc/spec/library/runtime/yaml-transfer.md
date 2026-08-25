@@ -45,6 +45,8 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - Library URI bytes retain their separate path identity and are never Unicode-normalized by transfer.
 - One committed import applies content and any adopted `libraryId` through one write transaction and one library revision.
 - Preview runs the same mutation path in an uncommitted transaction and publishes no content change.
+- Each live preview or apply operation acquires the import background-task lease, enters Maintenance through the library command lane, runs only generation-bound Maintenance commands, and exits Maintenance through that lane before its public Task completes.
+- Revision settlement for a committed import precedes Maintenance workflow settlement; the final `Available` notification and its observers complete before the operation returns.
 - A prepared plan can commit only against the exact source bytes and target runtime, library identity, and committed revision it previewed.
 - A collection field that is present replaces its complete baseline collection; an omitted collection preserves its baseline.
 - Restore scope is determined by payload mode, never inferred from omitted collections.
@@ -61,20 +63,24 @@ The application import path has two operations:
 
 ```text
 prepare(path, import mode)
+  -> enter sequenced Import Maintenance
   -> read exact source bytes
   -> parse and validate version 5
   -> prepare track/list data
   -> capture target runtime + library id + committed revision
-  -> run mutation path in an uncommitted preview transaction
+  -> run exact preview in one generation-bound lane turn and abort
+  -> exit Maintenance and deliver Available
   -> return LibraryImportPlan + ImportReport
 
 explicit authorization
+  -> enter a new sequenced Import Maintenance interval
   -> consume LibraryImportPlan
   -> recheck runtime + library id + committed revision
   -> reread and compare exact source bytes
-  -> run prepared mutation path in one write transaction
+  -> run prepared mutation path in one generation-bound lane turn
   -> commit once
-  -> publish one change set
+  -> settle one published change set while still in Maintenance
+  -> exit Maintenance and deliver Available
 ```
 
 Rejecting or dropping a plan performs no persistent mutation.
@@ -225,6 +231,8 @@ Offline import has no runtime publication phase; its transaction commit result i
 
 `LibraryTaskService` honors cancellation on executor transitions.
 Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.
+Before commit, cancellation aborts or prevents the Maintenance mutation and the workflow still completes its sequenced Maintenance exit while the runtime remains live.
+After durable commit, the command must reach `Published` or coordinated-Closing retirement before cancellation can propagate; a durable import is never reported as rolled back.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
 Version 5 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
@@ -256,6 +264,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryYamlExporter`](../../../../app/include/ao/rt/library/LibraryYamlExporter.h) and [`LibraryYamlExporter.cpp`](../../../../app/runtime/library/LibraryYamlExporter.cpp) implement export modes and baselines.
 - [`LibraryYamlImporter`](../../../../app/include/ao/rt/library/LibraryYamlImporter.h) and [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) implement strict parsing and prepared mutation behavior.
 - [`LibraryImportPlan`](../../../../app/include/ao/rt/library/LibraryImportPlan.h) and [`LibraryTaskService`](../../../../app/include/ao/rt/library/LibraryTaskService.h) define preview-bound application authorization.
+- [`LibraryMutationService`](../../../../app/runtime/library/LibraryMutationService.h) owns sequenced Maintenance entry, generation-bound preview/apply turns, revision settlement, and workflow exit.
 - [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines canonical root-relative path evidence.
 - [`LibraryChanges`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines published change values.
 
@@ -273,6 +282,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 
 ## Related documents
 
+- [Decision 0015: sequence live-runtime library writes](../../../decision/0015-sequence-live-runtime-library-writes.md)
 - [Library YAML format reference](../../../reference/library/format/yaml.md)
 - [Library architecture](../../../architecture/library.md)
 - [Outcome channel specification](../../failure/outcome-channel.md)

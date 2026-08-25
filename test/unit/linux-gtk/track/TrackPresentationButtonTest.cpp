@@ -11,6 +11,7 @@
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -182,12 +183,13 @@ namespace ao::gtk::test
     auto* const albumsButton = findButtonByLabel(*popover, "Albums");
     REQUIRE(albumsButton != nullptr);
 
+    auto const secondListId = ao::test::requireValue(
+      runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Other"})));
+
     emitClicked(*albumsButton);
 
     SECTION("focus changes before the idle apply")
     {
-      auto const secondListId =
-        ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Other"}));
       auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
       auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
       drainGtkEvents();

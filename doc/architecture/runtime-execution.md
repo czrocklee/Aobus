@@ -107,12 +107,20 @@ After the final worker phase resumes on the callback executor, upper request/sou
 The old playback session remains authoritative during this round trip.
 
 Mutating library tasks acquire one coordinator background-task lease on the callback executor before slow preparation begins.
-The lease serializes scan, identity backfill, and YAML import preparation, but it carries no LMDB transaction or writer mutex and does not change authoring availability.
-YAML import additionally enters Maintenance and closes interactive admission; scan and backfill leave it open during preparation. Their background write phases reserve writer intent before waiting, so callback-owner authoring returns unavailable instead of blocking behind the worker transaction.
-Worker code acquires a coordinator-owned mutation only for its apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before task finalization.
-For a foreign commit, mandatory publication `P` is admitted before the same operation admits callback-owner finalization `C`; their shared `QueuedExecutorBase` FIFO therefore runs `P` before `C`.
-An owner-thread commit executes `P` inline.
-These two cases make an ordinary mutating-task return a materialization barrier without a ticket, acknowledgement object, or callback-thread wait.
+The lease serializes scan, identity backfill, and YAML import preparation, but it carries no LMDB transaction and does not change authoring availability.
+YAML import additionally enters Maintenance through a sequenced control command and closes interactive admission; scan and backfill leave authoring open during preparation.
+
+Every live transaction and exact preview enters one private per-library FIFO lane.
+Command arguments own everything retained across suspension.
+A command waiting in the lane consumes no worker; after grant it resumes on a worker, performs any active-turn revalidation, and runs the complete native transaction inside one ordinary non-coroutine call stack.
+A committing command dispatches mandatory publication `P(R)` to the callback executor and then suspends on a one-shot publication event, again consuming no worker.
+The event posts continuation back to the awaiter's associated worker executor, so callback completion cannot turn the publication owner into the next transaction owner.
+It supports completion before or after await registration because the callback executor may finish `P(R)` before the worker's dispatch call returns.
+The command releases its lane turn only after revision settlement; its caller continuation may run later and is not part of lane ownership.
+
+Later interactive commands do not wait behind an outstanding background mutation.
+Track/List authoring receives non-terminal `Busy`, while ordinary mutation or preview commands receive `ResourceBusy`.
+An interactive command already accepted before the background intent retains its FIFO turn.
 Identity backfill commits bounded batches, while scan apply commits its complete admitted plan at once.
 Read-only export and scan-plan construction need no maintenance admission.
 For progress-capable library tasks, successful cancellable callback-executor admission is the observer-side-effect boundary; the [library task execution specification](../spec/library/runtime/task-execution.md#progress-and-outcome) owns the exact conversation and terminal-pulse behavior.
@@ -135,6 +143,7 @@ After logging initialization, the application registers one Core fatal sink back
 - Runtime and UIModel event owners may use `async::Signal`, but application payloads, affinity checks, and transaction ordering remain with those owners.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
 - Runtime library code cannot bypass `LibraryMutationService` with an independent committing transaction; UIModel and frontend code cannot name that authority.
+- A live library transaction runs only in the sequencer's worker-side synchronous kernel and never spans `co_await`.
 - A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.
 - Notification feed reads, commands, and subscription registration require the callback executor; foreign producers return through their runtime owner instead of using a cross-thread convenience post.
 - Frontend code does not post directly into audio engine internals, and audio callbacks do not mutate runtime snapshots from backend threads.
@@ -174,16 +183,18 @@ A scan or identity-backfill task refines the round trip:
 
 ```text
 callback executor: acquire background-task lease
-  -> worker pool: parse, walk, hash, or otherwise prepare without writer ownership
-  -> background mutation: revalidate, apply, commit revision R
-  -> admit callback publication P(R) while writer admission remains closed
+  -> worker pool: parse, walk, hash, or otherwise prepare without transaction ownership
+  -> submit owning background command
+  -> active worker turn: final revalidation, synchronous apply, commit revision R
   -> callback executor: P(R) applies the replica and emits observers
-  -> callback executor: later finalization C releases the lease and clears task progress
+  -> publication event resumes command on a worker and releases the lane
+  -> callback executor: workflow finalization releases the lease and clears task progress
 ```
 
-YAML import uses the same lease around its stronger Maintenance interval.
+YAML import uses the same lease around a stronger sequenced Maintenance interval.
+Its commit reaches revision settlement while mode remains `Maintenance`; a separate Maintenance-exit command delivers final `Available` before the public workflow completes.
 Cancellation before commit releases the lease or maintenance without advancing the library revision.
-After a transaction may have committed, the coroutine returns to the callback executor without a cancellable hop so publication and task cleanup cannot be skipped.
+After durable commit, caller cancellation cannot reinterpret the result before publication reaches `Published` or coordinated-Closing retirement.
 
 For CLI, the callback executor is the invocation thread's `LoopExecutor` and the synchronous command boundary pumps it through `CliRuntime::runTask()` until terminal completion.
 An escaping executor callback completes the executor's mandatory queue bookkeeping and then enters AO fatal handling at the executor boundary.
@@ -253,7 +264,7 @@ Runtime shutdown proceeds from producers toward dependencies:
 
 1. Interactive runtime owners stop playback-session scheduling and quiesce audio callback producers.
 2. Frontend subscriptions and adapters release their observations.
-3. `CoreRuntime` seals library mutation/publication admission, retires queued library callbacks, and wakes publication waiters.
+3. `CoreRuntime` seals the library command lane, retires queued commands and unclaimed callback deliveries, settles or retires any committed publication, and waits for lane quiescence.
 4. `CoreRuntime` closes callback resumption, requests worker-pool stop, and joins it while storage-backed and notification collaborators still exist.
 5. Library, source, completion, and notification collaborators are destroyed.
 6. The callback executor is released last within `CoreRuntime` ownership.
@@ -275,6 +286,7 @@ Unexpected coroutine exceptions abort through the Core fatal backend after termi
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
 - [`TaskFuture`](../../include/ao/async/TaskFuture.h) owns explicit future result and exception transport without default-constructing domain values.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
+- [`LibraryMutationService.cpp`](../../app/runtime/library/LibraryMutationService.cpp) owns the per-library command lane, worker-side transaction kernel, publication events, Maintenance control delivery, and Closing quiescence.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
 - [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) enforces reporting-feed affinity and deterministic reentrant publication on that executor.
 - [`Contract.h`](../../include/ao/Contract.h) and [`Fatal.cpp`](../../lib/utility/Fatal.cpp) define the application-independent fatal registration and abort boundary used by that adapter.
@@ -298,9 +310,11 @@ Unexpected coroutine exceptions abort through the Core fatal backend after termi
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, and reentrant commands.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
 - [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects task leases, interactive authoring during scan preparation, publication-before-finalization ordering, and cancellation cleanup.
+- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) and [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protect lane contention, worker affinity, settlement ordering, Maintenance control delivery, and Closing retirement.
 
 ## Related documents
 
+- [Decision 0015: sequence live-runtime library writes](../decision/0015-sequence-live-runtime-library-writes.md)
 - [System architecture](system-overview.md)
 - [Failure and reporting architecture](failure-and-reporting.md)
 - [Outcome channel specification](../spec/failure/outcome-channel.md)

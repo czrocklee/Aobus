@@ -23,7 +23,7 @@
 namespace ao::rt
 {
   enum class MissingTrackValueKind : std::uint8_t;
-  enum class TrackAuthoringStatus : std::uint8_t;
+  enum class AuthoringStatus : std::uint8_t;
 }
 
 namespace ao::uimodel
@@ -110,7 +110,7 @@ namespace ao::uimodel
                                        std::size_t count,
                                        bool isAllTracks,
                                        bool localEmpty) const;
-    std::string listMembershipNotification(rt::TrackAuthoringStatus status,
+    std::string listMembershipNotification(rt::AuthoringStatus status,
                                            ListMembershipOperation operation,
                                            std::string_view listName,
                                            std::string_view tagExpression,

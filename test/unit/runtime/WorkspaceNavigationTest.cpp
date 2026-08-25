@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -24,7 +25,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -102,6 +102,7 @@ namespace ao::rt::test
                                                    { focusedViewId = changed.snapshot.activeViewId; });
 
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
+    settleRuntimeCallbacks(runtime);
     auto activeViewId = runtime.workspace().snapshot().activeViewId;
     CHECK(focusedViewId == activeViewId);
   }
@@ -111,14 +112,13 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto listId =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Test List"}));
+    auto listId = fixture.createList("Test List");
     REQUIRE(runtime.workspace().navigate({.target = listId}));
 
     auto activeViewId = runtime.workspace().snapshot().activeViewId;
     CHECK(activeViewId != kInvalidViewId);
 
-    REQUIRE(runtime.library().writer().deleteList(listId));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(listId)));
 
     auto layout = runtime.workspace().snapshot();
     CHECK(!std::ranges::contains(layout.openViews, activeViewId));
@@ -136,7 +136,7 @@ namespace ao::rt::test
     auto const sub =
       runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { changes.push_back(changed); });
 
-    REQUIRE(runtime.library().writer().deleteList(fixture.firstListId));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(fixture.firstListId)));
 
     REQUIRE(changes.size() == 1);
     CHECK(changes.front().cause == WorkspaceChangeCause::ListDeletion);
@@ -276,6 +276,7 @@ namespace ao::rt::test
     auto const sub = workspace.onChanged([&](WorkspaceChanged const& value) noexcept { changed = value; });
 
     REQUIRE(workspace.focusView(firstViewId));
+    settleRuntimeCallbacks(fixture.runtime());
 
     CHECK(workspace.snapshot().revision == before.revision + 1);
     CHECK(workspace.snapshot().activeViewId == firstViewId);
@@ -322,10 +323,10 @@ namespace ao::rt::test
     auto* const executor = executorPtr.get();
     auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
     auto const firstListId = ao::test::requireValue(
-      runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First observed"}));
+      runRuntimeTask(*runtimePtr, runtimePtr->library().writer().createList(ListDraft{.name = "First observed"})));
     executor->drain();
     auto const secondListId = ao::test::requireValue(
-      runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Second observed"}));
+      runRuntimeTask(*runtimePtr, runtimePtr->library().writer().createList(ListDraft{.name = "Second observed"})));
     executor->drain();
     auto received = std::vector<WorkspaceChanged>{};
     bool reentrantNavigateSucceeded = false;

@@ -38,6 +38,14 @@ void acceptResult(
   (void)goodParamRes;
 }
 
+template<typename T>
+T passThrough(
+  // NEGATIVE
+  T value)
+{
+  return value;
+}
+
 void testResultNaming()
 {
   // POSITIVE
@@ -60,4 +68,6 @@ void testResultNaming()
 
   // POSITIVE
   [[maybe_unused]] Result<void> invalidValue;
+
+  [[maybe_unused]] auto const genericResultRes = passThrough(Result<int>{});
 }

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/Error.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
@@ -27,7 +27,7 @@
 namespace ao::rt
 {
   class AppRuntime;
-  struct LibraryListDraft;
+  struct ListDraft;
 }
 
 namespace ao::gtk
@@ -35,6 +35,7 @@ namespace ao::gtk
   class GtkTextCatalog;
   class TrackRowCache;
   class ListNavigationPanel;
+  class SmartListDialog;
   class ThemeCoordinator;
 
   class ListNavigationController final
@@ -67,7 +68,6 @@ namespace ao::gtk
     void select(ListId listId);
     void createSmartListFromExpression(ListId parentListId, std::string expression);
     void openNewPlaylistDialog();
-    Result<ListId> submitListDraft(rt::LibraryListDraft const& draft, std::string presentationId);
 
     void addActionsTo(Gio::ActionMap& actionMap);
 
@@ -76,12 +76,14 @@ namespace ao::gtk
     void handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
     void handleSelectionChanged(ListId listId);
     bool notifyListSelected(ListId listId) const;
+    void reconcilePendingSelection();
     void syncSelectionFromWorkspace(rt::ViewId viewId);
     void updateListActions(ListId listId);
 
     void openNewListDialog(ListId parentListId, std::string initialExpression = {});
     void openNewSmartListDialog();
     void openEditListDialog(ListId listId);
+    void submitListDraftFromDialog(SmartListDialog& dialog, rt::ListDraft draft, std::string presentationId);
 
     void handleDeleteListActivated();
     void handleDeleteListSubtreeActivated();
@@ -115,5 +117,6 @@ namespace ao::gtk
     std::uint64_t _observedWorkspaceRevision = 0;
     bool _syncingWorkspaceSelection = false;
     async::Subscription _workspaceSub;
+    async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

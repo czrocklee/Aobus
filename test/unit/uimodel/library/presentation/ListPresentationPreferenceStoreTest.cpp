@@ -7,6 +7,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
@@ -156,13 +157,14 @@ namespace ao::uimodel::test
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const parentId = ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.name = "Parent"}));
-    auto const childId =
-      ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.parentId = parentId, .name = "Child"}));
+    auto const parentId =
+      ao::test::requireValue(writerFixture.runTask(writer.createList(rt::ListDraft{.name = "Parent"})));
+    auto const childId = ao::test::requireValue(
+      writerFixture.runTask(writer.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto const grandchildId = ao::test::requireValue(
-      writer.createList(rt::LibraryWriter::ListDraft{.parentId = childId, .name = "Grandchild"}));
+      writerFixture.runTask(writer.createList(rt::ListDraft{.parentId = childId, .name = "Grandchild"})));
     auto const unrelatedId =
-      ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+      ao::test::requireValue(writerFixture.runTask(writer.createList(rt::ListDraft{.name = "Unrelated"})));
     auto preferences = std::map<ListId, std::string>{
       {parentId, "songs"},
       {childId, "albums"},
@@ -176,7 +178,7 @@ namespace ao::uimodel::test
       [&removed](ListId const listId) noexcept { removed.push_back(listId); },
     };
 
-    REQUIRE(writer.deleteListAndDescendants(parentId));
+    REQUIRE(writerFixture.runTask(writer.deleteListAndDescendants(parentId)));
 
     CHECK(removed == std::vector{parentId, childId, grandchildId});
     REQUIRE(preferences.size() == 1);
@@ -190,9 +192,10 @@ namespace ao::uimodel::test
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const parentId = ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.name = "Parent"}));
-    auto const childId =
-      ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.parentId = parentId, .name = "Child"}));
+    auto const parentId =
+      ao::test::requireValue(writerFixture.runTask(writer.createList(rt::ListDraft{.name = "Parent"})));
+    auto const childId = ao::test::requireValue(
+      writerFixture.runTask(writer.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto preferencesPtr = std::make_unique<std::map<ListId, std::string>>(
       std::initializer_list<std::pair<ListId const, std::string>>{{parentId, "songs"}, {childId, "albums"}});
     auto lifecyclePtr = std::unique_ptr<ListPresentationPreferenceLifecycle>{};
@@ -211,7 +214,7 @@ namespace ao::uimodel::test
         }
       });
 
-    REQUIRE(writer.deleteListAndDescendants(parentId));
+    REQUIRE(writerFixture.runTask(writer.deleteListAndDescendants(parentId)));
 
     CHECK(removed == std::vector{parentId, childId});
     CHECK(lifecyclePtr == nullptr);

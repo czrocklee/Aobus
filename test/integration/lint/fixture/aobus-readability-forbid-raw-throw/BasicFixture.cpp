@@ -43,6 +43,8 @@ void rawThrowIsRejected()
 
 namespace ao::async
 {
+  [[noreturn]] void rethrowException(std::exception_ptr const& exceptionPtr);
+
   [[noreturn]] void throwOperationCancelled()
   {
     AO_EXCEPTION_CARRIER(CancellationTransport);
@@ -247,6 +249,56 @@ void cleanupAndRethrowIsAccepted()
   catch (...)
   {
     throw;
+  }
+}
+
+void currentExceptionOwnershipIsAccepted()
+{
+  std::exception_ptr deferredException;
+
+  try
+  {
+    mayThrow();
+  }
+  // NEGATIVE
+  catch (...)
+  {
+    deferredException = std::current_exception();
+  }
+
+  ao::async::rethrowException(deferredException);
+}
+
+std::exception_ptr currentExceptionLookalike();
+
+void currentExceptionLookalikeIsRejected()
+{
+  std::exception_ptr deferredException;
+
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    deferredException = currentExceptionLookalike();
+  }
+}
+
+void nestedCurrentExceptionCaptureDoesNotTransferOuterOwnership()
+{
+  std::exception_ptr deferredException;
+
+  try
+  {
+    mayThrow();
+  }
+  // POSITIVE
+  catch (...)
+  {
+    auto captureLater = [&deferredException] { deferredException = std::current_exception(); };
+    static_cast<void>(captureLater);
   }
 }
 

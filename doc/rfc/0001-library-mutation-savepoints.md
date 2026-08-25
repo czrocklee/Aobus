@@ -12,7 +12,7 @@ depends-on: none
 
 The current [library architecture](../architecture/library.md), [outcome channel specification](../spec/failure/outcome-channel.md), and [runtime mutation specification](../spec/library/runtime/mutation.md) already define a non-nested root execution boundary.
 `WriteTransaction::apply()` accepts a `Result<T>`-returning body, aborts the complete root on an error or private native transaction marker, and aborts before rethrowing an unrelated exception.
-For live commits, `LibraryMutationService::Mutation::execute()` accepts one operation-owned `Changed` or `Unchanged` outcome, commits and publishes only `Changed`, and releases writer admission on every terminal path.
+For live commits, `LibraryMutationService::Mutation::executeAsync()` accepts one operation-owned `Changed` or `Unchanged` outcome, commits and publishes only `Changed`, and releases the sequencer turn on every terminal path.
 `Mutation::apply()` is the noncommitting preview boundary, and offline scan/import owners use the same core `WriteTransaction::apply()` containment.
 No runtime writer, task, scan, or importer catches `lmdb::detail::TransactionFailure`.
 Root construction is deliberately outside that recoverable operation channel: native begin and candidate-revision construction occur before the wrapper is exposed, and failure unwinds writer ownership before aborting through the fatal facility.
@@ -52,6 +52,8 @@ The remaining proposal asks whether nested savepoints can preserve a usable pare
 - Hard: None.
 - Conditional: None.
 - Integration: None.
+
+Any implementation must preserve the synchronous root/preview kernel and sole live-runtime transaction owner established by [Decision 0015](../decision/0015-sequence-live-runtime-library-writes.md).
 
 ## Goals
 
@@ -357,7 +359,7 @@ Pure validation remains valuable for three reasons:
 
 - It avoids opening a native child for obviously invalid input.
 - It lets a batch report an item-local rejection before doing storage work.
-- It keeps expensive or user-facing validation separate from the short writer-held phase.
+- It keeps expensive or user-facing validation separate from the short active transaction phase.
 
 Pure validation is no longer the atomicity mechanism.
 A late recoverable error is safe because it returns to an owner that aborts the root or current child before exposing the error.
@@ -381,7 +383,7 @@ The existing type-level `[[nodiscard]]` contract remains, and tests or lint rule
 ### Runtime commit and publication
 
 A child commit changes only the root's uncommitted native and dictionary state.
-It does not advance the library revision, publish `LibraryChanges`, update sources or projections, or release writer admission.
+It does not advance the library revision, publish `LibraryChanges`, update sources or projections, or release the command lane.
 
 After the root mutation body succeeds, the existing `LibraryMutationService` commit path validates the revision, commits the root, completes dictionary publication, and submits exactly one matching `LibraryChangeSet`.
 A failed, skipped, previewed, or child-only operation publishes no application change.

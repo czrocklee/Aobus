@@ -3,12 +3,18 @@
 
 #pragma once
 
+#include "GtkApplicationTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 namespace ao::library
 {
@@ -33,6 +39,30 @@ namespace ao::rt
 
 namespace ao::gtk::test
 {
+  template<typename T>
+  async::Task<T> runGtkTaskOnCallback(async::Runtime* runtime, async::Task<T> task)
+  {
+    co_await runtime->resumeOnCallbackExecutor();
+
+    if constexpr (std::is_void_v<T>)
+    {
+      co_await std::move(task);
+      co_return;
+    }
+    else
+    {
+      auto result = co_await std::move(task);
+      co_return std::move(result);
+    }
+  }
+
+  template<typename T>
+  T runGtkTask(rt::AppRuntime& runtime, async::Task<T> task)
+  {
+    auto pump = [] { drainGtkEvents(); };
+    return rt::test::runRuntimeTask(runtime, runGtkTaskOnCallback(&runtime.async(), std::move(task)), pump);
+  }
+
   TrackId addRuntimeTrack(rt::AppRuntime& runtime, library::test::TrackSpec const& spec);
   void updateRuntimeTrack(rt::AppRuntime& runtime,
                           TrackId trackId,

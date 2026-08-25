@@ -18,6 +18,7 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
@@ -185,8 +186,8 @@ namespace ao::rt::test::playback_succession
                                                    config.blockEveryLookahead,
                                                    std::move(config.finalOpenFailureFileName))}
     , asyncRuntime{transport.executor, 1, &sleeper}
-    , changes{libraryChangesExecutor, 0, "test-library"}
-    , writerFixture{transport.libraryFixture.library(), changes}
+    , changes{transport.executor, 0, "test-library"}
+    , writerFixture{transport.libraryFixture.library(), changes, transport.executor}
     , sources{transport.libraryFixture.library(), changes}
     , views{transport.executor, transport.libraryFixture.library(), sources, changes}
     , workspace{transport.executor, views, changes}
@@ -207,8 +208,8 @@ namespace ao::rt::test::playback_succession
     auto const libraryUri = std::format("transport-playable-{}.flac", nextPlayableFile++);
     auto const fixtureUri =
       audio::test::installAudioFixture(transport.libraryFixture.root(), "basic_metadata.flac", libraryUri);
-    auto const created =
-      ao::test::requireValue(writer().createTrackFromFile(transport.libraryFixture.root() / fixtureUri));
+    auto const created = ao::test::requireValue(
+      writerFixture.runTask(writer().createTrackFromFile(transport.libraryFixture.root() / fixtureUri)));
     transport.executor.drain();
     REQUIRE(writerFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
     transport.executor.drain();
@@ -224,10 +225,10 @@ namespace ao::rt::test::playback_succession
     auto const membershipTag = std::array{std::string{"transportorder"}};
     REQUIRE(writerFixture.editTags(trackIds, membershipTag, {}));
     sources.reloadAllTracks();
-    listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
+    listId = ao::test::requireValue(writerFixture.runTask(writer().createList(ListDraft{
       .name = "Transport order",
       .expression = "#transportorder",
-    }));
+    })));
     viewId = ao::test::requireValue(workspace.navigate(navigationRequest(TrackListViewConfig{
       .listId = listId,
       .optPresentation = TrackPresentationSpec{.id = std::string{kListOrderTrackPresentationId}},

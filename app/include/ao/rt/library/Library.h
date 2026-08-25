@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -50,8 +51,9 @@ namespace ao::rt
   };
 
   // CQRS façade over the music library, exposing four cooperating roles:
-  // reader (consistent point-in-time reads), writer (synchronous mutations),
-  // task service (long-running async operations) and changes (the mutation event bus).
+  // reader (consistent point-in-time reads), writer (sequenced asynchronous
+  // mutations), task service (long-running async operations) and changes (the
+  // mutation event bus).
   // Library owns none of its collaborators: the MusicLibrary storage, async
   // Runtime and LibraryChanges bus are injected by reference and outlive it.
   // It merely wires them together and hands out the role objects.
@@ -84,12 +86,13 @@ namespace ao::rt
 
     // Frontend-facing list mutation. linux-gtk is barred from reaching
     // LibraryWriter directly (frontend-core guardrail), so these stay.
-    Result<ListId> createList(LibraryListDraft const& draft);
-    Result<UpdateListReply> updateList(LibraryListDraft const& draft);
-    Result<DeleteListReply> deleteList(ListId listId, DeleteListOptions options = {});
-    Result<DeleteListReply> previewDeleteList(ListId listId, DeleteListOptions options = {});
-    Result<DeleteListSubtreeReply> deleteListAndDescendants(ListId listId, DeleteListOptions options = {});
-    Result<DeleteListSubtreeReply> previewDeleteListAndDescendants(ListId listId, DeleteListOptions options = {});
+    async::Task<Result<ListId>> createList(ListDraft draft);
+    async::Task<Result<UpdateListReply>> updateList(ListDraft draft);
+    async::Task<Result<DeleteListReply>> deleteList(ListId listId, DeleteListOptions options = {});
+    async::Task<Result<DeleteListReply>> previewDeleteList(ListId listId, DeleteListOptions options = {});
+    async::Task<Result<DeleteListSubtreeReply>> deleteListAndDescendants(ListId listId, DeleteListOptions options = {});
+    async::Task<Result<DeleteListSubtreeReply>> previewDeleteListAndDescendants(ListId listId,
+                                                                                DeleteListOptions options = {});
 
     LibraryAuthoringAvailability authoringAvailability() const;
     // Synchronous callback-executor notification. A handler must defer

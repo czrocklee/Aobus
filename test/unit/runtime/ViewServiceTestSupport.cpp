@@ -23,7 +23,7 @@ namespace ao::rt::test
 {
   ViewServiceFixture::ViewServiceFixture()
     : changes{executor, 0, "test-library"}
-    , writerFixture{libraryFixture.library(), changes}
+    , writerFixture{libraryFixture.library(), changes, executor}
     , cachePtr{std::make_unique<TrackSourceCache>(libraryFixture.library(), changes)}
     , service{executor, libraryFixture.library(), *cachePtr, changes}
     , workspace{executor, service, changes}
@@ -37,7 +37,14 @@ namespace ao::rt::test
 
   TrackId ViewServiceFixture::addTrack(library::test::TrackSpec const& spec)
   {
-    return addTrackAndPublish(libraryFixture.library(), changes, spec);
+    return writerFixture.addTrack(spec);
+  }
+
+  void ViewServiceFixture::drainCallbacks()
+  {
+    while (executor.runReadyTurn())
+    {
+    }
   }
 
   ViewId ViewServiceFixture::requireView(TrackListViewConfig const& config)
@@ -74,7 +81,9 @@ namespace ao::rt::test
       request.optPresentation = NavigationPresentation{.spec = std::move(presentation)};
     }
 
-    return ao::test::requireValue(workspace.navigate(request));
+    auto const viewId = ao::test::requireValue(workspace.navigate(request));
+    drainCallbacks();
+    return viewId;
   }
 
   std::shared_ptr<TrackListProjection> ViewServiceFixture::requireProjection(ViewId const viewId)

@@ -6,19 +6,26 @@
 #include "test/unit/PresentationTextCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
+#include <atomic>
+#include <cstddef>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,9 +40,9 @@ namespace ao::uimodel::test
         : first{runtime.addTrack(library::test::TrackSpec{.title = "First"})}
         , second{runtime.addTrack(library::test::TrackSpec{.title = "Second"})}
         , third{runtime.addTrack(library::test::TrackSpec{.title = "Third"})}
-        , listId{ao::test::requireValue(runtime.writer().createList(rt::LibraryWriter::ListDraft{
+        , listId{ao::test::requireValue(runtime.writerFixture.runTask(runtime.writer().createList(rt::ListDraft{
             .name = "Ordered",
-          }))}
+          })))}
       {
       }
 
@@ -64,6 +71,45 @@ namespace ao::uimodel::test
       TrackId third;
       ListId listId;
     };
+
+    struct PendingSessionFixture final
+    {
+      PendingSessionFixture()
+        : changes{executor, 0, "test-library"}
+        , writerFixture{libraryFixture.library(), changes, executor}
+        , cachePtr{std::make_unique<rt::TrackSourceCache>(libraryFixture.library(), changes)}
+        , service{executor, libraryFixture.library(), *cachePtr, changes}
+        , workspace{executor, service, changes}
+      {
+        first = writerFixture.addTrack(library::test::TrackSpec{.title = "First"});
+        second = writerFixture.addTrack(library::test::TrackSpec{.title = "Second"});
+        listId = ao::test::requireValue(
+          writerFixture.runTask(writerFixture.writer().createList(rt::ListDraft{.name = "Ordered"})));
+      }
+
+      rt::ViewId open()
+      {
+        auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
+        REQUIRE(manual != nullptr);
+        auto const viewId = ao::test::requireValue(workspace.navigate(rt::NavigationRequest{
+          .target = rt::FilteredListTarget{.listId = listId, .filterExpression = {}},
+          .optPresentation = rt::NavigationPresentation{.spec = manual->spec},
+        }));
+        executor.runUntilIdle();
+        return viewId;
+      }
+
+      rt::test::MusicLibraryFixture libraryFixture;
+      rt::test::ManualExecutor executor;
+      rt::LibraryChanges changes;
+      rt::test::LibraryWriterFixture writerFixture;
+      std::unique_ptr<rt::TrackSourceCache> cachePtr;
+      rt::ViewService service;
+      rt::WorkspaceService workspace;
+      TrackId first = kInvalidTrackId;
+      TrackId second = kInvalidTrackId;
+      ListId listId = kInvalidListId;
+    };
   } // namespace
 
   TEST_CASE("ListOrderAuthoringSession - relative move commits the complete source order",
@@ -80,10 +126,10 @@ namespace ao::uimodel::test
 
     CHECK(std::vector<TrackId>{session.effectiveTrackIds().begin(), session.effectiveTrackIds().end()} ==
           std::vector{fixture.first, fixture.second, fixture.third});
-    auto const result = session.moveDown(std::array{fixture.first});
+    auto const result = fixture.runtime.writerFixture.runTask(session.moveDown({fixture.first}));
 
     REQUIRE(result);
-    CHECK(result->status == rt::ListOrderAuthoringStatus::Applied);
+    CHECK(result->status == rt::AuthoringStatus::Applied);
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.first, fixture.third});
     CHECK_FALSE(session.isCurrent());
   }
@@ -104,13 +150,13 @@ namespace ao::uimodel::test
     CHECK_FALSE(session.capabilities().canGapMove);
     CHECK_FALSE(session.capabilities().canRelativeMove);
 
-    auto const relativeRes = session.moveUp(std::array{fixture.second});
+    auto const relativeRes = fixture.runtime.writerFixture.runTask(session.moveUp({fixture.second}));
     REQUIRE_FALSE(relativeRes);
     CHECK(relativeRes.error().code == Error::Code::InvalidState);
 
-    auto const absoluteRes = session.moveToTop(std::array{fixture.third});
+    auto const absoluteRes = fixture.runtime.writerFixture.runTask(session.moveToTop({fixture.third}));
     REQUIRE(absoluteRes);
-    CHECK(absoluteRes->status == rt::ListOrderAuthoringStatus::Applied);
+    CHECK(absoluteRes->status == rt::AuthoringStatus::Applied);
     CHECK(fixture.storedOrder() == std::vector{fixture.third, fixture.first, fixture.second});
   }
 
@@ -128,6 +174,7 @@ namespace ao::uimodel::test
                                                                 viewId,
                                                                 ao::test::englishPresentationTextCatalog()));
       REQUIRE(fixture.runtime.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+      fixture.runtime.drainCallbacks();
       CHECK_FALSE(sessionPtr->isCurrent());
     }
 
@@ -140,6 +187,7 @@ namespace ao::uimodel::test
                                                                 viewId,
                                                                 ao::test::englishPresentationTextCatalog()));
       REQUIRE(fixture.runtime.service.setFilter(viewId, "true"));
+      fixture.runtime.drainCallbacks();
       CHECK_FALSE(sessionPtr->isCurrent());
     }
 
@@ -152,7 +200,35 @@ namespace ao::uimodel::test
                                                                 viewId,
                                                                 ao::test::englishPresentationTextCatalog()));
       REQUIRE(fixture.runtime.workspace.closeView(viewId));
+      fixture.runtime.drainCallbacks();
       CHECK_FALSE(sessionPtr->isCurrent());
     }
+  }
+
+  TEST_CASE("ListOrderAuthoringSession - NoOp replays invalidation observed while submission is pending",
+            "[uimodel][regression][list-order][concurrency]")
+  {
+    auto fixture = PendingSessionFixture{};
+    auto const viewId = fixture.open();
+    auto sessionRes = ListOrderAuthoringSession::begin(
+      fixture.writerFixture.library(), fixture.service, viewId, ao::test::englishPresentationTextCatalog());
+    REQUIRE(sessionRes);
+    auto sessionPtr = std::move(*sessionRes);
+    std::size_t invalidatedCount = 0;
+    auto subscription = sessionPtr->onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future =
+      fixture.writerFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, sessionPtr->resetOrder()));
+    REQUIRE(fixture.executor.waitUntilQueued());
+
+    REQUIRE(fixture.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+    CHECK(sessionPtr->isCurrent());
+    REQUIRE(fixture.executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+
+    auto result = future.get();
+    REQUIRE(result);
+    CHECK(result->status == rt::AuthoringStatus::NoOp);
+    CHECK_FALSE(sessionPtr->isCurrent());
+    CHECK(invalidatedCount == 1);
   }
 } // namespace ao::uimodel::test

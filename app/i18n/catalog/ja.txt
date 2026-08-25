@@ -107,6 +107,7 @@ ja:table {
     notification_grouped_info { "{count, plural, one {# 件の通知} other {# 件の通知}}" }
     notification_grouped_warning { "{count, plural, one {# 件の警告} other {# 件の警告}}" }
     notification_grouped_error { "{count, plural, one {# 件のエラー} other {# 件のエラー}}" }
+    library_busy_try_again { "ライブラリはビジー状態です。もう一度お試しください。" }
     library_task_scanning { "スキャン中" }
     library_task_updating { "更新中" }
     library_task_fingerprinting { "フィンガープリント作成中" }

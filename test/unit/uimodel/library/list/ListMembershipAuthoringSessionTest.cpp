@@ -96,10 +96,10 @@ namespace ao::uimodel::test
       writerFixture.library(), std::array{trackId}, ao::test::presentationTextCatalog("de-DE"));
     REQUIRE(sessionRes);
 
-    auto const result = (*sessionRes)->removeFromList(listId);
+    auto const result = writerFixture.runTask((*sessionRes)->removeFromList(listId));
 
     REQUIRE(result);
-    CHECK(result->status == rt::TrackAuthoringStatus::Applied);
+    CHECK(result->status == rt::AuthoringStatus::Applied);
     CHECK(result->forgottenPositionCount == 1);
     CHECK(result->notificationText ==
           R"(#"road-trip" wurde von 1 Titel entfernt und 1 gespeicherte Position wurde in Road Trip verworfen.)");
@@ -124,10 +124,10 @@ namespace ao::uimodel::test
       writerFixture.library(), std::array{trackId}, ao::test::presentationTextCatalog("de-DE"));
     REQUIRE(sessionRes);
 
-    auto const result = (*sessionRes)->addToList(listId);
+    auto const result = writerFixture.runTask((*sessionRes)->addToList(listId));
 
     REQUIRE(result);
-    CHECK(result->status == rt::TrackAuthoringStatus::Applied);
+    CHECK(result->status == rt::AuthoringStatus::Applied);
     CHECK(result->targetTrackCount == 1);
     CHECK(result->changedTrackCount == 1);
     CHECK(result->notificationText == R"(#"road-trip" wurde für 1 Titel in Road Trip hinzugefügt.)");

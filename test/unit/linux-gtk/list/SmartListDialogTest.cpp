@@ -22,6 +22,9 @@
 #include <gtkmm/label.h>
 #include <gtkmm/window.h>
 
+#include <cstddef>
+#include <functional>
+
 namespace ao::gtk::test
 {
   TEST_CASE("SmartListDialog - renders the initial smart-list draft", "[gtk][unit][list][dialog]")
@@ -134,6 +137,53 @@ namespace ao::gtk::test
     CHECK(okButton->get_sensitive());
   }
 
+  TEST_CASE("SmartListDialog - pending submission remains guarded while the draft changes",
+            "[gtk][regression][list][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishPresentationTextCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  fixture.runtime(),
+                                  ao::test::englishPresentationTextCatalog(),
+                                  englishGtkTextCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
+
+    drainGtkEvents();
+
+    Gtk::Entry* nameEntry = nullptr;
+
+    for (auto* const entry : collectAll<Gtk::Entry>(dialog))
+    {
+      if (entry->get_placeholder_text() == "List name")
+      {
+        nameEntry = entry;
+        break;
+      }
+    }
+
+    REQUIRE(nameEntry != nullptr);
+    auto* const okButton = findButtonByLabel(dialog, "Create");
+    REQUIRE(okButton != nullptr);
+
+    nameEntry->set_text("First draft");
+    drainGtkEvents();
+    REQUIRE(okButton->get_sensitive());
+
+    CHECK(dialog.beginSubmission());
+    CHECK_FALSE(okButton->get_sensitive());
+    CHECK_FALSE(dialog.beginSubmission());
+
+    nameEntry->set_text("Changed while pending");
+    drainGtkEvents();
+    CHECK_FALSE(okButton->get_sensitive());
+
+    dialog.completeSubmission();
+    CHECK(okButton->get_sensitive());
+  }
+
   // A list created from the library root, and any top-level list opened for
   // editing, carries parentId kInvalidListId. The source cache rejects that id
   // outright, so the dialog must resolve it to the All Tracks root or the
@@ -210,5 +260,32 @@ namespace ao::gtk::test
     CHECK(dialog.presentationId() == "list-order");
     CHECK(dialog.draft().expression ==
           query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = "Road Trip"}));
+  }
+
+  TEST_CASE("SmartListDialog - retained presentation callback retires with the dialog",
+            "[gtk][regression][smart-list-dialog][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishPresentationTextCatalog()};
+    auto callback = std::function<void()>{};
+    std::size_t presentationCount = 0;
+
+    {
+      auto dialog = SmartListDialog{window,
+                                    fixture.runtime(),
+                                    ao::test::englishPresentationTextCatalog(),
+                                    englishGtkTextCatalog(),
+                                    rt::kAllTracksListId,
+                                    cache};
+      drainGtkEvents();
+      callback = dialog.guardPresentationCallback([&presentationCount] { ++presentationCount; });
+      callback();
+      CHECK(presentationCount == 1);
+    }
+
+    callback();
+    CHECK(presentationCount == 1);
   }
 } // namespace ao::gtk::test

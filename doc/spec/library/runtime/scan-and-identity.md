@@ -41,7 +41,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - Plan application accepts only the library id captured by the planner and admits each actionable item against its own filesystem and database evidence.
 - One applied plan commits all admitted content changes and the revision atomically; stale ordinary items are skipped, not partially committed in separate transactions.
 - Runtime scan apply holds one background-task lease through preparation and publication. The lease excludes scan, backfill, and import preparation from each other without closing interactive authoring admission.
-- Filesystem reads, media parsing, and fingerprinting hold no coordinator writer ownership or LMDB write transaction.
+- Filesystem reads, media parsing, and fingerprinting hold no LMDB write transaction; final scan revalidation runs in the active pre-transaction lane phase.
 - Plan construction owns a copy of the manifest snapshot and releases its LMDB read transaction before filesystem traversal, file I/O, or hashing.
 - Media decoders may translate their declared legacy encodings, but library admission never repairs malformed declared UTF-8: a new file with invalid metadata becomes a per-item failure and no Track, manifest, dictionary row, or replacement character is committed.
 - Cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
@@ -79,14 +79,15 @@ Ambiguous duplicate groups remain `Missing` plus `New` for explicit resolution.
 
 ## Plan application
 
-Runtime application acquires the exclusive `ScanApply` background-task lease, prepares plan items on a worker without writer ownership, then opens one short coordinator background mutation to admit prepared state and apply every successful content change atomically.
-Authoring availability remains `Available` during preparation. A background mutation reserves writer intent before waiting for the physical writer; callback-executor authoring returns `Unavailable` while that reservation is pending or active instead of blocking the UI thread, while non-owner writers retain ordinary waiting semantics.
+Runtime application acquires the exclusive `ScanApply` background-task lease, prepares plan items on a worker without transaction ownership, then submits one coordinator background command to admit prepared state and apply every successful content change atomically.
+Authoring availability remains `Available` during preparation.
+Once the background command is queued or active, later Track/List authoring returns non-terminal `Busy` and ordinary mutation/preview commands return `ResourceBusy` instead of waiting behind the scan; an interactive command accepted first retains its FIFO turn.
 It reports updating and fingerprinting progress during preparation.
 The runtime-private operation enforces `Created → Prepared → Revalidated → Applied/Terminal`; callers cannot skip final file revalidation or apply the same operation twice.
 
 The two compositions share that state machine but not transaction ownership:
 
-- live `LibraryTaskService` calls `prepare()`, revalidates files, then obtains one background mutation and calls `apply()`;
+- live `LibraryTaskService` calls `prepare()`, submits one background command, revalidates files during that command's active pre-transaction turn, then opens the transaction and calls `apply()`;
 - offline `run()` prepares first, acquires its own writable-library lease, revalidates, applies, and commits one isolated transaction.
 
 There is no nullable or mode-switching transaction branch inside `apply()`.
@@ -117,7 +118,7 @@ There is no nested LMDB transaction, item savepoint, or partial batch commit.
 - Item-level parse/open failures are counted and reported without claiming that item succeeded.
 - Item-level Track validation failures, including malformed UTF-8 or post-NFC size overflow, are reported at the `serialize` stage and leave that new item absent.
 
-After preparation and immediately before opening the coordinator mutation, application re-stats every prepared new, changed, or moved file and requires its planned size and modification time, checks that every missing path remains absent, and fingerprints every moved destination again against both the prepared and planned identities.
+After preparation, once the background command owns the active lane turn and immediately before opening its write transaction, application re-stats every prepared new, changed, or moved file and requires its planned size and modification time, checks that every missing path remains absent, and fingerprints every moved destination again against both the prepared and planned identities.
 Stale new, changed, or missing filesystem evidence increments the stale count and skips that item without rewriting current facts. Path-resolution, permission, and other inspection failures remain per-item failures.
 A moved mismatch aborts the complete application.
 
@@ -149,17 +150,17 @@ Aobus never writes a guessed identity.
 
 `AudioIdentityIndexer` processes bounded batches in three phases:
 
-1. Under one outer `AudioIdentityBackfill` background-task lease, snapshot available pending rows and their URI, size, and modification time in a read transaction without writer ownership.
+1. Under one outer `AudioIdentityBackfill` background-task lease, snapshot available pending rows and their URI, size, and modification time in a read transaction without a write-lane turn.
 2. Fingerprint files concurrently outside LMDB transactions; the default concurrency is `clamp(hardware_concurrency / 2, 2, 4)`.
 3. Acquire one bounded background mutation per serial write-back batch, re-read every row, and commit identities for rows still available, pending, and stat-equal.
 
-The lease prevents another scan, backfill, or import preparation from overlapping the run, but it emits no `Maintenance` availability transition. Interactive authoring remains enabled between write-back batches and returns `Unavailable` on the callback executor only while a batch writer is pending or active.
+The lease prevents another scan, backfill, or import preparation from overlapping the run, but it emits no `Maintenance` availability transition. Interactive authoring remains enabled between write-back batches and reports non-terminal `Busy` only while a bounded background batch is queued or active; ordinary commands use `ResourceBusy`.
 
 Per-file failures are reported and counted without aborting the run; recoverable database failures fail the operation.
 Manifest iteration trusts the open gate and aborts through `AO_INVARIANT` on a later row-integrity breach rather than skipping it, treating it as pending work, or translating a private mechanism in runtime.
 Progress callbacks are serialized but may run on worker-pool threads.
 
-Cancellation stops hashing at chunk boundaries, commits valid rows already completed in the current batch, leaves unfinished rows pending, and propagates `OperationCancelled` after callback-owner maintenance cleanup.
+Cancellation stops hashing at chunk boundaries, commits valid rows already completed and submitted in the current batch, leaves unfinished rows pending, and propagates `OperationCancelled` after callback-owner lease cleanup.
 The successful result contains only completed, skipped, and per-item-failure counts; it never also represents cancellation.
 Earlier committed batches remain durable, and the next run resumes from the pending manifest rows rather than reconstructing partial counts for the cancelled run.
 Backfill changes only manifest identity; each effective batch publishes its committed revision with no track/list category rather than claiming a metadata mutation.
@@ -194,7 +195,7 @@ through `LibraryChanges`; workflow completion performs no independent refresh.
 - [`ScanApplyOperation.cpp`](../../../../app/runtime/library/ScanApplyOperation.cpp) owns the shared state machine, the self-contained offline `run()` composition, and transaction-scoped apply.
 - [`TrackWriter.h`](../../../../include/ao/library/TrackWriter.h) owns the logical create, replace, relink, and manifest-only operations used during apply.
 - [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns background-task lifetime and prepare/apply worker composition.
-- [`LibraryMutationService.cpp`](../../../../app/runtime/library/LibraryMutationService.cpp) owns background-task exclusion, short writer admission, and publication ordering.
+- [`LibraryMutationService.cpp`](../../../../app/runtime/library/LibraryMutationService.cpp) owns background-task exclusion, command-lane admission, active-turn revalidation placement, and publication settlement.
 - [`LibraryScanWorkflow.cpp`](../../../../app/uimodel/library/task/LibraryScanWorkflow.cpp) owns frontend-shared plan disposition, issue collection, identity policy, and build/apply orchestration.
 - [`AudioIdentity.h`](../../../../include/ao/library/AudioIdentity.h) owns identity calculation.
 - [`AudioIdentityIndexer.cpp`](../../../../app/runtime/library/AudioIdentityIndexer.cpp) owns concurrent backfill.
@@ -212,6 +213,7 @@ through `LibraryChanges`; workflow completion performs no independent refresh.
 
 ## Related documents
 
+- [Decision 0015: sequence live-runtime library writes](../../../decision/0015-sequence-live-runtime-library-writes.md)
 - [Cover-art delivery](../../resource/cover-art-delivery.md)
 - [Decision 0010: never write to an audio file](../../../decision/0010-never-write-to-audio-files.md)
 - [Decision 0014: admit scan plans by item evidence](../../../decision/0014-admit-scan-plans-by-item-evidence.md)

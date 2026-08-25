@@ -9,6 +9,7 @@
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -160,5 +161,6 @@ namespace ao::gtk
 
     // Signals
     CreateSmartListRequestedSignal _createSmartListRequested;
+    async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

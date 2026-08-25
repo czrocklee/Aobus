@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -38,6 +39,7 @@ namespace ao::gtk::layout
 
   TrackDetailUndoController::~TrackDetailUndoController()
   {
+    _presentationCallbacks.close();
     disconnectTimer();
   }
 
@@ -88,38 +90,39 @@ namespace ao::gtk::layout
     _changed.emit();
   }
 
-  Result<> TrackDetailUndoController::undo()
+  async::Task<Result<>> TrackDetailUndoController::undo()
   {
     if (!_optPendingCustomMetadataUndo)
     {
-      return {};
+      co_return Result<>{};
     }
 
-    auto& pendingUndo = *_optPendingCustomMetadataUndo;
-
     auto patch = rt::MetadataPatch{};
-    patch.customUpdates[pendingUndo.key] = pendingUndo.value;
+    patch.customUpdates[_optPendingCustomMetadataUndo->key] = _optPendingCustomMetadataUndo->value;
+    auto submission = _optPendingCustomMetadataUndo->sessionPtr->submitMetadata(std::move(patch));
+    auto clearPending = _presentationCallbacks.guard([this] { clear(); });
 
-    auto const replyRes = pendingUndo.sessionPtr->submitMetadata(patch);
+    auto const replyRes = co_await std::move(submission);
 
     if (!replyRes)
     {
       APP_LOG_ERROR("Metadata undo failed: {}", replyRes.error().message);
       auto error = replyRes.error();
-      clear();
-      return std::unexpected{std::move(error)};
+      clearPending();
+      co_return std::unexpected{std::move(error)};
     }
 
     auto result = Result<>{};
 
     switch (replyRes->status)
     {
-      case rt::TrackAuthoringStatus::Applied:
-      case rt::TrackAuthoringStatus::NoOp: break;
-      case rt::TrackAuthoringStatus::Stale:
+      case rt::AuthoringStatus::Applied:
+      case rt::AuthoringStatus::NoOp: break;
+      case rt::AuthoringStatus::Busy: co_return makeError(Error::Code::ResourceBusy, "Metadata undo is currently busy");
+      case rt::AuthoringStatus::Stale:
         result = makeError(Error::Code::InvalidState, "Library changed before metadata undo could be applied");
         break;
-      case rt::TrackAuthoringStatus::Unavailable:
+      case rt::AuthoringStatus::Unavailable:
         result = makeError(Error::Code::InvalidState, "Metadata undo is currently unavailable");
         break;
     }
@@ -129,8 +132,8 @@ namespace ao::gtk::layout
       APP_LOG_ERROR("Metadata undo failed: {}", result.error().message);
     }
 
-    clear();
-    return result;
+    clearPending();
+    co_return result;
   }
 
   sigc::signal<void()>& TrackDetailUndoController::signalChanged()

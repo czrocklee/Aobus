@@ -10,6 +10,7 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/async/Executor.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/async/Sleeper.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -179,6 +180,11 @@ namespace ao::rt::test
   std::unique_ptr<AppRuntime> makeStateOnlyRuntime(ao::test::TempDir const& tempDir,
                                                    ConfigStore* const playbackSessionConfigStore)
   {
-    return makeRuntime(tempDir, std::make_unique<InlineExecutor>(), playbackSessionConfigStore);
+    return makeRuntime(tempDir, std::make_unique<async::LoopExecutor>(), playbackSessionConfigStore);
+  }
+
+  void settleRuntimeCallbacks(AppRuntime& runtime)
+  {
+    runRuntimeTask(runtime, runtime.async().resumeOnCallbackExecutor());
   }
 } // namespace ao::rt::test

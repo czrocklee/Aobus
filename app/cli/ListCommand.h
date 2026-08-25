@@ -17,6 +17,6 @@ namespace ao::cli
 {
   class CliRuntime;
 
-  Result<> validateListOrderCommandStatus(rt::ListOrderAuthoringStatus status);
+  Result<> validateListOrderCommandStatus(rt::AuthoringStatus status);
   void configureListCommand(CLI::App& app, CliRuntime& cli);
 }

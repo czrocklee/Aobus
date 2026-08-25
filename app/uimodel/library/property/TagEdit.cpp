@@ -5,56 +5,78 @@
 
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
+#include <cstddef>
 #include <expected>
-#include <span>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::uimodel
 {
-  Result<TagEditResult> applyTagEdit(TrackAuthoringSession& session,
-                                     PresentationTextCatalog const& textCatalog,
-                                     std::span<std::string const> tagsToAdd,
-                                     std::span<std::string const> tagsToRemove)
+  namespace
+  {
+    async::Task<Result<TagEditResult>> finishTagEditAsync(async::Task<Result<TrackTagSubmitResult>> submission,
+                                                          PresentationTextCatalog textCatalog,
+                                                          std::size_t const addedCount,
+                                                          std::size_t const removedCount)
+    {
+      auto replyRes = co_await std::move(submission);
+
+      if (!replyRes)
+      {
+        co_return std::unexpected{replyRes.error()};
+      }
+
+      switch (replyRes->status)
+      {
+        case rt::AuthoringStatus::Applied:
+          co_return TagEditResult{
+            .status = replyRes->status,
+            .notificationText =
+              textCatalog.format(i18n::MessageId::TrackTagsChanged,
+                                 {{"hasAdded", addedCount == 0 ? std::string_view{"no"} : std::string_view{"yes"}},
+                                  {"hasRemoved", removedCount == 0 ? std::string_view{"no"} : std::string_view{"yes"}},
+                                  {"addedCount", addedCount},
+                                  {"removedCount", removedCount},
+                                  {"trackCount", replyRes->reply.changes.size()}}),
+          };
+        case rt::AuthoringStatus::NoOp: co_return TagEditResult{.status = replyRes->status, .notificationText = {}};
+        case rt::AuthoringStatus::Busy:
+          co_return TagEditResult{
+            .status = replyRes->status,
+            .notificationText = std::string{textCatalog.text(i18n::MessageId::LibraryBusyTryAgain)},
+          };
+        case rt::AuthoringStatus::Stale:
+        case rt::AuthoringStatus::Unavailable:
+          co_return TagEditResult{
+            .status = replyRes->status,
+            .notificationText = std::string{textCatalog.text(i18n::MessageId::TrackTagsStale)},
+          };
+      }
+
+      AO_FATAL("Tag edit returned an unknown authoring status");
+    }
+  } // namespace
+
+  async::Task<Result<TagEditResult>> applyTagEdit(TrackAuthoringSession& session,
+                                                  PresentationTextCatalog const& textCatalog,
+                                                  std::vector<std::string> tagsToAdd,
+                                                  std::vector<std::string> tagsToRemove)
   {
     if (tagsToAdd.empty() && tagsToRemove.empty())
     {
-      return TagEditResult{};
+      return async::makeReadyTask(Result<TagEditResult>{});
     }
 
-    auto replyRes = session.submitTags(tagsToAdd, tagsToRemove);
-
-    if (!replyRes)
-    {
-      return std::unexpected{replyRes.error()};
-    }
-
-    switch (replyRes->status)
-    {
-      case rt::TrackAuthoringStatus::Applied:
-        return TagEditResult{
-          .status = replyRes->status,
-          .notificationText =
-            textCatalog.format(i18n::MessageId::TrackTagsChanged,
-                               {{"hasAdded", tagsToAdd.empty() ? std::string_view{"no"} : std::string_view{"yes"}},
-                                {"hasRemoved", tagsToRemove.empty() ? std::string_view{"no"} : std::string_view{"yes"}},
-                                {"addedCount", tagsToAdd.size()},
-                                {"removedCount", tagsToRemove.size()},
-                                {"trackCount", replyRes->reply.changes.size()}}),
-        };
-      case rt::TrackAuthoringStatus::NoOp: return TagEditResult{};
-      case rt::TrackAuthoringStatus::Stale:
-      case rt::TrackAuthoringStatus::Unavailable:
-        return TagEditResult{
-          .status = replyRes->status,
-          .notificationText = std::string{textCatalog.text(i18n::MessageId::TrackTagsStale)},
-        };
-    }
-
-    AO_FATAL("Tag edit returned an unknown authoring status");
+    auto const addedCount = tagsToAdd.size();
+    auto const removedCount = tagsToRemove.size();
+    auto submission = session.submitTags(std::move(tagsToAdd), std::move(tagsToRemove));
+    return finishTagEditAsync(std::move(submission), textCatalog, addedCount, removedCount);
   }
 } // namespace ao::uimodel

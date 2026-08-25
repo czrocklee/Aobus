@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include <ao/async/Executor.h>
+#include <ao/async/LoopExecutor.h>
+#include <ao/async/Runtime.h>
 #include <ao/async/Sleeper.h>
 #include <ao/async/Task.h>
 #include <ao/async/TaskFuture.h>
@@ -192,6 +196,22 @@ namespace ao::rt::test
     private:
       std::shared_ptr<std::atomic_bool> _completedPtr;
     };
+
+    template<typename T, typename Drain>
+    T finishDrivenTask(async::TaskFuture<T>& future, Drain drain)
+    {
+      if constexpr (std::is_void_v<T>)
+      {
+        future.get();
+        drain();
+      }
+      else
+      {
+        auto result = future.get();
+        drain();
+        return result;
+      }
+    }
   } // namespace detail
 
   // The RAII flag also completes when Runtime teardown destroys a suspended
@@ -208,7 +228,8 @@ namespace ao::rt::test
     }
     else
     {
-      co_return co_await std::move(task);
+      auto result = co_await std::move(task);
+      co_return std::move(result);
     }
   }
 
@@ -218,17 +239,51 @@ namespace ao::rt::test
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
     REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+    return detail::finishDrivenTask(future, [&executor] { executor.drain(); });
+  }
 
-    if constexpr (std::is_void_v<T>)
+  template<typename RuntimeType, typename T>
+  T runLoopTask(RuntimeType& runtime, async::LoopExecutor& executor, async::Task<T> task)
+  {
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
+    REQUIRE(runLoopUntil(executor, [completedPtr] { return completedPtr->load(); }));
+    return detail::finishDrivenTask(future,
+                                    [&executor]
+                                    {
+                                      while (executor.runReadyTurn())
+                                      {
+                                      }
+                                    });
+  }
+
+  template<typename RuntimeType, typename T>
+  T runManualTask(RuntimeType& runtime, ManualExecutor& executor, async::Task<T> task)
+  {
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
+    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+    return detail::finishDrivenTask(future, [&executor] { executor.runUntilIdle(); });
+  }
+
+  template<typename T>
+  T runTestTask(async::Runtime& runtime, async::Executor& executor, async::Task<T> task)
+  {
+    if (auto* const queuedExecutor = dynamic_cast<QueuedExecutor*>(&executor); queuedExecutor != nullptr)
     {
-      future.get();
-      executor.drain();
+      return runQueuedTask(runtime, *queuedExecutor, std::move(task));
     }
-    else
+
+    if (auto* const loopExecutor = dynamic_cast<async::LoopExecutor*>(&executor); loopExecutor != nullptr)
     {
-      auto result = future.get();
-      executor.drain();
-      return result;
+      return runLoopTask(runtime, *loopExecutor, std::move(task));
     }
+
+    if (auto* const manualExecutor = dynamic_cast<ManualExecutor*>(&executor); manualExecutor != nullptr)
+    {
+      return runManualTask(runtime, *manualExecutor, std::move(task));
+    }
+
+    FAIL("Runtime Task tests require a pumpable callback executor");
   }
 } // namespace ao::rt::test

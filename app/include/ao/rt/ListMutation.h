@@ -13,7 +13,7 @@
 
 namespace ao::rt
 {
-  struct LibraryListDraft final
+  struct ListDraft final
   {
     ListId parentId = kInvalidListId;
     ListId listId = kInvalidListId;

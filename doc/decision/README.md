@@ -31,6 +31,7 @@ Use the [decision template](../template/decision.md).
 - [Decision 0012: adopt ICU resource catalogs](0012-adopt-icu-resource-catalogs.md)
 - [Decision 0013: adopt ICU collation](0013-adopt-icu-collation.md)
 - [Decision 0014: admit scan plans by item evidence](0014-admit-scan-plans-by-item-evidence.md)
+- [Decision 0015: sequence live-runtime library writes](0015-sequence-live-runtime-library-writes.md)
 
 ## Superseded decisions
 

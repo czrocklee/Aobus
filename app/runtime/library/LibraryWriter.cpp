@@ -8,6 +8,9 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -40,6 +43,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -70,12 +74,14 @@ namespace ao::rt
     Result<std::string> normalizeRuntimeText(std::string_view const value, std::string_view const context)
     {
       auto normalizedRes = utility::normalizeUtf8Nfc(value);
+
       if (!normalizedRes)
       {
         auto error = std::move(normalizedRes.error());
         error.message = std::format("{}: {}", context, error.message);
         return std::unexpected{std::move(error)};
       }
+
       return std::move(*normalizedRes);
     }
 
@@ -99,21 +105,25 @@ namespace ao::rt
       for (auto const member : kTextMembers)
       {
         auto& optValue = normalized.*member;
+
         if (!optValue)
         {
           continue;
         }
 
         auto valueRes = normalizeRuntimeText(*optValue, "Track metadata");
+
         if (!valueRes)
         {
           return std::unexpected{valueRes.error()};
         }
+
         optValue = std::move(*valueRes);
       }
 
       auto customUpdates = std::move(normalized.customUpdates);
       normalized.customUpdates.clear();
+
       for (auto const& [key, optValue] : customUpdates)
       {
         if (key.empty())
@@ -122,23 +132,27 @@ namespace ao::rt
         }
 
         auto keyRes = normalizeRuntimeText(key, "Custom metadata key");
+
         if (!keyRes)
         {
           return std::unexpected{keyRes.error()};
         }
 
-        auto normalizedValue = std::optional<std::string>{};
+        auto optNormalizedValue = std::optional<std::string>{};
+
         if (optValue)
         {
           auto valueRes = normalizeRuntimeText(*optValue, "Custom metadata value");
+
           if (!valueRes)
           {
             return std::unexpected{valueRes.error()};
           }
-          normalizedValue = std::move(*valueRes);
+
+          optNormalizedValue = std::move(*valueRes);
         }
 
-        if (!normalized.customUpdates.emplace(std::move(*keyRes), std::move(normalizedValue)).second)
+        if (!normalized.customUpdates.emplace(std::move(*keyRes), std::move(optNormalizedValue)).second)
         {
           return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
         }
@@ -157,27 +171,33 @@ namespace ao::rt
       for (auto const& tag : tags)
       {
         auto tagRes = normalizeRuntimeText(tag, "Track tag");
+
         if (!tagRes)
         {
           return std::unexpected{tagRes.error()};
         }
+
         if (seen.insert(*tagRes).second)
         {
           normalized.push_back(std::move(*tagRes));
         }
       }
+
       return normalized;
     }
 
-    Result<LibraryWriter::ListDraft> normalizeListDraft(LibraryWriter::ListDraft const& draft)
+    Result<ListDraft> normalizeListDraft(ListDraft const& draft)
     {
       auto normalized = draft;
       auto nameRes = normalizeRuntimeText(draft.name, "List name");
+
       if (!nameRes)
       {
         return std::unexpected{nameRes.error()};
       }
+
       auto descriptionRes = normalizeRuntimeText(draft.description, "List description");
+
       if (!descriptionRes)
       {
         return std::unexpected{descriptionRes.error()};
@@ -442,42 +462,206 @@ namespace ao::rt
 
     template<typename Operation,
              typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>>
-    OperationResult applyInteractivePreview(LibraryMutationService& mutationService, Operation&& operation)
+    async::Task<OperationResult> applyInteractivePreviewAsync(LibraryMutationService::Submission submission,
+                                                              Operation operation)
     {
-      auto mutationRes = mutationService.beginInteractiveMutation();
+      auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
 
       if (!mutationRes)
       {
-        return OperationResult{std::unexpected{mutationRes.error()}};
+        co_return std::unexpected{mutationRes.error()};
       }
 
       auto mutation = std::move(*mutationRes);
-      auto result = mutation.apply(std::forward<Operation>(operation));
-
-      if (result)
-      {
-        mutation.abort();
-      }
-
-      return result;
+      auto result = mutation.apply(std::move(operation));
+      mutation.abort();
+      co_return result;
     }
 
     template<typename Operation,
              typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>,
              typename Value = detail::OperationResultTraits<OperationResult>::ValueType>
-    Result<MutationExecution<Value>> executeInteractiveMutation(LibraryMutationService& mutationService,
-                                                                std::string_view operationName,
-                                                                Operation&& operation)
+    async::Task<Result<MutationExecution<Value>>> executeInteractiveMutationAsync(
+      LibraryMutationService::Submission submission,
+      std::string operationName,
+      Operation operation)
     {
-      auto mutationRes = mutationService.beginInteractiveMutation();
+      auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
 
       if (!mutationRes)
       {
-        return std::unexpected{mutationRes.error()};
+        co_return std::unexpected{mutationRes.error()};
       }
 
       auto mutation = std::move(*mutationRes);
-      return mutation.execute(std::forward<Operation>(operation), operationName);
+      auto executionRes = co_await mutation.executeAsync(std::move(operation), std::move(operationName));
+      co_return std::move(executionRes);
+    }
+
+    template<typename Reply, typename Operation>
+    async::Task<Result<TrackAuthoringResult<Reply>>> executeBoundTrackAuthoringAsync(
+      LibraryMutationService::Submission submission,
+      BoundTrackTargets targets,
+      std::string operationName,
+      Operation operation)
+    {
+      auto start = co_await LibraryMutationService::beginAuthoringMutationAsync(std::move(submission), targets);
+      auto result = TrackAuthoringResult<Reply>{.status = start.status};
+
+      if (!start.optMutation)
+      {
+        co_return result;
+      }
+
+      auto executionRes = co_await start.optMutation->executeAsync(
+        [&targets, operation = std::move(operation)](
+          library::LibraryWrite& transaction) mutable -> Result<OperationOutcome<Reply>>
+        { return operation(transaction, targets.trackIds()); },
+        std::move(operationName));
+
+      if (!executionRes)
+      {
+        co_return std::unexpected{executionRes.error()};
+      }
+
+      result.reply = std::move(executionRes->value);
+
+      if (!executionRes->optCommittedRevision)
+      {
+        result.status = AuthoringStatus::NoOp;
+        co_return result;
+      }
+
+      result.status = AuthoringStatus::Applied;
+      result.optNextTargets.emplace(
+        LibraryMutationService::advanceBoundTargets(targets, *executionRes->optCommittedRevision));
+      co_return result;
+    }
+
+    template<typename Reply, typename Operation>
+    async::Task<Result<AuthoringResult<Reply>>> executeBoundListOrderAuthoringAsync(
+      LibraryMutationService::Submission submission,
+      BoundListOrder order,
+      std::string operationName,
+      Operation operation)
+    {
+      auto start = co_await LibraryMutationService::beginListOrderAuthoringMutationAsync(std::move(submission), order);
+      auto result = AuthoringResult<Reply>{.status = start.status};
+
+      if (!start.optMutation)
+      {
+        co_return result;
+      }
+
+      auto executionRes = co_await start.optMutation->executeAsync(
+        [&order, operation = std::move(operation)](
+          library::LibraryWrite& transaction) mutable -> Result<OperationOutcome<Reply>>
+        { return operation(transaction, order); },
+        std::move(operationName));
+
+      if (!executionRes)
+      {
+        co_return std::unexpected{executionRes.error()};
+      }
+
+      result.reply = std::move(executionRes->value);
+      result.status = executionRes->optCommittedRevision ? AuthoringStatus::Applied : AuthoringStatus::NoOp;
+      co_return result;
+    }
+
+    template<typename Reply>
+    struct ChangedWork final
+    {
+      Reply reply{};
+      LibraryChangeSet changeSet{};
+    };
+
+    template<typename Reply, typename Operation>
+    async::Task<Result<Reply>> executeChangedWorkAsync(LibraryMutationService::Submission submission,
+                                                       std::string operationName,
+                                                       Operation operation)
+    {
+      auto executionRes = co_await executeInteractiveMutationAsync(
+        std::move(submission),
+        std::move(operationName),
+        [operation =
+           std::move(operation)](library::LibraryWrite& transaction) mutable -> Result<OperationOutcome<Reply>>
+        {
+          auto workRes = operation(transaction);
+
+          if (!workRes)
+          {
+            return std::unexpected{workRes.error()};
+          }
+
+          auto work = std::move(*workRes);
+          return Changed<Reply>{
+            .value = std::move(work.reply),
+            .changeSet = std::move(work.changeSet),
+          };
+        });
+
+      if (!executionRes)
+      {
+        co_return std::unexpected{executionRes.error()};
+      }
+
+      co_return std::move(executionRes->value);
+    }
+
+    template<typename Reply, typename Operation>
+    async::Task<Result<Reply>> previewChangedWorkAsync(LibraryMutationService::Submission submission,
+                                                       Operation operation)
+    {
+      auto workRes = co_await applyInteractivePreviewAsync(std::move(submission), std::move(operation));
+
+      if (!workRes)
+      {
+        co_return std::unexpected{workRes.error()};
+      }
+
+      co_return std::move(workRes->reply);
+    }
+
+    template<typename Value, typename Owner, typename Operation>
+    async::Task<Value> runWriterOperation(std::shared_ptr<Owner> ownerPtr,
+                                          LibraryMutationService::Submission submission,
+                                          Operation operation)
+    {
+      auto optResult = std::optional<Value>{};
+      auto deferredException = std::exception_ptr{};
+
+      try
+      {
+        optResult.emplace(co_await operation(*ownerPtr, std::move(submission)));
+      }
+      catch (...)
+      {
+        deferredException = std::current_exception();
+      }
+
+      co_await ownerPtr->asyncRuntime.resumeOnCallbackExecutor();
+
+      if (deferredException)
+      {
+        async::rethrowException(deferredException);
+      }
+
+      AO_INVARIANT(optResult);
+      co_return std::move(*optResult);
+    }
+
+    // This ordinary function captures submission context before the returned
+    // lazy coroutine can outlive its caller or cross an executor boundary.
+    template<typename Value, typename Owner, typename Method, typename... Args>
+    async::Task<Value> submitWriterOperation(std::shared_ptr<Owner> ownerPtr, Method method, Args... args)
+    {
+      auto submission = ownerPtr->mutationService.captureSubmission();
+      return runWriterOperation<Value>(
+        std::move(ownerPtr),
+        std::move(submission),
+        [method, ... args = std::move(args)](Owner& owner, LibraryMutationService::Submission innerSubmission) mutable
+        { return std::invoke(method, owner, std::move(innerSubmission), std::move(args)...); });
     }
 
     struct ImportTarget final
@@ -554,6 +738,32 @@ namespace ao::rt
       return std::move(*optTarget);
     }
 
+    struct PreparedTrackImport final
+    {
+      ImportTarget target;
+      MediaTrack mediaTrack;
+    };
+
+    Result<PreparedTrackImport> prepareTrackImport(library::MusicLibrary const& library,
+                                                   std::filesystem::path const& path)
+    {
+      auto targetRes = importTargetForPath(library, path);
+
+      if (!targetRes)
+      {
+        return std::unexpected{targetRes.error()};
+      }
+
+      auto mediaTrackRes = readMediaTrack(targetRes->fullPath);
+
+      if (!mediaTrackRes)
+      {
+        return std::unexpected{mediaTrackRes.error()};
+      }
+
+      return PreparedTrackImport{.target = std::move(*targetRes), .mediaTrack = std::move(*mediaTrackRes)};
+    }
+
     Result<> validateListExpression(std::string const& expression)
     {
       auto exprRes = query::parse(expression.empty() ? "true" : expression);
@@ -571,7 +781,7 @@ namespace ao::rt
       return {};
     }
 
-    library::ListBuilder listForDraft(LibraryWriter::ListDraft const& draft,
+    library::ListBuilder listForDraft(ListDraft const& draft,
                                       std::optional<library::ListView> const& optExisting = std::nullopt)
     {
       auto builder = optExisting ? library::ListBuilder::fromView(*optExisting) : library::ListBuilder::makeEmpty();
@@ -579,7 +789,7 @@ namespace ao::rt
       return builder;
     }
 
-    Result<> validateListDraft(LibraryWriter::ListDraft const& draft)
+    Result<> validateListDraft(ListDraft const& draft)
     {
       return validateListExpression(draft.expression);
     }
@@ -735,7 +945,7 @@ namespace ao::rt
         .field = std::string{field}, .oldValue = std::string{oldValue}, .newValue = std::string{newValue}});
     }
 
-    UpdateListReply diffListUpdate(library::ListView const& existing, LibraryWriter::ListDraft const& draft)
+    UpdateListReply diffListUpdate(library::ListView const& existing, ListDraft const& draft)
     {
       auto reply = UpdateListReply{};
       appendListFieldChange(reply.fieldChanges, "name", existing.name(), draft.name);
@@ -749,13 +959,15 @@ namespace ao::rt
       return reply;
     }
 
-    Result<ListId> createListInTransaction(library::LibraryWrite& transaction, LibraryWriter::ListDraft const& draft)
+    Result<ListId> createListInTransaction(library::LibraryWrite& transaction, ListDraft const& draft)
     {
       auto normalizedDraftRes = normalizeListDraft(draft);
+
       if (!normalizedDraftRes)
       {
         return std::unexpected{normalizedDraftRes.error()};
       }
+
       auto const& normalizedDraft = *normalizedDraftRes;
       auto listWriter = transaction.lists();
       auto list = listForDraft(normalizedDraft);
@@ -775,14 +987,15 @@ namespace ao::rt
       return *result;
     }
 
-    Result<UpdateListReply> updateListInTransaction(library::LibraryWrite& transaction,
-                                                    LibraryWriter::ListDraft const& draft)
+    Result<UpdateListReply> updateListInTransaction(library::LibraryWrite& transaction, ListDraft const& draft)
     {
       auto normalizedDraftRes = normalizeListDraft(draft);
+
       if (!normalizedDraftRes)
       {
         return std::unexpected{normalizedDraftRes.error()};
       }
+
       auto const& normalizedDraft = *normalizedDraftRes;
       auto listWriter = transaction.lists();
       auto optExisting = listWriter.get(normalizedDraft.listId);
@@ -822,10 +1035,12 @@ namespace ao::rt
                                                                      MetadataPatch const& patch)
     {
       auto normalizedPatchRes = normalizeMetadataPatch(patch);
+
       if (!normalizedPatchRes)
       {
         return std::unexpected{normalizedPatchRes.error()};
       }
+
       auto const& normalizedPatch = *normalizedPatchRes;
       auto writer = transaction.tracks();
       auto changes = std::vector<TrackChangeRecord>{};
@@ -881,11 +1096,14 @@ namespace ao::rt
                                                           std::span<std::string const> tagsToRemove)
     {
       auto normalizedAddRes = normalizeTags(tagsToAdd);
+
       if (!normalizedAddRes)
       {
         return std::unexpected{normalizedAddRes.error()};
       }
+
       auto normalizedRemoveRes = normalizeTags(tagsToRemove);
+
       if (!normalizedRemoveRes)
       {
         return std::unexpected{normalizedRemoveRes.error()};
@@ -1450,16 +1668,10 @@ namespace ao::rt
                               }};
     }
 
-    struct DeleteListWork final
-    {
-      DeleteListReply reply{};
-      LibraryChangeSet changeSet{};
-    };
-
-    Result<DeleteListWork> applyDeleteListInTransaction(library::MusicLibrary& library,
-                                                        library::LibraryWrite& transaction,
-                                                        ListId const listId,
-                                                        DeleteListOptions const options)
+    Result<ChangedWork<DeleteListReply>> applyDeleteListInTransaction(library::MusicLibrary& library,
+                                                                      library::LibraryWrite& transaction,
+                                                                      ListId const listId,
+                                                                      DeleteListOptions const options)
     {
       auto listWriter = transaction.lists();
       auto optView = listWriter.get(listId);
@@ -1490,7 +1702,7 @@ namespace ao::rt
           Error::Code::Conflict, std::format("List {} has dependent Lists: {}", listId, dependentDescriptions));
       }
 
-      auto work = DeleteListWork{
+      auto work = ChangedWork<DeleteListReply>{
         .reply =
           DeleteListReply{
             .listId = listId,
@@ -1546,16 +1758,10 @@ namespace ao::rt
       return work;
     }
 
-    struct DeleteListSubtreeWork final
-    {
-      DeleteListSubtreeReply reply{};
-      LibraryChangeSet changeSet{};
-    };
-
-    Result<DeleteListSubtreeWork> applyDeleteListSubtreeInTransaction(library::MusicLibrary& library,
-                                                                      library::LibraryWrite& transaction,
-                                                                      ListId const listId,
-                                                                      DeleteListOptions const options)
+    Result<ChangedWork<DeleteListSubtreeReply>> applyDeleteListSubtreeInTransaction(library::MusicLibrary& library,
+                                                                                    library::LibraryWrite& transaction,
+                                                                                    ListId const listId,
+                                                                                    DeleteListOptions const options)
     {
       auto deletedListsRes = collectDeleteListSubtree(library, transaction, listId);
 
@@ -1564,7 +1770,7 @@ namespace ao::rt
         return std::unexpected{deletedListsRes.error()};
       }
 
-      auto work = DeleteListSubtreeWork{
+      auto work = ChangedWork<DeleteListSubtreeReply>{
         .reply = DeleteListSubtreeReply{.rootListId = listId, .deletedLists = std::move(*deletedListsRes)},
       };
       auto deletedIds =
@@ -1629,15 +1835,9 @@ namespace ao::rt
       return work;
     }
 
-    struct DeleteTrackWork final
-    {
-      DeleteTrackReply reply{};
-      LibraryChangeSet changeSet{};
-    };
-
-    Result<DeleteTrackWork> applyDeleteTrackInTransaction(library::MusicLibrary& library,
-                                                          library::LibraryWrite& transaction,
-                                                          TrackId const trackId)
+    Result<ChangedWork<DeleteTrackReply>> applyDeleteTrackInTransaction(library::MusicLibrary& library,
+                                                                        library::LibraryWrite& transaction,
+                                                                        TrackId const trackId)
     {
       auto writer = transaction.tracks();
       auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
@@ -1657,7 +1857,7 @@ namespace ao::rt
       }
 
       auto changedLists = std::move(*changedListsRes);
-      auto work = DeleteTrackWork{
+      auto work = ChangedWork<DeleteTrackReply>{
         .reply =
           DeleteTrackReply{
             .trackId = trackId,
@@ -1768,204 +1968,259 @@ namespace ao::rt
 
   struct LibraryWriter::Impl final
   {
-    Result<UpdateTrackMetadataReply> previewUpdateMetadata(std::span<TrackId const> trackIds,
-                                                           MetadataPatch const& patch);
-    Result<MetadataAuthoringResult> applyUpdateMetadata(BoundTrackTargets const& targets, MetadataPatch const& patch);
-    Result<EditTrackTagsReply> previewEditTags(std::span<TrackId const> trackIds,
-                                               std::span<std::string const> tagsToAdd,
-                                               std::span<std::string const> tagsToRemove);
-    Result<TagAuthoringResult> applyEditTags(BoundTrackTargets const& targets,
-                                             std::span<std::string const> tagsToAdd,
-                                             std::span<std::string const> tagsToRemove);
-    Result<AddTracksToListReply> previewAddTracksToList(ListId listId, std::span<TrackId const> trackIds);
-    Result<AddToListAuthoringResult> applyAddTracksToList(ListId listId, BoundTrackTargets const& targets);
-    Result<RemoveTracksFromListReply> previewRemoveTracksFromList(ListId listId, std::span<TrackId const> trackIds);
-    Result<RemoveFromListAuthoringResult> applyRemoveTracksFromList(ListId listId, BoundTrackTargets const& targets);
-    Result<ListId> createList(ListDraft const& draft);
-    Result<> previewCreateList(ListDraft const& draft);
-    Result<UpdateListReply> updateList(ListDraft const& draft);
-    Result<UpdateListReply> previewUpdateList(ListDraft const& draft);
-    Result<MoveOrderAuthoringResult> applyMoveListOrder(BoundListOrder const& order,
-                                                        std::span<TrackId const> selectedTrackIds,
-                                                        std::optional<TrackId> optBeforeTrackId);
-    Result<ResetOrderAuthoringResult> applyResetListOrder(BoundListOrder const& order);
-    Result<ForgetHiddenOrderAuthoringResult> applyForgetHiddenListOrder(BoundListOrder const& order);
-    Result<DeleteListReply> deleteList(ListId listId, DeleteListOptions options);
-    Result<DeleteListReply> previewDeleteList(ListId listId, DeleteListOptions options);
-    Result<DeleteListSubtreeReply> deleteListAndDescendants(ListId listId, DeleteListOptions options);
-    Result<DeleteListSubtreeReply> previewDeleteListAndDescendants(ListId listId, DeleteListOptions options);
-    Result<DeleteTrackReply> deleteTrack(TrackId trackId);
-    Result<DeleteTrackReply> previewDeleteTrack(TrackId trackId);
-    Result<CreateTrackReply> createTrackFromFile(std::filesystem::path const& path);
-    Result<PreviewCreateTrackReply> previewCreateTrackFromFile(std::filesystem::path const& path);
+    async::Task<Result<UpdateTrackMetadataReply>> previewUpdateMetadata(LibraryMutationService::Submission submission,
+                                                                        std::vector<TrackId> trackIds,
+                                                                        MetadataPatch patch);
+    async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>>
+    applyUpdateMetadata(LibraryMutationService::Submission submission, BoundTrackTargets targets, MetadataPatch patch);
+    async::Task<Result<EditTrackTagsReply>> previewEditTags(LibraryMutationService::Submission submission,
+                                                            std::vector<TrackId> trackIds,
+                                                            std::vector<std::string> tagsToAdd,
+                                                            std::vector<std::string> tagsToRemove);
+    async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> applyEditTags(
+      LibraryMutationService::Submission submission,
+      BoundTrackTargets targets,
+      std::vector<std::string> tagsToAdd,
+      std::vector<std::string> tagsToRemove);
+    async::Task<Result<AddTracksToListReply>> previewAddTracksToList(LibraryMutationService::Submission submission,
+                                                                     ListId listId,
+                                                                     std::vector<TrackId> trackIds);
+    async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>>
+    applyAddTracksToList(LibraryMutationService::Submission submission, ListId listId, BoundTrackTargets targets);
+    async::Task<Result<RemoveTracksFromListReply>> previewRemoveTracksFromList(
+      LibraryMutationService::Submission submission,
+      ListId listId,
+      std::vector<TrackId> trackIds);
+    async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>>
+    applyRemoveTracksFromList(LibraryMutationService::Submission submission, ListId listId, BoundTrackTargets targets);
+    async::Task<Result<ListId>> createList(LibraryMutationService::Submission submission, ListDraft draft);
+    async::Task<Result<>> previewCreateList(LibraryMutationService::Submission submission, ListDraft draft);
+    async::Task<Result<UpdateListReply>> updateList(LibraryMutationService::Submission submission, ListDraft draft);
+    async::Task<Result<UpdateListReply>> previewUpdateList(LibraryMutationService::Submission submission,
+                                                           ListDraft draft);
+    async::Task<Result<AuthoringResult<MoveListOrderReply>>> applyMoveListOrder(
+      LibraryMutationService::Submission submission,
+      BoundListOrder order,
+      std::vector<TrackId> selectedTrackIds,
+      std::optional<TrackId> optBeforeTrackId);
+    async::Task<Result<AuthoringResult<ResetListOrderReply>>> applyResetListOrder(
+      LibraryMutationService::Submission submission,
+      BoundListOrder order);
+    async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> applyForgetHiddenListOrder(
+      LibraryMutationService::Submission submission,
+      BoundListOrder order);
+    async::Task<Result<DeleteListReply>> deleteList(LibraryMutationService::Submission submission,
+                                                    ListId listId,
+                                                    DeleteListOptions options);
+    async::Task<Result<DeleteListReply>> previewDeleteList(LibraryMutationService::Submission submission,
+                                                           ListId listId,
+                                                           DeleteListOptions options);
+    async::Task<Result<DeleteListSubtreeReply>> deleteListAndDescendants(LibraryMutationService::Submission submission,
+                                                                         ListId listId,
+                                                                         DeleteListOptions options);
+    async::Task<Result<DeleteListSubtreeReply>> previewDeleteListAndDescendants(
+      LibraryMutationService::Submission submission,
+      ListId listId,
+      DeleteListOptions options);
+    async::Task<Result<DeleteTrackReply>> deleteTrack(LibraryMutationService::Submission submission, TrackId trackId);
+    async::Task<Result<DeleteTrackReply>> previewDeleteTrack(LibraryMutationService::Submission submission,
+                                                             TrackId trackId);
+    async::Task<Result<CreateTrackReply>> createTrackFromFile(LibraryMutationService::Submission submission,
+                                                              std::filesystem::path path) const;
+    async::Task<Result<PreviewCreateTrackReply>> previewCreateTrackFromFile(
+      LibraryMutationService::Submission submission,
+      std::filesystem::path path) const;
 
     library::MusicLibrary& library;
     LibraryMutationService& mutationService;
+    async::Runtime& asyncRuntime;
   };
 
-  LibraryWriter::LibraryWriter(library::MusicLibrary& library, LibraryMutationService& mutationService)
-    : _implPtr{std::make_unique<Impl>(library, mutationService)}
+  LibraryWriter::LibraryWriter(library::MusicLibrary& library,
+                               LibraryMutationService& mutationService,
+                               async::Runtime& asyncRuntime)
+    : _implPtr{std::make_shared<Impl>(library, mutationService, asyncRuntime)}
   {
   }
 
   LibraryWriter::~LibraryWriter() = default;
 
-  Result<LibraryWriter::MetadataAuthoringResult> LibraryWriter::updateMetadata(BoundTrackTargets const& targets,
-                                                                               MetadataPatch const& patch)
+  async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryWriter::updateMetadata(
+    BoundTrackTargets targets,
+    MetadataPatch patch)
   {
-    return _implPtr->applyUpdateMetadata(targets, patch);
+    return submitWriterOperation<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>>(
+      _implPtr, &Impl::applyUpdateMetadata, std::move(targets), std::move(patch));
   }
 
-  Result<UpdateTrackMetadataReply> LibraryWriter::previewUpdateMetadata(std::span<TrackId const> trackIds,
-                                                                        MetadataPatch const& patch)
+  async::Task<Result<UpdateTrackMetadataReply>> LibraryWriter::previewUpdateMetadata(std::vector<TrackId> trackIds,
+                                                                                     MetadataPatch patch)
   {
-    return _implPtr->previewUpdateMetadata(trackIds, patch);
+    return submitWriterOperation<Result<UpdateTrackMetadataReply>>(
+      _implPtr, &Impl::previewUpdateMetadata, std::move(trackIds), std::move(patch));
   }
 
-  Result<LibraryWriter::TagAuthoringResult> LibraryWriter::editTags(BoundTrackTargets const& targets,
-                                                                    std::span<std::string const> tagsToAdd,
-                                                                    std::span<std::string const> tagsToRemove)
+  async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryWriter::editTags(
+    BoundTrackTargets targets,
+    std::vector<std::string> tagsToAdd,
+    std::vector<std::string> tagsToRemove)
   {
-    return _implPtr->applyEditTags(targets, tagsToAdd, tagsToRemove);
+    return submitWriterOperation<Result<TrackAuthoringResult<EditTrackTagsReply>>>(
+      _implPtr, &Impl::applyEditTags, std::move(targets), std::move(tagsToAdd), std::move(tagsToRemove));
   }
 
-  Result<EditTrackTagsReply> LibraryWriter::previewEditTags(std::span<TrackId const> trackIds,
-                                                            std::span<std::string const> tagsToAdd,
-                                                            std::span<std::string const> tagsToRemove)
+  async::Task<Result<EditTrackTagsReply>> LibraryWriter::previewEditTags(std::vector<TrackId> trackIds,
+                                                                         std::vector<std::string> tagsToAdd,
+                                                                         std::vector<std::string> tagsToRemove)
   {
-    return _implPtr->previewEditTags(trackIds, tagsToAdd, tagsToRemove);
+    return submitWriterOperation<Result<EditTrackTagsReply>>(
+      _implPtr, &Impl::previewEditTags, std::move(trackIds), std::move(tagsToAdd), std::move(tagsToRemove));
   }
 
-  Result<LibraryWriter::AddToListAuthoringResult> LibraryWriter::addTracksToList(ListId const listId,
-                                                                                 BoundTrackTargets const& targets)
-  {
-    return _implPtr->applyAddTracksToList(listId, targets);
-  }
-
-  Result<AddTracksToListReply> LibraryWriter::previewAddTracksToList(ListId const listId,
-                                                                     std::span<TrackId const> const trackIds)
-  {
-    return _implPtr->previewAddTracksToList(listId, trackIds);
-  }
-
-  Result<LibraryWriter::RemoveFromListAuthoringResult> LibraryWriter::removeTracksFromList(
+  async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> LibraryWriter::addTracksToList(
     ListId const listId,
-    BoundTrackTargets const& targets)
+    BoundTrackTargets targets)
   {
-    return _implPtr->applyRemoveTracksFromList(listId, targets);
+    return submitWriterOperation<Result<TrackAuthoringResult<AddTracksToListReply>>>(
+      _implPtr, &Impl::applyAddTracksToList, listId, std::move(targets));
   }
 
-  Result<RemoveTracksFromListReply> LibraryWriter::previewRemoveTracksFromList(ListId const listId,
-                                                                               std::span<TrackId const> const trackIds)
+  async::Task<Result<AddTracksToListReply>> LibraryWriter::previewAddTracksToList(ListId const listId,
+                                                                                  std::vector<TrackId> trackIds)
   {
-    return _implPtr->previewRemoveTracksFromList(listId, trackIds);
+    return submitWriterOperation<Result<AddTracksToListReply>>(
+      _implPtr, &Impl::previewAddTracksToList, listId, std::move(trackIds));
   }
 
-  Result<ListId> LibraryWriter::createList(ListDraft const& draft)
+  async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>> LibraryWriter::removeTracksFromList(
+    ListId const listId,
+    BoundTrackTargets targets)
   {
-    return _implPtr->createList(draft);
+    return submitWriterOperation<Result<TrackAuthoringResult<RemoveTracksFromListReply>>>(
+      _implPtr, &Impl::applyRemoveTracksFromList, listId, std::move(targets));
   }
 
-  Result<> LibraryWriter::previewCreateList(ListDraft const& draft)
+  async::Task<Result<RemoveTracksFromListReply>> LibraryWriter::previewRemoveTracksFromList(
+    ListId const listId,
+    std::vector<TrackId> trackIds)
   {
-    return _implPtr->previewCreateList(draft);
+    return submitWriterOperation<Result<RemoveTracksFromListReply>>(
+      _implPtr, &Impl::previewRemoveTracksFromList, listId, std::move(trackIds));
   }
 
-  Result<UpdateListReply> LibraryWriter::updateList(ListDraft const& draft)
+  async::Task<Result<ListId>> LibraryWriter::createList(ListDraft draft)
   {
-    return _implPtr->updateList(draft);
+    return submitWriterOperation<Result<ListId>>(_implPtr, &Impl::createList, std::move(draft));
   }
 
-  Result<UpdateListReply> LibraryWriter::previewUpdateList(ListDraft const& draft)
+  async::Task<Result<>> LibraryWriter::previewCreateList(ListDraft draft)
   {
-    return _implPtr->previewUpdateList(draft);
+    return submitWriterOperation<Result<>>(_implPtr, &Impl::previewCreateList, std::move(draft));
   }
 
-  Result<LibraryWriter::MoveOrderAuthoringResult> LibraryWriter::moveListOrder(
-    BoundListOrder const& order,
-    std::span<TrackId const> const selectedTrackIds,
+  async::Task<Result<UpdateListReply>> LibraryWriter::updateList(ListDraft draft)
+  {
+    return submitWriterOperation<Result<UpdateListReply>>(_implPtr, &Impl::updateList, std::move(draft));
+  }
+
+  async::Task<Result<UpdateListReply>> LibraryWriter::previewUpdateList(ListDraft draft)
+  {
+    return submitWriterOperation<Result<UpdateListReply>>(_implPtr, &Impl::previewUpdateList, std::move(draft));
+  }
+
+  async::Task<Result<AuthoringResult<MoveListOrderReply>>> LibraryWriter::moveListOrder(
+    BoundListOrder order,
+    std::vector<TrackId> selectedTrackIds,
     std::optional<TrackId> const optBeforeTrackId)
   {
-    return _implPtr->applyMoveListOrder(order, selectedTrackIds, optBeforeTrackId);
+    return submitWriterOperation<Result<AuthoringResult<MoveListOrderReply>>>(
+      _implPtr, &Impl::applyMoveListOrder, std::move(order), std::move(selectedTrackIds), optBeforeTrackId);
   }
 
-  Result<LibraryWriter::ResetOrderAuthoringResult> LibraryWriter::resetListOrder(BoundListOrder const& order)
+  async::Task<Result<AuthoringResult<ResetListOrderReply>>> LibraryWriter::resetListOrder(BoundListOrder order)
   {
-    return _implPtr->applyResetListOrder(order);
+    return submitWriterOperation<Result<AuthoringResult<ResetListOrderReply>>>(
+      _implPtr, &Impl::applyResetListOrder, std::move(order));
   }
 
-  Result<LibraryWriter::ForgetHiddenOrderAuthoringResult> LibraryWriter::forgetHiddenListOrder(
-    BoundListOrder const& order)
+  async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> LibraryWriter::forgetHiddenListOrder(
+    BoundListOrder order)
   {
-    return _implPtr->applyForgetHiddenListOrder(order);
+    return submitWriterOperation<Result<AuthoringResult<ForgetHiddenListOrderReply>>>(
+      _implPtr, &Impl::applyForgetHiddenListOrder, std::move(order));
   }
 
-  Result<DeleteListReply> LibraryWriter::deleteList(ListId listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryWriter::deleteList(ListId const listId, DeleteListOptions const options)
   {
-    return _implPtr->deleteList(listId, options);
+    return submitWriterOperation<Result<DeleteListReply>>(_implPtr, &Impl::deleteList, listId, options);
   }
 
-  Result<DeleteListReply> LibraryWriter::previewDeleteList(ListId listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryWriter::previewDeleteList(ListId const listId,
+                                                                        DeleteListOptions const options)
   {
-    return _implPtr->previewDeleteList(listId, options);
+    return submitWriterOperation<Result<DeleteListReply>>(_implPtr, &Impl::previewDeleteList, listId, options);
   }
 
-  Result<DeleteListSubtreeReply> LibraryWriter::deleteListAndDescendants(ListId const listId,
-                                                                         DeleteListOptions const options)
+  async::Task<Result<DeleteListSubtreeReply>> LibraryWriter::deleteListAndDescendants(ListId const listId,
+                                                                                      DeleteListOptions const options)
   {
-    return _implPtr->deleteListAndDescendants(listId, options);
+    return submitWriterOperation<Result<DeleteListSubtreeReply>>(
+      _implPtr, &Impl::deleteListAndDescendants, listId, options);
   }
 
-  Result<DeleteListSubtreeReply> LibraryWriter::previewDeleteListAndDescendants(ListId const listId,
-                                                                                DeleteListOptions const options)
+  async::Task<Result<DeleteListSubtreeReply>> LibraryWriter::previewDeleteListAndDescendants(
+    ListId const listId,
+    DeleteListOptions const options)
   {
-    return _implPtr->previewDeleteListAndDescendants(listId, options);
+    return submitWriterOperation<Result<DeleteListSubtreeReply>>(
+      _implPtr, &Impl::previewDeleteListAndDescendants, listId, options);
   }
 
-  Result<DeleteTrackReply> LibraryWriter::deleteTrack(TrackId trackId)
+  async::Task<Result<DeleteTrackReply>> LibraryWriter::deleteTrack(TrackId const trackId)
   {
-    return _implPtr->deleteTrack(trackId);
+    return submitWriterOperation<Result<DeleteTrackReply>>(_implPtr, &Impl::deleteTrack, trackId);
   }
 
-  Result<DeleteTrackReply> LibraryWriter::previewDeleteTrack(TrackId trackId)
+  async::Task<Result<DeleteTrackReply>> LibraryWriter::previewDeleteTrack(TrackId const trackId)
   {
-    return _implPtr->previewDeleteTrack(trackId);
+    return submitWriterOperation<Result<DeleteTrackReply>>(_implPtr, &Impl::previewDeleteTrack, trackId);
   }
 
-  Result<CreateTrackReply> LibraryWriter::createTrackFromFile(std::filesystem::path const& path)
+  async::Task<Result<CreateTrackReply>> LibraryWriter::createTrackFromFile(std::filesystem::path path)
   {
-    return _implPtr->createTrackFromFile(path);
+    return submitWriterOperation<Result<CreateTrackReply>>(_implPtr, &Impl::createTrackFromFile, std::move(path));
   }
 
-  Result<PreviewCreateTrackReply> LibraryWriter::previewCreateTrackFromFile(std::filesystem::path const& path)
+  async::Task<Result<PreviewCreateTrackReply>> LibraryWriter::previewCreateTrackFromFile(std::filesystem::path path)
   {
-    return _implPtr->previewCreateTrackFromFile(path);
+    return submitWriterOperation<Result<PreviewCreateTrackReply>>(
+      _implPtr, &Impl::previewCreateTrackFromFile, std::move(path));
   }
 
-  Result<UpdateTrackMetadataReply> LibraryWriter::Impl::previewUpdateMetadata(std::span<TrackId const> trackIds,
-                                                                              MetadataPatch const& patch)
+  async::Task<Result<UpdateTrackMetadataReply>> LibraryWriter::Impl::previewUpdateMetadata(
+    LibraryMutationService::Submission submission,
+    std::vector<TrackId> trackIds,
+    MetadataPatch patch)
   {
-    return applyInteractivePreview(mutationService,
-                                   [this, trackIds, &patch](library::LibraryWrite& transaction)
-                                   { return applyMetadataPatchInTransaction(library, transaction, trackIds, patch); });
+    return applyInteractivePreviewAsync(
+      std::move(submission),
+      [this, trackIds = std::move(trackIds), patch = std::move(patch)](library::LibraryWrite& transaction)
+      { return applyMetadataPatchInTransaction(library, transaction, trackIds, patch); });
   }
 
-  Result<LibraryWriter::MetadataAuthoringResult> LibraryWriter::Impl::applyUpdateMetadata(
-    BoundTrackTargets const& targets,
-    MetadataPatch const& patch)
+  async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryWriter::Impl::applyUpdateMetadata(
+    LibraryMutationService::Submission submission,
+    BoundTrackTargets targets,
+    MetadataPatch patch)
   {
-    auto start = mutationService.beginAuthoringMutation(targets);
-    auto result = MetadataAuthoringResult{.status = start.status};
-
-    if (!start.optMutation)
-    {
-      return result;
-    }
-
-    auto executionRes = start.optMutation->execute(
-      [this, &targets, &patch](library::LibraryWrite& transaction) -> Result<OperationOutcome<UpdateTrackMetadataReply>>
+    return executeBoundTrackAuthoringAsync<UpdateTrackMetadataReply>(
+      std::move(submission),
+      std::move(targets),
+      "Update track metadata",
+      [this, patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
+        -> Result<OperationOutcome<UpdateTrackMetadataReply>>
       {
-        auto replyRes = applyMetadataPatchInTransaction(library, transaction, targets.trackIds(), patch);
+        auto replyRes = applyMetadataPatchInTransaction(library, transaction, trackIds, patch);
 
         if (!replyRes)
         {
@@ -1985,55 +2240,37 @@ namespace ao::rt
           .value = std::move(reply),
           .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
         };
-      },
-      "Update track metadata");
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    result.reply = std::move(executionRes->value);
-
-    if (!executionRes->optCommittedRevision)
-    {
-      result.status = TrackAuthoringStatus::NoOp;
-      return result;
-    }
-
-    result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
-    return result;
+      });
   }
 
-  Result<EditTrackTagsReply> LibraryWriter::Impl::previewEditTags(std::span<TrackId const> trackIds,
-                                                                  std::span<std::string const> tagsToAdd,
-                                                                  std::span<std::string const> tagsToRemove)
+  async::Task<Result<EditTrackTagsReply>> LibraryWriter::Impl::previewEditTags(
+    LibraryMutationService::Submission submission,
+    std::vector<TrackId> trackIds,
+    std::vector<std::string> tagsToAdd,
+    std::vector<std::string> tagsToRemove)
   {
-    return applyInteractivePreview(
-      mutationService,
-      [this, trackIds, tagsToAdd, tagsToRemove](library::LibraryWrite& transaction)
+    return applyInteractivePreviewAsync(
+      std::move(submission),
+      [this, trackIds = std::move(trackIds), tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
+        library::LibraryWrite& transaction)
       { return applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove); });
   }
 
-  Result<LibraryWriter::TagAuthoringResult> LibraryWriter::Impl::applyEditTags(
-    BoundTrackTargets const& targets,
-    std::span<std::string const> tagsToAdd,
-    std::span<std::string const> tagsToRemove)
+  async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryWriter::Impl::applyEditTags(
+    LibraryMutationService::Submission submission,
+    BoundTrackTargets targets,
+    std::vector<std::string> tagsToAdd,
+    std::vector<std::string> tagsToRemove)
   {
-    auto start = mutationService.beginAuthoringMutation(targets);
-    auto result = TagAuthoringResult{.status = start.status};
-
-    if (!start.optMutation)
-    {
-      return result;
-    }
-
-    auto executionRes = start.optMutation->execute(
-      [this, &targets, tagsToAdd, tagsToRemove](
-        library::LibraryWrite& transaction) -> Result<OperationOutcome<EditTrackTagsReply>>
+    return executeBoundTrackAuthoringAsync<EditTrackTagsReply>(
+      std::move(submission),
+      std::move(targets),
+      "Edit track tags",
+      [this, tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
+        library::LibraryWrite& transaction,
+        std::span<TrackId const> trackIds) -> Result<OperationOutcome<EditTrackTagsReply>>
       {
-        auto replyRes = applyTagPatchInTransaction(library, transaction, targets.trackIds(), tagsToAdd, tagsToRemove);
+        auto replyRes = applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove);
 
         if (!replyRes)
         {
@@ -2053,52 +2290,33 @@ namespace ao::rt
           .value = std::move(reply),
           .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
         };
-      },
-      "Edit track tags");
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    result.reply = std::move(executionRes->value);
-
-    if (!executionRes->optCommittedRevision)
-    {
-      result.status = TrackAuthoringStatus::NoOp;
-      return result;
-    }
-
-    result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
-    return result;
+      });
   }
 
-  Result<AddTracksToListReply> LibraryWriter::Impl::previewAddTracksToList(ListId const listId,
-                                                                           std::span<TrackId const> const trackIds)
+  async::Task<Result<AddTracksToListReply>> LibraryWriter::Impl::previewAddTracksToList(
+    LibraryMutationService::Submission submission,
+    ListId const listId,
+    std::vector<TrackId> trackIds)
   {
-    return applyInteractivePreview(
-      mutationService,
-      [this, listId, trackIds](library::LibraryWrite& transaction)
+    return applyInteractivePreviewAsync(
+      std::move(submission),
+      [this, listId, trackIds = std::move(trackIds)](library::LibraryWrite& transaction)
       { return applyAddTracksToListInTransaction(library, transaction, listId, trackIds); });
   }
 
-  Result<LibraryWriter::AddToListAuthoringResult> LibraryWriter::Impl::applyAddTracksToList(
+  async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> LibraryWriter::Impl::applyAddTracksToList(
+    LibraryMutationService::Submission submission,
     ListId const listId,
-    BoundTrackTargets const& targets)
+    BoundTrackTargets targets)
   {
-    auto start = mutationService.beginAuthoringMutation(targets);
-    auto result = AddToListAuthoringResult{.status = start.status};
-
-    if (!start.optMutation)
-    {
-      return result;
-    }
-
-    auto executionRes = start.optMutation->execute(
-      [this, listId, &targets](library::LibraryWrite& transaction) -> Result<OperationOutcome<AddTracksToListReply>>
+    return executeBoundTrackAuthoringAsync<AddTracksToListReply>(
+      std::move(submission),
+      std::move(targets),
+      "Add tracks to list",
+      [this, listId](library::LibraryWrite& transaction,
+                     std::span<TrackId const> trackIds) -> Result<OperationOutcome<AddTracksToListReply>>
       {
-        auto replyRes = applyAddTracksToListInTransaction(library, transaction, listId, targets.trackIds());
+        auto replyRes = applyAddTracksToListInTransaction(library, transaction, listId, trackIds);
 
         if (!replyRes)
         {
@@ -2118,61 +2336,40 @@ namespace ao::rt
           .value = std::move(reply),
           .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
         };
-      },
-      "Add tracks to list");
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    result.reply = std::move(executionRes->value);
-
-    if (!executionRes->optCommittedRevision)
-    {
-      result.status = TrackAuthoringStatus::NoOp;
-      return result;
-    }
-
-    result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
-    return result;
+      });
   }
 
-  Result<RemoveTracksFromListReply> LibraryWriter::Impl::previewRemoveTracksFromList(
+  async::Task<Result<RemoveTracksFromListReply>> LibraryWriter::Impl::previewRemoveTracksFromList(
+    LibraryMutationService::Submission submission,
     ListId const listId,
-    std::span<TrackId const> const trackIds)
+    std::vector<TrackId> trackIds)
   {
-    auto workRes = applyInteractivePreview(
-      mutationService,
-      [this, listId, trackIds](library::LibraryWrite& transaction)
+    auto workRes = co_await applyInteractivePreviewAsync(
+      std::move(submission),
+      [this, listId, trackIds = std::move(trackIds)](library::LibraryWrite& transaction)
       { return applyRemoveTracksFromListInTransaction(library, transaction, listId, trackIds); });
 
     if (!workRes)
     {
-      return std::unexpected{workRes.error()};
+      co_return std::unexpected{workRes.error()};
     }
 
-    return std::move(workRes->reply);
+    co_return std::move(workRes->reply);
   }
 
-  Result<LibraryWriter::RemoveFromListAuthoringResult> LibraryWriter::Impl::applyRemoveTracksFromList(
+  async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>> LibraryWriter::Impl::applyRemoveTracksFromList(
+    LibraryMutationService::Submission submission,
     ListId const listId,
-    BoundTrackTargets const& targets)
+    BoundTrackTargets targets)
   {
-    auto start = mutationService.beginAuthoringMutation(targets);
-    auto result = RemoveFromListAuthoringResult{.status = start.status};
-
-    if (!start.optMutation)
-    {
-      return result;
-    }
-
-    auto executionRes = start.optMutation->execute(
-      [this, listId, &targets](
-        library::LibraryWrite& transaction) -> Result<OperationOutcome<RemoveTracksFromListReply>>
+    return executeBoundTrackAuthoringAsync<RemoveTracksFromListReply>(
+      std::move(submission),
+      std::move(targets),
+      "Remove tracks from list",
+      [this, listId](library::LibraryWrite& transaction,
+                     std::span<TrackId const> trackIds) -> Result<OperationOutcome<RemoveTracksFromListReply>>
       {
-        auto workRes = applyRemoveTracksFromListInTransaction(library, transaction, listId, targets.trackIds());
+        auto workRes = applyRemoveTracksFromListInTransaction(library, transaction, listId, trackIds);
 
         if (!workRes)
         {
@@ -2200,77 +2397,63 @@ namespace ao::rt
           .value = std::move(work.reply),
           .changeSet = std::move(changeSet),
         };
-      },
-      "Remove tracks from list");
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    result.reply = std::move(executionRes->value);
-
-    if (!executionRes->optCommittedRevision)
-    {
-      result.status = TrackAuthoringStatus::NoOp;
-      return result;
-    }
-
-    result.status = TrackAuthoringStatus::Applied;
-    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, *executionRes->optCommittedRevision));
-    return result;
+      });
   }
 
-  Result<ListId> LibraryWriter::Impl::createList(ListDraft const& draft)
+  async::Task<Result<ListId>> LibraryWriter::Impl::createList(LibraryMutationService::Submission submission,
+                                                              ListDraft draft)
   {
-    auto executionRes =
-      executeInteractiveMutation(mutationService,
-                                 "Create list",
-                                 [&draft](library::LibraryWrite& transaction) -> Result<OperationOutcome<ListId>>
-                                 {
-                                   auto listIdRes = createListInTransaction(transaction, draft);
+    auto executionRes = co_await executeInteractiveMutationAsync(
+      std::move(submission),
+      "Create list",
+      [draft = std::move(draft)](library::LibraryWrite& transaction) -> Result<OperationOutcome<ListId>>
+      {
+        auto listIdRes = createListInTransaction(transaction, draft);
 
-                                   if (!listIdRes)
-                                   {
-                                     return std::unexpected{listIdRes.error()};
-                                   }
+        if (!listIdRes)
+        {
+          return std::unexpected{listIdRes.error()};
+        }
 
-                                   auto const listId = *listIdRes;
-                                   return Changed<ListId>{
-                                     .value = listId,
-                                     .changeSet = LibraryChangeSet{.listsUpserted = {listId}},
-                                   };
-                                 });
+        auto const listId = *listIdRes;
+        return Changed<ListId>{
+          .value = listId,
+          .changeSet = LibraryChangeSet{.listsUpserted = {listId}},
+        };
+      });
 
     if (!executionRes)
     {
-      return std::unexpected{executionRes.error()};
+      co_return std::unexpected{executionRes.error()};
     }
 
     AO_INVARIANT(executionRes->optCommittedRevision, "List creation did not commit its generated identity");
-    return executionRes->value;
+    co_return executionRes->value;
   }
 
-  Result<> LibraryWriter::Impl::previewCreateList(ListDraft const& draft)
+  async::Task<Result<>> LibraryWriter::Impl::previewCreateList(LibraryMutationService::Submission submission,
+                                                               ListDraft draft)
   {
-    auto listIdRes = applyInteractivePreview(mutationService,
-                                             [&draft](library::LibraryWrite& transaction)
-                                             { return createListInTransaction(transaction, draft); });
+    auto listIdRes =
+      co_await applyInteractivePreviewAsync(std::move(submission),
+                                            [draft = std::move(draft)](library::LibraryWrite& transaction)
+                                            { return createListInTransaction(transaction, draft); });
 
     if (!listIdRes)
     {
-      return std::unexpected{listIdRes.error()};
+      co_return std::unexpected{listIdRes.error()};
     }
 
-    return {};
+    co_return Result<>{};
   }
 
-  Result<UpdateListReply> LibraryWriter::Impl::updateList(ListDraft const& draft)
+  async::Task<Result<UpdateListReply>> LibraryWriter::Impl::updateList(LibraryMutationService::Submission submission,
+                                                                       ListDraft draft)
   {
-    auto executionRes = executeInteractiveMutation(
-      mutationService,
+    auto executionRes = co_await executeInteractiveMutationAsync(
+      std::move(submission),
       "Update list",
-      [&draft](library::LibraryWrite& transaction) -> Result<OperationOutcome<UpdateListReply>>
+      [draft = std::move(draft)](library::LibraryWrite& transaction) -> Result<OperationOutcome<UpdateListReply>>
       {
         auto replyRes = updateListInTransaction(transaction, draft);
 
@@ -2294,30 +2477,33 @@ namespace ao::rt
 
     if (!executionRes)
     {
-      return std::unexpected{executionRes.error()};
+      co_return std::unexpected{executionRes.error()};
     }
 
-    return std::move(executionRes->value);
+    co_return std::move(executionRes->value);
   }
 
-  Result<UpdateListReply> LibraryWriter::Impl::previewUpdateList(ListDraft const& draft)
+  async::Task<Result<UpdateListReply>> LibraryWriter::Impl::previewUpdateList(
+    LibraryMutationService::Submission submission,
+    ListDraft draft)
   {
-    return applyInteractivePreview(mutationService,
-                                   [&draft](library::LibraryWrite& transaction)
-                                   { return updateListInTransaction(transaction, draft); });
+    return applyInteractivePreviewAsync(std::move(submission),
+                                        [draft = std::move(draft)](library::LibraryWrite& transaction)
+                                        { return updateListInTransaction(transaction, draft); });
   }
 
-  Result<LibraryWriter::MoveOrderAuthoringResult> LibraryWriter::Impl::applyMoveListOrder(
-    BoundListOrder const& order,
-    std::span<TrackId const> const selectedTrackIds,
+  async::Task<Result<AuthoringResult<MoveListOrderReply>>> LibraryWriter::Impl::applyMoveListOrder(
+    LibraryMutationService::Submission submission,
+    BoundListOrder order,
+    std::vector<TrackId> selectedTrackIds,
     std::optional<TrackId> const optBeforeTrackId)
   {
-    auto start = mutationService.beginListOrderAuthoringMutation(order);
-    auto result = MoveOrderAuthoringResult{.status = start.status};
+    auto start = co_await LibraryMutationService::beginListOrderAuthoringMutationAsync(std::move(submission), order);
+    auto result = AuthoringResult<MoveListOrderReply>{.status = start.status};
 
     if (!start.optMutation)
     {
-      return result;
+      co_return result;
     }
 
     auto const effectiveTrackIds = order.effectiveTrackIds();
@@ -2328,7 +2514,7 @@ namespace ao::rt
     {
       if (!effectiveMembership.contains(trackId))
       {
-        return makeError(
+        co_return makeError(
           Error::Code::InvalidInput, std::format("List order selection is not in the bound source: {}", trackId));
       }
 
@@ -2347,14 +2533,14 @@ namespace ao::rt
 
     if (result.reply.selectedTrackIds.empty())
     {
-      result.status = ListOrderAuthoringStatus::NoOp;
-      return result;
+      result.status = AuthoringStatus::NoOp;
+      co_return result;
     }
 
     if (optBeforeTrackId &&
         (!effectiveMembership.contains(*optBeforeTrackId) || selectedMembership.contains(*optBeforeTrackId)))
     {
-      return makeError(Error::Code::InvalidInput, "List order anchor must be an unselected bound source track");
+      co_return makeError(Error::Code::InvalidInput, "List order anchor must be an unselected bound source track");
     }
 
     auto desiredEffectiveTrackIds = std::vector<TrackId>{};
@@ -2380,11 +2566,11 @@ namespace ao::rt
 
     if (std::ranges::equal(effectiveTrackIds, desiredEffectiveTrackIds))
     {
-      result.status = ListOrderAuthoringStatus::NoOp;
-      return result;
+      result.status = AuthoringStatus::NoOp;
+      co_return result;
     }
 
-    auto executionRes = start.optMutation->execute(
+    auto executionRes = co_await start.optMutation->executeAsync(
       [&order, &desiredEffectiveTrackIds, &result, optBeforeTrackId](
         library::LibraryWrite& transaction) -> Result<OperationOutcome<MoveListOrderReply>>
       {
@@ -2405,26 +2591,24 @@ namespace ao::rt
 
     if (!executionRes)
     {
-      return std::unexpected{executionRes.error()};
+      co_return std::unexpected{executionRes.error()};
     }
 
     result.reply = std::move(executionRes->value);
-    result.status = ListOrderAuthoringStatus::Applied;
-    return result;
+    result.status = AuthoringStatus::Applied;
+    co_return result;
   }
 
-  Result<LibraryWriter::ResetOrderAuthoringResult> LibraryWriter::Impl::applyResetListOrder(BoundListOrder const& order)
+  async::Task<Result<AuthoringResult<ResetListOrderReply>>> LibraryWriter::Impl::applyResetListOrder(
+    LibraryMutationService::Submission submission,
+    BoundListOrder order)
   {
-    auto start = mutationService.beginListOrderAuthoringMutation(order);
-    auto result = ResetOrderAuthoringResult{.status = start.status};
-
-    if (!start.optMutation)
-    {
-      return result;
-    }
-
-    auto executionRes = start.optMutation->execute(
-      [&order](library::LibraryWrite& transaction) -> Result<OperationOutcome<ResetListOrderReply>>
+    return executeBoundListOrderAuthoringAsync<ResetListOrderReply>(
+      std::move(submission),
+      std::move(order),
+      "Reset list order",
+      [](library::LibraryWrite& transaction,
+         BoundListOrder const& order) -> Result<OperationOutcome<ResetListOrderReply>>
       {
         auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, order.listId());
@@ -2457,39 +2641,19 @@ namespace ao::rt
                                             ListOrderChange{.listId = order.listId(), .operation = ListOrderReset{}},
                                           }},
         };
-      },
-      "Reset list order");
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    result.reply = std::move(executionRes->value);
-
-    if (!executionRes->optCommittedRevision)
-    {
-      result.status = ListOrderAuthoringStatus::NoOp;
-      return result;
-    }
-
-    result.status = ListOrderAuthoringStatus::Applied;
-    return result;
+      });
   }
 
-  Result<LibraryWriter::ForgetHiddenOrderAuthoringResult> LibraryWriter::Impl::applyForgetHiddenListOrder(
-    BoundListOrder const& order)
+  async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> LibraryWriter::Impl::applyForgetHiddenListOrder(
+    LibraryMutationService::Submission submission,
+    BoundListOrder order)
   {
-    auto start = mutationService.beginListOrderAuthoringMutation(order);
-    auto result = ForgetHiddenOrderAuthoringResult{.status = start.status};
-
-    if (!start.optMutation)
-    {
-      return result;
-    }
-
-    auto executionRes = start.optMutation->execute(
-      [&order](library::LibraryWrite& transaction) -> Result<OperationOutcome<ForgetHiddenListOrderReply>>
+    return executeBoundListOrderAuthoringAsync<ForgetHiddenListOrderReply>(
+      std::move(submission),
+      std::move(order),
+      "Forget hidden list order",
+      [](library::LibraryWrite& transaction,
+         BoundListOrder const& order) -> Result<OperationOutcome<ForgetHiddenListOrderReply>>
       {
         auto listWriter = transaction.lists();
         auto viewRes = requireList(listWriter, order.listId());
@@ -2538,182 +2702,93 @@ namespace ao::rt
                                             ListOrderChange{.listId = order.listId(), .operation = std::move(script)},
                                           }},
         };
-      },
-      "Forget hidden list order");
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    result.reply = std::move(executionRes->value);
-
-    if (!executionRes->optCommittedRevision)
-    {
-      result.status = ListOrderAuthoringStatus::NoOp;
-      return result;
-    }
-
-    result.status = ListOrderAuthoringStatus::Applied;
-    return result;
+      });
   }
 
-  Result<DeleteListReply> LibraryWriter::Impl::deleteList(ListId const listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryWriter::Impl::deleteList(LibraryMutationService::Submission submission,
+                                                                       ListId const listId,
+                                                                       DeleteListOptions const options)
   {
-    auto executionRes = executeInteractiveMutation(
-      mutationService,
+    return executeChangedWorkAsync<DeleteListReply>(
+      std::move(submission),
       "Delete list",
-      [this, listId, options](library::LibraryWrite& transaction) -> Result<OperationOutcome<DeleteListReply>>
-      {
-        auto workRes = applyDeleteListInTransaction(library, transaction, listId, options);
-
-        if (!workRes)
-        {
-          return std::unexpected{workRes.error()};
-        }
-
-        auto work = std::move(*workRes);
-        return Changed<DeleteListReply>{
-          .value = std::move(work.reply),
-          .changeSet = std::move(work.changeSet),
-        };
-      });
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    return std::move(executionRes->value);
+      [this, listId, options](library::LibraryWrite& transaction)
+      { return applyDeleteListInTransaction(library, transaction, listId, options); });
   }
 
-  Result<DeleteListReply> LibraryWriter::Impl::previewDeleteList(ListId const listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryWriter::Impl::previewDeleteList(
+    LibraryMutationService::Submission submission,
+    ListId const listId,
+    DeleteListOptions const options)
   {
-    auto workRes =
-      applyInteractivePreview(mutationService,
-                              [this, listId, options](library::LibraryWrite& transaction)
-                              { return applyDeleteListInTransaction(library, transaction, listId, options); });
-
-    if (!workRes)
-    {
-      return std::unexpected{workRes.error()};
-    }
-
-    return std::move(workRes->reply);
+    return previewChangedWorkAsync<DeleteListReply>(
+      std::move(submission),
+      [this, listId, options](library::LibraryWrite& transaction)
+      { return applyDeleteListInTransaction(library, transaction, listId, options); });
   }
 
-  Result<DeleteListSubtreeReply> LibraryWriter::Impl::deleteListAndDescendants(ListId const listId,
-                                                                               DeleteListOptions const options)
+  async::Task<Result<DeleteListSubtreeReply>> LibraryWriter::Impl::deleteListAndDescendants(
+    LibraryMutationService::Submission submission,
+    ListId const listId,
+    DeleteListOptions const options)
   {
-    auto executionRes = executeInteractiveMutation(
-      mutationService,
+    return executeChangedWorkAsync<DeleteListSubtreeReply>(
+      std::move(submission),
       "Delete list subtree",
-      [this, listId, options](library::LibraryWrite& transaction) -> Result<OperationOutcome<DeleteListSubtreeReply>>
-      {
-        auto workRes = applyDeleteListSubtreeInTransaction(library, transaction, listId, options);
-
-        if (!workRes)
-        {
-          return std::unexpected{workRes.error()};
-        }
-
-        auto work = std::move(*workRes);
-        return Changed<DeleteListSubtreeReply>{
-          .value = std::move(work.reply),
-          .changeSet = std::move(work.changeSet),
-        };
-      });
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    return std::move(executionRes->value);
+      [this, listId, options](library::LibraryWrite& transaction)
+      { return applyDeleteListSubtreeInTransaction(library, transaction, listId, options); });
   }
 
-  Result<DeleteListSubtreeReply> LibraryWriter::Impl::previewDeleteListAndDescendants(ListId const listId,
-                                                                                      DeleteListOptions const options)
+  async::Task<Result<DeleteListSubtreeReply>> LibraryWriter::Impl::previewDeleteListAndDescendants(
+    LibraryMutationService::Submission submission,
+    ListId const listId,
+    DeleteListOptions const options)
   {
-    auto workRes =
-      applyInteractivePreview(mutationService,
-                              [this, listId, options](library::LibraryWrite& transaction)
-                              { return applyDeleteListSubtreeInTransaction(library, transaction, listId, options); });
-
-    if (!workRes)
-    {
-      return std::unexpected{workRes.error()};
-    }
-
-    return std::move(workRes->reply);
+    return previewChangedWorkAsync<DeleteListSubtreeReply>(
+      std::move(submission),
+      [this, listId, options](library::LibraryWrite& transaction)
+      { return applyDeleteListSubtreeInTransaction(library, transaction, listId, options); });
   }
 
-  Result<DeleteTrackReply> LibraryWriter::Impl::deleteTrack(TrackId const trackId)
+  async::Task<Result<DeleteTrackReply>> LibraryWriter::Impl::deleteTrack(LibraryMutationService::Submission submission,
+                                                                         TrackId const trackId)
   {
-    auto executionRes = executeInteractiveMutation(
-      mutationService,
+    return executeChangedWorkAsync<DeleteTrackReply>(
+      std::move(submission),
       "Delete track",
-      [this, trackId](library::LibraryWrite& transaction) -> Result<OperationOutcome<DeleteTrackReply>>
-      {
-        auto workRes = applyDeleteTrackInTransaction(library, transaction, trackId);
-
-        if (!workRes)
-        {
-          return std::unexpected{workRes.error()};
-        }
-
-        auto work = std::move(*workRes);
-        return Changed<DeleteTrackReply>{
-          .value = std::move(work.reply),
-          .changeSet = std::move(work.changeSet),
-        };
-      });
-
-    if (!executionRes)
-    {
-      return std::unexpected{executionRes.error()};
-    }
-
-    return std::move(executionRes->value);
+      [this, trackId](library::LibraryWrite& transaction)
+      { return applyDeleteTrackInTransaction(library, transaction, trackId); });
   }
 
-  Result<DeleteTrackReply> LibraryWriter::Impl::previewDeleteTrack(TrackId const trackId)
+  async::Task<Result<DeleteTrackReply>> LibraryWriter::Impl::previewDeleteTrack(
+    LibraryMutationService::Submission submission,
+    TrackId const trackId)
   {
-    auto workRes = applyInteractivePreview(mutationService,
-                                           [this, trackId](library::LibraryWrite& transaction)
-                                           { return applyDeleteTrackInTransaction(library, transaction, trackId); });
-
-    if (!workRes)
-    {
-      return std::unexpected{workRes.error()};
-    }
-
-    return std::move(workRes->reply);
+    return previewChangedWorkAsync<DeleteTrackReply>(
+      std::move(submission),
+      [this, trackId](library::LibraryWrite& transaction)
+      { return applyDeleteTrackInTransaction(library, transaction, trackId); });
   }
 
-  Result<CreateTrackReply> LibraryWriter::Impl::createTrackFromFile(std::filesystem::path const& path)
+  async::Task<Result<CreateTrackReply>> LibraryWriter::Impl::createTrackFromFile(
+    LibraryMutationService::Submission submission,
+    std::filesystem::path path) const
   {
-    auto const targetRes = importTargetForPath(library, path);
+    auto preparedRes = prepareTrackImport(library, path);
 
-    if (!targetRes)
+    if (!preparedRes)
     {
-      return std::unexpected{targetRes.error()};
+      co_return std::unexpected{preparedRes.error()};
     }
 
-    auto const& target = *targetRes;
-    auto mediaTrackRes = readMediaTrack(target.fullPath);
+    auto& prepared = *preparedRes;
 
-    if (!mediaTrackRes)
-    {
-      return std::unexpected{mediaTrackRes.error()};
-    }
-
-    auto executionRes = executeInteractiveMutation(
-      mutationService,
+    auto executionRes = co_await executeInteractiveMutationAsync(
+      std::move(submission),
       "Create track",
-      [&target, &mediaTrackRes](library::LibraryWrite& transaction) -> Result<OperationOutcome<CreateTrackFacts>>
+      [&prepared](library::LibraryWrite& transaction) -> Result<OperationOutcome<CreateTrackFacts>>
       {
-        auto factsRes = applyCreateTrackInTransaction(transaction, target, *mediaTrackRes);
+        auto factsRes = applyCreateTrackInTransaction(transaction, prepared.target, prepared.mediaTrack);
 
         if (!factsRes)
         {
@@ -2730,40 +2805,36 @@ namespace ao::rt
 
     if (!executionRes)
     {
-      return std::unexpected{executionRes.error()};
+      co_return std::unexpected{executionRes.error()};
     }
 
     AO_INVARIANT(executionRes->optCommittedRevision, "Track creation did not commit its generated identity");
-    return committedCreateTrackReply(std::move(executionRes->value));
+    co_return committedCreateTrackReply(std::move(executionRes->value));
   }
 
-  Result<PreviewCreateTrackReply> LibraryWriter::Impl::previewCreateTrackFromFile(std::filesystem::path const& path)
+  async::Task<Result<PreviewCreateTrackReply>> LibraryWriter::Impl::previewCreateTrackFromFile(
+    LibraryMutationService::Submission submission,
+    std::filesystem::path path) const
   {
-    auto const targetRes = importTargetForPath(library, path);
+    auto preparedRes = prepareTrackImport(library, path);
 
-    if (!targetRes)
+    if (!preparedRes)
     {
-      return std::unexpected{targetRes.error()};
+      co_return std::unexpected{preparedRes.error()};
     }
 
-    auto const& target = *targetRes;
-    auto mediaTrackRes = readMediaTrack(target.fullPath);
+    auto& prepared = *preparedRes;
 
-    if (!mediaTrackRes)
-    {
-      return std::unexpected{mediaTrackRes.error()};
-    }
-
-    auto factsRes =
-      applyInteractivePreview(mutationService,
-                              [&target, &mediaTrackRes](library::LibraryWrite& transaction)
-                              { return applyCreateTrackInTransaction(transaction, target, *mediaTrackRes); });
+    auto factsRes = co_await applyInteractivePreviewAsync(
+      std::move(submission),
+      [&prepared](library::LibraryWrite& transaction)
+      { return applyCreateTrackInTransaction(transaction, prepared.target, prepared.mediaTrack); });
 
     if (!factsRes)
     {
-      return std::unexpected{factsRes.error()};
+      co_return std::unexpected{factsRes.error()};
     }
 
-    return previewCreateTrackReply(std::move(*factsRes));
+    co_return previewCreateTrackReply(std::move(*factsRes));
   }
 } // namespace ao::rt

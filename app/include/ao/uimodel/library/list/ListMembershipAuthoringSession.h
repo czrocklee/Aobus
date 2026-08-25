@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
@@ -38,7 +39,7 @@ namespace ao::uimodel
 
   struct ListMembershipEditResult final
   {
-    rt::TrackAuthoringStatus status = rt::TrackAuthoringStatus::NoOp;
+    rt::AuthoringStatus status = rt::AuthoringStatus::NoOp;
     ListId listId = kInvalidListId;
     std::string listName{};
     std::string tag{};
@@ -65,13 +66,13 @@ namespace ao::uimodel
     ListMembershipAuthoringSession& operator=(ListMembershipAuthoringSession&&) = delete;
 
     std::span<TrackId const> targetIds() const noexcept;
-    Result<ListMembershipEditResult> addToList(ListId listId);
-    Result<ListMembershipEditResult> removeFromList(ListId listId);
+    async::Task<Result<ListMembershipEditResult>> addToList(ListId listId);
+    async::Task<Result<ListMembershipEditResult>> removeFromList(ListId listId);
 
   private:
     struct Impl;
-    explicit ListMembershipAuthoringSession(std::unique_ptr<Impl> implPtr);
+    explicit ListMembershipAuthoringSession(std::shared_ptr<Impl> implPtr);
 
-    std::unique_ptr<Impl> _implPtr;
+    std::shared_ptr<Impl> _implPtr;
   };
 } // namespace ao::uimodel

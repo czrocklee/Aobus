@@ -100,6 +100,12 @@ namespace ao::rt::test
     return _implPtr->cv.wait_for(lock, timeout, [this] { return !_implPtr->tasks.empty(); });
   }
 
+  bool ManualExecutor::waitUntilQueuedCount(std::size_t const expected, std::chrono::milliseconds const timeout) const
+  {
+    auto lock = std::unique_lock{_implPtr->mutex};
+    return _implPtr->cv.wait_for(lock, timeout, [this, expected] { return _implPtr->tasks.size() >= expected; });
+  }
+
   void ManualExecutor::checkQueued(std::chrono::milliseconds const timeout) const
   {
     INFO("Timed out waiting for queued executor task");

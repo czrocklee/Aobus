@@ -68,7 +68,7 @@ namespace ao::rt::test
       return;
     }
 
-    auto const trackIdRes = writer.createTrackFromFile(absValidFile);
+    auto const trackIdRes = writerFixture.runTask(writer.createTrackFromFile(absValidFile));
     REQUIRE(trackIdRes);
     CHECK(mutated.empty());
     REQUIRE(inserted.size() == 1);
@@ -83,7 +83,7 @@ namespace ao::rt::test
     CHECK(optTrackView->property().uri() == "music/song.flac");
     CHECK(libraryFixture.library().manifest().reader(transaction).get("music/song.flac"));
 
-    auto const duplicateRes = writer.createTrackFromFile(absValidFile);
+    auto const duplicateRes = writerFixture.runTask(writer.createTrackFromFile(absValidFile));
     REQUIRE(!duplicateRes);
     CHECK(duplicateRes.error().code == Error::Code::Conflict);
     CHECK(duplicateRes.error().message.contains("already imported"));
@@ -104,7 +104,7 @@ namespace ao::rt::test
       return;
     }
 
-    auto const trackIdRes = writer.createTrackFromFile("relative.flac");
+    auto const trackIdRes = writerFixture.runTask(writer.createTrackFromFile("relative.flac"));
     REQUIRE(trackIdRes);
 
     auto transaction = libraryFixture.library().readTransaction();
@@ -132,7 +132,7 @@ namespace ao::rt::test
       return;
     }
 
-    auto const createdRes = writer.createTrackFromFile(mediaPath);
+    auto const createdRes = writerFixture.runTask(writer.createTrackFromFile(mediaPath));
 
     REQUIRE(createdRes);
     auto transaction = libraryFixture.library().readTransaction();
@@ -158,7 +158,7 @@ namespace ao::rt::test
 
     auto const unsupportedFile = createTextFile(libraryFixture, "unsupported.txt");
 
-    auto const trackIdRes = writer.createTrackFromFile(unsupportedFile);
+    auto const trackIdRes = writerFixture.runTask(writer.createTrackFromFile(unsupportedFile));
     REQUIRE(!trackIdRes);
     CHECK(trackIdRes.error().code == Error::Code::NotSupported);
     CHECK(mutated.empty());
@@ -174,7 +174,7 @@ namespace ao::rt::test
 
     SECTION("missing file")
     {
-      auto const trackIdRes = writer.createTrackFromFile("missing.flac");
+      auto const trackIdRes = writerFixture.runTask(writer.createTrackFromFile("missing.flac"));
       REQUIRE(!trackIdRes);
       CHECK(trackIdRes.error().code == Error::Code::NotFound);
     }
@@ -187,7 +187,7 @@ namespace ao::rt::test
         auto out = std::ofstream{outsideFile};
         out << "not audio";
       }
-      auto const trackIdRes = writer.createTrackFromFile(outsideFile);
+      auto const trackIdRes = writerFixture.runTask(writer.createTrackFromFile(outsideFile));
       REQUIRE(!trackIdRes);
       CHECK(trackIdRes.error().code == Error::Code::InvalidInput);
       CHECK(trackIdRes.error().message.contains("outside music root"));
@@ -204,7 +204,7 @@ namespace ao::rt::test
       auto const alias = libraryFixture.root() / "alias.flac";
       auto const symlink = ao::test::SymlinkFixture{outsideFile, alias, ao::test::SymlinkType::File};
 
-      auto const trackIdRes = writer.createTrackFromFile(alias);
+      auto const trackIdRes = writerFixture.runTask(writer.createTrackFromFile(alias));
       REQUIRE_FALSE(trackIdRes);
       CHECK(trackIdRes.error().code == Error::Code::InvalidInput);
       CHECK(trackIdRes.error().message.contains("outside music root"));

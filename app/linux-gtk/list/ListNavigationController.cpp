@@ -5,12 +5,14 @@
 
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
+#include "common/UiWorkflow.h"
 #include "i18n/GtkTextCatalog.h"
 #include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
@@ -60,6 +62,23 @@ namespace ao::gtk
     std::string displayedTag(std::string_view const tag)
     {
       return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
+    }
+
+    async::Task<Result<ListId>> updateListDraft(rt::Library* library, rt::ListDraft draft)
+    {
+      auto const listId = draft.listId;
+      auto result = co_await library->updateList(std::move(draft));
+      co_return std::move(result).transform([listId](rt::UpdateListReply const&) { return listId; });
+    }
+
+    async::Task<Result<ListId>> writeListDraft(rt::Library* library, rt::ListDraft draft)
+    {
+      if (draft.listId == kInvalidListId)
+      {
+        return library->createList(std::move(draft));
+      }
+
+      return updateListDraft(library, std::move(draft));
     }
   } // namespace
 
@@ -164,21 +183,7 @@ namespace ao::gtk
 
     if (_pendingSelectId != kInvalidListId)
     {
-      auto const pendingSelectId = _pendingSelectId;
-      _syncingWorkspaceSelection = true;
-      _panelPtr->selectList(pendingSelectId);
-      _syncingWorkspaceSelection = false;
-
-      if (_panelPtr->selectedListId() == pendingSelectId)
-      {
-        updateListActions(pendingSelectId);
-      }
-
-      if (notifyListSelected(pendingSelectId))
-      {
-        _pendingSelectId = kInvalidListId;
-      }
-
+      reconcilePendingSelection();
       return;
     }
 
@@ -247,6 +252,29 @@ namespace ao::gtk
     return !_callbacks.onListSelected || _callbacks.onListSelected(listId);
   }
 
+  void ListNavigationController::reconcilePendingSelection()
+  {
+    if (_pendingSelectId == kInvalidListId)
+    {
+      return;
+    }
+
+    auto const pendingSelectId = _pendingSelectId;
+    _syncingWorkspaceSelection = true;
+    _panelPtr->selectList(pendingSelectId);
+    _syncingWorkspaceSelection = false;
+
+    if (_panelPtr->selectedListId() == pendingSelectId)
+    {
+      updateListActions(pendingSelectId);
+    }
+
+    if (notifyListSelected(pendingSelectId))
+    {
+      _pendingSelectId = kInvalidListId;
+    }
+  }
+
   void ListNavigationController::handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect)
   {
     auto const state = ao::uimodel::describeListActions(listId, _panelPtr->hasListChildren(listId));
@@ -302,11 +330,8 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::OK)
         {
-          if (auto const submittedRes = submitListDraft(dialog->draft(), dialog->presentationId()); !submittedRes)
-          {
-            dialog->showError(submittedRes.error().message);
-            return;
-          }
+          submitListDraftFromDialog(*dialog, dialog->draft(), dialog->presentationId());
+          return;
         }
 
         dialog->close();
@@ -336,13 +361,8 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::OK)
         {
-          auto const presId = dialog->presentationId();
-
-          if (auto const submittedRes = submitListDraft(dialog->draft(), presId); !submittedRes)
-          {
-            dialog->showError(submittedRes.error().message);
-            return;
-          }
+          submitListDraftFromDialog(*dialog, dialog->draft(), dialog->presentationId());
+          return;
         }
 
         dialog->close();
@@ -381,11 +401,8 @@ namespace ao::gtk
           {
             if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
             {
-              if (auto const submittedRes = submitListDraft(draft, dialog->presentationId()); !submittedRes)
-              {
-                dialog->showError(submittedRes.error().message);
-                return;
-              }
+              submitListDraftFromDialog(*dialog, draft, dialog->presentationId());
+              return;
             }
           }
 
@@ -397,44 +414,50 @@ namespace ao::gtk
     }
   }
 
-  Result<ListId> ListNavigationController::submitListDraft(rt::LibraryListDraft const& draft,
+  void ListNavigationController::submitListDraftFromDialog(SmartListDialog& dialog,
+                                                           rt::ListDraft draft,
                                                            std::string presentationId)
   {
-    if (draft.listId != kInvalidListId)
+    if (!dialog.beginSubmission())
     {
-      if (auto const updateRes = _runtime.library().updateList(draft); !updateRes)
+      return;
+    }
+
+    auto presentResult = dialog.guardPresentationCallback(
+      [dialogHandle = &dialog](Result<ListId> submittedRes)
       {
-        APP_LOG_ERROR("Failed to update list: {}", updateRes.error().message);
-        return std::unexpected{updateRes.error()};
-      }
+        if (!submittedRes)
+        {
+          APP_LOG_ERROR("Failed to save list: {}", submittedRes.error().message);
+          dialogHandle->completeSubmission();
+          dialogHandle->showError(submittedRes.error().message);
+          return;
+        }
 
-      _pendingSelectId = draft.listId;
+        dialogHandle->close();
+      });
+    spawnUiTask(_runtime.async(),
+                _tasks,
+                *this,
+                "save list",
+                writeListDraft(&_runtime.library(), std::move(draft)),
+                [presentationId = std::move(presentationId), presentResult = std::move(presentResult)](
+                  ListNavigationController* owner, Result<ListId> submittedRes) mutable
+                {
+                  if (submittedRes)
+                  {
+                    owner->_pendingSelectId = *submittedRes;
 
-      if (_callbacks.onListPresentationSaved)
-      {
-        _callbacks.onListPresentationSaved(draft.listId, std::move(presentationId));
-      }
+                    if (owner->_callbacks.onListPresentationSaved)
+                    {
+                      owner->_callbacks.onListPresentationSaved(*submittedRes, std::move(presentationId));
+                    }
 
-      return draft.listId;
-    }
+                    owner->reconcilePendingSelection();
+                  }
 
-    auto const listRes = _runtime.library().createList(draft);
-
-    if (!listRes)
-    {
-      APP_LOG_ERROR("Failed to create list: {}", listRes.error().message);
-      return std::unexpected{listRes.error()};
-    }
-
-    auto const newListId = *listRes;
-    _pendingSelectId = newListId;
-
-    if (_callbacks.onListPresentationSaved)
-    {
-      _callbacks.onListPresentationSaved(newListId, std::move(presentationId));
-    }
-
-    return newListId;
+                  presentResult(std::move(submittedRes));
+                });
   }
 
   void ListNavigationController::handleEditListActivated()
@@ -468,19 +491,26 @@ namespace ao::gtk
       return;
     }
 
-    auto const previewRes = _runtime.library().previewDeleteList(listId);
+    spawnUiTask(_runtime.async(),
+                _tasks,
+                *this,
+                "preview list deletion",
+                _runtime.library().previewDeleteList(listId),
+                [listId](ListNavigationController* owner, Result<rt::DeleteListReply> previewRes)
+                {
+                  if (!previewRes)
+                  {
+                    owner->showDeleteError(listId, previewRes.error().message);
+                    return;
+                  }
 
-    if (!previewRes)
-    {
-      showDeleteError(listId, previewRes.error().message);
-      return;
-    }
-
-    presentDeleteConfirmation(listId,
-                              false,
-                              std::string{_gtkTextCatalog.text(GtkTextId::ListDeleteQuestionTitle)},
-                              _gtkTextCatalog.deleteListQuestion(previewRes->name),
-                              previewRes->optTagImpact);
+                  owner->presentDeleteConfirmation(
+                    listId,
+                    false,
+                    std::string{owner->_gtkTextCatalog.text(GtkTextId::ListDeleteQuestionTitle)},
+                    owner->_gtkTextCatalog.deleteListQuestion(previewRes->name),
+                    previewRes->optTagImpact);
+                });
   }
 
   void ListNavigationController::handleDeleteListSubtreeActivated()
@@ -492,29 +522,36 @@ namespace ao::gtk
       return;
     }
 
-    auto const previewRes = _runtime.library().previewDeleteListAndDescendants(listId);
+    spawnUiTask(_runtime.async(),
+                _tasks,
+                *this,
+                "preview list subtree deletion",
+                _runtime.library().previewDeleteListAndDescendants(listId),
+                [listId](ListNavigationController* owner, Result<rt::DeleteListSubtreeReply> previewRes)
+                {
+                  if (!previewRes)
+                  {
+                    owner->showDeleteError(listId, previewRes.error().message);
+                    return;
+                  }
 
-    if (!previewRes)
-    {
-      showDeleteError(listId, previewRes.error().message);
-      return;
-    }
+                  auto entries = std::string{};
 
-    auto entries = std::string{};
+                  for (auto const& list : previewRes->deletedLists)
+                  {
+                    entries.append(std::format("• {} ({})\n", list.name, list.listId));
+                  }
 
-    for (auto const& list : previewRes->deletedLists)
-    {
-      entries.append(std::format("• {} ({})\n", list.name, list.listId));
-    }
-
-    auto message = _gtkTextCatalog.deleteSubtreeQuestion(previewRes->deletedLists.size(), entries);
-    auto optTagImpact = previewRes->deletedLists.empty() ? std::optional<rt::DeleteListReply::TagImpact>{}
-                                                         : previewRes->deletedLists.front().optTagImpact;
-    presentDeleteConfirmation(listId,
-                              true,
-                              std::string{_gtkTextCatalog.text(GtkTextId::ListDeleteSubtreeTitle)},
-                              std::move(message),
-                              std::move(optTagImpact));
+                  auto message = owner->_gtkTextCatalog.deleteSubtreeQuestion(previewRes->deletedLists.size(), entries);
+                  auto optTagImpact = previewRes->deletedLists.empty() ? std::optional<rt::DeleteListReply::TagImpact>{}
+                                                                       : previewRes->deletedLists.front().optTagImpact;
+                  owner->presentDeleteConfirmation(
+                    listId,
+                    true,
+                    std::string{owner->_gtkTextCatalog.text(GtkTextId::ListDeleteSubtreeTitle)},
+                    std::move(message),
+                    std::move(optTagImpact));
+                });
   }
 
   void ListNavigationController::presentDeleteConfirmation(ListId const listId,
@@ -596,19 +633,35 @@ namespace ao::gtk
                                                   bool const removeWritableTag)
   {
     auto const options = rt::DeleteListOptions{.removeWritableTagFromTracks = removeWritableTag};
-    auto result = deleteDescendants
-                    ? _runtime.library()
-                        .deleteListAndDescendants(listId, options)
-                        .transform([](rt::DeleteListSubtreeReply const&) {})
-                    : _runtime.library().deleteList(listId, options).transform([](rt::DeleteListReply const&) {});
-
-    if (!result)
+    auto complete = [listId](ListNavigationController* owner, auto result)
     {
-      showDeleteError(listId, result.error().message);
+      if (!result)
+      {
+        owner->showDeleteError(listId, result.error().message);
+        return;
+      }
+
+      owner->_pendingSelectId = rt::kAllTracksListId;
+      owner->reconcilePendingSelection();
+    };
+
+    if (deleteDescendants)
+    {
+      spawnUiTask(_runtime.async(),
+                  _tasks,
+                  *this,
+                  "delete list subtree",
+                  _runtime.library().deleteListAndDescendants(listId, options),
+                  complete);
       return;
     }
 
-    _pendingSelectId = rt::kAllTracksListId;
+    spawnUiTask(_runtime.async(),
+                _tasks,
+                *this,
+                "delete list",
+                _runtime.library().deleteList(listId, options),
+                std::move(complete));
   }
 
   void ListNavigationController::showDeleteError(ListId const listId, std::string_view const message)

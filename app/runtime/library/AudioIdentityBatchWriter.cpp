@@ -3,13 +3,13 @@
 
 #include "AudioIdentityBatchWriter.h"
 
+#include "AudioIdentityIndexer.h"
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackWriter.h>
-#include <ao/rt/library/AudioIdentityIndexer.h>
 
 #include <expected>
 #include <span>

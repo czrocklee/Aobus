@@ -9,9 +9,13 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/library/LibraryMutationTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/LibraryWrite.h>
@@ -25,6 +29,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -35,14 +40,15 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ao::rt::test
 {
   namespace
   {
-    InlineExecutor& stateOnlyLibraryExecutor()
+    async::LoopExecutor& stateOnlyLibraryExecutorInstance()
     {
-      static thread_local auto executor = InlineExecutor{};
+      static thread_local auto executor = async::LoopExecutor{};
       return executor;
     }
   } // namespace
@@ -103,26 +109,20 @@ namespace ao::rt::test
     std::filesystem::copy_file(sourcePath, destinationPath, std::filesystem::copy_options::overwrite_existing);
 
     auto& writer = runtime.library().writer();
-    auto createRes = writer.createTrackFromFile(destinationPath);
+    auto createRes = settlePublication
+                       ? runRuntimeTask(runtime, writer.createTrackFromFile(destinationPath), settlePublication)
+                       : runRuntimeTask(runtime, writer.createTrackFromFile(destinationPath));
     REQUIRE(createRes);
     auto const trackId = createRes->trackId;
-
-    if (settlePublication)
-    {
-      settlePublication();
-    }
 
     auto bindingRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
     REQUIRE(bindingRes);
     auto targets = std::move(*bindingRes);
-    auto patchRes = writer.updateMetadata(targets, metadataPatch(spec));
+    auto patchRes = settlePublication
+                      ? runRuntimeTask(runtime, writer.updateMetadata(targets, metadataPatch(spec)), settlePublication)
+                      : runRuntimeTask(runtime, writer.updateMetadata(targets, metadataPatch(spec)));
     REQUIRE(patchRes);
-    REQUIRE((patchRes->status == TrackAuthoringStatus::Applied || patchRes->status == TrackAuthoringStatus::NoOp));
-
-    if (settlePublication)
-    {
-      settlePublication();
-    }
+    REQUIRE((patchRes->status == AuthoringStatus::Applied || patchRes->status == AuthoringStatus::NoOp));
 
     if (!spec.tags.empty())
     {
@@ -131,14 +131,11 @@ namespace ao::rt::test
         targets = *patchRes->optNextTargets;
       }
 
-      auto tagRes = writer.editTags(targets, spec.tags, std::span<std::string const>{});
+      auto tagRes = settlePublication
+                      ? runRuntimeTask(runtime, writer.editTags(targets, spec.tags, {}), settlePublication)
+                      : runRuntimeTask(runtime, writer.editTags(targets, spec.tags, {}));
       REQUIRE(tagRes);
-      REQUIRE((tagRes->status == TrackAuthoringStatus::Applied || tagRes->status == TrackAuthoringStatus::NoOp));
-
-      if (settlePublication)
-      {
-        settlePublication();
-      }
+      REQUIRE((tagRes->status == AuthoringStatus::Applied || tagRes->status == AuthoringStatus::NoOp));
     }
 
     REQUIRE(spec.coverArtId == kInvalidResourceId);
@@ -147,7 +144,8 @@ namespace ao::rt::test
 
   void updateRuntimeTrack(AppRuntime& runtime,
                           TrackId const trackId,
-                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater)
+                          compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater,
+                          compat::MoveOnlyFunction<void()> settlePublication)
   {
     auto spec = library::test::TrackSpec{};
     {
@@ -162,9 +160,13 @@ namespace ao::rt::test
     REQUIRE(spec.coverArtId == kInvalidResourceId);
     auto bindingRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
     REQUIRE(bindingRes);
-    auto result = runtime.library().writer().updateMetadata(*bindingRes, metadataPatch(spec));
+    auto result =
+      settlePublication
+        ? runRuntimeTask(
+            runtime, runtime.library().writer().updateMetadata(*bindingRes, metadataPatch(spec)), settlePublication)
+        : runRuntimeTask(runtime, runtime.library().writer().updateMetadata(*bindingRes, metadataPatch(spec)));
     REQUIRE(result);
-    REQUIRE((result->status == TrackAuthoringStatus::Applied || result->status == TrackAuthoringStatus::NoOp));
+    REQUIRE((result->status == AuthoringStatus::Applied || result->status == AuthoringStatus::NoOp));
   }
 
   struct MusicLibraryFixture::Impl final
@@ -213,14 +215,20 @@ namespace ao::rt::test
 
   LibraryChanges makeStateOnlyLibraryChanges(std::uint64_t const lastPublishedRevision)
   {
-    return LibraryChanges{stateOnlyLibraryExecutor(), lastPublishedRevision, "state-only-test-library"};
+    return LibraryChanges{stateOnlyLibraryExecutorInstance(), lastPublishedRevision, "state-only-test-library"};
   }
 
   LibraryChanges makeStateOnlyLibraryChanges(library::MusicLibrary const& storage)
   {
     auto const transaction = storage.readTransaction();
-    return LibraryChanges{
-      stateOnlyLibraryExecutor(), storage.libraryRevision(transaction), utility::pathToUtf8(storage.databasePath())};
+    return LibraryChanges{stateOnlyLibraryExecutorInstance(),
+                          storage.libraryRevision(transaction),
+                          utility::pathToUtf8(storage.databasePath())};
+  }
+
+  async::Executor& stateOnlyLibraryExecutor()
+  {
+    return stateOnlyLibraryExecutorInstance();
   }
 
   LibraryChanges makeLibraryChanges(async::Executor& executor, std::uint64_t const lastPublishedRevision)
@@ -239,12 +247,14 @@ namespace ao::rt::test
     TrackId addTrackAndPublishImpl(library::MusicLibrary& storage,
                                    LibraryChanges& changes,
                                    library::test::TrackSpec const& spec,
-                                   bool const libraryReset)
+                                   bool const libraryReset,
+                                   async::Executor& executor)
     {
-      auto executor = InlineExecutor{};
-      auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(storage), changes};
-      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-      auto executionRes = mutation.execute(
+      auto asyncRuntime = async::Runtime{executor};
+      auto mutationService = LibraryMutationService{
+        asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(storage), changes};
+      auto task = executeInteractiveMutation(
+        mutationService.captureSubmission(),
         [&storage, &spec, libraryReset](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
         {
           auto const trackId = library::test::addTrackWithUniqueFixtureUri(storage, write, spec);
@@ -253,6 +263,7 @@ namespace ao::rt::test
             .changeSet = LibraryChangeSet{.libraryReset = libraryReset, .tracksInserted = {trackId}},
           };
         });
+      auto executionRes = runTestTask(asyncRuntime, executor, std::move(task));
       REQUIRE(executionRes);
       REQUIRE(executionRes->optCommittedRevision);
       return executionRes->value;
@@ -261,22 +272,24 @@ namespace ao::rt::test
 
   TrackId addTrackAndPublish(library::MusicLibrary& storage,
                              LibraryChanges& changes,
-                             library::test::TrackSpec const& spec)
+                             library::test::TrackSpec const& spec,
+                             async::Executor& executor)
   {
-    return addTrackAndPublishImpl(storage, changes, spec, false);
+    return addTrackAndPublishImpl(storage, changes, spec, false, executor);
   }
 
   TrackId addTrackAndPublishReset(library::MusicLibrary& storage,
                                   LibraryChanges& changes,
-                                  library::test::TrackSpec const& spec)
+                                  library::test::TrackSpec const& spec,
+                                  async::Executor& executor)
   {
-    return addTrackAndPublishImpl(storage, changes, spec, true);
+    return addTrackAndPublishImpl(storage, changes, spec, true, executor);
   }
 
   struct LibraryWriterFixture::Impl final
   {
-    Impl(library::MusicLibrary& storageValue, LibraryChanges& changesValue)
-      : asyncRuntime{executor}, storage{storageValue}, changes{changesValue}
+    Impl(library::MusicLibrary& storageValue, LibraryChanges& changesValue, async::Executor& executorValue)
+      : executor{executorValue}, asyncRuntime{executor}, storage{storageValue}, changes{changesValue}
     {
     }
 
@@ -302,15 +315,18 @@ namespace ao::rt::test
       return *libraryPtr;
     }
 
-    InlineExecutor executor;
+    async::Executor& executor;
     async::Runtime asyncRuntime;
     library::MusicLibrary& storage;
     LibraryChanges& changes;
     std::unique_ptr<Library> libraryPtr;
+    std::uint64_t nextFixtureTrack = 0;
   };
 
-  LibraryWriterFixture::LibraryWriterFixture(library::MusicLibrary& storage, LibraryChanges& changes)
-    : _implPtr{std::make_unique<Impl>(storage, changes)}
+  LibraryWriterFixture::LibraryWriterFixture(library::MusicLibrary& storage,
+                                             LibraryChanges& changes,
+                                             async::Executor& executor)
+    : _implPtr{std::make_unique<Impl>(storage, changes, executor)}
   {
   }
 
@@ -326,9 +342,49 @@ namespace ao::rt::test
     return _implPtr->ensureLibrary().writer();
   }
 
+  async::Runtime& LibraryWriterFixture::runtime()
+  {
+    return _implPtr->asyncRuntime;
+  }
+
   void LibraryWriterFixture::releaseLibrary()
   {
     _implPtr->libraryPtr.reset();
+  }
+
+  TrackId LibraryWriterFixture::addTrack(library::test::TrackSpec const& spec)
+  {
+    auto sourcePath = std::filesystem::path{spec.uri};
+
+    if (sourcePath.is_relative())
+    {
+      sourcePath = _implPtr->storage.rootPath() / sourcePath;
+    }
+
+    if (!std::filesystem::is_regular_file(sourcePath))
+    {
+      sourcePath = audio::test::requireAudioFixture("basic_metadata.flac");
+    }
+
+    auto const relativePath =
+      std::filesystem::path{".aobus-test"} /
+      std::format("fixture-track-{}{}", _implPtr->nextFixtureTrack++, sourcePath.extension().string());
+    auto const destinationPath = _implPtr->storage.rootPath() / relativePath;
+    std::filesystem::create_directories(destinationPath.parent_path());
+    std::filesystem::copy_file(sourcePath, destinationPath, std::filesystem::copy_options::overwrite_existing);
+
+    auto createRes = runTask(writer().createTrackFromFile(destinationPath));
+    REQUIRE(createRes);
+    auto const trackId = createRes->trackId;
+    REQUIRE(updateMetadata(std::array{trackId}, metadataPatch(spec)));
+
+    if (!spec.tags.empty())
+    {
+      REQUIRE(editTags(std::array{trackId}, spec.tags, {}));
+    }
+
+    REQUIRE(spec.coverArtId == kInvalidResourceId);
+    return trackId;
   }
 
   BoundTrackTargets LibraryWriterFixture::bind(std::span<TrackId const> const trackIds)
@@ -346,7 +402,7 @@ namespace ao::rt::test
       return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeRes = _implPtr->ensureLibrary().writer().updateMetadata(*bindingRes, patch);
+    auto outcomeRes = runTask(_implPtr->ensureLibrary().writer().updateMetadata(*bindingRes, patch));
 
     if (!outcomeRes)
     {
@@ -355,11 +411,11 @@ namespace ao::rt::test
 
     switch (outcomeRes->status)
     {
-      case TrackAuthoringStatus::Applied:
-      case TrackAuthoringStatus::NoOp: return std::move(outcomeRes->reply);
-      case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
-      case TrackAuthoringStatus::Unavailable:
-        return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
+      case AuthoringStatus::Applied:
+      case AuthoringStatus::NoOp: return std::move(outcomeRes->reply);
+      case AuthoringStatus::Busy: return makeError(Error::Code::ResourceBusy, "Track authoring is busy");
+      case AuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
+      case AuthoringStatus::Unavailable: return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
     }
 
     return makeError(Error::Code::InvalidState, "Unknown track authoring status");
@@ -376,7 +432,10 @@ namespace ao::rt::test
       return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeRes = _implPtr->ensureLibrary().writer().editTags(*bindingRes, tagsToAdd, tagsToRemove);
+    auto outcomeRes = runTask(
+      _implPtr->ensureLibrary().writer().editTags(*bindingRes,
+                                                  std::vector<std::string>{tagsToAdd.begin(), tagsToAdd.end()},
+                                                  std::vector<std::string>{tagsToRemove.begin(), tagsToRemove.end()}));
 
     if (!outcomeRes)
     {
@@ -385,11 +444,11 @@ namespace ao::rt::test
 
     switch (outcomeRes->status)
     {
-      case TrackAuthoringStatus::Applied:
-      case TrackAuthoringStatus::NoOp: return std::move(outcomeRes->reply);
-      case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
-      case TrackAuthoringStatus::Unavailable:
-        return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
+      case AuthoringStatus::Applied:
+      case AuthoringStatus::NoOp: return std::move(outcomeRes->reply);
+      case AuthoringStatus::Busy: return makeError(Error::Code::ResourceBusy, "Track authoring is busy");
+      case AuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
+      case AuthoringStatus::Unavailable: return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
     }
 
     return makeError(Error::Code::InvalidState, "Unknown track authoring status");

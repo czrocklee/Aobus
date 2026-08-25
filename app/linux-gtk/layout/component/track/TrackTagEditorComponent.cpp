@@ -3,6 +3,7 @@
 
 #include "TrackComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
+#include "common/UiWorkflow.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
@@ -10,6 +11,8 @@
 #include "tag/TagEditController.h"
 #include "tag/TagEditor.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
@@ -26,8 +29,8 @@
 #include <sigc++/scoped_connection.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
-#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,6 +46,7 @@ namespace ao::gtk::layout
       TrackTagEditorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _tagEditor{ctx.dependencies.textCatalog, ctx.runtime.textOrderingPolicy()}
         , _textCatalog{ctx.dependencies.textCatalog}
+        , _runtime{ctx.runtime}
         , _library{ctx.runtime.library()}
         , _notifications{ctx.runtime.notifications()}
         , _tagEditController{ctx.dependencies.tagEditController}
@@ -57,14 +61,17 @@ namespace ao::gtk::layout
         _tagEditor.signalTagsChanged().connect(
           [this](auto const& toAdd, auto const& toRemove)
           {
+            auto tagsToAdd = std::vector<std::string>{toAdd.begin(), toAdd.end()};
+            auto tagsToRemove = std::vector<std::string>{toRemove.begin(), toRemove.end()};
+
             if (_tagEditController != nullptr)
             {
-              _tagEditController->submitTagChanges(
-                TrackSelection{.listId = kInvalidListId, .selectedIds = _currentTrackIds}, toAdd, toRemove);
+              auto const selection = TrackSelection{.listId = kInvalidListId, .selectedIds = _currentTrackIds};
+              _tagEditController->submitTagChanges(selection, std::move(tagsToAdd), std::move(tagsToRemove));
             }
             else
             {
-              submitTagsWithoutController(toAdd, toRemove);
+              submitTagsWithoutController(std::move(tagsToAdd), std::move(tagsToRemove));
             }
           });
       }
@@ -78,8 +85,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _tagEditor; }
 
     private:
-      void submitTagsWithoutController(std::span<std::string const> tagsToAdd,
-                                       std::span<std::string const> tagsToRemove)
+      void submitTagsWithoutController(std::vector<std::string> tagsToAdd, std::vector<std::string> tagsToRemove)
       {
         if (_tagEditSessionPtr == nullptr || !std::ranges::equal(_tagEditSessionPtr->targetIds(), _currentTrackIds))
         {
@@ -94,10 +100,23 @@ namespace ao::gtk::layout
           }
 
           _tagEditSessionPtr = std::move(*sessionRes);
+          ++_tagEditSessionGeneration;
         }
 
-        auto const result = uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, tagsToAdd, tagsToRemove);
+        auto const sessionGeneration = _tagEditSessionGeneration;
+        auto submission =
+          uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove));
+        spawnUiTask(_runtime.async(),
+                    _tasks,
+                    *this,
+                    "tag edit",
+                    std::move(submission),
+                    [sessionGeneration](TrackTagEditorComponent* owner, Result<uimodel::TagEditResult> result)
+                    { owner->handleTagEditResult(std::move(result), sessionGeneration); });
+      }
 
+      void handleTagEditResult(Result<uimodel::TagEditResult> result, std::uint64_t const sessionGeneration)
+      {
         if (!result)
         {
           APP_LOG_ERROR("Tag edit failed: {}", result.error().message);
@@ -106,17 +125,28 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (result->status == rt::TrackAuthoringStatus::Stale ||
-            result->status == rt::TrackAuthoringStatus::Unavailable)
+        if (result->status == rt::AuthoringStatus::Busy)
+        {
+          _notifications.post(
+            rt::NotificationSeverity::Warning, result->notificationText, rt::NotificationLifetime::transient());
+          return;
+        }
+
+        if (result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable)
         {
           APP_LOG_ERROR("Tag edit failed: {}", result->notificationText);
           _notifications.post(
             rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
-          _tagEditSessionPtr.reset();
+
+          if (_tagEditSessionGeneration == sessionGeneration)
+          {
+            _tagEditSessionPtr.reset();
+          }
+
           return;
         }
 
-        if (result->status == rt::TrackAuthoringStatus::Applied)
+        if (result->status == rt::AuthoringStatus::Applied)
         {
           _notifications.post(
             rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
@@ -128,6 +158,7 @@ namespace ao::gtk::layout
         if (!std::ranges::equal(_currentTrackIds, snap.trackIds))
         {
           _tagEditSessionPtr.reset();
+          ++_tagEditSessionGeneration;
         }
 
         _currentTrackIds = snap.trackIds;
@@ -137,12 +168,15 @@ namespace ao::gtk::layout
 
       TagEditor _tagEditor;
       uimodel::PresentationTextCatalog _textCatalog;
+      rt::AppRuntime& _runtime;
       rt::Library& _library;
       rt::NotificationService& _notifications;
       TagEditController* _tagEditController;
       std::unique_ptr<uimodel::TrackAuthoringSession> _tagEditSessionPtr;
+      std::uint64_t _tagEditSessionGeneration = 0;
       std::vector<TrackId> _currentTrackIds;
       sigc::scoped_connection _scopeConn;
+      async::LifetimeScope _tasks;
     };
 
     std::unique_ptr<LayoutComponent> createTrackTagEditor(LayoutBuildContext& ctx, LayoutNode const& node)

@@ -135,13 +135,13 @@ namespace ao::uimodel
 
   // The draft owns its strings, so they are taken by value and moved in: a
   // caller holding a temporary pays no copy at all.
-  rt::LibraryListDraft makeSmartListDraft(ListId parentListId,
-                                          ListId editListId,
-                                          std::string name,
-                                          std::string description,
-                                          std::string expression)
+  rt::ListDraft makeSmartListDraft(ListId parentListId,
+                                   ListId editListId,
+                                   std::string name,
+                                   std::string description,
+                                   std::string expression)
   {
-    auto draft = rt::LibraryListDraft{};
+    auto draft = rt::ListDraft{};
     draft.parentId = parentListId;
     draft.listId = editListId;
     draft.name = std::move(name);

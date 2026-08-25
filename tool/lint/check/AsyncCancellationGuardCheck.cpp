@@ -4,14 +4,17 @@
 #include "check/AsyncCancellationGuardCheck.h"
 
 #include <clang/AST/ASTTypeTraits.h>
+#include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/StmtCXX.h>
+#include <clang/AST/Type.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/OperatorKinds.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
 #include <llvm/Support/Casting.h>
@@ -24,16 +27,9 @@ namespace clang::tidy::readability
 {
   namespace
   {
-    bool isStdExceptionCatch(CXXCatchStmt const* catchStmt)
+    bool isNamedStdRecord(QualType type, char const* const name)
     {
-      auto const* exceptionDecl = catchStmt->getExceptionDecl();
-
-      if (exceptionDecl == nullptr)
-      {
-        return false;
-      }
-
-      auto const type = exceptionDecl->getType().getNonReferenceType().getUnqualifiedType().getCanonicalType();
+      type = type.getNonReferenceType().getUnqualifiedType().getCanonicalType();
       auto const* record = type->getAsCXXRecordDecl();
 
       if (record == nullptr)
@@ -42,7 +38,25 @@ namespace clang::tidy::readability
       }
 
       auto const* identifier = record->getIdentifier();
-      return identifier != nullptr && identifier->getName() == "exception" && record->isInStdNamespace();
+      auto const* context = record->getDeclContext();
+
+      while (auto const* namespaceDecl = llvm::dyn_cast_or_null<NamespaceDecl>(context))
+      {
+        if (namespaceDecl->isStdNamespace())
+        {
+          return identifier != nullptr && identifier->getName() == name;
+        }
+
+        context = namespaceDecl->getParent();
+      }
+
+      return false;
+    }
+
+    bool isStdExceptionCatch(CXXCatchStmt const* catchStmt)
+    {
+      auto const* exceptionDecl = catchStmt->getExceptionDecl();
+      return exceptionDecl != nullptr && isNamedStdRecord(exceptionDecl->getType(), "exception");
     }
 
     bool isBroadCatch(CXXCatchStmt const* catchStmt)
@@ -136,6 +150,45 @@ namespace clang::tidy::readability
              hasValidGuardArguments(call, catchStmt);
     }
 
+    bool isStdExceptionPtr(VarDecl const& variable)
+    {
+      return isNamedStdRecord(variable.getType(), "exception_ptr");
+    }
+
+    VarDecl const* currentExceptionCaptureStorage(Stmt const* stmt,
+                                                  CXXCatchStmt const* catchStmt,
+                                                  SourceManager const& sourceManager)
+    {
+      auto const* assignment = llvm::dyn_cast_or_null<CXXOperatorCallExpr>(unwrapSingleExpression(stmt));
+
+      if (assignment == nullptr || assignment->getOperator() != OO_Equal || assignment->getNumArgs() != 2)
+      {
+        return nullptr;
+      }
+
+      auto const* storageRef = asDeclRef(assignment->getArg(0));
+      auto const* storage = storageRef != nullptr ? llvm::dyn_cast<VarDecl>(storageRef->getDecl()) : nullptr;
+      auto const* capture = unwrapSingleExpression(assignment->getArg(1));
+      auto const* callee = capture != nullptr ? capture->getDirectCallee() : nullptr;
+
+      if (storage == nullptr || !isStdExceptionPtr(*storage) || callee == nullptr ||
+          callee->getQualifiedNameAsString() != "std::current_exception")
+      {
+        return nullptr;
+      }
+
+      auto const storageLocation = sourceManager.getExpansionLoc(storage->getBeginLoc());
+      auto const catchLocation = sourceManager.getExpansionLoc(catchStmt->getBeginLoc());
+
+      if (!storageLocation.isValid() || !catchLocation.isValid() ||
+          !sourceManager.isBeforeInTranslationUnit(storageLocation, catchLocation))
+      {
+        return nullptr;
+      }
+
+      return storage;
+    }
+
     bool isNonEmptyCompound(Stmt const* stmt)
     {
       auto const* compound = llvm::dyn_cast_or_null<CompoundStmt>(stmt);
@@ -171,7 +224,7 @@ namespace clang::tidy::readability
              referencesCatchVariable(call->getArg(0), exceptionDecl);
     }
 
-    bool startsWithCancellationHandling(CXXCatchStmt const* catchStmt)
+    bool startsWithCancellationHandling(CXXCatchStmt const* catchStmt, SourceManager const& sourceManager)
     {
       auto const* body = llvm::dyn_cast_or_null<CompoundStmt>(catchStmt->getHandlerBlock());
 
@@ -181,7 +234,9 @@ namespace clang::tidy::readability
       }
 
       auto const* firstStmt = *body->body_begin();
-      return isCancellationGuardCall(firstStmt, catchStmt) || isCancellationClassifier(catchStmt, firstStmt);
+      return isCancellationGuardCall(firstStmt, catchStmt) ||
+             currentExceptionCaptureStorage(firstStmt, catchStmt, sourceManager) != nullptr ||
+             isCancellationClassifier(catchStmt, firstStmt);
     }
 
     FunctionDecl const* nearestEnclosingFunction(ASTContext& context, CXXCatchStmt const* catchStmt)
@@ -243,13 +298,13 @@ namespace clang::tidy::readability
       return;
     }
 
-    if (startsWithCancellationHandling(catchStmt))
+    if (startsWithCancellationHandling(catchStmt, sm))
     {
       return;
     }
 
     diag(loc,
-         "broad catch handler in a coroutine must first rethrow cancellation or "
-         "exhaustively classify it before handling other exceptions");
+         "broad catch handler in a coroutine must first rethrow, defer, or "
+         "exhaustively classify cancellation before handling other exceptions");
   }
 } // namespace clang::tidy::readability

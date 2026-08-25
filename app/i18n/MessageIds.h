@@ -128,6 +128,7 @@ namespace ao::i18n::detail
     {.id = MessageId::NotificationGroupedInfo, .key = "notification_grouped_info"},
     {.id = MessageId::NotificationGroupedWarning, .key = "notification_grouped_warning"},
     {.id = MessageId::NotificationGroupedError, .key = "notification_grouped_error"},
+    {.id = MessageId::LibraryBusyTryAgain, .key = "library_busy_try_again"},
     {.id = MessageId::LibraryTaskScanning, .key = "library_task_scanning"},
     {.id = MessageId::LibraryTaskUpdating, .key = "library_task_updating"},
     {.id = MessageId::LibraryTaskFingerprinting, .key = "library_task_fingerprinting"},

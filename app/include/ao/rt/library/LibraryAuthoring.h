@@ -21,18 +21,11 @@ namespace ao::rt
     Maintenance,
   };
 
-  enum class LibraryMaintenanceKind : std::uint8_t
-  {
-    None,
-    Import,
-  };
-
   struct LibraryAuthoringAvailability final
   {
     LibraryAuthoringState state = LibraryAuthoringState::Available;
     std::uint64_t runtimeInstanceId = 0;
     std::uint64_t libraryRevision = 0;
-    LibraryMaintenanceKind maintenanceKind = LibraryMaintenanceKind::None;
 
     bool operator==(LibraryAuthoringAvailability const&) const = default;
   };
@@ -51,8 +44,12 @@ namespace ao::rt
     BoundTrackTargets& operator=(BoundTrackTargets&&) noexcept = default;
     ~BoundTrackTargets() = default;
 
-    std::uint64_t runtimeInstanceId() const noexcept { return _runtimeInstanceId; }
-    std::uint64_t libraryRevision() const noexcept { return _libraryRevision; }
+    bool matches(LibraryAuthoringAvailability const& availability) const noexcept
+    {
+      return availability.state == LibraryAuthoringState::Available &&
+             availability.runtimeInstanceId == _runtimeInstanceId && availability.libraryRevision == _libraryRevision;
+    }
+
     std::span<TrackId const> trackIds() const noexcept { return _trackIds; }
 
     bool operator==(BoundTrackTargets const&) const = default;
@@ -83,8 +80,12 @@ namespace ao::rt
     BoundListOrder& operator=(BoundListOrder&&) noexcept = default;
     ~BoundListOrder() = default;
 
-    std::uint64_t runtimeInstanceId() const noexcept { return _runtimeInstanceId; }
-    std::uint64_t libraryRevision() const noexcept { return _libraryRevision; }
+    bool matches(LibraryAuthoringAvailability const& availability) const noexcept
+    {
+      return availability.state == LibraryAuthoringState::Available &&
+             availability.runtimeInstanceId == _runtimeInstanceId && availability.libraryRevision == _libraryRevision;
+    }
+
     ListId listId() const noexcept { return _listId; }
     std::span<TrackId const> effectiveTrackIds() const noexcept { return _effectiveTrackIds; }
 
@@ -110,34 +111,27 @@ namespace ao::rt
     friend class LibraryMutationService;
   };
 
-  enum class TrackAuthoringStatus : std::uint8_t
+  enum class AuthoringStatus : std::uint8_t
   {
     Applied,
     NoOp,
+    Busy,
     Stale,
     Unavailable,
   };
 
-  enum class ListOrderAuthoringStatus : std::uint8_t
+  template<typename Reply>
+  struct AuthoringResult final
   {
-    Applied,
-    NoOp,
-    Stale,
-    Unavailable,
+    AuthoringStatus status = AuthoringStatus::NoOp;
+    Reply reply{};
   };
 
   template<typename Reply>
   struct TrackAuthoringResult final
   {
-    TrackAuthoringStatus status = TrackAuthoringStatus::NoOp;
+    AuthoringStatus status = AuthoringStatus::NoOp;
     Reply reply{};
     std::optional<BoundTrackTargets> optNextTargets{};
-  };
-
-  template<typename Reply>
-  struct ListOrderAuthoringResult final
-  {
-    ListOrderAuthoringStatus status = ListOrderAuthoringStatus::NoOp;
-    Reply reply{};
   };
 } // namespace ao::rt

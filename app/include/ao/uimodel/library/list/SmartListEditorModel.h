@@ -77,9 +77,9 @@ namespace ao::uimodel
                                                std::string_view artist,
                                                std::string_view album);
 
-  rt::LibraryListDraft makeSmartListDraft(ListId parentListId,
-                                          ListId editListId,
-                                          std::string name,
-                                          std::string description,
-                                          std::string expression);
+  rt::ListDraft makeSmartListDraft(ListId parentListId,
+                                   ListId editListId,
+                                   std::string name,
+                                   std::string description,
+                                   std::string expression);
 } // namespace ao::uimodel

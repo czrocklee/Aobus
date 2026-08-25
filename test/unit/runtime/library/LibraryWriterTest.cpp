@@ -9,6 +9,7 @@
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -19,7 +20,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -304,20 +304,20 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto& service = writerFixture.writer();
+    auto& writer = writerFixture.writer();
 
-    auto draft = LibraryWriter::ListDraft{};
+    auto draft = ListDraft{};
     draft.name = "List";
     draft.expression = R"(#favorite)";
 
-    auto const listId = ao::test::requireValue(service.createList(draft));
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(draft)));
     CHECK(listId != kInvalidListId);
 
-    auto updateDraft = LibraryWriter::ListDraft{};
+    auto updateDraft = ListDraft{};
     updateDraft.listId = listId;
     updateDraft.name = "Updated";
     updateDraft.expression = R"(#favorite or #recent)";
-    auto const updateRes = service.updateList(updateDraft);
+    auto const updateRes = writerFixture.runTask(writer.updateList(updateDraft));
     REQUIRE(updateRes);
 
     auto const optNode = writerFixture.library().reader().listNode(listId);
@@ -334,17 +334,17 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const expression = std::string{"$title = 'Cafe\u0301'"};
-    auto listIdRes =
-      writer.createList(LibraryWriter::ListDraft{.name = "Café", .description = "Crème", .expression = expression});
+    auto listIdRes = writerFixture.runTask(
+      writer.createList(ListDraft{.name = "Café", .description = "Crème", .expression = expression}));
     REQUIRE(listIdRes);
     auto const listId = *listIdRes;
 
-    auto updateRes = writer.updateList(LibraryWriter::ListDraft{
+    auto updateRes = writerFixture.runTask(writer.updateList(ListDraft{
       .listId = listId,
       .name = "Cafe\u0301",
       .description = "Cre\u0300me",
       .expression = expression,
-    });
+    }));
 
     REQUIRE(updateRes);
     CHECK_FALSE(updateRes->changed);
@@ -360,19 +360,19 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto& service = writerFixture.writer();
+    auto& writer = writerFixture.writer();
 
-    auto draft = LibraryWriter::ListDraft{};
+    auto draft = ListDraft{};
     draft.name = "Original";
-    auto const listId = ao::test::requireValue(service.createList(draft));
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(draft)));
 
     auto upserted = std::vector<ListId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upserted = ev.listsUpserted; });
 
-    auto updateDraft = LibraryWriter::ListDraft{};
+    auto updateDraft = ListDraft{};
     updateDraft.listId = listId;
     updateDraft.name = "Updated";
-    auto const updateRes = service.updateList(updateDraft);
+    auto const updateRes = writerFixture.runTask(writer.updateList(updateDraft));
     REQUIRE(updateRes);
 
     REQUIRE(upserted.size() == 1);
@@ -384,15 +384,15 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto& service = writerFixture.writer();
+    auto& writer = writerFixture.writer();
 
     SECTION("invalid smart filter")
     {
-      auto draft = LibraryWriter::ListDraft{};
+      auto draft = ListDraft{};
       draft.name = "Invalid";
       draft.expression = "(";
 
-      auto const result = service.createList(draft);
+      auto const result = writerFixture.runTask(writer.createList(draft));
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message.contains("invalid list filter"));
@@ -402,10 +402,10 @@ namespace ao::rt::test
 
     SECTION("empty expression matches the parent source")
     {
-      auto draft = LibraryWriter::ListDraft{};
+      auto draft = ListDraft{};
       draft.name = "Empty";
 
-      auto const result = service.createList(draft);
+      auto const result = writerFixture.runTask(writer.createList(draft));
       REQUIRE(result);
 
       auto const optNode = writerFixture.library().reader().listNode(*result);
@@ -415,11 +415,11 @@ namespace ao::rt::test
 
     SECTION("missing parent")
     {
-      auto draft = LibraryWriter::ListDraft{};
+      auto draft = ListDraft{};
       draft.name = "Child";
       draft.parentId = ListId{999};
 
-      auto const result = service.createList(draft);
+      auto const result = writerFixture.runTask(writer.createList(draft));
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::InvalidInput);
       CHECK(result.error().message.contains("list parent not found"));
@@ -427,13 +427,13 @@ namespace ao::rt::test
 
     SECTION("self parent")
     {
-      auto draft = LibraryWriter::ListDraft{};
+      auto draft = ListDraft{};
       draft.name = "List";
-      auto const listId = ao::test::requireValue(service.createList(draft));
+      auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(draft)));
 
       draft.listId = listId;
       draft.parentId = listId;
-      auto const result = service.updateList(draft);
+      auto const result = writerFixture.runTask(writer.updateList(draft));
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::InvalidInput);
       CHECK(result.error().message.contains("list parent cannot be the list itself"));
@@ -441,23 +441,23 @@ namespace ao::rt::test
 
     SECTION("descendant parent")
     {
-      auto parentDraft = LibraryWriter::ListDraft{};
+      auto parentDraft = ListDraft{};
       parentDraft.name = "Parent";
-      auto const parentId = ao::test::requireValue(service.createList(parentDraft));
+      auto const parentId = ao::test::requireValue(writerFixture.runTask(writer.createList(parentDraft)));
 
-      auto childDraft = LibraryWriter::ListDraft{};
+      auto childDraft = ListDraft{};
       childDraft.name = "Child";
       childDraft.parentId = parentId;
-      auto const childId = ao::test::requireValue(service.createList(childDraft));
+      auto const childId = ao::test::requireValue(writerFixture.runTask(writer.createList(childDraft)));
 
-      auto grandchildDraft = LibraryWriter::ListDraft{};
+      auto grandchildDraft = ListDraft{};
       grandchildDraft.name = "Grandchild";
       grandchildDraft.parentId = childId;
-      auto const grandchildId = ao::test::requireValue(service.createList(grandchildDraft));
+      auto const grandchildId = ao::test::requireValue(writerFixture.runTask(writer.createList(grandchildDraft)));
 
       parentDraft.listId = parentId;
       parentDraft.parentId = grandchildId;
-      auto const result = service.updateList(parentDraft);
+      auto const result = writerFixture.runTask(writer.updateList(parentDraft));
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::InvalidInput);
       CHECK(result.error().message.contains("list parent cannot be a descendant of the list"));
@@ -469,17 +469,17 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto& service = writerFixture.writer();
+    auto& writer = writerFixture.writer();
 
-    auto draft = LibraryWriter::ListDraft{};
+    auto draft = ListDraft{};
     draft.name = "List";
-    auto const listId = ao::test::requireValue(service.createList(draft));
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(draft)));
     draft.listId = listId;
 
     auto upserted = std::vector<ListId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upserted = ev.listsUpserted; });
 
-    auto const updateRes = service.updateList(draft);
+    auto const updateRes = writerFixture.runTask(writer.updateList(draft));
     REQUIRE(updateRes);
     CHECK(upserted.empty());
   }
@@ -489,13 +489,13 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto& service = writerFixture.writer();
+    auto& writer = writerFixture.writer();
 
-    auto draft = LibraryWriter::ListDraft{};
+    auto draft = ListDraft{};
     draft.listId = ListId{999};
     draft.name = "Missing";
 
-    auto const result = service.updateList(draft);
+    auto const result = writerFixture.runTask(writer.updateList(draft));
     REQUIRE(!result);
     CHECK(result.error().code == Error::Code::NotFound);
     CHECK(result.error().message.contains("list not found: 999"));
@@ -506,16 +506,16 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    auto& service = writerFixture.writer();
+    auto& writer = writerFixture.writer();
 
-    auto draft = LibraryWriter::ListDraft{};
+    auto draft = ListDraft{};
     draft.name = "ToDelete";
-    auto const listId = ao::test::requireValue(service.createList(draft));
+    auto const listId = ao::test::requireValue(writerFixture.runTask(writer.createList(draft)));
 
     auto deleted = std::vector<ListId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { deleted = ev.listsDeleted; });
 
-    REQUIRE(service.deleteList(listId));
+    REQUIRE(writerFixture.runTask(writer.deleteList(listId)));
 
     REQUIRE(deleted.size() == 1);
     CHECK(deleted[0] == listId);
@@ -528,19 +528,20 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.name = "Parent"}));
-    auto const childId =
-      ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.parentId = parentId, .name = "Child"}));
-    auto const grandchildId =
-      ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.parentId = childId, .name = "Grandchild"}));
-    auto const unrelatedId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.name = "Unrelated"}));
+    auto const parentId = ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{.name = "Parent"})));
+    auto const childId = ao::test::requireValue(
+      writerFixture.runTask(writer.createList(ListDraft{.parentId = parentId, .name = "Child"})));
+    auto const grandchildId = ao::test::requireValue(
+      writerFixture.runTask(writer.createList(ListDraft{.parentId = childId, .name = "Grandchild"})));
+    auto const unrelatedId =
+      ao::test::requireValue(writerFixture.runTask(writer.createList(ListDraft{.name = "Unrelated"})));
 
-    auto const ordinaryDeleteRes = writer.deleteList(parentId);
+    auto const ordinaryDeleteRes = writerFixture.runTask(writer.deleteList(parentId));
     REQUIRE_FALSE(ordinaryDeleteRes);
     CHECK(ordinaryDeleteRes.error().code == Error::Code::Conflict);
     CHECK(ordinaryDeleteRes.error().message.contains("Child"));
 
-    auto const previewRes = writer.previewDeleteListAndDescendants(parentId);
+    auto const previewRes = writerFixture.runTask(writer.previewDeleteListAndDescendants(parentId));
     REQUIRE(previewRes);
     CHECK(previewRes->rootListId == parentId);
     REQUIRE(previewRes->deletedLists.size() == 3);
@@ -553,7 +554,7 @@ namespace ao::rt::test
 
     auto events = std::vector<LibraryChangeSet>{};
     auto sub = changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
-    auto const result = writer.deleteListAndDescendants(parentId);
+    auto const result = writerFixture.runTask(writer.deleteListAndDescendants(parentId));
 
     REQUIRE(result);
     CHECK(result->deletedLists == previewRes->deletedLists);

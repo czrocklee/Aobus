@@ -34,8 +34,7 @@ namespace ao::gtk::test
                           TrackId const trackId,
                           compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater)
   {
-    rt::test::updateRuntimeTrack(runtime, trackId, std::move(updater));
-    drainGtkEvents();
+    rt::test::updateRuntimeTrack(runtime, trackId, std::move(updater), [] { drainGtkEvents(); });
   }
 
   std::filesystem::path runtimeCacheDirectory(std::filesystem::path const& tempPath)

@@ -3,6 +3,7 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
@@ -81,9 +82,10 @@ namespace ao::rt::test
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
-    auto const listId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
-      .name = "Saved List",
-    }));
+    auto const listId =
+      ao::test::requireValue(env.writerFixture.runTask(env.writerFixture.writer().createList(ListDraft{
+        .name = "Saved List",
+      })));
 
     auto const created = env.requireView({.listId = listId});
     auto const state = service.trackListState(created);
@@ -98,9 +100,10 @@ namespace ao::rt::test
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
-    auto const listId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
-      .name = "Explicit order",
-    }));
+    auto const listId =
+      ao::test::requireValue(env.writerFixture.runTask(env.writerFixture.writer().createList(ListDraft{
+        .name = "Explicit order",
+      })));
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
 
@@ -117,10 +120,11 @@ namespace ao::rt::test
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
-    auto const listId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
-      .name = "Filtered List",
-      .expression = "true",
-    }));
+    auto const listId =
+      ao::test::requireValue(env.writerFixture.runTask(env.writerFixture.writer().createList(ListDraft{
+        .name = "Filtered List",
+        .expression = "true",
+      })));
 
     auto const allTracks = env.requireView();
     auto const savedList = env.requireView({.listId = listId});
@@ -178,9 +182,11 @@ namespace ao::rt::test
     std::int32_t published = 0;
     auto const sub = service.onPresentationChanged([&](auto const&) noexcept { ++published; });
     REQUIRE(service.setPresentation(result, preset->spec));
+    env.drainCallbacks();
     CHECK(published == 1);
 
     REQUIRE(service.setPresentation(result, preset->spec));
+    env.drainCallbacks();
     auto const snapAfter = service.trackListState(result);
 
     CHECK(published == 1);
@@ -218,6 +224,7 @@ namespace ao::rt::test
     auto const* preset = builtinTrackPresentationPreset("albums");
     REQUIRE(preset != nullptr);
     REQUIRE(service.setPresentation(result, preset->spec));
+    env.drainCallbacks();
 
     CHECK(received.id == "albums");
     CHECK(received.groupBy == TrackGroupKey::Album);
@@ -236,14 +243,17 @@ namespace ao::rt::test
     auto const* artistPreset = builtinTrackPresentationPreset("artists");
     REQUIRE(artistPreset != nullptr);
     REQUIRE(service.setPresentation(result, artistPreset->spec));
+    env.drainCallbacks();
     CHECK(callCount == 1);
 
     REQUIRE(service.setPresentation(result, artistPreset->spec));
+    env.drainCallbacks();
     CHECK(callCount == 1);
 
     auto const* albumPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumPreset != nullptr);
     REQUIRE(service.setPresentation(result, albumPreset->spec));
+    env.drainCallbacks();
     CHECK(callCount == 2);
   }
 

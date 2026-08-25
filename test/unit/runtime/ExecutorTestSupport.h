@@ -62,6 +62,7 @@ namespace ao::rt::test
 
     std::size_t queuedCount() const;
     bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool waitUntilQueuedCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
     void checkQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
 
   private:

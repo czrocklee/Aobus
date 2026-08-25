@@ -125,6 +125,7 @@ namespace ao::i18n
     NotificationGroupedInfo,
     NotificationGroupedWarning,
     NotificationGroupedError,
+    LibraryBusyTryAgain,
     LibraryTaskScanning,
     LibraryTaskUpdating,
     LibraryTaskFingerprinting,

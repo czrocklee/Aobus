@@ -16,6 +16,7 @@
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
+#include "track/TrackRowBinding.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -25,6 +26,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -37,15 +39,22 @@
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/utility/Raii.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gdk/gdk.h>
+#include <glib-object.h>
+#include <glibmm/value.h>
 #include <gtkmm/box.h>
+#include <gtkmm/dragsource.h>
+#include <gtkmm/droptarget.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -279,8 +288,8 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
                                      { std::ignore = addAlbumTrack(musicLibrary, "Album"); }};
     auto& runtime = fixture.runtime();
-    auto const listId =
-      ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Ordered"}));
+    auto const listId = ao::test::requireValue(
+      runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Ordered"})));
     auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(manual != nullptr);
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
@@ -340,7 +349,119 @@ namespace ao::gtk::test
           "Fix the List or quick-filter expression before changing its order.");
   }
 
-  TEST_CASE("TrackViewPage - stale inline metadata keeps the row value and shows status",
+  TEST_CASE("TrackViewPage - dropping a drag handle preserves the order submission", "[gtk][regression][list-order]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
+                                     {
+                                       std::ignore = addAlbumTrack(musicLibrary, "First");
+                                       std::ignore = addAlbumTrack(musicLibrary, "Second");
+                                     }};
+    auto& runtime = fixture.runtime();
+    auto const listId = ao::test::requireValue(
+      runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Ordered"})));
+    auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
+    REQUIRE(manual != nullptr);
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
+      .target = rt::FilteredListTarget{.listId = listId, .filterExpression = ""},
+      .optPresentation =
+        rt::NavigationPresentation{
+          .mode = rt::NavigationPresentationMode::Override,
+          .spec = manual->spec,
+        },
+    }));
+    auto const sourceIdsRes = runtime.views().listSourceTrackIds(viewId);
+    REQUIRE(sourceIdsRes);
+    REQUIRE(sourceIdsRes->size() == 2);
+    auto const& initialTrackIds = *sourceIdsRes;
+    auto projectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
+    auto modelPtr = TrackListModel::create(cache);
+    modelPtr->bindProjection(projectionPtr);
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto imageCache = ImageCache{200};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto page = TrackViewPage{listId,
+                              modelPtr,
+                              layoutStore,
+                              ao::test::englishPresentationTextCatalog(),
+                              runtime,
+                              thumbnailLoader,
+                              manual->spec,
+                              viewId};
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(page);
+    windowFixture.present();
+
+    Gtk::Box* sourceHandle = nullptr;
+    Gtk::Box* targetHandle = nullptr;
+
+    for (auto* const handle : collectAll<Gtk::Box>(page))
+    {
+      if (!hasCssClass(*handle, "ao-order-drag-handle"))
+      {
+        continue;
+      }
+
+      auto const rawId = GPOINTER_TO_UINT(::g_object_get_data(G_OBJECT(handle->gobj()), kBoundTrackIdDataKey));
+      auto const trackId = TrackId{static_cast<std::uint32_t>(rawId)};
+
+      if (trackId == initialTrackIds[0])
+      {
+        sourceHandle = handle;
+      }
+      else if (trackId == initialTrackIds[1])
+      {
+        targetHandle = handle;
+      }
+    }
+
+    REQUIRE(sourceHandle != nullptr);
+    REQUIRE(targetHandle != nullptr);
+    auto const dragSourcePtr = findController<Gtk::DragSource>(*sourceHandle);
+    auto const dropTargetPtr = findController<Gtk::DropTarget>(*targetHandle);
+    REQUIRE(dragSourcePtr);
+    REQUIRE(dropTargetPtr);
+
+    GdkContentProvider* rawProvider = nullptr;
+    ::g_signal_emit_by_name(dragSourcePtr->gobj(), "prepare", 1.0, 1.0, &rawProvider);
+    REQUIRE(rawProvider != nullptr);
+    auto providerPtr = utility::makeUniquePtr<::g_object_unref>(rawProvider);
+    auto dropValue = Glib::Value<std::string>{};
+    dropValue.init(Glib::Value<std::string>::value_type());
+    GError* rawError = nullptr;
+    auto const valueLoaded = ::gdk_content_provider_get_value(providerPtr.get(), dropValue.gobj(), &rawError) != 0;
+    auto errorPtr = utility::makeUniquePtr<::g_error_free>(rawError);
+    CHECK(errorPtr == nullptr);
+    REQUIRE(valueLoaded);
+
+    gboolean accepted = FALSE;
+    auto const targetBottom = static_cast<double>(std::max(1, targetHandle->get_height()));
+    ::g_signal_emit_by_name(dropTargetPtr->gobj(), "drop", dropValue.gobj(), 1.0, targetBottom, &accepted);
+    REQUIRE(accepted != 0);
+
+    auto expectedTrackIds = initialTrackIds;
+    std::ranges::reverse(expectedTrackIds);
+    auto observedTrackIds = std::vector<TrackId>{};
+    REQUIRE(pumpGtkEventsUntil(
+      [&]
+      {
+        auto const reorderedRes = runtime.views().listSourceTrackIds(viewId);
+
+        if (!reorderedRes)
+        {
+          return false;
+        }
+
+        observedTrackIds = *reorderedRes;
+        return observedTrackIds == expectedTrackIds;
+      }));
+
+    CHECK(observedTrackIds == expectedTrackIds);
+  }
+
+  TEST_CASE("TrackViewPage - an intervening revision cancels inline metadata without changing the row",
             "[gtk][regression][track-view][metadata]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -391,14 +512,10 @@ namespace ao::gtk::test
     titleStack->set_visible_child("edit");
     REQUIRE(emitFocusEnter(*entry));
     entry->set_text("After");
-    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
-    emitActivate(*entry);
-    drainGtkEvents();
+    REQUIRE(runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(pumpGtkEventsUntil([titleStack] { return titleStack->get_visible_child_name() == "display"; }));
 
-    auto* const statusLabel = findWidgetByClass<Gtk::Label>(page, "ao-track-status-message");
-    REQUIRE(statusLabel != nullptr);
-    CHECK(statusLabel->get_visible());
-    CHECK(statusLabel->get_text() == "Library changed while this edit was open. Reload the value and try again.");
+    CHECK(titleStack->get_visible_child_name() == "display");
     auto const rowPtr = rowCache.trackRow(trackId);
     REQUIRE(rowPtr);
     CHECK(rowPtr->fieldText(rt::TrackField::Title) == "Before");

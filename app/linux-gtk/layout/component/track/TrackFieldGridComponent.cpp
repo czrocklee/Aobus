@@ -4,6 +4,7 @@
 #include "TrackComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
+#include "common/UiWorkflow.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
@@ -14,7 +15,9 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackFieldUi.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -138,6 +141,7 @@ namespace ao::gtk::layout
       TrackFieldGridComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _textCatalog{ctx.dependencies.textCatalog}
         , _editCoordinator{ctx.parentWindow}
+        , _runtime{ctx.runtime}
         , _library{ctx.runtime.library()}
         , _completion{ctx.runtime.completion()}
         , _notifications{ctx.runtime.notifications()}
@@ -455,6 +459,11 @@ namespace ao::gtk::layout
         updateMetadataVisibility(snap);
       }
 
+      bool selectionMatches(std::vector<TrackId> const& trackIds) const
+      {
+        return _scope != nullptr && _scope->snapshot().trackIds == trackIds;
+      }
+
       void configureBuiltInRow(BuiltInRow& row, bool isTechnical = false)
       {
         auto const* def = rt::trackFieldDefinition(row.field);
@@ -602,7 +611,6 @@ namespace ao::gtk::layout
       }
 
       bool applyFieldEdit(rt::TrackField field,
-                          DetailFieldEditor& editor,
                           std::string_view newValue,
                           rt::TrackDetailSnapshot const& snap,
                           std::string_view mixedText,
@@ -642,22 +650,32 @@ namespace ao::gtk::layout
           return false;
         }
 
-        auto const replyRes = _editSessionPtr->submitMetadata(patch);
+        auto trackIds = snap.trackIds;
+        spawnUiTask(_runtime.async(),
+                    _tasks,
+                    *this,
+                    "metadata update",
+                    _editSessionPtr->submitMetadata(std::move(patch)),
+                    [field, newText, oldText, trackIds = std::move(trackIds)](
+                      TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
+                    {
+                      if (owner->reportMetadataSubmissionFailure(replyRes, "Metadata update"))
+                      {
+                        if (owner->selectionMatches(trackIds))
+                        {
+                          owner->restoreFieldEditor(field);
+                        }
 
-        if (reportMetadataSubmissionFailure(replyRes, "Metadata update"))
-        {
-          return false;
-        }
+                        return;
+                      }
 
-        switch (replyRes->status)
-        {
-          case rt::TrackAuthoringStatus::Applied: editor.setText(newText); return true;
-          case rt::TrackAuthoringStatus::NoOp: editor.setText(oldText); return true;
-          case rt::TrackAuthoringStatus::Stale:
-          case rt::TrackAuthoringStatus::Unavailable: return false;
-        }
-
-        return false;
+                      if (owner->selectionMatches(trackIds))
+                      {
+                        owner->setFieldEditorText(
+                          field, replyRes->status == rt::AuthoringStatus::Applied ? newText : oldText);
+                      }
+                    });
+        return true;
       }
 
       void handleBuiltInEdited(rt::TrackField field)
@@ -684,8 +702,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (!applyFieldEdit(
-              field, row->valueEditor, newValue, snap, _textCatalog.text(MessageId::TrackMultipleValues), true))
+        if (!applyFieldEdit(field, newValue, snap, _textCatalog.text(MessageId::TrackMultipleValues), true))
         {
           updateBuiltInRow(*row, snap);
         }
@@ -717,7 +734,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (!applyFieldEdit(field, editor, newValue, snap, uimodel::kCompositeMixedTrackText, false))
+        if (!applyFieldEdit(field, newValue, snap, uimodel::kCompositeMixedTrackText, false))
         {
           updateCompositeRow(*row, snap);
         }
@@ -831,6 +848,41 @@ namespace ao::gtk::layout
         row.partialIcon.set_visible(!item.presentOnAll);
       }
 
+      void submitCustomMetadataValue(uimodel::TrackAuthoringSession& session,
+                                     std::string key,
+                                     std::string_view const value,
+                                     std::vector<TrackId> trackIds,
+                                     bool const clearInputs)
+      {
+        auto submission = session.submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, value));
+        spawnUiTask(_runtime.async(),
+                    _tasks,
+                    *this,
+                    clearInputs ? "custom metadata add" : "custom metadata update",
+                    std::move(submission),
+                    [key = std::move(key), trackIds = std::move(trackIds), clearInputs](
+                      TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
+                    {
+                      auto const operation = clearInputs ? std::string_view{"Custom metadata add"}
+                                                         : std::string_view{"Custom metadata update"};
+
+                      if (owner->reportMetadataSubmissionFailure(replyRes, operation))
+                      {
+                        return;
+                      }
+
+                      if (replyRes->status == rt::AuthoringStatus::Applied && owner->_detailUndo != nullptr)
+                      {
+                        owner->_detailUndo->clearIfAffectsCustomMetadata(key, trackIds);
+                      }
+
+                      if (clearInputs && owner->selectionMatches(trackIds))
+                      {
+                        owner->_addMetadataButton.clearInputs();
+                      }
+                    });
+      }
+
       void handleCustomEdited(std::string key)
       {
         auto* row = findCustomRow(key);
@@ -849,17 +901,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const replyRes = _editSessionPtr->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, newValue));
-
-        if (reportMetadataSubmissionFailure(replyRes, "Custom metadata update"))
-        {
-          return;
-        }
-
-        if (replyRes->status == rt::TrackAuthoringStatus::Applied && _detailUndo != nullptr)
-        {
-          _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
-        }
+        submitCustomMetadataValue(*_editSessionPtr, std::move(key), newValue, snap.trackIds, false);
       }
 
       void handleCustomDeleted(std::string key)
@@ -882,17 +924,30 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const replyRes = (*sessionRes)->submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
+        auto sessionPtr = std::move(*sessionRes);
+        auto submission = sessionPtr->submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
+        auto trackIds = snap.trackIds;
+        spawnUiTask(
+          _runtime.async(),
+          _tasks,
+          *this,
+          "custom metadata delete",
+          std::move(submission),
+          [key = std::move(key), optPrevValue, sessionPtr = std::move(sessionPtr), trackIds = std::move(trackIds)](
+            TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes) mutable
+          {
+            if (owner->reportMetadataSubmissionFailure(replyRes, "Custom metadata delete"))
+            {
+              return;
+            }
 
-        if (reportMetadataSubmissionFailure(replyRes, "Custom metadata delete"))
-        {
-          return;
-        }
-
-        if (replyRes->status == rt::TrackAuthoringStatus::Applied && optPrevValue && _detailUndo != nullptr)
-        {
-          _detailUndo->presentCustomMetadataDeletedUndo(std::move(key), *optPrevValue, std::move(*sessionRes));
-        }
+            if (replyRes->status == rt::AuthoringStatus::Applied && optPrevValue && owner->selectionMatches(trackIds) &&
+                owner->_detailUndo != nullptr)
+            {
+              owner->_detailUndo->presentCustomMetadataDeletedUndo(
+                std::move(key), *optPrevValue, std::move(sessionPtr));
+            }
+          });
       }
 
       void handleCustomAdded(std::string key, std::string value)
@@ -922,19 +977,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const replyRes = (*sessionRes)->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, value));
-
-        if (reportMetadataSubmissionFailure(replyRes, "Custom metadata add"))
-        {
-          return;
-        }
-
-        if (replyRes->status == rt::TrackAuthoringStatus::Applied && _detailUndo != nullptr)
-        {
-          _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
-        }
-
-        _addMetadataButton.clearInputs();
+        submitCustomMetadataValue(**sessionRes, std::move(key), value, snap.trackIds, true);
       }
 
       bool reportMetadataSubmissionFailure(Result<uimodel::TrackMetadataSubmitResult> const& result,
@@ -950,10 +993,15 @@ namespace ao::gtk::layout
         {
           switch (result->status)
           {
-            case rt::TrackAuthoringStatus::Applied:
-            case rt::TrackAuthoringStatus::NoOp: return false;
-            case rt::TrackAuthoringStatus::Stale: message = _textCatalog.text(MessageId::TrackEditStale); break;
-            case rt::TrackAuthoringStatus::Unavailable:
+            case rt::AuthoringStatus::Applied:
+            case rt::AuthoringStatus::NoOp: return false;
+            case rt::AuthoringStatus::Busy:
+              _notifications.post(rt::NotificationSeverity::Warning,
+                                  std::string{_textCatalog.text(MessageId::LibraryBusyTryAgain)},
+                                  rt::NotificationLifetime::transient());
+              return true;
+            case rt::AuthoringStatus::Stale: message = _textCatalog.text(MessageId::TrackEditStale); break;
+            case rt::AuthoringStatus::Unavailable:
               message = _textCatalog.text(MessageId::TrackEditingUnavailable);
               break;
           }
@@ -962,6 +1010,41 @@ namespace ao::gtk::layout
         APP_LOG_ERROR("{} failed: {}", operation, message);
         _notifications.post(rt::NotificationSeverity::Error, message, rt::NotificationLifetime::history());
         return true;
+      }
+
+      void setFieldEditorText(rt::TrackField const field, std::string const& text)
+      {
+        if (auto* const row = findBuiltInRow(field); row != nullptr)
+        {
+          row->valueEditor.setText(text);
+          return;
+        }
+
+        if (auto* const row = findCompositeBuiltInRow(field); row != nullptr)
+        {
+          (row->primaryField == field ? row->primaryEditor : row->secondaryEditor).setText(text);
+        }
+      }
+
+      void restoreFieldEditor(rt::TrackField const field)
+      {
+        if (_scope == nullptr)
+        {
+          return;
+        }
+
+        auto const& snapshot = _scope->snapshot();
+
+        if (auto* const row = findBuiltInRow(field); row != nullptr)
+        {
+          updateBuiltInRow(*row, snapshot);
+          return;
+        }
+
+        if (auto* const row = findCompositeBuiltInRow(field); row != nullptr)
+        {
+          updateCompositeRow(*row, snapshot);
+        }
       }
 
       void buildGrid()
@@ -1222,6 +1305,7 @@ namespace ao::gtk::layout
       Gtk::Grid _grid;
       uimodel::PresentationTextCatalog _textCatalog;
       DetailEditCoordinator _editCoordinator;
+      rt::AppRuntime& _runtime;
       rt::Library& _library;
       rt::CompletionService& _completion;
       rt::NotificationService& _notifications;
@@ -1259,6 +1343,7 @@ namespace ao::gtk::layout
       sigc::connection _scopeConn;
 
       ConstrainedGridBox _wrapper;
+      async::LifetimeScope _tasks;
     };
 
     std::unique_ptr<LayoutComponent> createTrackFieldGrid(LayoutBuildContext& ctx, LayoutNode const& node)

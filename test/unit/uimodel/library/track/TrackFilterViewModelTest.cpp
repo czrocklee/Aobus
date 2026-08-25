@@ -10,8 +10,10 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -213,14 +215,14 @@ namespace ao::uimodel::test
       REQUIRE(transaction.commit());
     }
 
-    auto executor = InlineExecutor{};
+    auto executor = async::LoopExecutor{};
     auto const revision = [&libraryFixture]
     {
       auto transaction = libraryFixture.library().readTransaction();
       return libraryFixture.library().libraryRevision(transaction);
     }();
     auto changes = LibraryChanges{executor, revision, "test-library"};
-    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes, executor};
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
     auto views = ViewService{executor, libraryFixture.library(), sources, changes};
     auto workspace = WorkspaceService{executor, views, changes};
@@ -232,14 +234,23 @@ namespace ao::uimodel::test
 
     REQUIRE(
       workspace.navigate(NavigationRequest{.target = FilteredListTarget{.listId = listId, .filterExpression = {}}}));
+
+    while (executor.runReadyTurn())
+    {
+    }
+
     REQUIRE(renderLog.last().hasError);
     CHECK(renderLog.last().tooltip.contains("Filter error"));
 
-    REQUIRE(writerFixture.writer().updateList(LibraryWriter::ListDraft{
+    REQUIRE(writerFixture.runTask(writerFixture.writer().updateList(ListDraft{
       .listId = listId,
       .name = "Repaired source",
       .expression = "true",
-    }));
+    })));
+
+    while (executor.runReadyTurn())
+    {
+    }
 
     CHECK_FALSE(renderLog.last().hasError);
     CHECK(renderLog.last().tooltip.empty());

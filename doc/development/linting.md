@@ -133,8 +133,11 @@ function or file names; a direct call to its implementation helper, a nested
 marker, or a later marker does not qualify.
 A `catch (...)`, `catch (std::exception const&)`, or
 `catch (std::bad_alloc const&)` must rethrow, enter AO fatal handling, or
-explicitly capture `std::current_exception()` for a later owning boundary.
-Termination or transfer inside a nested catch, lambda, or only one branch of a conditional does not discharge the outer catch; every continuation path must transfer or terminate unless the current exception is explicitly captured.
+explicitly capture the current exception for a later owning boundary with
+`std::current_exception()`.
+Termination or transfer inside a nested catch, lambda, or only one branch of a
+conditional does not discharge the outer catch; every continuation path must
+transfer, terminate, or retain the current exception itself.
 An adapter that can name a narrower foreign exception catches that exact type.
 Ordinary test sources may inject arbitrary exceptions; the check's own
 integration fixture remains covered so the production rule cannot regress.
@@ -281,8 +284,8 @@ suppressions across the tree.
 ### Cancellation handling in coroutine catches
 
 The `aobus-async-cancellation-guard` check protects broad handlers in
-coroutines from turning cancellation into failure. A `catch
-(std::exception const& error)` must begin with one of two forms:
+coroutines from turning cancellation into failure. A broad coroutine handler
+must begin with one of three forms:
 
 1. Call `ao::async::rethrowIfOperationCancelled(error)` before handling the
    remaining exception.
@@ -290,16 +293,27 @@ coroutines from turning cancellation into failure. A `catch
    `if (ao::async::isOperationCancelled(error)) { ... } else { ... }` as the
    first statement. Both branches must be non-empty, and the predicate must
    inspect that handler's catch variable.
+3. Assign `std::current_exception()` to `std::exception_ptr` state declared
+   outside the handler when cleanup must finish before propagation. Use
+   separate state for separate cleanup stages when failure priority matters.
+   The owner must subsequently call `ao::async::rethrowException()`, or pass
+   the retained exception to a fatal terminal boundary.
+
+The check validates only that the handler immediately transfers ownership of
+the active exception. It does not perform cross-statement dataflow to prove the
+later rethrow or fatal disposition; that remains an invariant of the owning
+workflow and its review.
 
 The second form is for workflows that must retain cancellation as local state
 long enough to publish a terminal event, retire an in-flight request, or reset
 owner state before cancellation propagates. It is not permission to swallow
 cancellation or continue normal work.
 
-A `catch (...)` has no typed catch variable to classify and must still begin
-with `ao::async::rethrowIfOperationCancelled()`. A sibling catch cannot receive
-an exception rethrown from another handler; use local classification when the
-same workflow owns cleanup that cannot be skipped.
+A `catch (...)` has no typed catch variable to classify, so it must begin with
+either `ao::async::rethrowIfOperationCancelled()` or the deferred-exception
+form. A sibling catch cannot receive an exception rethrown from another
+handler; use local classification or deferral when the same workflow owns
+cleanup that cannot be skipped.
 
 `bugprone-throwing-static-initialization` and `bugprone-exception-escape` are
 disabled for all source modes. On MSVC they are dominated by standard-library

@@ -51,10 +51,9 @@ namespace ao::rt::test
     MusicLibraryFixture libraryFixture;
     ControlledSleeper sleeper;
     ExecutorT executor;
-    InlineExecutor libraryChangesExecutor;
     async::Runtime asyncRuntime{executor, 1, &sleeper};
-    LibraryChanges changes{libraryChangesExecutor, 0, "test-library"};
-    LibraryWriterFixture writerFixture{libraryFixture.library(), changes};
+    LibraryChanges changes{executor, 0, "test-library"};
+    LibraryWriterFixture writerFixture{libraryFixture.library(), changes, executor};
     TrackSourceCache sources{libraryFixture.library(), changes};
     ViewService views{executor, libraryFixture.library(), sources, changes};
     WorkspaceService workspace{executor, views, changes};

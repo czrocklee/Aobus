@@ -48,7 +48,7 @@ The public authority is `include/ao/Error.h`; runtime, UIModel, and frontends ma
 | `NotSupported` | The request is valid in shape, but the file type, codec, mode, capability, or operation is unsupported. |
 | `InvalidState` | The runtime object state cannot currently satisfy the requested operation. |
 | `Conflict` | A create or update conflicts with existing state or identity. |
-| `ResourceBusy` | A requested native resource is temporarily owned or busy; callers may surface contention but do not infer retry or preemption policy. |
+| `ResourceBusy` | A requested native or sequenced runtime resource is temporarily owned or busy; callers may surface contention but do not infer automatic retry or preemption policy. |
 | `ValueTooLarge` | External data is valid in shape but exceeds a serialized or configured size limit. |
 | `ResourceExhausted` | A finite identifier, storage, or runtime resource pool is exhausted. |
 | `StorageFull` | A database's mapped capacity is exhausted; the same work may succeed where more capacity is available. |

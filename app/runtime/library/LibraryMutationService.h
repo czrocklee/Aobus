@@ -6,8 +6,10 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/WritableMusicLibrary.h>
@@ -17,6 +19,7 @@
 
 #include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <exception>
 #include <expected>
 #include <format>
@@ -24,6 +27,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -69,6 +73,11 @@ namespace ao::rt
   namespace detail
   {
     class LibraryMutationLifetimeState;
+    class LibraryMutationOwnerLease;
+    class LibraryMutationCommandLease;
+    struct LibraryMutationCommandRequest;
+    struct LibraryMutationControlDelivery;
+    struct LibraryMutationPublicationEvent;
 
     template<typename Type>
     struct OperationResultTraits final
@@ -83,7 +92,6 @@ namespace ao::rt
       using ValueType = Value;
     };
 
-    // Completion acknowledgement has no recoverable branch after commit.
     void requireMatchingPublicationCompletion(bool publicationInProgress,
                                               std::uint64_t revision,
                                               std::uint64_t committedRevision,
@@ -101,6 +109,17 @@ namespace ao::rt
       AudioIdentityBackfill,
     };
 
+    class Submission final
+    {
+    private:
+      Submission(std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr, bool reentrant) noexcept;
+
+      std::weak_ptr<detail::LibraryMutationLifetimeState> _lifetimeStatePtr;
+      bool _reentrant = false;
+
+      friend class LibraryMutationService;
+    };
+
     class [[nodiscard]] Mutation final
     {
     public:
@@ -111,8 +130,6 @@ namespace ao::rt
       Mutation(Mutation&& other) noexcept;
       Mutation& operator=(Mutation&& other) = delete;
 
-      // An error result or exception terminalizes this mutation and releases
-      // writer admission. Later operations violate the terminal-state contract.
       template<typename Function,
                typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Function, library::LibraryWrite&>>>
         requires library::detail::IsResult<OperationResult>::value
@@ -142,7 +159,8 @@ namespace ao::rt
       template<typename Operation,
                typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>>
         requires detail::OperationResultTraits<OperationResult>::kValid
-      auto execute(Operation&& operation, std::string_view operationName = "Library mutation")
+      async::Task<Result<MutationExecution<typename detail::OperationResultTraits<OperationResult>::ValueType>>>
+      executeAsync(Operation operation, std::string operationName = "Library mutation")
       {
         using Value = detail::OperationResultTraits<OperationResult>::ValueType;
         using Execution = MutationExecution<Value>;
@@ -153,58 +171,84 @@ namespace ao::rt
         AO_INVARIANT(_executeEligible, "Library mutation execute must own the first write operation");
         _executeEligible = false;
 
+        auto execution = Execution{};
+        auto deferredException = std::exception_ptr{};
+
         try
         {
-          auto outcomeRes = _transaction.apply(std::forward<Operation>(operation));
+          auto outcomeRes = _transaction.apply(std::move(operation));
 
           if (!outcomeRes)
           {
             auto error = std::move(outcomeRes.error());
             abort();
-            return Result<Execution>{std::unexpected{std::move(error)}};
+            co_return std::unexpected{std::move(error)};
           }
 
           if (auto* unchanged = std::get_if<Unchanged<Value>>(&*outcomeRes); unchanged != nullptr)
           {
-            auto execution = Execution{.value = std::move(unchanged->value), .optCommittedRevision = std::nullopt};
+            execution.value = std::move(unchanged->value);
             abort();
-            return Result<Execution>{std::move(execution)};
+            co_return Result<Execution>{std::move(execution)};
           }
 
           auto changed = std::get<Changed<Value>>(std::move(*outcomeRes));
-          auto execution = Execution{.value = std::move(changed.value), .optCommittedRevision = std::nullopt};
+          execution.value = std::move(changed.value);
           auto commitRes = _owner->commitMutation(*this, std::move(changed.changeSet));
 
           if (!commitRes)
           {
             auto error = std::move(commitRes.error());
             error.message = std::format("{} commit failed: {}", operationName, error.message);
-            return Result<Execution>{std::unexpected{std::move(error)}};
+            co_return std::unexpected{std::move(error)};
           }
 
           execution.optCommittedRevision = *commitRes;
-          return Result<Execution>{std::move(execution)};
         }
         catch (...)
         {
+          deferredException = std::current_exception();
           abort();
-          throw;
+          async::rethrowException(deferredException);
         }
+
+        auto terminal = detail::LibraryPublicationTerminal{};
+
+        try
+        {
+          terminal = co_await _owner->settleMutationAsync(*execution.optCommittedRevision);
+        }
+        catch (...)
+        {
+          deferredException = std::current_exception();
+          // A durable commit cannot abandon publication settlement, including on cancellation.
+          _owner->abortPostCommitSettlement(deferredException);
+        }
+
+        finish();
+
+        if (terminal == detail::LibraryPublicationTerminal::RetiredByClosing)
+        {
+          async::throwOperationCancelled();
+        }
+
+        co_return Result<Execution>{std::move(execution)};
       }
 
+      std::stop_token closingStopToken() const noexcept;
       void abort() noexcept;
 
     private:
       Mutation(LibraryMutationService& owner,
-               std::unique_lock<std::mutex> writerLock,
-               library::WriteTransaction transaction,
-               bool backgroundWriter = false) noexcept;
+               std::unique_ptr<detail::LibraryMutationCommandLease> commandLeasePtr,
+               library::WriteTransaction transaction) noexcept;
+      void finish() noexcept;
+
       LibraryMutationService* _owner = nullptr;
-      std::unique_lock<std::mutex> _writerLock;
+      std::unique_ptr<detail::LibraryMutationCommandLease> _commandLeasePtr;
       library::WriteTransaction _transaction;
       bool _terminal = false;
       bool _executeEligible = true;
-      bool _backgroundWriter = false;
 
       friend class LibraryMutationService;
     };
@@ -219,7 +263,7 @@ namespace ao::rt
       MaintenanceGuard(MaintenanceGuard&& other) noexcept;
       MaintenanceGuard& operator=(MaintenanceGuard&&) = delete;
 
-      void finish() noexcept;
+      async::Task<void> finishAsync();
 
     private:
       MaintenanceGuard(std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
@@ -231,11 +275,6 @@ namespace ao::rt
       friend class LibraryMutationService;
     };
 
-    /**
-     * Serializes long-running library tasks without changing authoring
-     * availability. Each task still acquires ordinary writer ownership only
-     * for its bounded mutation phases.
-     */
     class [[nodiscard]] BackgroundTaskLease final
     {
     public:
@@ -260,13 +299,7 @@ namespace ao::rt
 
     struct AuthoringStart final
     {
-      TrackAuthoringStatus status = TrackAuthoringStatus::Unavailable;
-      std::optional<Mutation> optMutation{};
-    };
-
-    struct ListOrderAuthoringStart final
-    {
-      ListOrderAuthoringStatus status = ListOrderAuthoringStatus::Unavailable;
+      AuthoringStatus status = AuthoringStatus::Unavailable;
       std::optional<Mutation> optMutation{};
     };
 
@@ -281,31 +314,53 @@ namespace ao::rt
     LibraryMutationService& operator=(LibraryMutationService&&) = delete;
 
     LibraryAuthoringAvailability availability() const;
-    // Availability is a notification: it reports a state the coordinator has
-    // already reached. The owning Signal boundary diagnoses and aborts an
-    // escaping observer exception.
-    // Handlers must defer owner destruction or runtime shutdown to a later
-    // callback-executor turn instead of tearing down the active emitter.
     async::Subscription onAvailabilityChanged(
       compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
-    BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision) const;
+    static BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision);
 
-    Result<Mutation> beginInteractiveMutation(library::WriteTransaction::Options options = {});
-    AuthoringStart beginAuthoringMutation(BoundTrackTargets const& targets);
-    ListOrderAuthoringStart beginListOrderAuthoringMutation(BoundListOrder const& order);
+    Submission captureSubmission() const noexcept;
+    static async::Task<Result<Mutation>> beginInteractiveMutationAsync(Submission submission,
+                                                                       library::WriteTransaction::Options options = {});
+    static async::Task<AuthoringStart> beginAuthoringMutationAsync(Submission submission, BoundTrackTargets targets);
+    static async::Task<AuthoringStart> beginListOrderAuthoringMutationAsync(Submission submission,
+                                                                            BoundListOrder order);
     Result<BackgroundTaskLease> beginBackgroundTask(BackgroundTaskKind kind);
-    Result<Mutation> beginBackgroundMutation(BackgroundTaskLease const& lease);
-    Result<MaintenanceGuard> beginMaintenance(LibraryMaintenanceKind kind);
-    Result<Mutation> beginMaintenanceMutation(MaintenanceGuard const& guard);
+    static async::Task<Result<Mutation>> beginBackgroundMutationAsync(
+      Submission submission,
+      BackgroundTaskLease const& lease,
+      compat::MoveOnlyFunction<Result<>(std::stop_token)> preTransaction = {});
+    static async::Task<Result<MaintenanceGuard>> beginMaintenanceAsync(Submission submission);
+    static async::Task<Result<Mutation>> beginMaintenanceMutationAsync(Submission submission,
+                                                                       MaintenanceGuard const& guard);
 
   private:
-    enum class WriterKind : std::uint8_t
+    enum class Lifecycle : std::uint8_t
     {
-      Ordinary,
+      Open,
+      Closing,
+      Closed,
+    };
+
+    enum class ActivePhase : std::uint8_t
+    {
+      Idle,
+      PreTransaction,
+      InTransaction,
+      SubmittingPublication,
+      AwaitingPublication,
+      AwaitingControlDelivery,
+    };
+
+    enum class CommandKind : std::uint8_t
+    {
+      Interactive,
       Background,
+      MaintenanceMutation,
+      MaintenanceEnter,
+      MaintenanceExit,
     };
 
     struct PublicationDiagnosticContext final
@@ -315,63 +370,46 @@ namespace ao::rt
       std::uint64_t revision = 0;
     };
 
-    // Submission return and publication completion rendezvous in either order;
-    // writer admission reopens only after both have completed.
-    class PublicationBarrier final
-    {
-    public:
-      constexpr void beginSubmission(bool const fromOwner) noexcept
-      {
-        _publicationInProgress = true;
-        _submissionInProgress = true;
-        _submissionFromOwner = fromOwner;
-      }
-
-      constexpr void completeSubmission() noexcept
-      {
-        _submissionInProgress = false;
-        _submissionFromOwner = false;
-      }
-
-      constexpr void completePublication() noexcept { _publicationInProgress = false; }
-      constexpr void retire() noexcept { _publicationInProgress = false; }
-
-      constexpr bool blocksWriter() const noexcept { return _publicationInProgress || _submissionInProgress; }
-
-      constexpr bool publicationInProgress() const noexcept { return _publicationInProgress; }
-      constexpr bool submissionInProgress() const noexcept { return _submissionInProgress; }
-      constexpr bool ownerSubmissionInProgress() const noexcept
-      {
-        return _submissionInProgress && _submissionFromOwner;
-      }
-
-    private:
-      bool _publicationInProgress = false;
-      bool _submissionInProgress = false;
-      bool _submissionFromOwner = false;
-    };
-
     void beginClosing() noexcept;
-    Result<std::unique_lock<std::mutex>> acquireWriter(LibraryAuthoringState requiredState,
-                                                       std::string_view operation,
-                                                       WriterKind writerKind = WriterKind::Ordinary);
+    static async::Task<Result<std::unique_ptr<detail::LibraryMutationCommandLease>>>
+    acquireCommandAsync(Submission submission, CommandKind kind, std::uint64_t generation, std::string operation);
+    static async::Task<Result<Mutation>> beginMutationAsync(
+      Submission submission,
+      CommandKind kind,
+      std::uint64_t generation,
+      library::WriteTransaction::Options options,
+      std::string operation,
+      compat::MoveOnlyFunction<Result<>(std::stop_token)> preTransaction = {});
+    Result<std::shared_ptr<detail::LibraryMutationCommandRequest>> enqueueCommand(CommandKind kind,
+                                                                                  std::uint64_t generation,
+                                                                                  bool reentrant,
+                                                                                  std::string_view operation);
+    void releaseCommand(std::shared_ptr<detail::LibraryMutationCommandRequest> const& requestPtr) noexcept;
+    bool beginTransaction() noexcept;
     Result<std::uint64_t> commitMutation(Mutation& mutation, LibraryChangeSet changeSet);
-    void cancelBackgroundWriterReservation() noexcept;
-    void releaseBackgroundWriter(std::unique_lock<std::mutex>& writerLock) noexcept;
-    void releaseMutationWriter(Mutation& mutation) noexcept;
+    async::Task<detail::LibraryPublicationTerminal> settleMutationAsync(std::uint64_t revision);
+    [[noreturn]] void abortPostCommitSettlement(std::exception_ptr exceptionPtr) noexcept;
+    void completeCommittedCommand(std::uint64_t revision) noexcept;
     void finishBackgroundTask(std::uint64_t generation) noexcept;
-    void dispatchMaintenanceFinish(std::uint64_t generation) noexcept;
+    static async::Task<void> finishMaintenanceAsync(
+      std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
+      std::uint64_t generation);
+    async::Task<bool> deliverControlAvailabilityAsync(LibraryAuthoringAvailability expected);
+    void deliverControlAvailability(
+      std::shared_ptr<detail::LibraryMutationControlDelivery> const& deliveryPtr) noexcept;
     void handleFinalizationAdmissionFailure(std::exception_ptr exceptionPtr) noexcept;
-    void finishMaintenance(std::uint64_t generation) noexcept;
-    void finishPublication(std::uint64_t revision, std::string libraryIdentity, std::string replicaName);
-    std::shared_ptr<PublicationDiagnosticContext const> activePublicationDiagnosticContext() const noexcept;
+    void finishPublication(detail::LibraryPublicationTerminal terminal,
+                           std::uint64_t revision,
+                           std::string libraryIdentity,
+                           std::string replicaName);
+    std::optional<PublicationDiagnosticContext> activePublicationDiagnosticContext() const noexcept;
     bool beginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept;
     void completeAvailabilityNotification() noexcept;
     void emitAvailability(LibraryAuthoringAvailability const& expected) noexcept;
-    void emitAvailability(LibraryAuthoringAvailability const& expected,
-                          std::unique_lock<std::mutex>& writerLock) noexcept;
-    bool writerAdmissionBlockedLocked() const noexcept;
     LibraryAuthoringAvailability availabilityLocked() const noexcept;
+    bool submissionIsReentrantLocked() const noexcept;
+    bool hasOutstandingCommandLocked(CommandKind kind) const noexcept;
+    bool hasMaintenanceTransitionLocked() const noexcept;
 
     async::Executor& _callbackExecutor;
     library::WritableMusicLibrary _writableLibrary;
@@ -381,23 +419,30 @@ namespace ao::rt
     std::shared_ptr<detail::LibraryMutationLifetimeState> _lifetimeStatePtr;
 
     mutable std::mutex _stateMutex;
-    std::mutex _writerMutex;
-    std::condition_variable _writerAdmissionChanged;
+    std::condition_variable _stateChanged;
+    std::deque<std::shared_ptr<detail::LibraryMutationCommandRequest>> _commandQueue;
+    std::shared_ptr<detail::LibraryMutationCommandRequest> _activeCommandRequestPtr;
+    std::shared_ptr<detail::LibraryMutationPublicationEvent> _activePublicationEventPtr;
+    std::shared_ptr<detail::LibraryMutationControlDelivery> _activeControlDeliveryPtr;
+    Lifecycle _lifecycle = Lifecycle::Open;
+    ActivePhase _activePhase = ActivePhase::Idle;
     LibraryAuthoringState _state = LibraryAuthoringState::Available;
     std::uint64_t _lastCommittedRevision = 0;
     std::uint64_t _availableRevision = 0;
     std::uint64_t _maintenanceGeneration = 0;
-    LibraryMaintenanceKind _maintenanceKind = LibraryMaintenanceKind::None;
     std::uint64_t _backgroundTaskGeneration = 0;
-    std::optional<BackgroundTaskKind> _optBackgroundTaskKind{};
-    bool _backgroundWriterReserved = false;
-    PublicationBarrier _publicationBarrier;
-    std::shared_ptr<PublicationDiagnosticContext const> _activePublicationDiagnosticContextPtr;
+    std::optional<BackgroundTaskKind> _optBackgroundTaskKind;
+    bool _changesSealed = false;
+    std::optional<PublicationDiagnosticContext> _optActivePublicationDiagnosticContext;
     bool _availabilityNotificationInProgress = false;
-    bool _closing = false;
     mutable async::Signal<LibraryAuthoringAvailability const&> _availabilityChanged;
 
     friend class Library;
     friend class LibraryTaskService;
+    friend class detail::LibraryMutationLifetimeState;
+    friend class detail::LibraryMutationCommandLease;
+    friend struct detail::LibraryMutationCommandRequest;
+    friend struct detail::LibraryMutationControlDelivery;
+    friend struct detail::LibraryMutationPublicationEvent;
   };
 } // namespace ao::rt

@@ -12,11 +12,13 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -50,15 +52,14 @@ namespace ao::rt::test::playback_succession
     void removePlayableFile(TrackId trackId);
     void openManualView(std::span<TrackId const> trackIds, TrackListViewConfig config = {});
     void removeFromList(std::span<TrackId const> trackIds);
-    Result<LibraryWriter::MoveOrderAuthoringResult> moveListOrder(std::span<TrackId const> selectedTrackIds,
-                                                                  std::optional<TrackId> optBeforeTrackId);
+    Result<AuthoringResult<MoveListOrderReply>> moveListOrder(std::span<TrackId const> selectedTrackIds,
+                                                              std::optional<TrackId> optBeforeTrackId);
     void buildThreeTrackManualView(TrackListViewConfig config = {});
     Result<> playAndWait(TrackId trackId);
 
     MusicLibraryFixture libraryFixture;
     ControlledSleeper sleeper;
     QueuedExecutor executor;
-    InlineExecutor libraryChangesExecutor;
     async::Runtime asyncRuntime;
     LibraryChanges changes;
     LibraryWriterFixture writerFixture;

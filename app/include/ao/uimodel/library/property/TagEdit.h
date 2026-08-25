@@ -4,10 +4,11 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
-#include <span>
 #include <string>
+#include <vector>
 
 namespace ao::uimodel
 {
@@ -16,12 +17,12 @@ namespace ao::uimodel
 
   struct TagEditResult final
   {
-    rt::TrackAuthoringStatus status = rt::TrackAuthoringStatus::NoOp;
+    rt::AuthoringStatus status = rt::AuthoringStatus::NoOp;
     std::string notificationText;
   };
 
-  Result<TagEditResult> applyTagEdit(TrackAuthoringSession& session,
-                                     PresentationTextCatalog const& textCatalog,
-                                     std::span<std::string const> tagsToAdd,
-                                     std::span<std::string const> tagsToRemove);
+  async::Task<Result<TagEditResult>> applyTagEdit(TrackAuthoringSession& session,
+                                                  PresentationTextCatalog const& textCatalog,
+                                                  std::vector<std::string> tagsToAdd,
+                                                  std::vector<std::string> tagsToRemove);
 } // namespace ao::uimodel

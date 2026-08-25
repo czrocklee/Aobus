@@ -107,6 +107,7 @@ fr:table {
     notification_grouped_info { "{count, plural, one {# notification} other {# notifications}}" }
     notification_grouped_warning { "{count, plural, one {# avertissement} other {# avertissements}}" }
     notification_grouped_error { "{count, plural, one {# erreur} other {# erreurs}}" }
+    library_busy_try_again { "La bibliothèque est occupée. Réessayez." }
     library_task_scanning { "Analyse en cours" }
     library_task_updating { "Mise à jour" }
     library_task_fingerprinting { "Génération d''empreinte" }

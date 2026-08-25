@@ -21,6 +21,15 @@ namespace ao::async
 
 namespace ao::rt
 {
+  namespace detail
+  {
+    enum class LibraryPublicationTerminal : std::uint8_t
+    {
+      Published,
+      RetiredByClosing,
+    };
+  } // namespace detail
+
   struct ListOrderReset final
   {
     bool operator==(ListOrderReset const&) const = default;
@@ -87,10 +96,12 @@ namespace ao::rt
   private:
     friend class LibraryMutationService;
 
-    void publishFromCoordinator(
-      LibraryChangeSet changeSet,
-      compat::MoveOnlyFunction<void(std::string libraryIdentity, std::string replicaName)> completion) noexcept;
-    void retireFromCoordinator() noexcept;
+    void publishFromCoordinator(LibraryChangeSet changeSet,
+                                compat::MoveOnlyFunction<void(detail::LibraryPublicationTerminal terminal,
+                                                              std::string libraryIdentity,
+                                                              std::string replicaName)> completion) noexcept;
+    bool publicationDeliveryInProgressFromCoordinator() const noexcept;
+    void sealAndRetireFromCoordinator() noexcept;
 
     struct Impl;
     std::shared_ptr<Impl> _implPtr;

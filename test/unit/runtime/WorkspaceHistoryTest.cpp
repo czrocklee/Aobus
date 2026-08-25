@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/WorkspaceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackPresentation.h>
@@ -234,10 +234,8 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const listA =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"}));
-    auto const listB =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "B"}));
+    auto const listA = fixture.createList("A");
+    auto const listB = fixture.createList("B");
 
     requireNavigation(runtime, NavigationRequest{.target = listA, .recordHistory = true});
     auto const viewA = runtime.workspace().snapshot().activeViewId;
@@ -263,7 +261,7 @@ namespace ao::rt::test
     auto const viewA = requireNavigation(runtime, fixture.firstListId);
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     REQUIRE(runtime.workspace().closeView(viewA));
-    REQUIRE(runtime.library().writer().deleteList(fixture.firstListId));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(fixture.firstListId)));
     auto const before = runtime.workspace().snapshot();
 
     auto const result = runtime.workspace().goBack();
@@ -286,7 +284,7 @@ namespace ao::rt::test
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     requireBackNavigation(runtime);
     REQUIRE(runtime.workspace().closeView(viewB));
-    REQUIRE(runtime.library().writer().deleteList(fixture.secondListId));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(fixture.secondListId)));
     auto const before = runtime.workspace().snapshot();
 
     auto const result = runtime.workspace().goForward();

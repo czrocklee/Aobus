@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <giomm/actionmap.h>
@@ -86,8 +87,8 @@ namespace ao::gtk
     void openTagEditor(TrackSelection const& selection, Gtk::Widget& relativeTo);
 
     void submitTagChanges(TrackSelection const& selection,
-                          std::span<std::string const> tagsToAdd,
-                          std::span<std::string const> tagsToRemove);
+                          std::vector<std::string> tagsToAdd,
+                          std::vector<std::string> tagsToRemove);
 
   private:
     void createActions();
@@ -128,6 +129,7 @@ namespace ao::gtk
 
     std::unique_ptr<TagPopover> _tagPopoverPtr;
     std::unique_ptr<uimodel::TrackAuthoringSession> _tagEditSessionPtr;
+    std::uint64_t _tagEditSessionGeneration = 0;
     std::unique_ptr<Gtk::PopoverMenu> _contextPopoverPtr;
     Glib::RefPtr<Gio::SimpleActionGroup> _contextActionGroupPtr;
 
@@ -137,6 +139,7 @@ namespace ao::gtk
     sigc::scoped_connection _tagPopoverClosedConnection;
     sigc::scoped_connection _tagAnchorUnmapConnection;
     sigc::scoped_connection _tagsChangedConnection;
+    async::LifetimeScope _tasks;
 
     TrackViewPage* _contextPage = nullptr;
     double _contextXPosition = 0.0;

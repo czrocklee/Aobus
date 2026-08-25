@@ -95,6 +95,7 @@ namespace ao::gtk
 
   SmartListDialog::~SmartListDialog()
   {
+    _presentationCallbacks.close();
     _exprTimeoutConnection.disconnect();
     _rebuildConnection.disconnect();
   }
@@ -170,6 +171,23 @@ namespace ao::gtk
   {
     _errorLabel.set_text(std::string{message});
     _errorLabel.set_visible(!message.empty());
+  }
+
+  bool SmartListDialog::beginSubmission()
+  {
+    if (std::exchange(_submissionPending, true))
+    {
+      return false;
+    }
+
+    updateDialogState();
+    return true;
+  }
+
+  void SmartListDialog::completeSubmission()
+  {
+    _submissionPending = false;
+    updateDialogState();
   }
 
   void SmartListDialog::buildUi()
@@ -493,7 +511,7 @@ namespace ao::gtk
   {
     auto const state = editorViewState();
     auto const playlistTagReady = !_playlistTemplate || !_membershipTagEntry.get_text().empty();
-    _okButton->set_sensitive(state.canSubmit && playlistTagReady);
+    _okButton->set_sensitive(state.canSubmit && playlistTagReady && !_submissionPending);
     _membershipEditingLabel.set_text(playlistTagReady ? state.membershipEditingText
                                                       : _gtkTextCatalog.text(GtkTextId::SmartListChooseMembershipTag));
   }
@@ -534,10 +552,10 @@ namespace ao::gtk
     _membershipEditingLabel.set_text(playlistTagReady ? state.membershipEditingText
                                                       : _gtkTextCatalog.text(GtkTextId::SmartListChooseMembershipTag));
 
-    _okButton->set_sensitive(state.canSubmit && playlistTagReady);
+    _okButton->set_sensitive(state.canSubmit && playlistTagReady && !_submissionPending);
   }
 
-  rt::LibraryListDraft SmartListDialog::draft() const
+  rt::ListDraft SmartListDialog::draft() const
   {
     return ao::uimodel::makeSmartListDraft(
       _parentListId, _editListId, _nameEntry.get_text(), _descEntry.get_text(), _exprBox.entry().get_text());

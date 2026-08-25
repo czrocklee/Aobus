@@ -3,12 +3,15 @@
 
 #pragma once
 
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Task.h>
 
 #include <cstddef>
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::rt
@@ -16,6 +19,16 @@ namespace ao::rt
   class Library;
   class LibraryChanges;
 } // namespace ao::rt
+
+namespace ao::async
+{
+  class Runtime;
+}
+
+namespace ao::rt::test
+{
+  class ManualExecutor;
+}
 
 namespace ao::uimodel::test
 {
@@ -32,7 +45,15 @@ namespace ao::uimodel::test
 
     rt::Library& library() const;
     rt::LibraryChanges& changes() const;
+    async::Runtime& runtime() const;
+    rt::test::ManualExecutor& executor() const;
     std::span<TrackId const> trackIds() const noexcept;
+
+    template<typename T>
+    T runTask(async::Task<T> task)
+    {
+      return rt::test::runTestTask(runtime(), executor(), std::move(task));
+    }
 
     std::string title(TrackId trackId) const;
     std::vector<std::string> tags(TrackId trackId) const;
