@@ -13,6 +13,7 @@ HELP = "Format C++ and Python sources (changed files by default)"
 NAME = "format"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+REQUIRES_PYTHON_TOOLS = True
 
 
 EPILOG = """\

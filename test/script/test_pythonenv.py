@@ -1,4 +1,4 @@
-"""Tests for the native Windows Python tooling bootstrap."""
+"""Tests for the native Python tooling bootstrap."""
 
 import json
 import os
@@ -13,7 +13,7 @@ from unittest import mock
 from ao.core import pythonenv
 
 
-class WindowsPythonEnvironmentTest(unittest.TestCase):
+class NativePythonEnvironmentTest(unittest.TestCase):
     def test_toolchain_schema_is_supported(self):
         values = json.loads(pythonenv.TOOLCHAIN_FILE.read_text(encoding="utf-8"))
 
@@ -23,11 +23,15 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
         versions = pythonenv.tool_versions()
         actual_python = ".".join(str(part) for part in sys.version_info[:3])
 
-        self.assertEqual(actual_python, versions["python"])
+        if sys.platform == "darwin":
+            expected_major_minor = tuple(int(part) for part in versions["python"].split(".")[:2])
+            self.assertEqual(sys.version_info[:2], expected_major_minor)
+        else:
+            self.assertEqual(actual_python, versions["python"])
         for module, prefix in (("ruff", "ruff"), ("mypy", "mypy")):
             command = (
                 [sys.executable, "-I", "-m", module, "--version"]
-                if os.name == "nt"
+                if os.name == "nt" or sys.platform == "darwin"
                 else [shutil.which(module) or module, "--version"]
             )
             completed = subprocess.run(
@@ -46,6 +50,12 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "requires Python 0.0.0"):
             pythonenv.validate_base_python({"python": "0.0.0"})
 
+    def test_native_platform_selection_rejects_linux(self):
+        self.assertEqual(pythonenv._native_platform_name("darwin"), "macos")
+        self.assertEqual(pythonenv._native_platform_name("win32"), "windows")
+        with self.assertRaisesRegex(RuntimeError, "unavailable on platform 'linux'"):
+            pythonenv._native_platform_name("linux")
+
     def test_toolchain_and_hashed_lock_pin_the_validated_windows_wheels(self):
         versions = pythonenv.tool_versions()
         requirements = pythonenv.REQUIREMENTS_FILE.read_text(encoding="utf-8")
@@ -62,6 +72,19 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
         }.items():
             self.assertIn(f"{package}=={version}", requirements)
         self.assertEqual(requirements.count("--hash=sha256:"), 7)
+
+        macos_requirements = pythonenv.MACOS_REQUIREMENTS_FILE.read_text(encoding="utf-8")
+        for package, version in {
+            "ast-serialize": "0.6.0",
+            "librt": "0.13.0",
+            "mypy": versions["mypy"],
+            "mypy_extensions": "1.1.0",
+            "pathspec": "1.1.1",
+            "ruff": versions["ruff"],
+            "typing_extensions": "4.16.0",
+        }.items():
+            self.assertIn(f"{package}=={version}", macos_requirements)
+        self.assertEqual(macos_requirements.count("--hash=sha256:"), 11)
 
     def test_fingerprint_changes_with_requirements_or_base_python(self):
         versions = {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"}
@@ -85,7 +108,31 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
             )
 
         self.assertEqual(path, Path(r"C:\Aobus") / "tools" / "venvs" / "aobus-deadbeef" / "fingerprint")
-        key.assert_called_once_with(Path("Y:\\"), environ={"AOBUS_CHECKOUT_ID": "id"}, create_id=True)
+        key.assert_called_once_with(
+            Path("Y:\\"),
+            environ={"AOBUS_CHECKOUT_ID": "id"},
+            create_id=True,
+            os_name="nt",
+        )
+
+    def test_macos_environment_uses_a_posix_checkout_key_and_python_path(self):
+        with mock.patch.object(pythonenv.builddir, "windows_checkout_key", return_value="aobus-deadbeef") as key:
+            path = pythonenv.environment_path(
+                Path("/src/Aobus"),
+                Path("/state/Aobus"),
+                "fingerprint",
+                environ={"AOBUS_CHECKOUT_ID": "id"},
+                os_name="posix",
+            )
+
+        self.assertEqual(path, Path("/state/Aobus/tools/venvs/aobus-deadbeef/fingerprint"))
+        self.assertEqual(pythonenv._python_path(path, platform_name="macos"), path / "bin" / "python")
+        key.assert_called_once_with(
+            Path("/src/Aobus"),
+            environ={"AOBUS_CHECKOUT_ID": "id"},
+            create_id=True,
+            os_name="posix",
+        )
 
     def test_ready_environment_is_reused_without_rebuilding(self):
         versions = {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"}
@@ -119,12 +166,12 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
             requirements.write_text("locked", encoding="utf-8")
             destination = root / "environment"
 
-            def build(staging, _versions, _requirements, _state, fingerprint):
+            def build(staging, _versions, _requirements, _state, fingerprint, **_kwargs):
                 (staging / "Scripts").mkdir(parents=True)
                 (staging / "Scripts" / "python.exe").touch()
                 (staging / pythonenv.COMPLETE_MARKER).write_text(f"{fingerprint}\n", encoding="utf-8")
 
-            def ready(environment, _versions, _state, _fingerprint):
+            def ready(environment, _versions, _state, _fingerprint, **_kwargs):
                 return environment == destination and environment.is_dir()
 
             with mock.patch.object(pythonenv, "validate_base_python"):

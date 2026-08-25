@@ -38,7 +38,8 @@
     },
     {
       "name": "python3",
-      "host": true
+      "host": true,
+      "platform": "windows"
     },
     "libflac",
     "lmdb",
@@ -61,7 +62,7 @@
     {
       "name": "ftxui",
       "version-semver": "6.1.9",
-      "$reason": "Keep Windows aligned with the governed cross-platform FTXUI contract. Remove when the default baseline resolves 6.1.9."
+      "$reason": "Keep vcpkg hosts aligned with the governed cross-platform FTXUI contract. Remove when the default baseline resolves 6.1.9."
     }
   ],
   "features": {

@@ -30,7 +30,7 @@ Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for au
 ## 🛠 Building
 
 Aobus uses CMake with platform-specific development profiles: pinned Nix
-dependencies on Linux and macOS, and vcpkg on Windows.
+dependencies on Linux and governed vcpkg manifests on macOS and Windows.
 
 ### Linux
 
@@ -66,9 +66,9 @@ when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
 ### macOS
 
 The current macOS profile is a headless development port for the shared core,
-CLI, and TUI. It has no native desktop frontend or audio backend. Nix and the
-Xcode Command Line Tools are required; the `./ao` portal bootstraps its own Bash
-and enters the Darwin-specific pinned Nix environment.
+CLI, and TUI. It has no native desktop frontend or audio backend. Install the
+Xcode Command Line Tools and the documented Homebrew host tools; the `./ao`
+portal bootstraps a pinned vcpkg checkout and resolves the shared manifest.
 
 ```bash
 ./ao build

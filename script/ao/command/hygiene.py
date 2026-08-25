@@ -23,6 +23,7 @@ HELP = "Run the commit gate: format --check, naming audits, then tidy (check-onl
 NAME = "hygiene"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+REQUIRES_PYTHON_TOOLS = True
 
 
 EPILOG = """\

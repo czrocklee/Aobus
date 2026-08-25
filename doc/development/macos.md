@@ -16,36 +16,54 @@ commands therefore run, but playback has no provider and the TUI reports `--`
 for the backend.
 
 The build targets macOS 14.0 or newer. The project-maintained validation host is
-macOS 15.7.9 on x86_64. That host is the current support evidence; it is not
-evidence that arm64 or the macOS 14.0 runtime has been validated.
+macOS 15.7.9 on x86_64. The repository also defines an arm64 vcpkg triplet, but
+that triplet remains unvalidated until a native arm64 gate passes.
 
 ## Policy
 
-Run repository operations from the project root through `./ao`. Do not invoke a
-system CMake toolchain or use Homebrew packages as substitutes for the pinned
-environment. `shell.nix` selects `nixpkgs-darwin.json` on Darwin and supplies
-Clang 22 plus every governed native dependency.
+Run repository operations from the project root through `./ao`. The portal
+selects the required Homebrew host tools, bootstraps the repository-pinned
+vcpkg checkout, and configures the matching project triplet. Do not run ambient
+CMake or invoke vcpkg manually for a normal build.
+Nix is a Linux-only resolver: `shell.nix` deliberately rejects Darwin, and the
+macOS portal must not grow a second Nix bootstrap path.
+
+For a normal Git checkout, the portal also configures the repository-local
+`core.hooksPath` as `script/git-hook` after entering the native environment.
+
+`script/ao/macos-toolchain.json` owns the Clang major version, deployment
+target, vcpkg tool revision, archive URL, and archive SHA-256.
+`vcpkg-configuration.json` owns registry revisions, `vcpkg.json` owns ports and
+features, and `cmake/vcpkg-triplets/` owns macOS linkage and deployment flags.
+The native dependency contract is shared with Linux and Windows.
 
 Keep generated state on the guest or workstation's local disk. A source tree
 may be mounted over SMB, but build trees, compiler caches, and toolchains must
 not be written to that mount.
 
-The Darwin Nix pin intentionally does not promise the exact Python, Ruff, and
-mypy versions in `script/ao/toolchain.json`, so `./ao test --tooling` remains
-unavailable. Native clang-tidy and its integration fixtures are supported;
-`./ao test --lint` is part of both `./ao test --all` and `./ao check`.
+The Homebrew Python starts the portal. Format, tidy, and hygiene commands then
+use a checkout-isolated environment whose x86_64 and arm64 wheel hashes are
+locked in `script/ao/macos-requirements.txt`. Ruff and mypy match
+`script/ao/toolchain.json`; the Homebrew Python must match its major/minor but
+not its exact patch release. macOS therefore does not own
+`./ao test --tooling`. Native clang-tidy and its integration fixtures are
+supported; `./ao test --lint` is part of both `./ao test --all` and
+`./ao check`.
 
 ## Workflow
 
-Install Nix and the Xcode Command Line Tools before the first portal command.
-No separate CMake, Ninja, Python, or Homebrew dependency setup is required.
-The first `./ao` invocation resolves Bash 5 through `darwin-bash.nix` because
-Apple's Bash 3.2 cannot enter the current nixpkgs environment, then re-enters
-the Darwin-specific `shell.nix` automatically. The x86_64 Darwin binary cache
-is incomplete, so a cold bootstrap can build some packages from source.
-For non-interactive SSH shells, the portal recovers Nix from the standard
-multi-user or single-user profile before invoking `nix-build`; callers do not
-need to edit shell startup files merely to use `./ao`.
+Install the Xcode Command Line Tools and Homebrew, then install the host tools:
+
+```bash
+xcode-select --install
+brew install llvm@22 cmake ninja pkgconf python@3.14 \
+  autoconf autoconf-archive automake libtool
+```
+
+Nix is not required on macOS. The first build downloads a SHA-256-verified
+vcpkg source archive, bootstraps its tool, resolves the locked registries, and
+builds the manifest dependencies. This cold build can take several minutes.
+Later builds restore packages from the host-local vcpkg binary cache.
 
 The supported commands are:
 
@@ -62,17 +80,31 @@ The supported commands are:
 ./ao check release            # Release build and supported suites
 ./ao check --asan             # Supported suites with ASan/UBSan
 ./ao check --tsan             # Core suite with TSan
-./ao deps report              # Governed versions and Darwin Nix identities
+./ao deps report              # Governed versions and vcpkg identities
 ./ao deps verify              # Reject stale or mismatched dependency evidence
 ```
 
 The default build roots are `/tmp/build/<source-directory>/debug` and
-`/tmp/build/<source-directory>/release`; sanitizer suffixes create
-separate sibling trees. `AOBUS_BUILD_ROOT` replaces `/tmp/build` while retaining
-the source-directory component. Each build writes `build.log` inside its tree.
-The compiler cache defaults to
-`$HOME/Library/Caches/Aobus/ccache`; `AOBUS_STATE_ROOT` replaces the
-`$HOME/Library/Caches/Aobus` base for that cache.
+`/tmp/build/<source-directory>/release`; sanitizer suffixes create separate
+sibling trees. `AOBUS_BUILD_ROOT` replaces `/tmp/build` while retaining the
+source-directory component. Each build writes `build.log` inside its tree.
+
+Managed tool and package state defaults to `$HOME/Library/Caches/Aobus`:
+
+- `tools/vcpkg/<revision>` contains the bootstrapped pinned checkout;
+- `cache/vcpkg/downloads` contains verified source downloads;
+- `cache/vcpkg/binaries` contains reusable built packages;
+- `ccache` contains compiler-cache state when the optional tool is installed;
+- `tools/libcxx-expected-shim/<llvm-version>` contains the generated libc++
+  compatibility header.
+- `tools/venvs/<checkout>/<fingerprint>` contains the managed Ruff/mypy
+  environment when a Python-check command needs it.
+
+`AOBUS_STATE_ROOT` replaces that base. An explicit `VCPKG_ROOT` may select a
+pre-bootstrapped checkout for diagnosis, but the registry and manifest locks
+still apply. `ccache` is optional; install it with Homebrew if desired.
+When present, it uses `$AOBUS_STATE_ROOT/ccache`, a 10 GiB maximum, compression,
+and the same time-macro policy as the Linux development environment.
 
 The project validation VM sees the authoritative Linux checkout through SMB:
 
@@ -102,9 +134,16 @@ Linux and Windows remain required for those platform-specific contracts.
 
 ## Troubleshooting
 
-- If the portal reports an unsupported Apple Bash, unset a stale
-  `NIX_BUILD_SHELL` and run `./ao` again so `darwin-bash.nix` can select the
-  pinned shell.
+- If the portal reports a missing Homebrew formula, install the exact formula
+  named in the error and run the command again.
+- If Homebrew reports a permission error, repair only the named Homebrew-owned
+  path. Do not recursively change ownership of `/usr/local` or `/opt/homebrew`.
+- If the managed vcpkg root is incomplete, move only the exact directory named
+  by the portal aside and run `./ao` again. The immutable revision remains in
+  the directory name.
+- If the vcpkg source archive fails SHA-256 verification, do not bypass the
+  check or replace the digest from a fresh download alone. Follow the
+  [verified archive-recovery procedure](dependency-upgrade.md#recovering-a-regenerated-macos-vcpkg-archive).
 - If CMake reports `AOBUS_LIBCXX_EXPECTED_SHIM` as missing, the configure step
   was run outside the portal. Remove that manual build tree and use `./ao`.
 - If a build tree appears under the SMB checkout, stop and choose a local
@@ -112,16 +151,15 @@ Linux and Windows remain required for those platform-specific contracts.
   for generated state.
 - macOS has no `timeout` command by default. Put command timeouts on the
   controlling host when operating the validation VM.
-- A cold Nix evaluation can be slow because x86_64 Darwin cache coverage is
-  limited. Preserve `/tmp/build/...` and the local compiler cache while
-  diagnosing failures.
+- A cold vcpkg build is expected to be slow. Preserve `/tmp/build/...` and the
+  local vcpkg caches while diagnosing failures.
 
 ## Related documents
 
 - [macOS portability compromises](macos-portability.md) owns removable
   toolchain workarounds and permanent Darwin source differences.
 - [Dependency governance](dependency-governance.md) owns cross-platform version
-  policy and the two Nix resolver pins.
+  policy and native resolver pins.
 - [Dependency upgrade](dependency-upgrade.md) owns pin changes and validation.
 - [Test suites](test/test-suite.md) owns platform suite membership.
 - [Validation and review](test/validation-and-review.md) owns completion gates.

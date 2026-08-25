@@ -1,7 +1,7 @@
 """Aobus development portal: `./ao <command> [options]`.
 
 Each command module registers an argparse subparser; `./ao help` lists them all.
-The `ao` shim at the repository root re-enters nix-shell before dispatching here.
+The repository shim prepares the platform's native environment before dispatching here.
 """
 
 import argparse

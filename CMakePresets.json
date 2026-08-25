@@ -30,21 +30,43 @@
       }
     },
     {
-      "name": "macos-debug",
+      "name": "macos-base",
+      "hidden": true,
       "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "$env{AOBUS_LLVM_ROOT}/bin/clang",
+        "CMAKE_CXX_COMPILER": "$env{AOBUS_LLVM_ROOT}/bin/clang++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "$env{AOBUS_MACOS_DEPLOYMENT_TARGET}",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_HOST_TRIPLET": "$env{AOBUS_VCPKG_TRIPLET}",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/vcpkg-triplets",
+        "VCPKG_TARGET_TRIPLET": "$env{AOBUS_VCPKG_TRIPLET}"
+      }
+    },
+    {
+      "name": "macos-debug",
+      "inherits": "macos-base",
       "binaryDir": "/tmp/build/${sourceDirName}/debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
       "name": "macos-release",
-      "generator": "Ninja",
+      "inherits": "macos-base",
       "binaryDir": "/tmp/build/${sourceDirName}/release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "macos-profile",
+      "inherits": "macos-base",
+      "binaryDir": "/tmp/build/${sourceDirName}/profile",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer"
       }
     },
     {

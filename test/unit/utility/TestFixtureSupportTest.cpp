@@ -16,6 +16,14 @@
 
 namespace ao::test
 {
+  TEST_CASE("TestFixtureSupport - temporary directories expose canonical paths",
+            "[utility][unit][test-fixture-support]")
+  {
+    auto const temp = TempDir{};
+
+    CHECK(temp.path() == std::filesystem::canonical(temp.path()));
+  }
+
   TEST_CASE("TestFixtureSupport - temporary files use isolated directories", "[utility][unit][test-fixture-support]")
   {
     constexpr auto kFirstData = std::to_array<std::uint8_t>({'a'});

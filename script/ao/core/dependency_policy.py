@@ -19,11 +19,11 @@ BUILD_REPORT_NAME = "aobus-dependencies.json"
 SUPPORTED_SCHEMA = 2
 SUPPORTED_NIX_REPORT_SCHEMA = 1
 SUPPORTED_PLATFORMS = frozenset({"linux", "macos", "windows"})
-# Platforms whose native dependencies are resolved by Nix rather than vcpkg.
-# Each one pins its own nixpkgs: macOS cannot follow the main pin because
-# nixpkgs dropped x86_64-darwin after 26.05.
-NIX_PLATFORMS = frozenset({"linux", "macos"})
-NIXPKGS_PIN_FILES = {"linux": "nixpkgs.json", "macos": "nixpkgs-darwin.json"}
+# Native resolver ownership. Linux retains the pinned Nix package set; macOS
+# and Windows share the governed vcpkg manifest and registry snapshots.
+NIX_PLATFORMS = frozenset({"linux"})
+VCPKG_PLATFORMS = frozenset({"macos", "windows"})
+NIXPKGS_PIN_FILES = {"linux": "nixpkgs.json"}
 SUPPORTED_BUILD_CONDITIONS = frozenset({"AOBUS_BUILD_TUI", "AOBUS_BUILD_WINUI"})
 _VERSION_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 
@@ -191,20 +191,27 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
         else:
             raise DependencyPolicyError(f"dependencies.{name}.policy.kind must be 'exact' or 'range'")
 
-        if NIX_PLATFORMS.intersection(platforms):
+        has_nix = "nix" in dependency
+        if "linux" in platforms:
             nix = _mapping(dependency.get("nix"), f"dependencies.{name}.nix")
             _string(nix.get("attribute"), f"dependencies.{name}.nix.attribute")
-        elif "nix" in dependency:
-            raise DependencyPolicyError(f"dependencies.{name}.nix is invalid for a Windows-only dependency")
+        elif has_nix:
+            raise DependencyPolicyError(f"dependencies.{name} declares a Nix resolver without Linux support")
 
         has_vcpkg = "vcpkg" in dependency
         has_nuget = "nuget" in dependency
+        if "macos" in platforms and not has_vcpkg:
+            raise DependencyPolicyError(f"dependencies.{name} must declare a vcpkg resolver for macOS")
         if "windows" in platforms and has_vcpkg == has_nuget:
             raise DependencyPolicyError(
                 f"dependencies.{name} must declare exactly one Windows resolver: vcpkg or nuget"
             )
-        if "windows" not in platforms and (has_vcpkg or has_nuget):
-            raise DependencyPolicyError(f"dependencies.{name} declares a Windows resolver without Windows support")
+        if not VCPKG_PLATFORMS.intersection(platforms) and has_vcpkg:
+            raise DependencyPolicyError(
+                f"dependencies.{name} declares a vcpkg resolver without macOS or Windows support"
+            )
+        if "windows" not in platforms and has_nuget:
+            raise DependencyPolicyError(f"dependencies.{name} declares a NuGet resolver without Windows support")
 
         if has_vcpkg:
             vcpkg = _mapping(dependency["vcpkg"], f"dependencies.{name}.vcpkg")
@@ -517,8 +524,11 @@ def _verify_vcpkg_resolution(
     build_dir: Path,
     project_root: Path = PROJECT_ROOT,
     *,
+    platform: str,
     today: date | None = None,
 ) -> dict[str, object]:
+    if platform not in VCPKG_PLATFORMS:
+        raise DependencyPolicyError(f"vcpkg is not the native resolver for {platform!r}")
     host = _mapping(report["host"], "report.host")
     installed_value = host.get("vcpkgInstalledDir")
     installed = (
@@ -535,9 +545,9 @@ def _verify_vcpkg_resolution(
     result: dict[str, object] = {}
     for name, raw_definition in _mapping(contract["dependencies"], "dependencies").items():
         definition = _mapping(raw_definition, f"dependencies.{name}")
-        if "vcpkg" not in definition:
+        if "vcpkg" not in definition or platform not in _dependency_platforms(definition, f"dependencies.{name}"):
             continue
-        policy = effective_policy(contract, name, "windows", today=today)
+        policy = effective_policy(contract, name, platform, today=today)
         ports = _string_list(_mapping(definition["vcpkg"], f"dependencies.{name}.vcpkg")["ports"], "vcpkg.ports")
         port_results: dict[str, object] = {}
         for port in ports:
@@ -560,7 +570,7 @@ def _verify_vcpkg_resolution(
             }
         result[name] = port_results
 
-    boost_policy = effective_policy(contract, "boost", "windows", today=today)
+    boost_policy = effective_policy(contract, "boost", platform, today=today)
     boost_family: dict[str, object] = {}
     for port, package in packages.items():
         if not port.startswith("boost-") or port == "boost-vcpkg-helpers":
@@ -612,6 +622,7 @@ def _verify_vcpkg_resolution(
         port
         for raw_definition in _mapping(contract["dependencies"], "dependencies").values()
         if "vcpkg" in _mapping(raw_definition, "dependency")
+        and platform in _dependency_platforms(_mapping(raw_definition, "dependency"), "dependency")
         for port in _string_list(
             _mapping(_mapping(raw_definition, "dependency")["vcpkg"], "dependency.vcpkg")["ports"],
             "dependency.vcpkg.ports",
@@ -754,17 +765,26 @@ def verified_report(
             "kind": "nix",
             "report": _verify_nix_resolution(contract, report, project_root, platform=platform, today=today),
         }
-    else:
+    elif platform in VCPKG_PLATFORMS:
         host = _mapping(report["host"], "report.host")
-        nuget = _verify_nuget_resolution(contract, report, project_root, today=today)
+        nuget = _verify_nuget_resolution(contract, report, project_root, today=today) if platform == "windows" else {}
         enriched["nativeResolution"] = {
             "kind": "vcpkg+nuget" if nuget else "vcpkg",
             "configuration": read_json(project_root / "vcpkg-configuration.json"),
-            "packages": _verify_vcpkg_resolution(contract, report, build_dir, project_root, today=today),
+            "packages": _verify_vcpkg_resolution(
+                contract,
+                report,
+                build_dir,
+                project_root,
+                platform=platform,
+                today=today,
+            ),
             "nuget": nuget,
             "triplet": host.get("vcpkgTriplet"),
             "vcpkgVersion": host.get("vcpkgVersion"),
         }
+    else:
+        raise DependencyPolicyError(f"unsupported dependency platform {platform!r}")
     return enriched
 
 

@@ -19,10 +19,24 @@ class Check:
     argv: tuple[str, ...]
 
 
-def module_command(module: str, *arguments: str, os_name: str | None = None) -> tuple[str, ...]:
-    """Run a Python module, isolating managed Windows tools from ambient packages."""
-    isolated = ("-I",) if (os.name if os_name is None else os_name) == "nt" else ()
+def module_command(
+    module: str,
+    *arguments: str,
+    os_name: str | None = None,
+    platform_name: str | None = None,
+) -> tuple[str, ...]:
+    """Run a Python module, isolating managed native tools from ambient packages."""
+    resolved_os_name = os.name if os_name is None else os_name
+    resolved_platform = sys.platform if platform_name is None else platform_name
+    isolated = ("-I",) if resolved_os_name == "nt" or resolved_platform == "darwin" else ()
     return (sys.executable, *isolated, "-m", module, *arguments)
+
+
+def mypy_command(*arguments: str, platform_name: str | None = None) -> tuple[str, ...]:
+    """Keep Darwin's SQLite cache on the local managed-tool volume."""
+    resolved_platform = sys.platform if platform_name is None else platform_name
+    cache = ("--cache-dir", str(Path(sys.prefix) / ".mypy_cache")) if resolved_platform == "darwin" else ()
+    return module_command("mypy", *cache, *arguments, platform_name=platform_name)
 
 
 def checks(paths: list[str]) -> tuple[Check, ...]:
@@ -30,7 +44,7 @@ def checks(paths: list[str]) -> tuple[Check, ...]:
     mypy_targets = tuple(target for target in targets if not _is_test_script_path(target))
     result = [Check("Ruff", module_command("ruff", "check", *targets))]
     if mypy_targets:
-        result.append(Check("mypy", module_command("mypy", *mypy_targets)))
+        result.append(Check("mypy", mypy_command(*mypy_targets)))
     return tuple(result)
 
 

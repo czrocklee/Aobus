@@ -27,6 +27,7 @@ HELP = "Run C++ clang-tidy and Python Ruff/mypy checks"
 NAME = "tidy"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+REQUIRES_PYTHON_TOOLS = True
 
 
 EPILOG = """\

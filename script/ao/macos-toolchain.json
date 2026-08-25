@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "deploymentTarget": "14.0",
+  "homebrew": {
+    "llvmFormula": "llvm@22",
+    "llvmMajorVersion": "22",
+    "pythonFormula": "python@3.14",
+    "pythonMajorMinorVersion": "3.14"
+  },
+  "vcpkg": {
+    "repository": "https://github.com/microsoft/vcpkg",
+    "revision": "40a9bd4ccdf5dc14ff76d4ed47d46a226ce84a83",
+    "archiveUrl": "https://github.com/microsoft/vcpkg/archive/40a9bd4ccdf5dc14ff76d4ed47d46a226ce84a83.tar.gz",
+    "archiveSha256": "d97e44d13c64490e04428cd05c2596bef5ac82c15c6bed1c2ad7bc718a49e5ff"
+  }
+}

@@ -15,8 +15,8 @@ developer procedure for changing pins is in the
 
 Aobus resolves dependencies through different native ecosystems:
 
-- separately pinned Nixpkgs package sets on Linux and macOS;
-- versioned vcpkg registries on Windows;
+- a pinned Nixpkgs package set on Linux;
+- shared versioned vcpkg registries on macOS and Windows;
 - an exact, signed NuGet closure for Windows App SDK/MSBuild dependencies;
 - a managed Python environment for repository tooling.
 
@@ -33,20 +33,21 @@ Each file owns a distinct question:
 |---|---|
 | Which C++ dependency versions and capabilities does Aobus accept? | `dependency-contract.json` |
 | Which Nixpkgs package set does Linux resolve from? | `nixpkgs.json` |
-| Which Nixpkgs package set does macOS resolve from? | `nixpkgs-darwin.json` |
-| Which vcpkg registry snapshots does Windows resolve from? | `vcpkg-configuration.json` |
+| Which vcpkg registry snapshots do macOS and Windows resolve from? | `vcpkg-configuration.json` |
 | Which vcpkg ports and features does Aobus consume? | `vcpkg.json` |
+| Which macOS host compiler and vcpkg tool revision does the portal select? | `script/ao/macos-toolchain.json` |
 | Which Windows App SDK packages and signing source does MSBuild consume? | `app/windows-winui/packages.config` and `app/windows-winui/NuGet.Config` |
 | Which Python, Ruff, and mypy versions does repository tooling require? | `script/ao/toolchain.json` |
 | Which Windows Python artifacts and transitive packages are accepted? | `script/ao/windows-requirements.txt` |
+| Which macOS Python artifacts and transitive packages are accepted? | `script/ao/macos-requirements.txt` |
 | Did the configured build satisfy the contract? | CMake dependency checks and `./ao deps verify` |
 
-Nix is the normal **lead resolver**, not the policy source of truth. Linux and
-macOS use separate Nixpkgs pins because the current x86_64 Darwin package set
-cannot follow the newer Linux revision. A routine upgrade normally starts by
-evaluating the relevant Nixpkgs pin, but resolved versions become project
-policy only after an explicit `dependency-contract.json` change is reviewed and
-every affected native build passes.
+Linux Nix is the normal **lead resolver**, not the policy source of truth. A
+routine upgrade normally starts by evaluating the Linux Nixpkgs pin, but
+resolved versions become project policy only after an explicit
+`dependency-contract.json` change is reviewed and every affected native build
+passes. macOS and Windows then consume the same vcpkg registry and manifest
+locks with platform-specific triplets.
 
 ## Governed dependencies
 
@@ -89,8 +90,8 @@ Platform build identity includes additional information:
   overlays, and tool version.
 
 For example, vcpkg `spdlog 1.17.0#1` satisfies an upstream version contract of
-`1.17.0`; the `#1` port revision remains part of the Windows build identity and
-must still appear in the dependency report.
+`1.17.0`; the `#1` port revision remains part of the native vcpkg build identity
+and must still appear in the dependency report.
 
 Version equality is never used as proof of ABI or behavior equality. The build
 also verifies required imported targets and behavior-affecting options. In
@@ -113,36 +114,37 @@ component.
 
 Canonical localization assets are compiled by the same ICU release that the
 application links. CMake locates and version-checks `genrb` and `pkgdata` at
-configure time. Windows enables vcpkg's ICU `tools` feature explicitly; those
-build-host executables are never deployment artifacts.
+configure time. The vcpkg manifest enables ICU's `tools` feature explicitly on
+macOS and Windows; those build-host executables are never deployment artifacts.
 
 ## Native resolution
 
-### Linux and macOS
+### Linux
 
 `shell.nix` imports the exact Nixpkgs revision and source hash from
-`nixpkgs.json` on Linux and `nixpkgs-darwin.json` on macOS. Both shells expose a
-generated dependency report containing the selected pin, governed versions,
-and Nix store identities. A dependency supplied by a project derivation, such
-as `aobus-fast-float`, remains governed by the same source hash and exact
-version checks as a package selected directly from Nixpkgs.
+`nixpkgs.json`. The shell exposes a generated dependency report containing the
+selected pin, governed versions, and Nix store identities. A dependency
+supplied by a project derivation, such as `aobus-fast-float`, remains governed
+by the same source hash and exact version checks as a package selected directly
+from Nixpkgs.
 
 An unrelated package from `PATH`, a channel, or `NIX_PATH` is not an accepted
 substitute for the environment entered by `./ao`.
 
 Linux also verifies during Nix evaluation that Python, Ruff, and mypy match
-`script/ao/toolchain.json`. The x86_64 Darwin-compatible pin cannot supply those
-exact tooling releases, so macOS is explicitly exempt from that tooling
-assertion and does not expose the tooling test suite. Native clang-tidy and its
-lint-integration suite remain part of the macOS gate. This exception is limited
-to repository tooling; governed C++ dependencies still resolve and verify on
-macOS.
+`script/ao/toolchain.json`.
 
-### Windows
+### macOS and Windows
 
 `vcpkg-configuration.json` owns registry identities. Its default registry
 selects the normal port graph. Dependencies that need a coherent historical
 family can use a package-scoped registry baseline.
+
+macOS bootstraps the vcpkg tool revision and verified archive from
+`script/ao/macos-toolchain.json`. Project-owned x64 and arm64 triplets select
+static libraries, the native architecture, and the macOS 14.0 deployment
+target. Windows uses the vcpkg tool bundled with Visual Studio and its native
+Windows triplet. Both hosts resolve the same manifest and registry snapshots.
 
 Boost uses a scoped registry because vcpkg publishes Boost as many related
 `boost-*` ports. Pinning only one Boost port with a manifest override would
@@ -156,7 +158,7 @@ Manifest overrides are reserved for a small number of single-port, exact pins.
 An override ignores other version constraints and therefore requires an
 explicit reason and removal condition. It is not the default update mechanism.
 
-The Windows dependency report preserves the complete
+Each vcpkg dependency report preserves the complete
 `version#port-version`, selected features, target triplet, registry baselines,
 and vcpkg tool version.
 
@@ -173,15 +175,17 @@ setup also verifies Microsoft Authenticode.
 
 ## Tooling contract
 
-`script/ao/toolchain.json` is the shared Linux and Windows tooling policy even
-though Windows performs the managed bootstrap. Linux Nix evaluation and the
-Windows checkout environment must both match its exact Python, Ruff, and mypy
-versions. It is not a macOS environment contract while the Darwin profile does
-not own repository-tooling suites.
+`script/ao/toolchain.json` is the shared tooling policy. Linux Nix evaluation
+and the Windows checkout environment must match its exact Python, Ruff, and
+mypy versions. The macOS managed environment matches Ruff and mypy exactly but
+accepts the selected Homebrew Python at the contracted major/minor version; the
+macOS profile therefore does not own the exact Python patch-level tooling suite.
 
 `script/ao/windows-requirements.txt` is an artifact lock rather than a second
 policy file. It pins Windows wheels and transitive packages by hash. Tooling
 tests verify that its Ruff and mypy entries agree with the toolchain contract.
+`script/ao/macos-requirements.txt` plays the same role for x86_64 and arm64
+macOS wheels used by format, tidy, and hygiene commands.
 
 The Ruff target version and mypy `python_version` in `pyproject.toml` describe
 the Python language compatibility target. They do not need to equal the exact
@@ -191,9 +195,8 @@ development interpreter patch release.
 
 The enforcement path is layered:
 
-1. Linux Nix evaluation or the Windows Python bootstrap validates the tooling
-   contract. macOS Nix evaluation selects its platform pin without claiming
-   tooling-contract parity.
+1. Linux Nix evaluation and the native managed Python bootstraps validate their
+   applicable tooling contract. macOS does not claim exact Python patch parity.
 2. CMake reads `dependency-contract.json`, selects the effective host policy or
    active platform exception, rejects expired exceptions, and performs
    exact/range package discovery.
@@ -243,10 +246,8 @@ clean build and smoke tests.
 
 There are three update classes:
 
-- A Nixpkgs pin update is a platform-scoped batch change by nature. It must
-  update the corresponding pin file and include a generated diff for governed
-  and monitored dependencies on that platform. A change intended to align both
-  Nix hosts updates and validates both pins.
+- A Nixpkgs pin update is a Linux batch change by nature. It must update the
+  pin file and include a generated diff for governed and monitored dependencies.
 - A normal cross-platform governed-dependency update changes the contract and
   every affected native resolution path in one pull request.
 - An emergency platform-first update may use a bounded exception and is not

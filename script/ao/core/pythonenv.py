@@ -1,4 +1,4 @@
-"""Provision the checkout-isolated Windows Python tooling environment."""
+"""Provision a checkout-isolated native Python tooling environment."""
 
 import argparse
 import contextlib
@@ -20,8 +20,9 @@ from . import builddir
 PACKAGE_ROOT = Path(__file__).parent.parent
 TOOLCHAIN_FILE = PACKAGE_ROOT / "toolchain.json"
 REQUIREMENTS_FILE = PACKAGE_ROOT / "windows-requirements.txt"
+MACOS_REQUIREMENTS_FILE = PACKAGE_ROOT / "macos-requirements.txt"
 COMPLETE_MARKER = ".aobus-tooling-complete"
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 LOCK_TIMEOUT_SECONDS = 600
 STALE_LOCK_SECONDS = 1_800
 
@@ -36,22 +37,32 @@ def tool_versions(config_file: Path = TOOLCHAIN_FILE) -> dict[str, str]:
     return {name: values[name] for name in required}
 
 
-def validate_base_python(versions: dict[str, str]) -> None:
+def validate_base_python(versions: dict[str, str], *, exact_patch: bool = True) -> None:
     expected = tuple(int(part) for part in versions["python"].split("."))
-    if sys.version_info[:3] != expected:
-        actual = ".".join(str(part) for part in sys.version_info[:3])
-        raise RuntimeError(f"Aobus requires Python {versions['python']} for Windows tooling; got {actual}")
+    actual = sys.version_info[:3]
+    matches = actual == expected if exact_patch else actual[:2] == expected[:2]
+    if not matches:
+        actual_text = ".".join(str(part) for part in sys.version_info[:3])
+        requirement = versions["python"] if exact_patch else ".".join(str(part) for part in expected[:2])
+        raise RuntimeError(f"Aobus requires Python {requirement} for native tooling; got {actual_text}")
     if importlib.util.find_spec("ensurepip") is None:
         raise RuntimeError("Aobus requires a regular Python installation with ensurepip")
 
 
 def environment_fingerprint(
-    versions: dict[str, str], requirements_file: Path = REQUIREMENTS_FILE, *, executable: str = sys.executable
+    versions: dict[str, str],
+    requirements_file: Path = REQUIREMENTS_FILE,
+    *,
+    executable: str = sys.executable,
+    runtime_version: str | None = None,
 ) -> str:
     digest = hashlib.sha256()
     digest.update(f"schema={SCHEMA_VERSION}\0".encode())
     digest.update(os.path.normcase(os.path.abspath(executable)).encode())
     digest.update(b"\0")
+    if runtime_version is not None:
+        digest.update(runtime_version.encode())
+        digest.update(b"\0")
     digest.update(json.dumps(versions, sort_keys=True).encode())
     digest.update(b"\0")
     digest.update(requirements_file.read_bytes())
@@ -64,13 +75,19 @@ def environment_path(
     fingerprint: str,
     *,
     environ: dict[str, str] | None = None,
+    os_name: str = "nt",
 ) -> Path:
-    checkout = builddir.windows_checkout_key(project_root, environ=environ, create_id=True)
+    checkout = builddir.windows_checkout_key(
+        project_root,
+        environ=environ,
+        create_id=True,
+        os_name=os_name,
+    )
     return state_root / "tools" / "venvs" / checkout / fingerprint
 
 
-def _python_path(environment: Path) -> Path:
-    return environment / "Scripts" / "python.exe"
+def _python_path(environment: Path, *, platform_name: str = "windows") -> Path:
+    return environment / "Scripts" / "python.exe" if platform_name == "windows" else environment / "bin" / "python"
 
 
 def _process_environment(state_root: Path) -> dict[str, str]:
@@ -84,8 +101,15 @@ def _process_environment(state_root: Path) -> dict[str, str]:
     return environment
 
 
-def _tools_match(environment: Path, versions: dict[str, str], state_root: Path, fingerprint: str) -> bool:
-    python = _python_path(environment)
+def _tools_match(
+    environment: Path,
+    versions: dict[str, str],
+    state_root: Path,
+    fingerprint: str,
+    *,
+    platform_name: str = "windows",
+) -> bool:
+    python = _python_path(environment, platform_name=platform_name)
     marker = environment / COMPLETE_MARKER
     if not python.is_file() or not marker.is_file():
         return False
@@ -96,13 +120,15 @@ def _tools_match(environment: Path, versions: dict[str, str], state_root: Path, 
         return False
 
     python_version = tuple(int(part) for part in versions["python"].split("."))
+    version_components = 3 if platform_name == "windows" else 2
     commands = (
         (
             [
                 str(python),
                 "-I",
                 "-c",
-                f"import sys; raise SystemExit(tuple(sys.version_info[:3]) != {python_version!r})",
+                "import sys; raise SystemExit("
+                f"tuple(sys.version_info[:{version_components}]) != {python_version[:version_components]!r})",
             ],
             "",
         ),
@@ -132,9 +158,11 @@ def _build_environment(
     requirements_file: Path,
     state_root: Path,
     fingerprint: str,
+    *,
+    platform_name: str = "windows",
 ) -> None:
     venv.EnvBuilder(with_pip=True, clear=False, symlinks=False).create(destination)
-    python = _python_path(destination)
+    python = _python_path(destination, platform_name=platform_name)
     subprocess.run(
         [
             str(python),
@@ -154,7 +182,13 @@ def _build_environment(
         env=_process_environment(state_root),
     )
     (destination / COMPLETE_MARKER).write_text(f"{fingerprint}\n", encoding="utf-8")
-    if not _tools_match(destination, versions, state_root, fingerprint):
+    if not _tools_match(
+        destination,
+        versions,
+        state_root,
+        fingerprint,
+        platform_name=platform_name,
+    ):
         raise RuntimeError("the provisioned Ruff/mypy environment failed its version probe")
 
 
@@ -192,32 +226,57 @@ def ensure_environment(
     state_root: Path,
     *,
     config_file: Path = TOOLCHAIN_FILE,
-    requirements_file: Path = REQUIREMENTS_FILE,
+    requirements_file: Path | None = None,
     environ: dict[str, str] | None = None,
+    platform_name: str = "windows",
 ) -> Path:
+    if platform_name not in {"macos", "windows"}:
+        raise RuntimeError(f"unsupported native Python tooling platform {platform_name!r}")
+    if requirements_file is None:
+        requirements_file = MACOS_REQUIREMENTS_FILE if platform_name == "macos" else REQUIREMENTS_FILE
     versions = tool_versions(config_file)
-    validate_base_python(versions)
-    fingerprint = environment_fingerprint(versions, requirements_file)
-    destination = environment_path(project_root, state_root, fingerprint, environ=environ)
-    if _tools_match(destination, versions, state_root, fingerprint):
-        return _python_path(destination)
+    validate_base_python(versions, exact_patch=platform_name == "windows")
+    actual_version = ".".join(str(part) for part in sys.version_info[:3])
+    fingerprint = environment_fingerprint(versions, requirements_file, runtime_version=actual_version)
+    destination = environment_path(
+        project_root,
+        state_root,
+        fingerprint,
+        environ=environ,
+        os_name="nt" if platform_name == "windows" else "posix",
+    )
+    if _tools_match(destination, versions, state_root, fingerprint, platform_name=platform_name):
+        return _python_path(destination, platform_name=platform_name)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     lock = destination.parent / f".{fingerprint}.lock"
     with _environment_lock(lock):
-        if not _tools_match(destination, versions, state_root, fingerprint):
+        if not _tools_match(destination, versions, state_root, fingerprint, platform_name=platform_name):
             staging = destination.parent / f".{fingerprint}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
             try:
-                _build_environment(staging, versions, requirements_file, state_root, fingerprint)
+                _build_environment(
+                    staging,
+                    versions,
+                    requirements_file,
+                    state_root,
+                    fingerprint,
+                    platform_name=platform_name,
+                )
                 if destination.exists():
                     shutil.rmtree(destination)
                 staging.rename(destination)
-                if not _tools_match(destination, versions, state_root, fingerprint):
+                if not _tools_match(
+                    destination,
+                    versions,
+                    state_root,
+                    fingerprint,
+                    platform_name=platform_name,
+                ):
                     raise RuntimeError("the published Ruff/mypy environment failed its version probe")
             finally:
                 if staging.exists():
                     shutil.rmtree(staging)
-        return _python_path(destination)
+        return _python_path(destination, platform_name=platform_name)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -225,17 +284,28 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--state-root", type=Path, required=True)
     parser.add_argument("--result-file", type=Path, required=True)
+    parser.add_argument("--platform", choices=("macos", "windows"))
     return parser
+
+
+def _native_platform_name(platform_name: str | None = None) -> str:
+    resolved = sys.platform if platform_name is None else platform_name
+    if resolved == "darwin":
+        return "macos"
+    if resolved == "win32":
+        return "windows"
+    raise RuntimeError(f"native Python tooling is unavailable on platform {resolved!r}")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        python = ensure_environment(args.project_root, args.state_root)
+        platform_name = args.platform or _native_platform_name()
+        python = ensure_environment(args.project_root, args.state_root, platform_name=platform_name)
         args.result_file.parent.mkdir(parents=True, exist_ok=True)
         args.result_file.write_text(f"{python}\n", encoding="utf-8")
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
-        print(f"Aobus Python tooling bootstrap failed: {exc}", file=sys.stderr)
+        print(f"Aobus native Python tooling bootstrap failed: {exc}", file=sys.stderr)
         return 1
     return 0
 

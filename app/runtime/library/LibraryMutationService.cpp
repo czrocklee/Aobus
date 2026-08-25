@@ -281,7 +281,7 @@ namespace ao::rt
 
     LibraryMutationService::CommandKind kind;
     OneShotEvent<bool> event;
-    std::stop_source closingStopSource;
+    mutable std::stop_source closingStopSource;
   };
 
   struct detail::LibraryMutationPublicationEvent final

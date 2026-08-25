@@ -38,7 +38,7 @@ Capture the current state before editing:
 ./ao check
 ```
 
-Run that sequence on each affected Nix host. Keep platform reports distinct,
+Run that sequence on each affected native host. Keep platform reports distinct,
 for example `/tmp/aobus-dependencies-linux-before.json` and
 `/tmp/aobus-dependencies-macos-before.json`.
 
@@ -55,10 +55,8 @@ Do not infer the old graph from a new lockfile after the update.
 
 ## Updating Nixpkgs
 
-1. Select the intended platform and Nixpkgs revision.
-2. Update the revision, ref, and source hash in `nixpkgs.json` for Linux or
-   `nixpkgs-darwin.json` for macOS. These pins are independent; never update one
-   and describe the other as validated.
+1. Select the intended Nixpkgs revision for Linux.
+2. Update the revision, ref, and source hash in `nixpkgs.json`.
 3. Compute the unpacked tarball hash rather than copying an unverified value:
 
 ```bash
@@ -66,10 +64,9 @@ nix-prefetch-url --unpack \
   https://github.com/NixOS/nixpkgs/archive/<revision>.tar.gz
 ```
 
-4. Enter the new environment through `./ao`. On Linux, tooling assertions fail
-   early if the package set no longer provides the exact Python, Ruff, or mypy
-   versions from `script/ao/toolchain.json`. macOS does not own that tooling
-   contract; it must still satisfy every governed C++ dependency.
+4. Enter the new environment through `./ao`. Tooling assertions fail early if
+   the package set no longer provides the exact Python, Ruff, or mypy versions
+   from `script/ao/toolchain.json`.
 5. Build and generate the new dependency report:
 
 ```bash
@@ -77,9 +74,7 @@ nix-prefetch-url --unpack \
 ./ao deps report --json /tmp/aobus-dependencies-after.json
 ```
 
-6. Run the clean build, dependency report, and gate on the selected native
-   host. A change intended to align both Nix hosts must update and validate both
-   pin files.
+6. Run the clean build, dependency report, and gate on Linux.
 7. Review every governed dependency change. The Nix result is a candidate; it
    changes policy only when `dependency-contract.json` is edited explicitly.
 8. Review monitor-only changes for API, security, license, patch, and build-option
@@ -96,21 +91,18 @@ Update the dependency's policy in `dependency-contract.json`. State whether the
 policy remains exact or changes to a bounded range. Do not broaden a range only
 to make CI green.
 
-### 2. Resolve it on Linux and macOS
+### 2. Resolve it on Linux
 
 Normally the accepted version comes from the pinned Nixpkgs package. If the
 package set cannot supply the accepted version, either retain the current
 contract or add a targeted, source-hash-verified Nix override. Do not use an
 ambient package outside `shell.nix`.
 
-Resolve and report the dependency against both `nixpkgs.json` and
-`nixpkgs-darwin.json` when its contract includes both platforms. A project
-derivation must use one immutable upstream source and version on both hosts;
-the two Nixpkgs pins do not authorize two dependency contracts.
+Resolve and report the dependency against `nixpkgs.json`.
 
-### 3. Resolve it on Windows
+### 3. Resolve it on macOS and Windows
 
-Use the least forceful vcpkg mechanism that preserves the contract:
+Use the least forceful shared vcpkg mechanism that preserves the contract:
 
 1. an approved default registry baseline;
 2. a direct `version>=` constraint when a minimum is sufficient;
@@ -119,6 +111,49 @@ Use the least forceful vcpkg mechanism that preserves the contract:
 5. a versioned custom registry when the official registry lacks a maintained
    version;
 6. a repository overlay port only as a short-lived emergency measure.
+
+When the default registry baseline changes, update the vcpkg revision, archive
+URL, and verified archive SHA-256 in `script/ao/macos-toolchain.json` in the
+same change. The macOS tool revision must equal the default registry baseline;
+the portal tests enforce that relationship. Compute the archive hash from the
+downloaded bytes with `shasum -a 256`; do not copy an unverified digest.
+
+### Recovering a regenerated macOS vcpkg archive
+
+GitHub generates commit archives on demand. The files for a commit remain
+stable, but the compressed archive bytes may be regenerated differently and
+invalidate the SHA-256 recorded in `script/ao/macos-toolchain.json`.
+The mismatch must remain a hard failure until the new archive is independently
+verified against the pinned Git commit.
+
+Use a scratch directory outside the repository and substitute the revision and
+URL already recorded in the macOS lock:
+
+```bash
+AOBUS_VCPKG_AUDIT="$(mktemp -d)"
+AOBUS_VCPKG_REVISION="<revision>"
+AOBUS_VCPKG_URL="<archiveUrl>"
+git init "$AOBUS_VCPKG_AUDIT/repository"
+git -C "$AOBUS_VCPKG_AUDIT/repository" remote add origin https://github.com/microsoft/vcpkg
+git -C "$AOBUS_VCPKG_AUDIT/repository" fetch --depth=1 origin "$AOBUS_VCPKG_REVISION"
+test "$(git -C "$AOBUS_VCPKG_AUDIT/repository" rev-parse FETCH_HEAD)" = "$AOBUS_VCPKG_REVISION"
+mkdir "$AOBUS_VCPKG_AUDIT/expected" "$AOBUS_VCPKG_AUDIT/actual"
+git -C "$AOBUS_VCPKG_AUDIT/repository" archive FETCH_HEAD \
+  | tar -xf - -C "$AOBUS_VCPKG_AUDIT/expected"
+curl --fail --location --output "$AOBUS_VCPKG_AUDIT/vcpkg.tar.gz" "$AOBUS_VCPKG_URL"
+tar -xzf "$AOBUS_VCPKG_AUDIT/vcpkg.tar.gz" \
+  --strip-components=1 -C "$AOBUS_VCPKG_AUDIT/actual"
+git diff --no-index --no-ext-diff --exit-code \
+  "$AOBUS_VCPKG_AUDIT/expected" "$AOBUS_VCPKG_AUDIT/actual"
+shasum -a 256 "$AOBUS_VCPKG_AUDIT/vcpkg.tar.gz"
+```
+
+Only after the tree comparison succeeds may the archive SHA-256 change without
+changing the pinned revision. Preserve the old cached archive as review
+evidence, explain why the upstream bytes changed, then run clean macOS Debug
+and Release gates plus `./ao deps verify`. A project-controlled immutable
+release asset may replace the generated URL in a later change, but an unhashed
+Git clone is not an equivalent supply-chain check.
 
 An override ignores other version constraints. Every new override needs a
 reason and an exit condition in the pull-request description. Remove an
@@ -164,7 +199,7 @@ as `version-semver` for FTXUI.
 
 Treat the fast_float version and decimal-conversion behavior as one contract.
 Update its exact version in `dependency-contract.json`, its source tag and hash
-in `shell.nix`, and the vcpkg resolution together. Run the `[from-chars]`
+in `shell.nix`, and the shared vcpkg resolution together. Run the `[from-chars]`
 regressions on Linux, macOS, and Windows, including representable subnormals,
 true underflow and overflow, unchanged output on errors, and ties-to-even
 rounding. Do not replace those cases with performance-only evidence.
@@ -192,11 +227,19 @@ Verify that the dependency report still declares and resolves `script-transliter
 `script/ao/toolchain.json` is the version policy source.
 
 1. Update the intended exact versions there.
-2. Rebuild `script/ao/windows-requirements.txt` with hashes for every selected
+2. If the Python major/minor changes, update both `pythonFormula` and
+   `pythonMajorMinorVersion` in `script/ao/macos-toolchain.json`. The portal
+   tests require them to match the major/minor selected by
+   `script/ao/toolchain.json`; a patch-only Python update leaves the Homebrew
+   lock unchanged.
+3. Rebuild `script/ao/windows-requirements.txt` with hashes for every selected
    Windows wheel and transitive package.
-3. Ensure the Linux Nixpkgs set or a targeted Nix derivation supplies the same
-   exact versions. The macOS profile is outside this tooling contract.
-4. Run the tooling gate on Linux and Windows:
+4. Rebuild `script/ao/macos-requirements.txt` with hashes for the x86_64 and
+   arm64 wheels used by macOS format, tidy, and hygiene commands.
+5. Ensure the Linux Nixpkgs set or a targeted Nix derivation supplies the same
+   exact versions. macOS must match Ruff and mypy but remains outside the exact
+   Python patch-level contract.
+6. Run the tooling gate on Linux and Windows:
 
 ```bash
 ./ao test --tooling
@@ -206,11 +249,10 @@ Verify that the dependency report still declares and resolves `script-transliter
 ao.bat test --tooling
 ```
 
-Do not update `nixpkgs-darwin.json` merely to chase these tooling versions.
-macOS does not expose `./ao test --tooling`; its governed C++ dependencies and
-native suite gate remain independent.
+macOS does not expose `./ao test --tooling`; its managed checks, governed C++
+dependencies, and native suite gate remain independent.
 
-5. Review new Ruff diagnostics and mypy behavior as policy changes. Keep the
+7. Review new Ruff diagnostics and mypy behavior as policy changes. Keep the
    pin change and any large mechanical cleanup in distinct, understandable
    commits.
 
@@ -220,7 +262,7 @@ Python language target.
 
 ## When vcpkg does not carry the contracted version
 
-Do not silently leave Windows on another version.
+Do not silently leave either vcpkg host on another version.
 
 Choose one explicit outcome:
 
@@ -293,7 +335,7 @@ Confirm in the report:
 - required CMake targets and capabilities passed;
 - all selected Boost library ports belong to one release family;
 - vcpkg port revisions, features, triplet, and registry baselines are present;
-- the selected Nixpkgs revision and Nix store identities are present;
+- on Linux, the selected Nixpkgs revision and Nix store identities are present;
 - no exception is expired or broader than one dependency and platform;
 - on Linux and Windows, the actual Ruff and mypy versions match the tooling
   contract; macOS makes no such claim.
@@ -318,7 +360,7 @@ security impact, and open the reconciliation work immediately.
 - [ ] The change has one clear dependency/tooling purpose.
 - [ ] The before/after governed dependency summary is attached.
 - [ ] `dependency-contract.json` changed only when project policy changed.
-- [ ] Each affected Nix pin and all vcpkg source revisions and hashes are immutable.
+- [ ] The affected Nix pin and all vcpkg source revisions and hashes are immutable.
 - [ ] New vcpkg overrides have a reason and exit condition.
 - [ ] Boost ports use one scoped-registry release family.
 - [ ] Linux clean Debug and Release gates pass.

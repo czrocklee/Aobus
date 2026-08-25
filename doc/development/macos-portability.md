@@ -25,12 +25,12 @@ application, and the native test suites. There is no GTK frontend and no native
 audio backend: `lib/audio/PlatformBackendProvidersMacos.cpp` returns no
 providers, so the terminal application reports `--` where Linux reports `PW`.
 
-The toolchain is Clang 22 from `llvmPackages_22.stdenv`, targeting
-`-mmacosx-version-min=14.0`. The runtime C++ library is Apple's system
-`/usr/lib/libc++.1.dylib`: nixpkgs' darwin `libcxx` ships only `.tbd` stubs, so
-Apple's availability annotations are load-bearing and must not be suppressed.
-Defining `_LIBCPP_DISABLE_AVAILABILITY` makes the build succeed and then fails
-at process load with a missing symbol.
+The toolchain is Clang 22 from Homebrew's `llvm@22` formula, targeting
+`-mmacosx-version-min=14.0`. Compilation uses that formula's libc++ headers and
+links Apple's system `/usr/lib/libc++.1.dylib`. Apple's availability annotations
+are load-bearing and must not be suppressed. Defining
+`_LIBCPP_DISABLE_AVAILABILITY` makes the build succeed and then fails at process
+load with a missing symbol.
 
 ## Removable deviations
 
@@ -42,9 +42,10 @@ repository. None of them is a design choice.
 | 1 | `ao::compat::MoveOnlyFunction` | `include/ao/compat/MoveOnlyFunction.h` | libc++ defines `__cpp_lib_move_only_function` |
 | 2 | `ao::compat::views::enumerate` | `include/ao/compat/Enumerate.h` | libc++ defines `__cpp_lib_ranges_enumerate` |
 | 3 | `ao::compat::AtomicSharedPtr` | `include/ao/compat/AtomicSharedPtr.h` | libc++ defines `__cpp_lib_atomic_shared_ptr` |
-| 4 | libc++ `expected` shim | `shell.nix`, `cmake/CompilerOptions.cmake` | libc++ constrains `expected`'s equality operators without self-reference |
+| 4 | libc++ `expected` shim | `script/ao/macos-vcpkg-bootstrap.sh`, `cmake/CompilerOptions.cmake` | libc++ constrains `expected`'s equality operators without self-reference |
 | 5 | `-Wno-c2y-extensions` | `cmake/CompilerOptions.cmake` | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it |
 | 6 | `StringMaker<file_time_type>` | `test/unit/FilesystemTestSupport.h` | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock |
+| 7 | c4core `C4_CPP=17` header mode | `cmake/Dependencies.cmake` | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
 
 ### 1-3: standard-library seams
 
@@ -105,33 +106,33 @@ the value type converts to `expected`, so the candidate is viable and the
 constraint is checked before the conversion is rejected. There is no way to
 avoid it from the call site.
 
-`shell.nix` builds a copy of `__expected/expected.h` with the five C++26 gates
-disabled, and `cmake/CompilerOptions.cmake` puts that directory ahead of the
-real one with `-isystem`. Two mechanics are easy to get wrong:
+The macOS portal builds a copy of `__expected/expected.h` with the five C++26
+gates disabled, and `cmake/CompilerOptions.cmake` puts that directory ahead of
+the real one with `-isystem`. Two mechanics are easy to get wrong:
 
 - **Only a command-line `-isystem` works.** The real libc++ directory is built
-  into the compiler driver rather than passed as an argument, and
-  `CPLUS_INCLUDE_PATH` and `NIX_CFLAGS_COMPILE` were both measured to lose that
-  race. Injecting through either produces a silent no-op: the build fails
-  exactly as before, with nothing pointing at the cause.
+  into the compiler driver rather than passed as an argument. Environment-only
+  include injection was measured to lose that race and produces a silent
+  no-op: the build fails exactly as before, with nothing pointing at the cause.
 - **Only that one header may be copied.** libc++'s own `<cstdint>` reaches the
   SDK through `#include_next`, and a duplicate include tree on the search path
   captures that hop, leaving `intmax_t` unresolved.
 
-The derivation asserts that exactly five gates are present and fails the build
-otherwise, so a libc++ upgrade that reworks the file stops the build instead of
-silently producing an unpatched header. That failure is the signal to re-test
-whether the shim is still needed.
+The portal transform asserts that exactly five gates are present and fails the
+build otherwise, so an `llvm@22` update that reworks the file stops the build
+instead of silently producing an unpatched header. That failure is the signal
+to re-test whether the shim is still needed.
 
 Disabling the constraints restores the C++23 form of the operators. That is a
 step away from C++26 conformance, but it is what libstdc++ and the MSVC STL
 compile against today, so macOS behaves exactly like the other platforms rather
 than a third way.
 
-To retire it: delete the derivation and its export from `shell.nix`, delete the
-`if(APPLE)` block from `cmake/CompilerOptions.cmake`, and confirm the core test
-suite still builds on macOS. A minimal check is a `std::vector<std::expected<T, E>>`
-that reallocates, compiled with `-std=gnu++26`.
+To retire it: delete the transform and export from
+`script/ao/macos-vcpkg-bootstrap.sh`, delete the `if(APPLE)` block from
+`cmake/CompilerOptions.cmake`, and confirm the core test suite still builds on
+macOS. A minimal check is a `std::vector<std::expected<T, E>>` that reallocates,
+compiled with `-std=gnu++26`.
 
 ### 5: `-Wno-c2y-extensions`
 
@@ -147,6 +148,23 @@ no `operator<<` accepts that type, so Catch2's default stringifier fails to
 compile as soon as a comparison of two file times is decomposed. The
 specialisation formats the tick count by hand. It is defined unconditionally so
 the failure text is identical on every platform.
+
+### 7: c4core C++17 header mode
+
+c4core 0.5.0 classifies a C++26 consumer as C++23 and selects standard
+likelihood attributes for `C4_LIKELY` and `C4_UNLIKELY`. rapidyaml uses those
+macros in expression positions where Darwin Clang 22 rejects the resulting
+attribute placement.
+
+`PkgRapidYaml` therefore defines `C4_CPP=17` for Darwin Clang consumers while
+leaving Aobus itself in C++26 mode. The pre-existing MSVC compatibility mode is
+retained separately. Linux Clang is deliberately outside the Darwin condition,
+so this workaround cannot silently change its dependency headers.
+
+To retire it: remove the Darwin condition from `cmake/Dependencies.cmake`,
+build the affected rapidyaml consumers with the current Homebrew Clang in
+C++26 mode, and run the complete macOS gate. A dependency upgrade is not enough
+evidence unless those consumers compile without the definition.
 
 ## Permanent platform differences
 

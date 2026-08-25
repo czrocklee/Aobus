@@ -68,19 +68,18 @@ else()
   # Reproduced on libc++ 21 and 22; libstdc++ and the MSVC STL do not implement
   # P2944 yet, which is why only macOS breaks.
   #
-  # shell.nix builds a copy of that one header with the C++26 clauses disabled
-  # and exports its directory. Prepending it on the command line is what makes
-  # it win: the real libc++ include directory is built into the compiler driver
-  # rather than passed as an argument, and a command-line -isystem is searched
-  # before the driver's own directories. CPLUS_INCLUDE_PATH and
-  # NIX_CFLAGS_COMPILE were both measured to lose that race.
+  # The macOS portal builds a copy of that one header with the C++26 clauses
+  # disabled and exports its directory. Prepending it on the command line is
+  # what makes it win: the real libc++ include directory is built into the
+  # compiler driver rather than passed as an argument, and a command-line
+  # -isystem is searched before the driver's own directories.
   #
   # Retirement condition: doc/development/macos-portability.md.
   if(APPLE)
     if(NOT DEFINED ENV{AOBUS_LIBCXX_EXPECTED_SHIM})
       message(FATAL_ERROR
         "AOBUS_LIBCXX_EXPECTED_SHIM is unset. Configure through the ./ao portal, "
-        "which enters shell.nix and exports it; without it libc++ cannot compile "
+        "which generates and exports it; without it libc++ cannot compile "
         "std::expected comparisons in C++26 mode.")
     endif()
     add_compile_options(-isystem $ENV{AOBUS_LIBCXX_EXPECTED_SHIM})

@@ -15,6 +15,33 @@ class PythonCheckRunnerTest(unittest.TestCase):
             (pythoncheck.sys.executable, "-I", "-m", "ruff", "--version"),
         )
 
+    def test_macos_modules_ignore_ambient_python_packages(self):
+        self.assertEqual(
+            pythoncheck.module_command("ruff", "--version", os_name="posix", platform_name="darwin"),
+            (pythoncheck.sys.executable, "-I", "-m", "ruff", "--version"),
+        )
+
+    def test_linux_modules_keep_the_nix_python_package_environment(self):
+        self.assertEqual(
+            pythoncheck.module_command("ruff", "--version", os_name="posix", platform_name="linux"),
+            (pythoncheck.sys.executable, "-m", "ruff", "--version"),
+        )
+
+    def test_macos_mypy_cache_stays_in_the_managed_environment(self):
+        with mock.patch.object(pythoncheck.sys, "prefix", "/state/tooling"):
+            self.assertEqual(
+                pythoncheck.mypy_command("script/ao", platform_name="darwin"),
+                (
+                    pythoncheck.sys.executable,
+                    "-I",
+                    "-m",
+                    "mypy",
+                    "--cache-dir",
+                    "/state/tooling/.mypy_cache",
+                    "script/ao",
+                ),
+            )
+
     def test_default_checks_cover_python_tooling_targets(self):
         self.assertEqual(
             pythoncheck.checks([]),
@@ -27,7 +54,7 @@ class PythonCheckRunnerTest(unittest.TestCase):
                 ),
                 pythoncheck.Check(
                     "mypy",
-                    pythoncheck.module_command("mypy", "script/ao", "app/cli/generate_test_library.py"),
+                    pythoncheck.mypy_command("script/ao", "app/cli/generate_test_library.py"),
                 ),
             ),
         )
@@ -40,7 +67,7 @@ class PythonCheckRunnerTest(unittest.TestCase):
                     "Ruff",
                     pythoncheck.module_command("ruff", "check", "script/ao/core/pythoncheck.py"),
                 ),
-                pythoncheck.Check("mypy", pythoncheck.module_command("mypy", "script/ao/core/pythoncheck.py")),
+                pythoncheck.Check("mypy", pythoncheck.mypy_command("script/ao/core/pythoncheck.py")),
             ),
         )
 

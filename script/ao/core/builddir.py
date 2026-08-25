@@ -157,7 +157,7 @@ WINDOWS_WINUI_PRESET = "windows-winui"
 MACOS_PRESETS = {
     "debug": "macos-debug",
     "release": "macos-release",
-    "profile": "profile",
+    "profile": "macos-profile",
 }
 
 TIDY_PRESETS = {
@@ -197,8 +197,7 @@ LINUX_PROFILE = PlatformProfile(
 # macOS builds the terminal and command-line frontends only: there is no GTK
 # frontend and no native audio backend there yet, so the app runs silently and
 # the gtk suites do not exist. Python repository tooling remains owned by Linux
-# and Windows because the Darwin Nix pin intentionally has a different Python
-# toolchain. Native clang-tidy integration is supported on Darwin.
+# and Windows. Native clang-tidy integration is supported on Darwin.
 MACOS_PROFILE = PlatformProfile(
     name="macos",
     build_root=BUILD_ROOT,

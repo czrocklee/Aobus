@@ -1,15 +1,15 @@
-"""Answers which portal commands need the native Windows build environment.
+"""Answers which portal commands need the native build environment.
 
 Each command module declares REQUIRES_BUILD_ENV next to its NAME; ao.bat
-queries this module (``python -m ao.core.buildenv <command>``) after the
-Python bootstrap instead of keeping its own copy of the command list.
+and the macOS branch of ./ao query this module after their Python bootstrap
+instead of keeping their own copies of the command list.
 """
 
 import sys
 
 
 def requires_build_env(command: str) -> bool:
-    """Return True when `command` needs cl.exe and the vcpkg toolchain."""
+    """Return True when `command` needs the native compiler and dependencies."""
     from ..command import COMMAND_MODULES
 
     for module in COMMAND_MODULES:
@@ -18,10 +18,23 @@ def requires_build_env(command: str) -> bool:
     return False
 
 
+def requires_python_tools(command: str) -> bool:
+    """Return True when `command` needs the managed Ruff/mypy environment."""
+    from ..command import COMMAND_MODULES
+
+    for module in COMMAND_MODULES:
+        if module.NAME == command:
+            return bool(getattr(module, "REQUIRES_PYTHON_TOOLS", False))
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
-    command = arguments[0] if arguments else ""
-    print("1" if requires_build_env(command) else "0")
+    python_tools = bool(arguments and arguments[0] == "--python-tools")
+    command_index = 1 if python_tools else 0
+    command = arguments[command_index] if len(arguments) > command_index else ""
+    required = requires_python_tools(command) if python_tools else requires_build_env(command)
+    print("1" if required else "0")
     return 0
 
 

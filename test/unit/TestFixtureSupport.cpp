@@ -21,7 +21,10 @@ namespace ao::test
 {
   TempDir::TempDir()
   {
-    auto const root = std::filesystem::temp_directory_path();
+    // macOS reports /var as the temporary root even though it resolves through
+    // the /private/var symlink. Keep fixture paths in their physical form so
+    // production canonicalization does not change their identity mid-test.
+    auto const root = std::filesystem::canonical(std::filesystem::temp_directory_path());
     auto device = std::random_device{};
     auto distribution = std::uniform_int_distribution<std::uint64_t>{};
 

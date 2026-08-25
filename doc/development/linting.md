@@ -48,21 +48,23 @@ drive-by lint sweep.
 ## Platform coverage
 
 Clang-format does not depend on a compile database, so the same source can be
-formatted on any native host. Linux and macOS get clang-format from Nix; Windows resolves
-the formatter from the pinned LLVM SDK used by tidy (version pinned in
-`cmake/LlvmSdk.cmake`) and never falls back to `PATH`. Clang-tidy must use compiler flags, defines, generated headers, and
-SDK headers from a real native compile command. Complete cross-platform C++
-lint coverage is therefore the combination of Linux, macOS, and Windows runs:
+formatted on any native host. Linux gets clang-format from Nix, macOS gets it
+from the `llvm@22` formula selected by the portal, and Windows resolves it from
+the pinned LLVM SDK used by tidy (version pinned in `cmake/LlvmSdk.cmake`).
+Clang-tidy must use compiler flags, defines, generated headers, and SDK headers
+from a real native compile command. Complete cross-platform C++ lint coverage
+is therefore the combination of Linux, macOS, and Windows runs:
 
 - Linux owns PipeWire, ALSA, POSIX, and GTK translation units.
 - macOS owns Darwin translation units and independently covers POSIX and shared translation units.
 - Windows owns WASAPI and other Windows-only translation units.
 - Shared translation units are intentionally checked on every host that builds them.
 
-Darwin's available Python, Ruff, and mypy versions still check changed Python
-files through `./ao hygiene`, but they do not establish the exact Python
-toolchain contract. The `tooling` suite on Linux and Windows owns that version
-and behavior gate.
+The macOS managed environment pins Ruff and mypy but accepts the Homebrew
+Python at the contracted major/minor version instead of the exact patch. It
+checks changed Python during hygiene without establishing the complete tooling
+contract; the `tooling` suite on Linux and Windows owns that version and
+behavior gate.
 
 Changed-file, folder, and `--all` scopes may defer only files that are incompatible with the current host, such as WinUI or WASAPI code on Linux and GTK, ALSA, or PipeWire code on Windows.
 The portal prints those platform deferrals and continues with the native files.
@@ -437,10 +439,11 @@ Add the direct include where the symbol is used.
 - If a symbol is used only in a `.cpp`, add the provider include to the `.cpp`
   instead of relying on a paired header's transitive includes.
 - For standard library symbols, include the standard header that owns the symbol.
-- For GTKmm, GLib, PipeWire, LLVM, and other Nix-provided libraries, use the
-  package's headers and build configuration to find the provider. From the repo
-  root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for libraries
-  that publish pkg-config metadata.
+- For GTKmm, GLib, PipeWire, LLVM, and other Linux Nix-provided libraries, use
+  the package's headers and build configuration to find the provider. From the
+  repo root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for
+  libraries that publish pkg-config metadata. On macOS, inspect the active
+  vcpkg installation recorded in the dependency report.
 - For Clang/LLVM internals, inspect the compile database under
   `/tmp/build/<project-directory>/debug-clang-tidy/compile_commands.json` on
   Linux or the resolved checkout-specific `windows-tidy` build tree on Windows.

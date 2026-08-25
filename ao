@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Aobus development portal: ./ao <command> [options]
-# Re-enters nix-shell, then dispatches to the Python package in script/ao.
+# Enters the native dependency environment, then dispatches to the Python
+# package in script/ao. Linux uses Nix; macOS uses Homebrew host tools and a
+# repository-pinned vcpkg checkout.
 #
 # Deliberately does NOT trust IN_NIX_SHELL: direnv and long-lived shells carry stale
 # environments that silently diverge from the current shell.nix (e.g. missing pkg-config
@@ -10,31 +12,46 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# cd first so shell.nix's $PWD-based hooks (ccache dir) resolve to the repository.
+# Resolve repository-relative hook and compiler-cache paths consistently.
 cd "$ROOT"
+
+aobus_configure_git_hooks() {
+    if [[ -d "$ROOT/.git" ]]; then
+        git -C "$ROOT" config --local core.hooksPath script/git-hook
+    fi
+}
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    # Do not let Python modules from an ambient virtual environment shadow the
+    # portal package. The Homebrew interpreter is selected by the macOS lock.
+    unset PYTHONHOME PYTHONPATH
+    source "$ROOT/script/ao/macos-vcpkg-bootstrap.sh"
+    aobus_macos_prepare_python "$ROOT" || exit $?
+    aobus_configure_git_hooks
+    export PYTHONPATH="$ROOT/script"
+
+    NEEDS_BUILD_ENV=0
+    NEEDS_PYTHON_TOOLS=0
+    if [[ $# -gt 0 ]]; then
+        NEEDS_BUILD_ENV="$("$AOBUS_PYTHON" -m ao.core.buildenv "$1")"
+        NEEDS_PYTHON_TOOLS="$("$AOBUS_PYTHON" -m ao.core.buildenv --python-tools "$1")"
+    fi
+    if [[ "$NEEDS_PYTHON_TOOLS" == "1" ]]; then
+        aobus_macos_prepare_python_tools "$ROOT" || exit $?
+    fi
+    if [[ "$NEEDS_BUILD_ENV" == "1" ]]; then
+        aobus_macos_prepare_build_environment "$ROOT" || exit $?
+    fi
+    exec "$AOBUS_PYTHON" -m ao "$@"
+fi
 
 if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
     # Do not let Python modules from a previously entered project shell shadow
     # the versions selected by the current shell.nix.
     unset PYTHONHOME PYTHONPATH
-    # macOS ships bash 3.2.57, which nixpkgs' stdenv setup rejects. nix-shell
-    # picks its interactive shell from PATH, so resolve the pinned bash first.
-    # Non-interactive SSH shells commonly omit Nix's profile from PATH; recover
-    # the standard multi-user and legacy single-user locations before invoking
-    # either nix-build or nix-shell.
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        source "$ROOT/script/ao/darwin-nix-bootstrap.sh"
-        aobus_require_nix_build \
-            /nix/var/nix/profiles/default/bin \
-            "$HOME/.nix-profile/bin" || exit $?
-    fi
-
-    if [[ "$(uname -s)" == "Darwin" && -z "${NIX_BUILD_SHELL:-}" ]]; then
-        NIX_BUILD_SHELL="$(nix-build --no-out-link "$ROOT/darwin-bash.nix")/bin/bash"
-        export NIX_BUILD_SHELL
-    fi
     exec nix-shell "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
 fi
 
+aobus_configure_git_hooks
 export PYTHONPATH="$ROOT/script${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m ao "$@"

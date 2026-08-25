@@ -33,10 +33,10 @@ uses a separate `windows-tidy` preset that builds the self-contained
 `AobusClangTidy.exe`.
 
 The macOS `all` group contains core, TUI, CLI, integration, and lint. GTK is not
-built. Python tooling remains unavailable because the Darwin Nix pin does not
-own the exact repository-tooling contract; native clang-tidy and its integration
-fixtures do have a Darwin baseline. `./ao test --all` and `./ao check` resolve
-the same supported five-suite group.
+built. Its Homebrew host Python is outside the exact repository-tooling
+contract; native clang-tidy and its integration fixtures do have a Darwin
+baseline. `./ao test --all` and `./ao check` resolve the same supported
+five-suite group.
 
 The tooling gate uses the pinned Ruff and mypy environment supplied by Nix on
 Linux and the checkout-specific managed environment supplied by `ao.bat` on

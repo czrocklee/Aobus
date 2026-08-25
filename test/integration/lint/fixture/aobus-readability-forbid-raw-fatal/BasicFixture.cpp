@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #ifdef __APPLE__
-// nixpkgs' Darwin SDK omits the global declaration that libc++ imports into
-// std. The fixture is parsed but never linked, so provide that declaration to
+// The Darwin SDK omits the global declaration that libc++ imports into std.
+// The fixture is parsed but never linked, so provide that declaration to
 // preserve coverage of both forbidden spellings.
 extern "C"
 {

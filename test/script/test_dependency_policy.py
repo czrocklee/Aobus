@@ -346,10 +346,10 @@ class DependencyPolicyTest(unittest.TestCase):
         }
 
     @staticmethod
-    def _write_vcpkg_status(status_file, versions):
+    def _write_vcpkg_status(status_file, versions, *, triplet="x64-windows"):
         status_file.write_text(
             "\n\n".join(
-                f"Package: {name}\nVersion: {version}\nArchitecture: x64-windows\n"
+                f"Package: {name}\nVersion: {version}\nArchitecture: {triplet}\n"
                 "Status: install ok installed\nFeature: core"
                 for name, version in versions.items()
             ),
@@ -394,14 +394,10 @@ class DependencyPolicyTest(unittest.TestCase):
 
                 self.assertEqual(resolved["schemaVersion"], 1)
 
-    def test_each_nix_platform_verifies_against_its_own_nixpkgs_pin(self):
-        # macOS cannot follow the main pin: nixpkgs dropped x86_64-darwin after
-        # 26.05. Each Nix platform must therefore be checked against its own pin
-        # file, and a report from the wrong pin must not pass.
-        self.assertEqual(
-            dependency_policy.NIXPKGS_PIN_FILES,
-            {"linux": "nixpkgs.json", "macos": "nixpkgs-darwin.json"},
-        )
+    def test_linux_nix_resolution_verifies_against_its_pin(self):
+        self.assertEqual(dependency_policy.NIXPKGS_PIN_FILES, {"linux": "nixpkgs.json"})
+        self.assertEqual(dependency_policy.NIX_PLATFORMS, {"linux"})
+        self.assertEqual(dependency_policy.VCPKG_PLATFORMS, {"macos", "windows"})
         for platform in sorted(dependency_policy.NIX_PLATFORMS):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp_dir:
                 root = Path(temp_dir)
@@ -445,14 +441,37 @@ class DependencyPolicyTest(unittest.TestCase):
                     "vcpkgTriplet": "x64-windows",
                 }
             }
-            resolved = dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir)
+            resolved = dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="windows")
             self.assertIn("boost-regex", resolved["boost"])
             self.assertEqual(set(resolved["recipeHelpers"]), {"vcpkg-boost", "boost-vcpkg-helpers"})
 
             versions["boost-regex"] = "1.90.0"
             self._write_vcpkg_status(status_file, versions)
             with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "family is mixed"):
-                dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir)
+                dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="windows")
+
+    def test_macos_vcpkg_resolution_uses_the_macos_policy_and_triplet(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            installed = build_dir / "vcpkg_installed"
+            status_file = installed / "vcpkg" / "status"
+            status_file.parent.mkdir(parents=True)
+            triplet = "x64-aobus-osx"
+            versions = self._governed_port_versions()
+            versions["boost-regex"] = "1.89.0"
+            self._write_vcpkg_status(status_file, versions, triplet=triplet)
+            report = {
+                "host": {
+                    "platform": "macos",
+                    "vcpkgInstalledDir": str(installed),
+                    "vcpkgTriplet": triplet,
+                }
+            }
+
+            resolved = dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="macos")
+
+        self.assertEqual(resolved["ftxui"]["ftxui"]["upstreamVersion"], "6.1.9")
+        self.assertEqual(resolved["boost"]["boost-regex"]["triplet"], triplet)
 
     def test_injected_verification_date_governs_native_resolution(self):
         contract = copy.deepcopy(self.contract)
@@ -471,7 +490,13 @@ class DependencyPolicyTest(unittest.TestCase):
                     "vcpkgTriplet": "x64-windows",
                 }
             }
-            resolved = dependency_policy._verify_vcpkg_resolution(contract, report, build_dir, today=date(2020, 1, 15))
+            resolved = dependency_policy._verify_vcpkg_resolution(
+                contract,
+                report,
+                build_dir,
+                platform="windows",
+                today=date(2020, 1, 15),
+            )
 
         self.assertEqual(resolved["ftxui"]["ftxui"]["upstreamVersion"], "7.0.0")
 

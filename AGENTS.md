@@ -1,15 +1,16 @@
 # Aobus Agent Guide
 
 Aobus is a C++26 music application: a GTK4 (gtkmm) desktop frontend, a TUI, and
-a CLI tool over a shared core library. CMake builds the project. On Linux and
-macOS, dependencies come from `nix-shell`, which needs `shell.nix` in the
-current directory, so always work from the project root. Read
-`doc/development/macos.md` before native macOS work. On native Windows, use
-`ao.bat` with the same command vocabulary and read
-`doc/development/windows.md` first.
+a CLI tool over a shared core library. CMake builds the project. Linux
+dependencies come from `nix-shell`; macOS and Windows use the shared vcpkg
+manifest. Always work from the project root. Read `doc/development/macos.md`
+before native macOS work. On native Windows, use `ao.bat` with the same command
+vocabulary and read `doc/development/windows.md` first.
 
 > [!TIP]
-> External library headers live in the Nix store; check build config for paths, or use `nix-shell --run "pkg-config --cflags <lib>"`. `nix-shell -p` for extra tools.
+> On Linux, external headers live in the Nix store; use `nix-shell --run
+> "pkg-config --cflags <lib>"` when needed. On macOS and Windows, inspect the
+> configured vcpkg installation under the active build tree.
 
 ## Human References
 
@@ -51,9 +52,9 @@ Read the human docs for project policy instead of duplicating them here:
 ## Build and Validation
 
 On Linux and macOS, everything goes through the `./ao` portal (Python package
-in `script/ao/`; re-enters nix-shell automatically). Platform suite groups and
-available frontends differ; `./ao help` lists commands and `./ao <cmd> --help`
-has all options.
+in `script/ao/`). It re-enters Nix on Linux and prepares Homebrew plus pinned
+vcpkg state on macOS. Platform suite groups and available frontends differ;
+`./ao help` lists commands and `./ao <cmd> --help` has all options.
 
 ```bash
 ./ao check                    # build/test gate: everything + all native suites (--clang/--asan/--tsan)
@@ -71,6 +72,8 @@ has all options.
 ./ao format                   # clang-format + ruff format (gate fixes / explicit request only)
 ```
 
-Manual CMake, rarely needed: `TREE="/tmp/build/$(basename "$PWD")/debug"; nix-shell --run "cmake --preset linux-debug -B $TREE && cmake --build $TREE --parallel"`.
+Manual CMake is rarely needed. On Linux, enter `nix-shell` first; on macOS,
+source `script/ao/macos-vcpkg-bootstrap.sh` and prepare the build environment
+before using the native preset. Prefer `./ao build -p <tree>` in both cases.
 
 Preserve `/tmp/build/...` trees when chasing failures; `./ao build`/`check` tee all output to `$BUILD_DIR/build.log`.

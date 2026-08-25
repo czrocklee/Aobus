@@ -3,6 +3,7 @@
 import contextlib
 import io
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -19,78 +20,224 @@ from ao.command import run as run_command_mod
 from ao.command import test as test_command
 from ao.command import tidy as tidy_command
 from ao.command.build import BuildResult
-from ao.core import builddir
+from ao.core import builddir, buildenv
 
 
-class NixShellPortalTest(unittest.TestCase):
+class NativePortalTest(unittest.TestCase):
     def test_nix_reentry_discards_python_paths_from_a_stale_shell(self):
         portal = Path(__file__).resolve().parents[2] / "ao"
         content = portal.read_text(encoding="utf-8")
 
-        unset_offset = content.index("unset PYTHONHOME PYTHONPATH")
+        linux_offset = content.index('if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]')
+        unset_offset = content.index("unset PYTHONHOME PYTHONPATH", linux_offset)
         reentry_offset = content.index('exec nix-shell "$ROOT/shell.nix"')
 
         self.assertLess(unset_offset, reentry_offset)
 
-    def test_darwin_bootstrap_recovers_nix_build_from_a_profile(self):
-        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "darwin-nix-bootstrap.sh"
+    def test_macos_bootstrap_maps_native_architectures_to_project_triplets(self):
+        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
         bash = shutil.which("bash")
         if bash is None:
             self.skipTest("bash is unavailable on this host")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp = Path(temp_dir)
-            empty_bin = temp / "empty-bin"
-            profile_bin = temp / "profile" / "bin"
-            empty_bin.mkdir()
-            profile_bin.mkdir(parents=True)
-            nix_build = profile_bin / "nix-build"
-            nix_build.touch()
-            nix_build.chmod(0o755)
-            result = subprocess.run(
-                [
-                    bash,
-                    "-c",
-                    'source "$1"; aobus_require_nix_build "$2" "$3"; command -v nix-build',
-                    "aobus-bootstrap-test",
-                    str(helper),
-                    str(temp / "missing-profile"),
-                    str(profile_bin),
-                ],
-                capture_output=True,
-                text=True,
-                env={"HOME": str(temp), "PATH": str(empty_bin)},
-            )
+        result = subprocess.run(
+            [
+                bash,
+                "-c",
+                'source "$1"; aobus_macos_triplet x86_64; aobus_macos_triplet arm64',
+                "aobus-bootstrap-test",
+                str(helper),
+            ],
+            capture_output=True,
+            text=True,
+        )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), str(nix_build))
+        self.assertEqual(result.stdout.splitlines(), ["x64-aobus-osx", "arm64-aobus-osx"])
 
-    def test_darwin_bootstrap_returns_127_when_nix_is_unavailable(self):
-        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "darwin-nix-bootstrap.sh"
+    def test_macos_bootstrap_rejects_unknown_architectures(self):
+        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
+        bash = shutil.which("bash")
+        if bash is None:
+            self.skipTest("bash is unavailable on this host")
+
+        result = subprocess.run(
+            [
+                bash,
+                "-c",
+                'source "$1"; aobus_macos_triplet powerpc',
+                "aobus-bootstrap-test",
+                str(helper),
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unsupported architecture", result.stderr)
+
+    def test_macos_ccache_state_stays_under_the_managed_local_root(self):
+        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
         bash = shutil.which("bash")
         if bash is None:
             self.skipTest("bash is unavailable on this host")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
-            empty_bin = temp / "empty-bin"
-            empty_bin.mkdir()
+            project = temp / "project"
+            state = temp / "state"
+            project.mkdir()
             result = subprocess.run(
                 [
                     bash,
                     "-c",
-                    'source "$1"; aobus_require_nix_build "$2"',
+                    'source "$1"; aobus_macos_prepare_ccache_environment "$2" "$3"; '
+                    'printf "%s\\n" "$CCACHE_DIR" "$CCACHE_BASEDIR" "$CCACHE_MAXSIZE" '
+                    '"$CCACHE_COMPRESS" "$CCACHE_SLOPPINESS"',
                     "aobus-bootstrap-test",
                     str(helper),
-                    str(temp / "missing-profile"),
+                    str(project),
+                    str(state),
                 ],
                 capture_output=True,
                 text=True,
-                env={"HOME": str(temp), "PATH": str(empty_bin)},
             )
 
-        self.assertEqual(result.returncode, 127)
-        self.assertIn("nix-build is unavailable", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                result.stdout.splitlines(),
+                [str(state / "ccache"), str(project), "10G", "1", "time_macros"],
+            )
+            self.assertTrue((state / "ccache").is_dir())
+
+    def test_macos_expected_shim_disables_exactly_five_libcxx_gates(self):
+        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
+        bash = shutil.which("bash")
+        if bash is None:
+            self.skipTest("bash is unavailable on this host")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            header = temp / "llvm" / "include" / "c++" / "v1" / "__expected" / "expected.h"
+            header.parent.mkdir(parents=True)
+            header.write_text("\n".join(["#  if _LIBCPP_STD_VER >= 26"] * 5) + "\n", encoding="utf-8")
+            result = subprocess.run(
+                [
+                    bash,
+                    "-c",
+                    'source "$1"; aobus_macos_prepare_expected_shim "$2" 22.1.8 "$3"; '
+                    'grep -c "^#  if 0$" "$AOBUS_LIBCXX_EXPECTED_SHIM/__expected/expected.h"',
+                    "aobus-bootstrap-test",
+                    str(helper),
+                    str(temp / "llvm"),
+                    str(temp / "state"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            destination = temp / "state" / "tools" / "libcxx-expected-shim" / "22.1.8" / "__expected" / "expected.h"
+            os.utime(destination, ns=(1_000_000_000, 1_000_000_000))
+            preserved_mtime = destination.stat().st_mtime_ns
+            repeated = subprocess.run(
+                [
+                    bash,
+                    "-c",
+                    'source "$1"; aobus_macos_prepare_expected_shim "$2" 22.1.8 "$3"',
+                    "aobus-bootstrap-test",
+                    str(helper),
+                    str(temp / "llvm"),
+                    str(temp / "state"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            repeated_mtime = destination.stat().st_mtime_ns
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "5")
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(repeated_mtime, preserved_mtime)
+
+    def test_macos_portal_dispatches_before_linux_nix_reentry(self):
+        portal = Path(__file__).resolve().parents[2] / "ao"
+        content = portal.read_text(encoding="utf-8")
+
+        darwin_offset = content.index('if [[ "$(uname -s)" == "Darwin" ]]')
+        nix_offset = content.index('if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]')
+        self.assertLess(darwin_offset, nix_offset)
+        self.assertIn("macos-vcpkg-bootstrap.sh", content)
+        self.assertIn("aobus_macos_prepare_build_environment", content)
+        self.assertIn("aobus_macos_prepare_python_tools", content)
+        self.assertNotIn("darwin-nix-bootstrap.sh", content)
+
+    def test_unix_portal_configures_hooks_after_each_native_environment_entry(self):
+        root = Path(__file__).resolve().parents[2]
+        portal = (root / "ao").read_text(encoding="utf-8")
+        shell = (root / "shell.nix").read_text(encoding="utf-8")
+
+        darwin_offset = portal.index('if [[ "$(uname -s)" == "Darwin" ]]')
+        nix_offset = portal.index('if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]')
+        macos_hook_offset = portal.index("aobus_configure_git_hooks", darwin_offset)
+        linux_hook_offset = portal.index("aobus_configure_git_hooks", nix_offset)
+
+        self.assertLess(macos_hook_offset, nix_offset)
+        self.assertGreater(linux_hook_offset, nix_offset)
+        self.assertEqual(portal.count("aobus_configure_git_hooks"), 3)
+        self.assertNotIn("core.hooksPath", shell)
+
+    def test_shell_nix_rejects_non_linux_hosts(self):
+        shell = (Path(__file__).resolve().parents[2] / "shell.nix").read_text(encoding="utf-8")
+
+        self.assertIn("pkgs.stdenv.isLinux", shell)
+        self.assertIn("on macOS use ./ao with the native vcpkg profile", shell)
+        self.assertNotIn("isDarwin", shell)
+
+    def test_macos_managed_python_is_requested_only_for_python_check_commands(self):
+        for command in ("format", "tidy", "hygiene"):
+            self.assertTrue(buildenv.requires_python_tools(command))
+        for command in ("build", "check", "deps", "docs", "run", "test"):
+            self.assertFalse(buildenv.requires_python_tools(command))
+
+        bootstrap = (Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('export AOBUS_PYTHON="$managed_python"', bootstrap)
+        self.assertNotIn('export PATH="$(dirname "$managed_python"):$PATH"', bootstrap)
+
+    def test_macos_toolchain_lock_matches_the_vcpkg_registry(self):
+        root = Path(__file__).resolve().parents[2]
+        lock = json.loads((root / "script" / "ao" / "macos-toolchain.json").read_text(encoding="utf-8"))
+        toolchain = json.loads((root / "script" / "ao" / "toolchain.json").read_text(encoding="utf-8"))
+        configuration = json.loads((root / "vcpkg-configuration.json").read_text(encoding="utf-8"))
+        presets = json.loads((root / "CMakePresets.json").read_text(encoding="utf-8"))["configurePresets"]
+
+        self.assertEqual(lock["vcpkg"]["revision"], configuration["default-registry"]["baseline"])
+        self.assertIn(lock["vcpkg"]["revision"], lock["vcpkg"]["archiveUrl"])
+        self.assertRegex(lock["vcpkg"]["archiveSha256"], r"^[0-9a-f]{64}$")
+        python_major_minor = ".".join(toolchain["python"].split(".")[:2])
+        self.assertEqual(lock["homebrew"]["pythonMajorMinorVersion"], python_major_minor)
+        self.assertEqual(lock["homebrew"]["pythonFormula"], f"python@{python_major_minor}")
+        macos_base = next(preset for preset in presets if preset["name"] == "macos-base")
+        self.assertEqual(
+            macos_base["cacheVariables"]["CMAKE_OSX_DEPLOYMENT_TARGET"],
+            "$env{AOBUS_MACOS_DEPLOYMENT_TARGET}",
+        )
+        requirements = (root / "script" / "ao" / "macos-requirements.txt").read_text(encoding="utf-8")
+        self.assertEqual(requirements.count("--hash=sha256:"), 11)
+        for architecture in ("x64", "arm64"):
+            triplet = root / "cmake" / "vcpkg-triplets" / f"{architecture}-aobus-osx.cmake"
+            content = triplet.read_text(encoding="utf-8")
+            self.assertIn(f"set(VCPKG_OSX_DEPLOYMENT_TARGET {lock['deploymentTarget']})", content)
+
+    def test_rapidyaml_clang_compatibility_is_darwin_only(self):
+        dependencies = (Path(__file__).resolve().parents[2] / "cmake" / "Dependencies.cmake").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("APPLE AND CMAKE_CXX_COMPILER_ID", dependencies)
+        self.assertIn('MATCHES "^(AppleClang|Clang)$"', dependencies)
+        self.assertNotIn("CXX_COMPILER_ID:AppleClang,Clang,MSVC", dependencies)
 
 
 class WindowsBatchPortalTest(unittest.TestCase):
@@ -171,10 +318,26 @@ class WindowsBatchPortalTest(unittest.TestCase):
     def test_linux_presets_use_ninja(self):
         presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
         presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
-        linux_presets = [preset for preset in presets if not preset["name"].startswith("windows-")]
+        linux_presets = [
+            preset for preset in presets if preset["name"].startswith("linux-") or preset["name"] == "profile"
+        ]
 
         self.assertTrue(linux_presets)
         self.assertTrue(all(preset["generator"] == "Ninja" for preset in linux_presets))
+
+    def test_macos_presets_use_the_pinned_vcpkg_toolchain(self):
+        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
+        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
+        macos_presets = {preset["name"]: preset for preset in presets if preset["name"].startswith("macos-")}
+
+        self.assertEqual(set(macos_presets), {"macos-base", "macos-debug", "macos-release", "macos-profile"})
+        for name in ("macos-debug", "macos-release", "macos-profile"):
+            self.assertEqual(macos_presets[name]["inherits"], "macos-base")
+        cache = macos_presets["macos-base"]["cacheVariables"]
+        self.assertEqual(cache["CMAKE_TOOLCHAIN_FILE"], "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+        self.assertEqual(cache["VCPKG_TARGET_TRIPLET"], "$env{AOBUS_VCPKG_TRIPLET}")
+        self.assertEqual(cache["VCPKG_HOST_TRIPLET"], "$env{AOBUS_VCPKG_TRIPLET}")
+        self.assertEqual(cache["CMAKE_CXX_COMPILER"], "$env{AOBUS_LLVM_ROOT}/bin/clang++")
 
     def test_linux_release_does_not_have_a_separate_ipo_preset(self):
         presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"

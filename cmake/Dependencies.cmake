@@ -54,6 +54,12 @@ else()
   set(AOBUS_DEPENDENCY_PLATFORM "linux")
 endif()
 
+if(DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
+  set(AOBUS_DEPENDENCY_USES_VCPKG TRUE)
+else()
+  set(AOBUS_DEPENDENCY_USES_VCPKG FALSE)
+endif()
+
 function(aobus_dependency_policy dependency output_kind output_version output_exception)
   aobus_contract_get(kind dependencies "${dependency}" policy kind)
   if(kind STREQUAL "exact")
@@ -337,7 +343,13 @@ endif()
 
 add_library(PkgRapidYaml INTERFACE)
 target_link_libraries(PkgRapidYaml INTERFACE ryml::ryml c4core::c4core)
-target_compile_definitions(PkgRapidYaml INTERFACE $<$<CXX_COMPILER_ID:MSVC>:C4_CPP=17>)
+# c4core 0.5.0 selects C++20 likelihood attributes for C++26 consumers, then
+# uses them where MSVC and Darwin Clang reject an attribute on an expression.
+# Keep the third-party headers in their C++17 compatibility mode without
+# changing Aobus's language mode or the established Linux Clang build.
+if(MSVC OR (APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang)$"))
+  target_compile_definitions(PkgRapidYaml INTERFACE C4_CPP=17)
+endif()
 
 get_target_property(AOBUS_RYML_INCLUDE_DIRS ryml::ryml INTERFACE_INCLUDE_DIRECTORIES)
 if(AOBUS_RYML_INCLUDE_DIRS)
@@ -620,7 +632,7 @@ else()
     "${AOBUS_DEPENDENCY_HOST}" nugetPackagesDir null)
 endif()
 
-if(WIN32)
+if(AOBUS_DEPENDENCY_USES_VCPKG)
   find_program(AOBUS_VCPKG_EXECUTABLE NAMES vcpkg.exe vcpkg HINTS "$ENV{VCPKG_ROOT}")
   if(AOBUS_VCPKG_EXECUTABLE)
     execute_process(
@@ -662,7 +674,7 @@ file(WRITE "${CMAKE_BINARY_DIR}/aobus-dependencies.json" "${AOBUS_DEPENDENCY_REP
 
 find_program(GPERF_EXECUTABLE gperf REQUIRED)
 
-if(WIN32)
+if(AOBUS_DEPENDENCY_USES_VCPKG)
   find_package(FLAC CONFIG REQUIRED)
   add_library(PkgFLAC INTERFACE)
   target_link_libraries(PkgFLAC INTERFACE FLAC::FLAC)

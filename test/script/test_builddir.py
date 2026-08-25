@@ -74,6 +74,7 @@ class BuildDirTest(unittest.TestCase):
             profile = builddir.platform_profile()
             self.assertEqual(profile.name, "macos")
             self.assertEqual(profile.presets["debug"], "macos-debug")
+            self.assertEqual(profile.presets["profile"], "macos-profile")
             self.assertEqual(profile.compiler, "clang")
             self.assertEqual(profile.apps, ("cli", "tui"))
             self.assertEqual(profile.default_suites, ("core", "tui"))
@@ -105,7 +106,7 @@ class BuildDirTest(unittest.TestCase):
             os.environ.pop("BUILD_DIR", None)
             os.environ.pop("AOBUS_BUILD_ROOT", None)
             root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
-            for flavor in ("debug", "release"):
+            for flavor in ("debug", "release", "profile"):
                 preset_name = builddir.preset(flavor)
                 self.assertEqual(builddir.build_dir(flavor), root / flavor)
                 self.assertEqual(
