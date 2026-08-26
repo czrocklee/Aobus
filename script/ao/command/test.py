@@ -4,7 +4,7 @@ import argparse
 import os
 import re
 import subprocess
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +18,12 @@ HELP = "Build incrementally and run C++ and tooling test suites with optional Ca
 NAME = "test"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+
+
+def requires_build_environment(arguments: Sequence[str]) -> bool:
+    """Return whether this invocation can build before running tests."""
+    portal_arguments = arguments[: arguments.index("--")] if "--" in arguments else arguments
+    return not any(argument in {"-n", "--no-build"} for argument in portal_arguments)
 
 
 EPILOG = """\

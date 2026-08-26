@@ -27,6 +27,24 @@ _CHECKOUT_ID_FILE = "aobus-checkout-id"
 _CHECKOUT_KEY_LENGTH = 12
 
 
+def _windows_canonical_path(path: str) -> str | None:
+    """Return the final DOS/UNC spelling of a Windows filesystem path."""
+    if os.name != "nt":
+        return None
+
+    try:
+        resolved = os.path.realpath(path)
+    except (OSError, ValueError):
+        return None
+    if resolved.lower().startswith("\\\\?\\unc\\"):
+        return "\\\\" + resolved[8:]
+    if resolved.startswith("\\\\?\\"):
+        return resolved[4:]
+    if resolved.startswith("\\\\.\\"):
+        return None
+    return resolved or None
+
+
 def windows_state_root(*, environ: Mapping[str, str] | None = None) -> Path:
     """Return the native Windows state root shared by Aobus checkouts."""
     environment = os.environ if environ is None else environ
@@ -111,11 +129,13 @@ def windows_checkout_key(
     create_id: bool | None = None,
     os_name: str = "nt",
 ) -> str:
-    """Return a stable, path-sensitive key for a native Windows checkout."""
+    """Return a stable key for a native Windows checkout and its resolved share."""
     environment = os.environ if environ is None else environ
     create = os.name == "nt" if create_id is None else create_id
     path_module = ntpath if os_name == "nt" else os.path
-    normalized_root = path_module.normcase(path_module.abspath(str(project_root)))
+    absolute_root = path_module.abspath(str(project_root))
+    resolved_root = _windows_canonical_path(absolute_root) if os_name == "nt" else None
+    normalized_root = path_module.normcase(path_module.abspath(resolved_root or absolute_root))
     identity = _checkout_id(project_root, environment=environment, create=create)
     digest = hashlib.sha256(f"{normalized_root}\0{identity}".encode()).hexdigest()[:_CHECKOUT_KEY_LENGTH]
     label = re.sub(r"[^A-Za-z0-9._-]+", "-", project_root.name).strip("-.") or "aobus"

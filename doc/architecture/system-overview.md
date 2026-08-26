@@ -128,9 +128,9 @@ Dependencies follow the arrows toward core libraries and never reverse from runt
 - Shared signal mechanisms live in `ao_async`, while the runtime or UIModel service that owns an event remains responsible for its payload, execution domain, and exception-containment policy.
 
 Public runtime headers deliberately hide direct LMDB stores, library store/view types, and audio control-plane implementation types.
-The build attaches include-boundary checks to desktop support, runtime, UIModel,
-GTK, and WinUI targets so these edges are executable constraints rather than
-diagram-only guidance.
+The check-owned `aobus_guardrails` target aggregates include-boundary checks
+across desktop support, runtime, UIModel, GTK, and WinUI so these edges are
+executable constraints rather than diagram-only guidance.
 
 ## Data and control flow
 
@@ -223,9 +223,9 @@ Subsystem-specific code families and translations belong to their focused specif
 - Tests under [`test/unit/desktop/`](../../test/unit/desktop/) protect the shared
   desktop boundary on Linux and Windows.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects CLI use of the shared runtime.
-- Building `ao_app_desktop`, `ao_app_runtime`, `ao_app_uimodel`, or
-  `aobus-gtk-lib` runs the attached boundary guardrails from
-  [`app/CMakeLists.txt`](../../app/CMakeLists.txt).
+- The `aobus_guardrails` target aggregates the application boundary checks from
+  [`app/CMakeLists.txt`](../../app/CMakeLists.txt), and the normal completion
+  `./ao check` gate builds it explicitly.
 
 ## Related documents
 

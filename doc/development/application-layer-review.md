@@ -58,7 +58,8 @@ Known direct-library migration seams are documented in the [presentation archite
 ## Validation
 
 Run the narrow tests for the changed owner and adapter, then the repository validation required by [validation and review](test/validation-and-review.md).
-Building application targets also runs the include and UIModel organization guardrails attached in `app/CMakeLists.txt`.
+The completion `./ao check` gate explicitly builds `aobus_guardrails`, which owns the include and UIModel organization checks declared in `app/CMakeLists.txt`.
+Ordinary application builds leave those repository-wide scans to that gate.
 
 Review evidence should identify:
 

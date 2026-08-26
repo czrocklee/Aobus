@@ -44,7 +44,7 @@ ao_write_guardrail_regex(
   "lmdb-read-fault-injection-owners"
   "${AO_LMDB_READ_FAULT_INJECTION_OWNER_REGEX}"
 )
-add_custom_target(ao_lmdb_read_fault_injection_boundary_check ALL
+add_custom_target(ao_lmdb_read_fault_injection_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_LMDB_FORBIDDEN_READ_FAULT_INJECTION_REGEX_FILE}"
@@ -54,7 +54,6 @@ add_custom_target(ao_lmdb_read_fault_injection_boundary_check ALL
   COMMENT "Checking LMDB read-fault injection stays test-only"
   VERBATIM
 )
-add_dependencies(ao_lmdb ao_lmdb_read_fault_injection_boundary_check)
 
 set(AO_LMDB_FORBIDDEN_DATABASE_OPEN_ADMISSION_PROBE_REGEX
     "#[ \t]*include[ \t]*[<\"][^\">]*DatabaseOpenAdmissionProbe\\.h[>\"]|(^|[^A-Za-z0-9_])DatabaseOpenAdmissionProbe([^A-Za-z0-9_]|$)"
@@ -84,7 +83,7 @@ ao_write_guardrail_regex(
   "lmdb-database-open-admission-probe-owners"
   "${AO_LMDB_DATABASE_OPEN_ADMISSION_PROBE_OWNER_REGEX}"
 )
-add_custom_target(ao_lmdb_database_open_admission_probe_boundary_check ALL
+add_custom_target(ao_lmdb_database_open_admission_probe_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_LMDB_FORBIDDEN_DATABASE_OPEN_ADMISSION_PROBE_REGEX_FILE}"
@@ -94,7 +93,6 @@ add_custom_target(ao_lmdb_database_open_admission_probe_boundary_check ALL
   COMMENT "Checking LMDB database-open admission probe stays test-only"
   VERBATIM
 )
-add_dependencies(ao_lmdb ao_lmdb_database_open_admission_probe_boundary_check)
 
 set(AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX
     "#[ \t]*include[ \t]*[<\"][^\">]*UnvalidatedDatabase\\.h[>\"]|(^|[^A-Za-z0-9_])UnvalidatedDatabase([^A-Za-z0-9_]|$)"
@@ -124,7 +122,7 @@ ao_write_guardrail_regex(
   "lmdb-unvalidated-database-owners"
   "${AO_LMDB_UNVALIDATED_DATABASE_OWNER_REGEX}"
 )
-add_custom_target(ao_lmdb_unvalidated_database_boundary_check ALL
+add_custom_target(ao_lmdb_unvalidated_database_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_LMDB_FORBIDDEN_UNVALIDATED_DATABASE_REGEX_FILE}"
@@ -134,4 +132,3 @@ add_custom_target(ao_lmdb_unvalidated_database_boundary_check ALL
   COMMENT "Checking LMDB unvalidated database stays source-private"
   VERBATIM
 )
-add_dependencies(ao_lmdb ao_lmdb_unvalidated_database_boundary_check)

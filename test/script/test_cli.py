@@ -169,6 +169,8 @@ class NativePortalTest(unittest.TestCase):
         self.assertIn("macos-vcpkg-bootstrap.sh", content)
         self.assertIn("aobus_macos_prepare_build_environment", content)
         self.assertIn("aobus_macos_prepare_python_tools", content)
+        self.assertIn('-m ao.core.buildenv "$@"', content)
+        self.assertIn('-m ao.core.buildenv --python-tools "$@"', content)
         self.assertNotIn("darwin-nix-bootstrap.sh", content)
 
     def test_unix_portal_configures_hooks_after_each_native_environment_entry(self):
@@ -256,8 +258,9 @@ class WindowsBatchPortalTest(unittest.TestCase):
 
         # ao.bat asks the portal package which commands need MSVC/vcpkg instead
         # of keeping its own command list.
-        self.assertIn("-m ao.core.buildenv", content)
-        self.assertIn('if not "%needs_build_env%"=="1" goto environment_ready', content)
+        self.assertIn("-m ao.core.buildenv --exit-code %*", content)
+        self.assertIn('if not "%buildenv_status%"=="10" exit /b %buildenv_status%', content)
+        self.assertNotIn('for /f "usebackq delims="', content)
         self.assertNotIn('if /i "%~1"=="build" set "needs_build_env=1"', content)
 
     def test_visual_studio_discovery_does_not_trust_an_ambient_installation_root(self):
@@ -1001,7 +1004,7 @@ class CliParseTest(unittest.TestCase):
                         with mock.patch.object(check_command.build, "print_summary"):
                             self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=["all", "ao_perf_baseline"])
+        do_build.assert_called_once_with(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"])
         verify.assert_called_once_with(result.build_dir)
         run_suites.assert_called_once_with(
             test_command.SUITE_GROUPS["all"],
@@ -1011,14 +1014,16 @@ class CliParseTest(unittest.TestCase):
             log=result.log,
         )
 
-    def test_profile_check_delegates_to_build_with_an_explicit_empty_target_list(self):
+    def test_profile_check_builds_the_default_graph_and_guardrails_without_tests(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
             args = self.parse(["check", "profile"])
             with mock.patch.object(check_command.build, "run_command", return_value=0) as run_build:
                 self.assertEqual(check_command.run_command(args), 0)
 
         self.assertEqual(args.target, [])
-        run_build.assert_called_once_with(args)
+        profile_args = run_build.call_args.args[0]
+        self.assertIsNot(profile_args, args)
+        self.assertEqual(profile_args.target, ["all", "aobus_guardrails"])
 
     def test_tsan_check_builds_and_runs_only_baselined_suites(self):
         args = self.parse(["check", "--tsan"])
@@ -1035,7 +1040,7 @@ class CliParseTest(unittest.TestCase):
                         with mock.patch.object(check_command.build, "print_summary"):
                             self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=["ao_core_test", "ao_gtk_test"])
+        do_build.assert_called_once_with(args, targets=["ao_core_test", "ao_gtk_test", "aobus_guardrails"])
         run_suites.assert_called_once_with(
             ("core", "gtk"),
             result.build_dir,
@@ -1060,7 +1065,7 @@ class CliParseTest(unittest.TestCase):
                         with mock.patch.object(check_command.build, "print_summary"):
                             self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=["all", "ao_perf_baseline"])
+        do_build.assert_called_once_with(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"])
         verify.assert_called_once_with(result.build_dir)
         run_suites.assert_called_once_with(
             ("core", "tui", "cli", "integration", "lint"),
@@ -1122,7 +1127,10 @@ class CliParseTest(unittest.TestCase):
 
         self.assertEqual(
             do_build.call_args_list,
-            [mock.call(args, targets=["all", "ao_perf_baseline"]), mock.call(mock.ANY, targets=["winui"])],
+            [
+                mock.call(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"]),
+                mock.call(mock.ANY, targets=["winui"]),
+            ],
         )
         self.assertEqual(
             verify.call_args_list,

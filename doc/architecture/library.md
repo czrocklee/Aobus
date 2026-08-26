@@ -235,7 +235,7 @@ UIModel and frontends consume runtime snapshots and commands rather than opening
 
 `CoreRuntime::musicLibrary()` is const and supports read-only CLI inspection and narrow runtime evaluator composition.
 It cannot create a library write transaction.
-Build guardrails reject write-transaction, writable-capability, and direct `LibraryWriter` dependencies from UIModel, GTK, and TUI; normal frontend mutation must cross UIModel or another semantic runtime command.
+The check-owned `aobus_guardrails` target rejects write-transaction, writable-capability, and direct `LibraryWriter` dependencies from UIModel, GTK, and TUI; normal frontend mutation must cross UIModel or another semantic runtime command.
 
 `CoreRuntime::create()` and `AppRuntime::create()` are the recoverable composition boundaries.
 They return typed errors from `MusicLibrary::open()` and writable-facade acquisition without a throwing compatibility constructor.

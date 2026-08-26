@@ -21,11 +21,12 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 
 rem Command modules in script\ao\command declare REQUIRES_BUILD_ENV; ask the
 rem portal package instead of keeping a second copy of the command list here.
-set "NEEDS_BUILD_ENV=0"
-if not "%~1"=="" (
-  for /f "usebackq delims=" %%i in (`""%PYTHON%" -m ao.core.buildenv "%~1""`) do set "NEEDS_BUILD_ENV=%%i"
-)
-if not "%NEEDS_BUILD_ENV%"=="1" goto environment_ready
+rem Query directly so forwarded application arguments are parsed by cmd.exe
+rem only once. Exit code 10 means the native build environment is required.
+"%PYTHON%" -m ao.core.buildenv --exit-code %*
+set "BUILDENV_STATUS=%ERRORLEVEL%"
+if "%BUILDENV_STATUS%"=="0" goto environment_ready
+if not "%BUILDENV_STATUS%"=="10" exit /b %BUILDENV_STATUS%
 call :ensure_build_environment
 if errorlevel 1 exit /b %ERRORLEVEL%
 

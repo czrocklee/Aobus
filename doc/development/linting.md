@@ -85,20 +85,26 @@ Visual Studio-only WinUI headers use a small audited companion map because that 
 
 ## Fatal-contract source guardrails
 
-Normal builds scan production C++ under `app/`, `include/`, `lib/`, and `tool/`
-and fail when a source uses the C `assert` macro or raw gsl-lite contract
+The `aobus_guardrails` target scans production C++ under `app/`, `include/`, `lib/`, and `tool/`
+and fails when a source uses the C `assert` macro or raw gsl-lite contract
 spelling (`gsl_Expects`, `gsl_Ensures`, or `gsl_Assert`).
+The normal completion `./ao check` gate builds this target explicitly; ordinary incremental application builds do not rerun repository-wide source scans.
 Production runtime contracts use the AO macros so category, source location,
 diagnostic context, and abort behavior remain project-owned and consistent.
 Compile-time `static_assert` and third-party or test-source assertions are not
 part of this guardrail.
+
+CMake automatically adds `ao_` custom targets ending in `_check`, `_guardrail`,
+or `_boundary_report` to `aobus_guardrails`. Use one of those suffixes for a new
+completion guardrail; conditional frontend targets are discovered only when
+their owning frontend is enabled.
 
 The check is intentionally lexical and admits no per-file production
 allowlist. If foreign code must retain a raw spelling, keep that code outside
 the production source roots or isolate it behind the owning adapter rather
 than suppressing the repository rule.
 
-The same normal-build guardrail rejects the removed general exception surface
+The same check-owned guardrail rejects the removed general exception surface
 (`ao/Exception.h`, `ExceptionFormat`, and `throwException`) and raw fatal
 call spellings (`std::terminate`, `std::abort`, `std::quick_exit`, `std::_Exit`,
 their explicitly global forms, and `_Exit`).

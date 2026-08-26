@@ -432,8 +432,6 @@ add_custom_target(ao_uimodel_layout_boundary_check
   VERBATIM
 )
 
-add_dependencies(ao_app_uimodel ao_uimodel_layout_boundary_check)
-
 add_custom_target(ao_uimodel_organization_guardrail
   COMMAND ${CMAKE_COMMAND}
           "-DPUBLIC_ROOT=${CMAKE_SOURCE_DIR}/app/include/ao/uimodel"
@@ -443,8 +441,6 @@ add_custom_target(ao_uimodel_organization_guardrail
   COMMENT "Checking UIModel namespace and folder organization"
   VERBATIM
 )
-
-add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
 
 # A frontend's own vocabulary is not a shared model, however portable its code
 # is. The guardrail names the frontends rather than a spelling of "platform"
@@ -460,11 +456,9 @@ add_custom_target(ao_uimodel_frontend_vocabulary_guardrail
   VERBATIM
 )
 
-add_dependencies(ao_app_uimodel ao_uimodel_frontend_vocabulary_guardrail)
-
 # --- Layering boundary guardrails ---
-# Cleared boundaries run in enforce mode and are attached to the owning target.
-# ao_layering_boundary_report remains as an aggregate entry point.
+# Cleared boundaries run in enforce mode from the completion-gate aggregate.
+# ao_layering_boundary_report remains a focused application-layer entry point.
 set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)")
 set(AO_FORBIDDEN_WRITE_AUTHORITY_REGEX "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
 set(AO_RUNTIME_WRITE_TRANSACTION_REGEX "(^|[^A-Za-z0-9_])writeTransaction[ \t\r\n]*\\(")
@@ -636,8 +630,6 @@ add_custom_target(ao_shared_signal_boundary_check
   VERBATIM
 )
 
-add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
-
 add_custom_target(ao_runtime_write_transaction_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/runtime"
@@ -649,8 +641,6 @@ add_custom_target(ao_runtime_write_transaction_boundary_check
   VERBATIM
 )
 
-add_dependencies(ao_app_runtime ao_runtime_write_transaction_boundary_check)
-
 add_custom_target(ao_playback_internal_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt;${CMAKE_SOURCE_DIR}/app/include/ao/uimodel;${CMAKE_SOURCE_DIR}/app/include/ao/desktop;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/desktop;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
@@ -660,8 +650,6 @@ add_custom_target(ao_playback_internal_boundary_check
   COMMENT "Checking internal playback owners do not leak into public or consumer layers"
   VERBATIM
 )
-
-add_dependencies(ao_app_runtime ao_playback_internal_boundary_check)
 
 add_custom_target(ao_presentation_vocabulary_boundary_check
   COMMAND ${CMAKE_COMMAND}
@@ -693,8 +681,6 @@ add_custom_target(ao_presentation_vocabulary_boundary_check
   VERBATIM
 )
 
-add_dependencies(ao_app_runtime ao_presentation_vocabulary_boundary_check)
-
 add_custom_target(ao_managed_state_schema_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/include;${CMAKE_SOURCE_DIR}/app/runtime;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/desktop;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui"
@@ -715,10 +701,6 @@ add_custom_target(ao_core_yaml_domain_boundary_check
   VERBATIM
 )
 
-add_dependencies(ao_app_runtime ao_managed_state_schema_boundary_check ao_core_yaml_domain_boundary_check)
-add_dependencies(ao_app_uimodel ao_managed_state_schema_boundary_check)
-add_dependencies(ao_app_desktop ao_managed_state_schema_boundary_check ao_playback_internal_boundary_check)
-
 add_custom_target(ao_rt_public_boundary_report
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt"
@@ -728,8 +710,6 @@ add_custom_target(ao_rt_public_boundary_report
   COMMENT "Checking storage/control-plane includes that leak through ao/rt public headers"
   VERBATIM
 )
-
-add_dependencies(ao_app_runtime ao_rt_public_boundary_report)
 
 add_custom_target(ao_uimodel_platform_boundary_report
   COMMAND ${CMAKE_COMMAND}
@@ -760,8 +740,6 @@ add_custom_target(ao_uimodel_core_boundary_report
   COMMENT "Checking storage/control-plane includes in ao_app_uimodel"
   VERBATIM
 )
-
-add_dependencies(ao_app_uimodel ao_uimodel_platform_boundary_report ao_uimodel_core_boundary_report)
 
 if(AOBUS_BUILD_GTK)
   add_custom_target(ao_linux_gtk_core_boundary_report
@@ -806,8 +784,6 @@ add_custom_target(ao_app_desktop_core_boundary_report
   COMMENT "Checking direct storage/library dependencies in ao_app_desktop"
   VERBATIM
 )
-
-add_dependencies(ao_app_desktop ao_app_desktop_core_boundary_report)
 
 # Hand-revoked WinRT events are what grew the frontend's teardown catches, and
 # no lint the project runs can see them: a comment in the catch satisfies
@@ -865,7 +841,6 @@ add_custom_target(ao_layering_boundary_report
     ao_uimodel_frontend_vocabulary_guardrail
 )
 
-add_dependencies(ao_app_desktop ao_frontend_library_path_boundary_check)
 if(AOBUS_BUILD_GTK)
   add_dependencies(ao_layering_boundary_report ao_linux_gtk_core_boundary_report)
 endif()
@@ -898,7 +873,6 @@ if(AOBUS_BUILD_CLI)
             -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
     COMMENT "Checking that CLI source does not consume interactive localization"
     VERBATIM)
-  add_dependencies(aobus-cli-lib ao_cli_localization_boundary_check)
 
   function(aobus_assert_cli_link_closure root_target)
     set(_queue "${root_target}")
@@ -939,7 +913,4 @@ if(AOBUS_BUILD_TUI)
 endif()
 if(AOBUS_BUILD_WINUI)
   add_subdirectory(windows-winui)
-  add_dependencies(aobus-winui
-    ao_frontend_library_path_boundary_check
-    ao_windows_winui_core_boundary_report)
 endif()

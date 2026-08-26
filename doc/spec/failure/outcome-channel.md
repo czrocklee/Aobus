@@ -179,7 +179,7 @@ It is not converted into generic presentation followed by continued execution.
 
 - [`ErrorTest.cpp`](../../../test/unit/core/ErrorTest.cpp) protects recoverable value and diagnostic-location behavior.
 - Fatal tests under [`test/unit/core/`](../../../test/unit/core) and the dedicated `ao_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect lazy conditions, registration, emergency fallback, reentrancy, source context, and process death.
-- Build-owned source guardrails in [`CMakeLists.txt`](../../../CMakeLists.txt) reject production C assertions, raw gsl-lite contract spellings, unconditional false AO contracts, and production `std::unreachable()` at every normal build.
+- The check-owned `aobus_guardrails` target in [`CMakeLists.txt`](../../../CMakeLists.txt) rejects production C assertions, raw gsl-lite contract spellings, unconditional false AO contracts, and production `std::unreachable()` at every completion gate.
 - [`AsyncRuntimeTest.cpp`](../../../test/unit/runtime/AsyncRuntimeTest.cpp) protects future single ownership, non-default-constructible value transport, and cancellation exclusion.
 - [`LifetimeScopeTest.cpp`](../../../test/unit/runtime/LifetimeScopeTest.cpp) plus runtime fatal subprocess scenarios protect task retirement before fatal entry.
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects callback-affine failure cleanup before exception propagation.

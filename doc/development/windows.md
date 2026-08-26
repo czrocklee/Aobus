@@ -79,6 +79,10 @@ The managed base interpreter is
 root, where `<version>` is the pinned release from `script/ao/toolchain.json`.
 
 The checkout key is stable for one checkout and keeps two clones or linked worktrees from sharing CMake and vcpkg state.
+The portal resolves mapped drives, UNC spellings, and local junctions to their final filesystem path before deriving the key.
+Entering the same checkout through an alias or through different temporary drive letters therefore reuses one build tree and Python environment.
+An unresolvable local or mapped path retains its normalized absolute spelling in the identity.
+The first portal run after this canonical identity scheme is introduced may select a new key and perform one full build; earlier key directories remain local and can be removed after the new tree is validated.
 LLVM downloads and verified SDKs are intentionally shared.
 The tool fingerprint changes when the managed Python or locked requirements change, allowing a new virtual environment to be built before the portal switches to it.
 Build, run, test, and check commands share the `windows-debug` or `windows-release` flavor directory.
@@ -155,10 +159,14 @@ ao.bat tidy                  rem lint changed files with the native compile data
 ao.bat hygiene               rem check formatting, audits, and lint
 ```
 
+The completion `check` command explicitly builds the aggregate `aobus_guardrails` source-policy target.
+Ordinary incremental `build` and `run` commands compile their requested product graph without repeating those repository-wide scans.
+
 The portal initializes the Visual Studio x64 environment when a build-capable
 command is selected; each command declares that need in its module under
 `script/ao/command/`, and Visual Studio discovery is shared with
 `start-msbuild-env.bat` through `script/ao/windows-vsenv.bat`.
+`ao.bat run <app> --no-build` skips that native build-environment setup and launches an existing executable through the managed portal directly.
 `start-msbuild-env.bat <command> [args...]` remains useful when another
 development tool needs to run inside that environment; it honors a preset
 `VCPKG_ROOT` and otherwise defaults to the Visual Studio bundled vcpkg.

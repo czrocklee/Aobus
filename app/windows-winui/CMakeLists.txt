@@ -205,12 +205,6 @@ target_link_libraries(aobus-winui-lib
     ao_unicode_text
     runtimeobject.lib
     shell32.lib)
-add_dependencies(aobus-winui-lib
-  ao_frontend_library_path_boundary_check
-  ao_windows_winui_core_boundary_report
-  ao_windows_winui_event_revoker_guardrail
-  ao_windows_winui_leaf_capability_guardrail
-  ao_windows_winui_state_subscription_guardrail)
 
 add_executable(aobus-winui WIN32
   ${AOBUS_NO_COVER_ASSETS}

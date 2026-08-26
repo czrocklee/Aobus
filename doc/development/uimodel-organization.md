@@ -118,7 +118,8 @@ Tests use the `ao::uimodel::test` namespace and tags shaped as `[uimodel][unit][
 
 ## Validation
 
-Build the affected application target so `ao_uimodel_organization_guardrail` and forbidden-include checks run, then execute the focused UIModel tests and the normal completion gate.
+Build the affected application target, execute the focused UIModel tests, and run the normal completion gate.
+For an earlier focused boundary check, build the `aobus_guardrails` target explicitly; `./ao check` includes it automatically.
 
 ## Troubleshooting
 

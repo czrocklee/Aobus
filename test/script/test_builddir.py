@@ -238,6 +238,63 @@ class BuildDirTest(unittest.TestCase):
             self.assertNotEqual(first_key, second_key)
             self.assertTrue((first / ".git" / "aobus-checkout-id").is_file())
 
+    def test_checkout_key_reuses_one_tree_for_mapped_and_unc_spellings(self):
+        environment = {"AOBUS_CHECKOUT_ID": "checkout-a"}
+        mapped_root = Path("Y:/work/Aobus")
+        unc_root = Path("//server/share/work/Aobus")
+
+        with mock.patch.object(
+            builddir,
+            "_windows_canonical_path",
+            side_effect=lambda path: r"\\server\share\work\Aobus" if path.lower().startswith("y:") else None,
+        ):
+            mapped_key = builddir.windows_checkout_key(mapped_root, environ=environment)
+            unc_key = builddir.windows_checkout_key(unc_root, environ=environment)
+
+        self.assertEqual(mapped_key, unc_key)
+
+    def test_checkout_key_reuses_one_tree_for_a_local_junction_and_target(self):
+        environment = {"AOBUS_CHECKOUT_ID": "checkout-a"}
+        junction_root = Path("C:/junction/Aobus")
+        target_root = Path("D:/source/Aobus")
+
+        with mock.patch.object(
+            builddir,
+            "_windows_canonical_path",
+            side_effect=lambda path: r"D:\source\Aobus" if path.lower().startswith("c:") else path,
+        ):
+            junction_key = builddir.windows_checkout_key(junction_root, environ=environment)
+            target_key = builddir.windows_checkout_key(target_root, environ=environment)
+
+        self.assertEqual(junction_key, target_key)
+
+    def test_windows_canonical_path_normalizes_dos_and_unc_namespaces(self):
+        cases = (
+            (r"\\?\UNC\server\share\repo", r"\\server\share\repo"),
+            (r"\\?\unc\SERVER\Share\repo", r"\\SERVER\Share\repo"),
+            (r"\\server\share\repo", r"\\server\share\repo"),
+            (r"C:\local\repo", r"C:\local\repo"),
+            (r"\\?\C:\local\repo", r"C:\local\repo"),
+            (r"\\.\C:\local\repo", None),
+        )
+
+        for resolved, expected in cases:
+            with self.subTest(resolved=resolved):
+                with (
+                    mock.patch.object(builddir.os, "name", "nt"),
+                    mock.patch.object(builddir.os.path, "realpath", return_value=resolved),
+                ):
+                    self.assertEqual(builddir._windows_canonical_path(r"Z:\repo"), expected)
+
+    def test_windows_canonical_path_handles_resolution_failures(self):
+        for failure in (OSError(53, "network path unavailable"), ValueError("invalid path")):
+            with self.subTest(failure=failure):
+                with (
+                    mock.patch.object(builddir.os, "name", "nt"),
+                    mock.patch.object(builddir.os.path, "realpath", side_effect=failure),
+                ):
+                    self.assertIsNone(builddir._windows_canonical_path(r"Z:\repo"))
+
     def test_checkout_id_override_avoids_git_metadata_writes(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "Aobus"

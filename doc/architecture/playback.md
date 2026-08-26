@@ -159,7 +159,7 @@ Consumers borrow the last boundary-committed coherent value through `PlaybackSer
 `PlaybackService` is the application commit authority over the internal `PlaybackTransport` and `PlaybackSuccession` owners.
 Its private implementation assigns command generations, serializes commands requested by observers, and publishes at most one coherent snapshot after each logical mutation settles.
 Independent lower-layer observations are coalesced at the end of the callback-executor turn.
-The internal headers live under `app/runtime/playback/`; build guardrails reject those owner names in public runtime headers, UIModel, and frontend sources.
+The internal headers live under `app/runtime/playback/`; the check-owned `aobus_guardrails` target rejects those owner names in public runtime headers, UIModel, and frontend sources.
 The [playback application boundary reference](../reference/playback/application-boundary.md) owns the exact public surface, while the [application commit specification](../spec/playback/application-commit.md) owns command ordering and publication behavior.
 
 `PlaybackTransport` retains lower-level direct start and prepare operations solely for internal collaboration and focused lower-layer tests.

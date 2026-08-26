@@ -69,7 +69,6 @@ add_custom_target(ao_library_media_file_boundary_check
   COMMENT "Checking ao_library does not depend on media-file readers"
   VERBATIM
 )
-add_dependencies(ao_library ao_library_media_file_boundary_check)
 
 set(AO_LIBRARY_FORBIDDEN_PHYSICAL_ACCESS_REGEX
     "#[ \t]*include[ \t]*[<\"][^\">]*PhysicalStoreAccess\\.h[>\"]|(^|[^A-Za-z0-9_])(class|struct)[ \t\r\n]+([A-Za-z_][A-Za-z0-9_]*::)*PhysicalStoreAccess([ \t\r\n]+final)?[ \t\r\n]*\\{|(^|[^A-Za-z0-9_])PhysicalStoreAccess[ \t\r\n]*::"
@@ -226,4 +225,3 @@ add_custom_target(ao_library_logical_writer_boundary_check
   COMMENT "Checking production library writes use logical transaction ports"
   VERBATIM
 )
-add_dependencies(ao_library ao_library_logical_writer_boundary_check)

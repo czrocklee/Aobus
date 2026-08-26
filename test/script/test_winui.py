@@ -2,6 +2,9 @@
 
 import hashlib
 import json
+import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +14,46 @@ from ao.core import winui
 
 
 class WinUiTest(unittest.TestCase):
+    def test_generated_msbuild_import_writer_preserves_unchanged_mtime(self):
+        cmake = shutil.which("cmake")
+        if cmake is None:
+            self.skipTest("cmake is unavailable")
+
+        module = Path(__file__).resolve().parents[2] / "cmake" / "WindowsAppSdk.cmake"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            output = temp / "generated.props"
+            script = temp / "write-import.cmake"
+            script.write_text(
+                f"include([=[{module.as_posix()}]=])\n"
+                f"_aobus_write_if_different([=[{output.as_posix()}]=] [=[alpha;beta\n]=])\n",
+                encoding="utf-8",
+            )
+            first = subprocess.run([cmake, "-P", str(script)], capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(output.read_text(encoding="utf-8"), "alpha;beta\n")
+
+            os.utime(output, ns=(1_000_000_000, 1_000_000_000))
+            preserved_mtime = output.stat().st_mtime_ns
+            repeated = subprocess.run([cmake, "-P", str(script)], capture_output=True, text=True)
+            repeated_mtime = output.stat().st_mtime_ns
+
+            update_script = temp / "write-import-update.cmake"
+            update_script.write_text(
+                f"include([=[{module.as_posix()}]=])\n"
+                f"_aobus_write_if_different([=[{output.as_posix()}]=] [=[updated;content\n]=])\n",
+                encoding="utf-8",
+            )
+            updated = subprocess.run([cmake, "-P", str(update_script)], capture_output=True, text=True)
+            updated_content = output.read_text(encoding="utf-8")
+            updated_mtime = output.stat().st_mtime_ns
+
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(repeated_mtime, preserved_mtime)
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        self.assertEqual(updated_content, "updated;content\n")
+        self.assertNotEqual(updated_mtime, preserved_mtime)
+
     def test_component_manifest_is_the_build_tools_source_of_truth(self):
         components = winui.required_components()
 

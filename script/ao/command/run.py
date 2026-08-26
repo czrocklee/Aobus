@@ -2,6 +2,7 @@
 
 import argparse
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,12 @@ HELP = "Build and run an application enabled by the native profile"
 NAME = "run"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+
+
+def requires_build_environment(arguments: Sequence[str]) -> bool:
+    """Return whether this invocation can build before launching."""
+    portal_arguments = arguments[: arguments.index("--")] if "--" in arguments else arguments
+    return not any(argument in {"-n", "--no-build"} for argument in portal_arguments)
 
 
 @dataclass(frozen=True)

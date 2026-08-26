@@ -74,4 +74,3 @@ add_custom_target(ao_media_boundary_check
   COMMENT "Checking ao_media dependency direction"
   VERBATIM
 )
-add_dependencies(ao_media ao_media_boundary_check)

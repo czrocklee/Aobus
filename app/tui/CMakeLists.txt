@@ -52,7 +52,6 @@ target_link_libraries(aobus-tui-lib PRIVATE PkgStb ao_app_i18n ao_unicode_text)
 if(AOBUS_ENABLE_ASAN)
     target_compile_definitions(aobus-tui-lib PRIVATE STBIR_NO_SIMD)
 endif()
-add_dependencies(aobus-tui-lib ao_frontend_library_path_boundary_check ao_tui_core_boundary_report)
 
 add_executable(aobus-tui
     AudioBackendBootstrap.cpp

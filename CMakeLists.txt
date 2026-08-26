@@ -62,6 +62,35 @@ function(ao_write_guardrail_regex out_var name pattern)
   set(${out_var} "${_path}" PARENT_SCOPE)
 endfunction()
 
+function(ao_collect_buildsystem_targets directory output)
+  get_property(_targets DIRECTORY "${directory}" PROPERTY BUILDSYSTEM_TARGETS)
+  get_property(_subdirectories DIRECTORY "${directory}" PROPERTY SUBDIRECTORIES)
+  foreach(_subdirectory IN LISTS _subdirectories)
+    ao_collect_buildsystem_targets("${_subdirectory}" _child_targets)
+    list(APPEND _targets ${_child_targets})
+  endforeach()
+  set(${output} "${_targets}" PARENT_SCOPE)
+endfunction()
+
+# Completion guardrails are custom targets using one of these governed suffixes.
+# Discovering the directory tree keeps conditional frontend targets automatic.
+function(ao_collect_guardrail_targets output)
+  ao_collect_buildsystem_targets("${CMAKE_SOURCE_DIR}" _targets)
+  set(_guardrails)
+  foreach(_target IN LISTS _targets)
+    get_target_property(_type "${_target}" TYPE)
+    if(_type STREQUAL "UTILITY"
+       AND _target MATCHES "^ao_.*(_check|_guardrail|_boundary_report)$")
+      list(APPEND _guardrails "${_target}")
+    endif()
+  endforeach()
+  if(NOT _guardrails)
+    message(FATAL_ERROR "No guardrail custom targets were discovered")
+  endif()
+  list(SORT _guardrails)
+  set(${output} "${_guardrails}" PARENT_SCOPE)
+endfunction()
+
 set(AO_FORBIDDEN_C_ASSERT_REGEX "(^|[^A-Za-z0-9_])assert[ \t\r\n]*\\(")
 foreach(AO_FORBIDDEN_C_ASSERT_SPELLING IN ITEMS
     "assert(value)"
@@ -80,7 +109,7 @@ foreach(AO_ALLOWED_ASSERT_SPELLING IN ITEMS
 endforeach()
 ao_write_guardrail_regex(AO_FORBIDDEN_C_ASSERT_REGEX_FILE "c-assert" "${AO_FORBIDDEN_C_ASSERT_REGEX}")
 
-add_custom_target(ao_no_c_assert_check ALL
+add_custom_target(ao_no_c_assert_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/include;${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_C_ASSERT_REGEX_FILE}"
@@ -115,7 +144,7 @@ ao_write_guardrail_regex(
   "raw-gsl-contract"
   "${AO_FORBIDDEN_RAW_GSL_CONTRACT_REGEX}")
 
-add_custom_target(ao_no_raw_gsl_contract_check ALL
+add_custom_target(ao_no_raw_gsl_contract_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/include;${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_RAW_GSL_CONTRACT_REGEX_FILE}"
@@ -154,7 +183,7 @@ ao_write_guardrail_regex(
   "unconditional-terminal"
   "${AO_FORBIDDEN_UNCONDITIONAL_TERMINAL_REGEX}")
 
-add_custom_target(ao_no_unconditional_terminal_check ALL
+add_custom_target(ao_no_unconditional_terminal_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/include;${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_UNCONDITIONAL_TERMINAL_REGEX_FILE}"
@@ -189,7 +218,7 @@ ao_write_guardrail_regex(
   "removed-exception-surface"
   "${AO_FORBIDDEN_REMOVED_EXCEPTION_SURFACE_REGEX}")
 
-add_custom_target(ao_no_removed_exception_surface_check ALL
+add_custom_target(ao_no_removed_exception_surface_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/include;${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_REMOVED_EXCEPTION_SURFACE_REGEX_FILE}"
@@ -231,7 +260,7 @@ ao_write_guardrail_regex(
   "raw-fatal-primitive"
   "${AO_FORBIDDEN_RAW_FATAL_PRIMITIVE_REGEX}")
 
-add_custom_target(ao_no_raw_fatal_primitive_check ALL
+add_custom_target(ao_no_raw_fatal_primitive_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/include;${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_RAW_FATAL_PRIMITIVE_REGEX_FILE}"
@@ -257,6 +286,10 @@ endif()
 if(AOBUS_BUILD_TESTS)
   add_subdirectory(test)
 endif()
+
+ao_collect_guardrail_targets(AOBUS_GUARDRAIL_TARGETS)
+add_custom_target(aobus_guardrails DEPENDS ${AOBUS_GUARDRAIL_TARGETS})
+
 aobus_verify_windows_utf8_manifest_coverage("${CMAKE_SOURCE_DIR}")
 
 get_property(AOBUS_GENERATED_HEADERS GLOBAL PROPERTY AOBUS_GENERATED_HEADERS)

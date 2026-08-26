@@ -1,5 +1,15 @@
 # Windows App SDK NuGet restore and generated Visual Studio/MSBuild imports.
 
+function(_aobus_write_if_different path content)
+  if(EXISTS "${path}")
+    file(READ "${path}" existing_content)
+    if("${existing_content}" STREQUAL "${content}")
+      return()
+    endif()
+  endif()
+  file(WRITE "${path}" "${content}")
+endfunction()
+
 function(_aobus_read_nuget_lock output)
   file(STRINGS "${AOBUS_WINDOWS_APP_SDK_LOCK}" package_lines
     REGEX "<package id=\"[^\"]+\" version=\"[^\"]+\"")
@@ -217,14 +227,16 @@ function(aobus_enable_cppwinrt target)
 
   set(props_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.CppWinRT.props")
   set(targets_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.CppWinRT.targets")
-  file(WRITE "${props_file}"
+  string(CONCAT props_content
     "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
     "${props_import}"
     "</Project>\n")
-  file(WRITE "${targets_file}"
+  string(CONCAT targets_content
     "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
     "${targets_import}"
     "</Project>\n")
+  _aobus_write_if_different("${props_file}" "${props_content}")
+  _aobus_write_if_different("${targets_file}" "${targets_content}")
 
   set_target_properties("${target}" PROPERTIES
     VS_GLOBAL_ForceImportAfterCppProps "${props_file}"
@@ -299,7 +311,7 @@ function(aobus_enable_windows_app_sdk target role)
 
   set(props_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.WinUI.props")
   set(targets_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.WinUI.targets")
-  file(WRITE "${props_file}"
+  string(CONCAT props_content
     "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
     "  <PropertyGroup>\n"
     "${output_type}"
@@ -321,7 +333,7 @@ function(aobus_enable_windows_app_sdk target role)
     "    <WindowsPackageType>None</WindowsPackageType>\n"
     "  </PropertyGroup>\n"
     "</Project>\n")
-  file(WRITE "${targets_file}"
+  string(CONCAT targets_content
     "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
     "${targets_imports}"
     "  <PropertyGroup>\n"
@@ -336,6 +348,8 @@ function(aobus_enable_windows_app_sdk target role)
     "  </ItemDefinitionGroup>\n"
     "${generated_module}"
     "</Project>\n")
+  _aobus_write_if_different("${props_file}" "${props_content}")
+  _aobus_write_if_different("${targets_file}" "${targets_content}")
 
   configure_file(
     "${AOBUS_WINDOWS_APP_SDK_LOCK}"

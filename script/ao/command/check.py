@@ -11,6 +11,7 @@ HELP = "Build everything and run every suite enabled by the native profile"
 NAME = "check"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+GUARDRAIL_TARGET = "aobus_guardrails"
 
 
 EPILOG = """\
@@ -34,14 +35,16 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 def run_command(args: argparse.Namespace) -> int:
     if args.flavor not in ("debug", "release"):
         print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
-        return build.run_command(args)
+        profile_args = copy.copy(args)
+        profile_args.target = ["all", GUARDRAIL_TARGET]
+        return build.run_command(profile_args)
 
     suites = test.suites_for("all", tsan=args.tsan)
-    targets = (
-        [target for suite in suites if (target := test.SUITES[suite].target) is not None]
-        if args.tsan
-        else ["all", perf.TARGET]
-    )
+    if args.tsan:
+        targets = [target for suite in suites if (target := test.SUITES[suite].target) is not None]
+        targets.append(GUARDRAIL_TARGET)
+    else:
+        targets = ["all", GUARDRAIL_TARGET, perf.TARGET]
     result = build.do_build(args, targets=targets)
 
     print("Verifying dependency resolution...")
