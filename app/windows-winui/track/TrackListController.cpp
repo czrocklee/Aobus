@@ -32,6 +32,7 @@
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/winui/track/TrackRevealAdapter.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -271,7 +272,6 @@ namespace ao::winui
       return;
     }
 
-    _runtime->reloadAllTracks();
     auto const restoredView = _runtime->workspace().snapshot().activeViewId;
 
     if (restoredView != rt::kInvalidViewId)
@@ -819,6 +819,7 @@ namespace ao::winui
     {
       adoptWorkspaceView(*viewRes);
     }
+
     return {};
   }
 
