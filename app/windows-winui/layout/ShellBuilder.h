@@ -22,7 +22,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
+#include <vector>
 
 namespace ao::winui
 {
@@ -50,15 +52,31 @@ namespace ao::winui::layout
   {
     std::function<void()> openLibrary;
     std::function<void()> rescanLibrary;
+    std::function<void()> importLibrary;
+    std::function<void()> exportLibrary;
     std::function<void()> toggleInspector;
     std::function<void()> toggleShellMode;
     std::function<void()> chooseColumns;
     std::function<void()> reloadTheme;
     std::function<void()> playPause;
     std::function<void()> stop;
+    std::function<void()> revealCurrentTrack;
+    std::function<void()> presentTrackProperties;
     std::function<void()> showSoul;
     std::function<void()> showSystemMenu;
     std::function<void(winrt::Microsoft::UI::Xaml::FrameworkElement const&)> showOutputDeviceSelector;
+  };
+
+  /// Window-owned List workflows exposed to generation components as narrow callbacks.
+  struct ShellListCommands final
+  {
+    std::function<void(ListId, std::string)> createList;
+    std::function<void(ListId)> editList;
+    std::function<void(ListId, bool)> deleteList;
+    std::function<std::vector<uimodel::WritableTagListTarget>()> membershipTargets;
+    std::function<void(ListId, bool)> editMembership;
+    std::function<uimodel::ListOrderCapabilityState()> orderCapabilities;
+    std::function<void(ListOrderCommand)> applyOrder;
   };
 
   /// What the window frame lends the builder for the life of the shell.
@@ -82,6 +100,7 @@ namespace ao::winui::layout
     std::function<void()> saveSettings;
 
     ShellCommands commands;
+    ShellListCommands listCommands;
   };
 
   /**
@@ -133,6 +152,9 @@ namespace ao::winui::layout
 
     /// The live generation's title bar, or nothing when its preset authored none.
     winrt::Microsoft::UI::Xaml::FrameworkElement titleBar() const { return _host.activeTitleBar(); }
+
+    /// Invoke one shell-lifetime action from fixed window chrome or an accelerator.
+    bool invokeAction(std::string_view actionId) const;
 
   private:
     /**

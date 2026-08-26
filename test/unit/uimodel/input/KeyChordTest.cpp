@@ -44,6 +44,11 @@ namespace ao::uimodel::test
       auto const optMetaChord = KeyChord::parse("Meta+Cmd+Q");
       REQUIRE(optMetaChord);
       CHECK(optMetaChord->modifiers.has(KeyModifier::Super));
+
+      auto const optPlatformAliases = KeyChord::parse("Option+Windows+K");
+      REQUIRE(optPlatformAliases);
+      CHECK(optPlatformAliases->modifiers.has(KeyModifier::Alt));
+      CHECK(optPlatformAliases->modifiers.has(KeyModifier::Super));
     }
 
     SECTION("media key token preserved")

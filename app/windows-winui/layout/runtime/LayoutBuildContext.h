@@ -23,6 +23,7 @@
 
 namespace ao::rt
 {
+  class CompletionService;
   class LibraryTaskService;
   class NotificationService;
   class PlaybackService;
@@ -34,9 +35,11 @@ namespace ao::rt
 namespace ao::uimodel
 {
   class LayoutComponentCatalog;
+  class ListPresentationPreferenceStore;
   class PlaybackCommandSurface;
   class PresentationTextCatalog;
   class ShellGenerationGate;
+  class TrackPresentationCatalog;
   struct LayoutRuntimeState;
 } // namespace ao::uimodel
 
@@ -113,7 +116,10 @@ namespace ao::winui::layout
     rt::WorkspaceService& workspace;
     rt::NotificationService& notifications;
     rt::LibraryTaskService& libraryTasks;
+    rt::CompletionService& completion;
     uimodel::PlaybackCommandSurface& playbackCommands;
+    uimodel::TrackPresentationCatalog& presentationCatalog;
+    uimodel::ListPresentationPreferenceStore& presentationPreferences;
     uimodel::PresentationTextCatalog const& textCatalog;
     TrackListController& trackList;
     rt::ResourceByteLoader& resourceBytes;

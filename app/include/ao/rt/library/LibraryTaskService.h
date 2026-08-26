@@ -116,11 +116,12 @@ namespace ao::rt
     std::uint64_t resourceCarrierIndexBuildCount() const noexcept;
 
     // A progress conversation begins only after successful cancellable
-    // callback-executor admission. Once admitted, this status-free
-    // presentation pulse occurs exactly once on every ordinary terminal path
-    // while the owner remains live. Task values, errors, and cancellation
-    // remain exclusively on the awaited task channel.
-    async::Subscription onProgressFinished(compat::MoveOnlyFunction<void()> handler) const;
+    // callback-executor admission. Progress and its status-free terminal pulse
+    // carry the same owner-local id so overlapping read-only tasks cannot clear
+    // one another. Task values, errors, and cancellation remain exclusively on
+    // the awaited task channel.
+    async::Subscription onProgressFinished(
+      compat::MoveOnlyFunction<void(LibraryTaskProgressFinished const&)> handler) const;
     async::Subscription onProgress(compat::MoveOnlyFunction<void(LibraryTaskProgressUpdated const&)> handler) const;
 
     LibraryTaskService(LibraryTaskService const&) = delete;

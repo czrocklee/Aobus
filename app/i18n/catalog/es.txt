@@ -114,6 +114,9 @@ es:table {
     library_task_updating { "Actualizando" }
     library_task_fingerprinting { "Generando huella digital" }
     library_task_indexing_audio_identity { "Indexando identidad de audio" }
+    library_task_preparing_import { "Preparando importación" }
+    library_task_importing { "Importando" }
+    library_task_exporting { "Exportando" }
     library_task_progress_detail { "{hasSubject, select, yes {{activity}: {subject}} other {{activity}}}" }
     library_task_scanning_compact { "Escaneando biblioteca" }
     library_task_updating_compact { "Actualizando biblioteca" }
@@ -159,9 +162,9 @@ es:table {
     list_order_changed { "La lista ha cambiado. Inicia la acción de orden de nuevo." }
     list_order_unchanged { "Orden sin cambios." }
     list_order_editing_unavailable { "La edición de la biblioteca no está disponible actualmente." }
-    list_order_moved { "Se movieron {count, plural, one {# pista} other {# pistas}} en Orden manual." }
-    list_order_reset { "Se restableció el orden manual y se olvidaron {count, plural, one {# posición guardada} other {# posiciones guardadas}}." }
-    list_order_forgot_hidden { "Se olvidaron {count, plural, one {# posición guardada oculta} other {# posiciones guardadas ocultas}}." }
+    list_order_moved { "{count, plural, one {Se movió # pista} other {Se movieron # pistas}} en Orden manual." }
+    list_order_reset { "{count, plural, one {Se restableció Orden manual y se descartó # posición guardada} other {Se restableció Orden manual y se descartaron # posiciones guardadas}}." }
+    list_order_forgot_hidden { "{count, plural, one {Se descartó # posición guardada oculta} other {Se descartaron # posiciones guardadas ocultas}}." }
     list_membership_add_stale { "La biblioteca cambió antes de poder añadir pistas. Inténtalo de nuevo." }
     list_membership_add_unavailable { "La biblioteca está ocupada. No se añadieron pistas." }
     list_membership_add_noop { "{list} ya contiene {tag} en las pistas seleccionadas." }
@@ -280,7 +283,7 @@ es:table {
     gtk_library_select_export_mode { "Seleccionar modo de exportación" }
     gtk_library_choose_backup_contents { "Elige qué incluir en la copia de seguridad:" }
     gtk_library_export_mode_delta { "Delta (sincronizar ediciones, etiquetas y listas)" }
-    gtk_library_export_mode_metadata { "Metadatos (texto y portadas, sin datos técnicos)" }
+    gtk_library_export_mode_metadata { "Metadatos (texto, etiquetas y listas)" }
     gtk_library_export_mode_full { "Completo (recuperación total: todo)" }
     gtk_library_export_mode_list_only { "Solo listas (sincronizar listas sin tocar pistas)" }
     gtk_library_include { "Incluir" }
@@ -490,6 +493,32 @@ es:table {
     winui_shell_open_library { "Abrir biblioteca..." }
     winui_shell_rescan { "Reescanear" }
     winui_shell_rescan_library { "Reescanear biblioteca" }
+    winui_shell_import_library_data { "Importar datos de la biblioteca..." }
+    winui_shell_export_library_data { "Exportar datos de la biblioteca..." }
+    winui_library_select_export_mode { "Seleccionar modo de exportación" }
+    winui_library_choose_backup_contents { "Elige qué incluir en la copia de seguridad:" }
+    winui_library_include { "Incluir" }
+    winui_library_export_mode_delta { "Delta (sincronizar ediciones, etiquetas y listas)" }
+    winui_library_export_mode_metadata { "Metadatos (texto, etiquetas y listas)" }
+    winui_library_export_mode_full { "Completo (recuperación total: todo)" }
+    winui_library_export_mode_list_only { "Solo listas (sincronizar listas sin tocar pistas)" }
+    winui_library_select_import_mode { "Seleccionar modo de importación" }
+    winui_library_choose_import_mode { "Combina esta copia con la biblioteca o restaura su ámbito:" }
+    winui_library_import_mode_merge { "Combinar (conservar registros ajenos a la copia)" }
+    winui_library_import_mode_restore { "Restaurar (reemplazar el ámbito tras la vista previa)" }
+    winui_library_next { "Siguiente" }
+    winui_library_export_yaml { "Exportar biblioteca a YAML" }
+    winui_library_import_yaml { "Importar biblioteca desde YAML" }
+    winui_library_yaml_files { "Archivos YAML" }
+    winui_library_confirm_restore { "Confirmar restauración" }
+    winui_library_restore_library { "Restaurar biblioteca" }
+    winui_library_restore_lists { "Restaurar listas" }
+    winui_library_restore_scope_library { "biblioteca" }
+    winui_library_restore_scope_lists { "listas" }
+    winui_library_restore_confirmation { "Esta restauración reemplazará la {scope} actual.\n\nContenido: YAML v{version}, modo ''{mode}''.\nVista previa: {tracksCreated} creadas, {tracksUpdated} actualizadas, {tracksDeleted} eliminadas; {listsCreated} listas creadas, {listsDeleted} eliminadas; {dangling} referencias sueltas ignoradas.\n\nContinúa solo si coincide con la copia seleccionada." }
+    winui_library_could_not_select_export_file { "No se pudo seleccionar un archivo de exportación" }
+    winui_library_could_not_select_backup { "No se pudo seleccionar una copia de seguridad de la biblioteca" }
+    winui_library_file_selection_error { "{operation}: {message}" }
     winui_shell_menu_view { "Ver" }
     winui_shell_modern_mode { "Modo moderno" }
     winui_shell_columns { "Columnas..." }
@@ -497,6 +526,62 @@ es:table {
     winui_shell_menu_playback { "Reproducción" }
     winui_shell_play_pause { "Reproducir/Pausar" }
     winui_shell_stop { "Detener" }
+    winui_shell_reveal_current_track { "Mostrar pista actual" }
+    winui_track_properties_command { "Propiedades..." }
+    winui_track_properties_title { "Propiedades" }
+    winui_track_properties_selected_title { "Propiedades — {count, plural, one {# pista seleccionada} other {# pistas seleccionadas}}" }
+    winui_track_properties_save { "Guardar" }
+    winui_track_properties_cancel { "Cancelar" }
+    winui_track_properties_tags { "Etiquetas" }
+    winui_track_properties_tags_hint { "Etiquetas compartidas por todas las pistas seleccionadas" }
+    winui_track_properties_custom_metadata { "Metadatos personalizados" }
+    winui_track_properties_custom_key { "Clave nueva" }
+    winui_track_properties_custom_value { "Valor nuevo" }
+    winui_track_properties_delete { "Eliminar" }
+    winui_track_properties_add { "Añadir" }
+    winui_track_properties_editing_unavailable { "Edición no disponible: {detail}" }
+    winui_track_properties_save_failed { "Error al guardar: {detail}" }
+    winui_track_properties_stale { "La biblioteca cambió mientras este cuadro de diálogo estaba abierto. Vuelve a abrir Propiedades e inténtalo de nuevo." }
+    winui_track_properties_invalid_value { "Valor no válido: {detail}" }
+    winui_list_create_from_filter { "Crear lista a partir del filtro actual" }
+    winui_list_new { "Nueva lista..." }
+    winui_list_edit { "Editar lista..." }
+    winui_list_delete { "Eliminar lista" }
+    winui_list_delete_subtree { "Eliminar lista y descendientes..." }
+    winui_list_editor_new_title { "Nueva lista" }
+    winui_list_editor_edit_title { "Editar lista" }
+    winui_common_cancel { "Cancelar" }
+    winui_common_create { "Crear" }
+    winui_common_save { "Guardar" }
+    winui_list_name_placeholder { "Nombre de la lista" }
+    winui_list_name { "Nombre" }
+    winui_list_description_placeholder { "Descripción opcional" }
+    winui_list_description { "Descripción" }
+    winui_list_inherited_filter { "Filtro heredado" }
+    winui_list_filter_placeholder { "Expresión de filtro (escribe $, @, # o %)" }
+    winui_list_local_filter { "Filtro local" }
+    winui_list_effective_filter { "Filtro efectivo" }
+    winui_list_membership { "Pertenencia" }
+    winui_list_auto_presentation { "Automático" }
+    winui_list_presentation { "Vista" }
+    winui_list_preview { "Vista previa" }
+    winui_list_delete_title { "¿Eliminar lista?" }
+    winui_list_delete_subtree_title { "¿Eliminar lista y descendientes?" }
+    winui_list_delete_commit { "Eliminar" }
+    winui_list_delete_all_commit { "Eliminar todo" }
+    winui_list_delete_question { "¿Eliminar \"{name}\"?\n\nLa lista se eliminará. Los archivos de música se conservarán." }
+    winui_list_delete_subtree_question { "¿Eliminar {count, plural, one {# lista} other {# listas}} en este subárbol derivado?\n\n{entries}\nSe conservarán las etiquetas utilizadas por las listas anidadas.\nLos archivos de música se conservarán." }
+    winui_list_remove_tag { "Eliminar también {tag} de {count, plural, one {# pista} other {# pistas}}" }
+    winui_list_tag_references { "{tag} también está referenciado por: {references}. Eliminarlo puede cambiar esas listas." }
+    winui_list_no_editable_playlists { "No hay listas de reproducción editables directamente" }
+    winui_list_add_to_playlist { "Añadir a la lista de reproducción" }
+    winui_list_remove_from_current { "Eliminar de {name} ({tag})" }
+    winui_list_manual_order { "Orden manual" }
+    winui_list_move_up { "Mover arriba" }
+    winui_list_move_down { "Mover abajo" }
+    winui_list_move_to_top { "Mover al principio" }
+    winui_list_move_to_bottom { "Mover al final" }
+    winui_list_reset_order { "Restablecer orden" }
     winui_shell_track_details { "Detalles de la pista" }
     winui_shell_classic_mode { "Modo clásico" }
     winui_playback_output_device { "Dispositivo de salida" }
@@ -633,50 +718,50 @@ es:table {
     gtk_layout_category_application { "Aplicación" }
     gtk_layout_category_library { "Biblioteca" }
     gtk_layout_category_layout { "Diseño" }
-    gtk_layout_component_box { "Caja (Box)" }
-    gtk_layout_component_split_pane { "Panel dividido (Split Pane)" }
-    gtk_layout_component_label { "Etiqueta (Label)" }
-    gtk_layout_component_action_button { "Botón de acción (Action Button)" }
-    gtk_layout_component_menu_button { "Botón de menú (Menu Button)" }
-    gtk_layout_component_menu_bar { "Barra de menú (Menu Bar)" }
-    gtk_layout_component_track_table { "Tabla de pistas (Track Table)" }
-    gtk_layout_component_quick_filter { "Filtro rápido (Quick Filter)" }
-    gtk_layout_component_presentation_button { "Botón de vista (Presentation Button)" }
-    gtk_layout_component_cover_art { "Portada (Cover Art)" }
-    gtk_layout_component_transport_button { "Botón de transporte (Transport Button)" }
-    gtk_layout_component_soul_button { "Botón Soul (Soul Button)" }
-    gtk_layout_component_seek_slider { "Deslizador de posición (Seek Slider)" }
-    gtk_layout_component_time_label { "Etiqueta de tiempo (Time Label)" }
-    gtk_layout_component_volume_control { "Control de volumen (Volume Control)" }
-    gtk_layout_component_output_device_selector { "Selector de dispositivo de salida (Output Device Selector)" }
-    gtk_layout_component_activity_status { "Estado de actividad (Activity Status)" }
-    gtk_layout_component_track_count { "Recuento de pistas (Track Count)" }
-    gtk_layout_component_selection_info { "Información de selección (Selection Info)" }
-    gtk_layout_component_status_message { "Mensaje de estado (Status Message)" }
-    gtk_layout_component_now_playing_status { "Estado de reproducción actual (Now Playing Status)" }
-    gtk_layout_component_playback_details { "Detalles de reproducción (Playback Details)" }
-    gtk_layout_component_library_tree { "Árbol de biblioteca (Library Tree)" }
-    gtk_layout_component_playback_cover_art { "Portada de reproducción (Playback Cover Art)" }
-    gtk_layout_component_soul_play_pause { "Botón de reproducción/pausa Soul (Soul Play/Pause Button)" }
-    gtk_layout_component_quality_indicator { "Indicador de calidad de audio (Quality Indicator)" }
-    gtk_layout_component_audio_pipeline_panel { "Panel de cadena de audio (Audio Pipeline Panel)" }
-    gtk_layout_component_current_title_label { "Etiqueta de título actual (Current Title Label)" }
-    gtk_layout_component_current_artist_label { "Etiqueta de artista actual (Current Artist Label)" }
-    gtk_layout_component_separator { "Separador (Separator)" }
-    gtk_layout_component_absolute_canvas { "Lienzo absoluto (Absolute Canvas)" }
-    gtk_layout_component_spacer { "Espaciador (Spacer)" }
-    gtk_layout_component_scroll_window { "Ventana con desplazamiento (Scroll Window)" }
-    gtk_layout_component_tabs { "Pestañas (Tabs)" }
-    gtk_layout_component_responsive_class { "Clase responsiva (Responsive Class)" }
-    gtk_layout_component_center_box { "Caja centrada (Center Box)" }
-    gtk_layout_component_open_library_button { "Botón de abrir biblioteca (Open Library Button)" }
-    gtk_layout_component_workspace_with_detail { "Espacio de trabajo con detalle (Workspace with Detail)" }
-    gtk_layout_component_collapsible_split { "División plegable (Collapsible Split)" }
-    gtk_layout_component_detail_scope { "Ámbito de detalle (Detail Scope)" }
-    gtk_layout_component_field_grid { "Cuadrícula de campos (Field Grid)" }
-    gtk_layout_component_tag_editor { "Editor de etiquetas (Tag Editor)" }
-    gtk_layout_component_selection_region { "Región de selección (Selection Region)" }
-    gtk_layout_component_detail_undo_bar { "Barra de deshacer de detalle (Detail Undo Bar)" }
+    gtk_layout_component_box { "Caja" }
+    gtk_layout_component_split_pane { "Panel dividido" }
+    gtk_layout_component_label { "Etiqueta" }
+    gtk_layout_component_action_button { "Botón de acción" }
+    gtk_layout_component_menu_button { "Botón de menú" }
+    gtk_layout_component_menu_bar { "Barra de menú" }
+    gtk_layout_component_track_table { "Tabla de pistas" }
+    gtk_layout_component_quick_filter { "Filtro rápido" }
+    gtk_layout_component_presentation_button { "Botón de vista" }
+    gtk_layout_component_cover_art { "Portada" }
+    gtk_layout_component_transport_button { "Botón de transporte" }
+    gtk_layout_component_soul_button { "Botón Soul" }
+    gtk_layout_component_seek_slider { "Deslizador de posición" }
+    gtk_layout_component_time_label { "Etiqueta de tiempo" }
+    gtk_layout_component_volume_control { "Control de volumen" }
+    gtk_layout_component_output_device_selector { "Selector de dispositivo de salida" }
+    gtk_layout_component_activity_status { "Estado de actividad" }
+    gtk_layout_component_track_count { "Recuento de pistas" }
+    gtk_layout_component_selection_info { "Información de selección" }
+    gtk_layout_component_status_message { "Mensaje de estado" }
+    gtk_layout_component_now_playing_status { "Estado de reproducción actual" }
+    gtk_layout_component_playback_details { "Detalles de reproducción" }
+    gtk_layout_component_library_tree { "Árbol de biblioteca" }
+    gtk_layout_component_playback_cover_art { "Portada de reproducción" }
+    gtk_layout_component_soul_play_pause { "Botón de reproducción/pausa Soul" }
+    gtk_layout_component_quality_indicator { "Indicador de calidad de audio" }
+    gtk_layout_component_audio_pipeline_panel { "Panel de cadena de audio" }
+    gtk_layout_component_current_title_label { "Etiqueta de título actual" }
+    gtk_layout_component_current_artist_label { "Etiqueta de artista actual" }
+    gtk_layout_component_separator { "Separador" }
+    gtk_layout_component_absolute_canvas { "Lienzo absoluto" }
+    gtk_layout_component_spacer { "Espaciador" }
+    gtk_layout_component_scroll_window { "Ventana con desplazamiento" }
+    gtk_layout_component_tabs { "Pestañas" }
+    gtk_layout_component_responsive_class { "Clase responsiva" }
+    gtk_layout_component_center_box { "Caja centrada" }
+    gtk_layout_component_open_library_button { "Botón de abrir biblioteca" }
+    gtk_layout_component_workspace_with_detail { "Espacio de trabajo con detalle" }
+    gtk_layout_component_collapsible_split { "División plegable" }
+    gtk_layout_component_detail_scope { "Ámbito de detalle" }
+    gtk_layout_component_field_grid { "Cuadrícula de campos" }
+    gtk_layout_component_tag_editor { "Editor de etiquetas" }
+    gtk_layout_component_selection_region { "Región de selección" }
+    gtk_layout_component_detail_undo_bar { "Barra de deshacer de detalle" }
     gtk_layout_property_text { "Texto" }
     gtk_layout_property_orientation { "Orientación" }
     gtk_layout_property_spacing { "Espaciado" }

@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
@@ -34,13 +35,13 @@
 namespace ao::rt
 {
   class AppRuntime;
+  class CompletionAliasPolicy;
   class ConfigStore;
   class TextOrderingPolicy;
 }
 
 namespace ao::uimodel
 {
-  class ListPresentationPreferenceLifecycle;
   class PlaybackCommandSurface;
   class TrackPresentationCatalog;
 }
@@ -63,6 +64,7 @@ namespace ao::winui
       winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
       uimodel::PresentationTextCatalog textCatalog,
       rt::TextOrderingPolicy const& textOrderingPolicy,
+      rt::CompletionAliasPolicy const& completionAliasPolicy,
       std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
     ~LibrarySession();
 
@@ -87,6 +89,11 @@ namespace ao::winui
       return _presentationPreferences;
     }
     uimodel::ListPresentationPreferenceState& presentationPreferences() noexcept { return _presentationPreferences; }
+    uimodel::TrackPresentationCatalog& presentationCatalog() const noexcept { return *_presentationCatalogPtr; }
+    uimodel::ListPresentationPreferenceStore& presentationPreferenceStore() const noexcept
+    {
+      return *_presentationPreferenceStorePtr;
+    }
     /// The effective keyboard map: the shipped defaults with the user's overrides merged in.
     uimodel::KeymapModel const& keymap() const noexcept { return _keymap; }
     std::filesystem::path const& stateRoot() const noexcept { return _stateRoot; }
@@ -106,7 +113,8 @@ namespace ao::winui
     LibrarySession(std::filesystem::path stateRoot,
                    winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                    uimodel::PresentationTextCatalog textCatalog,
-                   rt::TextOrderingPolicy const& textOrderingPolicy);
+                   rt::TextOrderingPolicy const& textOrderingPolicy,
+                   rt::CompletionAliasPolicy const& completionAliasPolicy);
 
     struct CallbackLifetime final
     {};
@@ -139,6 +147,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     uimodel::PresentationTextCatalog _textCatalog;
     rt::TextOrderingPolicy const& _textOrderingPolicy;
+    rt::CompletionAliasPolicy const& _completionAliasPolicy;
     std::unique_ptr<rt::ConfigStore> _settingsStorePtr;
     std::unique_ptr<rt::ConfigStore> _playbackStorePtr;
     DesktopSettings _settings{};
@@ -149,7 +158,8 @@ namespace ao::winui
     std::unique_ptr<rt::AppRuntime> _runtimePtr;
     DispatcherQueueExecutor* _dispatcherExecutor = nullptr;
     std::unique_ptr<uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
-    std::unique_ptr<uimodel::ListPresentationPreferenceLifecycle> _presentationPreferenceLifecyclePtr;
+    std::unique_ptr<uimodel::ListPresentationPreferenceStore> _presentationPreferenceStorePtr;
+    async::Subscription _presentationPreferenceSub;
     std::unique_ptr<uimodel::PlaybackCommandSurface> _playbackCommandsPtr;
     LibrarySessionCallbacks _callbacks{};
     async::TaskHandle _libraryTask;

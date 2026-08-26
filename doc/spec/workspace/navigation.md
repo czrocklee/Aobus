@@ -114,6 +114,9 @@ Reapplying an identical presentation and history point succeeds without publicat
 Replay finds a live view matching list and filter or creates a replacement, restores the exact presentation, prepares the next open/focused snapshot, and commits snapshot plus cursor once.
 Replay never appends a history point.
 
+`canGoBack()` and `canGoForward()` expose the current cursor boundaries without duplicating history state.
+They are owner-thread-confined reads and publish no separate availability signal; a frontend rereads them after the existing workspace-changed observation.
+
 Traversal past an end returns `NotFound`.
 Failed target recreation or presentation restoration leaves the live cursor, snapshot, and revision unchanged.
 
@@ -183,7 +186,7 @@ The [workspace session specification](session.md) owns capture and restore, and 
 
 - [`NavigationHistoryTest.cpp`](../../../test/unit/runtime/NavigationHistoryTest.cpp) proves cursor and capacity mechanics.
 - [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion batching, and album reveal.
-- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) proves atomic history replay.
+- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) proves atomic history replay and boundary availability.
 - [`WorkspacePresentationTest.cpp`](../../../test/unit/runtime/WorkspacePresentationTest.cpp) proves presentation and preset commands.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves atomic multi-view restore and failure cleanup.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves frontend-neutral reconstruction.

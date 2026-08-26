@@ -222,6 +222,14 @@ namespace ao::winui
           resetProjection(changed.projectionPtr);
         }
       });
+    _workspaceSub = _runtime->workspace().onChanged(
+      [this](rt::WorkspaceChanged const& changed)
+      {
+        if (changed.snapshot.activeViewId != _viewId)
+        {
+          adoptWorkspaceView(changed.snapshot.activeViewId);
+        }
+      });
     reload();
   }
 
@@ -233,11 +241,14 @@ namespace ao::winui
 
     _projectionSub.reset();
     _viewProjectionSub.reset();
+    _workspaceSub.reset();
 
     _projectionPtr.reset();
+    _displayIndex.clear();
     _projectionInvalidated = false;
     _columns.clear();
     _viewId = rt::kInvalidViewId;
+    _revealIntent = {};
     _columnLayouts = nullptr;
     _runtime = nullptr;
 
@@ -265,9 +276,7 @@ namespace ao::winui
 
     if (restoredView != rt::kInvalidViewId)
     {
-      _viewId = restoredView;
-      auto const foundProjectionRes = _runtime->views().findTrackListProjection(_viewId);
-      resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
+      adoptWorkspaceView(restoredView);
       return;
     }
 
@@ -280,9 +289,10 @@ namespace ao::winui
       return;
     }
 
-    _viewId = *viewRes;
-    auto const foundProjectionRes = _runtime->views().findTrackListProjection(_viewId);
-    resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
+    if (_viewId != *viewRes)
+    {
+      adoptWorkspaceView(*viewRes);
+    }
   }
 
   void TrackListController::setViewportWidth(double const width, double const trailingChromeWidth)
@@ -315,6 +325,7 @@ namespace ao::winui
     _bindingLifetimePtr.reset();
     _projectionSub.reset();
     _projectionPtr = std::move(projectionPtr);
+    _displayIndex.clear();
     _projectionInvalidated = false;
     _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
 
@@ -378,6 +389,7 @@ namespace ao::winui
       std::ignore = displayIndex.reset(rowCount, {});
     }
 
+    _displayIndex = displayIndex;
     auto const displayCount = displayIndex.displayCount();
     auto materializerPtr = std::make_shared<TrackItemMaterializer>(*_runtime,
                                                                    *_projectionPtr,
@@ -692,6 +704,28 @@ namespace ao::winui
     std::ignore = _runtime->workspace().focusView(_viewId);
   }
 
+  std::vector<TrackId> TrackListController::selection() const
+  {
+    if (_runtime == nullptr || _viewId == rt::kInvalidViewId)
+    {
+      return {};
+    }
+
+    auto const stateRes = _runtime->views().findTrackListState(_viewId);
+    return stateRes ? stateRes->selection : std::vector<TrackId>{};
+  }
+
+  std::optional<std::size_t> TrackListController::displayIndexOfTrack(TrackId const trackId) const noexcept
+  {
+    if (_projectionPtr == nullptr || _projectionInvalidated || trackId == kInvalidTrackId)
+    {
+      return std::nullopt;
+    }
+
+    auto const optSourceIndex = _projectionPtr->indexOf(trackId);
+    return optSourceIndex ? _displayIndex.displayIndexOfSourceRow(*optSourceIndex) : std::nullopt;
+  }
+
   Result<> TrackListController::play(TrackId const trackId,
                                      std::function<Result<>(rt::ViewId, TrackId)> const& playTrack)
   {
@@ -781,10 +815,107 @@ namespace ao::winui
       return std::unexpected{viewRes.error()};
     }
 
-    _viewId = *viewRes;
-    auto const foundProjectionRes = _runtime->views().findTrackListProjection(_viewId);
-    resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
+    if (_viewId != *viewRes)
+    {
+      adoptWorkspaceView(*viewRes);
+    }
     return {};
+  }
+
+  void TrackListController::adoptWorkspaceView(rt::ViewId const viewId)
+  {
+    _viewId = viewId;
+
+    if (_runtime == nullptr || viewId == rt::kInvalidViewId)
+    {
+      resetProjection(nullptr);
+      return;
+    }
+
+    auto const foundProjectionRes = _runtime->views().findTrackListProjection(viewId);
+    resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
+  }
+
+  Result<> TrackListController::revealTrack(TrackId const trackId,
+                                            rt::ViewId const preferredViewId,
+                                            ListId const preferredListId)
+  {
+    if (_runtime == nullptr || trackId == kInvalidTrackId)
+    {
+      return {};
+    }
+
+    auto const snapshot = _runtime->workspace().snapshot();
+    auto targetViewId = rt::kInvalidViewId;
+
+    if (preferredViewId != rt::kInvalidViewId && std::ranges::contains(snapshot.openViews, preferredViewId) &&
+        _runtime->views().findTrackListState(preferredViewId))
+    {
+      targetViewId = preferredViewId;
+    }
+
+    if (targetViewId == rt::kInvalidViewId && preferredListId != kInvalidListId)
+    {
+      for (auto const viewId : snapshot.openViews)
+      {
+        if (auto const stateRes = _runtime->views().findTrackListState(viewId);
+            stateRes && stateRes->listId == preferredListId)
+        {
+          targetViewId = viewId;
+          break;
+        }
+      }
+
+      if (targetViewId == rt::kInvalidViewId)
+      {
+        auto request = rt::NavigationRequest{};
+        request.target = preferredListId == rt::kAllTracksListId ? rt::NavigationTarget{rt::GlobalViewKind::AllTracks}
+                                                                 : rt::NavigationTarget{preferredListId};
+        auto viewRes = _runtime->workspace().navigate(request);
+
+        if (!viewRes)
+        {
+          return std::unexpected{viewRes.error()};
+        }
+
+        targetViewId = *viewRes;
+      }
+    }
+
+    if (targetViewId == rt::kInvalidViewId)
+    {
+      return {};
+    }
+
+    if (auto focusedRes = _runtime->workspace().focusView(targetViewId); !focusedRes)
+    {
+      return focusedRes;
+    }
+
+    if (_viewId != targetViewId)
+    {
+      adoptWorkspaceView(targetViewId);
+    }
+
+    if (auto selectedRes = _runtime->views().setSelection(targetViewId, {trackId}); !selectedRes)
+    {
+      return selectedRes;
+    }
+
+    recordTrackRevealIntent(_revealIntent, targetViewId, trackId);
+    _changed.emit();
+    return {};
+  }
+
+  std::optional<TrackRevealTarget> TrackListController::revealTarget() const noexcept
+  {
+    if (_projectionPtr == nullptr || _projectionInvalidated)
+    {
+      return std::nullopt;
+    }
+
+    return resolveTrackRevealTarget(
+      _revealIntent, _viewId, _projectionPtr->indexOf(_revealIntent.trackId), _displayIndex);
   }
 
   ListId TrackListController::activeListId() const
@@ -794,7 +925,8 @@ namespace ao::winui
       return kInvalidListId;
     }
 
-    return _runtime->views().trackListState(_viewId).listId;
+    auto const stateRes = _runtime->views().findTrackListState(_viewId);
+    return stateRes ? stateRes->listId : kInvalidListId;
   }
 
   std::string TrackListController::activePresentationId() const
@@ -804,7 +936,8 @@ namespace ao::winui
       return {};
     }
 
-    return _runtime->views().trackListState(_viewId).presentation.id;
+    auto const stateRes = _runtime->views().findTrackListState(_viewId);
+    return stateRes ? stateRes->presentation.id : std::string{};
   }
 
   std::size_t TrackListController::rowCount() const noexcept

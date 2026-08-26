@@ -37,8 +37,15 @@ namespace ao::uimodel::test
 
   inline rt::LibraryTaskProgressUpdated libraryTaskProgress(rt::LibraryTaskProgressKind kind,
                                                             std::string subject,
-                                                            double fraction)
+                                                            double fraction,
+                                                            rt::LibraryTaskProgressId id = rt::LibraryTaskProgressId{1})
   {
-    return {.kind = kind, .fraction = fraction, .subject = std::move(subject)};
+    return {.id = id, .kind = kind, .fraction = fraction, .subject = std::move(subject)};
+  }
+
+  inline rt::LibraryTaskProgressFinished libraryTaskProgressFinished(
+    rt::LibraryTaskProgressId id = rt::LibraryTaskProgressId{1})
+  {
+    return {.id = id};
   }
 } // namespace ao::uimodel::test

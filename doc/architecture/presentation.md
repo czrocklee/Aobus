@@ -139,6 +139,7 @@ Maintenance, runtime replacement, any intervening effective commit, or a rejecte
 Submission is asynchronous and the session permits only one pending command at a time.
 It retains the draft and binding across non-terminal lane `Busy`, while `Stale` or `Unavailable` invalidates the session according to the owning editor policy.
 An applied submission receives evidence for the new settled revision, enabling a guarded follow-up edit or undo without weakening the original target set.
+An editor that owns metadata and tag intent together uses the session's combined Properties command so one runtime transaction and one next binding cover the complete form.
 
 The public namespace remains `ao::uimodel`; feature ownership is expressed by singular folders mirrored across public headers, sources, and tests.
 
@@ -183,9 +184,7 @@ What is this shell's own but needs no XAML to decide - its layout catalog and
 dialect, its element lattice and style resolution, its themed surfaces, and its
 strict settings and theme schemas - remains in the Windows-only
 `aobus-winui-lib`, not shared UIModel. These sources stay separable from XAML
-construction where useful, but only the native Windows suite compiles their
-frontend-specific tests; naming a frontend is what keeps them out of the shared
-model, not what they include.
+construction where useful, and pure WinRT-free adapters compile into the ordinary cross-host core tests; naming a frontend is what keeps them out of the shared model, not what they include.
 
 Canonical ICU catalog sources generate WinUI's migrated shared resources as `en`, `de`, `zh-Hans`, `zh-Hant`, `ja`, `es`, `fr`, and `qps-ploc` PRI candidates.
 Chinese region requests resolve to the corresponding script-qualified candidate, so the build never emits region and script aliases for the same MRT resource.
@@ -248,7 +247,7 @@ Metadata/tag authoring adds an explicit revision boundary:
 runtime projection target ids
   -> UIModel TrackAuthoringSession binds (runtime instance, revision, exact ids)
   -> GTK/TUI edits a local value
-  -> session submits one owning metadata/tag Task with the retained binding
+  -> session submits one owning metadata, tag, or combined Properties Task with the retained binding
   -> pending until transaction abort or revision settlement
   -> Applied + next binding | NoOp | Busy | Stale | Unavailable
 ```

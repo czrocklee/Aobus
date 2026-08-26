@@ -220,6 +220,8 @@ namespace ao::winui::test
     // The cover reports the Border that rounds and clips it, not the Image.
     CHECK(componentElementKind(LayoutNode{.type = "track.coverArt"}) == ElementKind::Border);
 
+    CHECK(componentElementKind(LayoutNode{.type = "track.quickFilter"}) == ElementKind::Grid);
+
     CHECK(componentElementKind(LayoutNode{.type = "playback.volumeControl"}) == ElementKind::Button);
     CHECK(componentElementKind(LayoutNode{
             .type = "playback.volumeControl", .props = {{"presentation", LayoutValue{std::string{"inline"}}}}}) ==

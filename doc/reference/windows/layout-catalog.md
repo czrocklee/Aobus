@@ -19,7 +19,7 @@ These surfaces are shipped contracts today. The WinUI window builds its Modern a
 
 Two boundaries run through this reference, and they are not the same one. What both shells decide the same way - parsing the version 1 common fields, walking a candidate against a catalog, the parse-expand-validate step - belongs to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md). What is this shell's own belongs to this shell, however portable the code is: a component catalog naming `windows.navigationPane` is not a shared model just because deciding it needs no XAML.
 
-So the shared traversal lives in `app/uimodel/layout/document/`, and everything below - the catalog, the dialect that extends the shared rules, the element lattice, the themed surfaces, the style resolution, and the WinUI half of placement - lives in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, in the `ao::winui` namespace. Public frontend headers live under `app/windows-winui/include/ao/winui/`. The pure rule sources remain independent of XAML construction, but their tests run only in the native Windows `ao_core_test`; the Linux gate does not compile a second WinUI model target. The preset resources, native construction, controllers, and resource lookup all remain under `app/windows-winui/`.
+So the shared traversal lives in `app/uimodel/layout/document/`, and everything below - the catalog, the dialect that extends the shared rules, the element lattice, the themed surfaces, the style resolution, and the WinUI half of placement - lives in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, in the `ao::winui` namespace. Public frontend headers live under `app/windows-winui/include/ao/winui/`. Pure Windows-owned rule sources that name no platform API are compiled directly into `ao_core_test` on every host; rules that name WinRT or XAML types run only in the native Windows test profile. Neither path exports a second WinUI model target. The preset resources, native construction, controllers, and resource lookup all remain under `app/windows-winui/`.
 
 ## Surface
 
@@ -96,9 +96,19 @@ The `navigationView` presentation is the exception. It draws its own pane inside
 | `shell.toggleInspector` | Shell | None |
 | `shell.showSystemMenu` | Shell | `RequiresAnchor`, `PresentsMenu` |
 | `shell.showSoul` | Shell | None |
+| `playback.play` | Playback | None |
+| `playback.pause` | Playback | None |
+| `playback.playPause` | Playback | None |
+| `playback.stop` | Playback | None |
+| `playback.next` | Playback | None |
+| `playback.previous` | Playback | None |
+| `playback.toggleShuffle` | Playback | None |
+| `playback.cycleRepeat` | Playback | None |
 | `playback.showOutputDeviceSelector` | Playback | `RequiresAnchor`, `PresentsMenu` |
 
-Menus, transport commands, and column editing are native behavior of the component that owns them, so they have no action id.
+Menus, reveal-current-track, and column editing remain native behavior of the component that owns them and have no layout-catalog action id.
+Transport components also run their native command directly, but every `playback.*` transport command is registered so layout action slots and the shared keymap resolve the same stable inventory.
+The separate shared keymap action `workspace.revealCurrentTrack` is registered directly by the native shell and is therefore runnable by `Ctrl+L` without becoming authorable in a layout-document action slot.
 
 `actionButton` and `playback.soulButton` accept the primary click, primary long press, and secondary click; `playback.soulButton` defaults `secondaryAction` to `shell.showSystemMenu` and `primaryLongPressAction` to `shell.showSoul`. Every other component accepts none.
 
@@ -131,12 +141,11 @@ A field the document does not author leaves the corresponding `Style` setter in 
 
 | Element | Component types |
 |---|---|
-| `Grid` | `box`, `split`, `windows.titleBar`, `windows.statusBar`, `windows.inspectorPane`, `windows.navigationPane` in `tree` presentation, `playback.nowPlayingInfo`, `status.activity` |
+| `Grid` | `box`, `split`, `windows.titleBar`, `windows.statusBar`, `windows.inspectorPane`, `windows.navigationPane` in `tree` presentation, `track.quickFilter`, `playback.nowPlayingInfo`, `status.activity` |
 | `ScrollViewer` | `track.detail`, `track.table` |
 | `Border` | `track.coverArt` |
 | `NavigationView` | `windows.navigationPane` in `navigationView` presentation |
 | `MenuBar` | `app.menuBar` |
-| `AutoSuggestBox` | `track.quickFilter` |
 | `Button` | `track.presentationButton`, `playback.transportButton`, `playback.soulButton`, `playback.outputDeviceSelector`, `playback.volumeControl` in `flyout` presentation, `actionButton`, `menuButton` |
 | `Slider` | `playback.seekSlider`, `playback.volumeControl` in `inline` presentation |
 | `TextBlock` | `label`, `playback.timeLabel`, `status.message`, `status.selectionInfo`, `status.trackCount`, `windows.libraryPath` |
@@ -144,6 +153,9 @@ A field the document does not author leaves the corresponding `Style` setter in 
 Every structural container is a `Grid` because WinUI expresses remaining-space allocation on a row or column definition, which is what `hexpand` and `vexpand` mean. `windows.inspectorPane` and the `tree` navigation pane are among them despite what they show: each carries a resize thumb over one edge, so the thumb and the pane content share a cell.
 
 The mapping names what the component hands to its parent, not what it displays. `track.table` is its scrolling viewport rather than the surface of headers and rows inside it, the `tree` pane is its cell rather than the `TreeView`, and `track.coverArt` is the `Border` that rounds and clips the artwork and its placeholder together rather than the `Image` inside it. That is what a `styleKey` targets and what a `surface` paints, and the runtime rejects a component whose element is not the kind its entry declares.
+
+`track.quickFilter` hands its parent a `Grid` containing the native `AutoSuggestBox` and a Create List action that appears only for a valid non-empty resolved expression.
+Its adapter takes completion identity, ranking, replacement ranges, and insertion text from the shared track-filter UIModel, keeps arrow navigation from rewriting the draft, maps the native UTF-16 caret to shared UTF-8 byte positions, and applies accepted replacements back at UTF-16 boundaries.
 
 Style-target compatibility uses this element lattice: `Panel` and `Border`, `TextBlock`, and `Control` derive from `FrameworkElement`; `Grid` from `Panel`; `ContentControl`, `ItemsControl`, `Slider`, `AutoSuggestBox`, `TreeView`, and `MenuBar` from `Control`; `ButtonBase`, `ScrollViewer`, and `NavigationView` from `ContentControl`; `Button` from `ButtonBase`; and `ListView` from `ItemsControl`.
 
@@ -196,6 +208,7 @@ The shipped frame declares these styles for the shipped presets. `ChromeLessButt
 | `ClassicPlaybackStripStyle` | `Grid` | 6px padding, 1px divider below |
 | `ClassicToolbarStyle` | `Grid` | 6×3 padding, 1px divider above and below |
 | `ClassicInspectorStyle` | `Grid` | 1px divider along the leading edge |
+| `ClassicInspectorCoverStyle` | `Border` | 10px inset, 200px cap, Classic chrome radius, 1px divider border, and card fill |
 | `ClassicStatusBarStyle` | `Grid` | 6×2 padding, 1px divider above |
 
 Each `TargetType` is the element the native element mapping says the node constructs, and the pairing of every authored `styleKey` with the frame that declares it is a test, not a convention.
@@ -287,8 +300,8 @@ root:
 ## Implementation authority
 
 Everything below is the WinUI shell's own, which is why it lives in
-`aobus-winui-lib` rather than in `ao_app_uimodel`. The native Windows suite
-compiles and tests these pure rules without constructing a XAML host.
+`aobus-winui-lib` rather than in `ao_app_uimodel`.
+Pure rules carrying no WinRT dependency compile in `ao_core_test` on every host; native Windows builds additionally cover their XAML composition.
 
 - [`LayoutCatalog.cpp`](../../../app/windows-winui/layout/LayoutCatalog.cpp) owns registered component and action ids, presentation-dependent element and child rules, and required ids.
 - [`LayoutDialect.cpp`](../../../app/windows-winui/layout/LayoutDialect.cpp) owns what this shell adds to the shared rules: the styling field it rejects, its `styleKey`, and its themed surfaces. Whole-candidate rejection itself belongs to the shared [`LayoutValidation.cpp`](../../../app/uimodel/layout/document/LayoutValidation.cpp).
@@ -304,6 +317,7 @@ compiles and tests these pure rules without constructing a XAML host.
 - [`LayoutCatalogTest.cpp`](../../../test/unit/winui/layout/LayoutCatalogTest.cpp), [`PlacementPlanTest.cpp`](../../../test/unit/winui/layout/PlacementPlanTest.cpp), [`StyleLookupTest.cpp`](../../../test/unit/winui/layout/StyleLookupTest.cpp), and [`ElementKindTest.cpp`](../../../test/unit/winui/layout/ElementKindTest.cpp) cover the catalog, placement mapping, style planning, and element lattice.
 - [`FrameResourceTest.cpp`](../../../test/unit/winui/FrameResourceTest.cpp) reads the shipped frame and proves every `styleKey` the presets name is declared in the window scope with a `TargetType` the node's element accepts, that the resources the components resolve by name are declared, and that the seek chrome stays out of the window scope.
 - [`ThemeSurfaceTest.cpp`](../../../test/unit/winui/layout/ThemeSurfaceTest.cpp) covers the themed surface vocabulary, its theme tokens, and which elements accept a slot.
+- [`QuickFilterCompletionAdapterTest.cpp`](../../../test/unit/winui/track/QuickFilterCompletionAdapterTest.cpp) covers the platform-free UTF-8/UTF-16 completion boundary on every host; native Windows builds cover the XAML wiring itself.
 
 ## Related documents
 

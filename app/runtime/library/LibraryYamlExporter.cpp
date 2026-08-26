@@ -530,6 +530,10 @@ namespace ao::rt
 
   LibraryYamlExporter::~LibraryYamlExporter() = default;
 
+  LibraryYamlExporter::LibraryYamlExporter(LibraryYamlExporter&&) noexcept = default;
+
+  LibraryYamlExporter& LibraryYamlExporter::operator=(LibraryYamlExporter&&) noexcept = default;
+
   Result<> LibraryYamlExporter::exportToYaml(std::filesystem::path const& path,
                                              ExportMode mode,
                                              std::stop_token stopToken)

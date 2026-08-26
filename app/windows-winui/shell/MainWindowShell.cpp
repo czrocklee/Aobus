@@ -4,6 +4,7 @@
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "layout/ShellBuilder.h"
+#include "library/LibraryTransferCoordinator.h"
 #include "pch.h"
 #include "platform/StringResources.h"
 #include "theme/SurfaceBrushes.h"
@@ -13,6 +14,7 @@
 #include <ao/rt/Log.h>
 #include <ao/utility/Path.h>
 #include <ao/winui/Theme.h>
+#include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 
 #include <errhandlingapi.h>
@@ -125,8 +127,13 @@ namespace winrt::Aobus::implementation
     }
 
     auto const& state = *appliedRes;
-    ExtendsContentIntoTitleBar(state.integratedTitleBar);
-    SetTitleBar(state.integratedTitleBar ? _shellBuilderPtr->titleBar() : Microsoft::UI::Xaml::UIElement{nullptr});
+    ao::winui::runOptionalWinRt(
+      "applying the WinUI title bar",
+      [this, &state]
+      {
+        ExtendsContentIntoTitleBar(state.integratedTitleBar);
+        SetTitleBar(state.integratedTitleBar ? _shellBuilderPtr->titleBar() : Microsoft::UI::Xaml::UIElement{nullptr});
+      });
   }
 
   void MainWindow::restoreWindowPlacement()
@@ -224,6 +231,14 @@ namespace winrt::Aobus::implementation
     {
       updateStatus(ao::winui::formatResource("winui_folder_picker_failed", to_string(error.message())));
     }
+    catch (std::exception const& error)
+    {
+      updateStatus(ao::winui::formatResource("winui_folder_picker_failed", error.what()));
+    }
+    catch (...)
+    {
+      updateStatus(ao::winui::formatResource("winui_folder_picker_failed", "Unknown exception"));
+    }
   }
 
   void MainWindow::rescanLibrary()
@@ -231,6 +246,22 @@ namespace winrt::Aobus::implementation
     if (_session != nullptr)
     {
       _session->rescan();
+    }
+  }
+
+  void MainWindow::importLibrary()
+  {
+    if (_libraryTransferCoordinatorPtr && !modalWorkflowActive())
+    {
+      _libraryTransferCoordinatorPtr->importLibrary();
+    }
+  }
+
+  void MainWindow::exportLibrary()
+  {
+    if (_libraryTransferCoordinatorPtr && !modalWorkflowActive())
+    {
+      _libraryTransferCoordinatorPtr->exportLibrary();
     }
   }
 

@@ -64,7 +64,7 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - Values retained across submission are owned by the command. Caller spans, string views, path references, transaction views, and raw implementation pointers do not enter the queue.
 - Import Maintenance rejects interactive commands for the complete workflow. Scan and audio-identity preparation leave availability open; once their background mutation is outstanding, later interactive authoring receives `Busy` and ordinary commands receive `ResourceBusy`.
 - `Busy` is transient lane contention and does not invalidate a Track/List authoring binding or draft. `Unavailable` remains logical Maintenance/lifetime rejection, and `Stale` remains invalid evidence.
-- Metadata and tag commits require a current target binding and revalidate runtime identity, availability, revision, and every target inside the active transaction turn.
+- Metadata, tag, and combined Properties commits require a current target binding and revalidate runtime identity, availability, revision, and every target inside the active transaction turn.
 - Order commits require a current order binding and revalidate runtime identity, availability, revision, List identity, selection, and anchor inside the active transaction turn.
 - A preview returns the same classifications and report values as its committing counterpart from the same starting state, except it returns no allocated durable id.
 - Dictionary rows and every record that references them commit in the same native transaction; committed dictionary publication completes before application change delivery.
@@ -134,7 +134,11 @@ Tag edit adds absent requested tags and removes present requested tags.
 Duplicate and already-present/absent tag requests do not create an effective change.
 Target binding and all-or-none outcomes are identical to metadata update, and one command updates all affected tracks atomically.
 
-Raw-id metadata/tag previews remain non-committing administrative inspection.
+The combined Properties command applies one metadata patch and one tag edit through the same target binding, root operation, and write transaction.
+Either both parts commit in one revision and one changeset or an error aborts every staged effect; a tag validation or storage failure cannot leave the metadata part committed.
+If both parts are semantic no-ops, the command returns `NoOp` and retains the binding.
+
+Raw-id metadata, tag, and combined Properties previews remain non-committing administrative inspection.
 They may report the mutation that would affect currently existing ids, but they create no authoring binding and cannot be turned into a commit without a fresh binding.
 
 ### Create from file
@@ -218,6 +222,8 @@ An explicit `removeWritableTagFromTracks` option removes that tag from all affec
 
 Every deleted List id is published so shared presentation-preference lifecycle code can remove all corresponding frontend state.
 A missing list returns `NotFound`.
+Create, update, and delete Tasks report success only after their committed change publication settles.
+Interactive navigation therefore rebuilds from those published List ids; a preview or an optimistic native-node edit is never authoritative library state.
 
 ## Failure and cancellation
 
@@ -235,7 +241,7 @@ Scan cancellation and a prepared scan with no committable work are `Unchanged` o
 When commit fails, staged dictionary mappings are rolled back before readers resume, and allocated ids and prepared resources are not observable as successful command results.
 The deterministic commit-result test seam is data-only: it terminates the native transaction and supplies an error without invoking application callbacks while writer and dictionary locks are held.
 
-`Busy`, `Stale`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata/tag authoring outcomes.
+`Busy`, `Stale`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata, tag, and combined Properties authoring outcomes.
 `Busy` retains the authoring session and permits an explicit retry; it triggers neither automatic replay nor an availability notification.
 Input, validation, serialization, and pre-commit storage failures remain `Result` errors.
 After durable commit, a revision invariant or mandatory-publication admission/delivery failure in a live runtime terminates the process; it is never reported as an ordinary pre-commit error or exposed as a public authoring outcome.
@@ -269,6 +275,7 @@ Exact records and identifier allocation belong to the [library database referenc
 - [`WriteTransactionTest.cpp`](../../../../test/unit/library/WriteTransactionTest.cpp) proves root error containment, rollback, terminal state, and writer-gate reuse.
 - [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) and [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) prove the logical port capability boundary and relationship-preserving mutations below the runtime facade.
 - `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
+- [`LibraryWriterTrackPropertiesTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterTrackPropertiesTest.cpp) proves combined metadata/tag publication and whole-command rollback after a later tag failure.
 - [`LibraryWriterListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListMembershipTest.cpp) additionally proves that an invalid stored parent expression returns contextual `FormatRejected` before mutation or publication.
 - [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, failed-mutation admission release, no-op binding retention, and publication reentrancy closure.
 - [`LibraryChangesTest.cpp`](../../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves `executeAsync()` transitions, injected native commit failure, exact operation-owned publication, signal-before-await settlement, revision return, rollback, lane release, and Closing retirement.

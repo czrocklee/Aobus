@@ -61,7 +61,9 @@ Task progress uses owner-local operational channels on `LibraryTaskService`.
 Progress is best effort and does not constitute a committed state transition.
 Each operation keeps at most one progress-delivery callback queued; while that callback is pending, a newer update replaces the pending value for the same phase.
 Phase transitions remain ordered, so consumers observe each entered phase and the newest accepted state within that phase without per-file event flooding.
-`onProgressFinished()` is a status-free pulse used only to clear presentation progress.
+Every admitted progress conversation receives one owner-local `LibraryTaskProgressId` shared by its progress updates and finished pulse.
+Consumers may therefore retain several overlapping read-only conversations, present the most recently updated one, and remove only the conversation named by a finished pulse; finishing export or scan planning must not clear another active task.
+`onProgressFinished()` remains a status-free pulse used only to retire the progress conversation carrying that same id.
 It carries no outcome, Error, cancellation state, count, or message.
 The awaited `Task<Result<T>>` value and the ordinary cancellation/exception channel are the sole operation outcome; the task-specific caller owns final wording and payload presentation.
 
@@ -70,7 +72,9 @@ Cancellation before that admission emits neither progress nor a finished pulse.
 Once admitted, each TaskService method that may publish progress emits exactly one finished pulse on its ordinary value, Error, exception, or cancellation path after callback-owner cleanup while the runtime owner remains live, whether or not it emitted a progress update.
 The callback executor's FIFO delivers any final queued progress update before that conversation's finished pulse.
 Scan-plan build and scan apply are independent progress conversations and therefore emit independent pulses.
-Resource loading, YAML export, and the import operations currently publish no task progress and emit no finished pulse.
+Import preparation, prepared import application, and YAML export are likewise independent progress conversations.
+They publish one coarse `PreparingImport`, `Importing`, or `Exporting` phase with the selected file name as its subject and emit one finished pulse after ordinary callback-owner cleanup.
+Resource loading currently publishes no task progress and emits no finished pulse.
 
 Committed content or manifest changes publish only through the revisioned changeset channel.
 Neither the finished pulse nor an awaited-task caller refreshes runtime replicas, caches, sources, or projections.
@@ -116,7 +120,8 @@ If one throws, required cleanup completes before that exception propagates and r
 
 ## Test map
 
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
+- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
+- [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves that finishing one overlapping read-only task immediately restores another task's active progress instead of clearing the status surface.
 - [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves non-terminal contention behind a background command, worker-side execution, Maintenance ordering, active pre-transaction Closing cancellation, and later admission after release.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
 

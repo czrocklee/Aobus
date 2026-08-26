@@ -42,7 +42,7 @@ namespace ao::uimodel::test
     {
       feedProjection.handleLibraryTaskProgress(
         libraryTaskProgress(rt::LibraryTaskProgressKind::Updating, "track.flac", 0.8));
-      feedProjection.handleLibraryProgressFinished(feed({}));
+      feedProjection.handleLibraryProgressFinished(libraryTaskProgressFinished(), feed({}));
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Idle);
@@ -62,7 +62,7 @@ namespace ao::uimodel::test
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{4}));
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
 
-      feedProjection.handleLibraryProgressFinished(currentFeed);
+      feedProjection.handleLibraryProgressFinished(libraryTaskProgressFinished(), currentFeed);
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Error);
@@ -79,7 +79,7 @@ namespace ao::uimodel::test
         rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", rt::NotificationLifetime::pinned());
       feedProjection.handleFeedUpdated(postedUpdate(feed({error}), rt::NotificationId{15}));
 
-      feedProjection.handleLibraryProgressFinished(feed({}));
+      feedProjection.handleLibraryProgressFinished(libraryTaskProgressFinished(), feed({}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
       CHECK(feedProjection.viewState().detail.items.empty());
@@ -89,7 +89,7 @@ namespace ao::uimodel::test
     {
       feedProjection.handleLibraryTaskProgress(
         libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
-      feedProjection.handleLibraryProgressFinished(feed({}));
+      feedProjection.handleLibraryProgressFinished(libraryTaskProgressFinished(), feed({}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
       CHECK_FALSE(feedProjection.viewState().detail.optLibraryTask);
@@ -107,5 +107,33 @@ namespace ao::uimodel::test
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedProjection.viewState().compact.text == "Partial import");
     }
+  }
+
+  TEST_CASE("ActivityStatusFeedProjection - finishing an overlapping export restores active scan progress",
+            "[uimodel][regression][activity-status][concurrency]")
+  {
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishPresentationTextCatalog()};
+    auto const scanId = rt::LibraryTaskProgressId{11};
+    auto const exportId = rt::LibraryTaskProgressId{12};
+    feedProjection.handleLibraryTaskProgress(
+      libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4, scanId));
+    feedProjection.handleLibraryTaskProgress(
+      libraryTaskProgress(rt::LibraryTaskProgressKind::Exporting, "backup.yaml", 0.0, exportId));
+
+    REQUIRE(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
+    CHECK(feedProjection.viewState().compact.text == "Exporting: backup.yaml");
+
+    feedProjection.handleLibraryProgressFinished(libraryTaskProgressFinished(exportId), feed({}));
+
+    CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
+    CHECK(feedProjection.viewState().compact.text == "Scanning library");
+    CHECK(feedProjection.viewState().compact.optProgressFraction == 0.4);
+    REQUIRE(feedProjection.viewState().detail.optLibraryTask);
+    CHECK(feedProjection.viewState().detail.optLibraryTask->progressFraction == 0.4);
+
+    feedProjection.handleLibraryProgressFinished(libraryTaskProgressFinished(scanId), feed({}));
+
+    CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
+    CHECK_FALSE(feedProjection.viewState().detail.optLibraryTask);
   }
 } // namespace ao::uimodel::test

@@ -87,6 +87,8 @@ namespace ao::rt
 
     Result<> goBack();
     Result<> goForward();
+    bool canGoBack() const;
+    bool canGoForward() const;
 
     std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target);
 

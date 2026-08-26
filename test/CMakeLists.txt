@@ -487,6 +487,7 @@ add_executable(ao_core_test
     unit/runtime/TrackPresentationTest.cpp
     unit/runtime/TrackEditScriptTest.cpp
     unit/runtime/library/LibraryWriterTagCommandTest.cpp
+    unit/runtime/library/LibraryWriterTrackPropertiesTest.cpp
     unit/runtime/library/LibraryWriterTrackCreateCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackDeleteCommandTest.cpp
     unit/runtime/library/LibraryWriterListMembershipTest.cpp
@@ -598,14 +599,21 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/theme/Theme.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/input/KeyChordAccelerator.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/input/KeymapAcceleratorPlan.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/library/LibraryTransferAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/track/QuickFilterCompletionAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/track/TrackRevealAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/track/TrackPropertiesAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/list/ListAuthoringAdapter.cpp
     unit/winui/DesktopSettingsYamlSchemaTest.cpp
     unit/winui/ThemeTest.cpp
+    unit/winui/WindowInteractionPolicyTest.cpp
     unit/winui/app/DesktopOutputSelectionTest.cpp
     unit/winui/app/DestructiveLibraryRestartTest.cpp
     unit/winui/app/DispatcherQueueAdmissionTest.cpp
     unit/winui/app/SelectedRootCommitTest.cpp
     unit/winui/input/KeyChordAcceleratorTest.cpp
     unit/winui/input/KeymapAcceleratorPlanTest.cpp
+    unit/winui/library/LibraryTransferAdapterTest.cpp
     unit/winui/layout/ElementKindTest.cpp
     unit/winui/layout/LayoutCatalogTest.cpp
     unit/winui/layout/LayoutDialectTest.cpp
@@ -614,6 +622,10 @@ add_executable(ao_core_test
     unit/winui/layout/ShellStatePolicyTest.cpp
     unit/winui/layout/StyleLookupTest.cpp
     unit/winui/layout/ThemeSurfaceTest.cpp
+    unit/winui/track/QuickFilterCompletionAdapterTest.cpp
+    unit/winui/track/TrackRevealAdapterTest.cpp
+    unit/winui/track/TrackPropertiesAdapterTest.cpp
+    unit/winui/list/ListAuthoringAdapterTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_core_test)
 target_include_directories(ao_core_test PRIVATE

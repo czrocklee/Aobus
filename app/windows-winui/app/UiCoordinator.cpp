@@ -7,8 +7,11 @@
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 // ResourceByteLoader::bind converts AppRuntime to its CoreRuntime base, which requires a complete derived type.
 #include <ao/rt/AppRuntime.h> // NOLINT(misc-include-cleaner)
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 
 #include <memory>
@@ -48,6 +51,17 @@ namespace ao::winui
     {
       resourceBytes.bind(session.runtime());
       trackList.bind(session.runtime(), session.columnLayouts());
+      revealTrackSub = session.runtime().playback().events().onRevealTrackRequested(
+        [this](rt::PlaybackRevealTrackRequest const& request)
+        {
+          auto const revealedRes =
+            trackList.revealTrack(request.trackId, request.preferredViewId, request.preferredListId);
+
+          if (!revealedRes && callbacks.onFailure)
+          {
+            callbacks.onFailure(revealedRes.error());
+          }
+        });
     }
 
     void retire() noexcept
@@ -63,6 +77,7 @@ namespace ao::winui
       active = false;
       callbacks = {};
       session.setCallbacks({});
+      revealTrackSub.reset();
       trackList.unbind();
       resourceBytes.unbind();
     }
@@ -72,6 +87,7 @@ namespace ao::winui
     TrackListController trackList;
     ThemeCoordinator theme;
     rt::ResourceByteLoader resourceBytes;
+    async::Subscription revealTrackSub;
     bool active = true;
   };
 

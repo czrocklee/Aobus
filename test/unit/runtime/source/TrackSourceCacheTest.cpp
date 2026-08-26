@@ -133,7 +133,7 @@ namespace ao::rt::test
       auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
       auto& writer = writerFixture.writer();
 
-      CHECK(writerFixture.runTask(writer.deleteTrack(trackId)).has_value());
+      REQUIRE(writerFixture.runTask(writer.deleteTrack(trackId)).has_value());
       CHECK(allTracks->size() == 0);
       REQUIRE(spy.batches.size() == 1);
       REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
@@ -690,6 +690,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<delta::RemoveRange>(sourceEditScript(batches[0]).edits[0]));
     CHECK(std::holds_alternative<delta::InsertRange>(sourceEditScript(batches[0]).edits[1]));
     REQUIRE(trailingBatches.size() == 1);
+    REQUIRE_FALSE(sourceEditScript(trailingBatches[0]).edits.empty());
     CHECK(std::holds_alternative<delta::RemoveRange>(sourceEditScript(trailingBatches[0]).edits.front()));
 
     {
@@ -984,6 +985,30 @@ namespace ao::rt::test
 
     CHECK(&first.source() == &second.source());
     CHECK(&first.source() != &different.source());
+  }
+
+  TEST_CASE("TrackSourceCache - an invalid transient ad-hoc source reports its error and can expire",
+            "[runtime][unit][source][source-spec]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    libraryFixture.addTrack("First");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    cache.reloadAllTracks();
+
+    {
+      auto invalid =
+        ao::test::requireValue(cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "("}));
+      auto const optError = cache.sourceError(invalid);
+      REQUIRE(optError);
+      CHECK(optError->code == Error::Code::FormatRejected);
+      CHECK(invalid->size() == 0);
+    }
+
+    auto valid =
+      ao::test::requireValue(cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "true"}));
+    CHECK_FALSE(cache.sourceError(valid));
+    CHECK(valid->size() == 1);
   }
 
   TEST_CASE("TrackSourceCache - acquiring a new ad-hoc source prunes expired unrelated specs",

@@ -8,23 +8,24 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/UiSubscription.h"
 #include "pch.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include "track/TrackQuickFilterControl.h"
-#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/TrackPresentation.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
+#include <ao/uimodel/library/list/ListActionPolicy.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
@@ -38,8 +39,11 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::FrameworkElement;
     using winrt::Microsoft::UI::Xaml::HorizontalAlignment;
     using winrt::Microsoft::UI::Xaml::RoutedEventArgs;
+    using winrt::Microsoft::UI::Xaml::Visibility;
     using winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox;
     using winrt::Microsoft::UI::Xaml::Controls::Button;
+    using winrt::Microsoft::UI::Xaml::Controls::ColumnDefinition;
+    using winrt::Microsoft::UI::Xaml::Controls::Grid;
     using winrt::Microsoft::UI::Xaml::Controls::MenuFlyout;
     using winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem;
     using winrt::Microsoft::UI::Xaml::Controls::SymbolIcon;
@@ -47,14 +51,6 @@ namespace ao::winui::layout
     using winrt::Windows::Foundation::IInspectable;
 
     constexpr auto kCompactVariant = std::string_view{"compact"};
-
-    /// A presentation id's shown name, stable across locales that do not translate it.
-    std::string presentationLabel(uimodel::PresentationTextCatalog const& textCatalog,
-                                  std::string_view const presentationId)
-    {
-      auto const optText = textCatalog.builtinTrackPresentation(presentationId);
-      return stableResourceString("track_presentation_", presentationId, optText ? optText->label : presentationId);
-    }
 
     /**
      * @brief The quick filter box.
@@ -68,21 +64,68 @@ namespace ao::winui::layout
     {
     public:
       explicit QuickFilterComponent(LayoutBuildContext& ctx)
-        : _control{TrackQuickFilterControlConfig{
+        : _createList{ctx.library.createList}
+        , _trackList{ctx.trackList}
+        , _gatePtr{ctx.gatePtr}
+        , _control{TrackQuickFilterControlConfig{
             .input = _input,
             .onError = ctx.reportStatus,
+            .onState =
+              [this](uimodel::TrackFilterViewState const& state)
+            {
+              _resolvedExpression = state.resolvedExpression;
+              _createButton.Visibility(state.canCreateSmartList ? Visibility::Visible : Visibility::Collapsed);
+              _createButton.IsEnabled(state.canCreateSmartList);
+            },
             .textCatalog = ctx.textCatalog,
           }}
       {
+        auto inputColumn = ColumnDefinition{};
+        inputColumn.Width(winrt::Microsoft::UI::Xaml::GridLength{
+          .Value = 1.0,
+          .GridUnitType = winrt::Microsoft::UI::Xaml::GridUnitType::Star,
+        });
+        auto buttonColumn = ColumnDefinition{};
+        buttonColumn.Width(winrt::Microsoft::UI::Xaml::GridLength{
+          .Value = 0.0,
+          .GridUnitType = winrt::Microsoft::UI::Xaml::GridUnitType::Auto,
+        });
+        _root.ColumnDefinitions().Append(inputColumn);
+        _root.ColumnDefinitions().Append(buttonColumn);
+        _root.ColumnSpacing(8.0);
         _input.QueryIcon(SymbolIcon{winrt::Microsoft::UI::Xaml::Controls::Symbol::Find});
         _input.PlaceholderText(winrt::to_hstring(resourceString("winui_library_quick_filter_placeholder")));
-        _control.bind(ctx.views, ctx.workspace);
+        _root.Children().Append(_input);
+
+        auto const createLabel = ctx.textCatalog.text(i18n::MessageId::WinUiListCreateFromFilter);
+        _createButton.Content(winrt::box_value(winrt::to_hstring(createLabel)));
+        _createButton.Visibility(Visibility::Collapsed);
+        ToolTipService::SetToolTip(_createButton, winrt::box_value(winrt::to_hstring(createLabel)));
+        _createClickRevoker = _createButton.Click(
+          winrt::auto_revoke,
+          [this](IInspectable const&, RoutedEventArgs const&)
+          {
+            if (_createList && !_resolvedExpression.empty() && uimodel::isGenerationActive(_gatePtr))
+            {
+              _createList(uimodel::parentForNewSmartList(_trackList.activeListId()), _resolvedExpression);
+            }
+          });
+        Grid::SetColumn(_createButton, 1);
+        _root.Children().Append(_createButton);
+        _control.bind(ctx.views, ctx.workspace, ctx.completion);
       }
 
-      FrameworkElement element() const override { return _input; }
+      FrameworkElement element() const override { return _root; }
 
     private:
+      Grid _root{};
       AutoSuggestBox _input{};
+      Button _createButton{};
+      std::function<void(ListId, std::string)> _createList;
+      TrackListController& _trackList;
+      std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
+      std::string _resolvedExpression;
+      Button::Click_revoker _createClickRevoker{};
       /// Declared last so it unbinds before the box it drives is released.
       TrackQuickFilterControl _control;
     };
@@ -99,16 +142,23 @@ namespace ao::winui::layout
     public:
       PresentationButtonComponent(LayoutBuildContext& ctx, bool const compact)
         : _trackList{ctx.trackList}
-        , _rememberPresentation{ctx.library.rememberPresentation}
         , _gatePtr{ctx.gatePtr}
         , _reportStatus{ctx.reportStatus}
-        , _textCatalog{ctx.textCatalog}
+        , _viewModelPtr{std::make_unique<uimodel::TrackPresentationPickerViewModel>(
+            ctx.views,
+            ctx.workspace,
+            ctx.presentationCatalog,
+            ctx.presentationPreferences,
+            ctx.textCatalog,
+            [this](uimodel::TrackPresentationPickerState const& state)
+            {
+              _state = state;
+              refreshLabel();
+            })}
       {
         _button.HorizontalContentAlignment(compact ? HorizontalAlignment::Center : HorizontalAlignment::Left);
         _buttonClickRevoker = _button.Click(winrt::auto_revoke, {this, &PresentationButtonComponent::onClicked});
-        refreshLabel();
-        _trackListChangedSub =
-          subscribeUiUpdate(_trackList.signalChanged(), "PresentationButtonComponent", [this] { refreshLabel(); });
+        _viewModelPtr->refresh();
       }
 
       ~PresentationButtonComponent() override
@@ -127,8 +177,8 @@ namespace ao::winui::layout
     private:
       void refreshLabel()
       {
-        _button.Content(
-          winrt::box_value(winrt::to_hstring(presentationLabel(_textCatalog, _trackList.activePresentationId()))));
+        _button.Content(winrt::box_value(winrt::to_hstring(_state.label)));
+        _button.IsEnabled(_state.enabled);
       }
 
       void onClicked(IInspectable const& /*sender*/, RoutedEventArgs const& /*args*/)
@@ -140,23 +190,42 @@ namespace ao::winui::layout
 
         closeFlyout();
         _flyout = MenuFlyout{};
-        auto const activeListId = _trackList.activeListId();
-
-        for (auto const& preset : rt::builtinTrackPresentationPresets())
+        for (std::size_t index = 0; index < _state.menuItems.size(); ++index)
         {
-          auto const eligibility = uimodel::trackPresentationEligibility(_textCatalog, activeListId, preset.spec.id);
-          auto item = MenuFlyoutItem{};
-          item.Text(winrt::to_hstring(presentationLabel(_textCatalog, preset.spec.id)));
-          item.IsEnabled(eligibility.enabled);
+          auto const& entry = _state.menuItems[index];
 
-          if (!eligibility.enabled)
+          if (entry.type == uimodel::TrackPresentationMenuItemType::CreateCustomView)
           {
-            ToolTipService::SetToolTip(item, winrt::box_value(winrt::to_hstring(eligibility.disabledReason)));
+            continue;
+          }
+
+          if (entry.type == uimodel::TrackPresentationMenuItemType::Separator)
+          {
+            auto const hasLaterPreset = std::ranges::any_of(
+              _state.menuItems.begin() + static_cast<std::ptrdiff_t>(index + 1),
+              _state.menuItems.end(),
+              [](auto const& candidate) { return candidate.type == uimodel::TrackPresentationMenuItemType::Preset; });
+
+            if (hasLaterPreset)
+            {
+              _flyout.Items().Append(winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutSeparator{});
+            }
+
+            continue;
+          }
+
+          auto item = MenuFlyoutItem{};
+          item.Text(winrt::to_hstring(entry.label));
+          item.IsEnabled(entry.enabled);
+
+          if (!entry.enabled)
+          {
+            ToolTipService::SetToolTip(item, winrt::box_value(winrt::to_hstring(entry.disabledReason)));
           }
 
           _itemClickRevokers.push_back(
             item.Click(winrt::auto_revoke,
-                       [this, presentationId = preset.spec.id](IInspectable const&, RoutedEventArgs const&)
+                       [this, presentationId = entry.id](IInspectable const&, RoutedEventArgs const&)
                        { select(presentationId); }));
           _flyout.Items().Append(item);
         }
@@ -186,7 +255,14 @@ namespace ao::winui::layout
           return;
         }
 
-        if (auto const selectedRes = _trackList.selectPresentation(presentationId); !selectedRes)
+        auto const optSelection = _viewModelPtr->selectPresentation(presentationId);
+
+        if (!optSelection)
+        {
+          return;
+        }
+
+        if (auto const selectedRes = _trackList.selectPresentation(optSelection->spec); !selectedRes)
         {
           if (_reportStatus)
           {
@@ -196,17 +272,16 @@ namespace ao::winui::layout
           return;
         }
 
-        _rememberPresentation(_trackList.activeListId(), presentationId);
+        _viewModelPtr->completeSelection(*optSelection);
       }
 
       Button _button{};
       MenuFlyout _flyout{nullptr};
       TrackListController& _trackList;
-      std::function<void(ListId, std::string)> _rememberPresentation;
       std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
       std::function<void(std::string)> _reportStatus;
-      uimodel::PresentationTextCatalog _textCatalog;
-      async::Subscription _trackListChangedSub;
+      uimodel::TrackPresentationPickerState _state;
+      std::unique_ptr<uimodel::TrackPresentationPickerViewModel> _viewModelPtr;
       Button::Click_revoker _buttonClickRevoker{};
       std::vector<MenuFlyoutItem::Click_revoker> _itemClickRevokers;
     };

@@ -249,11 +249,16 @@ A version-3 document's embedded cover bytes are therefore never read: the import
 
 ## Frontend observations
 
-CLI and GTK use the same plan-producing runtime operation and one-shot apply operation.
-Neither frontend may commit a restore from a bare path or reinterpret scope, counts, matching, or publication.
+CLI, GTK, and WinUI use the same plan-producing runtime operation and one-shot apply operation.
+No frontend may commit a restore from a bare path or reinterpret scope, counts, matching, or publication.
 
 GTK prepares a restore plan after file selection, presents its version, payload mode, scope, counts, and ignored references, and applies only after an explicit positive response.
 Closing or rejecting the confirmation drops the plan.
+
+WinUI exposes all four export modes through its Windows save picker and offers `merge` or `restore` before opening its Windows file picker.
+Merge is the default and applies the prepared plan without a destructive confirmation.
+Restore presents the shared report's version, payload mode, target scope, track/List create-update-delete counts, and ignored references in a native confirmation; cancellation or rejection drops the plan and changes nothing.
+Import preparation, apply, and export publish their coarse file-named phases through the shared task-progress channel used by the Windows activity surface.
 
 CLI defaults import to `merge`.
 `--mode restore --dry-run` prepares and prints a plan report without committing; a non-dry-run restore additionally requires `--confirm-destructive-restore`.
@@ -267,6 +272,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryMutationService`](../../../../app/runtime/library/LibraryMutationService.h) owns sequenced Maintenance entry, generation-bound preview/apply turns, revision settlement, and workflow exit.
 - [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines canonical root-relative path evidence.
 - [`LibraryChanges`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines published change values.
+- [`LibraryTransferCoordinator`](../../../../app/windows-winui/library/LibraryTransferCoordinator.h) owns Windows pickers, native confirmation, notifications, and window-lifetime cancellation; [`LibraryTransferAdapter`](../../../../app/windows-winui/include/ao/winui/library/LibraryTransferAdapter.h) maps stable selector rows and shared report data without WinRT types.
 
 ## Test map
 
@@ -277,6 +283,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryYamlSchemaTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
 - [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
+- [`LibraryTransferAdapterTest.cpp`](../../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping, restore-only destructive admission, and the complete native preview projection.
 - [`LibraryImportExportWorkflowTest.cpp`](../../../../test/unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp) proves confirmation precedes GTK mutation.
 - [`CliSmokeTest.cpp`](../../../../test/unit/cli/CliSmokeTest.cpp) proves CLI preview and explicit restore confirmation.
 

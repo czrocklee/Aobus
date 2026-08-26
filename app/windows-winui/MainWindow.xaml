@@ -6,7 +6,15 @@
     xmlns:local="using:Aobus"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
-    <Grid x:Name="RootGrid" SizeChanged="OnRootSizeChanged">
+    <Grid
+        x:Name="RootGrid"
+        PointerPressed="OnRootPointerPressed"
+        SizeChanged="OnRootSizeChanged">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="Left" Modifiers="Menu" Invoked="OnNavigateBackInvoked" />
+            <KeyboardAccelerator Key="Right" Modifiers="Menu" Invoked="OnNavigateForwardInvoked" />
+            <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnTrackPropertiesInvoked" />
+        </Grid.KeyboardAccelerators>
         <Grid.Resources>
             <Style x:Key="ChromeLessButtonStyle" TargetType="Button">
                 <Setter Property="Background" Value="Transparent" />

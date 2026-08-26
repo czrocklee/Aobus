@@ -114,6 +114,9 @@ de:table {
     library_task_updating { "Aktualisieren" }
     library_task_fingerprinting { "Fingerabdruck erstellen" }
     library_task_indexing_audio_identity { "Audioidentität indizieren" }
+    library_task_preparing_import { "Import wird vorbereitet" }
+    library_task_importing { "Importieren" }
+    library_task_exporting { "Exportieren" }
     library_task_progress_detail { "{hasSubject, select, yes {{activity}: {subject}} other {{activity}}}" }
     library_task_scanning_compact { "Bibliothek wird gescannt" }
     library_task_updating_compact { "Bibliothek wird aktualisiert" }
@@ -280,7 +283,7 @@ de:table {
     gtk_library_select_export_mode { "Exportmodus auswählen" }
     gtk_library_choose_backup_contents { "Inhalt der Sicherung auswählen:" }
     gtk_library_export_mode_delta { "Differenz (Benutzeränderungen, Tags und Listen synchronisieren)" }
-    gtk_library_export_mode_metadata { "Metadaten (gepflegter Text und Cover, ohne technische Daten)" }
+    gtk_library_export_mode_metadata { "Metadaten (gepflegter Text, Tags und Listen)" }
     gtk_library_export_mode_full { "Vollständig (Notfallwiederherstellung: alles)" }
     gtk_library_export_mode_list_only { "Nur Listen (Wiedergabelisten ohne Titeländerungen synchronisieren)" }
     gtk_library_include { "Einschließen" }
@@ -490,6 +493,32 @@ de:table {
     winui_shell_open_library { "Bibliothek öffnen..." }
     winui_shell_rescan { "Neu scannen" }
     winui_shell_rescan_library { "Bibliothek neu scannen" }
+    winui_shell_import_library_data { "Bibliotheksdaten importieren..." }
+    winui_shell_export_library_data { "Bibliotheksdaten exportieren..." }
+    winui_library_select_export_mode { "Exportmodus auswählen" }
+    winui_library_choose_backup_contents { "Inhalt der Sicherung auswählen:" }
+    winui_library_include { "Einschließen" }
+    winui_library_export_mode_delta { "Differenz (Benutzeränderungen, Tags und Listen synchronisieren)" }
+    winui_library_export_mode_metadata { "Metadaten (gepflegter Text, Tags und Listen)" }
+    winui_library_export_mode_full { "Vollständig (Notfallwiederherstellung: alles)" }
+    winui_library_export_mode_list_only { "Nur Listen (Wiedergabelisten ohne Titeländerungen synchronisieren)" }
+    winui_library_select_import_mode { "Importmodus auswählen" }
+    winui_library_choose_import_mode { "Diese Sicherung zusammenführen oder ihren Bereich wiederherstellen:" }
+    winui_library_import_mode_merge { "Zusammenführen (Datensätze außerhalb der Sicherung behalten)" }
+    winui_library_import_mode_restore { "Wiederherstellen (Sicherungsbereich nach Vorschau ersetzen)" }
+    winui_library_next { "Weiter" }
+    winui_library_export_yaml { "Bibliothek als YAML exportieren" }
+    winui_library_import_yaml { "Bibliothek aus YAML importieren" }
+    winui_library_yaml_files { "YAML-Dateien" }
+    winui_library_confirm_restore { "Wiederherstellung bestätigen" }
+    winui_library_restore_library { "Bibliothek wiederherstellen" }
+    winui_library_restore_lists { "Listen wiederherstellen" }
+    winui_library_restore_scope_library { "Bibliothek" }
+    winui_library_restore_scope_lists { "Listen" }
+    winui_library_restore_confirmation { "Diese Wiederherstellung ersetzt die aktuelle {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; {listsCreated} Listen erstellt, {listsDeleted} gelöscht; {dangling} verwaiste Verweise ignoriert.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
+    winui_library_could_not_select_export_file { "Exportdatei konnte nicht ausgewählt werden" }
+    winui_library_could_not_select_backup { "Bibliothekssicherung konnte nicht ausgewählt werden" }
+    winui_library_file_selection_error { "{operation}: {message}" }
     winui_shell_menu_view { "Ansicht" }
     winui_shell_modern_mode { "Moderner Modus" }
     winui_shell_columns { "Spalten..." }
@@ -497,6 +526,62 @@ de:table {
     winui_shell_menu_playback { "Wiedergabe" }
     winui_shell_play_pause { "Wiedergabe/Pause" }
     winui_shell_stop { "Stopp" }
+    winui_shell_reveal_current_track { "Aktuellen Titel anzeigen" }
+    winui_track_properties_command { "Eigenschaften..." }
+    winui_track_properties_title { "Eigenschaften" }
+    winui_track_properties_selected_title { "Eigenschaften — {count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }
+    winui_track_properties_save { "Speichern" }
+    winui_track_properties_cancel { "Abbrechen" }
+    winui_track_properties_tags { "Tags" }
+    winui_track_properties_tags_hint { "Tags, die alle ausgewählten Titel gemeinsam haben" }
+    winui_track_properties_custom_metadata { "Benutzerdefinierte Metadaten" }
+    winui_track_properties_custom_key { "Neuer Schlüssel" }
+    winui_track_properties_custom_value { "Neuer Wert" }
+    winui_track_properties_delete { "Löschen" }
+    winui_track_properties_add { "Hinzufügen" }
+    winui_track_properties_editing_unavailable { "Bearbeitung nicht verfügbar: {detail}" }
+    winui_track_properties_save_failed { "Speichern fehlgeschlagen: {detail}" }
+    winui_track_properties_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Öffnen Sie die Eigenschaften erneut und versuchen Sie es noch einmal." }
+    winui_track_properties_invalid_value { "Ungültiger Wert: {detail}" }
+    winui_list_create_from_filter { "Liste aus aktuellem Filter erstellen" }
+    winui_list_new { "Neue Liste..." }
+    winui_list_edit { "Liste bearbeiten..." }
+    winui_list_delete { "Liste löschen" }
+    winui_list_delete_subtree { "Liste und Unterlisten löschen..." }
+    winui_list_editor_new_title { "Neue Liste" }
+    winui_list_editor_edit_title { "Liste bearbeiten" }
+    winui_common_cancel { "Abbrechen" }
+    winui_common_create { "Erstellen" }
+    winui_common_save { "Speichern" }
+    winui_list_name_placeholder { "Listenname" }
+    winui_list_name { "Name" }
+    winui_list_description_placeholder { "Optionale Beschreibung" }
+    winui_list_description { "Beschreibung" }
+    winui_list_inherited_filter { "Geerbter Filter" }
+    winui_list_filter_placeholder { "Filterausdruck ($, @, # oder % eingeben)" }
+    winui_list_local_filter { "Lokaler Filter" }
+    winui_list_effective_filter { "Wirksamer Filter" }
+    winui_list_membership { "Mitgliedschaft" }
+    winui_list_auto_presentation { "Automatisch" }
+    winui_list_presentation { "Ansicht" }
+    winui_list_preview { "Vorschau" }
+    winui_list_delete_title { "Liste löschen?" }
+    winui_list_delete_subtree_title { "Liste und Unterlisten löschen?" }
+    winui_list_delete_commit { "Löschen" }
+    winui_list_delete_all_commit { "Alle löschen" }
+    winui_list_delete_question { "\"{name}\" löschen?\n\nDie Liste wird entfernt. Musikdateien bleiben erhalten." }
+    winui_list_delete_subtree_question { "{count, plural, one {# Liste} other {# Listen}} in diesem abgeleiteten Teilbaum löschen?\n\n{entries}\nTags verschachtelter Wiedergabelisten bleiben erhalten.\nMusikdateien bleiben erhalten." }
+    winui_list_remove_tag { "{tag} auch von {count, plural, one {# Titel} other {# Titeln}} entfernen" }
+    winui_list_tag_references { "{tag} wird auch verwendet von: {references}. Das Entfernen kann diese Listen ändern." }
+    winui_list_no_editable_playlists { "Keine direkt bearbeitbaren Wiedergabelisten" }
+    winui_list_add_to_playlist { "Zur Wiedergabeliste hinzufügen" }
+    winui_list_remove_from_current { "Aus {name} ({tag}) entfernen" }
+    winui_list_manual_order { "Manuelle Sortierung" }
+    winui_list_move_up { "Nach oben" }
+    winui_list_move_down { "Nach unten" }
+    winui_list_move_to_top { "An den Anfang" }
+    winui_list_move_to_bottom { "An das Ende" }
+    winui_list_reset_order { "Sortierung zurücksetzen" }
     winui_shell_track_details { "Titeldetails" }
     winui_shell_classic_mode { "Klassischer Modus" }
     winui_playback_output_device { "Ausgabegerät" }

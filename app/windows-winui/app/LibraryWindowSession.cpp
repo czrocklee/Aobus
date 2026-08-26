@@ -41,11 +41,13 @@ namespace ao::winui
   LibraryWindowSession::LibraryWindowSession(std::filesystem::path stateRoot,
                                              winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                                              uimodel::PresentationTextCatalog textCatalog,
-                                             rt::TextOrderingPolicy const& textOrderingPolicy)
+                                             rt::TextOrderingPolicy const& textOrderingPolicy,
+                                             rt::CompletionAliasPolicy const& completionAliasPolicy)
     : _stateRoot{std::move(stateRoot)}
     , _dispatcher{std::move(dispatcher)}
     , _textCatalog{std::move(textCatalog)}
     , _textOrderingPolicy{textOrderingPolicy}
+    , _completionAliasPolicy{completionAliasPolicy}
   {
   }
 
@@ -76,8 +78,12 @@ namespace ao::winui
 
     try
     {
-      auto sessionRes = LibrarySession::create(
-        _stateRoot, _dispatcher, _textCatalog, _textOrderingPolicy, std::move(optSuccessorRequest));
+      auto sessionRes = LibrarySession::create(_stateRoot,
+                                               _dispatcher,
+                                               _textCatalog,
+                                               _textOrderingPolicy,
+                                               _completionAliasPolicy,
+                                               std::move(optSuccessorRequest));
 
       if (!sessionRes)
       {
@@ -144,9 +150,16 @@ namespace ao::winui
 
   Result<> LibraryWindowSession::prepareLibraryRestart()
   {
+    if (!_window && !_sessionPtr)
+    {
+      // Closing the window may retire both owners before the queued restart
+      // reaches the dispatcher. That state is already fully quiesced.
+      return {};
+    }
+
     if (!_window || !_sessionPtr)
     {
-      return makeError(Error::Code::InvalidState, "No active WinUI library window can be restarted");
+      return makeError(Error::Code::InvalidState, "The WinUI library window session is only partially retired");
     }
 
     auto* const implementation = winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>());

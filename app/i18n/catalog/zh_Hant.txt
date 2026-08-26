@@ -114,6 +114,9 @@ zh_Hant:table {
     library_task_updating { "更新中" }
     library_task_fingerprinting { "提取音訊指紋中" }
     library_task_indexing_audio_identity { "建立音訊識別索引中" }
+    library_task_preparing_import { "正在準備匯入" }
+    library_task_importing { "正在匯入" }
+    library_task_exporting { "正在匯出" }
     library_task_progress_detail { "{hasSubject, select, yes {{activity}：{subject}} other {{activity}}}" }
     library_task_scanning_compact { "正在掃描音樂庫" }
     library_task_updating_compact { "正在更新音樂庫" }
@@ -280,7 +283,7 @@ zh_Hant:table {
     gtk_library_select_export_mode { "選取匯出模式" }
     gtk_library_choose_backup_contents { "選取要包含在備份中的內容：" }
     gtk_library_export_mode_delta { "增量（同步使用者編輯、標籤、列表）" }
-    gtk_library_export_mode_metadata { "中繼資料（整理過的文字和封面，不含技術統計）" }
+    gtk_library_export_mode_metadata { "中繼資料（整理過的文字、標籤和清單）" }
     gtk_library_export_mode_full { "完整（災難復原：包含全部資料）" }
     gtk_library_export_mode_list_only { "僅列表（只同步播放清單，不變更曲目）" }
     gtk_library_include { "包含" }
@@ -490,6 +493,32 @@ zh_Hant:table {
     winui_shell_open_library { "開啟音樂庫..." }
     winui_shell_rescan { "重新掃描" }
     winui_shell_rescan_library { "重新掃描音樂庫" }
+    winui_shell_import_library_data { "匯入音樂庫資料..." }
+    winui_shell_export_library_data { "匯出音樂庫資料..." }
+    winui_library_select_export_mode { "選取匯出模式" }
+    winui_library_choose_backup_contents { "選取要包含在備份中的內容：" }
+    winui_library_include { "包含" }
+    winui_library_export_mode_delta { "增量（同步使用者編輯、標籤、列表）" }
+    winui_library_export_mode_metadata { "中繼資料（整理過的文字、標籤和清單）" }
+    winui_library_export_mode_full { "完整（災難復原：包含全部資料）" }
+    winui_library_export_mode_list_only { "僅列表（只同步播放清單，不變更曲目）" }
+    winui_library_select_import_mode { "選取匯入模式" }
+    winui_library_choose_import_mode { "將此備份合併到音樂庫，或還原其資料範圍：" }
+    winui_library_import_mode_merge { "合併（保留備份範圍外的資料）" }
+    winui_library_import_mode_restore { "還原（預覽後取代備份範圍）" }
+    winui_library_next { "下一步" }
+    winui_library_export_yaml { "匯出音樂庫為 YAML" }
+    winui_library_import_yaml { "從 YAML 匯入音樂庫" }
+    winui_library_yaml_files { "YAML 檔案" }
+    winui_library_confirm_restore { "確認還原" }
+    winui_library_restore_library { "還原音樂庫" }
+    winui_library_restore_lists { "還原列表" }
+    winui_library_restore_scope_library { "音樂庫" }
+    winui_library_restore_scope_lists { "列表" }
+    winui_library_restore_confirmation { "此還原操作將取代目前的{scope}。\n\n資料：YAML v{version}，模式 ''{mode}''。\n預覽：建立 {tracksCreated} 首、更新 {tracksUpdated} 首、刪除 {tracksDeleted} 首；建立 {listsCreated} 個列表、刪除 {listsDeleted} 個列表；忽略 {dangling} 個懸空參照。\n\n請只在此內容與所選備份相符時繼續。" }
+    winui_library_could_not_select_export_file { "無法選取匯出檔案" }
+    winui_library_could_not_select_backup { "無法選取音樂庫備份檔案" }
+    winui_library_file_selection_error { "{operation}：{message}" }
     winui_shell_menu_view { "檢視" }
     winui_shell_modern_mode { "現代模式" }
     winui_shell_columns { "列設定..." }
@@ -497,6 +526,62 @@ zh_Hant:table {
     winui_shell_menu_playback { "播放" }
     winui_shell_play_pause { "播放/暫停" }
     winui_shell_stop { "停止" }
+    winui_shell_reveal_current_track { "定位目前曲目" }
+    winui_track_properties_command { "屬性..." }
+    winui_track_properties_title { "屬性" }
+    winui_track_properties_selected_title { "屬性 — 已選取 {count, plural, one {# 首曲目} other {# 首曲目}}" }
+    winui_track_properties_save { "儲存" }
+    winui_track_properties_cancel { "取消" }
+    winui_track_properties_tags { "標籤" }
+    winui_track_properties_tags_hint { "所有已選曲目共有的標籤" }
+    winui_track_properties_custom_metadata { "自訂中繼資料" }
+    winui_track_properties_custom_key { "新鍵" }
+    winui_track_properties_custom_value { "新值" }
+    winui_track_properties_delete { "刪除" }
+    winui_track_properties_add { "新增" }
+    winui_track_properties_editing_unavailable { "無法編輯：{detail}" }
+    winui_track_properties_save_failed { "儲存失敗：{detail}" }
+    winui_track_properties_stale { "開啟此對話框期間，音樂庫已發生變更。請重新開啟屬性後再試一次。" }
+    winui_track_properties_invalid_value { "值無效：{detail}" }
+    winui_list_create_from_filter { "依目前的篩選條件建立列表" }
+    winui_list_new { "新建列表..." }
+    winui_list_edit { "編輯列表..." }
+    winui_list_delete { "刪除列表" }
+    winui_list_delete_subtree { "刪除列表及其子項..." }
+    winui_list_editor_new_title { "新建列表" }
+    winui_list_editor_edit_title { "編輯列表" }
+    winui_common_cancel { "取消" }
+    winui_common_create { "建立" }
+    winui_common_save { "儲存" }
+    winui_list_name_placeholder { "列表名稱" }
+    winui_list_name { "名稱" }
+    winui_list_description_placeholder { "可選描述" }
+    winui_list_description { "描述" }
+    winui_list_inherited_filter { "繼承的篩選條件" }
+    winui_list_filter_placeholder { "篩選表示式（輸入 $、@、# 或 %）" }
+    winui_list_local_filter { "本機篩選條件" }
+    winui_list_effective_filter { "實際篩選條件" }
+    winui_list_membership { "成員資格" }
+    winui_list_auto_presentation { "自動" }
+    winui_list_presentation { "檢視" }
+    winui_list_preview { "預覽" }
+    winui_list_delete_title { "刪除列表？" }
+    winui_list_delete_subtree_title { "刪除列表及其子項？" }
+    winui_list_delete_commit { "刪除" }
+    winui_list_delete_all_commit { "全部刪除" }
+    winui_list_delete_question { "刪除“{name}”？\n\n該列表將被移除，音樂檔案將予以保留。" }
+    winui_list_delete_subtree_question { "刪除此衍生子樹中的 {count, plural, one {# 個列表} other {# 個列表}}？\n\n{entries}\n巢狀播放清單使用的標籤將會保留。\n音樂檔案也會保留。" }
+    winui_list_remove_tag { "同時從 {count, plural, one {# 首曲目} other {# 首曲目}} 中移除 {tag}" }
+    winui_list_tag_references { "{tag} 仍由下列項目參照：{references}。移除它可能會變更這些列表。" }
+    winui_list_no_editable_playlists { "沒有可直接編輯的播放清單" }
+    winui_list_add_to_playlist { "新增到播放清單" }
+    winui_list_remove_from_current { "從 {name} ({tag}) 中移除" }
+    winui_list_manual_order { "手動排序" }
+    winui_list_move_up { "上移" }
+    winui_list_move_down { "下移" }
+    winui_list_move_to_top { "移至最上方" }
+    winui_list_move_to_bottom { "移至最下方" }
+    winui_list_reset_order { "重設排序" }
     winui_shell_track_details { "曲目詳情" }
     winui_shell_classic_mode { "經典模式" }
     winui_playback_output_device { "輸出裝置" }
@@ -633,50 +718,50 @@ zh_Hant:table {
     gtk_layout_category_application { "應用程式" }
     gtk_layout_category_library { "音樂庫" }
     gtk_layout_category_layout { "版面配置" }
-    gtk_layout_component_box { "盒子 (Box)" }
-    gtk_layout_component_split_pane { "分割面板 (Split Pane)" }
-    gtk_layout_component_label { "標籤 (Label)" }
-    gtk_layout_component_action_button { "操作按鈕 (Action Button)" }
-    gtk_layout_component_menu_button { "選單按鈕 (Menu Button)" }
-    gtk_layout_component_menu_bar { "選單列 (Menu Bar)" }
-    gtk_layout_component_track_table { "曲目表格 (Track Table)" }
-    gtk_layout_component_quick_filter { "快速篩選器 (Quick Filter)" }
-    gtk_layout_component_presentation_button { "檢視按鈕 (Presentation Button)" }
-    gtk_layout_component_cover_art { "封面 (Cover Art)" }
-    gtk_layout_component_transport_button { "播放控制按鈕 (Transport Button)" }
-    gtk_layout_component_soul_button { "Soul 按鈕 (Soul Button)" }
-    gtk_layout_component_seek_slider { "進度滑塊 (Seek Slider)" }
-    gtk_layout_component_time_label { "時間標籤 (Time Label)" }
-    gtk_layout_component_volume_control { "音量控制 (Volume Control)" }
-    gtk_layout_component_output_device_selector { "輸出裝置選取器 (Output Device Selector)" }
-    gtk_layout_component_activity_status { "活動狀態 (Activity Status)" }
-    gtk_layout_component_track_count { "曲目計數 (Track Count)" }
-    gtk_layout_component_selection_info { "選取資訊 (Selection Info)" }
-    gtk_layout_component_status_message { "狀態訊息 (Status Message)" }
-    gtk_layout_component_now_playing_status { "現正播放狀態 (Now Playing Status)" }
-    gtk_layout_component_playback_details { "播放詳情 (Playback Details)" }
-    gtk_layout_component_library_tree { "音樂庫樹 (Library Tree)" }
-    gtk_layout_component_playback_cover_art { "播放封面 (Playback Cover Art)" }
-    gtk_layout_component_soul_play_pause { "Soul 播放/暫停按鈕 (Soul Play/Pause Button)" }
-    gtk_layout_component_quality_indicator { "音質指示器 (Quality Indicator)" }
-    gtk_layout_component_audio_pipeline_panel { "音訊鏈路面板 (Audio Pipeline Panel)" }
-    gtk_layout_component_current_title_label { "目前標題標籤 (Current Title Label)" }
-    gtk_layout_component_current_artist_label { "目前藝人標籤 (Current Artist Label)" }
-    gtk_layout_component_separator { "分隔線 (Separator)" }
-    gtk_layout_component_absolute_canvas { "絕對畫布 (Absolute Canvas)" }
-    gtk_layout_component_spacer { "間隔元件 (Spacer)" }
-    gtk_layout_component_scroll_window { "捲動視窗 (Scroll Window)" }
-    gtk_layout_component_tabs { "分頁 (Tabs)" }
-    gtk_layout_component_responsive_class { "回應式類別 (Responsive Class)" }
-    gtk_layout_component_center_box { "置中方塊 (Center Box)" }
-    gtk_layout_component_open_library_button { "開啟音樂庫按鈕 (Open Library Button)" }
-    gtk_layout_component_workspace_with_detail { "帶詳情工作區 (Workspace with Detail)" }
-    gtk_layout_component_collapsible_split { "可收合分割區 (Collapsible Split)" }
-    gtk_layout_component_detail_scope { "詳情範圍 (Detail Scope)" }
-    gtk_layout_component_field_grid { "欄位格線 (Field Grid)" }
-    gtk_layout_component_tag_editor { "標籤編輯器 (Tag Editor)" }
-    gtk_layout_component_selection_region { "選取區域 (Selection Region)" }
-    gtk_layout_component_detail_undo_bar { "詳情撤銷欄 (Detail Undo Bar)" }
+    gtk_layout_component_box { "盒子" }
+    gtk_layout_component_split_pane { "分割面板" }
+    gtk_layout_component_label { "標籤" }
+    gtk_layout_component_action_button { "操作按鈕" }
+    gtk_layout_component_menu_button { "選單按鈕" }
+    gtk_layout_component_menu_bar { "選單列" }
+    gtk_layout_component_track_table { "曲目表格" }
+    gtk_layout_component_quick_filter { "快速篩選器" }
+    gtk_layout_component_presentation_button { "檢視按鈕" }
+    gtk_layout_component_cover_art { "封面" }
+    gtk_layout_component_transport_button { "播放控制按鈕" }
+    gtk_layout_component_soul_button { "Soul 按鈕" }
+    gtk_layout_component_seek_slider { "進度滑塊" }
+    gtk_layout_component_time_label { "時間標籤" }
+    gtk_layout_component_volume_control { "音量控制" }
+    gtk_layout_component_output_device_selector { "輸出裝置選取器" }
+    gtk_layout_component_activity_status { "活動狀態" }
+    gtk_layout_component_track_count { "曲目計數" }
+    gtk_layout_component_selection_info { "選取資訊" }
+    gtk_layout_component_status_message { "狀態訊息" }
+    gtk_layout_component_now_playing_status { "現正播放狀態" }
+    gtk_layout_component_playback_details { "播放詳情" }
+    gtk_layout_component_library_tree { "音樂庫樹" }
+    gtk_layout_component_playback_cover_art { "播放封面" }
+    gtk_layout_component_soul_play_pause { "Soul 播放/暫停按鈕" }
+    gtk_layout_component_quality_indicator { "音質指示器" }
+    gtk_layout_component_audio_pipeline_panel { "音訊鏈路面板" }
+    gtk_layout_component_current_title_label { "目前標題標籤" }
+    gtk_layout_component_current_artist_label { "目前藝人標籤" }
+    gtk_layout_component_separator { "分隔線" }
+    gtk_layout_component_absolute_canvas { "絕對畫布" }
+    gtk_layout_component_spacer { "間隔元件" }
+    gtk_layout_component_scroll_window { "捲動視窗" }
+    gtk_layout_component_tabs { "分頁" }
+    gtk_layout_component_responsive_class { "回應式類別" }
+    gtk_layout_component_center_box { "置中方塊" }
+    gtk_layout_component_open_library_button { "開啟音樂庫按鈕" }
+    gtk_layout_component_workspace_with_detail { "帶詳情工作區" }
+    gtk_layout_component_collapsible_split { "可收合分割區" }
+    gtk_layout_component_detail_scope { "詳情範圍" }
+    gtk_layout_component_field_grid { "欄位格線" }
+    gtk_layout_component_tag_editor { "標籤編輯器" }
+    gtk_layout_component_selection_region { "選取區域" }
+    gtk_layout_component_detail_undo_bar { "詳情撤銷欄" }
     gtk_layout_property_text { "文字" }
     gtk_layout_property_orientation { "方向" }
     gtk_layout_property_spacing { "間距" }

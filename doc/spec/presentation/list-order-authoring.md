@@ -3,14 +3,14 @@ id: presentation.list-order-authoring
 type: spec
 status: current
 domain: presentation
-summary: Defines saved-List order eligibility, stable-ID gestures, authoring-session invalidation, GTK drag behavior, and keyboard movement.
+summary: Defines saved-List order eligibility, stable-ID gestures, authoring-session invalidation, frontend adaptation, and keyboard movement.
 ---
 # Saved-List order authoring
 
 ## Scope
 
 This specification defines when an interactive view may modify saved List rank and how drag, context-menu, and keyboard gestures become stable-ID order commands.
-It owns capability derivation, selection normalization, absolute and relative movement intent, authoring-session lifetime, user-visible unavailability, GTK generation ownership, and keyboard repeat behavior.
+It owns capability derivation, selection normalization, absolute and relative movement intent, authoring-session lifetime, user-visible unavailability, frontend generation ownership, and frontend-specific keyboard repeat behavior.
 
 Raw/effective rank semantics and writer transactions belong to [track sources](../library/source/track-source.md) and [library mutation](../library/runtime/mutation.md).
 Presentation sorting belongs to [track-list presentation](track-presentation.md).
@@ -19,10 +19,12 @@ Exact default chords belong to the [keyboard map](../../reference/shell/keymap.m
 ## Code boundary
 
 Platform-neutral capability and session policy lives in UIModel under `app/include/ao/uimodel/library/list/` and `app/uimodel/library/list/`.
-It consumes runtime view, projection, library-availability, and authoring ports without depending on GTK.
+It consumes runtime view, projection, library-availability, and authoring ports without depending on GTK or WinUI.
 
 GTK owns `TrackOrderDragController`, native row/drop controllers, autoscroll, indicators, status rendering, selection adaptation, and shortcut-event suppression.
 It does not submit row indexes to storage or call a core store directly.
+WinUI owns native row-context commands, selection adaptation, status presentation, and live action handlers in its window-owned List authoring coordinator.
+It currently exposes no order drag adapter.
 
 ## Terminology
 
@@ -41,7 +43,7 @@ It does not submit row indexes to storage or call a core store directly.
 - Source state must be live and error-free, and library authoring must be `Available`.
 - An invalid filter on the saved List or any saved ancestor is a source error and disables every order-authoring capability until repaired.
 - A quick filter disables gap and relative moves but leaves absolute moves, Reset Order, and Forget Hidden Positions available.
-- Movement operands and anchors are stable TrackIds; GTK row positions never cross the runtime authoring boundary.
+- Movement operands and anchors are stable TrackIds; native row positions never cross the runtime authoring boundary.
 - A dragged selected row moves the complete selection in effective source order.
 - A dragged unselected row becomes the sole dragged selection.
 - One effective movement is one semantic writer command and one library commit.
@@ -70,7 +72,7 @@ Evaluation order makes the most actionable blocking state visible:
 5. quick-filter restriction for gap/relative movement.
 
 Maintenance produces **Library is busy. Manual ordering will be available when maintenance finishes.**
-GTK displays that state in the track-page status surface rather than silently omitting the interaction.
+GTK displays that state in the track-page status surface, while WinUI displays it in the native Manual Order submenu rather than silently omitting the interaction.
 Live source-error changes refresh exported action state and the page's drag capability surface.
 
 `ListOrderAuthoringSession` owns one `BoundListOrder`, the matching projection, capability snapshot, and subscriptions.
@@ -133,10 +135,12 @@ The shipped bindings are:
 - `Alt+Home`: Move to Top;
 - `Alt+End`: Move to Bottom.
 
-Order movement is intentionally one command per physical key-down/key-up cycle.
-GTK's capture-phase guard keys by physical keycode and consumes repeated press events until release.
+GTK order movement is intentionally one command per physical key-down/key-up cycle.
+Its capture-phase guard keys by physical keycode and consumes repeated press events until release.
 Window deactivation and keymap replacement reset the guard.
 Holding a key therefore moves once; another committed step requires release and a new press.
+
+WinUI registers the four movement action handlers outside its layout-action catalog, so the ordinary Windows keymap plan installs the same shipped chords without making those ids authorable in layout documents.
 
 Reset and Forget Hidden Positions remain menu/action commands without shipped global shortcuts.
 
@@ -149,11 +153,12 @@ Stale tells the user that the List changed and to start again.
 Unavailable reports that editing is currently unavailable; maintenance has the more specific library-busy reason before submission.
 
 A source error, grouped/sorted presentation, active quick filter for a relative action, missing selection, or destroyed view disables the command with its current reason.
-GTK never clears a quick filter, changes presentation, or prunes hidden positions as an implicit workaround.
+Neither desktop frontend clears a quick filter, changes presentation, or prunes hidden positions as an implicit workaround.
 
 Drag callbacks hold weak/shared generation-local state.
 On ColumnView rebuild or page destruction, GTK first closes and destroys `TrackOrderDragController`, detaches the model and widget tree, and only then installs replacement-generation controllers.
 Late callbacks observe `closing`, an invalid token, or expired state and cannot submit against a new view generation.
+WinUI command continuations likewise carry the window coordinator's lifetime token and cannot report into a retired window.
 
 ## Persistence and versioning
 
@@ -168,8 +173,10 @@ GTK prepends a 36-pixel drag-handle column only when gap movement is available.
 The right-click **Manual Order** submenu exposes relative, absolute, Reset, and Forget Hidden commands according to their separate flags and shows the blocking reason when order authoring is unavailable.
 With a quick filter, the submenu keeps Move Up and Move Down visibly disabled beside the relative-movement reason while Move to Top, Move to Bottom, Reset Order, and Forget Hidden Positions remain available.
 
-Other frontends may adapt the same UIModel capabilities to native interactions.
-They must preserve stable-ID operands, complete-sequence semantics, revision-bound submission, and explicit unavailable states.
+WinUI exposes Move Up, Move Down, Move to Top, Move to Bottom, and Reset Order in the selected-row context menu according to the same independent capability flags.
+It has no drag handle or Forget Hidden Positions command in this version.
+The four movement commands use the shared default accelerators and the same handlers as the menu; Reset remains menu-only.
+Both frontends preserve stable-ID operands, complete-sequence semantics, revision-bound submission, and explicit unavailable states.
 
 ## Implementation map
 
@@ -179,6 +186,7 @@ They must preserve stable-ID operands, complete-sequence semantics, revision-bou
 - [`TrackOrderDragController.cpp`](../../../app/linux-gtk/track/TrackOrderDragController.cpp) owns the GTK generation-local DnD surface.
 - [`TrackViewPage.cpp`](../../../app/linux-gtk/track/TrackViewPage.cpp) adapts capabilities and order commands.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) suppresses native order-key auto-repeat.
+- WinUI [`ListAuthoringCoordinator.cpp`](../../../app/windows-winui/list/ListAuthoringCoordinator.cpp) owns session creation and result presentation; [`TrackTable.cpp`](../../../app/windows-winui/layout/component/track/TrackTable.cpp) owns the native menu, and [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers its four keymap handlers.
 
 ## Test map
 
@@ -189,6 +197,7 @@ They must preserve stable-ID operands, complete-sequence semantics, revision-bou
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects GTK eligibility and command adaptation.
 - [`TagEditControllerTest.cpp`](../../../test/unit/linux-gtk/tag/TagEditControllerTest.cpp) protects the visible Manual Order menu capability split.
 - [`TrackSelectionControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackSelectionControllerTest.cpp) protects the blank-area right-click no-menu contract.
+- [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects installation of the four native-only WinUI movement actions without adding layout-action descriptors; native Windows smoke covers context-menu eligibility and command dispatch.
 
 ## Related documents
 

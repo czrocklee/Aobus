@@ -9,7 +9,6 @@
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -23,7 +22,8 @@ namespace ao::uimodel
     void initialize(rt::NotificationFeedState const& feed);
     void handleFeedUpdated(rt::NotificationFeedUpdate const& update);
     void handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event);
-    void handleLibraryProgressFinished(rt::NotificationFeedState const& feed);
+    void handleLibraryProgressFinished(rt::LibraryTaskProgressFinished const& event,
+                                       rt::NotificationFeedState const& feed);
     void dismissCompact(rt::NotificationFeedState const& feed);
     void hideDetailNotification(rt::NotificationId id, rt::NotificationFeedState const& feed);
     void autoDismissCompact(rt::NotificationFeedState const& feed);
@@ -33,6 +33,7 @@ namespace ao::uimodel
   private:
     struct LibraryProgressState final
     {
+      rt::LibraryTaskProgressId id = rt::kInvalidLibraryTaskProgressId;
       rt::LibraryTaskProgressKind kind = rt::LibraryTaskProgressKind::Scanning;
       std::string subject{};
       double fraction = 0.0;
@@ -41,6 +42,8 @@ namespace ao::uimodel
     void handleFeedChanged(rt::NotificationFeedState const& feed);
     void handleNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId id);
     bool refreshesVisibleTransient(rt::NotificationFeedUpdate const& update) const;
+    bool libraryTaskActive() const noexcept;
+    void projectLibraryProgress(LibraryProgressState const& progress);
     void projectDetail(rt::NotificationFeedState const& feed);
     void projectPersistentCompact(rt::NotificationFeedState const& feed);
     void projectNotificationCompact(rt::NotificationEntry const& entry);
@@ -54,8 +57,7 @@ namespace ao::uimodel
 
     ActivityStatusViewState _state{};
     PresentationTextCatalog _textCatalog;
-    bool _taskActive = false;
-    std::optional<LibraryProgressState> _optLibraryProgress{};
+    std::vector<LibraryProgressState> _libraryProgressStates{};
     std::vector<rt::NotificationId> _compactSourceNotificationIds{};
     std::vector<rt::NotificationId> _hiddenCompactIds{};
     std::vector<rt::NotificationId> _hiddenDetailIds{};

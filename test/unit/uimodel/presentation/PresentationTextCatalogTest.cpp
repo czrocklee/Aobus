@@ -267,6 +267,9 @@ namespace ao::uimodel::test
     CHECK(catalog.libraryTaskProgressCompact(Kind::Fingerprinting, "literal.flac") == "Fingerprinting: literal.flac");
     CHECK(catalog.libraryTaskProgressCompact(Kind::IndexingAudioIdentity, "literal.flac") ==
           "Indexing audio identity: literal.flac");
+    CHECK(catalog.libraryTaskProgressCompact(Kind::PreparingImport, "backup.yaml") == "Preparing import: backup.yaml");
+    CHECK(catalog.libraryTaskProgressCompact(Kind::Importing, "backup.yaml") == "Importing: backup.yaml");
+    CHECK(catalog.libraryTaskProgressCompact(Kind::Exporting, "backup.yaml") == "Exporting: backup.yaml");
   }
 
   TEST_CASE("PresentationTextCatalog - track filter errors carry the parser diagnostic verbatim",
@@ -381,6 +384,21 @@ namespace ao::uimodel::test
           "#straße wurde für 2 Titel in Straße hinzugefügt.");
     CHECK(catalog.format(MessageId::LibraryExportFailed, {{"error", "Datenträger voll"}}) ==
           "Export fehlgeschlagen: Datenträger voll");
+  }
+
+  TEST_CASE("PresentationTextCatalog - Spanish manual-order verbs agree with singular and plural counts",
+            "[uimodel][unit][localization][regression]")
+  {
+    auto const catalog = ao::test::presentationTextCatalog("es-ES");
+
+    CHECK(catalog.format(MessageId::ListOrderMoved, {{"count", 1}}) == "Se movió 1 pista en Orden manual.");
+    CHECK(catalog.format(MessageId::ListOrderMoved, {{"count", 2}}) == "Se movieron 2 pistas en Orden manual.");
+    CHECK(catalog.format(MessageId::ListOrderReset, {{"count", 1}}) ==
+          "Se restableció Orden manual y se descartó 1 posición guardada.");
+    CHECK(catalog.format(MessageId::ListOrderForgotHidden, {{"count", 1}}) ==
+          "Se descartó 1 posición guardada oculta.");
+    CHECK(catalog.format(MessageId::ListOrderForgotHidden, {{"count", 2}}) ==
+          "Se descartaron 2 posiciones guardadas ocultas.");
   }
 
   TEST_CASE("PresentationTextCatalog - unsupported locale falls back to the complete English surface",

@@ -217,4 +217,14 @@ namespace ao::uimodel
       [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](Impl& impl) mutable
       { return impl.library.writer().editTags(impl.targets, std::move(tagsToAdd), std::move(tagsToRemove)); });
   }
+
+  async::Task<Result<TrackPropertiesSubmitResult>> TrackAuthoringSession::submitProperties(
+    rt::TrackPropertiesPatch patch)
+  {
+    return Impl::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackPropertiesReply>,
+                                    TrackPropertiesSubmitResult>(
+      _implPtr,
+      [patch = std::move(patch)](Impl& impl) mutable
+      { return impl.library.writer().updateProperties(impl.targets, std::move(patch)); });
+  }
 } // namespace ao::uimodel

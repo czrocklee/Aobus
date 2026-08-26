@@ -48,6 +48,19 @@ namespace ao::winui::test
 
     /// Answers yes for everything, so a case can isolate the other rules.
     KeymapActionAvailability const kEverythingOffered = [](std::string_view) { return true; };
+
+    bool shippedWindowsAction(LayoutActionCatalog const& catalog, std::string_view const id)
+    {
+      if (catalog.descriptor(id))
+      {
+        return true;
+      }
+
+      // These commands are native shell behavior rather than layout-document
+      // actions. ShellBuilder registers their live handlers directly.
+      return id == "workspace.revealCurrentTrack" || id == "track.orderMoveUp" || id == "track.orderMoveDown" ||
+             id == "track.orderMoveToTop" || id == "track.orderMoveToBottom";
+    }
   } // namespace
 
   TEST_CASE("KeymapAcceleratorPlan - a binding this shell serves becomes an accelerator", "[winui][unit][input]")
@@ -158,13 +171,13 @@ namespace ao::winui::test
     CHECK(plans.size() == 2);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - the shipped shell reaches its transport from the keyboard", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - the shipped shell reaches its keyboard commands", "[winui][unit][input]")
   {
-    // The Windows catalog describes every transport command, and the default
-    // keymap binds six of them; none may be lost between the two.
+    // Layout actions and native-only shell commands both participate in the
+    // keymap when the running shell offers a handler.
     auto const catalog = layoutActionCatalog();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&catalog](std::string_view const id) { return catalog.descriptor(id).has_value(); };
+    auto const offered = [&catalog](std::string_view const id) { return shippedWindowsAction(catalog, id); };
 
     auto const plans = planKeymapAccelerators(keymap, catalog, offered);
 
@@ -186,17 +199,18 @@ namespace ao::winui::test
     // already deliver, so the keyboard map installs nothing for it here.
     CHECK_FALSE(planned(uimodel::playbackCommandActionId(uimodel::PlaybackCommand::Stop)));
 
-    // Track ordering and workspace reveal are GTK capabilities the Windows
-    // shell does not offer, so their default chords stay unbound here.
-    CHECK_FALSE(planned("track.orderMoveUp"));
-    CHECK_FALSE(planned("workspace.revealCurrentTrack"));
+    CHECK(planned("workspace.revealCurrentTrack"));
+    CHECK(planned("track.orderMoveUp"));
+    CHECK(planned("track.orderMoveDown"));
+    CHECK(planned("track.orderMoveToTop"));
+    CHECK(planned("track.orderMoveToBottom"));
   }
 
   TEST_CASE("KeymapAcceleratorPlan - no two accelerators claim the same key", "[winui][unit][input]")
   {
     auto const catalog = layoutActionCatalog();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&catalog](std::string_view const id) { return catalog.descriptor(id).has_value(); };
+    auto const offered = [&catalog](std::string_view const id) { return shippedWindowsAction(catalog, id); };
 
     auto const plans = planKeymapAccelerators(keymap, catalog, offered);
     auto seen = std::set<std::pair<std::uint32_t, std::uint32_t>>{};

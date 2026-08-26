@@ -8,18 +8,24 @@
 #include "pch.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
+#include "track/TrackPropertiesCoordinator.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Windows.Foundation.h>
 
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -67,6 +73,71 @@ namespace winrt::Aobus::implementation
       {
         updateStatus(ao::winui::formatResource("winui_presentation_failed", selectedRes.error().message));
       }
+    }
+  }
+
+  void MainWindow::revealCurrentTrack()
+  {
+    if (_session != nullptr)
+    {
+      _session->runtime().playback().commands().revealPlayingTrack();
+    }
+  }
+
+  void MainWindow::OnTrackPropertiesInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
+                                            Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
+  {
+    args.Handled(_shellBuilderPtr && _shellBuilderPtr->invokeAction("track.presentProperties"));
+  }
+
+  void MainWindow::presentTrackProperties()
+  {
+    if (_session == nullptr || _trackListPtr == nullptr || modalWorkflowActive())
+    {
+      return;
+    }
+
+    _trackPropertiesCoordinatorPtr.reset();
+    auto& runtime = _session->runtime();
+    auto stateRes = runtime.views().findTrackListState(_trackListPtr->viewId());
+
+    if (!stateRes || !ao::winui::canPresentTrackProperties(stateRes->selection))
+    {
+      return;
+    }
+
+    try
+    {
+      auto dialogPtr =
+        std::make_unique<ao::winui::TrackPropertiesCoordinator>(ao::winui::TrackPropertiesCoordinatorConfig{
+          .xamlRoot = RootGrid().XamlRoot(),
+          .asyncRuntime = runtime.async(),
+          .library = runtime.library(),
+          .workspace = runtime.workspace(),
+          .completion = runtime.completion(),
+          .textCatalog = _session->textCatalog(),
+          .trackIds = std::move(stateRes->selection),
+        });
+
+      if (auto presentedRes = dialogPtr->present(); !presentedRes)
+      {
+        updateStatus(ao::winui::formatResource("winui_error", presentedRes.error().message));
+        return;
+      }
+
+      _trackPropertiesCoordinatorPtr = std::move(dialogPtr);
+    }
+    catch (winrt::hresult_error const& error)
+    {
+      updateStatus(ao::winui::formatResource("winui_error", winrt::to_string(error.message())));
+    }
+    catch (std::exception const& error)
+    {
+      updateStatus(ao::winui::formatResource("winui_error", error.what()));
+    }
+    catch (...)
+    {
+      updateStatus(ao::winui::formatResource("winui_error", "Unknown exception"));
     }
   }
 

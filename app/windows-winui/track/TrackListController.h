@@ -12,7 +12,9 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
+#include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/winui/track/TrackRevealAdapter.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -20,6 +22,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -57,11 +60,15 @@ namespace ao::winui
     void reload();
     void setViewportWidth(double width, double trailingChromeWidth);
     void publishSelection(std::span<TrackId const> trackIds);
+    std::vector<TrackId> selection() const;
+    std::optional<std::size_t> displayIndexOfTrack(TrackId trackId) const noexcept;
     Result<> play(TrackId trackId, std::function<Result<>(rt::ViewId, TrackId)> const& playTrack);
     Result<> selectPresentation(std::string_view presentationId);
     Result<> selectPresentation(rt::TrackPresentationSpec const& presentation);
     Result<> toggleSort(rt::TrackSortField field);
     Result<> navigateTo(ListId listId);
+    Result<> revealTrack(TrackId trackId, rt::ViewId preferredViewId, ListId preferredListId);
+    std::optional<TrackRevealTarget> revealTarget() const noexcept;
     Result<> resizeColumn(std::string_view fieldId, double horizontalChange);
     Result<> moveColumn(std::string_view fieldId, std::int32_t offset);
     Result<> setColumnVisible(std::string_view fieldId, bool visible);
@@ -93,6 +100,7 @@ namespace ao::winui
     void handleProjectionBatch(rt::TrackListProjectionDeltaBatch const& batch);
     void refreshRows();
     void refreshColumns();
+    void adoptWorkspaceView(rt::ViewId viewId);
     Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
     uimodel::PresentationTextCatalog _textCatalog;
@@ -106,6 +114,9 @@ namespace ao::winui
     winrt::Windows::Foundation::Collections::IObservableVector<winrt::Windows::Foundation::IInspectable> _headers;
     async::Subscription _projectionSub;
     async::Subscription _viewProjectionSub;
+    async::Subscription _workspaceSub;
+    uimodel::TrackDisplayIndex _displayIndex;
+    TrackRevealIntent _revealIntent{};
     std::vector<TrackColumnCellSpec> _columns;
     std::int32_t _viewportWidth = kDefaultViewportWidth;
     std::int32_t _surfaceViewportWidth = kDefaultViewportWidth;

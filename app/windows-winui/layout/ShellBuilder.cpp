@@ -22,6 +22,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
@@ -69,7 +70,7 @@ namespace ao::winui::layout
       return mode == ShellMode::Classic ? ShellPreset::Classic : ShellPreset::Modern;
     }
 
-    ShellLibraryAccess makeLibraryAccess(LibrarySession& sessionValue)
+    ShellLibraryAccess makeLibraryAccess(LibrarySession& sessionValue, ShellListCommands const& listCommands)
     {
       auto* const session = &sessionValue;
       return ShellLibraryAccess{
@@ -80,6 +81,18 @@ namespace ao::winui::layout
           return uimodel::buildListTreeProjection(
             session->textCatalog(), session->runtime().library().reader().lists());
         },
+        .subscribeListTreeChanged =
+          [session](compat::MoveOnlyFunction<void()> handler)
+        {
+          return session->runtime().library().changes().onChanged(
+            [handler = std::move(handler)](rt::LibraryChangeSet const& changeSet) mutable
+            {
+              if (listTreeChangeRequiresRebuild(changeSet))
+              {
+                handler();
+              }
+            });
+        },
         .preferredPresentation = [session](ListId const listId) -> std::optional<rt::TrackPresentationSpec>
         {
           if (!session->presentationPreferences().presentations.contains(listId))
@@ -89,14 +102,15 @@ namespace ao::winui::layout
 
           return session->presentationForList(listId);
         },
-        .rememberPresentation =
-          [session](ListId const listId, std::string presentationId)
-        {
-          session->presentationPreferences().presentations[listId] = std::move(presentationId);
-          std::ignore = session->saveSettings();
-        },
         .playTrack = [session](rt::ViewId const viewId, TrackId const trackId)
         { return session->playTrack(viewId, trackId); },
+        .createList = listCommands.createList,
+        .editList = listCommands.editList,
+        .deleteList = listCommands.deleteList,
+        .membershipTargets = listCommands.membershipTargets,
+        .editMembership = listCommands.editMembership,
+        .orderCapabilities = listCommands.orderCapabilities,
+        .applyOrder = listCommands.applyOrder,
       };
     }
 
@@ -104,7 +118,8 @@ namespace ao::winui::layout
     void appendItem(winrt::Windows::Foundation::Collections::IVector<
                       winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItemBase> const& items,
                     std::string_view const resourceId,
-                    std::function<void()> const& command)
+                    std::function<void()> const& command,
+                    std::string_view const acceleratorText = {})
     {
       if (!command)
       {
@@ -113,6 +128,12 @@ namespace ao::winui::layout
 
       auto item = MenuFlyoutItem{};
       item.Text(winrt::to_hstring(resourceString(resourceId)));
+
+      if (!acceleratorText.empty())
+      {
+        item.KeyboardAcceleratorTextOverride(winrt::to_hstring(acceleratorText));
+      }
+
       item.Click([command](winrt::Windows::Foundation::IInspectable const&,
                            winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { command(); });
       items.Append(item);
@@ -134,7 +155,10 @@ namespace ao::winui::layout
   } // namespace
 
   ShellBuilder::ShellBuilder(LibrarySession& session, ShellBuilderConfig config)
-    : _session{session}, _config{std::move(config)}, _libraryAccess{makeLibraryAccess(session)}, _host{_config.host}
+    : _session{session}
+    , _config{std::move(config)}
+    , _libraryAccess{makeLibraryAccess(session, _config.listCommands)}
+    , _host{_config.host}
   {
     registerActions();
     installKeyboardAccelerators();
@@ -173,6 +197,20 @@ namespace ao::winui::layout
     bindCommand("shell.toggleInspector", _config.commands.toggleInspector);
     bindCommand("shell.showSoul", _config.commands.showSoul);
     bindCommand("shell.showSystemMenu", _config.commands.showSystemMenu);
+    bindCommand("workspace.revealCurrentTrack", _config.commands.revealCurrentTrack);
+    bindCommand("track.presentProperties", _config.commands.presentTrackProperties);
+
+    if (auto const& applyOrder = _config.listCommands.applyOrder; applyOrder)
+    {
+      _actions.registerAction(
+        "track.orderMoveUp", [applyOrder](ActionContext const&) { applyOrder(ListOrderCommand::MoveUp); });
+      _actions.registerAction(
+        "track.orderMoveDown", [applyOrder](ActionContext const&) { applyOrder(ListOrderCommand::MoveDown); });
+      _actions.registerAction(
+        "track.orderMoveToTop", [applyOrder](ActionContext const&) { applyOrder(ListOrderCommand::MoveToTop); });
+      _actions.registerAction(
+        "track.orderMoveToBottom", [applyOrder](ActionContext const&) { applyOrder(ListOrderCommand::MoveToBottom); });
+    }
 
     // The selector presents from wherever it was raised, so unlike the rest this
     // one is the anchor's business as much as the shell's.
@@ -207,7 +245,10 @@ namespace ao::winui::layout
     auto const items = flyout.Items();
     appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
     appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
+    appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
+    appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
     appendSeparator(items);
+    appendItem(items, "winui_track_properties_command", _config.commands.presentTrackProperties, "Alt+Enter");
     appendItem(items, "winui_shell_columns", _config.commands.chooseColumns);
     appendItem(items, "winui_shell_classic_mode", _config.commands.toggleShellMode);
     appendItem(items, "winui_shell_reload_theme", _config.commands.reloadTheme);
@@ -219,8 +260,11 @@ namespace ao::winui::layout
     auto flyout = MenuFlyout{};
     auto const items = flyout.Items();
     appendItem(items, "winui_shell_stop", _config.commands.stop);
+    appendItem(items, "winui_shell_reveal_current_track", _config.commands.revealCurrentTrack);
     appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
     appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
+    appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
+    appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
     appendSeparator(items);
     appendItem(items, "winui_shell_classic_mode", _config.commands.toggleShellMode);
     return flyout;
@@ -246,6 +290,9 @@ namespace ao::winui::layout
                {
                  appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
                  appendItem(items, "winui_shell_rescan", _config.commands.rescanLibrary);
+                 appendSeparator(items);
+                 appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
+                 appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
                });
     appendMenu("winui_shell_menu_view",
                [this](auto const& items)
@@ -255,6 +302,8 @@ namespace ao::winui::layout
                  // is the only place the overlay can be asked for at the widths
                  // that do not seat the inspector inline.
                  appendItem(items, "winui_shell_track_details", _config.commands.toggleInspector);
+                 appendItem(
+                   items, "winui_track_properties_command", _config.commands.presentTrackProperties, "Alt+Enter");
                  appendItem(items, "winui_shell_modern_mode", _config.commands.toggleShellMode);
                  appendItem(items, "winui_shell_reload_theme", _config.commands.reloadTheme);
                });
@@ -263,6 +312,7 @@ namespace ao::winui::layout
                {
                  appendItem(items, "winui_shell_play_pause", _config.commands.playPause);
                  appendItem(items, "winui_shell_stop", _config.commands.stop);
+                 appendItem(items, "winui_shell_reveal_current_track", _config.commands.revealCurrentTrack);
                });
   }
 
@@ -313,7 +363,10 @@ namespace ao::winui::layout
         .workspace = runtime.workspace(),
         .notifications = runtime.notifications(),
         .libraryTasks = runtime.library().taskService(),
+        .completion = runtime.completion(),
         .playbackCommands = _session.playbackCommands(),
+        .presentationCatalog = _session.presentationCatalog(),
+        .presentationPreferences = _session.presentationPreferenceStore(),
         .textCatalog = _session.textCatalog(),
         .trackList = _config.trackList,
         .resourceBytes = _config.resourceBytes,
@@ -497,6 +550,11 @@ namespace ao::winui::layout
                             plans,
                             [this, lifetimePtr = std::weak_ptr{_lifetimePtr}](std::string_view const id)
                             { return !lifetimePtr.expired() && _actions.invoke(id, ActionContext{}); });
+  }
+
+  bool ShellBuilder::invokeAction(std::string_view const actionId) const
+  {
+    return !_retired && _actions.invoke(actionId, ActionContext{});
   }
 
   void ShellBuilder::retire() noexcept

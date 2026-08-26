@@ -285,4 +285,34 @@ namespace ao::rt::test
     CHECK(emitCount == 3);
     CHECK(runtime.workspace().customPresets().empty());
   }
+
+  TEST_CASE("WorkspaceService - custom preset identity is its spec id rather than its label",
+            "[runtime][unit][workspace][regression]")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& workspace = fixture.runtime().workspace();
+    auto first = CustomTrackPresentationPreset{};
+    first.label = "Shared label";
+    first.spec.id = "first-id";
+    first.spec.groupBy = TrackGroupKey::Composer;
+
+    REQUIRE(workspace.addCustomPreset(first));
+    first.label = "Renamed label";
+    REQUIRE(workspace.addCustomPreset(first));
+
+    auto presets = workspace.customPresets();
+    REQUIRE(presets.size() == 1);
+    CHECK(presets.front().label == "Renamed label");
+    CHECK(presets.front().spec.id == "first-id");
+
+    auto second = first;
+    second.spec.id = "second-id";
+    REQUIRE(workspace.addCustomPreset(second));
+
+    presets = workspace.customPresets();
+    REQUIRE(presets.size() == 2);
+    CHECK(presets[0].spec.id == "first-id");
+    CHECK(presets[1].spec.id == "second-id");
+    CHECK(presets[0].label == presets[1].label);
+  }
 } // namespace ao::rt::test

@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <list>
 #include <unordered_map>
 #include <utility>
 
@@ -39,10 +40,12 @@ namespace ao::winui
       winrt::Windows::Foundation::Collections::IIterator<Item> First();
 
     private:
+      using Recency = std::list<std::uint32_t>;
+
       struct Entry final
       {
         Item item{nullptr};
-        std::uint64_t lastUse = 0;
+        Recency::iterator recency;
       };
 
       void evictLeastRecentlyUsed();
@@ -50,7 +53,7 @@ namespace ao::winui
       std::uint32_t _size = 0;
       TrackItemProvider _provider;
       std::size_t _maximumEntries = 1;
-      std::uint64_t _useSequence = 0;
+      Recency _recency;
       std::unordered_map<std::uint32_t, Entry> _entries;
     };
 
@@ -106,7 +109,7 @@ namespace ao::winui
 
       if (auto const found = _entries.find(index); found != _entries.end())
       {
-        found->second.lastUse = ++_useSequence;
+        _recency.splice(_recency.begin(), _recency, found->second.recency);
         return found->second.item;
       }
 
@@ -122,8 +125,24 @@ namespace ao::winui
         evictLeastRecentlyUsed();
       }
 
-      auto const inserted = _entries.emplace(index, Entry{.item = item, .lastUse = ++_useSequence}).first;
-      return inserted->second.item;
+      _recency.push_front(index);
+
+      try
+      {
+        auto const [inserted, wasInserted] = _entries.emplace(index, Entry{.item = item, .recency = _recency.begin()});
+
+        if (!wasInserted)
+        {
+          _recency.pop_front();
+        }
+
+        return inserted->second.item;
+      }
+      catch (...)
+      {
+        _recency.pop_front();
+        throw;
+      }
     }
 
     bool TrackItemView::IndexOf(Item const& value, std::uint32_t& index) const noexcept
@@ -166,22 +185,14 @@ namespace ao::winui
 
     void TrackItemView::evictLeastRecentlyUsed()
     {
-      auto oldest = _entries.end();
-      auto oldestUse = std::numeric_limits<std::uint64_t>::max();
-
-      for (auto it = _entries.begin(); it != _entries.end(); ++it)
+      if (_recency.empty())
       {
-        if (it->second.lastUse < oldestUse)
-        {
-          oldest = it;
-          oldestUse = it->second.lastUse;
-        }
+        return;
       }
 
-      if (oldest != _entries.end())
-      {
-        _entries.erase(oldest);
-      }
+      auto const oldest = _recency.back();
+      _recency.pop_back();
+      _entries.erase(oldest);
     }
   } // namespace
 

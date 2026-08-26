@@ -145,7 +145,7 @@ namespace ao::uimodel
   {
     projectDetail(feed);
 
-    if (_taskActive)
+    if (libraryTaskActive())
     {
       return;
     }
@@ -191,7 +191,7 @@ namespace ao::uimodel
       return;
     }
 
-    if (_taskActive)
+    if (libraryTaskActive())
     {
       return;
     }
@@ -212,7 +212,8 @@ namespace ao::uimodel
 
   bool ActivityStatusFeedProjection::refreshesVisibleTransient(rt::NotificationFeedUpdate const& update) const
   {
-    if (_taskActive || _state.compact.kind != ActivityStatusKind::Info || _compactSourceNotificationIds.size() != 1)
+    if (libraryTaskActive() || _state.compact.kind != ActivityStatusKind::Info ||
+        _compactSourceNotificationIds.size() != 1)
     {
       return false;
     }
@@ -229,26 +230,63 @@ namespace ao::uimodel
 
   void ActivityStatusFeedProjection::handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event)
   {
-    _taskActive = true;
-    _optLibraryProgress =
-      LibraryProgressState{.kind = event.kind, .subject = event.subject, .fraction = event.fraction};
+    if (auto const existing = std::ranges::find(_libraryProgressStates, event.id, &LibraryProgressState::id);
+        existing != _libraryProgressStates.end())
+    {
+      _libraryProgressStates.erase(existing);
+    }
+
+    _libraryProgressStates.push_back(
+      LibraryProgressState{.id = event.id, .kind = event.kind, .subject = event.subject, .fraction = event.fraction});
+    projectLibraryProgress(_libraryProgressStates.back());
+  }
+
+  bool ActivityStatusFeedProjection::libraryTaskActive() const noexcept
+  {
+    return !_libraryProgressStates.empty();
+  }
+
+  void ActivityStatusFeedProjection::projectLibraryProgress(LibraryProgressState const& progress)
+  {
     setCompact(ActivityCompactState{
       .kind = ActivityStatusKind::Processing,
-      .text = _textCatalog.libraryTaskProgressCompact(event.kind, event.subject),
-      .optProgressFraction = event.fraction,
+      .text = _textCatalog.libraryTaskProgressCompact(progress.kind, progress.subject),
+      .optProgressFraction = progress.fraction,
     });
     _state.detail.optLibraryTask = ActivityTaskDetail{
-      .message = _textCatalog.libraryTaskProgressDetail(event.kind, event.subject),
-      .progressFraction = event.fraction,
+      .message = _textCatalog.libraryTaskProgressDetail(progress.kind, progress.subject),
+      .progressFraction = progress.fraction,
     };
   }
 
-  void ActivityStatusFeedProjection::handleLibraryProgressFinished(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedProjection::handleLibraryProgressFinished(rt::LibraryTaskProgressFinished const& event,
+                                                                   rt::NotificationFeedState const& feed)
   {
-    _taskActive = false;
-    _optLibraryProgress.reset();
+    auto const finished = std::ranges::find(_libraryProgressStates, event.id, &LibraryProgressState::id);
+
+    if (finished == _libraryProgressStates.end())
+    {
+      return;
+    }
+
+    auto const finishedCurrent = finished == _libraryProgressStates.end() - 1;
+    _libraryProgressStates.erase(finished);
+
+    if (!finishedCurrent)
+    {
+      return;
+    }
+
     projectDetail(feed);
-    projectPersistentCompact(feed);
+
+    if (libraryTaskActive())
+    {
+      projectLibraryProgress(_libraryProgressStates.back());
+    }
+    else
+    {
+      projectPersistentCompact(feed);
+    }
   }
 
   void ActivityStatusFeedProjection::dismissCompact(rt::NotificationFeedState const& feed)
@@ -276,7 +314,7 @@ namespace ao::uimodel
     bool const compactReferencedHiddenSource = std::ranges::contains(_compactSourceNotificationIds, id);
     projectDetail(feed);
 
-    if (compactReferencedHiddenSource && !_taskActive)
+    if (compactReferencedHiddenSource && !libraryTaskActive())
     {
       projectPersistentCompact(feed);
     }
@@ -319,11 +357,12 @@ namespace ao::uimodel
 
     auto optLibraryTask = std::optional<ActivityTaskDetail>{};
 
-    if (_optLibraryProgress)
+    if (libraryTaskActive())
     {
+      auto const& progress = _libraryProgressStates.back();
       optLibraryTask = ActivityTaskDetail{
-        .message = _textCatalog.libraryTaskProgressDetail(_optLibraryProgress->kind, _optLibraryProgress->subject),
-        .progressFraction = _optLibraryProgress->fraction,
+        .message = _textCatalog.libraryTaskProgressDetail(progress.kind, progress.subject),
+        .progressFraction = progress.fraction,
       };
     }
 

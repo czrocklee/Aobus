@@ -77,6 +77,26 @@ namespace ao::uimodel::test
     CHECK(fixture.title(fixture.trackIds().front()) == "Now changed");
   }
 
+  TEST_CASE("TrackAuthoringSession - Properties submission advances one binding for metadata and tags",
+            "[uimodel][regression][library-authoring]")
+  {
+    auto fixture = TrackAuthoringFixture{1};
+    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    REQUIRE(sessionRes);
+    auto sessionPtr = std::move(*sessionRes);
+
+    auto const submitRes = fixture.runTask(sessionPtr->submitProperties(rt::TrackPropertiesPatch{
+      .metadata = rt::MetadataPatch{.optTitle = "Together"},
+      .tagsToAdd = {"Favorite"},
+    }));
+
+    REQUIRE(submitRes);
+    CHECK(submitRes->status == rt::AuthoringStatus::Applied);
+    CHECK(sessionPtr->isCurrent());
+    CHECK(fixture.title(fixture.trackIds().front()) == "Together");
+    CHECK(fixture.tags(fixture.trackIds().front()) == std::vector<std::string>{"Favorite"});
+  }
+
   TEST_CASE("TrackAuthoringSession - a tag commit stales other sessions bound to the old revision",
             "[uimodel][unit][library-authoring]")
   {

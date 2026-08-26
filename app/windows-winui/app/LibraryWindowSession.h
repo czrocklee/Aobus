@@ -18,6 +18,7 @@
 
 namespace ao::rt
 {
+  class CompletionAliasPolicy;
   class TextOrderingPolicy;
 }
 
@@ -42,7 +43,8 @@ namespace ao::winui
     LibraryWindowSession(std::filesystem::path stateRoot,
                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                          uimodel::PresentationTextCatalog textCatalog,
-                         rt::TextOrderingPolicy const& textOrderingPolicy);
+                         rt::TextOrderingPolicy const& textOrderingPolicy,
+                         rt::CompletionAliasPolicy const& completionAliasPolicy);
     ~LibraryWindowSession();
 
     LibraryWindowSession(LibraryWindowSession const&) = delete;
@@ -75,6 +77,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     uimodel::PresentationTextCatalog _textCatalog;
     rt::TextOrderingPolicy const& _textOrderingPolicy;
+    rt::CompletionAliasPolicy const& _completionAliasPolicy;
     // Declared before the window so fallback member destruction releases the
     // window first. Explicit retirement preserves the same order.
     std::unique_ptr<LibrarySession> _sessionPtr;

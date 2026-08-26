@@ -28,6 +28,7 @@ namespace ao::uimodel
 
 namespace ao::rt
 {
+  class CompletionAliasPolicy;
   class TextOrderingPolicy;
 }
 
@@ -64,6 +65,7 @@ namespace winrt::Aobus::implementation
     std::unique_ptr<ao::i18n::MessageCatalog> _messageCatalogPtr;
     std::unique_ptr<ao::uimodel::PresentationTextCatalog> _presentationTextCatalogPtr;
     std::unique_ptr<ao::rt::TextOrderingPolicy> _textOrderingPolicyPtr;
+    std::unique_ptr<ao::rt::CompletionAliasPolicy> _completionAliasPolicyPtr;
     std::unique_ptr<ao::winui::LibraryWindowSession> _windowSessionPtr;
     ProcessPhase _processPhase = ProcessPhase::Starting;
   };

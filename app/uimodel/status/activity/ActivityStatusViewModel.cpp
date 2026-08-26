@@ -82,8 +82,8 @@ namespace ao::uimodel
       {
         libraryProgressSub = options.libraryTasks->onProgress([this](rt::LibraryTaskProgressUpdated const& event)
                                                               { handleLibraryTaskProgress(event); });
-        libraryProgressFinishedSub =
-          options.libraryTasks->onProgressFinished([this] { handleLibraryProgressFinished(); });
+        libraryProgressFinishedSub = options.libraryTasks->onProgressFinished(
+          [this](rt::LibraryTaskProgressFinished const& event) { handleLibraryProgressFinished(event); });
       }
 
       syncAutoDismissDeadline();
@@ -151,9 +151,9 @@ namespace ao::uimodel
       publish();
     }
 
-    void handleLibraryProgressFinished()
+    void handleLibraryProgressFinished(rt::LibraryTaskProgressFinished const& event)
     {
-      feedProjection.handleLibraryProgressFinished(notifications.feed());
+      feedProjection.handleLibraryProgressFinished(event, notifications.feed());
       publish();
     }
   };

@@ -182,7 +182,7 @@ Maintenance entry and exit are themselves sequenced control commands, and availa
 Mutation attempted from a publication or availability observer is rejected as reentrant rather than queued for a later causal turn.
 The [task execution specification](../spec/library/runtime/task-execution.md#background-tasks-and-maintenance-states) and [change publication specification](../spec/library/runtime/change-publication.md#ordering-and-delivery) own the exact admission and settlement behavior.
 Closing is private lifetime coordination rather than a public authoring state.
-Metadata and tag authoring additionally requires runtime-created `BoundTrackTargets` containing the runtime instance id, committed library revision, and exact target order.
+Metadata, tag, and combined Properties authoring additionally requires runtime-created `BoundTrackTargets` containing the runtime instance id, committed library revision, and exact target order.
 
 ### Sources
 
@@ -291,7 +291,7 @@ Explicit relink is a constrained plan derivation that preserves the same source 
 
 A read-oriented workflow obtains one `LibraryReader`, performs the related reads under its single transaction snapshot, and releases the reader before retaining application values.
 
-Metadata and tag authoring first binds the exact targets to one runtime instance and one available committed revision.
+Metadata, tag, and combined Properties authoring first binds the exact targets to one runtime instance and one available committed revision.
 Commit rechecks runtime identity, availability, revision, and every target inside the command's active transaction turn.
 A foreign or superseded binding is `Stale`, maintenance is `Unavailable`, lane contention is non-terminal `Busy`, and an effective commit returns a binding advanced to the published revision.
 Creating a binding validates that every target exists and returns `NotFound` otherwise; disappearance under an accepted exact-revision binding is an invariant violation rather than another authoring status.

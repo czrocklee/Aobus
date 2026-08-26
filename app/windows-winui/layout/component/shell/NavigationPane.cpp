@@ -13,13 +13,18 @@
 #include "track/TrackListController.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
+#include <ao/uimodel/library/list/ListActionPolicy.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -46,8 +51,12 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Visibility;
     using winrt::Microsoft::UI::Xaml::Controls::Canvas;
     using winrt::Microsoft::UI::Xaml::Controls::Grid;
+    using winrt::Microsoft::UI::Xaml::Controls::MenuFlyout;
+    using winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem;
+    using winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutSeparator;
     using winrt::Microsoft::UI::Xaml::Controls::NavigationView;
     using winrt::Microsoft::UI::Xaml::Controls::NavigationViewBackButtonVisible;
+    using winrt::Microsoft::UI::Xaml::Controls::NavigationViewBackRequestedEventArgs;
     using winrt::Microsoft::UI::Xaml::Controls::NavigationViewItem;
     using winrt::Microsoft::UI::Xaml::Controls::NavigationViewPaneDisplayMode;
     using winrt::Microsoft::UI::Xaml::Controls::NavigationViewSelectionChangedEventArgs;
@@ -121,6 +130,31 @@ namespace ao::winui::layout
                      : kInvalidListId;
     }
 
+    template<typename NativeItem>
+    void expandActiveAncestors(std::map<ListId, NativeItem> const& items,
+                               std::map<ListId, ListId> const& parentIds,
+                               ListId currentId)
+    {
+      auto remaining = parentIds.size();
+
+      while (remaining-- > 0)
+      {
+        auto const current = parentIds.find(currentId);
+
+        if (current == parentIds.end() || current->second == kInvalidListId || current->second == currentId)
+        {
+          return;
+        }
+
+        currentId = current->second;
+
+        if (auto const parent = items.find(currentId); parent != items.end())
+        {
+          parent->second.IsExpanded(true);
+        }
+      }
+    }
+
     /**
      * @brief The library tree both shell modes show, and where a selection goes.
      *
@@ -132,8 +166,14 @@ namespace ao::winui::layout
     public:
       explicit NavigationBinding(LayoutBuildContext& ctx)
         : _trackList{ctx.trackList}
+        , _workspace{ctx.workspace}
         , _listTreeProjection{ctx.library.listTreeProjection}
+        , _subscribeListTreeChanged{ctx.library.subscribeListTreeChanged}
         , _preferredPresentation{ctx.library.preferredPresentation}
+        , _createList{ctx.library.createList}
+        , _editList{ctx.library.editList}
+        , _deleteList{ctx.library.deleteList}
+        , _textCatalog{ctx.textCatalog}
         , _gatePtr{ctx.gatePtr}
         , _reportStatus{ctx.reportStatus}
       {
@@ -142,6 +182,77 @@ namespace ao::winui::layout
       uimodel::ListTreeProjection projection() const { return _listTreeProjection(); }
 
       ListId activeListId() const { return _trackList.activeListId(); }
+      bool canGoBack() const { return _workspace.canGoBack(); }
+
+      async::Subscription subscribeListTreeChanged(compat::MoveOnlyFunction<void()> callback) const
+      {
+        return _subscribeListTreeChanged ? _subscribeListTreeChanged(std::move(callback)) : async::Subscription{};
+      }
+
+      MenuFlyout contextFlyout(uimodel::ListTreeProjectionRow const& row) const
+      {
+        auto flyout = MenuFlyout{};
+        auto const state = uimodel::describeListActions(row.id, !row.childIds.empty());
+        auto const append = [&flyout, gatePtr = _gatePtr](std::string_view const label, std::function<void()> callback)
+        {
+          if (!callback)
+          {
+            return;
+          }
+
+          auto item = MenuFlyoutItem{};
+          item.Text(winrt::to_hstring(label));
+          item.Click(
+            [gatePtr, callback = std::move(callback)](
+              winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
+            {
+              if (uimodel::isGenerationActive(gatePtr))
+              {
+                callback();
+              }
+            });
+          flyout.Items().Append(item);
+        };
+
+        if (state.canCreate && _createList)
+        {
+          append(_textCatalog.text(i18n::MessageId::WinUiListNew),
+                 [create = _createList, parentId = uimodel::parentForNewSmartList(row.id)] { create(parentId, {}); });
+        }
+
+        if (state.canEdit && _editList)
+        {
+          append(
+            _textCatalog.text(i18n::MessageId::WinUiListEdit), [edit = _editList, listId = row.id] { edit(listId); });
+        }
+
+        if ((state.canEdit && _editList) &&
+            ((state.canDelete && _deleteList) || (state.canDeleteSubtree && _deleteList)))
+        {
+          flyout.Items().Append(MenuFlyoutSeparator{});
+        }
+
+        if (state.canDelete && _deleteList)
+        {
+          append(_textCatalog.text(i18n::MessageId::WinUiListDelete),
+                 [remove = _deleteList, listId = row.id] { remove(listId, false); });
+        }
+        else if (state.canDeleteSubtree && _deleteList)
+        {
+          append(_textCatalog.text(i18n::MessageId::WinUiListDeleteSubtree),
+                 [remove = _deleteList, listId = row.id] { remove(listId, true); });
+        }
+
+        return flyout;
+      }
+
+      void goBack()
+      {
+        if (auto const backRes = _workspace.goBack(); !backRes)
+        {
+          report(formatResource("winui_navigation_failed", backRes.error().message));
+        }
+      }
 
       /// Move the workspace to @p listId, restoring the presentation that list was last shown with.
       void navigate(ListId const listId, std::string const& label)
@@ -179,8 +290,14 @@ namespace ao::winui::layout
       }
 
       TrackListController& _trackList;
+      rt::WorkspaceService& _workspace;
       std::function<uimodel::ListTreeProjection()> _listTreeProjection;
+      std::function<async::Subscription(compat::MoveOnlyFunction<void()>)> _subscribeListTreeChanged;
       std::function<std::optional<rt::TrackPresentationSpec>(ListId)> _preferredPresentation;
+      std::function<void(ListId, std::string)> _createList;
+      std::function<void(ListId)> _editList;
+      std::function<void(ListId, bool)> _deleteList;
+      uimodel::PresentationTextCatalog _textCatalog;
       std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
       std::function<void(std::string)> _reportStatus;
     };
@@ -244,7 +361,9 @@ namespace ao::winui::layout
                     },
                     [this] { _width.commit(); }}
       {
-        _view.IsBackButtonVisible(NavigationViewBackButtonVisible::Collapsed);
+        _view.IsBackButtonVisible(NavigationViewBackButtonVisible::Visible);
+        _backRequestedRevoker =
+          _view.BackRequested(winrt::auto_revoke, {this, &NavigationViewPaneComponent::onBackRequested});
         _view.IsSettingsVisible(false);
         _view.PaneTitle(winrt::to_hstring(resourceString("winui_library_navigation_pane_title")));
         _view.CompactPaneLength(kCompactPaneLength);
@@ -262,6 +381,20 @@ namespace ao::winui::layout
         _shellStateSub = subscribeUiUpdate(ctx.shellStateChanged,
                                            "NavigationViewPaneComponent",
                                            [this](ShellState const state) { applyShellState(state); });
+        _workspaceSub = ctx.workspace.onChanged(
+          [this](rt::WorkspaceChanged const&)
+          {
+            applyUiUpdate("NavigationViewPaneComponent",
+                          [this]
+                          {
+                            updateHistory();
+                            [[maybe_unused]] auto const applying = ScopedBooleanFlag{_applying};
+                            selectActive(_itemsById, _binding.activeListId());
+                          });
+          });
+        _listTreeSub = _binding.subscribeListTreeChanged(
+          [this] { applyUiUpdate("NavigationViewPaneComponent", [this] { rebuild(); }); });
+        updateHistory();
       }
 
       FrameworkElement element() const override { return _view; }
@@ -304,56 +437,78 @@ namespace ao::winui::layout
 
       void applyWidth() { _view.OpenPaneLength(_width.value()); }
 
+      void updateHistory() { _view.IsBackEnabled(_binding.canGoBack()); }
+
       void rebuild()
       {
         [[maybe_unused]] auto const applying = ScopedBooleanFlag{_applying};
         auto const projection = _binding.projection();
         auto const activeListId = _binding.activeListId();
+        auto previousExpansion = std::map<ListId, bool>{};
+
+        for (auto const& [id, item] : _itemsById)
+        {
+          previousExpansion.emplace(id, item.IsExpanded());
+        }
+
+        auto const restore = restoreListTreeState(projection, activeListId, previousExpansion);
         _view.MenuItems().Clear();
         _labelsById.clear();
-
-        auto items = std::map<ListId, NavigationViewItem>{};
+        _parentIdsById.clear();
+        _itemsById.clear();
 
         for (auto const& [id, row] : projection.rowsById)
         {
           auto item = NavigationViewItem{};
-          item.Content(navigationContent(row, false));
+          auto content = navigationContent(row, false);
+          content.ContextFlyout(_binding.contextFlyout(row));
+          item.Content(content);
           item.Icon(SymbolIcon{navigationSymbol(row)});
           item.Tag(winrt::box_value(id.raw()));
-          items.emplace(id, item);
+          _itemsById.emplace(id, item);
           _labelsById.emplace(id, winrt::to_string(navigationLabel(row)));
+          _parentIdsById.emplace(id, row.parentId);
         }
 
         for (auto const& [id, row] : projection.rowsById)
         {
-          auto const& item = items.at(id);
+          auto const& item = _itemsById.at(id);
 
           for (auto const childId : row.childIds)
           {
-            if (auto const child = items.find(childId); child != items.end())
+            if (auto const child = _itemsById.find(childId); child != _itemsById.end())
             {
               item.MenuItems().Append(child->second);
             }
           }
 
-          item.IsExpanded(!row.childIds.empty());
+          item.IsExpanded(restore.expandedById.at(id));
         }
 
         for (auto const rootId : projection.rootIds)
         {
-          if (auto const root = items.find(rootId); root != items.end())
+          if (auto const root = _itemsById.find(rootId); root != _itemsById.end())
           {
             _view.MenuItems().Append(root->second);
           }
         }
 
-        selectActive(items, activeListId);
+        selectActive(_itemsById, restore.selectedListId);
+
+        if (restore.selectedListId != activeListId)
+        {
+          if (auto const fallback = _labelsById.find(restore.selectedListId); fallback != _labelsById.end())
+          {
+            _binding.navigate(restore.selectedListId, fallback->second);
+          }
+        }
       }
 
       void selectActive(std::map<ListId, NavigationViewItem> const& items, ListId const activeListId)
       {
         if (auto const active = items.find(activeListId); active != items.end())
         {
+          expandActiveAncestors(items, _parentIdsById, activeListId);
           _view.SelectedItem(active->second);
         }
         else if (auto const fallback = items.find(rt::kAllTracksListId); fallback != items.end())
@@ -377,16 +532,26 @@ namespace ao::winui::layout
         }
       }
 
+      void onBackRequested(NavigationView const& /*sender*/, NavigationViewBackRequestedEventArgs const& /*args*/)
+      {
+        _binding.goBack();
+      }
+
       NavigationView _view{};
       Grid _content{};
       NavigationBinding _binding;
       NavigationWidth _width;
       PaneSplitter _splitter;
       std::map<ListId, std::string> _labelsById;
+      std::map<ListId, ListId> _parentIdsById;
+      std::map<ListId, NavigationViewItem> _itemsById;
       std::vector<PlacedChild> _children;
       bool _applying = false;
       async::Subscription _shellStateSub;
+      async::Subscription _workspaceSub;
+      async::Subscription _listTreeSub;
       NavigationView::SelectionChanged_revoker _selectionChangedRevoker{};
+      NavigationView::BackRequested_revoker _backRequestedRevoker{};
     };
 
     /**
@@ -428,6 +593,18 @@ namespace ao::winui::layout
         _shellStateSub = subscribeUiUpdate(ctx.shellStateChanged,
                                            "NavigationTreePaneComponent",
                                            [this](ShellState const state) { applyShellState(state); });
+        _workspaceSub = ctx.workspace.onChanged(
+          [this](rt::WorkspaceChanged const&)
+          {
+            applyUiUpdate("NavigationTreePaneComponent",
+                          [this]
+                          {
+                            [[maybe_unused]] auto const applying = ScopedBooleanFlag{_applying};
+                            selectActive(_nodesById, _binding.activeListId());
+                          });
+          });
+        _listTreeSub = _binding.subscribeListTreeChanged(
+          [this] { applyUiUpdate("NavigationTreePaneComponent", [this] { rebuild(); }); });
       }
 
       FrameworkElement element() const override { return _root; }
@@ -448,49 +625,69 @@ namespace ao::winui::layout
         [[maybe_unused]] auto const applying = ScopedBooleanFlag{_applying};
         auto const projection = _binding.projection();
         auto const activeListId = _binding.activeListId();
+        auto previousExpansion = std::map<ListId, bool>{};
+
+        for (auto const& [id, node] : _nodesById)
+        {
+          previousExpansion.emplace(id, node.IsExpanded());
+        }
+
+        auto const restore = restoreListTreeState(projection, activeListId, previousExpansion);
         _tree.RootNodes().Clear();
         _labelsById.clear();
-
-        auto nodes = std::map<ListId, TreeViewNode>{};
+        _parentIdsById.clear();
+        _nodesById.clear();
 
         for (auto const& [id, row] : projection.rowsById)
         {
           auto node = TreeViewNode{};
-          node.Content(navigationContent(row, true));
-          nodes.emplace(id, node);
+          auto content = navigationContent(row, true);
+          content.ContextFlyout(_binding.contextFlyout(row));
+          node.Content(content);
+          _nodesById.emplace(id, node);
           _labelsById.emplace(id, winrt::to_string(navigationLabel(row)));
+          _parentIdsById.emplace(id, row.parentId);
         }
 
         for (auto const& [id, row] : projection.rowsById)
         {
-          auto const& node = nodes.at(id);
+          auto const& node = _nodesById.at(id);
 
           for (auto const childId : row.childIds)
           {
-            if (auto const child = nodes.find(childId); child != nodes.end())
+            if (auto const child = _nodesById.find(childId); child != _nodesById.end())
             {
               node.Children().Append(child->second);
             }
           }
 
-          node.IsExpanded(!row.childIds.empty());
+          node.IsExpanded(restore.expandedById.at(id));
         }
 
         for (auto const rootId : projection.rootIds)
         {
-          if (auto const root = nodes.find(rootId); root != nodes.end())
+          if (auto const root = _nodesById.find(rootId); root != _nodesById.end())
           {
             _tree.RootNodes().Append(root->second);
           }
         }
 
-        selectActive(nodes, activeListId);
+        selectActive(_nodesById, restore.selectedListId);
+
+        if (restore.selectedListId != activeListId)
+        {
+          if (auto const fallback = _labelsById.find(restore.selectedListId); fallback != _labelsById.end())
+          {
+            _binding.navigate(restore.selectedListId, fallback->second);
+          }
+        }
       }
 
       void selectActive(std::map<ListId, TreeViewNode> const& nodes, ListId const activeListId)
       {
         if (auto const active = nodes.find(activeListId); active != nodes.end())
         {
+          expandActiveAncestors(nodes, _parentIdsById, activeListId);
           _tree.SelectedNode(active->second);
         }
         else if (auto const fallback = nodes.find(rt::kAllTracksListId); fallback != nodes.end())
@@ -521,8 +718,12 @@ namespace ao::winui::layout
       NavigationWidth _width;
       PaneSplitter _splitter;
       std::map<ListId, std::string> _labelsById;
+      std::map<ListId, ListId> _parentIdsById;
+      std::map<ListId, TreeViewNode> _nodesById;
       bool _applying = false;
       async::Subscription _shellStateSub;
+      async::Subscription _workspaceSub;
+      async::Subscription _listTreeSub;
       TreeView::SelectionChanged_revoker _selectionChangedRevoker{};
     };
   } // namespace

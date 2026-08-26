@@ -114,6 +114,9 @@ ja:table {
     library_task_updating { "更新中" }
     library_task_fingerprinting { "フィンガープリント作成中" }
     library_task_indexing_audio_identity { "オーディオ識別インデックス作成中" }
+    library_task_preparing_import { "インポートを準備中" }
+    library_task_importing { "インポート中" }
+    library_task_exporting { "エクスポート中" }
     library_task_progress_detail { "{hasSubject, select, yes {{activity}: {subject}} other {{activity}}}" }
     library_task_scanning_compact { "ライブラリをスキャン中" }
     library_task_updating_compact { "ライブラリを更新中" }
@@ -280,7 +283,7 @@ ja:table {
     gtk_library_select_export_mode { "エクスポートモードを選択" }
     gtk_library_choose_backup_contents { "バックアップに含める内容を選択してください:" }
     gtk_library_export_mode_delta { "差分（ユーザー編集、タグ、リストを同期）" }
-    gtk_library_export_mode_metadata { "メタデータ（テキストとカバーアート、技術情報なし）" }
+    gtk_library_export_mode_metadata { "メタデータ（編集済みテキスト、タグ、リスト）" }
     gtk_library_export_mode_full { "完全（障害復旧用: すべてを含む）" }
     gtk_library_export_mode_list_only { "リストのみ（曲を変更せずにプレイリストを同期）" }
     gtk_library_include { "含める" }
@@ -490,6 +493,32 @@ ja:table {
     winui_shell_open_library { "ライブラリを開く..." }
     winui_shell_rescan { "再スキャン" }
     winui_shell_rescan_library { "ライブラリを再スキャン" }
+    winui_shell_import_library_data { "ライブラリデータをインポート..." }
+    winui_shell_export_library_data { "ライブラリデータをエクスポート..." }
+    winui_library_select_export_mode { "エクスポートモードを選択" }
+    winui_library_choose_backup_contents { "バックアップに含める内容を選択してください:" }
+    winui_library_include { "含める" }
+    winui_library_export_mode_delta { "差分（ユーザー編集、タグ、リストを同期）" }
+    winui_library_export_mode_metadata { "メタデータ（編集済みテキスト、タグ、リスト）" }
+    winui_library_export_mode_full { "完全（障害復旧用: すべてを含む）" }
+    winui_library_export_mode_list_only { "リストのみ（曲を変更せずにプレイリストを同期）" }
+    winui_library_select_import_mode { "インポートモードを選択" }
+    winui_library_choose_import_mode { "バックアップを統合するか、その範囲を復元してください:" }
+    winui_library_import_mode_merge { "統合（バックアップ外の項目を維持）" }
+    winui_library_import_mode_restore { "復元（プレビュー後に対象範囲を置換）" }
+    winui_library_next { "次へ" }
+    winui_library_export_yaml { "ライブラリを YAML にエクスポート" }
+    winui_library_import_yaml { "YAML からライブラリをインポート" }
+    winui_library_yaml_files { "YAML ファイル" }
+    winui_library_confirm_restore { "復元の確認" }
+    winui_library_restore_library { "ライブラリを復元" }
+    winui_library_restore_lists { "リストを復元" }
+    winui_library_restore_scope_library { "ライブラリ" }
+    winui_library_restore_scope_lists { "リスト" }
+    winui_library_restore_confirmation { "この復元により現在の {scope} が置き換えられます。\n\nデータ: YAML v{version}、モード ''{mode}''。\nプレビュー: 作成 {tracksCreated} 件、更新 {tracksUpdated} 件、削除 {tracksDeleted} 件; リスト作成 {listsCreated} 件、削除 {listsDeleted} 件; 無視された未解決参照 {dangling} 件。\n\n選択したバックアップと一致する場合にのみ続行してください。" }
+    winui_library_could_not_select_export_file { "エクスポートファイルを選択できませんでした" }
+    winui_library_could_not_select_backup { "ライブラリバックアップを選択できませんでした" }
+    winui_library_file_selection_error { "{operation}: {message}" }
     winui_shell_menu_view { "表示" }
     winui_shell_modern_mode { "モダンモード" }
     winui_shell_columns { "列..." }
@@ -497,6 +526,62 @@ ja:table {
     winui_shell_menu_playback { "再生" }
     winui_shell_play_pause { "再生/一時停止" }
     winui_shell_stop { "停止" }
+    winui_shell_reveal_current_track { "現在の曲を表示" }
+    winui_track_properties_command { "プロパティ..." }
+    winui_track_properties_title { "プロパティ" }
+    winui_track_properties_selected_title { "プロパティ — {count, plural, one {# 曲} other {# 曲}}を選択中" }
+    winui_track_properties_save { "保存" }
+    winui_track_properties_cancel { "キャンセル" }
+    winui_track_properties_tags { "タグ" }
+    winui_track_properties_tags_hint { "選択したすべての曲に共通するタグ" }
+    winui_track_properties_custom_metadata { "カスタムメタデータ" }
+    winui_track_properties_custom_key { "新しいキー" }
+    winui_track_properties_custom_value { "新しい値" }
+    winui_track_properties_delete { "削除" }
+    winui_track_properties_add { "追加" }
+    winui_track_properties_editing_unavailable { "編集できません: {detail}" }
+    winui_track_properties_save_failed { "保存に失敗しました: {detail}" }
+    winui_track_properties_stale { "このダイアログを開いている間にライブラリが変更されました。プロパティを開き直して再試行してください。" }
+    winui_track_properties_invalid_value { "値が無効です: {detail}" }
+    winui_list_create_from_filter { "現在のフィルターからリストを作成" }
+    winui_list_new { "新規リスト..." }
+    winui_list_edit { "リストを編集..." }
+    winui_list_delete { "リストを削除" }
+    winui_list_delete_subtree { "リストとサブツリーを削除..." }
+    winui_list_editor_new_title { "新規リスト" }
+    winui_list_editor_edit_title { "リストを編集" }
+    winui_common_cancel { "キャンセル" }
+    winui_common_create { "作成" }
+    winui_common_save { "保存" }
+    winui_list_name_placeholder { "リスト名" }
+    winui_list_name { "名前" }
+    winui_list_description_placeholder { "説明（任意）" }
+    winui_list_description { "説明" }
+    winui_list_inherited_filter { "継承されたフィルター" }
+    winui_list_filter_placeholder { "フィルター式（$、@、#、% を入力）" }
+    winui_list_local_filter { "ローカルフィルター" }
+    winui_list_effective_filter { "有効なフィルター" }
+    winui_list_membership { "メンバーシップ" }
+    winui_list_auto_presentation { "自動" }
+    winui_list_presentation { "表示" }
+    winui_list_preview { "プレビュー" }
+    winui_list_delete_title { "リストを削除しますか？" }
+    winui_list_delete_subtree_title { "リストとサブツリーを削除しますか？" }
+    winui_list_delete_commit { "削除" }
+    winui_list_delete_all_commit { "すべて削除" }
+    winui_list_delete_question { "「{name}」を削除しますか？\n\nリストは削除されますが、音楽ファイルは保持されます。" }
+    winui_list_delete_subtree_question { "このサブツリー内の {count, plural, one {# 件のリスト} other {# 件のリスト}} を削除しますか？\n\n{entries}\nネストされたプレイリストで使用されているタグは保持されます。\n音楽ファイルは保持されます。" }
+    winui_list_remove_tag { "{count, plural, one {# 曲} other {# 曲}} からも {tag} を削除する" }
+    winui_list_tag_references { "{tag} は次でも参照されています: {references}。削除すると、これらのリストが変更される可能性があります。" }
+    winui_list_no_editable_playlists { "直接編集可能なプレイリストはありません" }
+    winui_list_add_to_playlist { "プレイリストに追加" }
+    winui_list_remove_from_current { "{name} ({tag}) から削除" }
+    winui_list_manual_order { "手動の順序" }
+    winui_list_move_up { "上へ移動" }
+    winui_list_move_down { "下へ移動" }
+    winui_list_move_to_top { "先頭へ移動" }
+    winui_list_move_to_bottom { "末尾へ移動" }
+    winui_list_reset_order { "順序をリセット" }
     winui_shell_track_details { "曲詳細" }
     winui_shell_classic_mode { "クラシックモード" }
     winui_playback_output_device { "出力デバイス" }
@@ -633,50 +718,50 @@ ja:table {
     gtk_layout_category_application { "アプリケーション" }
     gtk_layout_category_library { "ライブラリ" }
     gtk_layout_category_layout { "レイアウト" }
-    gtk_layout_component_box { "ボックス (Box)" }
-    gtk_layout_component_split_pane { "分割ペイン (Split Pane)" }
-    gtk_layout_component_label { "ラベル (Label)" }
-    gtk_layout_component_action_button { "アクションボタン (Action Button)" }
-    gtk_layout_component_menu_button { "メニューボタン (Menu Button)" }
-    gtk_layout_component_menu_bar { "メニューバー (Menu Bar)" }
-    gtk_layout_component_track_table { "トラックテーブル (Track Table)" }
-    gtk_layout_component_quick_filter { "クイックフィルター (Quick Filter)" }
-    gtk_layout_component_presentation_button { "表示ボタン (Presentation Button)" }
-    gtk_layout_component_cover_art { "カバーアート (Cover Art)" }
-    gtk_layout_component_transport_button { "トランスポートボタン (Transport Button)" }
-    gtk_layout_component_soul_button { "Soul ボタン (Soul Button)" }
-    gtk_layout_component_seek_slider { "シークスライダー (Seek Slider)" }
-    gtk_layout_component_time_label { "時間ラベル (Time Label)" }
-    gtk_layout_component_volume_control { "音量コントロール (Volume Control)" }
-    gtk_layout_component_output_device_selector { "出力デバイスセレクター (Output Device Selector)" }
-    gtk_layout_component_activity_status { "アクティビティステータス (Activity Status)" }
-    gtk_layout_component_track_count { "曲数 (Track Count)" }
-    gtk_layout_component_selection_info { "選択情報 (Selection Info)" }
-    gtk_layout_component_status_message { "ステータスメッセージ (Status Message)" }
-    gtk_layout_component_now_playing_status { "再生中ステータス (Now Playing Status)" }
-    gtk_layout_component_playback_details { "再生詳細 (Playback Details)" }
-    gtk_layout_component_library_tree { "ライブラリツリー (Library Tree)" }
-    gtk_layout_component_playback_cover_art { "再生カバーアート (Playback Cover Art)" }
-    gtk_layout_component_soul_play_pause { "Soul 再生/一時停止ボタン (Soul Play/Pause Button)" }
-    gtk_layout_component_quality_indicator { "音質インジケーター (Quality Indicator)" }
-    gtk_layout_component_audio_pipeline_panel { "オーディオパイプラインパネル (Audio Pipeline Panel)" }
-    gtk_layout_component_current_title_label { "現在のタイトルラベル (Current Title Label)" }
-    gtk_layout_component_current_artist_label { "現在のアーティストラベル (Current Artist Label)" }
-    gtk_layout_component_separator { "セパレーター (Separator)" }
-    gtk_layout_component_absolute_canvas { "絶対キャンバス (Absolute Canvas)" }
-    gtk_layout_component_spacer { "スペーサー (Spacer)" }
-    gtk_layout_component_scroll_window { "スクロールウィンドウ (Scroll Window)" }
-    gtk_layout_component_tabs { "タブ (Tabs)" }
-    gtk_layout_component_responsive_class { "レスポンシブクラス (Responsive Class)" }
-    gtk_layout_component_center_box { "センターボックス (Center Box)" }
-    gtk_layout_component_open_library_button { "ライブラリを開くボタン (Open Library Button)" }
-    gtk_layout_component_workspace_with_detail { "詳細付きワークスペース (Workspace with Detail)" }
-    gtk_layout_component_collapsible_split { "折りたたみ可能分割 (Collapsible Split)" }
-    gtk_layout_component_detail_scope { "詳細スコープ (Detail Scope)" }
-    gtk_layout_component_field_grid { "フィールドグリッド (Field Grid)" }
-    gtk_layout_component_tag_editor { "タグエディター (Tag Editor)" }
-    gtk_layout_component_selection_region { "選択領域 (Selection Region)" }
-    gtk_layout_component_detail_undo_bar { "詳細元に戻すバー (Detail Undo Bar)" }
+    gtk_layout_component_box { "ボックス" }
+    gtk_layout_component_split_pane { "分割ペイン" }
+    gtk_layout_component_label { "ラベル" }
+    gtk_layout_component_action_button { "アクションボタン" }
+    gtk_layout_component_menu_button { "メニューボタン" }
+    gtk_layout_component_menu_bar { "メニューバー" }
+    gtk_layout_component_track_table { "トラックテーブル" }
+    gtk_layout_component_quick_filter { "クイックフィルター" }
+    gtk_layout_component_presentation_button { "表示ボタン" }
+    gtk_layout_component_cover_art { "カバーアート" }
+    gtk_layout_component_transport_button { "トランスポートボタン" }
+    gtk_layout_component_soul_button { "Soul ボタン" }
+    gtk_layout_component_seek_slider { "シークスライダー" }
+    gtk_layout_component_time_label { "時間ラベル" }
+    gtk_layout_component_volume_control { "音量コントロール" }
+    gtk_layout_component_output_device_selector { "出力デバイスセレクター" }
+    gtk_layout_component_activity_status { "アクティビティステータス" }
+    gtk_layout_component_track_count { "曲数" }
+    gtk_layout_component_selection_info { "選択情報" }
+    gtk_layout_component_status_message { "ステータスメッセージ" }
+    gtk_layout_component_now_playing_status { "再生中ステータス" }
+    gtk_layout_component_playback_details { "再生詳細" }
+    gtk_layout_component_library_tree { "ライブラリツリー" }
+    gtk_layout_component_playback_cover_art { "再生カバーアート" }
+    gtk_layout_component_soul_play_pause { "Soul 再生/一時停止ボタン" }
+    gtk_layout_component_quality_indicator { "音質インジケーター" }
+    gtk_layout_component_audio_pipeline_panel { "オーディオパイプラインパネル" }
+    gtk_layout_component_current_title_label { "現在のタイトルラベル" }
+    gtk_layout_component_current_artist_label { "現在のアーティストラベル" }
+    gtk_layout_component_separator { "セパレーター" }
+    gtk_layout_component_absolute_canvas { "絶対キャンバス" }
+    gtk_layout_component_spacer { "スペーサー" }
+    gtk_layout_component_scroll_window { "スクロールウィンドウ" }
+    gtk_layout_component_tabs { "タブ" }
+    gtk_layout_component_responsive_class { "レスポンシブクラス" }
+    gtk_layout_component_center_box { "センターボックス" }
+    gtk_layout_component_open_library_button { "ライブラリを開くボタン" }
+    gtk_layout_component_workspace_with_detail { "詳細付きワークスペース" }
+    gtk_layout_component_collapsible_split { "折りたたみ可能分割" }
+    gtk_layout_component_detail_scope { "詳細スコープ" }
+    gtk_layout_component_field_grid { "フィールドグリッド" }
+    gtk_layout_component_tag_editor { "タグエディター" }
+    gtk_layout_component_selection_region { "選択領域" }
+    gtk_layout_component_detail_undo_bar { "詳細元に戻すバー" }
     gtk_layout_property_text { "テキスト" }
     gtk_layout_property_orientation { "向き" }
     gtk_layout_property_spacing { "間隔" }

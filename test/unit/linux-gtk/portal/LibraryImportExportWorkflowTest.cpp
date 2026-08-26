@@ -147,7 +147,7 @@ namespace ao::gtk::test
 
     std::int32_t progressFinishedCount = 0;
     auto progressFinishedSub = fixture.runtime().library().taskService().onProgressFinished(
-      [&progressFinishedCount] noexcept { ++progressFinishedCount; });
+      [&progressFinishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
 
     workflow.scan();
 
@@ -175,7 +175,7 @@ namespace ao::gtk::test
     std::int32_t progressFinishedCount = 0;
     auto progressEvents = std::vector<rt::LibraryTaskProgressUpdated>{};
     auto progressFinishedSub = fixture.runtime().library().taskService().onProgressFinished(
-      [&progressFinishedCount] noexcept { ++progressFinishedCount; });
+      [&progressFinishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
     auto progressSub = fixture.runtime().library().taskService().onProgress(
       [&progressEvents](auto const& event) noexcept { progressEvents.push_back(event); });
 

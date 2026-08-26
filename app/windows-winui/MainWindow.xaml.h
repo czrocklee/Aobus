@@ -35,9 +35,12 @@ namespace ao::winui
 {
   class CoverArtPresenter;
   class LibrarySession;
+  class LibraryTransferCoordinator;
+  class ListAuthoringCoordinator;
   class OutputDeviceControl;
   class SmtcBridge;
   class TrackListController;
+  class TrackPropertiesCoordinator;
   class UiCoordinator;
   class ThemeCoordinator;
 }
@@ -72,6 +75,14 @@ namespace winrt::Aobus::implementation
 
     void OnRootSizeChanged(Windows::Foundation::IInspectable const&,
                            Microsoft::UI::Xaml::SizeChangedEventArgs const& args);
+    void OnRootPointerPressed(Windows::Foundation::IInspectable const&,
+                              Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args);
+    void OnNavigateBackInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                               Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
+    void OnNavigateForwardInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                                  Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
+    void OnTrackPropertiesInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                                  Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
     void OnColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
                                Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnColumnResizeCompleted(Windows::Foundation::IInspectable const& sender,
@@ -115,6 +126,8 @@ namespace winrt::Aobus::implementation
     void updateFullscreenSoulWindowActivity();
     void showFullscreenSoul();
     void showSystemMenu();
+    bool modalWorkflowActive() const noexcept;
+    void navigateHistory(bool forward);
 
     /**
      * @name Frame commands
@@ -125,8 +138,12 @@ namespace winrt::Aobus::implementation
      * @{
      */
     void rescanLibrary();
+    void importLibrary();
+    void exportLibrary();
     void playPause();
     void stopPlayback();
+    void revealCurrentTrack();
+    void presentTrackProperties();
     void toggleInspector();
     void toggleShellMode();
     void reloadTheme();
@@ -145,6 +162,12 @@ namespace winrt::Aobus::implementation
     std::unique_ptr<ao::winui::layout::ShellBuilder> _shellBuilderPtr;
     /// The selector a document's soul or output button raises, which no generation owns.
     std::unique_ptr<ao::winui::OutputDeviceControl> _shellOutputDevicePtr;
+    /// At most one revision-bound authoring dialog belongs to the window.
+    std::unique_ptr<ao::winui::TrackPropertiesCoordinator> _trackPropertiesCoordinatorPtr;
+    /// Window-lifetime owner of native List, Playlist-membership, and order workflows.
+    std::unique_ptr<ao::winui::ListAuthoringCoordinator> _listAuthoringCoordinatorPtr;
+    /// Window-lifetime owner of native YAML transfer dialogs, pickers, and tasks.
+    std::unique_ptr<ao::winui::LibraryTransferCoordinator> _libraryTransferCoordinatorPtr;
     /// The loaded theme override, or nothing while Windows' own appearance is in force.
     std::optional<ao::winui::Theme> _themeOverride;
     ao::winui::TrackListController* _trackListPtr = nullptr;

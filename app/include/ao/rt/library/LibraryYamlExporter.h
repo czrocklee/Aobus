@@ -32,7 +32,7 @@ namespace ao::rt
   enum class ExportMode : std::uint8_t
   {
     Delta,    // User edits + Tags + Lists
-    Metadata, // Curated text + cover art
+    Metadata, // Curated metadata + Tags + Lists
     Full,     // Everything
     ListOnly  // Playlists only
   };
@@ -61,8 +61,8 @@ namespace ao::rt
 
     LibraryYamlExporter(LibraryYamlExporter const&) = delete;
     LibraryYamlExporter& operator=(LibraryYamlExporter const&) = delete;
-    LibraryYamlExporter(LibraryYamlExporter&&) noexcept = default;
-    LibraryYamlExporter& operator=(LibraryYamlExporter&&) noexcept = default;
+    LibraryYamlExporter(LibraryYamlExporter&&) noexcept;
+    LibraryYamlExporter& operator=(LibraryYamlExporter&&) noexcept;
 
     /**
      * Export the library to a YAML file.

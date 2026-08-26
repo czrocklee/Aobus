@@ -65,7 +65,8 @@ namespace ao::rt
         return ResolvedNavigationTarget{.listId = filtered->listId, .filterExpression = filtered->filterExpression};
       }
 
-      if (std::get<GlobalViewKind>(target) == GlobalViewKind::AllTracks)
+      if (auto const* global = std::get_if<GlobalViewKind>(&target);
+          global != nullptr && *global == GlobalViewKind::AllTracks)
       {
         return ResolvedNavigationTarget{.listId = ListId{kAllTracksListId}, .reusePlainView = true};
       }
@@ -536,7 +537,7 @@ namespace ao::rt
     {
       auto nextSnapshot = currentSnapshot;
       auto const it = std::ranges::find_if(
-        nextSnapshot.customPresets, [&](auto const& existing) { return existing.label == preset.label; });
+        nextSnapshot.customPresets, [&](auto const& existing) { return existing.spec.id == preset.spec.id; });
 
       if (it != nextSnapshot.customPresets.end())
       {
@@ -664,6 +665,18 @@ namespace ao::rt
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->goForward();
+  }
+
+  bool WorkspaceService::canGoBack() const
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->navigationHistory.canGoBack();
+  }
+
+  bool WorkspaceService::canGoForward() const
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->navigationHistory.canGoForward();
   }
 
   std::unique_ptr<TrackDetailProjection> WorkspaceService::detailProjection(DetailTarget const& target)

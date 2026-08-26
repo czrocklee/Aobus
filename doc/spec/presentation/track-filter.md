@@ -19,7 +19,7 @@ Presentation grouping and ordering belong to [track-list presentation](track-pre
 ## Code boundary
 
 This contract spans the **UIModel**, **application runtime**, and frontend layers from the [system architecture](../../architecture/system-overview.md), refined by the [track expression](../../architecture/track-expression.md), [library](../../architecture/library.md), and [presentation](../../architecture/presentation.md) architectures.
-UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; runtime view filtering is public through `app/include/ao/rt/ViewService.h`; GTK and TUI adapt those boundaries.
+UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; runtime view filtering is public through `app/include/ao/rt/ViewService.h`; GTK, TUI, and WinUI adapt those boundaries.
 
 ## Terminology
 
@@ -36,8 +36,7 @@ UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; r
 - Clearing the filter restores the base source while retaining the active presentation.
 - A transient filter is represented by base `ListId` plus expression text; it is not a stored List.
 - GTK, TUI, and WinUI use the same UIModel resolver.
-- GTK and TUI use the same UIModel completer and therefore expose the same value set, ranking, replacement, and expression boundary.
-- WinUI currently resolves submitted filter text without exposing completion candidates.
+- GTK, TUI, and WinUI use the same UIModel completer and therefore expose the same value set, ranking, replacement, and expression boundary.
 - Runtime evaluates resolved text through the same source and predicate path used by saved Lists.
 - An invalid expression is observable in the view state and empty filtered membership without corrupting the base source.
 - An error inherited from the saved-List base source is observable through the same view-state error field and keeps the projection empty.
@@ -161,6 +160,12 @@ The create action emits the resolved expression.
 TUI routes the live `/` input and explicit `:filter` arguments through the same completer and resolves applied text through the same UIModel helper before calling `ViewService`.
 Its live input debounces edits, accepts a highlighted candidate on Return, and keeps the literal edited text when Escape is used instead; exact timing, keys, and the intentional distinction from Command Palette submission belong to the [TUI interaction specification](../tui/interaction.md).
 If that runtime call returns Error, TUI retains its draft, active source and view, rows, sections, and selection, and presents the Error through the shared notification surface.
+WinUI projects the shared completion items into its native suggestion list without letting arrow-key navigation rewrite the literal draft.
+Tab accepts the highlighted candidate and keeps focus in the filter.
+Return accepts a chosen value or complete postfix predicate and submits it immediately; accepting a field, alias, non-postfix operator, or logical operator keeps focus without submission because another expression token is still required.
+Escape closes the native suggestion list while retaining the literal draft.
+Its adapter maps native UTF-16 caret and replacement positions to the shared UTF-8 byte-range contract, including supplementary characters and mid-text replacement.
+Its composed component shows Create List only when the shared state permits it and passes the resolved expression to the ordinary List editor beneath the active saved source.
 Frontend-specific debounce, focus styling, popover rendering, and command syntax remain adapter concerns.
 
 ## Implementation map
@@ -170,7 +175,8 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 - [`TrackFilterViewModel`](../../../app/include/ao/uimodel/library/track/TrackFilterViewModel.h) owns frontend-neutral filter state.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns runtime view replacement and observations.
 - [`TrackSourceCache`](../../../app/include/ao/rt/source/TrackSourceCache.h) owns ad-hoc source acquisition.
-- [`TrackQuickFilter`](../../../app/linux-gtk/track/TrackQuickFilter.h) and [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h) are completion adapters; `EventController` owns live TUI timing and `LibraryController` applies TUI filters.
+- [`TrackQuickFilter`](../../../app/linux-gtk/track/TrackQuickFilter.h), [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h), and [`TrackQuickFilterControl`](../../../app/windows-winui/track/TrackQuickFilterControl.h) are completion adapters; [`QuickFilterCompletionAdapter`](../../../app/windows-winui/include/ao/winui/track/QuickFilterCompletionAdapter.h) owns the WinUI UTF-8/UTF-16 and semantic-row boundary, while [`TrackRegistry.cpp`](../../../app/windows-winui/layout/component/track/TrackRegistry.cpp) owns the composed create action.
+- TUI `EventController` owns live input timing and `LibraryController` applies TUI filters.
 
 ## Test map
 
@@ -180,6 +186,7 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 - [`ViewServiceListFilterTest.cpp`](../../../test/unit/runtime/ViewServiceListFilterTest.cpp) protects runtime replacement, transient expression errors, and contextual stored-parent errors with empty projections.
 - Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source/) protect source membership and dependency propagation.
 - GTK Quick Filter tests plus TUI event-controller and library-controller tests protect completion acceptance, debounce/cancellation, error presentation, and frontend adaptation.
+- [`QuickFilterCompletionAdapterTest.cpp`](../../../test/unit/winui/track/QuickFilterCompletionAdapterTest.cpp) runs on every host and protects WinUI caret/range conversion plus semantic completion-row projection without naming WinRT types.
 
 ## Related documents
 

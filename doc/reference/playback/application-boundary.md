@@ -157,6 +157,9 @@ retain their call-level `Result` on `AppRuntime`.
   shutdown require the runtime callback executor; off-executor access is a
   fail-fast contract violation.
 
+GTK and WinUI consume reveal requests at their workspace coordinators.
+They prefer the supplied view, fall back to the supplied List when necessary, and leave a track hidden by the active projection unchanged rather than weakening its filter.
+
 Command admission, ordering, supersession, snapshot coherence, publication,
 failure, and shutdown behavior belong to the
 [playback application-commit specification](../../spec/playback/application-commit.md).
@@ -176,6 +179,8 @@ keeps no source-compatibility constraint for it.
 - [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp)
   implements command ordering, supersession, commit composition, and
   publication.
+- [`UiCoordinator.cpp`](../../../app/windows-winui/app/UiCoordinator.cpp) and the
+  GTK main-window coordinator adapt reveal requests to each desktop workspace.
 
 ## Test authority
 

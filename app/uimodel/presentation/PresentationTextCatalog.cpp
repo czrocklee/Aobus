@@ -397,6 +397,9 @@ namespace ao::uimodel
       case rt::LibraryTaskProgressKind::IndexingAudioIdentity:
         activityId = MessageId::LibraryTaskIndexingAudioIdentity;
         break;
+      case rt::LibraryTaskProgressKind::PreparingImport: activityId = MessageId::LibraryTaskPreparingImport; break;
+      case rt::LibraryTaskProgressKind::Importing: activityId = MessageId::LibraryTaskImporting; break;
+      case rt::LibraryTaskProgressKind::Exporting: activityId = MessageId::LibraryTaskExporting; break;
     }
 
     auto const activity = text(activityId);
@@ -412,7 +415,10 @@ namespace ao::uimodel
       case rt::LibraryTaskProgressKind::Scanning: return std::string{text(MessageId::LibraryTaskScanningCompact)};
       case rt::LibraryTaskProgressKind::Updating: return std::string{text(MessageId::LibraryTaskUpdatingCompact)};
       case rt::LibraryTaskProgressKind::Fingerprinting:
-      case rt::LibraryTaskProgressKind::IndexingAudioIdentity: return libraryTaskProgressDetail(kind, subject);
+      case rt::LibraryTaskProgressKind::IndexingAudioIdentity:
+      case rt::LibraryTaskProgressKind::PreparingImport:
+      case rt::LibraryTaskProgressKind::Importing:
+      case rt::LibraryTaskProgressKind::Exporting: return libraryTaskProgressDetail(kind, subject);
     }
 
     return {};

@@ -3,7 +3,9 @@
 
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <optional>
 #include <span>
 
@@ -94,5 +96,22 @@ namespace ao::uimodel
       .sourceIndex = section.start + (displayIndex - headerIndex - 1),
       .groupIndex = groupIndex,
     };
+  }
+
+  std::optional<std::size_t> TrackDisplayIndex::displayIndexOfSourceRow(std::size_t const sourceIndex) const noexcept
+  {
+    if (sourceIndex >= _rowCount)
+    {
+      return std::nullopt;
+    }
+
+    if (_sections.empty())
+    {
+      return sourceIndex;
+    }
+
+    auto const next = std::ranges::upper_bound(_sections, sourceIndex, {}, &TrackDisplaySection::start);
+    auto const groupIndex = static_cast<std::size_t>(std::distance(_sections.begin(), next) - 1);
+    return sourceIndex + groupIndex + 1;
   }
 } // namespace ao::uimodel

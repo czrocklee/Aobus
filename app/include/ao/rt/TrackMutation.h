@@ -77,6 +77,22 @@ namespace ao::rt
     bool operator==(EditTrackTagsReply const&) const = default;
   };
 
+  /** One atomic metadata-and-tag edit for a bound Track selection. */
+  struct TrackPropertiesPatch final
+  {
+    MetadataPatch metadata{};
+    std::vector<std::string> tagsToAdd{};
+    std::vector<std::string> tagsToRemove{};
+  };
+
+  struct UpdateTrackPropertiesReply final
+  {
+    UpdateTrackMetadataReply metadata{};
+    EditTrackTagsReply tags{};
+
+    bool operator==(UpdateTrackPropertiesReply const&) const = default;
+  };
+
   struct CreateTrackReply final
   {
     TrackId trackId{};

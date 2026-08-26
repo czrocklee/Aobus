@@ -50,6 +50,7 @@ namespace ao::uimodel
     std::size_t groupCount() const noexcept { return _sections.size(); }
     std::size_t displayCount() const noexcept;
     std::optional<TrackDisplayItem> itemAt(std::size_t displayIndex) const noexcept;
+    std::optional<std::size_t> displayIndexOfSourceRow(std::size_t sourceIndex) const noexcept;
 
   private:
     std::size_t _rowCount = 0;

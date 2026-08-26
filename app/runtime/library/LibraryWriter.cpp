@@ -1164,6 +1164,28 @@ namespace ao::rt
       return EditTrackTagsReply{.changes = std::move(changes)};
     }
 
+    Result<UpdateTrackPropertiesReply> applyPropertiesPatchInTransaction(library::MusicLibrary& library,
+                                                                         library::LibraryWrite& transaction,
+                                                                         std::span<TrackId const> trackIds,
+                                                                         TrackPropertiesPatch const& patch)
+    {
+      auto metadataRes = applyMetadataPatchInTransaction(library, transaction, trackIds, patch.metadata);
+
+      if (!metadataRes)
+      {
+        return std::unexpected{metadataRes.error()};
+      }
+
+      auto tagsRes = applyTagPatchInTransaction(library, transaction, trackIds, patch.tagsToAdd, patch.tagsToRemove);
+
+      if (!tagsRes)
+      {
+        return std::unexpected{tagsRes.error()};
+      }
+
+      return UpdateTrackPropertiesReply{.metadata = std::move(*metadataRes), .tags = std::move(*tagsRes)};
+    }
+
     struct DeleteListTagImpactWork final
     {
       DeleteListReply::TagImpact impact{};
@@ -1982,6 +2004,14 @@ namespace ao::rt
       BoundTrackTargets targets,
       std::vector<std::string> tagsToAdd,
       std::vector<std::string> tagsToRemove);
+    async::Task<Result<UpdateTrackPropertiesReply>> previewUpdateProperties(
+      LibraryMutationService::Submission submission,
+      std::vector<TrackId> trackIds,
+      TrackPropertiesPatch patch);
+    async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> applyUpdateProperties(
+      LibraryMutationService::Submission submission,
+      BoundTrackTargets targets,
+      TrackPropertiesPatch patch);
     async::Task<Result<AddTracksToListReply>> previewAddTracksToList(LibraryMutationService::Submission submission,
                                                                      ListId listId,
                                                                      std::vector<TrackId> trackIds);
@@ -2075,6 +2105,21 @@ namespace ao::rt
   {
     return submitWriterOperation<Result<EditTrackTagsReply>>(
       _implPtr, &Impl::previewEditTags, std::move(trackIds), std::move(tagsToAdd), std::move(tagsToRemove));
+  }
+
+  async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> LibraryWriter::updateProperties(
+    BoundTrackTargets targets,
+    TrackPropertiesPatch patch)
+  {
+    return submitWriterOperation<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>>(
+      _implPtr, &Impl::applyUpdateProperties, std::move(targets), std::move(patch));
+  }
+
+  async::Task<Result<UpdateTrackPropertiesReply>> LibraryWriter::previewUpdateProperties(std::vector<TrackId> trackIds,
+                                                                                         TrackPropertiesPatch patch)
+  {
+    return submitWriterOperation<Result<UpdateTrackPropertiesReply>>(
+      _implPtr, &Impl::previewUpdateProperties, std::move(trackIds), std::move(patch));
   }
 
   async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> LibraryWriter::addTracksToList(
@@ -2287,6 +2332,66 @@ namespace ao::rt
         auto mutatedIds =
           reply.changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
         return Changed<EditTrackTagsReply>{
+          .value = std::move(reply),
+          .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
+        };
+      });
+  }
+
+  async::Task<Result<UpdateTrackPropertiesReply>> LibraryWriter::Impl::previewUpdateProperties(
+    LibraryMutationService::Submission submission,
+    std::vector<TrackId> trackIds,
+    TrackPropertiesPatch patch)
+  {
+    return applyInteractivePreviewAsync(
+      std::move(submission),
+      [this, trackIds = std::move(trackIds), patch = std::move(patch)](library::LibraryWrite& transaction)
+      { return applyPropertiesPatchInTransaction(library, transaction, trackIds, patch); });
+  }
+
+  async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> LibraryWriter::Impl::applyUpdateProperties(
+    LibraryMutationService::Submission submission,
+    BoundTrackTargets targets,
+    TrackPropertiesPatch patch)
+  {
+    return executeBoundTrackAuthoringAsync<UpdateTrackPropertiesReply>(
+      std::move(submission),
+      std::move(targets),
+      "Update track properties",
+      [this, patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
+        -> Result<OperationOutcome<UpdateTrackPropertiesReply>>
+      {
+        auto replyRes = applyPropertiesPatchInTransaction(library, transaction, trackIds, patch);
+
+        if (!replyRes)
+        {
+          return std::unexpected{replyRes.error()};
+        }
+
+        auto reply = std::move(*replyRes);
+        auto mutatedIds = std::vector<TrackId>{};
+        mutatedIds.reserve(reply.metadata.changes.size() + reply.tags.changes.size());
+
+        for (auto const& change : reply.metadata.changes)
+        {
+          mutatedIds.push_back(change.trackId);
+        }
+
+        for (auto const& change : reply.tags.changes)
+        {
+          mutatedIds.push_back(change.trackId);
+        }
+
+        if (mutatedIds.empty())
+        {
+          return Unchanged<UpdateTrackPropertiesReply>{.value = std::move(reply)};
+        }
+
+        std::ranges::sort(mutatedIds);
+        auto const uniqueEnd = std::ranges::unique(mutatedIds).begin();
+        mutatedIds.erase(uniqueEnd, mutatedIds.end());
+
+        return Changed<UpdateTrackPropertiesReply>{
           .value = std::move(reply),
           .changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedIds)},
         };

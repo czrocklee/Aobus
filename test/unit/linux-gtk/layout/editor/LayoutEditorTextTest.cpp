@@ -19,6 +19,12 @@ namespace ao::gtk::layout::editor::test
     CHECK(layoutEditorVocabularyText(german, "") == "Keine");
     CHECK(layoutEditorVocabularyText(german, "Third-party Control") == "Third-party Control");
 
+    CHECK(layoutEditorVocabularyText(ao::test::presentationTextCatalog("es-ES"), "Split Pane") == "Panel dividido");
+    CHECK(layoutEditorVocabularyText(ao::test::presentationTextCatalog("fr-FR"), "Split Pane") == "Panneau divisé");
+    CHECK(layoutEditorVocabularyText(ao::test::presentationTextCatalog("ja-JP"), "Split Pane") == "分割ペイン");
+    CHECK(layoutEditorVocabularyText(ao::test::presentationTextCatalog("zh-CN"), "Split Pane") == "分割面板");
+    CHECK(layoutEditorVocabularyText(ao::test::presentationTextCatalog("zh-TW"), "Split Pane") == "分割面板");
+
     auto const pseudo = ao::test::presentationTextCatalog("qps-ploc");
     auto const expanded = layoutEditorVocabularyText(pseudo, "Split Pane");
     CHECK(expanded.starts_with("[!! "));

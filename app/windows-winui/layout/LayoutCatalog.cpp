@@ -319,9 +319,9 @@ namespace ao::winui
 
   LayoutActionCatalog layoutActionCatalog()
   {
-    // Menus, transport commands, and column editing are native behavior of the
-    // component that owns them, so only the ids the two presets actually bind
-    // are registered here.
+    // Menus and column editing remain native behavior of their owning
+    // components. Transport ids are registered below so document action slots
+    // and the shared keymap use the same command inventory.
     auto catalog = LayoutActionCatalog{};
 
     // The transport is named the same way in every shell, so its ids and labels
@@ -412,7 +412,9 @@ namespace ao::winui
 
     if (node.type == componentTypeName(SharedLayoutComponentType::TrackQuickFilter))
     {
-      return ElementKind::AutoSuggestBox;
+      // The editor and create-from-filter command share one authored slot, so
+      // the containing Grid is the component's layout element.
+      return ElementKind::Grid;
     }
 
     if (isAnyOf(node,

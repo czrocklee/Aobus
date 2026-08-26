@@ -13,7 +13,7 @@ You can define a reusable set of tracks with an expression, use a visible tag fo
 
 ## Prerequisites
 
-- Open an indexed music library in GTK.
+- Open an indexed music library in GTK or the Windows desktop.
 - Use a saved List rather than the virtual **All Tracks** row when you want to store an order.
 
 ## Understand the model
@@ -45,17 +45,17 @@ Changing it later may change both membership and the unranked fallback order.
 
 ### Create and fill a Playlist
 
-1. Choose **New Playlist...**.
-2. Enter the Playlist name.
-3. Confirm the separate **Membership Tag** field.
+1. In GTK, choose **New Playlist...**, enter the name, and confirm the separate **Membership Tag** field.
    The name initially suggests the tag, but you can choose another visible tag.
-4. Create the Playlist.
-5. Select tracks, right-click, and choose the Playlist under **Add to Playlist**.
+   In Windows, choose **New List...**, enter one positive tag such as `#road-trip` as the local filter, and choose **Manual Order** as the presentation.
+2. Create the Playlist.
+3. Select tracks, right-click, and choose the Playlist under **Add to Playlist**.
 
 Direct Add/Remove is available only when the complete local filter is one positive tag, such as `#road-trip`.
 A computed expression such as `#road-trip and $year >= 2020` cannot be safely reversed into metadata, so Aobus directs you to edit its expression or track tags instead.
-The **Add to Playlist** submenu lists writable Playlists, summarizes omitted computed Lists once, and offers **Manage Lists...** instead of filling the menu with disabled computed targets.
-When no writable Playlist exists, it offers **Create a Playlist...**.
+The **Add to Playlist** submenu lists writable Playlists by their visible name and tag while commands continue to use stable List identities.
+GTK summarizes omitted computed Lists once and offers **Manage Lists...** instead of filling the menu with disabled computed targets; when no writable Playlist exists, it offers **Create a Playlist...**.
+Windows shows one disabled explanation when no eligible target exists.
 For a nested Playlist, every added track must already belong to the parent List.
 
 Renaming a Playlist does not rename its membership tag.
@@ -75,9 +75,10 @@ If the tag is restored later, the track returns to that position.
 
 1. Choose **Manual Order**, or another custom presentation that is flat, ungrouped, and has no sort fields.
 2. Clear the quick filter for gap dragging or relative movement.
-3. Drag the handle beside a row to a visible gap.
+3. In GTK, drag the handle beside a row to a visible gap.
    When dragging part of a selection, selected tracks retain their current relative order.
-4. Alternatively use the **Manual Order** submenu or these shortcuts:
+   Windows currently has no drag handle.
+4. In either desktop frontend, use the selected-row **Manual Order** submenu or these shortcuts:
 
    | Command | Shortcut |
    |---|---|
@@ -101,8 +102,8 @@ Manual Order is disabled there; create a root List with an empty filter if you n
 
 ### Reset or prune saved positions
 
-- **Reset Order** forgets every saved position and returns the List to filtered parent order.
-- **Forget Hidden Positions** forgets positions only for tracks outside current List membership and keeps the current visible order.
+- **Reset Order** forgets every saved position and returns the List to filtered parent order; both desktop frontends expose it in the Manual Order submenu.
+- **Forget Hidden Positions** forgets positions only for tracks outside current List membership and keeps the current visible order; it is currently exposed by GTK.
 
 Ordinary filter, parent, and tag edits do not automatically prune hidden positions.
 This lets a temporarily excluded track recover its former place.
@@ -113,6 +114,9 @@ Ordinary **Delete List** is rejected when the List has descendants.
 Choose **Delete List and Descendants...** to preview the complete derived subtree and delete it atomically.
 A writable-tag List also offers an unchecked-by-default option to remove its visible tag from affected tracks and warns when other Lists reference that tag.
 Tags used by nested Playlists are kept.
+
+In either desktop frontend, open these commands from the saved List's context menu.
+Deleting the active List returns the view to All Tracks after the committed deletion.
 
 Deleting a List never deletes music files.
 
@@ -127,7 +131,7 @@ Deleting a List never deletes music files.
 
 - **Library is busy**: scanning, import, or identity maintenance temporarily blocks order and membership commits. Wait for maintenance to finish and start the gesture again.
 - **The List changed**: membership, presentation, filter, or library revision changed during the gesture. Retry from the current rows.
-- **No drag handle**: use a saved List, choose a flat unsorted presentation, clear the quick filter, and resolve any expression error.
+- **No drag handle in GTK**: use a saved List, choose a flat unsorted presentation, clear the quick filter, and resolve any expression error. Windows currently uses menu and keyboard movement only.
 - **Playlist missing from Add to Playlist**: its filter is not one directly writable positive tag, or the selected tracks are outside its parent source.
 
 ## Related reference

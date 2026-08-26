@@ -23,7 +23,7 @@ UIModel code under `app/include/ao/uimodel/library/detail/`, `library/property/`
 
 `TrackAuthoringSession` is the UIModel boundary for committing metadata and tag edits and may call the narrow runtime writer supplied by composition.
 It does not open transactions or mutate `MusicLibrary` stores directly.
-Interactive GTK/TUI frontends may render and collect edit intent but cannot call `LibraryWriter` directly, replace the bound targets, or reinterpret patch semantics.
+Interactive GTK, WinUI, and TUI frontends may render and collect edit intent but cannot call `LibraryWriter` directly, replace the bound targets, or reinterpret patch semantics.
 The non-interactive CLI may bind command-selected ids immediately before invoking the runtime writer, as defined by the [CLI execution specification](../cli/execution.md).
 
 ## Terminology
@@ -47,8 +47,10 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 - Built-in metadata can be cleared but not structurally deleted.
 - A tag edit with no selected ids or no additions/removals is a no-op.
 - One open editor owns one `TrackAuthoringSession`; changing selection or recycling a row cannot retarget that session.
+- A WinUI window admits at most one track-properties dialog, and that dialog retains the selection captured when it opened.
 - Any intervening effective library commit, maintenance entry, fault, or runtime replacement invalidates an open session.
 - Missing targets reject the complete metadata/tag command; multi-selection authoring never applies a surviving subset.
+- A Properties save submits its metadata and tag intent as one runtime command; rejection cannot commit only one part.
 - A semantic no-op does not commit and leaves the current session binding usable.
 - File tag readers map only explicitly supported Aobus fields; unknown vendor fields do not become custom metadata.
 
@@ -106,9 +108,16 @@ chooser presentation; eligibility, List identity, tag expression, and the
 submitted membership command are unchanged. Without an interactive ordering
 policy, the UIModel helper retains name-byte order followed by `ListId`.
 
+### Combined Properties save
+
+A form that collects metadata and tags submits one `TrackPropertiesPatch` through its retained authoring session.
+Runtime applies both parts in one write transaction and publishes at most one revision and changeset.
+The form closes only after that command returns `Applied` or `NoOp`; `Busy`, stale/unavailable state, and `Result` errors leave the form open or disabled according to the session state without representing either part as committed.
+
 ## Failure and cancellation
 
 Runtime mutation failure rejects the edit and exposes the recoverable diagnostic to the frontend workflow.
+For a combined Properties save, failure after either part has staged changes aborts the complete write transaction, so reusing the unchanged form draft cannot resubmit an already committed metadata half.
 No partial frontend state is treated as committed merely because an editor closed.
 GTK table inline edits place parsing, operational, stale, and unavailable failures in the table's existing status surface and update the row only after `Applied`.
 GTK detail-grid parsing and submission failures create an error notification and restore the pre-edit display value; the backing library remains unchanged on rejection.
@@ -132,6 +141,12 @@ Editor visibility, expansion, drafts, and delete-undo state are not library data
 A frontend may distinguish no selection, mixed values, partial custom-key presence, empty metadata, and technical unknowns.
 It may choose inline, form, or command interaction while using the same schema, codec, validation, and runtime writer authority.
 
+WinUI presents one native `ContentDialog` for a captured single- or multi-track selection.
+The dialog exposes editable built-in metadata, tags common to every target, custom metadata, and read-only technical properties.
+It opens from the row context menu, an ordinary shell menu, or the window-local `Alt+Enter` accelerator; right-clicking an unselected row selects that row before opening its menu.
+Save is disabled while the draft is unchanged or invalid, remains open across `Busy` and recoverable failures, and closes only after the combined Properties submission is accepted.
+A stale session disables submission and asks the user to reopen the dialog from the current selection.
+
 Custom keys are queryable through the custom-variable syntax in the predicate language; presentation does not reinterpret or restrict that grammar.
 Locale ordering affects only suggestion and chooser position. It never changes
 tag equality, matching, stored tag bytes, or mutation semantics.
@@ -141,10 +156,12 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackDetailProjection.h`](../../../app/include/ao/rt/projection/TrackDetailProjection.h) defines the aggregate snapshot.
 - [`TrackDetailProjection.cpp`](../../../app/runtime/projection/TrackDetailProjection.cpp) builds and observes live snapshots.
 - [`TrackFieldGridSchema.cpp`](../../../app/uimodel/library/detail/TrackFieldGridSchema.cpp) and [`TrackFieldGridPolicy.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGridPolicy.h) own field selection and visibility.
+- [`TrackPropertiesFormModel.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormModel.h) and [`TrackPropertiesFormSpec.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormSpec.h) own compact form state, mixed-value policy, editor kinds, and patch construction.
 - [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, patches, and undo eligibility.
 - [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.
 - [`TrackAuthoringSession.h`](../../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns stable targets, current-binding lifetime, invalidation, and result mapping.
 - [`LibraryWriter.cpp`](../../../app/runtime/library/LibraryWriter.cpp) owns mutation commit.
+- [`TrackPropertiesCoordinator`](../../../app/windows-winui/track/TrackPropertiesCoordinator.h) owns the native dialog and guarded asynchronous workflow; [`TrackPropertiesAdapter`](../../../app/windows-winui/include/ao/winui/track/TrackPropertiesAdapter.h) maps shared form and vocabulary state without WinRT.
 
 ## Test map
 
@@ -154,6 +171,8 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TagEditTest.cpp`](../../../test/unit/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
 - [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, successful binding advancement, and invalidation after another commit.
 - [`LibraryWriterTest.cpp`](../../../test/unit/runtime/library/LibraryWriterTest.cpp) protects committed multi-target behavior.
+- [`LibraryWriterTrackPropertiesTest.cpp`](../../../test/unit/runtime/library/LibraryWriterTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when the later tag stage fails.
+- [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects WinUI control projection, mixed values, edit parsing, command availability, commit-state mapping, and tag/custom-key completion without WinRT.
 
 ## Related documents
 

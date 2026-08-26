@@ -71,10 +71,16 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
+    CHECK_FALSE(runtime.workspace().canGoBack());
+    CHECK_FALSE(runtime.workspace().canGoForward());
     requireNavigation(runtime, fixture.secondListId);
+    CHECK(runtime.workspace().canGoBack());
+    CHECK_FALSE(runtime.workspace().canGoForward());
     requireNavigation(runtime, fixture.thirdListId);
 
     CHECK(runtime.workspace().goBack());
+    CHECK(runtime.workspace().canGoBack());
+    CHECK(runtime.workspace().canGoForward());
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.secondListId);
   }

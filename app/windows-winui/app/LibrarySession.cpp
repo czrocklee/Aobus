@@ -33,7 +33,6 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
@@ -88,12 +87,13 @@ namespace ao::winui
       }
     }
 
-    async::Task<void> runActiveScan(rt::LibraryTaskService* const service,
+    async::Task<void> runActiveScan(async::Runtime* const runtime,
+                                    rt::LibraryTaskService* const service,
                                     PresentLibraryScan present,
                                     std::stop_token const stopToken)
     {
       auto result = co_await uimodel::runLibraryScanWorkflow(service, uimodel::LibraryScanMode::Eager, stopToken);
-      async::throwIfStopRequested(stopToken);
+      co_await runtime->resumeOnCallbackExecutor(stopToken);
       present(std::move(result));
     }
   } // namespace
@@ -103,10 +103,11 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
     uimodel::PresentationTextCatalog textCatalog,
     rt::TextOrderingPolicy const& textOrderingPolicy,
+    rt::CompletionAliasPolicy const& completionAliasPolicy,
     std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
   {
-    auto sessionPtr = std::unique_ptr<LibrarySession>{
-      new LibrarySession{std::move(stateRoot), std::move(dispatcher), std::move(textCatalog), textOrderingPolicy}};
+    auto sessionPtr = std::unique_ptr<LibrarySession>{new LibrarySession{
+      std::move(stateRoot), std::move(dispatcher), std::move(textCatalog), textOrderingPolicy, completionAliasPolicy}};
 
     if (auto initializedRes = sessionPtr->initialize(std::move(optSuccessorRequest)); !initializedRes)
     {
@@ -119,11 +120,13 @@ namespace ao::winui
   LibrarySession::LibrarySession(std::filesystem::path stateRoot,
                                  winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                                  uimodel::PresentationTextCatalog textCatalog,
-                                 rt::TextOrderingPolicy const& textOrderingPolicy)
+                                 rt::TextOrderingPolicy const& textOrderingPolicy,
+                                 rt::CompletionAliasPolicy const& completionAliasPolicy)
     : _stateRoot{std::move(stateRoot)}
     , _dispatcher{std::move(dispatcher)}
     , _textCatalog{std::move(textCatalog)}
     , _textOrderingPolicy{textOrderingPolicy}
+    , _completionAliasPolicy{completionAliasPolicy}
     , _settingsStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-settings.yaml")}
     , _playbackStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-playback.yaml")}
   {
@@ -281,7 +284,8 @@ namespace ao::winui
     // These UI-model owners borrow runtime services. They must disappear while
     // the runtime, stores, and dispatcher are still alive.
     _playbackCommandsPtr.reset();
-    _presentationPreferenceLifecyclePtr.reset();
+    _presentationPreferenceSub.reset();
+    _presentationPreferenceStorePtr.reset();
     _presentationCatalogPtr.reset();
 
     // Stop and join every foreign producer while runtime callback consumers
@@ -316,8 +320,6 @@ namespace ao::winui
 
   rt::TrackPresentationSpec LibrarySession::presentationForList(ListId const listId) const
   {
-    auto preferences = uimodel::ListPresentationPreferenceStore{*_presentationCatalogPtr};
-    preferences.setListPresentations(_presentationPreferences.presentations);
     auto context = uimodel::ListPresentationContext{
       .listId = listId,
       .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
@@ -329,11 +331,11 @@ namespace ao::winui
       {
         context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
         context.listExpression = optNode->expression;
-        return preferences.presentationForList(context);
+        return _presentationPreferenceStorePtr->presentationForList(context);
       }
     }
 
-    return preferences.presentationForList(context);
+    return _presentationPreferenceStorePtr->presentationForList(context);
   }
 
   Result<> LibrarySession::saveSettings()
@@ -442,7 +444,8 @@ namespace ao::winui
                                  .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
                                  .workspaceConfigStorePtr = std::move(workspaceStorePtr),
                                  .playbackSessionConfigStore = _playbackStorePtr.get(),
-                                 .textOrderingPolicy = &_textOrderingPolicy});
+                                 .textOrderingPolicy = &_textOrderingPolicy,
+                                 .completionAliasPolicy = &_completionAliasPolicy});
 
     if (!runtimeRes)
     {
@@ -471,22 +474,24 @@ namespace ao::winui
   void LibrarySession::bindRuntimeServices()
   {
     _playbackCommandsPtr.reset();
-    _presentationPreferenceLifecyclePtr.reset();
+    _presentationPreferenceSub.reset();
+    _presentationPreferenceStorePtr.reset();
     _presentationCatalogPtr.reset();
     _presentationCatalogPtr =
       std::make_unique<uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), _textCatalog);
-    _presentationPreferenceLifecyclePtr = std::make_unique<uimodel::ListPresentationPreferenceLifecycle>(
-      _presentationPreferences.presentations,
-      _runtimePtr->library().changes(),
+    _presentationPreferenceStorePtr = std::make_unique<uimodel::ListPresentationPreferenceStore>(
+      *_presentationCatalogPtr, _runtimePtr->library().changes());
+    _presentationPreferenceStorePtr->setListPresentations(_presentationPreferences.presentations);
+    _presentationPreferenceSub = _presentationPreferenceStorePtr->signalChanged().connect(
       [this](ListId const)
       {
+        _presentationPreferences.presentations = _presentationPreferenceStorePtr->listPresentations();
         auto const savedRes = _settingsStorePtr->save(
           "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{});
 
         if (!savedRes)
         {
-          APP_LOG_WARN(
-            "LibrarySession: failed to persist deleted List preference cleanup: {}", savedRes.error().message);
+          APP_LOG_WARN("LibrarySession: failed to persist presentation preference: {}", savedRes.error().message);
         }
       });
     _playbackCommandsPtr =
@@ -533,10 +538,11 @@ namespace ao::winui
                                           owner->finishActiveScan(std::move(result));
                                         }
                                       }};
+    auto* const runtime = &_runtimePtr->async();
     auto* const service = &_runtimePtr->library().taskService();
     _libraryTask = _runtimePtr->async().spawnCancellable(
-      [service, present = std::move(present)](std::stop_token const stopToken) mutable
-      { return runActiveScan(service, std::move(present), stopToken); });
+      [runtime, service, present = std::move(present)](std::stop_token const stopToken) mutable
+      { return runActiveScan(runtime, service, std::move(present), stopToken); });
   }
 
   void LibrarySession::finishActiveScan(LibraryScanResult result)

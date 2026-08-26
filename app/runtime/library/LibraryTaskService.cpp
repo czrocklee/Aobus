@@ -65,11 +65,13 @@ namespace ao::rt
   {
     Impl(LibraryYamlImportOperation::PreparedImport preparedValue,
          ImportReport reportValue,
+         std::filesystem::path sourcePathValue,
          std::array<std::byte, 16> targetLibraryIdValue,
          std::uint64_t runtimeInstanceIdValue,
          std::uint64_t targetRevisionValue)
       : prepared{std::move(preparedValue)}
       , report{reportValue}
+      , sourcePath{std::move(sourcePathValue)}
       , targetLibraryId{targetLibraryIdValue}
       , runtimeInstanceId{runtimeInstanceIdValue}
       , targetRevision{targetRevisionValue}
@@ -78,6 +80,7 @@ namespace ao::rt
 
     LibraryYamlImportOperation::PreparedImport prepared;
     ImportReport report;
+    std::filesystem::path sourcePath{};
     std::array<std::byte, 16> targetLibraryId{};
     std::uint64_t runtimeInstanceId = 0;
     std::uint64_t targetRevision = 0;
@@ -102,6 +105,12 @@ namespace ao::rt
   {
     using LibraryTaskProgressPublisher =
       compat::MoveOnlyFunction<void(LibraryTaskProgressKind kind, double fraction, std::string subject)>;
+
+    struct LibraryTaskProgressConversation final
+    {
+      LibraryTaskProgressId id = kInvalidLibraryTaskProgressId;
+      LibraryTaskProgressPublisher publish{};
+    };
 
     LibraryTaskProgressKind scanApplyProgressKind(ScanApplyProgress const& progress)
     {
@@ -394,7 +403,7 @@ namespace ao::rt
   {
     struct Signals final
     {
-      async::Signal<> progressFinished;
+      async::Signal<LibraryTaskProgressFinished const&> progressFinished;
       async::Signal<LibraryTaskProgressUpdated const&> progress;
     };
 
@@ -500,77 +509,86 @@ namespace ao::rt
       return materializeResource(context, stopToken);
     }
 
-    LibraryTaskProgressPublisher makeProgressPublisher()
+    LibraryTaskProgressConversation makeProgressConversation()
     {
+      auto const id = LibraryTaskProgressId{nextProgressId.fetch_add(1, std::memory_order_relaxed)};
       auto statePtr = std::make_shared<ProgressDeliveryState>(asyncRuntime.callbackExecutor(), signalsPtr);
 
-      return [statePtr](LibraryTaskProgressKind kind, double fraction, std::string subject)
-      {
-        bool scheduleDelivery = false;
-
+      return {
+        .id = id,
+        .publish =
+          [statePtr, id](LibraryTaskProgressKind kind, double fraction, std::string subject)
         {
-          auto const lock = std::scoped_lock{statePtr->mutex};
-          auto event = LibraryTaskProgressUpdated{
-            .kind = kind,
-            .fraction = fraction,
-            .subject = std::move(subject),
-          };
+          bool scheduleDelivery = false;
 
-          if (!statePtr->pendingEvents.empty() && statePtr->pendingEvents.back().kind == kind)
-          {
-            statePtr->pendingEvents.back() = std::move(event);
-          }
-          else
-          {
-            statePtr->pendingEvents.push_back(std::move(event));
-          }
-
-          scheduleDelivery = !statePtr->deliveryPending;
-          statePtr->deliveryPending = true;
-        }
-
-        if (!scheduleDelivery)
-        {
-          return;
-        }
-
-        try
-        {
-          statePtr->executorRaw->dispatch(
-            [statePtr]
-            {
-              auto events = std::vector<LibraryTaskProgressUpdated>{};
-
-              {
-                auto const lock = std::scoped_lock{statePtr->mutex};
-                events = std::move(statePtr->pendingEvents);
-                statePtr->pendingEvents.clear();
-                statePtr->deliveryPending = false;
-              }
-
-              if (auto const signalsPtr = statePtr->weakSignalsPtr.lock(); signalsPtr != nullptr)
-              {
-                for (auto const& event : events)
-                {
-                  signalsPtr->progress.emit(event);
-                }
-              }
-            });
-        }
-        catch (...)
-        {
           {
             auto const lock = std::scoped_lock{statePtr->mutex};
-            statePtr->pendingEvents.clear();
-            statePtr->deliveryPending = false;
+            auto event = LibraryTaskProgressUpdated{
+              .id = id,
+              .kind = kind,
+              .fraction = fraction,
+              .subject = std::move(subject),
+            };
+
+            if (!statePtr->pendingEvents.empty() && statePtr->pendingEvents.back().kind == kind)
+            {
+              statePtr->pendingEvents.back() = std::move(event);
+            }
+            else
+            {
+              statePtr->pendingEvents.push_back(std::move(event));
+            }
+
+            scheduleDelivery = !statePtr->deliveryPending;
+            statePtr->deliveryPending = true;
           }
 
-          throw;
-        }
+          if (!scheduleDelivery)
+          {
+            return;
+          }
+
+          try
+          {
+            statePtr->executorRaw->dispatch(
+              [statePtr]
+              {
+                auto events = std::vector<LibraryTaskProgressUpdated>{};
+
+                {
+                  auto const lock = std::scoped_lock{statePtr->mutex};
+                  events = std::move(statePtr->pendingEvents);
+                  statePtr->pendingEvents.clear();
+                  statePtr->deliveryPending = false;
+                }
+
+                if (auto const signalsPtr = statePtr->weakSignalsPtr.lock(); signalsPtr != nullptr)
+                {
+                  for (auto const& event : events)
+                  {
+                    signalsPtr->progress.emit(event);
+                  }
+                }
+              });
+          }
+          catch (...)
+          {
+            {
+              auto const lock = std::scoped_lock{statePtr->mutex};
+              statePtr->pendingEvents.clear();
+              statePtr->deliveryPending = false;
+            }
+
+            throw;
+          }
+        },
       };
     }
 
-    void notifyProgressFinished() const noexcept { signalsPtr->progressFinished.emit(); }
+    void notifyProgressFinished(LibraryTaskProgressId const id) const noexcept
+    {
+      signalsPtr->progressFinished.emit(LibraryTaskProgressFinished{.id = id});
+    }
 
     async::Task<void> resumeOnCallbackExecutorForFinalization()
     {
@@ -597,6 +615,7 @@ namespace ao::rt
     LibraryMutationService& mutationService;
     ResourceDiskCache diskCache;
     std::shared_ptr<Signals> signalsPtr = std::make_shared<Signals>();
+    std::atomic<std::uint64_t> nextProgressId{1};
 
     /// An immutable snapshot makes its contents safe to share; the slot holding
     /// it is a separate object and needs its own rule, so it is atomic. A request
@@ -617,7 +636,8 @@ namespace ao::rt
 
   LibraryTaskService::~LibraryTaskService() = default;
 
-  async::Subscription LibraryTaskService::onProgressFinished(compat::MoveOnlyFunction<void()> handler) const
+  async::Subscription LibraryTaskService::onProgressFinished(
+    compat::MoveOnlyFunction<void(LibraryTaskProgressFinished const&)> handler) const
   {
     return _implPtr->signalsPtr->progressFinished.connect(std::move(handler));
   }
@@ -656,11 +676,14 @@ namespace ao::rt
                                                                                        std::stop_token const stopToken)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    auto progressConversation = _implPtr->makeProgressConversation();
+    progressConversation.publish(LibraryTaskProgressKind::PreparingImport, 0.0, utility::pathToUtf8(path.filename()));
     auto backgroundTaskRes =
       _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::Import);
 
     if (!backgroundTaskRes)
     {
+      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{backgroundTaskRes.error()};
     }
 
@@ -671,6 +694,8 @@ namespace ao::rt
     if (!maintenanceRes)
     {
       co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+      backgroundTask.finish();
+      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{maintenanceRes.error()};
     }
 
@@ -725,7 +750,7 @@ namespace ao::rt
             auto report = std::move(*reportRes);
             mutation.abort();
             optRes.emplace(LibraryImportPlan{std::make_unique<LibraryImportPlan::Impl>(
-              std::move(*preparedRes), report, targetLibraryId, availability.runtimeInstanceId, targetRevision)});
+              std::move(*preparedRes), report, path, targetLibraryId, availability.runtimeInstanceId, targetRevision)});
           }
         }
       }
@@ -747,6 +772,7 @@ namespace ao::rt
     co_await _implPtr->resumeOnCallbackExecutorForFinalization();
 
     backgroundTask.finish();
+    _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (workFailure)
     {
@@ -774,12 +800,16 @@ namespace ao::rt
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
     AO_EXPECTS(plan._implPtr, "Import plan has already been consumed");
+    auto progressConversation = _implPtr->makeProgressConversation();
+    progressConversation.publish(
+      LibraryTaskProgressKind::Importing, 0.0, utility::pathToUtf8(plan._implPtr->sourcePath.filename()));
 
     auto backgroundTaskRes =
       _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::Import);
 
     if (!backgroundTaskRes)
     {
+      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{backgroundTaskRes.error()};
     }
 
@@ -790,6 +820,8 @@ namespace ao::rt
     if (!maintenanceRes)
     {
       co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+      backgroundTask.finish();
+      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{maintenanceRes.error()};
     }
 
@@ -896,6 +928,7 @@ namespace ao::rt
     co_await _implPtr->resumeOnCallbackExecutorForFinalization();
 
     backgroundTask.finish();
+    _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (workFailure)
     {
@@ -915,13 +948,16 @@ namespace ao::rt
                                                                rt::ExportMode mode,
                                                                std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("LibraryExport");
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    auto progressConversation = _implPtr->makeProgressConversation();
+    progressConversation.publish(LibraryTaskProgressKind::Exporting, 0.0, utility::pathToUtf8(path.filename()));
     auto result = Result<>{};
     auto deferredFailure = std::exception_ptr{};
 
     try
     {
+      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      setCurrentThreadName("LibraryExport");
       // Export only opens a read transaction; the LMDB snapshot is consistent
       // on its own, so it does not serialize against in-flight mutations.
       auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
@@ -936,6 +972,7 @@ namespace ao::rt
     // continuation back on the callback executor rather than throwing here, on a
     // worker.
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (deferredFailure)
     {
@@ -953,6 +990,7 @@ namespace ao::rt
   async::Task<Result<ScanPlan>> LibraryTaskService::buildScanPlanAsync(std::stop_token const stopToken)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    auto progressConversation = _implPtr->makeProgressConversation();
     auto optPlanRes = std::optional<Result<ScanPlan>>{};
     auto deferredFailure = std::exception_ptr{};
 
@@ -965,9 +1003,8 @@ namespace ao::rt
       // consistent on its own, and holding the mutation mutex here would not
       // keep the plan fresh anyway (the lock is released before apply).
       auto scanService = LibraryScan{_implPtr->library};
-      auto publishProgress = _implPtr->makeProgressPublisher();
       optPlanRes.emplace(scanService.buildPlan(
-        [publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
+        [publishProgress = std::move(progressConversation.publish)](std::filesystem::path const& path) mutable
         { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, utility::pathToUtf8(path.filename())); },
         stopToken));
     }
@@ -977,7 +1014,7 @@ namespace ao::rt
     }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
-    _implPtr->notifyProgressFinished();
+    _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (deferredFailure)
     {
@@ -1000,12 +1037,13 @@ namespace ao::rt
                                                                               ScanFailureCallback failureCallback)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    auto progressConversation = _implPtr->makeProgressConversation();
     auto backgroundTaskRes =
       _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
 
     if (!backgroundTaskRes)
     {
-      _implPtr->notifyProgressFinished();
+      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{backgroundTaskRes.error()};
     }
 
@@ -1020,7 +1058,7 @@ namespace ao::rt
       co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
       setCurrentThreadName("ApplyScanPlan");
       auto progress =
-        makeScanProgressReporter(totalItems, _implPtr->makeProgressPublisher(), std::move(progressCallback));
+        makeScanProgressReporter(totalItems, std::move(progressConversation.publish), std::move(progressCallback));
       auto failure = makeScanFailureReporter(std::move(failureCallback));
 
       coordinatedScanRes = co_await applyCoordinatedScan(std::move(submission),
@@ -1040,7 +1078,7 @@ namespace ao::rt
     co_await _implPtr->resumeOnCallbackExecutorForFinalization();
 
     backgroundTask.finish();
-    _implPtr->notifyProgressFinished();
+    _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (deferredFailure)
     {
@@ -1072,12 +1110,13 @@ namespace ao::rt
     AudioIdentityIndexFailureCallback failureCallback)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    auto progressConversation = _implPtr->makeProgressConversation();
     auto backgroundTaskRes =
       _implPtr->mutationService.beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::AudioIdentityBackfill);
 
     if (!backgroundTaskRes)
     {
-      _implPtr->notifyProgressFinished();
+      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{backgroundTaskRes.error()};
     }
 
@@ -1091,7 +1130,8 @@ namespace ao::rt
       co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
       setCurrentThreadName("AudioBackfill");
       auto commitBatch = makeAudioIdentityCommitBatch(std::move(submission), backgroundTask);
-      auto progress = makeAudioIdentityProgressReporter(_implPtr->makeProgressPublisher(), std::move(progressCallback));
+      auto progress =
+        makeAudioIdentityProgressReporter(std::move(progressConversation.publish), std::move(progressCallback));
       auto failure = makeAudioIdentityFailureReporter(std::move(failureCallback));
 
       // Fingerprinting runs without mutationService writer ownership; each
@@ -1108,7 +1148,7 @@ namespace ao::rt
     co_await _implPtr->resumeOnCallbackExecutorForFinalization();
 
     backgroundTask.finish();
-    _implPtr->notifyProgressFinished();
+    _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (deferredFailure)
     {

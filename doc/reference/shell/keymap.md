@@ -35,8 +35,8 @@ Parsing accepts case-insensitive aliases:
 |---|---|
 | `Ctrl` | `Ctrl`, `Control`, `Primary` |
 | `Shift` | `Shift` |
-| `Alt` | `Alt` |
-| `Super` | `Super`, `Meta`, `Cmd`, `Win` |
+| `Alt` | `Alt`, `Option` |
+| `Super` | `Super`, `Meta`, `Cmd`, `Win`, `Windows` |
 
 Single ASCII letters canonicalize to uppercase.
 Digits and punctuation are stored verbatim.
@@ -71,8 +71,8 @@ Other actions have no shipped global shortcut.
 |---|---|---|
 | `playback.*` transport, keyboard chords | installed | installed |
 | `playback.*` transport, media chords | installed | system media controls |
-| `workspace.revealCurrentTrack` | installed | no handler |
-| `track.orderMove*` | installed | no handler |
+| `workspace.revealCurrentTrack` | installed | installed |
+| `track.orderMove*` | installed | installed |
 
 The Windows shell installs an accelerator only when it has a handler for the action, the action does not present from an anchor, the chord is not a media key, and Windows has a key for the chord; anything else is skipped and logged rather than installed dead.
 
@@ -138,6 +138,7 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`PlaybackCommand.h`](../../../app/include/ao/uimodel/playback/command/PlaybackCommand.h) owns the transport action ids every shell registers.
 - [`GtkAccelTranslator.h`](../../../app/linux-gtk/app/GtkAccelTranslator.h) owns the GDK edge, and [`KeyChordAccelerator.h`](../../../app/windows-winui/include/ao/winui/input/KeyChordAccelerator.h) the Windows one.
 - [`KeymapAcceleratorPlan.h`](../../../app/windows-winui/include/ao/winui/input/KeymapAcceleratorPlan.h) owns which bindings the Windows shell installs.
+- WinUI [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers reveal and saved-order handlers directly in the live action registry; those native component commands remain outside the Windows layout-action catalog.
 
 ## Test authority
 
@@ -145,7 +146,7 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp) protects defaults and override/delta values.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects serialized shape, dynamic action ids, malformed-candidate rejection, and invalid-chord semantic handling.
 - [`GtkAccelTranslatorTest.cpp`](../../../test/unit/linux-gtk/app/GtkAccelTranslatorTest.cpp) protects the GDK edge.
-- [`KeyChordAcceleratorTest.cpp`](../../../test/unit/winui/input/KeyChordAcceleratorTest.cpp) protects the Windows key table, and [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) the skip rules. Both run on every host.
+- [`KeyChordAcceleratorTest.cpp`](../../../test/unit/winui/input/KeyChordAcceleratorTest.cpp) protects the Windows key table, and [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) the skip rules plus the shipped native-only reveal and saved-order actions. Both run on every host.
 
 ## Related documents
 

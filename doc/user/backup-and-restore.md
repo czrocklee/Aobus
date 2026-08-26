@@ -18,7 +18,7 @@ It does not copy the audio files themselves, and it never contains a cover image
 Back up the music files separately and preserve their paths relative to the music root; without them, a restored library keeps its cover references but may have no picture to show.
 
 `restore` replaces the payload-selected target scope; `merge` preserves target entities absent from the payload and adds imported lists as new lists.
-GTK prepares a restore preview and requires confirmation before changing the library.
+GTK and the Windows desktop prepare a restore preview and require confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
 Only version 5 YAML is accepted.
@@ -31,10 +31,10 @@ Symlinks whose existing targets remain inside that root are supported, while dan
 
 ### Create a backup
 
-1. In GTK, choose **File → Export Library Data...**.
+1. In GTK, choose **File → Export Library Data...**. On Windows, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode.
 2. Choose the payload you need:
    **Full** includes curated metadata, technical and manifest facts, cover references, and lists; **Metadata** omits technical statistics and cover references; **Delta** records edits relative to readable files; **List Only** contains lists without track records.
-3. Choose a `.yaml` file and wait for **Library exported successfully**.
+3. Choose a `.yaml` file and wait for **Library exported successfully**. On Windows, Modern's activity surface names the file while export is running; switching to Classic leaves the transfer running and its status bar reports completion.
 
 The CLI equivalent for a complete library-data backup is:
 
@@ -67,8 +67,9 @@ For an additive import that preserves target tracks and lists outside the payloa
 aobus -C /target lib import /backup/library.yaml --mode merge
 ```
 
-GTK **File → Import Library Data...** parses and previews the selected file, displays its scope and counts, and applies the bound plan only after **Restore Library** or **Restore Lists** is selected.
-Canceling the dialog leaves the target unchanged.
+GTK **File → Import Library Data...** and Windows **More/File → Import Library Data...** both use the same prepared-plan contract.
+Choose **Merge** to preserve records outside the backup and apply the prepared plan, or **Restore** to preview its scope and counts before explicitly selecting **Restore Library** or **Restore Lists**.
+Windows defaults to Merge; canceling its mode dialog or picker, or rejecting its restore preview, leaves the target unchanged.
 
 ## Verify the result
 

@@ -26,6 +26,7 @@ namespace ao::uimodel
 {
   using TrackMetadataSubmitResult = rt::AuthoringResult<rt::UpdateTrackMetadataReply>;
   using TrackTagSubmitResult = rt::AuthoringResult<rt::EditTrackTagsReply>;
+  using TrackPropertiesSubmitResult = rt::AuthoringResult<rt::UpdateTrackPropertiesReply>;
 
   /**
    * Platform-neutral lifetime for one stable set of authoring targets.
@@ -54,6 +55,7 @@ namespace ao::uimodel
     async::Task<Result<TrackMetadataSubmitResult>> submitMetadata(rt::MetadataPatch patch);
     async::Task<Result<TrackTagSubmitResult>> submitTags(std::vector<std::string> tagsToAdd,
                                                          std::vector<std::string> tagsToRemove);
+    async::Task<Result<TrackPropertiesSubmitResult>> submitProperties(rt::TrackPropertiesPatch patch);
 
   private:
     struct Impl;

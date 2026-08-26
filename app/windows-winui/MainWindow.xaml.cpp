@@ -8,12 +8,15 @@
 // The window's own destructor destroys the group-cover presenters it retains.
 #include "image/CoverArtPresenter.h" // NOLINT(misc-include-cleaner)
 #include "layout/ShellBuilder.h"
+#include "library/LibraryTransferCoordinator.h"
+#include "list/ListAuthoringCoordinator.h"
 #include "pch.h"
 // MainWindow's out-of-line destructor destroys the retained SMTC bridge.
 #include "platform/SmtcBridge.h" // NOLINT(misc-include-cleaner)
 #include "platform/StringResources.h"
 #include "playback/OutputDeviceControl.h"
 #include "theme/ThemeCoordinator.h"
+#include "track/TrackPropertiesCoordinator.h"
 
 #if __has_include("MainWindow.g.cpp")
 #include "MainWindow.g.cpp"
@@ -21,12 +24,17 @@
 
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
 // MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/WinUiErrorBoundary.h>
+#include <ao/winui/WindowInteractionPolicy.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Input.h>
 #include <winrt/Microsoft.UI.Windowing.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -115,6 +123,64 @@ namespace winrt::Aobus::implementation
     _resourceBytes = &_coordinatorPtr->resourceBytes();
     _themePtr = &_coordinatorPtr->theme();
 
+    auto& runtime = session.runtime();
+    _listAuthoringCoordinatorPtr =
+      std::make_unique<ao::winui::ListAuthoringCoordinator>(ao::winui::ListAuthoringCoordinatorConfig{
+        .xamlRoot =
+          [weak]
+        {
+          if (auto self = weak.get(); self)
+          {
+            return self->RootGrid().XamlRoot();
+          }
+
+          return Microsoft::UI::Xaml::XamlRoot{nullptr};
+        },
+        .asyncRuntime = runtime.async(),
+        .library = runtime.library(),
+        .views = runtime.views(),
+        .sources = runtime.sources(),
+        .trackList = *_trackListPtr,
+        .presentationCatalog = session.presentationCatalog(),
+        .presentationPreferences = session.presentationPreferenceStore(),
+        .textOrderingPolicy = runtime.textOrderingPolicy(),
+        .textCatalog = session.textCatalog(),
+        .reportStatus =
+          [weak](std::string status)
+        {
+          if (auto self = weak.get(); self)
+          {
+            self->updateStatus(status);
+          }
+        },
+      });
+    _libraryTransferCoordinatorPtr =
+      std::make_unique<ao::winui::LibraryTransferCoordinator>(ao::winui::LibraryTransferCoordinatorConfig{
+        .xamlRoot =
+          [weak]
+        {
+          if (auto self = weak.get(); self)
+          {
+            return self->RootGrid().XamlRoot();
+          }
+
+          return Microsoft::UI::Xaml::XamlRoot{nullptr};
+        },
+        .windowId = AppWindow().Id(),
+        .asyncRuntime = runtime.async(),
+        .taskService = runtime.library().taskService(),
+        .notifications = runtime.notifications(),
+        .textCatalog = session.textCatalog(),
+        .reportStatus =
+          [weak](std::string status)
+        {
+          if (auto self = weak.get(); self)
+          {
+            self->updateStatus(std::move(status));
+          }
+        },
+      });
+
     if (auto themeRes = _themePtr->reload(); themeRes)
     {
       applyTheme(*themeRes);
@@ -150,6 +216,68 @@ namespace winrt::Aobus::implementation
       return ao::makeError(
         ao::Error::Code::InitFailed,
         std::format("Failed to activate WinUI playback adapters: {}", winrt::to_string(error.message())));
+    }
+  }
+
+  bool MainWindow::modalWorkflowActive() const noexcept
+  {
+    return ao::winui::hasActiveWindowModalWorkflow(ao::winui::WindowModalWorkflowState{
+      .listAuthoring = _listAuthoringCoordinatorPtr && _listAuthoringCoordinatorPtr->dialogActive(),
+      .libraryTransfer = _libraryTransferCoordinatorPtr && _libraryTransferCoordinatorPtr->active(),
+      .trackProperties = _trackPropertiesCoordinatorPtr && _trackPropertiesCoordinatorPtr->active(),
+    });
+  }
+
+  void MainWindow::navigateHistory(bool const forward)
+  {
+    if (_session == nullptr || modalWorkflowActive())
+    {
+      return;
+    }
+
+    auto& workspace = _session->runtime().workspace();
+
+    if ((forward && !workspace.canGoForward()) || (!forward && !workspace.canGoBack()))
+    {
+      return;
+    }
+
+    auto const navigatedRes = forward ? workspace.goForward() : workspace.goBack();
+
+    if (!navigatedRes)
+    {
+      updateStatus(ao::winui::formatResource("winui_navigation_failed", navigatedRes.error().message));
+    }
+  }
+
+  void MainWindow::OnNavigateBackInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
+                                         Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
+  {
+    navigateHistory(false);
+    args.Handled(true);
+  }
+
+  void MainWindow::OnNavigateForwardInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
+                                            Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
+  {
+    navigateHistory(true);
+    args.Handled(true);
+  }
+
+  void MainWindow::OnRootPointerPressed(Windows::Foundation::IInspectable const& /*sender*/,
+                                        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+  {
+    auto const kind = args.GetCurrentPoint(RootGrid()).Properties().PointerUpdateKind();
+
+    if (kind == Microsoft::UI::Input::PointerUpdateKind::XButton1Pressed)
+    {
+      navigateHistory(false);
+      args.Handled(true);
+    }
+    else if (kind == Microsoft::UI::Input::PointerUpdateKind::XButton2Pressed)
+    {
+      navigateHistory(true);
+      args.Handled(true);
     }
   }
 
@@ -204,12 +332,16 @@ namespace winrt::Aobus::implementation
             }
           },
           .rescanLibrary = command(&MainWindow::rescanLibrary),
+          .importLibrary = command(&MainWindow::importLibrary),
+          .exportLibrary = command(&MainWindow::exportLibrary),
           .toggleInspector = command(&MainWindow::toggleInspector),
           .toggleShellMode = command(&MainWindow::toggleShellMode),
           .chooseColumns = command(&MainWindow::showColumnsMenu),
           .reloadTheme = command(&MainWindow::reloadTheme),
           .playPause = command(&MainWindow::playPause),
           .stop = command(&MainWindow::stopPlayback),
+          .revealCurrentTrack = command(&MainWindow::revealCurrentTrack),
+          .presentTrackProperties = command(&MainWindow::presentTrackProperties),
           .showSoul = command(&MainWindow::showFullscreenSoul),
           .showSystemMenu = command(&MainWindow::showSystemMenu),
           .showOutputDeviceSelector =
@@ -218,6 +350,74 @@ namespace winrt::Aobus::implementation
             if (auto self = weak.get(); self)
             {
               self->showOutputDeviceSelector(anchor);
+            }
+          },
+        },
+        .listCommands = {
+          .createList =
+            [weak](ao::ListId const parentListId, std::string expression)
+          {
+            if (auto self = weak.get();
+                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+            {
+              self->_listAuthoringCoordinatorPtr->createList(parentListId, std::move(expression));
+            }
+          },
+          .editList =
+            [weak](ao::ListId const listId)
+          {
+            if (auto self = weak.get();
+                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+            {
+              self->_listAuthoringCoordinatorPtr->editList(listId);
+            }
+          },
+          .deleteList =
+            [weak](ao::ListId const listId, bool const includeDescendants)
+          {
+            if (auto self = weak.get();
+                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+            {
+              self->_listAuthoringCoordinatorPtr->deleteList(listId, includeDescendants);
+            }
+          },
+          .membershipTargets =
+            [weak]
+          {
+            if (auto self = weak.get(); self && self->_listAuthoringCoordinatorPtr)
+            {
+              return self->_listAuthoringCoordinatorPtr->membershipTargets();
+            }
+
+            return std::vector<ao::uimodel::WritableTagListTarget>{};
+          },
+          .editMembership =
+            [weak](ao::ListId const listId, bool const add)
+          {
+            if (auto self = weak.get();
+                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+            {
+              self->_listAuthoringCoordinatorPtr->editMembership(listId, add);
+            }
+          },
+          .orderCapabilities =
+            [weak]
+          {
+            if (auto self = weak.get();
+                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+            {
+              return self->_listAuthoringCoordinatorPtr->orderCapabilities();
+            }
+
+            return ao::uimodel::ListOrderCapabilityState{};
+          },
+          .applyOrder =
+            [weak](ao::winui::ListOrderCommand const commandValue)
+          {
+            if (auto self = weak.get();
+                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+            {
+              self->_listAuthoringCoordinatorPtr->applyOrder(commandValue);
             }
           },
         },
@@ -241,11 +441,17 @@ namespace winrt::Aobus::implementation
     _appWindowChangedSub.reset();
     clearGroupCoverPresenters();
 
+    // Cancel authoring and close its transient native tree before releasing
+    // either the shell selection that opened it or the runtime it submits to.
+    _trackPropertiesCoordinatorPtr.reset();
+
     // Generation callbacks and all generation-owned runtime borrowers go away
     // before the coordinator/resource loader is released. Releasing the owner
     // is the retirement: each destructor runs its own quiescence, so the order
     // of these resets is the whole contract.
     _shellBuilderPtr.reset();
+    _libraryTransferCoordinatorPtr.reset();
+    _listAuthoringCoordinatorPtr.reset();
 
     // SMTC and fullscreen playback adapters must stop observing the runtime
     // before the coordinator releases its resource and track services.

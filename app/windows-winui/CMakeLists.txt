@@ -53,6 +53,14 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   input/SystemCharacterKey.h
   include/ao/winui/input/KeyChordAccelerator.h
   include/ao/winui/input/KeymapAcceleratorPlan.h
+  library/LibraryTransferAdapter.cpp
+  library/LibraryTransferCoordinator.cpp
+  library/LibraryTransferCoordinator.h
+  include/ao/winui/library/LibraryTransferAdapter.h
+  list/ListAuthoringAdapter.cpp
+  list/ListAuthoringCoordinator.cpp
+  list/ListAuthoringCoordinator.h
+  include/ao/winui/list/ListAuthoringAdapter.h
   layout/ElementKind.cpp
   layout/LayoutCatalog.cpp
   layout/LayoutDialect.cpp
@@ -113,6 +121,7 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   platform/StringResources.h
   platform/WinUiErrorBoundary.cpp
   include/ao/winui/WinUiErrorBoundary.h
+  include/ao/winui/WindowInteractionPolicy.h
   playback/AobusSoulControl.cpp
   playback/AobusSoulControl.h
   playback/AudioPipelineToolTip.cpp
@@ -145,10 +154,18 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   track/TrackDetailControl.h
   track/TrackItemView.cpp
   track/TrackItemView.h
+  track/QuickFilterCompletionAdapter.cpp
+  include/ao/winui/track/QuickFilterCompletionAdapter.h
   track/TrackListController.cpp
   track/TrackListController.h
+  track/TrackPropertiesAdapter.cpp
+  include/ao/winui/track/TrackPropertiesAdapter.h
+  track/TrackPropertiesCoordinator.cpp
+  track/TrackPropertiesCoordinator.h
   track/TrackQuickFilterControl.cpp
   track/TrackQuickFilterControl.h
+  track/TrackRevealAdapter.cpp
+  include/ao/winui/track/TrackRevealAdapter.h
   track/TrackRowItem.cpp
   track/TrackRowItem.h
   MainWindow.xaml
@@ -182,8 +199,10 @@ target_link_libraries(aobus-winui-lib
     ao_windows_platform
     PkgRapidYaml
   PRIVATE
+    ao_app_i18n_completion
     ao_app_i18n_ordering
     ao_app_i18n
+    ao_unicode_text
     runtimeobject.lib
     shell32.lib)
 add_dependencies(aobus-winui-lib

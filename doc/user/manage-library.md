@@ -22,6 +22,14 @@ Your library reflects the supported audio files beneath its root, and frequently
 A scan adds new supported files, refreshes technical properties for changed files, reconnects recognized moves when identity is available, and marks unmatched manifest rows as missing.
 Curated library metadata remains authoritative after initial import; rescanning a changed file does not replace those edits with file tags.
 
+### Reconcile files from the Windows desktop
+
+1. Open the intended root with **Open Library...**.
+2. Choose **Rescan** after files beneath that root change.
+3. Follow progress in the activity surface in Modern mode or the status bar in Classic mode.
+
+Windows runs the same transactional reconciliation as GTK. A failed scan keeps the active root open so **Rescan** can retry it, and another **Rescan** while one is active starts no duplicate work.
+
 ### Preview and apply a scan from the CLI
 
 1. Inspect the plan without changing the library:
@@ -37,12 +45,15 @@ Curated library metadata remains authoritative after initial import; rescanning 
    aobus -C /music scan
    ```
 
-### Filter and save a List in GTK
+### Filter and save a List on the desktop
 
-1. Enter words in the quick-filter field for a broad search, or enter a query expression for exact matching.
+1. In GTK or the Windows desktop, enter words in the quick-filter field for a broad search, or enter a query expression for exact matching.
 2. Check that the visible rows are the intended result.
-3. Use **Create List from current filter**, or right-click a source row and choose **New List...**.
+3. Use **Create List from current filter**, or right-click All Tracks or a saved source List and choose **New List...**.
 4. Give the list a name, adjust its filter or presentation, review the preview, and choose **Create**.
+
+The create action appears only while the current resolved expression is non-empty and valid.
+When the source is a saved List, the new List is derived from that parent; creating from All Tracks makes a root List.
 
 Saved Lists keep a predicate rather than a copied membership list, so their results follow later library mutations.
 They may also retain an independent manual rank; see [Organize music with Lists and Playlists](organize-with-lists.md).

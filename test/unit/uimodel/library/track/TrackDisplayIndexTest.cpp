@@ -46,6 +46,11 @@ namespace ao::uimodel::test
                                .groupIndex = 1,
                              });
     CHECK_FALSE(index.itemAt(7));
+    CHECK(index.displayIndexOfSourceRow(0) == 1);
+    CHECK(index.displayIndexOfSourceRow(1) == 2);
+    CHECK(index.displayIndexOfSourceRow(2) == 4);
+    CHECK(index.displayIndexOfSourceRow(4) == 6);
+    CHECK_FALSE(index.displayIndexOfSourceRow(5));
   }
 
   TEST_CASE("TrackDisplayIndex - rejects malformed sections without replacing the valid mapping",
@@ -64,5 +69,8 @@ namespace ao::uimodel::test
                                .sourceIndex = 1,
                                .groupIndex = 0,
                              });
+    CHECK(index.displayIndexOfSourceRow(0) == 0);
+    CHECK(index.displayIndexOfSourceRow(1) == 1);
+    CHECK_FALSE(index.displayIndexOfSourceRow(2));
   }
 } // namespace ao::uimodel::test

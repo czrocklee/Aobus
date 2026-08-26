@@ -116,6 +116,9 @@ root:table {
     library_task_updating { "Updating" }
     library_task_fingerprinting { "Fingerprinting" }
     library_task_indexing_audio_identity { "Indexing audio identity" }
+    library_task_preparing_import { "Preparing import" }
+    library_task_importing { "Importing" }
+    library_task_exporting { "Exporting" }
     library_task_progress_detail { "{hasSubject, select, yes {{activity}: {subject}} other {{activity}}}" }
     library_task_scanning_compact { "Scanning library" }
     library_task_updating_compact { "Updating library" }
@@ -282,7 +285,7 @@ root:table {
     gtk_library_select_export_mode { "Select Export Mode" }
     gtk_library_choose_backup_contents { "Choose what to include in the backup:" }
     gtk_library_export_mode_delta { "Delta (Sync user edits, Tags, Lists)" }
-    gtk_library_export_mode_metadata { "Metadata (Curated text + Cover Art, no technical stats)" }
+    gtk_library_export_mode_metadata { "Metadata (Curated text, Tags, Lists)" }
     gtk_library_export_mode_full { "Full (Disaster Recovery: Everything)" }
     gtk_library_export_mode_list_only { "List Only (Sync playlists without touching tracks)" }
     gtk_library_include { "Include" }
@@ -492,6 +495,32 @@ root:table {
     winui_shell_open_library { "Open Library..." }
     winui_shell_rescan { "Rescan" }
     winui_shell_rescan_library { "Rescan Library" }
+    winui_shell_import_library_data { "Import Library Data..." }
+    winui_shell_export_library_data { "Export Library Data..." }
+    winui_library_select_export_mode { "Select Export Mode" }
+    winui_library_choose_backup_contents { "Choose what to include in the backup:" }
+    winui_library_include { "Include" }
+    winui_library_export_mode_delta { "Delta (Sync user edits, Tags, Lists)" }
+    winui_library_export_mode_metadata { "Metadata (Curated text, Tags, Lists)" }
+    winui_library_export_mode_full { "Full (Disaster Recovery: Everything)" }
+    winui_library_export_mode_list_only { "List Only (Sync playlists without touching tracks)" }
+    winui_library_select_import_mode { "Select Import Mode" }
+    winui_library_choose_import_mode { "Merge this backup into the library, or restore its scope:" }
+    winui_library_import_mode_merge { "Merge (keep records outside the backup)" }
+    winui_library_import_mode_restore { "Restore (replace the backup scope after preview)" }
+    winui_library_next { "Next" }
+    winui_library_export_yaml { "Export Library to YAML" }
+    winui_library_import_yaml { "Import Library from YAML" }
+    winui_library_yaml_files { "YAML files" }
+    winui_library_confirm_restore { "Confirm Restore" }
+    winui_library_restore_library { "Restore Library" }
+    winui_library_restore_lists { "Restore Lists" }
+    winui_library_restore_scope_library { "library" }
+    winui_library_restore_scope_lists { "Lists" }
+    winui_library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; {listsCreated} lists created, {listsDeleted} deleted; {dangling} dangling references ignored.\n\nContinue only if this matches the selected backup." }
+    winui_library_could_not_select_export_file { "Could not select an export file" }
+    winui_library_could_not_select_backup { "Could not select a library backup" }
+    winui_library_file_selection_error { "{operation}: {message}" }
     winui_shell_menu_view { "View" }
     winui_shell_modern_mode { "Modern Mode" }
     winui_shell_columns { "Columns..." }
@@ -499,6 +528,62 @@ root:table {
     winui_shell_menu_playback { "Playback" }
     winui_shell_play_pause { "Play/Pause" }
     winui_shell_stop { "Stop" }
+    winui_shell_reveal_current_track { "Reveal Current Track" }
+    winui_track_properties_command { "Properties..." }
+    winui_track_properties_title { "Properties" }
+    winui_track_properties_selected_title { "Properties — {count, plural, one {# track selected} other {# tracks selected}}" }
+    winui_track_properties_save { "Save" }
+    winui_track_properties_cancel { "Cancel" }
+    winui_track_properties_tags { "Tags" }
+    winui_track_properties_tags_hint { "Tags shared by every selected track" }
+    winui_track_properties_custom_metadata { "Custom Metadata" }
+    winui_track_properties_custom_key { "New key" }
+    winui_track_properties_custom_value { "New value" }
+    winui_track_properties_delete { "Delete" }
+    winui_track_properties_add { "Add" }
+    winui_track_properties_editing_unavailable { "Editing unavailable: {detail}" }
+    winui_track_properties_save_failed { "Save failed: {detail}" }
+    winui_track_properties_stale { "The library changed while this dialog was open. Reopen Properties and try again." }
+    winui_track_properties_invalid_value { "Invalid value: {detail}" }
+    winui_list_create_from_filter { "Create List from current filter" }
+    winui_list_new { "New List..." }
+    winui_list_edit { "Edit List..." }
+    winui_list_delete { "Delete List" }
+    winui_list_delete_subtree { "Delete List and Descendants..." }
+    winui_list_editor_new_title { "New List" }
+    winui_list_editor_edit_title { "Edit List" }
+    winui_common_cancel { "Cancel" }
+    winui_common_create { "Create" }
+    winui_common_save { "Save" }
+    winui_list_name_placeholder { "List name" }
+    winui_list_name { "Name" }
+    winui_list_description_placeholder { "Optional description" }
+    winui_list_description { "Description" }
+    winui_list_inherited_filter { "Inherited Filter" }
+    winui_list_filter_placeholder { "Filter expression (type $, @, #, or %)" }
+    winui_list_local_filter { "Local Filter" }
+    winui_list_effective_filter { "Effective Filter" }
+    winui_list_membership { "Membership" }
+    winui_list_auto_presentation { "Auto" }
+    winui_list_presentation { "Presentation" }
+    winui_list_preview { "Preview" }
+    winui_list_delete_title { "Delete List?" }
+    winui_list_delete_subtree_title { "Delete List and Descendants?" }
+    winui_list_delete_commit { "Delete" }
+    winui_list_delete_all_commit { "Delete All" }
+    winui_list_delete_question { "Delete \"{name}\"?\n\nThe List will be removed. Music files will be kept." }
+    winui_list_delete_subtree_question { "Delete {count, plural, one {# List} other {# Lists}} in this derived subtree?\n\n{entries}\nTags used by nested Playlists are kept.\nMusic files will be kept." }
+    winui_list_remove_tag { "Also remove {tag} from {count, plural, one {# track} other {# tracks}}" }
+    winui_list_tag_references { "{tag} is also referenced by: {references}. Removing it may change those Lists." }
+    winui_list_no_editable_playlists { "No directly editable Playlists" }
+    winui_list_add_to_playlist { "Add to Playlist" }
+    winui_list_remove_from_current { "Remove from {name} ({tag})" }
+    winui_list_manual_order { "Manual Order" }
+    winui_list_move_up { "Move Up" }
+    winui_list_move_down { "Move Down" }
+    winui_list_move_to_top { "Move to Top" }
+    winui_list_move_to_bottom { "Move to Bottom" }
+    winui_list_reset_order { "Reset Order" }
     winui_shell_track_details { "Track Details" }
     winui_shell_classic_mode { "Classic Mode" }
     winui_playback_output_device { "Output device" }
