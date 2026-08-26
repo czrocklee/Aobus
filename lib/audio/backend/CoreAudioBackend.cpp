@@ -13,7 +13,6 @@
 #include "detail/CoreAudioGraph.h"
 #include "detail/CoreAudioLatency.h"
 #include "detail/CoreAudioRenderBuffer.h"
-
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
@@ -23,11 +22,17 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/flow/Graph.h>
 #include <ao/utility/ThreadName.h>
 
-#include <AudioToolbox/AudioToolbox.h>
-#include <CoreAudio/CoreAudio.h>
+#include <AudioToolbox/AUComponent.h>
+#include <AudioToolbox/AudioComponent.h>
+#include <AudioToolbox/AudioOutputUnit.h>
+#include <AudioToolbox/AudioUnit.h>
+#include <AudioToolbox/AudioUnitProperties.h>
+#include <CoreAudio/AudioHardware.h>
+#include <CoreAudio/AudioHardwareBase.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
+#include <MacTypes.h>
 
 #include <algorithm>
 #include <array>
@@ -37,7 +42,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
-#include <format>
+#include <expected>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -48,6 +53,7 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::audio::backend
@@ -55,20 +61,22 @@ namespace ao::audio::backend
   namespace
   {
     constexpr ::UInt32 kMinimumMaximumFramesPerSlice = 4096U;
-    constexpr auto kGlobalMain = ::AudioObjectPropertyAddress{
-      0U, ::kAudioObjectPropertyScopeGlobal, ::kAudioObjectPropertyElementMain};
-    constexpr auto kOutputMain = ::AudioObjectPropertyAddress{
-      0U, ::kAudioObjectPropertyScopeOutput, ::kAudioObjectPropertyElementMain};
-    constexpr auto kDevicePropertyAddresses = std::array{
-      ::AudioObjectPropertyAddress{::kAudioDevicePropertyDeviceIsAlive,
-                                   ::kAudioObjectPropertyScopeGlobal,
-                                   ::kAudioObjectPropertyElementMain},
-      ::AudioObjectPropertyAddress{::kAudioDevicePropertyNominalSampleRate,
-                                   ::kAudioObjectPropertyScopeGlobal,
-                                   ::kAudioObjectPropertyElementMain},
-      ::AudioObjectPropertyAddress{::kAudioDevicePropertyStreamConfiguration,
-                                   ::kAudioObjectPropertyScopeOutput,
-                                   ::kAudioObjectPropertyElementMain}};
+    constexpr auto kGlobalMain = ::AudioObjectPropertyAddress{.mSelector = 0U,
+                                                              .mScope = ::kAudioObjectPropertyScopeGlobal,
+                                                              .mElement = ::kAudioObjectPropertyElementMain};
+    constexpr auto kOutputMain = ::AudioObjectPropertyAddress{.mSelector = 0U,
+                                                              .mScope = ::kAudioObjectPropertyScopeOutput,
+                                                              .mElement = ::kAudioObjectPropertyElementMain};
+    constexpr auto kDevicePropertyAddresses =
+      std::array{::AudioObjectPropertyAddress{.mSelector = ::kAudioDevicePropertyDeviceIsAlive,
+                                              .mScope = ::kAudioObjectPropertyScopeGlobal,
+                                              .mElement = ::kAudioObjectPropertyElementMain},
+                 ::AudioObjectPropertyAddress{.mSelector = ::kAudioDevicePropertyNominalSampleRate,
+                                              .mScope = ::kAudioObjectPropertyScopeGlobal,
+                                              .mElement = ::kAudioObjectPropertyElementMain},
+                 ::AudioObjectPropertyAddress{.mSelector = ::kAudioDevicePropertyStreamConfiguration,
+                                              .mScope = ::kAudioObjectPropertyScopeOutput,
+                                              .mElement = ::kAudioObjectPropertyElementMain}};
 
     enum class CoreAudioFault : std::uint8_t
     {
@@ -114,6 +122,7 @@ namespace ao::audio::backend
           {
             ::AudioUnitUninitialize(_unit);
           }
+
           ::AudioComponentInstanceDispose(_unit);
         }
       }
@@ -144,7 +153,8 @@ namespace ao::audio::backend
                                     Value& value) noexcept
     {
       auto size = static_cast<::UInt32>(sizeof(Value));
-      auto const status = ::AudioObjectGetPropertyData(object, &address, 0U, nullptr, &size, &value);
+      auto const status =
+        ::AudioObjectGetPropertyData(object, &address, 0U, nullptr, &size, static_cast<void*>(std::addressof(value)));
       return status == ::noErr && size != sizeof(Value) ? ::kAudioHardwareBadPropertySizeError : status;
     }
 
@@ -160,24 +170,27 @@ namespace ao::audio::backend
       return status == ::noErr && size != sizeof(Value) ? ::kAudioHardwareBadPropertySizeError : status;
     }
 
-    std::vector<::AudioStreamID> outputStreams(::AudioDeviceID const device)
+    std::vector<::AudioObjectID> outputStreams(::AudioObjectID const device)
     {
       auto address = kOutputMain;
       address.mSelector = ::kAudioDevicePropertyStreams;
       ::UInt32 byteCount = 0U;
+
       if (::AudioObjectGetPropertyDataSize(device, &address, 0U, nullptr, &byteCount) != ::noErr ||
-          byteCount % sizeof(::AudioStreamID) != 0U)
+          byteCount % sizeof(::AudioObjectID) != 0U)
       {
         return {};
       }
 
-      auto streams = std::vector<::AudioStreamID>(byteCount / sizeof(::AudioStreamID));
+      auto streams = std::vector<::AudioObjectID>(byteCount / sizeof(::AudioObjectID));
+
       if (byteCount != 0U &&
           ::AudioObjectGetPropertyData(device, &address, 0U, nullptr, &byteCount, streams.data()) != ::noErr)
       {
         return {};
       }
-      streams.resize(byteCount / sizeof(::AudioStreamID));
+
+      streams.resize(byteCount / sizeof(::AudioObjectID));
       return streams;
     }
 
@@ -185,23 +198,23 @@ namespace ao::audio::backend
                                ::AudioObjectPropertySelector const selector,
                                ::AudioObjectPropertyScope const scope) noexcept
     {
-      auto address = ::AudioObjectPropertyAddress{selector, scope, ::kAudioObjectPropertyElementMain};
+      auto address = ::AudioObjectPropertyAddress{
+        .mSelector = selector, .mScope = scope, .mElement = ::kAudioObjectPropertyElementMain};
       ::UInt32 frames = 0U;
       return readAudioObjectValue(object, address, frames) == ::noErr ? frames : 0U;
     }
 
     Result<std::uint64_t> presentationTailFrames(::AudioUnit const unit,
-                                                  ::AudioDeviceID const device,
-                                                  ::AudioStreamBasicDescription const& deviceFormat,
-                                                  std::uint32_t const clientSampleRate)
+                                                 ::AudioObjectID const device,
+                                                 ::AudioStreamBasicDescription const& deviceFormat,
+                                                 std::uint32_t const clientSampleRate)
     {
-      auto streamLatency = std::uint64_t{0U};
+      std::uint64_t streamLatency = 0U;
+
       for (auto const stream : outputStreams(device))
       {
-        streamLatency = std::max(streamLatency,
-                                 scalarFrames(stream,
-                                              ::kAudioStreamPropertyLatency,
-                                              ::kAudioObjectPropertyScopeGlobal));
+        streamLatency = std::max(
+          streamLatency, scalarFrames(stream, ::kAudioStreamPropertyLatency, ::kAudioObjectPropertyScopeGlobal));
       }
 
       ::Float64 deviceSampleRate = deviceFormat.mSampleRate;
@@ -210,22 +223,14 @@ namespace ao::audio::backend
       readAudioObjectValue(device, sampleRateAddress, deviceSampleRate);
 
       ::Float64 audioUnitLatency = 0.0;
-      readAudioUnitProperty(unit,
-                            ::kAudioUnitProperty_Latency,
-                            ::kAudioUnitScope_Global,
-                            0U,
-                            audioUnitLatency);
+      readAudioUnitProperty(unit, ::kAudioUnitProperty_Latency, ::kAudioUnitScope_Global, 0U, audioUnitLatency);
 
       return detail::coreAudioPresentationTailFrames(
-        {.ioBufferFrames = scalarFrames(device,
-                                        ::kAudioDevicePropertyBufferFrameSize,
-                                        ::kAudioObjectPropertyScopeGlobal),
-         .safetyOffsetFrames = scalarFrames(device,
-                                            ::kAudioDevicePropertySafetyOffset,
-                                            ::kAudioObjectPropertyScopeOutput),
-         .deviceLatencyFrames = scalarFrames(device,
-                                             ::kAudioDevicePropertyLatency,
-                                             ::kAudioObjectPropertyScopeOutput),
+        {.ioBufferFrames =
+           scalarFrames(device, ::kAudioDevicePropertyBufferFrameSize, ::kAudioObjectPropertyScopeGlobal),
+         .safetyOffsetFrames =
+           scalarFrames(device, ::kAudioDevicePropertySafetyOffset, ::kAudioObjectPropertyScopeOutput),
+         .deviceLatencyFrames = scalarFrames(device, ::kAudioDevicePropertyLatency, ::kAudioObjectPropertyScopeOutput),
          .streamLatencyFrames = streamLatency,
          .audioUnitLatencySeconds = audioUnitLatency,
          .deviceSampleRate = deviceSampleRate,
@@ -241,8 +246,7 @@ namespace ao::audio::backend
 
       for (::UInt32 index = 0U; index < buffers->mNumberBuffers; ++index)
       {
-        auto& buffer = buffers->mBuffers[index];
-        if (buffer.mData != nullptr && buffer.mDataByteSize != 0U)
+        if (auto& buffer = buffers->mBuffers[index]; buffer.mData != nullptr && buffer.mDataByteSize != 0U)
         {
           std::memset(buffer.mData, 0, buffer.mDataByteSize);
         }
@@ -259,16 +263,16 @@ namespace ao::audio::backend
         case CoreAudioFault::RenderTargetMissing: return "Core Audio render callback has no target";
         case CoreAudioFault::None: return "Core Audio stream failed";
       }
+
       return "Core Audio stream failed";
     }
 
     struct CoreAudioRuntimeState final
     {
-      CoreAudioRuntimeState(Device const& device,
-                            std::shared_ptr<detail::BackendGraphRegistry> graphRegistry)
+      CoreAudioRuntimeState(Device const& device, std::shared_ptr<detail::BackendGraphRegistry> graphRegistryPtr)
         : deviceUid{device.id.raw()}
         , deviceName{device.displayName.empty() ? device.id.raw() : device.displayName}
-        , graphRegistryPtr{std::move(graphRegistry)}
+        , graphRegistryPtr{std::move(graphRegistryPtr)}
       {
       }
 
@@ -278,7 +282,7 @@ namespace ao::audio::backend
 
       mutable std::mutex nativeMutex{};
       ::AudioUnit unit = nullptr;
-      ::AudioDeviceID deviceId = ::kAudioObjectUnknown;
+      ::AudioObjectID deviceId = ::kAudioObjectUnknown;
       bool started = false;
       std::size_t registeredDeviceListenerCount = 0U;
 
@@ -293,6 +297,7 @@ namespace ao::audio::backend
       std::atomic<std::uint64_t> presentationTailFrameCount{0U};
       detail::AudioBackendDrainTail drainTail{};
 
+      mutable std::recursive_mutex graphPublicationMutex{};
       mutable std::mutex graphStateMutex{};
       std::optional<PcmFormat> optClientFormat{};
       std::optional<SignalFormat> optDeviceFormat{};
@@ -326,8 +331,7 @@ namespace ao::audio::backend
 
     void CoreAudioRuntimeState::signalDrainReady(std::uint64_t const drainGeneration) noexcept
     {
-      auto expected = std::uint64_t{0U};
-      if (pendingDrainGeneration.compare_exchange_strong(
+      if (std::uint64_t expected = 0U; pendingDrainGeneration.compare_exchange_strong(
             expected, drainGeneration, std::memory_order_release, std::memory_order_relaxed))
       {
         controlSignal.release();
@@ -344,9 +348,9 @@ namespace ao::audio::backend
     {
       auto const currentGeneration = generation.load(std::memory_order_acquire);
       auto const encoded = (currentGeneration << 8U) | static_cast<std::uint8_t>(fault);
-      auto expected = std::uint64_t{0U};
-      if (pendingFault.compare_exchange_strong(
-            expected, encoded, std::memory_order_release, std::memory_order_relaxed))
+
+      if (std::uint64_t expected = 0U;
+          pendingFault.compare_exchange_strong(expected, encoded, std::memory_order_release, std::memory_order_relaxed))
       {
         controlSignal.release();
       }
@@ -355,9 +359,11 @@ namespace ao::audio::backend
     void CoreAudioRuntimeState::controlLoop()
     {
       setCurrentThreadName("CoreAudioControl");
+
       while (!controlStop.load(std::memory_order_acquire))
       {
         controlSignal.acquire();
+
         if (controlStop.load(std::memory_order_acquire))
         {
           return;
@@ -368,10 +374,12 @@ namespace ao::audio::backend
         {
           handleDeviceChange(deviceGeneration);
         }
+
         if (auto const encodedFault = pendingFault.exchange(0U, std::memory_order_acq_rel); encodedFault != 0U)
         {
           handleFault(encodedFault);
         }
+
         if (auto const drainGeneration = pendingDrainGeneration.exchange(0U, std::memory_order_acq_rel);
             drainGeneration != 0U)
         {
@@ -391,6 +399,7 @@ namespace ao::audio::backend
       renderFence.closeAndWait();
       {
         auto const lock = std::scoped_lock{nativeMutex};
+
         if (unit != nullptr && started)
         {
           if (::AudioOutputUnitStop(unit) != ::noErr)
@@ -398,11 +407,13 @@ namespace ao::audio::backend
             signalFault(CoreAudioFault::DeviceLost);
             return;
           }
+
           started = false;
         }
       }
 
       auto const callbackLock = std::scoped_lock{targetCallbackMutex};
+
       if (generation.load(std::memory_order_relaxed) == drainGeneration && renderTarget != nullptr &&
           deliveredDrainGeneration != drainGeneration)
       {
@@ -418,13 +429,15 @@ namespace ao::audio::backend
         return;
       }
 
-      auto device = ::AudioDeviceID{::kAudioObjectUnknown};
+      ::AudioObjectID device = ::kAudioObjectUnknown;
       {
         auto const lock = std::scoped_lock{nativeMutex};
+
         if (generation.load(std::memory_order_relaxed) != deviceGeneration || unit == nullptr)
         {
           return;
         }
+
         device = deviceId;
       }
 
@@ -432,6 +445,7 @@ namespace ao::audio::backend
       aliveAddress.mSelector = ::kAudioDevicePropertyDeviceIsAlive;
       ::UInt32 alive = 0U;
       auto const aliveStatus = readAudioObjectValue(device, aliveAddress, alive);
+
       if (aliveStatus != ::noErr || alive == 0U)
       {
         signalFault(CoreAudioFault::DeviceLost);
@@ -439,59 +453,65 @@ namespace ao::audio::backend
       }
 
       auto outputFormat = ::AudioStreamBasicDescription{};
-      auto clientSampleRate = std::uint32_t{0U};
+      std::uint32_t clientSampleRate = 0U;
       {
         auto const lock = std::scoped_lock{graphStateMutex};
+
         if (optClientFormat)
         {
           clientSampleRate = optClientFormat->sampleRate;
         }
       }
       auto optTailFrames = std::optional<std::uint64_t>{};
-      auto formatStatus = ::OSStatus{::noErr};
+      ::OSStatus formatStatus = ::noErr;
       {
         auto const lock = std::scoped_lock{nativeMutex};
+
         if (unit == nullptr)
         {
           return;
         }
-        formatStatus = readAudioUnitProperty(unit,
-                                             ::kAudioUnitProperty_StreamFormat,
-                                             ::kAudioUnitScope_Output,
-                                             0U,
-                                             outputFormat);
+
+        formatStatus =
+          readAudioUnitProperty(unit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Output, 0U, outputFormat);
+
         if (formatStatus == ::noErr)
         {
-          if (auto const tailFramesRes =
-                presentationTailFrames(unit, device, outputFormat, clientSampleRate);
+          if (auto const tailFramesRes = presentationTailFrames(unit, device, outputFormat, clientSampleRate);
               tailFramesRes)
           {
             optTailFrames = *tailFramesRes;
           }
         }
       }
+
       if (formatStatus != ::noErr)
       {
         if (detail::isCoreAudioDeviceLossStatus(formatStatus))
         {
           signalFault(CoreAudioFault::DeviceLost);
         }
+
         return;
       }
 
       auto const signalRes = detail::coreAudioSignalFormat(outputFormat);
       {
         auto const lock = std::scoped_lock{graphStateMutex};
+
         if (generation.load(std::memory_order_relaxed) != deviceGeneration)
         {
           return;
         }
+
         optDeviceFormat = signalRes ? std::optional{*signalRes} : std::nullopt;
+
         if (optTailFrames)
         {
           presentationTailFrameCount.store(*optTailFrames, std::memory_order_release);
         }
       }
+
       publishGraph();
     }
 
@@ -499,6 +519,7 @@ namespace ao::audio::backend
     {
       auto const faultGeneration = encodedFault >> 8U;
       auto const fault = static_cast<CoreAudioFault>(encodedFault & 0xffU);
+
       if (generation.load(std::memory_order_acquire) != faultGeneration)
       {
         return;
@@ -509,12 +530,14 @@ namespace ao::audio::backend
       renderFence.closeAndWait();
       {
         auto const lock = std::scoped_lock{nativeMutex};
+
         if (unit != nullptr && started)
         {
           ::AudioOutputUnitStop(unit);
           started = false;
         }
       }
+
       reportError(faultGeneration, faultMessage(fault));
     }
 
@@ -525,29 +548,35 @@ namespace ao::audio::backend
         return;
       }
 
+      auto const publicationLock = std::scoped_lock{graphPublicationMutex};
       auto state = detail::CoreAudioRouteState{};
       {
         auto const lock = std::scoped_lock{graphStateMutex};
+
         if (!graphPublished)
         {
           return;
         }
+
         state.routeAnchor = deviceUid;
         state.deviceName = deviceName;
         state.optClientFormat = optClientFormat;
         state.optDeviceFormat = optDeviceFormat;
       }
+
       {
         auto const lock = std::scoped_lock{propertyMutex};
         state.volume = cachedVolume;
         state.muted = cachedMuted;
       }
+
       graphRegistryPtr->publish(state.routeAnchor, detail::coreAudioGraph(state));
     }
 
     void CoreAudioRuntimeState::reportError(std::uint64_t const errorGeneration, std::string_view const message)
     {
       auto const callbackLock = std::scoped_lock{targetCallbackMutex};
+
       if (generation.load(std::memory_order_relaxed) == errorGeneration && renderTarget != nullptr &&
           deliveredErrorGeneration != errorGeneration)
       {
@@ -564,37 +593,46 @@ namespace ao::audio::backend
                                        ::AudioBufferList* const outputData) noexcept
     {
       auto& state = *static_cast<CoreAudioRuntimeState*>(context);
+
       if (!state.renderFence.tryEnter())
       {
         silence(outputData);
+
         if (actionFlags != nullptr)
         {
           *actionFlags |= ::kAudioUnitRenderAction_OutputIsSilence;
         }
+
         return ::noErr;
       }
+
       auto const callbackLeave = CallbackLeave{state.renderFence};
 
       if (frameCount > state.maximumFramesPerSlice)
       {
         silence(outputData);
+
         if (actionFlags != nullptr)
         {
           *actionFlags |= ::kAudioUnitRenderAction_OutputIsSilence;
         }
+
         state.signalFault(CoreAudioFault::RenderFrameLimit);
         return ::noErr;
       }
 
       auto const byteCount = static_cast<std::size_t>(frameCount) * state.bytesPerFrame;
       auto const outputBuffer = detail::bindCoreAudioRenderBuffer(outputData, state.stagingBuffer, byteCount);
+
       if (!outputBuffer.valid)
       {
         silence(outputData);
+
         if (actionFlags != nullptr)
         {
           *actionFlags |= ::kAudioUnitRenderAction_OutputIsSilence;
         }
+
         state.signalFault(CoreAudioFault::RenderBufferShape);
         return ::noErr;
       }
@@ -602,31 +640,39 @@ namespace ao::audio::backend
       if (!state.renderAllowed.load(std::memory_order_acquire))
       {
         std::ranges::fill(outputBuffer.output, std::byte{0});
+
         if (actionFlags != nullptr)
         {
           *actionFlags |= ::kAudioUnitRenderAction_OutputIsSilence;
         }
+
         if (state.drainTail.consume(frameCount))
         {
           state.signalDrainReady(state.generation.load(std::memory_order_relaxed));
         }
+
         return ::noErr;
       }
 
       auto* const target = state.renderTarget;
+
       if (target == nullptr)
       {
         std::ranges::fill(outputBuffer.output, std::byte{0});
+
         if (actionFlags != nullptr)
         {
           *actionFlags |= ::kAudioUnitRenderAction_OutputIsSilence;
         }
+
         state.signalFault(CoreAudioFault::RenderTargetMissing);
         return ::noErr;
       }
+
       auto const renderResult = target->renderPcm(std::span{state.stagingBuffer}.first(byteCount));
       auto const prepared = detail::prepareAudioBackendRenderBuffer(
         std::span{state.stagingBuffer}.first(byteCount), state.bytesPerFrame, renderResult);
+
       if (outputBuffer.output.data() != state.stagingBuffer.data())
       {
         std::memcpy(outputBuffer.output.data(), state.stagingBuffer.data(), byteCount);
@@ -636,10 +682,12 @@ namespace ao::audio::backend
       {
         target->handleUnderrun();
       }
+
       if (prepared.positionFrames != 0U)
       {
         target->handlePositionAdvanced(prepared.positionFrames);
       }
+
       if (prepared.renderedFrames == 0U && actionFlags != nullptr)
       {
         *actionFlags |= ::kAudioUnitRenderAction_OutputIsSilence;
@@ -649,12 +697,13 @@ namespace ao::audio::backend
       {
         state.renderAllowed.store(false, std::memory_order_release);
         auto const silentSuffixFrames = prepared.framesProvided - prepared.renderedFrames;
-        if (state.drainTail.start(
-              state.presentationTailFrameCount.load(std::memory_order_acquire), silentSuffixFrames))
+
+        if (state.drainTail.start(state.presentationTailFrameCount.load(std::memory_order_acquire), silentSuffixFrames))
         {
           state.signalDrainReady(state.generation.load(std::memory_order_relaxed));
         }
       }
+
       return ::noErr;
     }
 
@@ -664,15 +713,45 @@ namespace ao::audio::backend
                                       void* const context) noexcept
     {
       auto& state = *static_cast<CoreAudioRuntimeState*>(context);
+
       if (!state.deviceListenerFence.tryEnter())
       {
         return ::noErr;
       }
+
       auto const callbackLeave = CallbackLeave{state.deviceListenerFence};
       state.signalDeviceChange();
       return ::noErr;
     }
 
+    Result<std::size_t> installDeviceListeners(::AudioObjectID const deviceId, CoreAudioRuntimeState& state)
+    {
+      state.deviceListenerFence.open();
+      std::size_t registeredListenerCount = 0U;
+
+      for (auto const& address : kDevicePropertyAddresses)
+      {
+        if (auto const status = ::AudioObjectAddPropertyListener(deviceId, &address, &coreAudioDeviceChanged, &state);
+            status != ::noErr)
+        {
+          state.deviceListenerFence.close();
+
+          while (registeredListenerCount != 0U)
+          {
+            --registeredListenerCount;
+            auto const& registeredAddress = kDevicePropertyAddresses[registeredListenerCount];
+            ::AudioObjectRemovePropertyListener(deviceId, &registeredAddress, &coreAudioDeviceChanged, &state);
+          }
+
+          state.deviceListenerFence.wait();
+          return detail::makeCoreAudioError(status, "monitor Core Audio output device", Error::Code::InitFailed);
+        }
+
+        ++registeredListenerCount;
+      }
+
+      return registeredListenerCount;
+    }
   } // namespace
 
   struct CoreAudioBackend::Impl final
@@ -700,6 +779,7 @@ namespace ao::audio::backend
     {
       statePtr->controlStop.store(true, std::memory_order_release);
       statePtr->controlSignal.release();
+
       if (controlThread.joinable())
       {
         if (controlThread.get_id() == std::this_thread::get_id())
@@ -748,59 +828,56 @@ namespace ao::audio::backend
     close();
     auto const statePtr = _implPtr->statePtr;
     auto const deviceRes = detail::coreAudioOutputDeviceId(statePtr->deviceUid);
+
     if (!deviceRes)
     {
-      return std::unexpected(deviceRes.error());
+      return std::unexpected{deviceRes.error()};
     }
 
-    auto const componentDescription = ::AudioComponentDescription{.componentType = ::kAudioUnitType_Output,
-                                                                   .componentSubType = ::kAudioUnitSubType_HALOutput,
-                                                                   .componentManufacturer =
-                                                                     ::kAudioUnitManufacturer_Apple,
-                                                                   .componentFlags = 0U,
-                                                                   .componentFlagsMask = 0U};
-    auto const component = ::AudioComponentFindNext(nullptr, &componentDescription);
+    auto const componentDescription =
+      ::AudioComponentDescription{.componentType = ::kAudioUnitType_Output,
+                                  .componentSubType = ::kAudioUnitSubType_HALOutput,
+                                  .componentManufacturer = ::kAudioUnitManufacturer_Apple,
+                                  .componentFlags = 0U,
+                                  .componentFlagsMask = 0U};
+    auto* const component = ::AudioComponentFindNext(nullptr, &componentDescription);
+
     if (component == nullptr)
     {
       return makeError(Error::Code::InitFailed, "Core Audio HAL output component is unavailable");
     }
 
     ::AudioUnit rawUnit = nullptr;
+
     if (auto const status = ::AudioComponentInstanceNew(component, &rawUnit); status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "create Core Audio HAL output unit", Error::Code::InitFailed);
     }
+
     auto unitOwner = AudioUnitOwner{rawUnit};
 
-    auto enabled = ::UInt32{1U};
-    if (auto const status = ::AudioUnitSetProperty(rawUnit,
-                                                   ::kAudioOutputUnitProperty_EnableIO,
-                                                   ::kAudioUnitScope_Output,
-                                                   0U,
-                                                   &enabled,
-                                                   sizeof(enabled));
+    ::UInt32 enabled = 1U;
+
+    if (auto const status = ::AudioUnitSetProperty(
+          rawUnit, ::kAudioOutputUnitProperty_EnableIO, ::kAudioUnitScope_Output, 0U, &enabled, sizeof(enabled));
         status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "enable Core Audio output", Error::Code::InitFailed);
     }
-    auto disabled = ::UInt32{0U};
-    if (auto const status = ::AudioUnitSetProperty(rawUnit,
-                                                   ::kAudioOutputUnitProperty_EnableIO,
-                                                   ::kAudioUnitScope_Input,
-                                                   1U,
-                                                   &disabled,
-                                                   sizeof(disabled));
+
+    ::UInt32 disabled = 0U;
+
+    if (auto const status = ::AudioUnitSetProperty(
+          rawUnit, ::kAudioOutputUnitProperty_EnableIO, ::kAudioUnitScope_Input, 1U, &disabled, sizeof(disabled));
         status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "disable Core Audio input", Error::Code::InitFailed);
     }
+
     auto const deviceId = *deviceRes;
-    if (auto const status = ::AudioUnitSetProperty(rawUnit,
-                                                   ::kAudioOutputUnitProperty_CurrentDevice,
-                                                   ::kAudioUnitScope_Global,
-                                                   0U,
-                                                   &deviceId,
-                                                   sizeof(deviceId));
+
+    if (auto const status = ::AudioUnitSetProperty(
+          rawUnit, ::kAudioOutputUnitProperty_CurrentDevice, ::kAudioUnitScope_Global, 0U, &deviceId, sizeof(deviceId));
         status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "select Core Audio output device", Error::Code::DeviceNotFound);
@@ -814,8 +891,9 @@ namespace ao::audio::backend
     variableBufferFramesAddress.mSelector = ::kAudioDevicePropertyUsesVariableBufferFrameSizes;
     ::UInt32 variableBufferFrames = 0U;
     readAudioObjectValue(deviceId, variableBufferFramesAddress, variableBufferFrames);
-    auto requestedMaximumFrames =
+    ::UInt32 requestedMaximumFrames =
       std::max({kMinimumMaximumFramesPerSlice, currentBufferFrames, variableBufferFrames});
+
     if (auto const status = ::AudioUnitSetProperty(rawUnit,
                                                    ::kAudioUnitProperty_MaximumFramesPerSlice,
                                                    ::kAudioUnitScope_Global,
@@ -826,12 +904,11 @@ namespace ao::audio::backend
     {
       return detail::makeCoreAudioError(status, "set Core Audio maximum frames per slice", Error::Code::InitFailed);
     }
-    auto maximumFrames = ::UInt32{0U};
-    if (auto const status = readAudioUnitProperty(rawUnit,
-                                                  ::kAudioUnitProperty_MaximumFramesPerSlice,
-                                                  ::kAudioUnitScope_Global,
-                                                  0U,
-                                                  maximumFrames);
+
+    ::UInt32 maximumFrames = 0U;
+
+    if (auto const status = readAudioUnitProperty(
+          rawUnit, ::kAudioUnitProperty_MaximumFramesPerSlice, ::kAudioUnitScope_Global, 0U, maximumFrames);
         status != ::noErr || maximumFrames == 0U)
     {
       return detail::makeCoreAudioError(status == ::noErr ? ::kAudioHardwareBadPropertySizeError : status,
@@ -841,8 +918,7 @@ namespace ao::audio::backend
 
     auto const selectedFormatRes = detail::selectLosslessCoreAudioClientFormat(
       sourceFormat,
-      [rawUnit](::AudioStreamBasicDescription const& description)
-        -> Result<::AudioStreamBasicDescription>
+      [rawUnit](::AudioStreamBasicDescription const& description) -> Result<::AudioStreamBasicDescription>
       {
         if (auto const status = ::AudioUnitSetProperty(rawUnit,
                                                        ::kAudioUnitProperty_StreamFormat,
@@ -852,84 +928,81 @@ namespace ao::audio::backend
                                                        sizeof(description));
             status != ::noErr)
         {
-          return detail::makeCoreAudioError(
-            status, "configure Core Audio client format", Error::Code::InitFailed);
+          return detail::makeCoreAudioError(status, "configure Core Audio client format", Error::Code::InitFailed);
         }
 
         auto readBack = ::AudioStreamBasicDescription{};
-        if (auto const status = readAudioUnitProperty(rawUnit,
-                                                      ::kAudioUnitProperty_StreamFormat,
-                                                      ::kAudioUnitScope_Input,
-                                                      0U,
-                                                      readBack);
+
+        if (auto const status =
+              readAudioUnitProperty(rawUnit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Input, 0U, readBack);
             status != ::noErr)
         {
-          return detail::makeCoreAudioError(
-            status, "read Core Audio client format", Error::Code::InitFailed);
+          return detail::makeCoreAudioError(status, "read Core Audio client format", Error::Code::InitFailed);
         }
+
         return readBack;
       });
+
     if (!selectedFormatRes)
     {
-      return std::unexpected(selectedFormatRes.error());
+      return std::unexpected{selectedFormatRes.error()};
     }
+
     auto const selectedFormat = *selectedFormatRes;
 
     auto const bytesPerFrame = frameBytes(selectedFormat);
+
     if (bytesPerFrame == 0U || maximumFrames > std::numeric_limits<std::size_t>::max() / bytesPerFrame ||
         static_cast<std::size_t>(maximumFrames) * bytesPerFrame > std::numeric_limits<::UInt32>::max())
     {
       return makeError(Error::Code::ValueTooLarge, "Core Audio render staging buffer is too large");
     }
+
     auto stagingBuffer = std::vector<std::byte>(static_cast<std::size_t>(maximumFrames) * bytesPerFrame);
 
-    auto const callback = ::AURenderCallbackStruct{.inputProc = &coreAudioRenderCallback,
-                                                    .inputProcRefCon = statePtr.get()};
-    if (auto const status = ::AudioUnitSetProperty(rawUnit,
-                                                   ::kAudioUnitProperty_SetRenderCallback,
-                                                   ::kAudioUnitScope_Input,
-                                                   0U,
-                                                   &callback,
-                                                   sizeof(callback));
+    auto const callback =
+      ::AURenderCallbackStruct{.inputProc = &coreAudioRenderCallback, .inputProcRefCon = statePtr.get()};
+
+    if (auto const status = ::AudioUnitSetProperty(
+          rawUnit, ::kAudioUnitProperty_SetRenderCallback, ::kAudioUnitScope_Input, 0U, &callback, sizeof(callback));
         status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "install Core Audio render callback", Error::Code::InitFailed);
     }
+
     if (auto const status = ::AudioUnitInitialize(rawUnit); status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "initialize Core Audio HAL output unit", Error::Code::InitFailed);
     }
+
     unitOwner.markInitialized();
 
     auto outputDescription = ::AudioStreamBasicDescription{};
-    if (auto const status = readAudioUnitProperty(rawUnit,
-                                                  ::kAudioUnitProperty_StreamFormat,
-                                                  ::kAudioUnitScope_Output,
-                                                  0U,
-                                                  outputDescription);
+
+    if (auto const status = readAudioUnitProperty(
+          rawUnit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Output, 0U, outputDescription);
         status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "read Core Audio device format", Error::Code::InitFailed);
     }
+
     auto const tailFramesRes = presentationTailFrames(rawUnit, deviceId, outputDescription, selectedFormat.sampleRate);
+
     if (!tailFramesRes)
     {
-      return std::unexpected(tailFramesRes.error());
+      return std::unexpected{tailFramesRes.error()};
     }
 
-    auto volume = 1.0F;
-    auto muted = false;
+    float volume = 1.0F;
+    bool muted = false;
     {
       auto const lock = std::scoped_lock{statePtr->propertyMutex};
       volume = statePtr->cachedVolume;
       muted = statePtr->cachedMuted;
     }
-    if (auto const status = ::AudioUnitSetParameter(rawUnit,
-                                                    ::kHALOutputParam_Volume,
-                                                    ::kAudioUnitScope_Global,
-                                                    0U,
-                                                    muted ? 0.0F : volume,
-                                                    0U);
+
+    if (auto const status = ::AudioUnitSetParameter(
+          rawUnit, ::kHALOutputParam_Volume, ::kAudioUnitScope_Global, 0U, muted ? 0.0F : volume, 0U);
         status != ::noErr)
     {
       return detail::makeCoreAudioError(status, "restore Core Audio output volume", Error::Code::IoError);
@@ -950,12 +1023,14 @@ namespace ao::audio::backend
       statePtr->presentationTailFrameCount.store(*tailFramesRes, std::memory_order_release);
       statePtr->stagingBuffer = std::move(stagingBuffer);
     }
+
     {
       auto const lock = std::scoped_lock{statePtr->graphStateMutex};
       auto const signalRes = detail::coreAudioSignalFormat(outputDescription);
       statePtr->optClientFormat = selectedFormat;
       statePtr->optDeviceFormat = signalRes ? std::optional{*signalRes} : std::nullopt;
     }
+
     {
       auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
       statePtr->renderTarget = &target;
@@ -963,33 +1038,19 @@ namespace ao::audio::backend
       statePtr->deliveredErrorGeneration = 0U;
     }
 
-    statePtr->deviceListenerFence.open();
-    auto registeredListenerCount = std::size_t{0U};
-    for (auto const& address : kDevicePropertyAddresses)
+    auto const registeredListenerCountRes = installDeviceListeners(deviceId, *statePtr);
+
+    if (!registeredListenerCountRes)
     {
-      if (auto const status = ::AudioObjectAddPropertyListener(
-            deviceId, &address, &coreAudioDeviceChanged, statePtr.get());
-          status != ::noErr)
-      {
-        statePtr->deviceListenerFence.close();
-        while (registeredListenerCount != 0U)
-        {
-          --registeredListenerCount;
-          auto const& registeredAddress = kDevicePropertyAddresses[registeredListenerCount];
-          ::AudioObjectRemovePropertyListener(
-            deviceId, &registeredAddress, &coreAudioDeviceChanged, statePtr.get());
-        }
-        statePtr->deviceListenerFence.wait();
-        close();
-        return detail::makeCoreAudioError(
-          status, "monitor Core Audio output device", Error::Code::InitFailed);
-      }
-      ++registeredListenerCount;
+      close();
+      return std::unexpected{registeredListenerCountRes.error()};
     }
+
     {
       auto const lock = std::scoped_lock{statePtr->nativeMutex};
-      statePtr->registeredDeviceListenerCount = registeredListenerCount;
+      statePtr->registeredDeviceListenerCount = *registeredListenerCountRes;
     }
+
     {
       auto const lock = std::scoped_lock{statePtr->graphStateMutex};
       statePtr->graphPublished = true;
@@ -1020,15 +1081,18 @@ namespace ao::audio::backend
     ::OSStatus status = ::noErr;
     {
       auto const lock = std::scoped_lock{statePtr->nativeMutex};
+
       if (statePtr->unit == nullptr)
       {
         statePtr->renderFence.closeAndWait();
         statePtr->runActive.store(false, std::memory_order_release);
         return;
       }
+
       status = ::AudioOutputUnitStart(statePtr->unit);
       statePtr->started = status == ::noErr;
     }
+
     if (status != ::noErr)
     {
       statePtr->renderFence.closeAndWait();
@@ -1043,12 +1107,14 @@ namespace ao::audio::backend
     auto const statePtr = _implPtr->statePtr;
     statePtr->renderFence.closeAndWait();
     auto const lock = std::scoped_lock{statePtr->nativeMutex};
+
     if (statePtr->unit != nullptr && statePtr->started)
     {
       if (auto const status = ::AudioOutputUnitStop(statePtr->unit); status != ::noErr)
       {
         statePtr->signalFault(CoreAudioFault::DeviceLost);
       }
+
       statePtr->started = false;
     }
   }
@@ -1056,18 +1122,22 @@ namespace ao::audio::backend
   void CoreAudioBackend::resume()
   {
     auto const statePtr = _implPtr->statePtr;
+
     if (!statePtr->runActive.load(std::memory_order_acquire))
     {
       return;
     }
+
     statePtr->renderFence.open();
     auto const lock = std::scoped_lock{statePtr->nativeMutex};
+
     if (statePtr->unit == nullptr)
     {
       statePtr->renderFence.closeAndWait();
       statePtr->runActive.store(false, std::memory_order_release);
       return;
     }
+
     if (!statePtr->started)
     {
       if (auto const status = ::AudioOutputUnitStart(statePtr->unit); status != ::noErr)
@@ -1077,6 +1147,7 @@ namespace ao::audio::backend
         statePtr->signalFault(CoreAudioFault::DeviceLost);
         return;
       }
+
       statePtr->started = true;
     }
   }
@@ -1085,14 +1156,16 @@ namespace ao::audio::backend
   {
     stop();
     auto const statePtr = _implPtr->statePtr;
-    auto status = ::OSStatus{::noErr};
+    ::OSStatus status = ::noErr;
     {
       auto const lock = std::scoped_lock{statePtr->nativeMutex};
+
       if (statePtr->unit != nullptr)
       {
         status = ::AudioUnitReset(statePtr->unit, ::kAudioUnitScope_Global, 0U);
       }
     }
+
     if (status != ::noErr)
     {
       auto const generation = statePtr->generation.load(std::memory_order_relaxed);
@@ -1110,6 +1183,7 @@ namespace ao::audio::backend
     statePtr->renderFence.closeAndWait();
     statePtr->drainTail.reset();
     auto const lock = std::scoped_lock{statePtr->nativeMutex};
+
     if (statePtr->unit != nullptr && statePtr->started)
     {
       ::AudioOutputUnitStop(statePtr->unit);
@@ -1126,8 +1200,9 @@ namespace ao::audio::backend
     statePtr->renderFence.closeAndWait();
     statePtr->deviceListenerFence.close();
 
+    auto const publicationLock = std::scoped_lock{statePtr->graphPublicationMutex};
     auto routeAnchor = std::string{};
-    auto clearGraph = false;
+    bool clearGraph = false;
     {
       auto const lock = std::scoped_lock{statePtr->graphStateMutex};
       routeAnchor = statePtr->deviceUid;
@@ -1138,8 +1213,8 @@ namespace ao::audio::backend
     }
 
     ::AudioUnit unit = nullptr;
-    ::AudioDeviceID deviceId = ::kAudioObjectUnknown;
-    auto registeredListenerCount = std::size_t{0U};
+    ::AudioObjectID deviceId = ::kAudioObjectUnknown;
+    std::size_t registeredListenerCount = 0U;
     {
       auto const lock = std::scoped_lock{statePtr->nativeMutex};
       unit = statePtr->unit;
@@ -1161,7 +1236,9 @@ namespace ao::audio::backend
       auto const& address = kDevicePropertyAddresses[registeredListenerCount];
       ::AudioObjectRemovePropertyListener(deviceId, &address, &coreAudioDeviceChanged, statePtr.get());
     }
+
     statePtr->deviceListenerFence.wait();
+
     if (unit != nullptr)
     {
       ::AudioOutputUnitStop(unit);
@@ -1175,7 +1252,9 @@ namespace ao::audio::backend
       statePtr->deliveredDrainGeneration = 0U;
       statePtr->deliveredErrorGeneration = 0U;
     }
+
     statePtr->drainTail.reset();
+
     if (clearGraph && statePtr->graphRegistryPtr && !routeAnchor.empty())
     {
       statePtr->graphRegistryPtr->clear(routeAnchor);
@@ -1187,23 +1266,27 @@ namespace ao::audio::backend
     auto const statePtr = _implPtr->statePtr;
     {
       auto const lock = std::scoped_lock{statePtr->propertyMutex};
+
       if (id == PropertyId::Volume)
       {
-        auto const* requestedPtr = std::get_if<float>(&value);
-        if (requestedPtr == nullptr || !std::isfinite(*requestedPtr))
+        auto const* requested = std::get_if<float>(&value);
+
+        if (requested == nullptr || !std::isfinite(*requested))
         {
           return makeError(Error::Code::InvalidInput, "Core Audio volume must be a finite number");
         }
-        auto const requested = std::clamp(*requestedPtr, 0.0F, 1.0F);
+
+        auto const requestedValue = std::clamp(*requested, 0.0F, 1.0F);
         {
           auto const nativeLock = std::scoped_lock{statePtr->nativeMutex};
+
           if (statePtr->unit != nullptr)
           {
             if (auto const status = ::AudioUnitSetParameter(statePtr->unit,
                                                             ::kHALOutputParam_Volume,
                                                             ::kAudioUnitScope_Global,
                                                             0U,
-                                                            statePtr->cachedMuted ? 0.0F : requested,
+                                                            statePtr->cachedMuted ? 0.0F : requestedValue,
                                                             0U);
                 status != ::noErr)
             {
@@ -1211,24 +1294,28 @@ namespace ao::audio::backend
             }
           }
         }
-        statePtr->cachedVolume = requested;
+
+        statePtr->cachedVolume = requestedValue;
       }
       else if (id == PropertyId::Muted)
       {
-        auto const* requestedPtr = std::get_if<bool>(&value);
-        if (requestedPtr == nullptr)
+        auto const* requested = std::get_if<bool>(&value);
+
+        if (requested == nullptr)
         {
           return makeError(Error::Code::InvalidInput, "Core Audio mute requires a boolean value");
         }
+
         {
           auto const nativeLock = std::scoped_lock{statePtr->nativeMutex};
+
           if (statePtr->unit != nullptr)
           {
             if (auto const status = ::AudioUnitSetParameter(statePtr->unit,
                                                             ::kHALOutputParam_Volume,
                                                             ::kAudioUnitScope_Global,
                                                             0U,
-                                                            *requestedPtr ? 0.0F : statePtr->cachedVolume,
+                                                            *requested ? 0.0F : statePtr->cachedVolume,
                                                             0U);
                 status != ::noErr)
             {
@@ -1236,7 +1323,8 @@ namespace ao::audio::backend
             }
           }
         }
-        statePtr->cachedMuted = *requestedPtr;
+
+        statePtr->cachedMuted = *requested;
       }
       else
       {
@@ -1252,14 +1340,17 @@ namespace ao::audio::backend
   {
     auto const statePtr = _implPtr->statePtr;
     auto const lock = std::scoped_lock{statePtr->propertyMutex};
+
     if (id == PropertyId::Volume)
     {
       return statePtr->cachedVolume;
     }
+
     if (id == PropertyId::Muted)
     {
       return statePtr->cachedMuted;
     }
+
     return makeError(Error::Code::NotSupported);
   }
 
@@ -1269,6 +1360,7 @@ namespace ao::audio::backend
     {
       return {};
     }
+
     auto const statePtr = _implPtr->statePtr;
     auto const lock = std::scoped_lock{statePtr->nativeMutex};
     return {.canRead = true,

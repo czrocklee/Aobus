@@ -94,11 +94,18 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
         self.fixture.write_compile_database(consumer)
         output = self.fixture.dependencies((consumer, [header]), base=self.fixture.build_dir)
 
-        with mock.patch.object(
-            tidyengine.subprocess,
-            "run",
-            return_value=subprocess.CompletedProcess(["ninja", "-t", "deps"], 0, output),
-        ) as run:
+        with (
+            mock.patch.object(
+                tidyengine.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(["ninja", "-t", "deps"], 0, output),
+            ) as run,
+            mock.patch.object(
+                tidyengine.buildlock,
+                "build_tree_lock",
+                wraps=tidyengine.buildlock.build_tree_lock,
+            ) as lock,
+        ):
             plan = tidyengine.compile_command_plan(
                 self.fixture.build_dir,
                 [header],
@@ -114,6 +121,7 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
             encoding="utf-8",
             errors="replace",
         )
+        lock.assert_called_once_with(self.fixture.build_dir.resolve())
         self.assertEqual([(target.selected, target.translation_unit) for target in plan.targets], [(header, consumer)])
 
     def test_fallback_selects_lexicographically_first_consumer_and_reads_graph_once(self):

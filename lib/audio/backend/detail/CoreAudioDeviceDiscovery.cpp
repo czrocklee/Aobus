@@ -5,17 +5,21 @@
 
 #include "CoreFoundationOwnership.h"
 #include "CoreFoundationString.h"
-
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 
-#include <CoreAudio/CoreAudio.h>
-#include <CoreFoundation/CoreFoundation.h>
+#include <CoreAudio/AudioHardware.h>
+#include <CoreAudio/AudioHardwareBase.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
+#include <CoreFoundation/CFBase.h>
+#include <MacTypes.h>
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
+#include <cstring>
+#include <expected>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -26,25 +30,26 @@ namespace ao::audio::backend::detail
 {
   namespace
   {
-    constexpr auto kGlobalMain = ::AudioObjectPropertyAddress{
-      0U, ::kAudioObjectPropertyScopeGlobal, ::kAudioObjectPropertyElementMain};
-    constexpr auto kOutputMain = ::AudioObjectPropertyAddress{
-      0U, ::kAudioObjectPropertyScopeOutput, ::kAudioObjectPropertyElementMain};
+    constexpr auto kGlobalMain = ::AudioObjectPropertyAddress{.mSelector = 0U,
+                                                              .mScope = ::kAudioObjectPropertyScopeGlobal,
+                                                              .mElement = ::kAudioObjectPropertyElementMain};
+    constexpr auto kOutputMain = ::AudioObjectPropertyAddress{.mSelector = 0U,
+                                                              .mScope = ::kAudioObjectPropertyScopeOutput,
+                                                              .mElement = ::kAudioObjectPropertyElementMain};
 
     template<typename Value>
-    bool readScalar(::AudioObjectID const object,
-                    ::AudioObjectPropertyAddress address,
-                    Value& value) noexcept
+    bool readScalar(::AudioObjectID const object, ::AudioObjectPropertyAddress address, Value& value) noexcept
     {
       auto size = static_cast<::UInt32>(sizeof(Value));
-      return ::AudioObjectGetPropertyData(object, &address, 0U, nullptr, &size, &value) == ::noErr &&
+      return ::AudioObjectGetPropertyData(
+               object, &address, 0U, nullptr, &size, static_cast<void*>(std::addressof(value))) == ::noErr &&
              size == sizeof(Value);
     }
 
-    std::vector<::AudioObjectID> readObjectList(::AudioObjectID const object,
-                                                ::AudioObjectPropertyAddress address)
+    std::vector<::AudioObjectID> readObjectList(::AudioObjectID const object, ::AudioObjectPropertyAddress address)
     {
       ::UInt32 byteCount = 0U;
+
       if (::AudioObjectGetPropertyDataSize(object, &address, 0U, nullptr, &byteCount) != ::noErr ||
           byteCount % sizeof(::AudioObjectID) != 0U)
       {
@@ -52,21 +57,23 @@ namespace ao::audio::backend::detail
       }
 
       auto values = std::vector<::AudioObjectID>(byteCount / sizeof(::AudioObjectID));
+
       if (byteCount != 0U &&
           ::AudioObjectGetPropertyData(object, &address, 0U, nullptr, &byteCount, values.data()) != ::noErr)
       {
         return {};
       }
+
       values.resize(byteCount / sizeof(::AudioObjectID));
       return values;
     }
 
-    std::string readString(::AudioObjectID const object,
-                           ::AudioObjectPropertySelector const selector)
+    std::string readString(::AudioObjectID const object, ::AudioObjectPropertySelector const selector)
     {
       auto address = kGlobalMain;
       address.mSelector = selector;
       ::CFStringRef rawValue = nullptr;
+
       if (!readScalar(object, address, rawValue) || rawValue == nullptr)
       {
         return {};
@@ -77,12 +84,12 @@ namespace ao::audio::backend::detail
       return utf8Res ? *utf8Res : std::string{};
     }
 
-    bool isOutputDevice(::AudioDeviceID const device)
+    bool isOutputDevice(::AudioObjectID const device)
     {
       auto aliveAddress = kGlobalMain;
       aliveAddress.mSelector = ::kAudioDevicePropertyDeviceIsAlive;
-      ::UInt32 alive = 0U;
-      if (!readScalar(device, aliveAddress, alive) || alive == 0U)
+
+      if (::UInt32 alive = 0U; !readScalar(device, aliveAddress, alive) || alive == 0U)
       {
         return false;
       }
@@ -90,52 +97,58 @@ namespace ao::audio::backend::detail
       auto configurationAddress = kOutputMain;
       configurationAddress.mSelector = ::kAudioDevicePropertyStreamConfiguration;
       ::UInt32 byteCount = 0U;
-      if (::AudioObjectGetPropertyDataSize(
-            device, &configurationAddress, 0U, nullptr, &byteCount) != ::noErr ||
+
+      if (::AudioObjectGetPropertyDataSize(device, &configurationAddress, 0U, nullptr, &byteCount) != ::noErr ||
           byteCount < offsetof(::AudioBufferList, mBuffers))
       {
         return false;
       }
 
       auto storage = std::vector<std::byte>(byteCount);
-      if (::AudioObjectGetPropertyData(
-            device, &configurationAddress, 0U, nullptr, &byteCount, storage.data()) != ::noErr ||
+
+      if (::AudioObjectGetPropertyData(device, &configurationAddress, 0U, nullptr, &byteCount, storage.data()) !=
+            ::noErr ||
           byteCount < offsetof(::AudioBufferList, mBuffers))
       {
         return false;
       }
 
-      auto const* buffers = reinterpret_cast<::AudioBufferList const*>(storage.data());
-      auto const availableBufferCount =
-        (byteCount - offsetof(::AudioBufferList, mBuffers)) / sizeof(::AudioBuffer);
-      if (buffers->mNumberBuffers > availableBufferCount)
+      auto const availableBufferCount = (byteCount - offsetof(::AudioBufferList, mBuffers)) / sizeof(::AudioBuffer);
+      ::UInt32 bufferCount = 0U;
+      std::memcpy(&bufferCount, storage.data() + offsetof(::AudioBufferList, mNumberBuffers), sizeof(bufferCount));
+
+      if (bufferCount > availableBufferCount)
       {
         return false;
       }
 
-      for (::UInt32 index = 0U; index < buffers->mNumberBuffers; ++index)
+      for (::UInt32 index = 0U; index < bufferCount; ++index)
       {
-        if (buffers->mBuffers[index].mNumberChannels != 0U)
+        auto buffer = ::AudioBuffer{};
+        auto const offset = offsetof(::AudioBufferList, mBuffers) + (static_cast<std::size_t>(index) * sizeof(buffer));
+        std::memcpy(&buffer, storage.data() + offset, sizeof(buffer));
+
+        if (buffer.mNumberChannels != 0U)
         {
           return true;
         }
       }
+
       return false;
     }
 
-    std::vector<::AudioDeviceID> audioDeviceIds()
+    std::vector<::AudioObjectID> audioDeviceIds()
     {
       auto address = kGlobalMain;
       address.mSelector = ::kAudioHardwarePropertyDevices;
-      auto objects = readObjectList(::kAudioObjectSystemObject, address);
-      return {objects.begin(), objects.end()};
+      return readObjectList(::kAudioObjectSystemObject, address);
     }
 
-    ::AudioDeviceID defaultOutputDevice()
+    ::AudioObjectID defaultOutputDevice()
     {
       auto address = kGlobalMain;
       address.mSelector = ::kAudioHardwarePropertyDefaultOutputDevice;
-      auto result = ::AudioDeviceID{kAudioObjectUnknown};
+      ::AudioObjectID result = ::kAudioObjectUnknown;
       readScalar(::kAudioObjectSystemObject, address, result);
       return result;
     }
@@ -171,6 +184,7 @@ namespace ao::audio::backend::detail
       }
 
       auto uid = readString(deviceId, ::kAudioDevicePropertyDeviceUID);
+
       if (uid.empty())
       {
         continue;
@@ -182,6 +196,7 @@ namespace ao::audio::backend::detail
       }
 
       auto name = readString(deviceId, ::kAudioObjectPropertyName);
+
       if (name.empty())
       {
         name = uid;
@@ -196,25 +211,27 @@ namespace ao::audio::backend::detail
     return orderCoreAudioDevices(std::move(devices), defaultUid);
   }
 
-  Result<::AudioDeviceID> coreAudioOutputDeviceId(std::string_view const deviceUid)
+  Result<::AudioObjectID> coreAudioOutputDeviceId(std::string_view const deviceUid)
   {
     auto const uidRes = coreFoundationString(deviceUid);
+
     if (!uidRes)
     {
-      return std::unexpected(uidRes.error());
+      return std::unexpected{uidRes.error()};
     }
 
-    auto const uid = uidRes->get();
-    auto deviceId = ::AudioDeviceID{::kAudioObjectUnknown};
+    auto const* const uid = uidRes->get();
+    ::AudioObjectID deviceId = ::kAudioObjectUnknown;
     auto byteCount = static_cast<::UInt32>(sizeof(deviceId));
     auto address = kGlobalMain;
     address.mSelector = ::kAudioHardwarePropertyTranslateUIDToDevice;
     auto const status = ::AudioObjectGetPropertyData(::kAudioObjectSystemObject,
                                                      &address,
-                                                     sizeof(uid),
-                                                     &uid,
+                                                     static_cast<::UInt32>(sizeof(::CFStringRef)),
+                                                     static_cast<void const*>(std::addressof(uid)),
                                                      &byteCount,
-                                                     &deviceId);
+                                                     static_cast<void*>(std::addressof(deviceId)));
+
     if (status == ::noErr && byteCount == sizeof(deviceId) && deviceId != ::kAudioObjectUnknown &&
         isOutputDevice(deviceId))
     {

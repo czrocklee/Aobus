@@ -3,6 +3,7 @@
 
 #include "test/fatal/AudioFatalProbeScenario.h"
 
+#include "lib/audio/backend/detail/BackendGraphRegistry.h"
 #include "lib/audio/detail/EngineEventQueueInvariants.h"
 #include "lib/audio/detail/EngineRtSignalRing.h"
 #include "lib/audio/detail/RenderTimeline.h"
@@ -16,12 +17,8 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 
-#ifdef __linux__
-#include "lib/audio/backend/detail/AlsaGraphRegistry.h"
-#endif
 #ifdef _WIN32
 #include "lib/audio/backend/WasapiProvider.h"
-#include "lib/audio/backend/detail/WasapiGraphRegistry.h"
 #include "lib/audio/backend/detail/WasapiProviderMonitorHooks.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
@@ -164,23 +161,12 @@ namespace ao::audio::test
       callbackEntered.acquire();
     }
 
-#if defined(__linux__) || defined(_WIN32)
-    // macOS builds no platform graph observer, so AudioFatalProbeProtocol omits
-    // this scenario there and the probe is never asked to run it. Without this
-    // guard the #else below would select the WASAPI registry on macOS, whose
-    // header is only included under _WIN32.
     if (scenario == "platform-graph-observer-exception")
     {
-#ifdef __linux__
-      auto registry = backend::detail::AlsaGraphRegistry{};
-#else
-      auto registry = backend::detail::WasapiGraphRegistry{};
-#endif
+      auto registry = backend::detail::BackendGraphRegistry{};
       [[maybe_unused]] auto subscription =
         registry.subscribe("probe-route", [](auto const&) { throw std::runtime_error{"probe exception"}; });
     }
-
-#endif
 
 #ifdef _WIN32
 

@@ -17,7 +17,6 @@
 #include <exception>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <stop_token>
 #include <string_view>
 #include <type_traits>
@@ -82,10 +81,10 @@ namespace ao::async
       }
       else
       {
-        // Boost.Asio supplies an empty optional to its completion token when
+        // Boost.Asio supplies an empty payload to its completion token when
         // the source fails, while use_future preserves the source exception.
-        auto transport = [](Task<T> source) -> Task<std::optional<T>>
-        { co_return std::optional<T>{co_await std::move(source)}; }(std::move(task));
+        auto transport = [](Task<T> source) -> Task<detail::TaskFuturePayload<T>>
+        { co_return detail::TaskFuturePayload<T>{co_await std::move(source)}; }(std::move(task));
         return TaskFuture{boost::asio::co_spawn(workerPool(), std::move(transport), boost::asio::use_future)};
       }
     }

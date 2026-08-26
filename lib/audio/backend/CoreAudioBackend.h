@@ -6,7 +6,6 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SignalFormat.h>
@@ -16,6 +15,12 @@
 namespace ao::audio::backend::detail
 {
   class BackendGraphRegistry;
+}
+
+namespace ao::audio
+{
+  struct Device;
+  class RenderTarget;
 }
 
 namespace ao::audio::backend

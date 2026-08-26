@@ -27,8 +27,7 @@ namespace ao::audio::backend::detail
    * is replaced with silence. Native APIs may therefore consume the complete
    * callback buffer while position advances only by committed real frames.
    */
-  PreparedAudioBackendRenderBuffer prepareAudioBackendRenderBuffer(
-    std::span<std::byte> buffer,
-    std::size_t bytesPerFrame,
-    RenderPcmResult const& result) noexcept;
+  PreparedAudioBackendRenderBuffer prepareAudioBackendRenderBuffer(std::span<std::byte> buffer,
+                                                                   std::size_t bytesPerFrame,
+                                                                   RenderPcmResult const& result) noexcept;
 } // namespace ao::audio::backend::detail

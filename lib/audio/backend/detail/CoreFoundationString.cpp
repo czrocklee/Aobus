@@ -4,15 +4,17 @@
 #include "CoreFoundationString.h"
 
 #include "CoreFoundationOwnership.h"
-
 #include <ao/Error.h>
 
-#include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFBase.h>
+#include <CoreFoundation/CFString.h>
+#include <MacTypes.h>
 
 #include <cstddef>
 #include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::audio::backend::detail
 {
@@ -23,10 +25,11 @@ namespace ao::audio::backend::detail
       return makeError(Error::Code::ValueTooLarge, "UTF-8 text is too large for Core Foundation");
     }
 
-    auto const* bytes = reinterpret_cast<::UInt8 const*>(utf8.data());
+    auto const bytes = std::vector<::UInt8>{utf8.begin(), utf8.end()};
     auto const length = static_cast<::CFIndex>(utf8.size());
-    auto* value = ::CFStringCreateWithBytes(
-      ::kCFAllocatorDefault, bytes, length, ::kCFStringEncodingUTF8, false);
+    auto const* value =
+      ::CFStringCreateWithBytes(::kCFAllocatorDefault, bytes.data(), length, ::kCFStringEncodingUTF8, 0U);
+
     if (value == nullptr)
     {
       return makeError(Error::Code::InvalidInput, "Core Foundation rejected invalid UTF-8 text");
@@ -44,39 +47,30 @@ namespace ao::audio::backend::detail
 
     auto const length = ::CFStringGetLength(value);
     ::CFIndex byteCount = 0;
-    auto const convertedCharacters = ::CFStringGetBytes(value,
-                                                        ::CFRangeMake(0, length),
-                                                        ::kCFStringEncodingUTF8,
-                                                        0,
-                                                        false,
-                                                        nullptr,
-                                                        0,
-                                                        &byteCount);
+    auto const convertedCharacters =
+      ::CFStringGetBytes(value, ::CFRangeMake(0, length), ::kCFStringEncodingUTF8, 0, 0U, nullptr, 0, &byteCount);
+
     if (convertedCharacters != length || byteCount < 0)
     {
       return makeError(Error::Code::InvalidInput, "Core Foundation string cannot be represented as UTF-8");
     }
 
-    auto result = std::string(static_cast<std::size_t>(byteCount), '\0');
+    auto bytes = std::vector<::UInt8>(static_cast<std::size_t>(byteCount));
+
     if (byteCount == 0)
     {
-      return result;
+      return std::string{};
     }
 
     ::CFIndex bytesWritten = 0;
-    auto const writtenCharacters = ::CFStringGetBytes(value,
-                                                      ::CFRangeMake(0, length),
-                                                      ::kCFStringEncodingUTF8,
-                                                      0,
-                                                      false,
-                                                      reinterpret_cast<::UInt8*>(result.data()),
-                                                      byteCount,
-                                                      &bytesWritten);
+    auto const writtenCharacters = ::CFStringGetBytes(
+      value, ::CFRangeMake(0, length), ::kCFStringEncodingUTF8, 0, 0U, bytes.data(), byteCount, &bytesWritten);
+
     if (writtenCharacters != length || bytesWritten != byteCount)
     {
       return makeError(Error::Code::InvalidInput, "Core Foundation string cannot be represented as UTF-8");
     }
 
-    return result;
+    return std::string{bytes.begin(), bytes.end()};
   }
 } // namespace ao::audio::backend::detail

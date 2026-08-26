@@ -18,6 +18,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
@@ -151,8 +152,7 @@ namespace ao::tui::test
     CHECK(controller.selectedRow() == 2);
   }
 
-  TEST_CASE("OutputDeviceController - presents Core Audio shared outputs",
-            "[tui][unit][output][coreaudio]")
+  TEST_CASE("OutputDeviceController - presents Core Audio shared outputs", "[tui][unit][output][coreaudio]")
   {
     auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
     fixture.status.descriptor.id = audio::kBackendCoreAudio;

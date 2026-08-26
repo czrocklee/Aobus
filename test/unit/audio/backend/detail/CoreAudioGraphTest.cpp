@@ -6,6 +6,7 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
+#include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,17 +15,14 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("CoreAudioGraph - distinguishes the client stream, endpoint signal, and software gain",
             "[audio][unit][coreaudio]")
   {
-    auto const graph = coreAudioGraph({.routeAnchor = "device-uid",
-                                       .deviceName = "Built-in Output",
-                                       .optClientFormat = PcmFormat{.sampleRate = 44100,
-                                                                    .channels = 2,
-                                                                    .encoding = SampleEncoding::Signed24In32Le},
-                                       .optDeviceFormat = SignalFormat{.sampleRate = 48000,
-                                                                       .channels = 2,
-                                                                       .precisionBits = 32,
-                                                                       .sampleKind = SampleKind::FloatingPoint},
-                                       .volume = 0.5F,
-                                       .muted = true});
+    auto const graph = coreAudioGraph(
+      {.routeAnchor = "device-uid",
+       .deviceName = "Built-in Output",
+       .optClientFormat = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed24In32Le},
+       .optDeviceFormat =
+         SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint},
+       .volume = 0.5F,
+       .muted = true});
 
     REQUIRE(graph.nodes.size() == 2U);
     CHECK(graph.nodes[0].id == "device-uid:client");

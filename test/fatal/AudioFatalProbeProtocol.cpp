@@ -26,13 +26,10 @@ namespace ao::audio::test
       AudioFatalProbeExpectation{"queue-rt-signals", "category=invariant", "must drain RT signals before destruction"},
       AudioFatalProbeExpectation{
         "engine-event-thread-exception", "category=unhandled-exception", "engine event thread: probe exception"},
-#ifdef __linux__
-      AudioFatalProbeExpectation{
-        "platform-graph-observer-exception", "category=unhandled-exception", "ALSA graph observer: probe exception"},
-#endif
+      AudioFatalProbeExpectation{"platform-graph-observer-exception",
+                                 "category=unhandled-exception",
+                                 "audio backend initial graph observer: probe exception"},
 #ifdef _WIN32
-      AudioFatalProbeExpectation{
-        "platform-graph-observer-exception", "category=unhandled-exception", "WASAPI graph observer: probe exception"},
       AudioFatalProbeExpectation{
         "wasapi-device-observer-exception", "category=unhandled-exception", "WASAPI device observer: probe exception"},
 #endif

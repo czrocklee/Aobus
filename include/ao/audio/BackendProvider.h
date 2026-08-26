@@ -99,7 +99,8 @@ namespace ao::audio
   /**
    * @brief Creates the native audio backend providers in platform preference order.
    *
-   * Linux prefers PipeWire and keeps ALSA as the fallback. Windows provides WASAPI.
+   * Linux prefers PipeWire and keeps ALSA as the fallback. Windows provides
+   * WASAPI, and macOS provides Core Audio.
    */
   std::vector<std::unique_ptr<BackendProvider>> createPlatformBackendProviders();
 } // namespace ao::audio

@@ -104,8 +104,7 @@ namespace ao::audio::backend::detail
   Subscription AlsaGraphRegistry::subscribe(std::string_view routeAnchor, Callback callback)
   {
     auto const anchor = std::string{routeAnchor};
-    return _implPtr->registry.subscribe(
-      anchor, std::move(callback), buildGraph(AlsaRouteState{.routeAnchor = anchor}));
+    return _implPtr->registry.subscribe(anchor, std::move(callback), buildGraph(AlsaRouteState{.routeAnchor = anchor}));
   }
 
   void AlsaGraphRegistry::publish(AlsaRouteState state)

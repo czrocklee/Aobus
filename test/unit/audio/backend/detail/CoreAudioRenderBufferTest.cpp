@@ -3,8 +3,7 @@
 
 #include "lib/audio/backend/detail/CoreAudioRenderBuffer.h"
 
-#include <AudioToolbox/AudioToolbox.h>
-
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -12,14 +11,11 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioRenderBuffer - supplies preallocated storage for a null AUHAL buffer",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioRenderBuffer - supplies preallocated storage for a null AUHAL buffer", "[audio][unit][coreaudio]")
   {
     auto staging = std::array<std::byte, 32>{};
-    auto buffers = ::AudioBufferList{.mNumberBuffers = 1U,
-                                     .mBuffers = {{.mNumberChannels = 2U,
-                                                   .mDataByteSize = 16U,
-                                                   .mData = nullptr}}};
+    auto buffers = ::AudioBufferList{
+      .mNumberBuffers = 1U, .mBuffers = {{.mNumberChannels = 2U, .mDataByteSize = 16U, .mData = nullptr}}};
 
     auto const bound = bindCoreAudioRenderBuffer(&buffers, staging, 16U);
 
@@ -35,10 +31,8 @@ namespace ao::audio::backend::detail::test
   {
     auto staging = std::array<std::byte, 32>{};
     auto native = std::array<std::byte, 16>{};
-    auto buffers = ::AudioBufferList{.mNumberBuffers = 1U,
-                                     .mBuffers = {{.mNumberChannels = 2U,
-                                                   .mDataByteSize = 16U,
-                                                   .mData = native.data()}}};
+    auto buffers = ::AudioBufferList{
+      .mNumberBuffers = 1U, .mBuffers = {{.mNumberChannels = 2U, .mDataByteSize = 16U, .mData = native.data()}}};
 
     auto const bound = bindCoreAudioRenderBuffer(&buffers, staging, 12U);
     REQUIRE(bound.valid);

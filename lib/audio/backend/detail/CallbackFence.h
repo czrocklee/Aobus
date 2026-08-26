@@ -22,7 +22,9 @@ namespace ao::audio::backend::detail
     bool isOpen() const noexcept;
 
   private:
-    std::atomic<bool> _open{false};
-    std::atomic<std::uint32_t> _inFlight{0U};
+    static constexpr std::uint32_t kClosed = std::uint32_t{1U} << 31U;
+    static constexpr std::uint32_t kInFlightMask = kClosed - 1U;
+
+    std::atomic<std::uint32_t> _state{kClosed};
   };
 } // namespace ao::audio::backend::detail

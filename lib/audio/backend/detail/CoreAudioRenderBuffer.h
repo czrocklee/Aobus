@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
 
 #include <cstddef>
 #include <span>
@@ -17,8 +17,7 @@ namespace ao::audio::backend::detail
   };
 
   /** @brief Binds AUHAL null output storage to the preallocated staging buffer. */
-  BoundCoreAudioRenderBuffer bindCoreAudioRenderBuffer(
-    ::AudioBufferList* buffers,
-    std::span<std::byte> stagingBuffer,
-    std::size_t byteCount) noexcept;
+  BoundCoreAudioRenderBuffer bindCoreAudioRenderBuffer(::AudioBufferList* buffers,
+                                                       std::span<std::byte> stagingBuffer,
+                                                       std::size_t byteCount) noexcept;
 } // namespace ao::audio::backend::detail

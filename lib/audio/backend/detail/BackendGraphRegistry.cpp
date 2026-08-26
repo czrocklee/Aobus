@@ -32,8 +32,10 @@ namespace ao::audio::backend::detail
     std::mutex mutex{};
     std::recursive_mutex callbackMutex{};
     std::unordered_map<std::string, flow::Graph> graphs{};
+    std::unordered_map<std::string, std::uint64_t> revisions{};
     std::vector<Subscriber> subscribers{};
     std::uint64_t nextSubscriberId = 1;
+    std::uint64_t nextRevision = 1;
     bool shutdown = false;
   };
 
@@ -41,8 +43,7 @@ namespace ao::audio::backend::detail
   {
     bool containsSubscriber(auto const& state, std::uint64_t const id)
     {
-      return std::ranges::any_of(state.subscribers,
-                                 [id](auto const& subscriber) { return subscriber.id == id; });
+      return std::ranges::any_of(state.subscribers, [id](auto const& subscriber) { return subscriber.id == id; });
     }
 
     void invokeGraphCallback(BackendGraphRegistry::Callback const& callback,
@@ -61,6 +62,8 @@ namespace ao::audio::backend::detail
 
     void publishToSubscribers(auto const& statePtr,
                               auto const& subscribers,
+                              std::string const& routeAnchor,
+                              std::uint64_t const revision,
                               flow::Graph const& graph)
     {
       for (auto const& subscriber : subscribers)
@@ -71,6 +74,13 @@ namespace ao::audio::backend::detail
           auto const lock = std::scoped_lock{statePtr->mutex};
 
           if (statePtr->shutdown)
+          {
+            return;
+          }
+
+          auto const revisionIt = statePtr->revisions.find(routeAnchor);
+
+          if (revisionIt == statePtr->revisions.end() || revisionIt->second != revision)
           {
             return;
           }
@@ -91,11 +101,14 @@ namespace ao::audio::backend::detail
   {
   }
 
-  BackendGraphRegistry::~BackendGraphRegistry() { shutdown(); }
+  BackendGraphRegistry::~BackendGraphRegistry()
+  {
+    shutdown();
+  }
 
   Subscription BackendGraphRegistry::subscribe(std::string_view const routeAnchor,
-                                                Callback callback,
-                                                flow::Graph initialGraph)
+                                               Callback callback,
+                                               flow::Graph initialGraph)
   {
     if (!callback)
     {
@@ -104,7 +117,7 @@ namespace ao::audio::backend::detail
 
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
-    auto subscriberId = std::uint64_t{0};
+    std::uint64_t subscriberId = 0;
     auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
 
     {
@@ -116,8 +129,7 @@ namespace ao::audio::backend::detail
       }
 
       subscriberId = statePtr->nextSubscriberId++;
-      statePtr->subscribers.push_back(
-        {.id = subscriberId, .routeAnchor = anchor, .callback = std::move(callback)});
+      statePtr->subscribers.push_back({.id = subscriberId, .routeAnchor = anchor, .callback = std::move(callback)});
 
       if (auto const it = statePtr->graphs.find(anchor); it != statePtr->graphs.end())
       {
@@ -125,7 +137,7 @@ namespace ao::audio::backend::detail
       }
     }
 
-    Callback initialCallback{};
+    auto initialCallback = Callback{};
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
@@ -150,10 +162,10 @@ namespace ao::audio::backend::detail
       }
     }
 
-    auto const weakState = std::weak_ptr<State>{statePtr};
-    return Subscription{[weakState, subscriberId]
+    auto const weakStatePtr = std::weak_ptr<State>{statePtr};
+    return Subscription{[weakStatePtr, subscriberId]
                         {
-                          auto const statePtr = weakState.lock();
+                          auto const statePtr = weakStatePtr.lock();
 
                           if (!statePtr)
                           {
@@ -177,6 +189,7 @@ namespace ao::audio::backend::detail
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
     auto pendingSubscribers = std::vector<State::Subscriber>{};
+    std::uint64_t revision = 0;
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
@@ -187,6 +200,8 @@ namespace ao::audio::backend::detail
       }
 
       statePtr->graphs[anchor] = graph;
+      revision = statePtr->nextRevision++;
+      statePtr->revisions[anchor] = revision;
 
       for (auto const& subscriber : statePtr->subscribers)
       {
@@ -197,7 +212,7 @@ namespace ao::audio::backend::detail
       }
     }
 
-    publishToSubscribers(statePtr, pendingSubscribers, graph);
+    publishToSubscribers(statePtr, pendingSubscribers, anchor, revision, graph);
   }
 
   void BackendGraphRegistry::clear(std::string_view const routeAnchor)
@@ -205,6 +220,7 @@ namespace ao::audio::backend::detail
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
     auto pendingSubscribers = std::vector<State::Subscriber>{};
+    std::uint64_t revision = 0;
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
@@ -215,6 +231,8 @@ namespace ao::audio::backend::detail
       }
 
       statePtr->graphs.erase(anchor);
+      revision = statePtr->nextRevision++;
+      statePtr->revisions[anchor] = revision;
 
       for (auto const& subscriber : statePtr->subscribers)
       {
@@ -225,7 +243,7 @@ namespace ao::audio::backend::detail
       }
     }
 
-    publishToSubscribers(statePtr, pendingSubscribers, {});
+    publishToSubscribers(statePtr, pendingSubscribers, anchor, revision, {});
   }
 
   void BackendGraphRegistry::shutdown() noexcept
@@ -243,6 +261,7 @@ namespace ao::audio::backend::detail
 
       statePtr->shutdown = true;
       statePtr->graphs.clear();
+      statePtr->revisions.clear();
     }
 
     auto const emptyGraph = flow::Graph{};

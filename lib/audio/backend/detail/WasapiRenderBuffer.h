@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "backend/detail/AudioBackendRenderBuffer.h"
+#include "AudioBackendRenderBuffer.h"
 
 #include <cstddef>
 #include <cstdint>

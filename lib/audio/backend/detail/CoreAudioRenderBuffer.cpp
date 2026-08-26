@@ -3,7 +3,8 @@
 
 #include "CoreAudioRenderBuffer.h"
 
-#include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
+#include <MacTypes.h>
 
 #include <cstddef>
 #include <limits>
@@ -11,10 +12,9 @@
 
 namespace ao::audio::backend::detail
 {
-  BoundCoreAudioRenderBuffer bindCoreAudioRenderBuffer(
-    ::AudioBufferList* const buffers,
-    std::span<std::byte> const stagingBuffer,
-    std::size_t const byteCount) noexcept
+  BoundCoreAudioRenderBuffer bindCoreAudioRenderBuffer(::AudioBufferList* const buffers,
+                                                       std::span<std::byte> const stagingBuffer,
+                                                       std::size_t const byteCount) noexcept
   {
     if (buffers == nullptr || buffers->mNumberBuffers != 1U || byteCount > stagingBuffer.size() ||
         byteCount > std::numeric_limits<::UInt32>::max())
@@ -23,6 +23,7 @@ namespace ao::audio::backend::detail
     }
 
     auto& buffer = buffers->mBuffers[0];
+
     if (buffer.mData == nullptr)
     {
       buffer.mData = stagingBuffer.data();

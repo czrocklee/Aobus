@@ -7,15 +7,56 @@
 
 #include <future>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 namespace ao::async
 {
+  namespace detail
+  {
+    template<typename T>
+    class TaskFuturePayload final
+    {
+    public:
+      TaskFuturePayload() = default;
+
+      explicit TaskFuturePayload(T value)
+        : _optValue{std::move(value)}
+      {
+      }
+
+      TaskFuturePayload(TaskFuturePayload const&) = delete;
+      TaskFuturePayload& operator=(TaskFuturePayload const&) = delete;
+      TaskFuturePayload(TaskFuturePayload&&) noexcept = default;
+      TaskFuturePayload& operator=(TaskFuturePayload&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+      {
+        if (this != &other)
+        {
+          _optValue.reset();
+
+          if (other._optValue)
+          {
+            _optValue.emplace(std::move(*other._optValue));
+          }
+        }
+
+        return *this;
+      }
+      ~TaskFuturePayload() = default;
+
+      bool hasValue() const noexcept { return _optValue.has_value(); }
+      T take() && { return std::move(*_optValue); }
+
+    private:
+      std::optional<T> _optValue{};
+    };
+  } // namespace detail
+
   template<typename T>
   class [[nodiscard]] TaskFuture final
   {
   public:
-    explicit TaskFuture(std::future<std::optional<T>> future)
+    explicit TaskFuture(std::future<detail::TaskFuturePayload<T>> future)
       : _future{std::move(future)}
     {
     }
@@ -29,17 +70,15 @@ namespace ao::async
 
     T get()
     {
-      auto optResult = _future.get();
+      auto result = _future.get();
 
-      AO_INVARIANT(optResult, "Task future completed without a result");
+      AO_INVARIANT(result.hasValue(), "Task future completed without a result");
 
-      return std::move(*optResult);
+      return std::move(result).take();
     }
 
   private:
-    // The optional payload prevents future implementations from eagerly
-    // default-constructing T before the task has produced a value.
-    std::future<std::optional<T>> _future;
+    std::future<detail::TaskFuturePayload<T>> _future;
   };
 
   template<>

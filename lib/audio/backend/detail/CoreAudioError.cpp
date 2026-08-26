@@ -5,8 +5,10 @@
 
 #include <ao/Error.h>
 
-#include <AudioToolbox/AudioToolbox.h>
-#include <CoreAudio/CoreAudio.h>
+#include <AudioToolbox/AUComponent.h>
+#include <CoreAudio/AudioHardwareBase.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
+#include <MacTypes.h>
 
 #include <algorithm>
 #include <array>
@@ -52,20 +54,21 @@ namespace ao::audio::backend::detail
                                            static_cast<char>((raw >> 16U) & 0xffU),
                                            static_cast<char>((raw >> 8U) & 0xffU),
                                            static_cast<char>(raw & 0xffU)};
-    auto const printable = std::ranges::all_of(bytes, [](char const byte) {
-      return std::isprint(static_cast<unsigned char>(byte)) != 0;
-    });
+    auto const printable =
+      std::ranges::all_of(bytes, [](char const byte) { return std::isprint(static_cast<unsigned char>(byte)) != 0; });
+
     if (printable)
     {
       return std::format("OSStatus '{}' ({})", std::string{bytes.data(), bytes.size()}, status);
     }
+
     return std::format("OSStatus {}", status);
   }
 
   std::unexpected<Error> makeCoreAudioError(::OSStatus const status,
-                                             std::string_view const operation,
-                                             Error::Code const fallback,
-                                             std::source_location const location)
+                                            std::string_view const operation,
+                                            Error::Code const fallback,
+                                            std::source_location const location)
   {
     return makeError(coreAudioErrorCode(status, fallback),
                      std::format("{} failed ({})", operation, coreAudioStatusText(status)),

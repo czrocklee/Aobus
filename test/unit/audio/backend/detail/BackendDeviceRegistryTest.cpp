@@ -15,7 +15,7 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("BackendDeviceRegistry - publishes snapshots and honors cancellation", "[audio][unit][device-registry]")
   {
     auto registry = BackendDeviceRegistry{};
-    auto calls = std::size_t{0};
+    std::size_t calls = 0;
     auto snapshot = std::vector<Device>{};
     auto sub = registry.subscribe(
       [&](std::vector<Device> const& devices)
@@ -37,12 +37,11 @@ namespace ao::audio::backend::detail::test
     CHECK(calls == 2U);
   }
 
-  TEST_CASE("BackendDeviceRegistry - shutdown closes admission and clears status",
-            "[audio][unit][device-registry]")
+  TEST_CASE("BackendDeviceRegistry - shutdown closes admission and clears status", "[audio][unit][device-registry]")
   {
     auto registry = BackendDeviceRegistry{};
     registry.publish({{.id = DeviceId{"uid-a"}}});
-    auto calls = std::size_t{0};
+    std::size_t calls = 0;
     auto sub = registry.subscribe([&](std::vector<Device> const&) { ++calls; });
     REQUIRE(sub);
     CHECK(calls == 1U);
@@ -61,14 +60,15 @@ namespace ao::audio::backend::detail::test
             "[audio][unit][device-registry]")
   {
     auto registry = BackendDeviceRegistry{};
-    auto firstCalls = std::size_t{0};
-    auto secondCalls = std::size_t{0};
-    auto cancelSecond = false;
+    std::size_t firstCalls = 0;
+    std::size_t secondCalls = 0;
+    bool cancelSecond = false;
     auto secondSub = Subscription{};
     auto firstSub = registry.subscribe(
       [&](std::vector<Device> const&)
       {
         ++firstCalls;
+
         if (cancelSecond)
         {
           secondSub.reset();

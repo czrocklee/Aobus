@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/audio/Subscription.h>
 
 #include <memory>
 #include <string_view>
@@ -11,6 +13,12 @@
 namespace ao::audio::backend::detail
 {
   struct CoreAudioProviderMonitorHooks;
+}
+
+namespace ao::audio
+{
+  class Backend;
+  struct Device;
 }
 
 namespace ao::audio::backend

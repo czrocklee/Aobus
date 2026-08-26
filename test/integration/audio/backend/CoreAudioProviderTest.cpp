@@ -46,12 +46,13 @@ namespace ao::audio::backend::test
         auto const frames = std::min(requestFrames, _totalFrames - _renderedFrames);
         auto* const samples = reinterpret_cast<std::int16_t*>(output.data());
 
-        for (auto frame = std::uint32_t{0U}; frame < frames; ++frame)
+        for (std::uint32_t frame = 0U; frame < frames; ++frame)
         {
-          auto const phase = 2.0 * std::numbers::pi * 440.0 * (_renderedFrames + frame) /
-                             static_cast<double>(_format.sampleRate);
+          auto const phase =
+            2.0 * std::numbers::pi * 440.0 * (_renderedFrames + frame) / static_cast<double>(_format.sampleRate);
           auto const value = static_cast<std::int16_t>(std::sin(phase) * 0.05 * 32767.0);
-          for (auto channel = std::uint32_t{0U}; channel < _format.channels; ++channel)
+
+          for (std::uint32_t channel = 0U; channel < _format.channels; ++channel)
           {
             samples[(static_cast<std::size_t>(frame) * _format.channels) + channel] = value;
           }
@@ -111,10 +112,7 @@ namespace ao::audio::backend::test
         return _routeAnchor;
       }
 
-      std::uint32_t advancedFrames() const noexcept
-      {
-        return _advancedFrames.load(std::memory_order_relaxed);
-      }
+      std::uint32_t advancedFrames() const noexcept { return _advancedFrames.load(std::memory_order_relaxed); }
 
     private:
       PcmFormat _format;
@@ -134,6 +132,7 @@ namespace ao::audio::backend::test
   {
     auto provider = CoreAudioProvider{};
     auto const status = provider.status();
+
     if (status.devices.empty())
     {
       SKIP("macOS host has no live Core Audio output device");
@@ -141,6 +140,7 @@ namespace ao::audio::backend::test
 
     auto const defaultCount = std::ranges::count(status.devices, true, &Device::isDefault);
     CHECK(defaultCount <= 1);
+
     if (defaultCount == 1)
     {
       CHECK(status.devices.front().isDefault);
@@ -155,10 +155,12 @@ namespace ao::audio::backend::test
     REQUIRE(backendPtr->set(props::kVolume, 0.25F));
 
     auto const openedRes = backendPtr->open(sourceFormat, target);
+
     if (!openedRes)
     {
       FAIL("Core Audio open failed: " << openedRes.error().message);
     }
+
     REQUIRE(openedRes->clientFormat == pcm);
     CHECK(target.routeAnchor() == status.devices.front().id.raw());
 

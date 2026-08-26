@@ -4,10 +4,9 @@
 #pragma once
 
 #include "CoreFoundationOwnership.h"
-
 #include <ao/Error.h>
 
-#include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFBase.h>
 
 #include <string>
 #include <string_view>

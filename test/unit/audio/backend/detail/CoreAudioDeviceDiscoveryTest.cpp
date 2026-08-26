@@ -3,18 +3,19 @@
 
 #include "lib/audio/backend/detail/CoreAudioDeviceDiscovery.h"
 
+#include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/Error.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioDeviceDiscovery - marks and orders the concrete system default",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioDeviceDiscovery - marks and orders the concrete system default", "[audio][unit][coreaudio]")
   {
     auto devices = std::vector<Device>{
       {.id = DeviceId{"uid-z"}, .displayName = "Zeta", .isDefault = true, .backendId = kBackendCoreAudio},
@@ -36,7 +37,8 @@ namespace ao::audio::backend::detail::test
             "[audio][integration][coreaudio]")
   {
     auto const devices = enumerateCoreAudioOutputDevices();
-    auto defaultCount = std::size_t{0};
+    std::size_t defaultCount = 0;
+
     for (auto const& device : devices)
     {
       CHECK_FALSE(device.id.empty());
@@ -47,6 +49,7 @@ namespace ao::audio::backend::detail::test
       auto const resolvedRes = coreAudioOutputDeviceId(device.id.raw());
       CHECK(resolvedRes);
     }
+
     CHECK(defaultCount <= 1U);
   }
 

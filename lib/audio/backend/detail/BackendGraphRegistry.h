@@ -41,9 +41,7 @@ namespace ao::audio::backend::detail
      * graph. A stored publication takes precedence. The returned subscription
      * may safely outlive the registry.
      */
-    Subscription subscribe(std::string_view routeAnchor,
-                           Callback callback,
-                           flow::Graph initialGraph = {});
+    Subscription subscribe(std::string_view routeAnchor, Callback callback, flow::Graph initialGraph = {});
 
     /// Replaces one route snapshot and publishes it to current subscribers.
     void publish(std::string_view routeAnchor, flow::Graph graph);

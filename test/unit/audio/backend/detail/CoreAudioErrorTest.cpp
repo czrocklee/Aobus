@@ -5,9 +5,8 @@
 
 #include <ao/Error.h>
 
-#include <AudioToolbox/AudioToolbox.h>
-#include <CoreAudio/CoreAudio.h>
-
+#include <AudioToolbox/AUComponent.h>
+#include <CoreAudio/AudioHardwareBase.h>
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
@@ -16,8 +15,7 @@ namespace ao::audio::backend::detail::test
 {
   TEST_CASE("CoreAudioError - classifies native failures", "[audio][unit][coreaudio]")
   {
-    CHECK(coreAudioErrorCode(::kAudioHardwareBadDeviceError, Error::Code::IoError) ==
-          Error::Code::DeviceNotFound);
+    CHECK(coreAudioErrorCode(::kAudioHardwareBadDeviceError, Error::Code::IoError) == Error::Code::DeviceNotFound);
     CHECK(coreAudioErrorCode(::kAudioUnitErr_FormatNotSupported, Error::Code::InitFailed) ==
           Error::Code::FormatRejected);
     CHECK(coreAudioErrorCode(::kAudioUnitErr_CannotDoInCurrentContext, Error::Code::InitFailed) ==
@@ -35,12 +33,12 @@ namespace ao::audio::backend::detail::test
 
   TEST_CASE("CoreAudioError - describes printable and numeric OSStatus values", "[audio][unit][coreaudio]")
   {
-    CHECK(coreAudioStatusText(::kAudioHardwareBadDeviceError).find("!dev") != std::string::npos);
+    CHECK(coreAudioStatusText(::kAudioHardwareBadDeviceError).contains("!dev"));
     CHECK(coreAudioStatusText(-123456) == "OSStatus -123456");
 
-    auto const error = makeCoreAudioError(
-      ::kAudioHardwareBadDeviceError, "select Core Audio device", Error::Code::InitFailed);
+    auto const error =
+      makeCoreAudioError(::kAudioHardwareBadDeviceError, "select Core Audio device", Error::Code::InitFailed);
     CHECK(error.error().code == Error::Code::DeviceNotFound);
-    CHECK(error.error().message.find("select Core Audio device") != std::string::npos);
+    CHECK(error.error().message.contains("select Core Audio device"));
   }
 } // namespace ao::audio::backend::detail::test

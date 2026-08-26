@@ -1126,9 +1126,9 @@ namespace ao::rt::test
 
     std::int32_t runTaskFutureMissingResult()
     {
-      auto promise = std::promise<std::optional<std::int32_t>>{};
+      auto promise = std::promise<async::detail::TaskFuturePayload<std::int32_t>>{};
       auto future = async::TaskFuture<std::int32_t>{promise.get_future()};
-      promise.set_value(std::nullopt);
+      promise.set_value(async::detail::TaskFuturePayload<std::int32_t>{});
       std::ignore = future.get();
       return 3;
     }

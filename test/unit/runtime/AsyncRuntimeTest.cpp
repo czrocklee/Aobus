@@ -62,6 +62,12 @@ namespace ao::rt::test
       {
       }
 
+      NonDefaultTaskResult(NonDefaultTaskResult const&) = delete;
+      NonDefaultTaskResult& operator=(NonDefaultTaskResult const&) = delete;
+      NonDefaultTaskResult(NonDefaultTaskResult&&) noexcept = default;
+      NonDefaultTaskResult& operator=(NonDefaultTaskResult&&) = delete;
+      ~NonDefaultTaskResult() = default;
+
       std::int32_t value() const noexcept { return _value; }
 
     private:
@@ -244,9 +250,11 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("AsyncRuntime - spawn transports non-default-constructible results", "[runtime][unit][async]")
+  TEST_CASE("AsyncRuntime - spawn transports non-default-constructible and non-assignable results",
+            "[runtime][unit][async]")
   {
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<NonDefaultTaskResult>);
+    STATIC_REQUIRE_FALSE(std::is_move_assignable_v<NonDefaultTaskResult>);
 
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};

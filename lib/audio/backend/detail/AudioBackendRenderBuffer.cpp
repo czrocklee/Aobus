@@ -4,7 +4,6 @@
 #include "backend/detail/AudioBackendRenderBuffer.h"
 
 #include "backend/detail/AudioBackendRenderProgress.h"
-
 #include <ao/audio/RenderTarget.h>
 
 #include <algorithm>
@@ -14,10 +13,9 @@
 
 namespace ao::audio::backend::detail
 {
-  PreparedAudioBackendRenderBuffer prepareAudioBackendRenderBuffer(
-    std::span<std::byte> buffer,
-    std::size_t const bytesPerFrame,
-    RenderPcmResult const& result) noexcept
+  PreparedAudioBackendRenderBuffer prepareAudioBackendRenderBuffer(std::span<std::byte> buffer,
+                                                                   std::size_t const bytesPerFrame,
+                                                                   RenderPcmResult const& result) noexcept
   {
     if (bytesPerFrame == 0)
     {
@@ -34,11 +32,11 @@ namespace ao::audio::backend::detail
       std::ranges::fill(buffer.subspan(renderedBytes), std::byte{0});
     }
 
-    return {.renderedFrames = renderedFrames,
-            .framesProvided = requestedFrames,
-            .positionFrames =
-              committedPositionFrames(renderedFrames, result.positionFrameOffset, result.positionFrames),
-            .underrun = renderedFrames < requestedFrames && !result.drained,
-            .drained = result.drained};
+    return {
+      .renderedFrames = renderedFrames,
+      .framesProvided = requestedFrames,
+      .positionFrames = committedPositionFrames(renderedFrames, result.positionFrameOffset, result.positionFrames),
+      .underrun = renderedFrames < requestedFrames && !result.drained,
+      .drained = result.drained};
   }
 } // namespace ao::audio::backend::detail

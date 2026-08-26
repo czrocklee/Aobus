@@ -4,7 +4,6 @@
 #include "CoreAudioGraph.h"
 
 #include "AudioBackendVolumeMath.h"
-
 #include <ao/audio/flow/Graph.h>
 
 #include <cmath>

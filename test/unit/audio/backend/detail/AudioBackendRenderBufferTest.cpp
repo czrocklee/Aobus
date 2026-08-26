@@ -3,13 +3,10 @@
 
 #include "lib/audio/backend/detail/AudioBackendRenderBuffer.h"
 
-#include <ao/audio/RenderTarget.h>
-
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <span>
 
 namespace ao::audio::backend::detail::test
@@ -21,9 +18,7 @@ namespace ao::audio::backend::detail::test
     buffer.fill(std::byte{0x7F});
 
     auto const prepared = prepareAudioBackendRenderBuffer(
-      buffer,
-      4,
-      {.bytesWritten = 8, .positionFrameOffset = 1, .positionFrames = 4, .drained = false});
+      buffer, 4, {.bytesWritten = 8, .positionFrameOffset = 1, .positionFrames = 4, .drained = false});
 
     CHECK(prepared.renderedFrames == 2);
     CHECK(prepared.framesProvided == 4);
@@ -42,9 +37,7 @@ namespace ao::audio::backend::detail::test
     buffer.fill(std::byte{0x3A});
 
     auto const prepared = prepareAudioBackendRenderBuffer(
-      buffer,
-      4,
-      {.bytesWritten = 4, .positionFrameOffset = 0, .positionFrames = 1, .drained = true});
+      buffer, 4, {.bytesWritten = 4, .positionFrameOffset = 0, .positionFrames = 1, .drained = true});
 
     CHECK(prepared.renderedFrames == 1);
     CHECK(prepared.framesProvided == 3);
@@ -62,9 +55,7 @@ namespace ao::audio::backend::detail::test
     auto buffer = std::array<std::byte, 8>{};
 
     auto const prepared = prepareAudioBackendRenderBuffer(
-      buffer,
-      4,
-      {.bytesWritten = 40, .positionFrameOffset = 0, .positionFrames = 9, .drained = false});
+      buffer, 4, {.bytesWritten = 40, .positionFrameOffset = 0, .positionFrames = 9, .drained = false});
 
     CHECK(prepared.renderedFrames == 2);
     CHECK(prepared.framesProvided == 2);

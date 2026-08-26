@@ -12,13 +12,13 @@
 #include <boost/asio/error.hpp>
 #include <boost/system/system_error.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
 
 #include <barrier>
 #include <cstddef>
 #include <exception>
 #include <stdexcept>
 #include <stop_token>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -251,11 +251,32 @@ namespace ao::rt::test
 
   TEST_CASE("OperationCancelled - exception rethrow normalizes cancellation", "[runtime][unit][async][cancellation]")
   {
-    CHECK_THROWS_WITH(
-      rethrowException(std::make_exception_ptr(std::runtime_error{"deferred failure"})), "deferred failure");
-    CHECK_THROWS_AS(
-      rethrowException(std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted})),
-      OperationCancelled);
+    bool deferredFailureRethrown = false;
+
+    try
+    {
+      rethrowException(std::make_exception_ptr(std::runtime_error{"deferred failure"}));
+    }
+    catch (std::runtime_error const& error)
+    {
+      deferredFailureRethrown = true;
+      CHECK(std::string_view{error.what()} == "deferred failure");
+    }
+
+    CHECK(deferredFailureRethrown);
+
+    bool cancellationNormalized = false;
+
+    try
+    {
+      rethrowException(std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted}));
+    }
+    catch (OperationCancelled const&)
+    {
+      cancellationNormalized = true;
+    }
+
+    CHECK(cancellationNormalized);
   }
 
   TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][lifetime]")

@@ -394,9 +394,7 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
         or "pipewire" in joined
         or stem.endswith("linux")
     )
-    owned_by_macos = (
-        "coreaudio" in joined or "corefoundation" in joined or stem.endswith("macos")
-    )
+    owned_by_macos = "coreaudio" in joined or "corefoundation" in joined or stem.endswith("macos")
     # POSIX sources belong to Linux and macOS alike, so only Windows defers
     # them. They are deliberately not part of owned_by_linux for that reason.
     owned_by_posix = stem.endswith("posix")
@@ -593,15 +591,16 @@ def _ninja_dependency_index(
                 compiled_by_output.setdefault(_ninja_path_key(output), set()).add(primary_consumer)
 
         try:
-            result = subprocess.run(
-                ["ninja", "-t", "deps"],
-                cwd=ninja_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
+            with buildlock.build_tree_lock(ninja_dir):
+                result = subprocess.run(
+                    ["ninja", "-t", "deps"],
+                    cwd=ninja_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
         except FileNotFoundError as error:
             raise die("ninja is required to resolve header compile-command consumers.") from error
         if result.returncode != 0:

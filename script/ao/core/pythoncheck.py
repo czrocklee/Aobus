@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import IO
 
 from .paths import PROJECT_ROOT, absolute_path
@@ -35,7 +35,7 @@ def module_command(
 def mypy_command(*arguments: str, platform_name: str | None = None) -> tuple[str, ...]:
     """Keep Darwin's SQLite cache on the local managed-tool volume."""
     resolved_platform = sys.platform if platform_name is None else platform_name
-    cache = ("--cache-dir", str(Path(sys.prefix) / ".mypy_cache")) if resolved_platform == "darwin" else ()
+    cache = ("--cache-dir", str(PurePosixPath(sys.prefix) / ".mypy_cache")) if resolved_platform == "darwin" else ()
     return module_command("mypy", *cache, *arguments, platform_name=platform_name)
 
 

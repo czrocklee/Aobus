@@ -6,7 +6,7 @@
 #include <ao/Error.h>
 #include <ao/audio/Device.h>
 
-#include <CoreAudio/CoreAudio.h>
+#include <CoreAudio/AudioHardwareBase.h>
 
 #include <string_view>
 #include <vector>
@@ -17,5 +17,5 @@ namespace ao::audio::backend::detail
 
   std::vector<Device> enumerateCoreAudioOutputDevices();
 
-  Result<::AudioDeviceID> coreAudioOutputDeviceId(std::string_view deviceUid);
+  Result<::AudioObjectID> coreAudioOutputDeviceId(std::string_view deviceUid);
 } // namespace ao::audio::backend::detail

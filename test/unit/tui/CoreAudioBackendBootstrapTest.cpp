@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "tui/AudioBackendBootstrap.h"
-
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
+#include "tui/AudioBackendBootstrap.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
@@ -15,11 +15,11 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 namespace ao::tui::test
 {
-  TEST_CASE("AudioBackendBootstrap - registers Core Audio with the TUI runtime",
-            "[tui][unit][platform][coreaudio]")
+  TEST_CASE("AudioBackendBootstrap - registers Core Audio with the TUI runtime", "[tui][unit][platform][coreaudio]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::QueuedExecutor>();

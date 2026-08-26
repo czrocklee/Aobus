@@ -246,7 +246,7 @@ namespace ao::rt::test
                                    {}},
       RuntimeFatalProbeExpectation{"task-future-missing-result",
                                    "invariant",
-                                   "optResult",
+                                   "result.hasValue()",
                                    "Task future completed without a result",
                                    "TaskFuture.h:",
                                    "get",

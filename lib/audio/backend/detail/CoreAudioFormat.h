@@ -7,7 +7,7 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SignalFormat.h>
 
-#include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
 
 #include <functional>
 
@@ -20,9 +20,8 @@ namespace ao::audio::backend::detail
 
   Result<SignalFormat> coreAudioSignalFormat(::AudioStreamBasicDescription const& format);
 
-  Result<PcmFormat> selectLosslessCoreAudioClientFormat(
-    SignalFormat const& sourceFormat,
-    TryCoreAudioClientFormat const& tryFormat);
+  Result<PcmFormat> selectLosslessCoreAudioClientFormat(SignalFormat const& sourceFormat,
+                                                        TryCoreAudioClientFormat const& tryFormat);
 
   bool sameCoreAudioPcmFormat(::AudioStreamBasicDescription const& lhs,
                               ::AudioStreamBasicDescription const& rhs) noexcept;

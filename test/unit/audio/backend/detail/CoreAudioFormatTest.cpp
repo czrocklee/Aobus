@@ -8,11 +8,13 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
-#include <AudioToolbox/AudioToolbox.h>
-
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
+#include <MacTypes.h>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -29,23 +31,14 @@ namespace ao::audio::backend::detail::test
     };
 
     constexpr auto kFormatCases = std::array{
-      FormatCase{SampleEncoding::Signed16Le,
-                 ::kAudioFormatFlagIsSignedInteger | ::kAudioFormatFlagIsPacked,
-                 2U,
-                 16U},
+      FormatCase{SampleEncoding::Signed16Le, ::kAudioFormatFlagIsSignedInteger | ::kAudioFormatFlagIsPacked, 2U, 16U},
       FormatCase{SampleEncoding::Signed24PackedLe,
                  ::kAudioFormatFlagIsSignedInteger | ::kAudioFormatFlagIsPacked,
                  3U,
                  24U},
       FormatCase{SampleEncoding::Signed24In32Le, ::kAudioFormatFlagIsSignedInteger, 4U, 24U},
-      FormatCase{SampleEncoding::Signed32Le,
-                 ::kAudioFormatFlagIsSignedInteger | ::kAudioFormatFlagIsPacked,
-                 4U,
-                 32U},
-      FormatCase{SampleEncoding::Float32Le,
-                 ::kAudioFormatFlagIsFloat | ::kAudioFormatFlagIsPacked,
-                 4U,
-                 32U}};
+      FormatCase{SampleEncoding::Signed32Le, ::kAudioFormatFlagIsSignedInteger | ::kAudioFormatFlagIsPacked, 4U, 32U},
+      FormatCase{SampleEncoding::Float32Le, ::kAudioFormatFlagIsFloat | ::kAudioFormatFlagIsPacked, 4U, 32U}};
   } // namespace
 
   TEST_CASE("CoreAudioFormat - maps every lossless encoding to strict interleaved little-endian PCM",
@@ -71,8 +64,8 @@ namespace ao::audio::backend::detail::test
 
   TEST_CASE("CoreAudioFormat - preserves low-aligned 24-bit-in-32 identity", "[audio][unit][coreaudio]")
   {
-    auto const nativeRes = coreAudioFormat(
-      PcmFormat{.sampleRate = 44100, .channels = 1, .encoding = SampleEncoding::Signed24In32Le});
+    auto const nativeRes =
+      coreAudioFormat(PcmFormat{.sampleRate = 44100, .channels = 1, .encoding = SampleEncoding::Signed24In32Le});
     REQUIRE(nativeRes);
 
     CHECK((nativeRes->mFormatFlags & ::kAudioFormatFlagIsPacked) == 0U);
@@ -83,8 +76,8 @@ namespace ao::audio::backend::detail::test
 
   TEST_CASE("CoreAudioFormat - rejects an unknown source encoding", "[audio][unit][coreaudio]")
   {
-    auto const unknownRes = coreAudioFormat(
-      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Unknown});
+    auto const unknownRes =
+      coreAudioFormat(PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Unknown});
     REQUIRE_FALSE(unknownRes);
     CHECK(unknownRes.error().code == Error::Code::FormatRejected);
   }
@@ -92,8 +85,8 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("CoreAudioFormat - derives endpoint signal evidence without claiming client layout",
             "[audio][unit][coreaudio]")
   {
-    auto native = *coreAudioFormat(
-      PcmFormat{.sampleRate = 96000, .channels = 2, .encoding = SampleEncoding::Float32Le});
+    auto native =
+      *coreAudioFormat(PcmFormat{.sampleRate = 96000, .channels = 2, .encoding = SampleEncoding::Float32Le});
     native.mFormatFlags |= ::kAudioFormatFlagIsNonInterleaved;
 
     auto const signalRes = coreAudioSignalFormat(native);
@@ -104,8 +97,7 @@ namespace ao::audio::backend::detail::test
     CHECK(signalRes->sampleKind == SampleKind::FloatingPoint);
   }
 
-  TEST_CASE("CoreAudioFormat - walks only lossless candidates and accepts exact read-back",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - walks only lossless candidates and accepts exact read-back", "[audio][unit][coreaudio]")
   {
     auto attemptedFrameByteCounts = std::vector<::UInt32>{};
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
@@ -113,10 +105,12 @@ namespace ao::audio::backend::detail::test
       [&](::AudioStreamBasicDescription const& candidate) -> Result<::AudioStreamBasicDescription>
       {
         attemptedFrameByteCounts.push_back(candidate.mBytesPerFrame);
+
         if (candidate.mBytesPerFrame == 6U)
         {
           return makeError(Error::Code::FormatRejected);
         }
+
         return candidate;
       });
 
@@ -127,10 +121,9 @@ namespace ao::audio::backend::detail::test
     CHECK(attemptedFrameByteCounts[1] == 8U);
   }
 
-  TEST_CASE("CoreAudioFormat - rejects coercion and never narrows a 32-bit integer source",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - rejects coercion and never narrows a 32-bit integer source", "[audio][unit][coreaudio]")
   {
-    auto attempts = std::size_t{0U};
+    std::size_t attempts = 0;
     auto const rejectedRes = selectLosslessCoreAudioClientFormat(
       {.sampleRate = 96000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::Integer},
       [&](::AudioStreamBasicDescription const&) -> Result<::AudioStreamBasicDescription>

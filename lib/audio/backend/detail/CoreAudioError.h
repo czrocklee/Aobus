@@ -5,7 +5,7 @@
 
 #include <ao/Error.h>
 
-#include <AudioToolbox/AudioToolbox.h>
+#include <MacTypes.h>
 
 #include <expected>
 #include <source_location>
@@ -20,9 +20,8 @@ namespace ao::audio::backend::detail
 
   std::string coreAudioStatusText(::OSStatus status);
 
-  std::unexpected<Error> makeCoreAudioError(
-    ::OSStatus status,
-    std::string_view operation,
-    Error::Code fallback,
-    std::source_location location = std::source_location::current());
+  std::unexpected<Error> makeCoreAudioError(::OSStatus status,
+                                            std::string_view operation,
+                                            Error::Code fallback,
+                                            std::source_location location = std::source_location::current());
 } // namespace ao::audio::backend::detail

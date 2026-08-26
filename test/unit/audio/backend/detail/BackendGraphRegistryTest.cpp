@@ -49,20 +49,19 @@ namespace ao::audio::backend::detail::test
     CHECK(lateGraph.nodes.front().id == "stream-a");
   }
 
-  TEST_CASE("BackendGraphRegistry - route fallback applies only before publication",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - route fallback applies only before publication", "[audio][unit][backend-graph]")
   {
     auto registry = BackendGraphRegistry{};
     auto received = flow::Graph{};
-    auto firstSub = registry.subscribe(
-      "route-a", [&](flow::Graph const& graph) { received = graph; }, graphWithNode("fallback"));
+    auto firstSub =
+      registry.subscribe("route-a", [&](flow::Graph const& graph) { received = graph; }, graphWithNode("fallback"));
 
     REQUIRE(received.nodes.size() == 1U);
     CHECK(received.nodes.front().id == "fallback");
 
     registry.publish("route-a", graphWithNode("published"));
-    auto lateSub = registry.subscribe(
-      "route-a", [&](flow::Graph const& graph) { received = graph; }, graphWithNode("ignored"));
+    auto lateSub =
+      registry.subscribe("route-a", [&](flow::Graph const& graph) { received = graph; }, graphWithNode("ignored"));
 
     REQUIRE(received.nodes.size() == 1U);
     CHECK(received.nodes.front().id == "published");
@@ -72,9 +71,9 @@ namespace ao::audio::backend::detail::test
             "[audio][regression][backend-graph][concurrency]")
   {
     auto registry = BackendGraphRegistry{};
-    auto cancelSecond = false;
-    auto firstCalls = std::int32_t{0};
-    auto secondCalls = std::int32_t{0};
+    bool cancelSecond = false;
+    std::int32_t firstCalls = 0;
+    std::int32_t secondCalls = 0;
     auto secondSub = Subscription{};
     auto firstSub = registry.subscribe("route-a",
                                        [&](flow::Graph const&)
@@ -99,7 +98,7 @@ namespace ao::audio::backend::detail::test
   {
     auto registry = BackendGraphRegistry{};
     auto routeAGraph = flow::Graph{};
-    auto routeBCalls = std::int32_t{0};
+    std::int32_t routeBCalls = 0;
     auto routeASub = registry.subscribe("route-a", [&](flow::Graph const& graph) { routeAGraph = graph; });
     auto routeBSub = registry.subscribe("route-b", [&](flow::Graph const&) { ++routeBCalls; });
     registry.publish("route-a", graphWithNode("stream-a"));
@@ -110,6 +109,29 @@ namespace ao::audio::backend::detail::test
     CHECK(routeAGraph.nodes.empty());
     CHECK(routeAGraph.connections.empty());
     CHECK(routeBCalls == 2);
+  }
+
+  TEST_CASE("BackendGraphRegistry - reentrant clear supersedes an older publication",
+            "[audio][regression][backend-graph]")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto secondSubscriberGraphs = std::vector<flow::Graph>{};
+    auto firstSub = registry.subscribe("route-a",
+                                       [&](flow::Graph const& graph)
+                                       {
+                                         if (!graph.nodes.empty())
+                                         {
+                                           registry.clear("route-a");
+                                         }
+                                       });
+    auto secondSub =
+      registry.subscribe("route-a", [&](flow::Graph const& graph) { secondSubscriberGraphs.push_back(graph); });
+
+    registry.publish("route-a", graphWithNode("obsolete"));
+
+    REQUIRE(secondSubscriberGraphs.size() == 2U);
+    CHECK(secondSubscriberGraphs[0].nodes.empty());
+    CHECK(secondSubscriberGraphs[1].nodes.empty());
   }
 
   TEST_CASE("BackendGraphRegistry - shutdown waits for an active callback and closes admission",

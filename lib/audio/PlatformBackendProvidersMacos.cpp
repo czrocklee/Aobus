@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "backend/CoreAudioProvider.h"
-
 #include <ao/audio/BackendProvider.h>
 
 #include <memory>

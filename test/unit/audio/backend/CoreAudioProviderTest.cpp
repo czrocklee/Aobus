@@ -4,7 +4,7 @@
 #include "lib/audio/backend/CoreAudioProvider.h"
 
 #include "lib/audio/backend/detail/CoreAudioProviderMonitorHooks.h"
-
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
@@ -20,14 +20,14 @@
 
 namespace ao::audio::backend::test
 {
-  TEST_CASE("CoreAudioProvider - exposes shared mode and concrete native devices",
-            "[audio][unit][coreaudio][provider]")
+  TEST_CASE("CoreAudioProvider - exposes shared mode and concrete native devices", "[audio][unit][coreaudio][provider]")
   {
     auto provider = CoreAudioProvider{};
     auto const status = provider.status();
     CHECK(status.descriptor.id == kBackendCoreAudio);
     REQUIRE(status.descriptor.supportedProfiles.size() == 1U);
     CHECK(status.descriptor.supportedProfiles.front().id == kProfileShared);
+
     for (auto const& device : status.devices)
     {
       CHECK_FALSE(device.id.empty());
@@ -39,6 +39,27 @@ namespace ao::audio::backend::test
     CHECK_FALSE(provider.subscribeDevices([](std::vector<Device> const&) {}));
   }
 
+  TEST_CASE("CoreAudioProvider - reconciles device state after listener installation",
+            "[audio][regression][coreaudio][provider]")
+  {
+    auto enumerateCount = std::atomic{std::size_t{0U}};
+    auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = [&]
+    {
+      auto const count = enumerateCount.fetch_add(1U, std::memory_order_relaxed);
+      return std::vector<Device>{{.id = DeviceId{count == 0U ? "uid-before" : "uid-after"},
+                                  .displayName = "Synthetic Output",
+                                  .backendId = kBackendCoreAudio}};
+    };
+
+    auto provider = CoreAudioProvider{hooksPtr};
+    auto const status = provider.status();
+
+    CHECK(enumerateCount.load(std::memory_order_relaxed) == 2U);
+    REQUIRE(status.devices.size() == 1U);
+    CHECK(status.devices.front().id == "uid-after");
+  }
+
   TEST_CASE("CoreAudioProvider - monitor refresh publishes a complete deterministic snapshot",
             "[audio][unit][coreaudio][provider]")
   {
@@ -48,7 +69,7 @@ namespace ao::audio::backend::test
     hooksPtr->enumerateDevices = [&]
     {
       auto const count = enumerateCount.fetch_add(1U, std::memory_order_relaxed);
-      return std::vector<Device>{{.id = DeviceId{count == 0U ? "uid-a" : "uid-b"},
+      return std::vector<Device>{{.id = DeviceId{count < 2U ? "uid-a" : "uid-b"},
                                   .displayName = "Synthetic Output",
                                   .backendId = kBackendCoreAudio}};
     };
@@ -66,6 +87,7 @@ namespace ao::audio::backend::test
     REQUIRE(snapshots[1].size() == 1U);
     CHECK(snapshots[0][0].id == "uid-a");
     CHECK(snapshots[1][0].id == "uid-b");
+    CHECK(enumerateCount.load(std::memory_order_relaxed) == 3U);
     provider.shutdown();
     hooksPtr->requestRefresh();
     CHECK(snapshots.size() == 2U);
@@ -80,9 +102,8 @@ namespace ao::audio::backend::test
       auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
       hooksPtr->enumerateDevices = []
       {
-        return std::vector<Device>{{.id = DeviceId{"uid-a"},
-                                    .displayName = "Synthetic Output",
-                                    .backendId = kBackendCoreAudio}};
+        return std::vector<Device>{
+          {.id = DeviceId{"uid-a"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio}};
       };
       auto provider = CoreAudioProvider{hooksPtr};
       sub = provider.subscribeDevices([](std::vector<Device> const&) {});

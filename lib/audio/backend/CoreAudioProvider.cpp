@@ -9,7 +9,6 @@
 #include "detail/CallbackFence.h"
 #include "detail/CoreAudioDeviceDiscovery.h"
 #include "detail/CoreAudioProviderMonitorHooks.h"
-
 #include <ao/Contract.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -18,11 +17,15 @@
 #include <ao/audio/Subscription.h>
 #include <ao/utility/ThreadName.h>
 
-#include <CoreAudio/CoreAudio.h>
+#include <CoreAudio/AudioHardware.h>
+#include <CoreAudio/AudioHardwareBase.h>
+#include <MacTypes.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <semaphore>
@@ -70,18 +73,19 @@ namespace ao::audio::backend
                             std::shared_ptr<detail::CoreAudioProviderMonitorHooks> hooksPtr)
         : deviceRegistryPtr{std::move(registryPtr)}, monitorHooksPtr{std::move(hooksPtr)}
       {
-        addresses = {::AudioObjectPropertyAddress{::kAudioHardwarePropertyDevices,
-                                                   ::kAudioObjectPropertyScopeGlobal,
-                                                   ::kAudioObjectPropertyElementMain},
-                     ::AudioObjectPropertyAddress{::kAudioHardwarePropertyDefaultOutputDevice,
-                                                   ::kAudioObjectPropertyScopeGlobal,
-                                                   ::kAudioObjectPropertyElementMain}};
+        addresses = {::AudioObjectPropertyAddress{.mSelector = ::kAudioHardwarePropertyDevices,
+                                                  .mScope = ::kAudioObjectPropertyScopeGlobal,
+                                                  .mElement = ::kAudioObjectPropertyElementMain},
+                     ::AudioObjectPropertyAddress{.mSelector = ::kAudioHardwarePropertyDefaultOutputDevice,
+                                                  .mScope = ::kAudioObjectPropertyScopeGlobal,
+                                                  .mElement = ::kAudioObjectPropertyElementMain}};
         deviceRegistryPtr->publish(enumerateDevices());
       }
 
       ~CoreAudioMonitorState()
       {
         requestShutdown();
+
         if (monitorHooksPtr && monitorHooksPtr->onMonitorStateDestroyed)
         {
           try
@@ -112,10 +116,12 @@ namespace ao::audio::backend
                                         void* const context) noexcept
       {
         auto& state = *static_cast<CoreAudioMonitorState*>(context);
+
         if (!state.listenerFence.tryEnter())
         {
           return ::noErr;
         }
+
         auto const leave = CallbackLeave{state.listenerFence};
         state.changeSignal.release();
         return ::noErr;
@@ -129,17 +135,26 @@ namespace ao::audio::backend
         }
 
         listenerFence.open();
-        for (auto& address : addresses)
+        auto const installed =
+          std::ranges::all_of(addresses,
+                              [this](auto& address)
+                              {
+                                if (::AudioObjectAddPropertyListener(
+                                      ::kAudioObjectSystemObject, &address, &propertyChanged, this) != ::noErr)
+                                {
+                                  return false;
+                                }
+
+                                ++registeredAddressCount;
+                                return true;
+                              });
+
+        if (!installed)
         {
-          if (::AudioObjectAddPropertyListener(
-                ::kAudioObjectSystemObject, &address, &propertyChanged, this) != ::noErr)
-          {
-            requestShutdown();
-            return false;
-          }
-          ++registeredAddressCount;
+          requestShutdown();
         }
-        return true;
+
+        return installed;
       }
 
       void monitorLoop()
@@ -147,12 +162,14 @@ namespace ao::audio::backend
         while (!shutdownRequested.load(std::memory_order_acquire))
         {
           changeSignal.acquire();
+
           if (shutdownRequested.load(std::memory_order_acquire))
           {
             return;
           }
 
           auto const coalesceDeadline = std::chrono::steady_clock::now() + kChangeCoalesceDelay;
+
           while (changeSignal.try_acquire_until(coalesceDeadline))
           {
             if (shutdownRequested.load(std::memory_order_acquire))
@@ -162,6 +179,7 @@ namespace ao::audio::backend
           }
 
           deviceRegistryPtr->publish(enumerateDevices());
+
           if (monitorHooksPtr && monitorHooksPtr->onRefreshComplete)
           {
             monitorHooksPtr->onRefreshComplete();
@@ -177,13 +195,14 @@ namespace ao::audio::backend
         }
 
         listenerFence.close();
+
         while (registeredAddressCount != 0U)
         {
           --registeredAddressCount;
           auto& address = addresses[registeredAddressCount];
-          ::AudioObjectRemovePropertyListener(
-            ::kAudioObjectSystemObject, &address, &propertyChanged, this);
+          ::AudioObjectRemovePropertyListener(::kAudioObjectSystemObject, &address, &propertyChanged, this);
         }
+
         listenerFence.wait();
         changeSignal.release();
       }
@@ -194,15 +213,13 @@ namespace ao::audio::backend
   {
     std::shared_ptr<detail::BackendDeviceRegistry> deviceRegistryPtr =
       std::make_shared<detail::BackendDeviceRegistry>();
-    std::shared_ptr<detail::BackendGraphRegistry> graphRegistryPtr =
-      std::make_shared<detail::BackendGraphRegistry>();
+    std::shared_ptr<detail::BackendGraphRegistry> graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
     std::shared_ptr<CoreAudioMonitorState> monitorStatePtr;
     std::jthread monitorThread;
     std::atomic<bool> shutdownStarted{false};
 
     explicit Impl(std::shared_ptr<detail::CoreAudioProviderMonitorHooks> monitorHooksPtr)
-      : monitorStatePtr{
-          std::make_shared<CoreAudioMonitorState>(deviceRegistryPtr, std::move(monitorHooksPtr))}
+      : monitorStatePtr{std::make_shared<CoreAudioMonitorState>(deviceRegistryPtr, std::move(monitorHooksPtr))}
     {
       if (monitorStatePtr->monitorHooksPtr)
       {
@@ -217,24 +234,25 @@ namespace ao::audio::backend
 
       if (monitorStatePtr->installNativeListeners())
       {
-        monitorThread = std::jthread{[statePtr = monitorStatePtr]
-                                     {
-                                       try
-                                       {
-                                         setCurrentThreadName("CoreAudioMonitor");
-                                         statePtr->monitorLoop();
-                                         if (statePtr->monitorHooksPtr &&
-                                             statePtr->monitorHooksPtr->onMonitorExit)
-                                         {
-                                           statePtr->monitorHooksPtr->onMonitorExit();
-                                         }
-                                       }
-                                       catch (...)
-                                       {
-                                         AO_FATAL_EXCEPTION(std::current_exception(),
-                                                            "Core Audio device-monitor thread");
-                                       }
-                                     }};
+        monitorStatePtr->deviceRegistryPtr->publish(monitorStatePtr->enumerateDevices());
+        monitorThread =
+          std::jthread{[statePtr = monitorStatePtr]
+                       {
+                         try
+                         {
+                           setCurrentThreadName("CoreAudioMonitor");
+                           statePtr->monitorLoop();
+
+                           if (statePtr->monitorHooksPtr && statePtr->monitorHooksPtr->onMonitorExit)
+                           {
+                             statePtr->monitorHooksPtr->onMonitorExit();
+                           }
+                         }
+                         catch (...)
+                         {
+                           AO_FATAL_EXCEPTION(std::current_exception(), "Core Audio device-monitor thread");
+                         }
+                       }};
       }
     }
 
@@ -252,9 +270,10 @@ namespace ao::audio::backend
         return;
       }
 
-      auto const deviceRegistry = deviceRegistryPtr;
-      auto const graphRegistry = graphRegistryPtr;
+      auto const deviceRegistryPtr = this->deviceRegistryPtr;
+      auto const graphRegistryPtr = this->graphRegistryPtr;
       monitorStatePtr->requestShutdown();
+
       if (monitorThread.joinable())
       {
         if (monitorThread.get_id() == std::this_thread::get_id())
@@ -266,8 +285,9 @@ namespace ao::audio::backend
           monitorThread.join();
         }
       }
-      deviceRegistry->shutdown();
-      graphRegistry->shutdown();
+
+      deviceRegistryPtr->shutdown();
+      graphRegistryPtr->shutdown();
     }
   };
 
@@ -307,8 +327,7 @@ namespace ao::audio::backend
     return std::make_unique<CoreAudioBackend>(device, kProfileShared, _implPtr->graphRegistryPtr);
   }
 
-  Subscription CoreAudioProvider::subscribeGraph(std::string_view const routeAnchor,
-                                                 OnGraphChangedCallback callback)
+  Subscription CoreAudioProvider::subscribeGraph(std::string_view const routeAnchor, OnGraphChangedCallback callback)
   {
     return _implPtr->graphRegistryPtr->subscribe(routeAnchor, std::move(callback));
   }

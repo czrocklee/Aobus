@@ -766,7 +766,7 @@ add_test(NAME ao_tui_test COMMAND ao_tui_test)
 if(APPLE)
   target_sources(ao_tui_test PRIVATE
     "${CMAKE_SOURCE_DIR}/app/tui/AudioBackendBootstrap.cpp"
-    unit/tui/AudioBackendBootstrapTest.cpp
+    unit/tui/CoreAudioBackendBootstrapTest.cpp
   )
 endif()
 

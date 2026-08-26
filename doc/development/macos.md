@@ -142,6 +142,9 @@ a live output when the host exposes one. A passing gate does not claim a GUI or
 the exact Python tooling contract. Linux and Windows remain required for those
 platform-specific contracts.
 
+Native audio validation requires an active logged-in console session, including when `./ao` itself runs over SSH.
+At the login window, Core Audio may enumerate the device while refusing to start AUHAL; log in before running the gate.
+
 Audio-backend changes also run the opt-in audible probe on a host where a short,
 quiet tone is acceptable:
 
@@ -173,6 +176,8 @@ automated probe does not by itself claim audible hardware behavior.
 - If the TUI lists no outputs, confirm that macOS shows a live output device in
   Audio MIDI Setup. Aobus does not synthesize a default route when Core Audio
   publishes no concrete device.
+- If AUHAL or `afplay` cannot start over SSH, run `stat -f "%Su" /dev/console`.
+  A result of `root` means no console user is logged in; log in through the desktop before retrying native audio validation.
 - If a selected output disappears, choose one of the newly published concrete
   devices. Aobus reports device loss and does not redirect the stream to a new
   system default behind the user's selection.

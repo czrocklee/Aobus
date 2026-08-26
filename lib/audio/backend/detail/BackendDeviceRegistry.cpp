@@ -37,8 +37,7 @@ namespace ao::audio::backend::detail
   {
     bool containsSubscriber(auto const& state, std::uint64_t const id)
     {
-      return std::ranges::any_of(state.subscribers,
-                                 [id](auto const& subscriber) { return subscriber.id == id; });
+      return std::ranges::any_of(state.subscribers, [id](auto const& subscriber) { return subscriber.id == id; });
     }
 
     void invokeDeviceCallback(BackendDeviceRegistry::Callback const& callback,
@@ -60,7 +59,10 @@ namespace ao::audio::backend::detail
   {
   }
 
-  BackendDeviceRegistry::~BackendDeviceRegistry() { shutdown(); }
+  BackendDeviceRegistry::~BackendDeviceRegistry()
+  {
+    shutdown();
+  }
 
   Subscription BackendDeviceRegistry::subscribe(Callback callback)
   {
@@ -71,11 +73,12 @@ namespace ao::audio::backend::detail
 
     auto const statePtr = _statePtr;
     auto devices = std::vector<Device>{};
-    auto subscriberId = std::uint64_t{0};
+    std::uint64_t subscriberId = 0;
     auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
+
       if (statePtr->shutdown)
       {
         return {};
@@ -86,14 +89,16 @@ namespace ao::audio::backend::detail
       devices = statePtr->devices;
     }
 
-    Callback initialCallback{};
+    auto initialCallback = Callback{};
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
       auto const it = std::ranges::find(statePtr->subscribers, subscriberId, &State::Subscriber::id);
+
       if (statePtr->shutdown || it == statePtr->subscribers.end())
       {
         return {};
       }
+
       initialCallback = it->callback;
     }
 
@@ -101,16 +106,18 @@ namespace ao::audio::backend::detail
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
+
       if (statePtr->shutdown || !containsSubscriber(*statePtr, subscriberId))
       {
         return {};
       }
     }
 
-    auto const weakState = std::weak_ptr<State>{statePtr};
-    return Subscription{[weakState, subscriberId]
+    auto const weakStatePtr = std::weak_ptr<State>{statePtr};
+    return Subscription{[weakStatePtr, subscriberId]
                         {
-                          auto const statePtr = weakState.lock();
+                          auto const statePtr = weakStatePtr.lock();
+
                           if (!statePtr)
                           {
                             return;
@@ -120,6 +127,7 @@ namespace ao::audio::backend::detail
                           auto const lock = std::scoped_lock{statePtr->mutex};
                           auto const it =
                             std::ranges::find(statePtr->subscribers, subscriberId, &State::Subscriber::id);
+
                           if (it != statePtr->subscribers.end())
                           {
                             statePtr->subscribers.erase(it);
@@ -141,6 +149,7 @@ namespace ao::audio::backend::detail
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
+
       if (statePtr->shutdown)
       {
         return;
@@ -156,10 +165,12 @@ namespace ao::audio::backend::detail
       auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
       {
         auto const lock = std::scoped_lock{statePtr->mutex};
+
         if (statePtr->shutdown)
         {
           return;
         }
+
         if (!containsSubscriber(*statePtr, subscriber.id))
         {
           continue;

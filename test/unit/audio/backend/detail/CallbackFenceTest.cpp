@@ -21,36 +21,39 @@ namespace ao::audio::backend::detail::test
     auto enteredFence = std::atomic{false};
     fence.open();
 
-    auto callbackThread = std::jthread{
-      [&]
-      {
-        enteredFence.store(fence.tryEnter(), std::memory_order_release);
-        entered.release();
-        release.acquire();
-        if (enteredFence.load(std::memory_order_acquire))
-        {
-          fence.leave();
-        }
-      }};
+    auto callbackThread = std::jthread{[&]
+                                       {
+                                         enteredFence.store(fence.tryEnter(), std::memory_order_release);
+                                         entered.release();
+                                         release.acquire();
+
+                                         if (enteredFence.load(std::memory_order_acquire))
+                                         {
+                                           fence.leave();
+                                         }
+                                       }};
     entered.acquire();
     REQUIRE(enteredFence.load(std::memory_order_acquire));
 
-    auto closeThread = std::jthread{
-      [&]
-      {
-        fence.closeAndWait();
-        closeReturned.store(true, std::memory_order_release);
-      }};
+    auto closeThread = std::jthread{[&]
+                                    {
+                                      fence.closeAndWait();
+                                      closeReturned.store(true, std::memory_order_release);
+                                    }};
+
     while (fence.isOpen())
     {
       std::this_thread::yield();
     }
+
     CHECK_FALSE(closeReturned.load(std::memory_order_acquire));
     auto const lateEntry = fence.tryEnter();
+
     if (lateEntry)
     {
       fence.leave();
     }
+
     CHECK_FALSE(lateEntry);
 
     release.release();
@@ -72,8 +75,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fence.isOpen());
   }
 
-  TEST_CASE("CallbackFence - listener removal can separate close from quiescence",
-            "[audio][unit][callback-fence]")
+  TEST_CASE("CallbackFence - listener removal can separate close from quiescence", "[audio][unit][callback-fence]")
   {
     auto fence = CallbackFence{};
     fence.open();

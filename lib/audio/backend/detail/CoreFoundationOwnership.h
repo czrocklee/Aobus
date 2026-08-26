@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFBase.h>
 
 #include <memory>
 #include <type_traits>
@@ -27,6 +27,5 @@ namespace ao::audio::backend::detail
 
   /** @brief Unique ownership for a Core Foundation create/copy result. */
   template<typename Reference>
-  using CoreFoundationPtr =
-    std::unique_ptr<std::remove_pointer_t<Reference>, CoreFoundationDeleter<Reference>>;
+  using CoreFoundationPtr = std::unique_ptr<std::remove_pointer_t<Reference>, CoreFoundationDeleter<Reference>>;
 } // namespace ao::audio::backend::detail

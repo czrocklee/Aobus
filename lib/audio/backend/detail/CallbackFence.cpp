@@ -3,49 +3,48 @@
 
 #include "backend/detail/CallbackFence.h"
 
+#include <ao/Contract.h>
+
 #include <atomic>
+#include <cstdint>
 #include <thread>
 
 namespace ao::audio::backend::detail
 {
   bool CallbackFence::tryEnter() noexcept
   {
-    if (!_open.load(std::memory_order_seq_cst))
-    {
-      return false;
-    }
+    auto const previous = _state.fetch_add(1U, std::memory_order_acquire);
 
-    _inFlight.fetch_add(1U, std::memory_order_seq_cst);
-    if (_open.load(std::memory_order_seq_cst))
+    if ((previous & kClosed) == 0U)
     {
       return true;
     }
 
-    leave();
+    _state.fetch_sub(1U, std::memory_order_release);
     return false;
   }
 
   void CallbackFence::leave() noexcept
   {
-    _inFlight.fetch_sub(1U, std::memory_order_release);
+    _state.fetch_sub(1U, std::memory_order_release);
   }
 
   void CallbackFence::open() noexcept
   {
-    _open.store(true, std::memory_order_release);
+    std::uint32_t expected = kClosed;
+    auto const opened =
+      _state.compare_exchange_strong(expected, 0U, std::memory_order_release, std::memory_order_relaxed);
+    AO_INVARIANT(opened, "Cannot reopen a callback fence before its callbacks quiesce");
   }
 
   void CallbackFence::close() noexcept
   {
-    // This store and the admission-side increment/load form a two-atomic
-    // handshake. Sequential consistency forbids both sides from observing the
-    // other's old value and lets wait() prove that no callback remains live.
-    _open.store(false, std::memory_order_seq_cst);
+    _state.fetch_or(kClosed, std::memory_order_acq_rel);
   }
 
   void CallbackFence::wait() const noexcept
   {
-    while (_inFlight.load(std::memory_order_seq_cst) != 0U)
+    while ((_state.load(std::memory_order_acquire) & kInFlightMask) != 0U)
     {
       std::this_thread::yield();
     }
@@ -59,6 +58,6 @@ namespace ao::audio::backend::detail
 
   bool CallbackFence::isOpen() const noexcept
   {
-    return _open.load(std::memory_order_acquire);
+    return (_state.load(std::memory_order_acquire) & kClosed) == 0U;
   }
 } // namespace ao::audio::backend::detail

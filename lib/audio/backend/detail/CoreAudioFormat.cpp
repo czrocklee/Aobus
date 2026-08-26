@@ -4,16 +4,17 @@
 #include "CoreAudioFormat.h"
 
 #include "detail/DecoderOutput.h"
-
 #include <ao/Error.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
-#include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
+#include <MacTypes.h>
 
 #include <cmath>
 #include <cstdint>
+#include <expected>
 #include <limits>
 
 namespace ao::audio::backend::detail
@@ -26,8 +27,7 @@ namespace ao::audio::backend::detail
       {
         case SampleEncoding::Signed16Le:
         case SampleEncoding::Signed24PackedLe:
-        case SampleEncoding::Signed32Le:
-          return ::kAudioFormatFlagIsSignedInteger | ::kAudioFormatFlagIsPacked;
+        case SampleEncoding::Signed32Le: return ::kAudioFormatFlagIsSignedInteger | ::kAudioFormatFlagIsPacked;
         case SampleEncoding::Signed24In32Le: return ::kAudioFormatFlagIsSignedInteger;
         case SampleEncoding::Float32Le: return ::kAudioFormatFlagIsFloat | ::kAudioFormatFlagIsPacked;
         case SampleEncoding::Unknown:
@@ -46,34 +46,36 @@ namespace ao::audio::backend::detail
     }
 
     auto const flagsRes = formatFlags(format.encoding);
+
     if (!flagsRes)
     {
-      return std::unexpected(flagsRes.error());
+      return std::unexpected{flagsRes.error()};
     }
 
     auto const sampleBytes = bytesPerSample(format.encoding);
     auto const frameByteCount = static_cast<std::uint64_t>(format.channels) * sampleBytes;
+
     if (frameByteCount > std::numeric_limits<::UInt32>::max())
     {
       return makeError(Error::Code::ValueTooLarge, "Core Audio PCM frame size is too large");
     }
 
-    return ::AudioStreamBasicDescription{
-      .mSampleRate = static_cast<::Float64>(format.sampleRate),
-      .mFormatID = ::kAudioFormatLinearPCM,
-      .mFormatFlags = *flagsRes,
-      .mBytesPerPacket = static_cast<::UInt32>(frameByteCount),
-      .mFramesPerPacket = 1U,
-      .mBytesPerFrame = static_cast<::UInt32>(frameByteCount),
-      .mChannelsPerFrame = format.channels,
-      .mBitsPerChannel = encodingNominalBits(format.encoding),
-      .mReserved = 0U};
+    return ::AudioStreamBasicDescription{.mSampleRate = static_cast<::Float64>(format.sampleRate),
+                                         .mFormatID = ::kAudioFormatLinearPCM,
+                                         .mFormatFlags = *flagsRes,
+                                         .mBytesPerPacket = static_cast<::UInt32>(frameByteCount),
+                                         .mFramesPerPacket = 1U,
+                                         .mBytesPerFrame = static_cast<::UInt32>(frameByteCount),
+                                         .mChannelsPerFrame = format.channels,
+                                         .mBitsPerChannel = encodingNominalBits(format.encoding),
+                                         .mReserved = 0U};
   }
 
   Result<SignalFormat> coreAudioSignalFormat(::AudioStreamBasicDescription const& format)
   {
     auto const floatingPoint = (format.mFormatFlags & ::kAudioFormatFlagIsFloat) != 0U;
     auto const signedInteger = (format.mFormatFlags & ::kAudioFormatFlagIsSignedInteger) != 0U;
+
     if (format.mFormatID != ::kAudioFormatLinearPCM || floatingPoint == signedInteger || format.mSampleRate <= 0.0 ||
         !std::isfinite(format.mSampleRate) || std::trunc(format.mSampleRate) != format.mSampleRate ||
         format.mSampleRate > static_cast<::Float64>(std::numeric_limits<std::uint32_t>::max()) ||
@@ -89,9 +91,8 @@ namespace ao::audio::backend::detail
                         .sampleKind = floatingPoint ? SampleKind::FloatingPoint : SampleKind::Integer};
   }
 
-  Result<PcmFormat> selectLosslessCoreAudioClientFormat(
-    SignalFormat const& sourceFormat,
-    TryCoreAudioClientFormat const& tryFormat)
+  Result<PcmFormat> selectLosslessCoreAudioClientFormat(SignalFormat const& sourceFormat,
+                                                        TryCoreAudioClientFormat const& tryFormat)
   {
     if (!tryFormat)
     {
@@ -102,28 +103,31 @@ namespace ao::audio::backend::detail
     {
       auto const candidate = pcmFormat(sourceFormat, encoding);
       auto const descriptionRes = coreAudioFormat(candidate);
+
       if (!descriptionRes)
       {
-        return std::unexpected(descriptionRes.error());
+        return std::unexpected{descriptionRes.error()};
       }
 
       auto const readBackRes = tryFormat(*descriptionRes);
+
       if (!readBackRes)
       {
         if (readBackRes.error().code == Error::Code::FormatRejected)
         {
           continue;
         }
-        return std::unexpected(readBackRes.error());
+
+        return std::unexpected{readBackRes.error()};
       }
+
       if (sameCoreAudioPcmFormat(*descriptionRes, *readBackRes))
       {
         return candidate;
       }
     }
 
-    return makeError(Error::Code::FormatRejected,
-                     "Core Audio rejected every lossless client PCM format");
+    return makeError(Error::Code::FormatRejected, "Core Audio rejected every lossless client PCM format");
   }
 
   bool sameCoreAudioPcmFormat(::AudioStreamBasicDescription const& lhs,
