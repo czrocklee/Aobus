@@ -22,16 +22,20 @@
 #include "MainWindow.g.cpp"
 #endif
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 // MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
+#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
+#include <ao/uimodel/library/list/ListOrderPolicy.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/WindowInteractionPolicy.h>
+#include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Input.h>
@@ -52,6 +56,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace winrt::Aobus::implementation
 {
@@ -281,6 +286,9 @@ namespace winrt::Aobus::implementation
     }
   }
 
+  // This declarative composition keeps the shell's callback ownership visible
+  // in one place; splitting individual callbacks would obscure that boundary.
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   void MainWindow::createShellBuilder()
   {
     // The selector belongs to the frame rather than to a generation: the node

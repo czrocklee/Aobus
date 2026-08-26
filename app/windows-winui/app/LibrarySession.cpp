@@ -8,7 +8,6 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>

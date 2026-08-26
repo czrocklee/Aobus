@@ -31,7 +31,7 @@ namespace ao::uimodel
     std::string_view localExpression;
     bool hasPreviewSource = false;
     bool hasError = false;
-    std::string_view errorMessage;
+    std::string_view errorMessage{};
     std::size_t matchCount = 0;
     bool isAllTracks = false;
   };

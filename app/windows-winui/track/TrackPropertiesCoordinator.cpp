@@ -4,20 +4,24 @@
 #include "track/TrackPropertiesCoordinator.h"
 
 #include "pch.h"
-#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/utility/String.h>
+#include <ao/winui/WinUiErrorBoundary.h>
+#include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -26,11 +30,9 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -51,14 +53,24 @@ namespace ao::winui
     constexpr double kDialogMaxContentHeight = 640.0;
     constexpr double kSectionSpacing = 12.0;
     constexpr double kRowSpacing = 8.0;
+    constexpr double kSectionHeadingFontSize = 18.0;
+    constexpr double kSectionHeadingTopMargin = 8.0;
+    constexpr double kSectionHeadingBottomMargin = 2.0;
+    constexpr double kSupportingTextOpacity = 0.82;
+    constexpr double kHintTextOpacity = 0.68;
     constexpr std::size_t kSuggestionLimit = 12;
 
     TextBlock makeSectionHeading(std::string_view const text)
     {
       auto heading = TextBlock{};
       heading.Text(winrt::to_hstring(text));
-      heading.FontSize(18.0);
-      heading.Margin(Thickness{.Left = 0.0, .Top = 8.0, .Right = 0.0, .Bottom = 2.0});
+      heading.FontSize(kSectionHeadingFontSize);
+      heading.Margin(Thickness{
+        .Left = 0.0,
+        .Top = kSectionHeadingTopMargin,
+        .Right = 0.0,
+        .Bottom = kSectionHeadingBottomMargin,
+      });
       return heading;
     }
 
@@ -191,9 +203,7 @@ namespace ao::winui
 
       auto const loadRow = [&](uimodel::TrackPropertiesFormRow const& row)
       {
-        auto const rawValue = reader.trackField(trackId, row.field);
-
-        if (firstTrack)
+        if (auto const rawValue = reader.trackField(trackId, row.field); firstTrack)
         {
           _formModel.loadFirstTrackField(row.field, rawValue);
         }
@@ -234,7 +244,7 @@ namespace ao::winui
     _errorText = TextBlock{};
     _errorText.TextWrapping(TextWrapping::Wrap);
     _errorText.Visibility(Visibility::Collapsed);
-    _errorText.Opacity(0.82);
+    _errorText.Opacity(kSupportingTextOpacity);
     content.Children().Append(_errorText);
 
     buildMetadataSection(content);
@@ -405,7 +415,7 @@ namespace ao::winui
     auto hint = TextBlock{};
     hint.Text(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesTagsHint)));
     hint.TextWrapping(TextWrapping::Wrap);
-    hint.Opacity(0.68);
+    hint.Opacity(kHintTextOpacity);
     content.Children().Append(hint);
 
     _tagRows = StackPanel{};
@@ -800,9 +810,8 @@ namespace ao::winui
         continue;
       }
 
-      auto value = winrt::to_string(editor.value.Text());
-
-      if (customMetadataValueNeedsUpdate(editor.existed, editor.optOriginalValue, value))
+      if (auto value = winrt::to_string(editor.value.Text());
+          customMetadataValueNeedsUpdate(editor.existed, editor.optOriginalValue, value))
       {
         patch.customUpdates[editor.key] = std::move(value);
       }
@@ -979,6 +988,7 @@ namespace ao::winui
         {
           _dialog.Hide();
         }
+
         return;
       case TrackPropertiesCommitState::Busy:
         updateSaveEnabled();
@@ -1032,25 +1042,20 @@ namespace ao::winui
     _sessionInvalidatedSub.reset();
     _sessionPtr.reset();
 
-    try
-    {
-      _primaryClickRevoker.revoke();
-      _closedRevoker.revoke();
-      _tagTextChangedRevoker.revoke();
-      _tagSubmittedRevoker.revoke();
-      _tagAddClickRevoker.revoke();
-      _tagRemoveClickRevokers.clear();
-      _customKeyChangedRevoker.revoke();
-      _customAddClickRevoker.revoke();
+    _primaryClickRevoker.revoke();
+    _closedRevoker.revoke();
+    _tagTextChangedRevoker.revoke();
+    _tagSubmittedRevoker.revoke();
+    _tagAddClickRevoker.revoke();
+    _tagRemoveClickRevokers.clear();
+    _customKeyChangedRevoker.revoke();
+    _customAddClickRevoker.revoke();
 
-      if (_dialog)
-      {
-        _dialog.Hide();
-      }
-    }
-    catch (...)
+    if (_dialog)
     {
-      AO_AUDITED_CATCH(SafeCleanup);
+      // The callback lifetime is already expired, so native dismissal is
+      // presentation-only cleanup rather than an operation invariant.
+      runOptionalWinRt("hiding the WinUI track-properties dialog", [this] { _dialog.Hide(); });
     }
 
     _showOperation = nullptr;

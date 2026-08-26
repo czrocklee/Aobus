@@ -13,10 +13,13 @@
 #include "track/TrackListController.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>

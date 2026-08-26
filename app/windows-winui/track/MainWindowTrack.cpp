@@ -18,6 +18,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
@@ -131,13 +132,9 @@ namespace winrt::Aobus::implementation
     {
       updateStatus(ao::winui::formatResource("winui_error", winrt::to_string(error.message())));
     }
-    catch (std::exception const& error)
-    {
-      updateStatus(ao::winui::formatResource("winui_error", error.what()));
-    }
     catch (...)
     {
-      updateStatus(ao::winui::formatResource("winui_error", "Unknown exception"));
+      AO_FATAL_EXCEPTION(std::current_exception(), "WinUI track-properties presentation");
     }
   }
 

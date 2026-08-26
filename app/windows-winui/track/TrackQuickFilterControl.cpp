@@ -9,6 +9,7 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/uimodel/library/track/TrackFilterCompleter.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
+#include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
@@ -18,12 +19,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace ao::winui
@@ -31,6 +32,8 @@ namespace ao::winui
   namespace
   {
     constexpr auto kFilterDebounceInterval = std::chrono::milliseconds{200};
+    constexpr double kSuggestionDetailFontSize = 12.0;
+    constexpr double kSuggestionDetailOpacity = 0.68;
 
     winrt::Microsoft::UI::Xaml::Controls::TextBox findTextBox(winrt::Microsoft::UI::Xaml::DependencyObject const& root)
     {
@@ -41,19 +44,22 @@ namespace ao::winui
       {
         return nullptr;
       }
-      if (auto editor = root.try_as<TextBox>())
+
+      if (auto editor = root.try_as<TextBox>(); editor)
       {
         return editor;
       }
 
       auto const childCount = VisualTreeHelper::GetChildrenCount(root);
-      for (auto index = 0; index < childCount; ++index)
+
+      for (std::int32_t index = 0; index < childCount; ++index)
       {
-        if (auto editor = findTextBox(VisualTreeHelper::GetChild(root, index)))
+        if (auto editor = findTextBox(VisualTreeHelper::GetChild(root, index)); editor)
         {
           return editor;
         }
       }
+
       return nullptr;
     }
 
@@ -75,8 +81,8 @@ namespace ao::winui
       {
         auto detail = TextBlock{};
         detail.Text(winrt::to_hstring(row.detailText));
-        detail.FontSize(12.0);
-        detail.Opacity(0.68);
+        detail.FontSize(kSuggestionDetailFontSize);
+        detail.Opacity(kSuggestionDetailOpacity);
         detail.TextTrimming(TextTrimming::CharacterEllipsis);
         panel.Children().Append(detail);
       }
@@ -190,7 +196,7 @@ namespace ao::winui
   void TrackQuickFilterControl::handleQuerySubmitted(
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBoxQuerySubmittedEventArgs const& args)
   {
-    if (auto const optIndex = suggestionIndex(args.ChosenSuggestion()))
+    if (auto const optIndex = suggestionIndex(args.ChosenSuggestion()); optIndex)
     {
       auto const continuesEditing = quickFilterSuggestionContinuesEditing(_suggestionRows[*optIndex]);
 
@@ -207,6 +213,7 @@ namespace ao::winui
         return;
       }
     }
+
     commitCurrentText();
   }
 
@@ -225,18 +232,21 @@ namespace ao::winui
     }
 
     auto const suggestionIndex = *_optPendingSuggestionIndex;
+
     if (suggestionIndex >= _suggestionRows.size())
     {
       return;
     }
 
     auto const continuesEditing = quickFilterSuggestionContinuesEditing(_suggestionRows[suggestionIndex]);
+
     if (!acceptSuggestion(suggestionIndex))
     {
       return;
     }
 
     args.Handled(true);
+
     if (continuesEditing)
     {
       _debounceTimer.Stop();
@@ -261,10 +271,12 @@ namespace ao::winui
   bool TrackQuickFilterControl::bindEditor()
   {
     auto const editor = findTextBox(_input);
+
     if (!editor)
     {
       return false;
     }
+
     if (_editor == editor)
     {
       return true;
@@ -294,6 +306,7 @@ namespace ao::winui
 
     auto const draft = winrt::to_string(_input.Text());
     auto const optCursor = quickFilterUtf8Cursor(draft, static_cast<std::size_t>(_editor.SelectionStart()));
+
     if (!optCursor)
     {
       clearSuggestions();
@@ -301,6 +314,7 @@ namespace ao::winui
     }
 
     auto optResult = _completerPtr->complete(draft, *optCursor);
+
     if (!optResult || optResult->items.empty())
     {
       clearSuggestions();
@@ -313,7 +327,7 @@ namespace ao::winui
     _optPendingSuggestionIndex.reset();
     _suggestionItems.Clear();
 
-    for (auto index = std::size_t{0}; index < _suggestionRows.size(); ++index)
+    for (std::size_t index = 0; index < _suggestionRows.size(); ++index)
     {
       _suggestionItems.Append(makeSuggestionElement(_suggestionRows[index], static_cast<std::uint32_t>(index)));
     }
@@ -340,12 +354,14 @@ namespace ao::winui
     winrt::Windows::Foundation::IInspectable const& suggestion) const
   {
     auto const element = suggestion.try_as<winrt::Microsoft::UI::Xaml::FrameworkElement>();
+
     if (!element)
     {
       return std::nullopt;
     }
 
     auto const property = element.Tag().try_as<winrt::Windows::Foundation::IPropertyValue>();
+
     if (!property || property.Type() != winrt::Windows::Foundation::PropertyType::UInt32)
     {
       return std::nullopt;
@@ -363,6 +379,7 @@ namespace ao::winui
     }
 
     auto const draft = winrt::to_string(_input.Text());
+
     if (draft != _completionDraft)
     {
       clearSuggestions();
@@ -371,6 +388,7 @@ namespace ao::winui
 
     auto const optRange =
       quickFilterUtf16Range(draft, _optCompletionResult->replaceBegin, _optCompletionResult->replaceEnd);
+
     if (!optRange)
     {
       clearSuggestions();
@@ -383,6 +401,7 @@ namespace ao::winui
     nativeText.replace(optRange->begin, optRange->end - optRange->begin, replacement.c_str(), replacement.size());
 
     auto const caret = optRange->begin + replacement.size();
+
     if (caret > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
     {
       clearSuggestions();
@@ -393,11 +412,13 @@ namespace ao::winui
       [[maybe_unused]] auto const applyingState = ScopedBooleanFlag{_applyingState};
       _input.Text(winrt::hstring{nativeText});
       clearSuggestions();
+
       if (bindEditor())
       {
         _editor.Select(static_cast<std::int32_t>(caret), 0);
       }
     }
+
     return true;
   }
 

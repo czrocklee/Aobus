@@ -11,6 +11,7 @@
 #include "theme/ThemeCoordinator.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/Path.h>
 #include <ao/winui/Theme.h>
@@ -208,6 +209,7 @@ namespace winrt::Aobus::implementation
   winrt::fire_and_forget MainWindow::pickLibrary()
   {
     auto lifetime = get_strong();
+    auto exceptionPtr = std::exception_ptr{};
 
     try
     {
@@ -231,13 +233,14 @@ namespace winrt::Aobus::implementation
     {
       updateStatus(ao::winui::formatResource("winui_folder_picker_failed", to_string(error.message())));
     }
-    catch (std::exception const& error)
-    {
-      updateStatus(ao::winui::formatResource("winui_folder_picker_failed", error.what()));
-    }
     catch (...)
     {
-      updateStatus(ao::winui::formatResource("winui_folder_picker_failed", "Unknown exception"));
+      exceptionPtr = std::current_exception();
+    }
+
+    if (exceptionPtr && !ao::async::isOperationCancelled(exceptionPtr))
+    {
+      AO_FATAL_EXCEPTION(exceptionPtr, "WinUI library folder picker");
     }
   }
 

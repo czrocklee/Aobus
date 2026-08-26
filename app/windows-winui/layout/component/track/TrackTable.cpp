@@ -29,6 +29,8 @@
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <functional>
@@ -36,6 +38,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::winui::layout
@@ -193,6 +197,11 @@ namespace ao::winui::layout
         }
       }
 
+      TrackTableComponent(TrackTableComponent const&) = delete;
+      TrackTableComponent& operator=(TrackTableComponent const&) = delete;
+      TrackTableComponent(TrackTableComponent&&) = delete;
+      TrackTableComponent& operator=(TrackTableComponent&&) = delete;
+
       FrameworkElement element() const override { return _viewport; }
 
     private:
@@ -206,9 +215,8 @@ namespace ao::winui::layout
 
         if (auto const panel = _rows.ItemsPanelRoot().try_as<ItemsStackPanel>(); panel)
         {
-          auto const firstVisible = panel.FirstVisibleIndex();
-
-          if (firstVisible >= 0 && oldItems && static_cast<std::uint32_t>(firstVisible) < oldItems.Size())
+          if (auto const firstVisible = panel.FirstVisibleIndex();
+              firstVisible >= 0 && oldItems && static_cast<std::uint32_t>(firstVisible) < oldItems.Size())
           {
             optTopIndex = static_cast<std::size_t>(firstVisible);
 
@@ -244,20 +252,20 @@ namespace ao::winui::layout
 
         if (optTopIndex)
         {
-          auto restoreIndex = optTopIndex;
+          auto optRestoreIndex = optTopIndex;
 
           if (topTrackId != kInvalidTrackId)
           {
-            if (auto const mappedIndex = _trackList.displayIndexOfTrack(topTrackId))
+            if (auto const optMappedIndex = _trackList.displayIndexOfTrack(topTrackId); optMappedIndex)
             {
-              restoreIndex = mappedIndex;
+              optRestoreIndex = optMappedIndex;
             }
           }
 
-          if (restoreIndex && *restoreIndex < items.Size())
+          if (optRestoreIndex && *optRestoreIndex < items.Size())
           {
             _rows.ScrollIntoView(
-              items.GetAt(static_cast<std::uint32_t>(*restoreIndex)), ScrollIntoViewAlignment::Leading);
+              items.GetAt(static_cast<std::uint32_t>(*optRestoreIndex)), ScrollIntoViewAlignment::Leading);
           }
         }
 
@@ -333,6 +341,9 @@ namespace ao::winui::layout
         }
       }
 
+      // The context menu is one ordered surface whose branching mirrors its
+      // visible sections; keeping the assembly together preserves that order.
+      // NOLINTNEXTLINE(readability-function-cognitive-complexity)
       void onRightTapped(IInspectable const& /*sender*/, RightTappedRoutedEventArgs const& args)
       {
         if (!uimodel::isGenerationActive(_gatePtr))
@@ -422,7 +433,7 @@ namespace ao::winui::layout
           auto const targets = _membershipTargets();
           auto addSubmenu = MenuFlyoutSubItem{};
           addSubmenu.Text(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListAddToPlaylist)));
-          auto addCount = std::size_t{0};
+          std::size_t addCount = 0;
           auto const activeListId = _trackList.activeListId();
 
           for (auto const& target : targets)
@@ -461,9 +472,8 @@ namespace ao::winui::layout
           _contextFlyout.Items().Append(MenuFlyoutSeparator{});
           auto ordering = MenuFlyoutSubItem{};
           ordering.Text(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListManualOrder)));
-          auto const capabilities = _orderCapabilities();
 
-          if (!capabilities.canAuthorOrder)
+          if (auto const capabilities = _orderCapabilities(); !capabilities.canAuthorOrder)
           {
             appendItem(ordering.Items(), capabilities.disabledReason, {}, false);
           }

@@ -5,10 +5,12 @@
 
 #include "pch.h"
 #include "track/TrackListController.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -17,9 +19,13 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
+#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 #include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
+#include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/uimodel/library/list/SmartListEditorModel.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -30,16 +36,18 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <format>
+#include <iterator>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::winui
@@ -54,6 +62,9 @@ namespace ao::winui
     constexpr double kEditorMinWidth = 620.0;
     constexpr double kDialogMaxHeight = 680.0;
     constexpr double kSectionSpacing = 12.0;
+    constexpr double kSupportingTextOpacity = 0.82;
+    constexpr double kContextTextOpacity = 0.72;
+    constexpr double kPreviewHeadingFontSize = 18.0;
 
     std::string displayedTag(std::string_view const tag)
     {
@@ -166,7 +177,7 @@ namespace ao::winui
     _descriptionInput.Text(winrt::to_hstring(description));
     _filterInput.Text(winrt::to_hstring(expression));
 
-    auto selectedPresentationIndex = std::int32_t{0};
+    std::int32_t selectedPresentationIndex = 0;
 
     if (auto const optId = _presentationPreferences.presentationIdForList(editListId); optId)
     {
@@ -174,8 +185,7 @@ namespace ao::winui
 
       if (selected != _presentationIds.end())
       {
-        selectedPresentationIndex =
-          static_cast<std::int32_t>(std::ranges::distance(_presentationIds.begin(), selected));
+        selectedPresentationIndex = static_cast<std::int32_t>(std::distance(_presentationIds.begin(), selected));
       }
     }
 
@@ -200,7 +210,7 @@ namespace ao::winui
     auto content = StackPanel{};
     content.Spacing(kSectionSpacing);
 
-    _errorText = makeWrappedText(0.82);
+    _errorText = makeWrappedText(kSupportingTextOpacity);
     _errorText.Visibility(Visibility::Collapsed);
     content.Children().Append(_errorText);
 
@@ -216,7 +226,7 @@ namespace ao::winui
       winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListDescriptionPlaceholder)));
     content.Children().Append(_descriptionInput);
 
-    _inheritedFilterText = makeWrappedText(0.72);
+    _inheritedFilterText = makeWrappedText(kContextTextOpacity);
     content.Children().Append(_inheritedFilterText);
 
     _filterInput = TextBox{};
@@ -224,8 +234,8 @@ namespace ao::winui
     _filterInput.PlaceholderText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListFilterPlaceholder)));
     content.Children().Append(_filterInput);
 
-    _effectiveFilterText = makeWrappedText(0.72);
-    _membershipText = makeWrappedText(0.72);
+    _effectiveFilterText = makeWrappedText(kContextTextOpacity);
+    _membershipText = makeWrappedText(kContextTextOpacity);
     content.Children().Append(_effectiveFilterText);
     content.Children().Append(_membershipText);
 
@@ -253,9 +263,9 @@ namespace ao::winui
 
     auto previewHeading = TextBlock{};
     previewHeading.Text(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListPreview)));
-    previewHeading.FontSize(18.0);
+    previewHeading.FontSize(kPreviewHeadingFontSize);
     content.Children().Append(previewHeading);
-    _previewText = makeWrappedText(0.82);
+    _previewText = makeWrappedText(kSupportingTextOpacity);
     content.Children().Append(_previewText);
 
     auto scroll = ScrollViewer{};
@@ -406,9 +416,8 @@ namespace ao::winui
     }
 
     auto const listId = draft.listId;
-    auto result = co_await library->updateList(std::move(draft));
 
-    if (!result)
+    if (auto result = co_await library->updateList(std::move(draft)); !result)
     {
       co_return std::unexpected{result.error()};
     }
@@ -442,12 +451,12 @@ namespace ao::winui
     auto const expression = _filterInput ? winrt::to_string(_filterInput.Text()) : std::string{};
     auto const presentation = resolveListAuthoringPresentation(_presentationPreferences, *result, expression);
 
-    if (auto const navigated = _trackList.navigateTo(*result); !navigated)
+    if (auto const navigatedRes = _trackList.navigateTo(*result); !navigatedRes)
     {
       if (_reportStatus)
       {
         _reportStatus(_textCatalog.format(
-          i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigated.error().message}}));
+          i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
       }
     }
     else if (auto const selectedRes = _trackList.selectPresentation(presentation); !selectedRes)
@@ -570,7 +579,7 @@ namespace ao::winui
 
     auto content = StackPanel{};
     content.Spacing(kSectionSpacing);
-    _errorText = makeWrappedText(0.82);
+    _errorText = makeWrappedText(kSupportingTextOpacity);
     _errorText.Visibility(Visibility::Collapsed);
     content.Children().Append(_errorText);
 
@@ -607,7 +616,7 @@ namespace ao::winui
       {
         auto references = std::string{};
         appendReferences(references, optTagImpact->otherListReferences);
-        auto warning = makeWrappedText(0.82);
+        auto warning = makeWrappedText(kSupportingTextOpacity);
         warning.Text(winrt::to_hstring(
           _textCatalog.format(i18n::MessageId::WinUiListTagReferences,
                               {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"references", references}})));
@@ -689,10 +698,10 @@ namespace ao::winui
 
     if (_deleteContainsActive)
     {
-      if (auto const navigated = _trackList.navigateTo(rt::kAllTracksListId); !navigated && _reportStatus)
+      if (auto const navigatedRes = _trackList.navigateTo(rt::kAllTracksListId); !navigatedRes && _reportStatus)
       {
         _reportStatus(_textCatalog.format(
-          i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigated.error().message}}));
+          i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
       }
     }
 
@@ -846,7 +855,7 @@ namespace ao::winui
       return;
     }
 
-    auto submission = [&]()
+    auto submission = [&]
     {
       switch (command)
       {
@@ -1051,19 +1060,13 @@ namespace ao::winui
 
     _commandTasks.cancelAll();
 
-    try
+    if (_dialog)
     {
-      if (_dialog)
-      {
-        _dialog.Hide();
-      }
+      // The callback lifetime is already expired, so native dismissal is
+      // presentation-only cleanup rather than an operation invariant.
+      runOptionalWinRt("hiding the WinUI list-authoring dialog", [this] { _dialog.Hide(); });
+    }
 
-      handleDialogClosed();
-    }
-    catch (...)
-    {
-      // Native teardown is best-effort; expired callback tokens keep every
-      // queued continuation from reaching this owner.
-    }
+    handleDialogClosed();
   }
 } // namespace ao::winui

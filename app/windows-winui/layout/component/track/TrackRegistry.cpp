@@ -12,12 +12,14 @@
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include "track/TrackQuickFilterControl.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
@@ -51,6 +53,7 @@ namespace ao::winui::layout
     using winrt::Windows::Foundation::IInspectable;
 
     constexpr auto kCompactVariant = std::string_view{"compact"};
+    constexpr double kQuickFilterColumnSpacing = 8.0;
 
     /**
      * @brief The quick filter box.
@@ -92,7 +95,7 @@ namespace ao::winui::layout
         });
         _root.ColumnDefinitions().Append(inputColumn);
         _root.ColumnDefinitions().Append(buttonColumn);
-        _root.ColumnSpacing(8.0);
+        _root.ColumnSpacing(kQuickFilterColumnSpacing);
         _input.QueryIcon(SymbolIcon{winrt::Microsoft::UI::Xaml::Controls::Symbol::Find});
         _input.PlaceholderText(winrt::to_hstring(resourceString("winui_library_quick_filter_placeholder")));
         _root.Children().Append(_input);
@@ -190,6 +193,7 @@ namespace ao::winui::layout
 
         closeFlyout();
         _flyout = MenuFlyout{};
+
         for (std::size_t index = 0; index < _state.menuItems.size(); ++index)
         {
           auto const& entry = _state.menuItems[index];

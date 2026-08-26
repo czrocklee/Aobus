@@ -17,6 +17,7 @@
 #include "theme/SurfaceBrushes.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
@@ -34,6 +35,7 @@
 #include <ao/winui/layout/LayoutCatalog.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -45,7 +47,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 
 namespace ao::winui::layout
