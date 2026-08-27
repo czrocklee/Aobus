@@ -3,6 +3,7 @@
 
 #include "layout/runtime/LayoutRuntime.h"
 
+#include "app/ShellLayoutCollaborators.h"
 #include "layout/component/container/ContainerRegistry.h"
 #include "layout/component/playback/PlaybackRegistry.h"
 #include "layout/component/semantic/SemanticRegistry.h"
@@ -22,15 +23,35 @@ namespace ao::gtk::layout
   {
   }
 
-  void LayoutRuntime::registerStandardComponents(ComponentRegistry& registry)
+  void LayoutRuntime::registerStandardComponents(ComponentRegistry& registry,
+                                                 rt::AppRuntime& runtime,
+                                                 ShellLayoutCollaborators const& collaborators)
   {
-    registerContainerComponents(registry);
-    registerPlaybackComponents(registry);
-    registerSemanticComponents(registry);
-    registerTrackComponents(registry);
-    registerTrackDetailComponents(registry);
-    registerTrackEditorComponents(registry);
-    registerStatusComponents(registry);
+    registerContainerComponents(registry, collaborators.textCatalog);
+    registerPlaybackComponents(registry,
+                               runtime,
+                               collaborators.playbackCommandSurface,
+                               collaborators.imageLoader,
+                               collaborators.textCatalog,
+                               collaborators.outputDeviceIntent);
+    registerSemanticComponents(registry,
+                               collaborators.trackRowCache,
+                               collaborators.trackPageHost,
+                               collaborators.listNavigationController,
+                               collaborators.importExportActions,
+                               collaborators.textCatalog,
+                               collaborators.menuModelPtr);
+    registerTrackComponents(registry,
+                            runtime,
+                            collaborators.trackPageHost,
+                            collaborators.trackPresentationCatalog,
+                            collaborators.trackPresentationPreferences,
+                            collaborators.themeCoordinator,
+                            collaborators.createSmartListFromExpression,
+                            collaborators.textCatalog);
+    registerTrackDetailComponents(registry, runtime, collaborators.imageLoader, collaborators.textCatalog);
+    registerTrackEditorComponents(registry, runtime, collaborators.tagEditController, collaborators.textCatalog);
+    registerStatusComponents(registry, runtime, collaborators.textCatalog);
   }
 
   std::unique_ptr<LayoutComponent> LayoutRuntime::build(LayoutBuildContext& ctx, uimodel::PreparedLayout const& layout)

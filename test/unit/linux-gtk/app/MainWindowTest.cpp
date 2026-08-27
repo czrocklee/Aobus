@@ -7,7 +7,10 @@
 #include "app/AppDialog.h"
 #include "app/GtkMainContextExecutor.h"
 #include "app/LibraryWindowLifecycle.h"
+#include "app/ShellLayoutStore.h"
 #include "app/WindowState.h"
+#include "i18n/GtkTextCatalog.h"
+#include "list/ListNavigationController.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "test/unit/MessageCatalogTestSupport.h"
@@ -17,28 +20,47 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/Transport.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/ListMutation.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <giomm/actionmap.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/menubutton.h>
+#include <gtkmm/popovermenubar.h>
 #include <gtkmm/window.h>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -421,5 +443,257 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(finalized);
+  }
+
+  TEST_CASE("MainWindow - shell menu components receive the window's menu model",
+            "[gtk][regression][main-window][menu]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+
+    auto const presetId = GENERATE(std::string_view{"classic"}, std::string_view{"modern"});
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = std::string{presetId};
+    configStorePtr->saveAppPrefs(prefs);
+
+    auto layoutStorePtr =
+      std::make_shared<ShellLayoutStore>(std::filesystem::path{fixture.tempDir().path()} / "layouts");
+    auto window =
+      MainWindow{fixture.runtime(), configStorePtr, std::move(layoutStorePtr), ao::test::englishMessageCatalog()};
+    REQUIRE(window.prepareSession());
+
+    auto* const shell = window.get_child();
+    REQUIRE(shell != nullptr);
+
+    // The menu model is a shell-lifetime collaborator captured when the layout components are
+    // registered, so a window that builds its menu too late leaves every menu surface empty.
+    // The modern preset's application menu is one of several Gtk::MenuButton widgets in the tree,
+    // so it is identified by the tooltip the component gives it.
+    auto const applicationMenuLabel =
+      gtkText(ao::test::englishMessageCatalog(), i18n::MessageId::GtkShellApplicationMenu);
+    auto const findApplicationMenu = [shell, &applicationMenuLabel] -> Gtk::Widget*
+    {
+      if (auto* const menuBar = findWidget<Gtk::PopoverMenuBar>(*shell); menuBar != nullptr)
+      {
+        return menuBar;
+      }
+
+      for (auto* const button : collectAll<Gtk::MenuButton>(*shell))
+      {
+        if (button->get_tooltip_text() == applicationMenuLabel)
+        {
+          return button;
+        }
+      }
+
+      return nullptr;
+    };
+
+    REQUIRE(pumpGtkEventsUntil([&findApplicationMenu] { return findApplicationMenu() != nullptr; }));
+
+    auto* const applicationMenu = findApplicationMenu();
+    REQUIRE(applicationMenu != nullptr);
+
+    if (auto* const menuBar = dynamic_cast<Gtk::PopoverMenuBar*>(applicationMenu); menuBar != nullptr)
+    {
+      CHECK(menuBar->get_menu_model() != nullptr);
+    }
+    else
+    {
+      CHECK(dynamic_cast<Gtk::MenuButton&>(*applicationMenu).get_menu_model() != nullptr);
+    }
+  }
+
+  TEST_CASE("MainWindow - a session checkpoint does not clobber explicit preferences",
+            "[gtk][unit][main-window][config]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+
+    auto initialPrefs = rt::AppPrefsState{};
+    initialPrefs.lastThemePreset = "modern";
+    initialPrefs.preferredOutputSelection.backendId = audio::BackendId{"preference-backend"};
+    initialPrefs.preferredOutputSelection.deviceId = audio::DeviceId{"preference-device"};
+    initialPrefs.preferredOutputSelection.profileId = audio::ProfileId{"preference-profile"};
+    configStorePtr->saveAppPrefs(initialPrefs);
+
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
+
+    // Applying a theme is a preference the user set in this session; a window
+    // checkpoint records the session, not a second opinion about preferences.
+    window.applyTheme(uimodel::ThemePreset::Classic);
+    window.saveSession();
+
+    auto loadedPrefs = rt::AppPrefsState{};
+    configStorePtr->loadAppPrefs(loadedPrefs);
+    CHECK(loadedPrefs.lastThemePreset == "modern");
+    CHECK(loadedPrefs.preferredOutputSelection.backendId == "preference-backend");
+    CHECK(loadedPrefs.preferredOutputSelection.deviceId == "preference-device");
+    CHECK(loadedPrefs.preferredOutputSelection.profileId == "preference-profile");
+
+    auto loadedSession = rt::AppSessionState{};
+    configStorePtr->loadAppSession(loadedSession);
+    CHECK(loadedSession.lastLibraryPath == runtime.musicLibrary().rootPath().string());
+  }
+
+  TEST_CASE("MainWindow - rejected workspace state is not overwritten during preparation",
+            "[gtk][unit][main-window][workspace]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const workspacePath = std::filesystem::path{fixture.tempDir().path()} / "config.yaml";
+    auto const rejected = std::string{"workspace:\n"
+                                      "  presentationVersion: 2\n"
+                                      "  openViews: []\n"
+                                      "  activeViewIndex: 0\n"
+                                      "  customPresets: []\n"};
+    std::ofstream{workspacePath} << rejected;
+    auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+
+    REQUIRE(window.prepareSession());
+
+    // A workspace document this build cannot read still belongs to the user:
+    // the window opens a default view beside it rather than replacing it.
+    CHECK(ao::test::readFile(workspacePath) == rejected);
+    CHECK(runtime.workspace().snapshot().openViews.size() == 1);
+    CHECK(runtime.workspace().snapshot().activeViewId != rt::kInvalidViewId);
+  }
+
+  TEST_CASE("MainWindow - partial output preferences fall back to the session output",
+            "[gtk][unit][main-window][audio]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+
+    auto prefs = rt::AppPrefsState{};
+    prefs.preferredOutputSelection.backendId = audio::BackendId{"incomplete-preference-backend"};
+    prefs.preferredOutputSelection.profileId = {};
+    configStorePtr->saveAppPrefs(prefs);
+
+    auto session = rt::AppSessionState{};
+    session.lastOutputSelection.backendId = audio::BackendId{"test_backend"};
+    session.lastOutputSelection.deviceId = audio::DeviceId{"test_device"};
+    session.lastOutputSelection.profileId = audio::kProfileShared;
+    REQUIRE(configStorePtr->saveAppSession(session));
+
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    drainGtkEvents();
+
+    auto const selected = runtime.playback().snapshot().transport.output.selectedDevice;
+    CHECK(selected.backendId == audio::BackendId{"test_backend"});
+    CHECK(selected.deviceId == audio::DeviceId{"test_device"});
+    CHECK(selected.profileId == audio::kProfileShared);
+  }
+
+  TEST_CASE("MainWindow - restores a playback session as idle sequence state",
+            "[gtk][unit][main-window-playback][session]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      {
+        auto const fixtureUri =
+          audio::test::installAudioFixture(library.rootPath(), "basic_metadata.flac", "restored-track.flac");
+        trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Restored Track", .uri = fixtureUri});
+      }};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    auto& playback = runtime.playback();
+    auto const sourceListId = ao::test::requireValue(runGtkTask(runtime,
+                                                                runtime.library().writer().createList(rt::ListDraft{
+                                                                  .name = "Temporary sequence source",
+                                                                })));
+    runtime.reloadAllTracks();
+    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigate({.target = sourceListId}));
+    REQUIRE(playback.commands().startFromView(sourceViewId, trackId));
+    REQUIRE(waitForPlaybackSettlement(runtime, trackId));
+    playback.commands().seek(std::chrono::milliseconds{500});
+    playback.commands().setShuffleMode(rt::ShuffleMode::On);
+    playback.commands().setRepeatMode(rt::RepeatMode::All);
+    REQUIRE(runtime.savePlaybackSession());
+    REQUIRE(runGtkTask(runtime, runtime.library().writer().deleteList(sourceListId)));
+    playback.commands().stop();
+
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
+
+    // A source list that no longer exists must not strand the restored track:
+    // the session comes back on All Tracks, paused where the user left it.
+    auto const snapshot = playback.snapshot();
+    auto const& sequenceState = snapshot.succession;
+    CHECK(sequenceState.currentTrackId == trackId);
+    CHECK(sequenceState.sourceListId == rt::kAllTracksListId);
+    CHECK(sequenceState.sourceState == rt::PlaybackSourceState::Live);
+    CHECK(sequenceState.shuffle == rt::ShuffleMode::On);
+    CHECK(sequenceState.repeat == rt::RepeatMode::All);
+    CHECK(snapshot.transport.transport == audio::Transport::Idle);
+    CHECK(snapshot.transport.nowPlaying.trackId == trackId);
+    CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{500});
+
+    auto const focusedViewId = runtime.workspace().snapshot().activeViewId;
+    REQUIRE(focusedViewId != rt::kInvalidViewId);
+    CHECK(runtime.views().trackListState(focusedViewId).selection == std::vector<TrackId>{trackId});
+  }
+
+  TEST_CASE("MainWindow - persists a playback session from playback events",
+            "[gtk][unit][main-window-playback][session]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    auto& playback = runtime.playback();
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const track1 = addRuntimeTrack(runtime, {.title = "Restored Track", .uri = fixturePath});
+    auto const track2 = addRuntimeTrack(runtime, {.title = "Changed Track", .uri = fixturePath});
+
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
+    auto const viewId = runtime.workspace().snapshot().activeViewId;
+    REQUIRE(viewId != rt::kInvalidViewId);
+    auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
+    REQUIRE(listOrder != nullptr);
+    REQUIRE(runtime.views().setPresentation(viewId, listOrder->spec));
+    REQUIRE(playback.commands().startFromView(viewId, track1));
+    REQUIRE(waitForPlaybackSettlement(runtime, track1));
+    playback.commands().seek(std::chrono::milliseconds{250});
+    playback.commands().next();
+    playback.commands().seek(std::chrono::milliseconds{550});
+    playback.commands().stop();
+
+    auto const restoredRes = runtime.restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    CHECK(restoredRes->trackId == track2);
+    auto const snapshot = playback.snapshot();
+    CHECK(snapshot.transport.nowPlaying.trackId == track2);
+    CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{550});
+    CHECK(snapshot.succession.currentTrackId == track2);
+    CHECK(snapshot.succession.sourceListId == rt::kAllTracksListId);
+    CHECK(snapshot.succession.hasPrevious);
   }
 } // namespace ao::gtk::test

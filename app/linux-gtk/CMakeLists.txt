@@ -36,7 +36,7 @@ add_library(aobus-gtk-lib STATIC
     app/ThemeCoordinator.cpp
     app/ThemePreset.cpp
     app/WindowActionRegistry.cpp
-    app/MainWindowCoordinator.cpp
+    app/WindowState.cpp
     app/AppConfigStore.cpp
     app/ShellLayoutStore.cpp
     app/GtkLayoutStateStore.cpp

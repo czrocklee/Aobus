@@ -3,7 +3,7 @@
 
 #include "LayoutTestSupport.h"
 
-#include "app/linux-gtk/app/GtkUiDependencies.h"
+#include "app/ShellLayoutCollaborators.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
@@ -20,7 +20,6 @@
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
@@ -87,18 +86,19 @@ namespace ao::gtk::layout::test
       , messageCatalog{ao::test::messageCatalog(locale)}
       , playbackCommandSurface{runtimePtr->playback(),
                                [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
-      , dependencies{.textCatalog = messageCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}
       , context{.registry = components,
                 .actionRegistry = actions,
-                .runtime = *runtimePtr,
                 .parentWindow = window,
                 .runtimeState = runtimeState,
-                .buildState = uimodel::LayoutBuildStateView{runtimeState},
-                .dependencies = dependencies}
+                .buildState = uimodel::LayoutBuildStateView{runtimeState}}
       , layoutRuntime{components}
     {
-      LayoutRuntime::registerStandardComponents(components);
-      dependencies.playbackCommandSurface = &playbackCommandSurface;
+      LayoutRuntime::registerStandardComponents(components,
+                                                *runtimePtr,
+                                                ShellLayoutCollaborators{
+                                                  .textCatalog = messageCatalog,
+                                                  .playbackCommandSurface = &playbackCommandSurface,
+                                                });
     }
 
     ~State() noexcept
@@ -129,7 +129,6 @@ namespace ao::gtk::layout::test
     ActionRegistry actions;
     Gtk::Window window;
     uimodel::LayoutRuntimeState runtimeState;
-    GtkUiDependencies dependencies;
     LayoutBuildContext context;
     LayoutRuntime layoutRuntime;
     std::unique_ptr<FakeTrackDetailScope> trackDetailScopePtr;
@@ -175,11 +174,6 @@ namespace ao::gtk::layout::test
     return _statePtr->context;
   }
 
-  GtkUiDependencies& LayoutRuntimeFixture::dependencies()
-  {
-    return _statePtr->dependencies;
-  }
-
   LayoutRuntime& LayoutRuntimeFixture::layoutRuntime()
   {
     return _statePtr->layoutRuntime;
@@ -202,11 +196,9 @@ namespace ao::gtk::layout::test
   {
     auto context = LayoutBuildContext{.registry = _statePtr->components,
                                       .actionRegistry = _statePtr->actions,
-                                      .runtime = *_statePtr->runtimePtr,
                                       .parentWindow = _statePtr->window,
                                       .runtimeState = _statePtr->runtimeState,
                                       .buildState = uimodel::LayoutBuildStateView{_statePtr->runtimeState},
-                                      .dependencies = _statePtr->dependencies,
                                       .detailScope = _statePtr->trackDetailScopePtr.get()};
     return _statePtr->components.create(context, node);
   }

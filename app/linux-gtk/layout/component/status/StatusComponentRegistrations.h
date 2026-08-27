@@ -3,14 +3,38 @@
 
 #pragma once
 
+namespace ao::rt
+{
+  class AppRuntime;
+  class NotificationService;
+  class LibraryTaskService;
+  class PlaybackService;
+  class ViewService;
+}
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
 
-  void registerPlaybackDetailsComponent(ComponentRegistry& registry);
-  void registerNowPlayingStatusComponent(ComponentRegistry& registry);
-  void registerActivityStatusComponent(ComponentRegistry& registry);
-  void registerSelectionInfoComponent(ComponentRegistry& registry);
-  void registerLibraryTrackCountComponent(ComponentRegistry& registry);
-  void registerStatusMessageLabelComponent(ComponentRegistry& registry);
+  void registerPlaybackDetailsComponent(ComponentRegistry& registry,
+                                        rt::PlaybackService& playback,
+                                        i18n::MessageCatalog const& textCatalog);
+  void registerNowPlayingStatusComponent(ComponentRegistry& registry,
+                                         rt::PlaybackService& playback,
+                                         i18n::MessageCatalog const& textCatalog);
+  void registerActivityStatusComponent(ComponentRegistry& registry,
+                                       rt::NotificationService& notifications,
+                                       rt::LibraryTaskService& libraryTasks,
+                                       i18n::MessageCatalog const& textCatalog);
+  void registerSelectionInfoComponent(ComponentRegistry& registry,
+                                      rt::ViewService& views,
+                                      i18n::MessageCatalog const& textCatalog);
+  void registerLibraryTrackCountComponent(ComponentRegistry& registry,
+                                          rt::AppRuntime& runtime,
+                                          i18n::MessageCatalog const& textCatalog);
+  void registerStatusMessageLabelComponent(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog);
 } // namespace ao::gtk::layout

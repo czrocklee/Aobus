@@ -76,15 +76,59 @@ namespace ao::winui
     bool active = false;
   };
 
-  SmtcBridge::SmtcBridge(HWND window, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher)
-    : _statePtr{std::make_shared<State>()}
+  void SmtcBridge::retireNativeSession(State& state) noexcept
+  {
+    state.active = false;
+    state.commands = nullptr;
+    state.displayedArtworkId = kInvalidResourceId;
+    state.buttonRevoker.revoke();
+
+    if (!state.controls)
+    {
+      return;
+    }
+
+    // Unlike an in-window widget, the system transport overlay outlives this
+    // window. Leaving it enabled with a stale thumbnail is visible to the user.
+    runOptionalWinRt("clearing the SMTC thumbnail",
+                     [&state]
+                     {
+                       auto updater = state.controls.DisplayUpdater();
+                       updater.Thumbnail(nullptr);
+                       updater.Update();
+                     });
+    runOptionalWinRt("disabling SMTC controls", [&state] { state.controls.IsEnabled(false); });
+  }
+
+  SmtcBridge::SmtcBridge(HWND window,
+                         winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+                         rt::AppRuntime& runtime,
+                         uimodel::PlaybackCommandSurface& commands,
+                         rt::ResourceByteLoader& resourceBytes)
+    : _statePtr{std::make_shared<State>()}, _runtime{&runtime}, _resourceBytes{&resourceBytes}
   {
     _statePtr->dispatcher = std::move(dispatcher);
+    _statePtr->commands = &commands;
+    _statePtr->active = true;
+
     auto interop = winrt::get_activation_factory<winrt::Windows::Media::SystemMediaTransportControls,
                                                  ::ISystemMediaTransportControlsInterop>();
     winrt::check_hresult(interop->GetForWindow(window,
                                                winrt::guid_of<winrt::Windows::Media::SystemMediaTransportControls>(),
                                                winrt::put_abi(_statePtr->controls)));
+
+    // Arm native retirement before the first external mutation. If any later
+    // WinRT call throws, constructed members still unwind even though this
+    // class's destructor does not run for a failed constructor.
+    _nativeSessionRetirement =
+      utility::ScopedRegistration{[statePtr = _statePtr] { SmtcBridge::retireNativeSession(*statePtr); }};
+
+    _statePtr->controls.IsEnabled(true);
+    _statePtr->controls.IsPlayEnabled(true);
+    _statePtr->controls.IsPauseEnabled(true);
+    _statePtr->controls.IsStopEnabled(true);
+    _statePtr->controls.IsNextEnabled(true);
+    _statePtr->controls.IsPreviousEnabled(true);
 
     auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
     _statePtr->buttonRevoker = _statePtr->controls.ButtonPressed(
@@ -106,59 +150,21 @@ namespace ao::winui
             });
         }
       });
-  }
 
-  SmtcBridge::~SmtcBridge()
-  {
-    unbind();
-    _statePtr->buttonRevoker.revoke();
-  }
-
-  void SmtcBridge::bind(rt::AppRuntime& runtime,
-                        uimodel::PlaybackCommandSurface& commands,
-                        rt::ResourceByteLoader& resourceBytes)
-  {
-    unbind();
-    _runtime = &runtime;
-    _resourceBytes = &resourceBytes;
-    _statePtr->active = true;
-    _statePtr->commands = &commands;
-    _statePtr->controls.IsEnabled(true);
-    _statePtr->controls.IsPlayEnabled(true);
-    _statePtr->controls.IsPauseEnabled(true);
-    _statePtr->controls.IsStopEnabled(true);
-    _statePtr->controls.IsNextEnabled(true);
-    _statePtr->controls.IsPreviousEnabled(true);
     _snapshotSub = runtime.playback().events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
                                                           { handleSnapshot(snapshot); });
     handleSnapshot(runtime.playback().snapshot());
   }
 
-  void SmtcBridge::unbind() noexcept
+  SmtcBridge::~SmtcBridge()
   {
-    // Close admission before cancellation so queued button/artwork continuations
-    // become harmless even if native revocation is delayed.
     _statePtr->active = false;
     _statePtr->commands = nullptr;
     _statePtr->displayedArtworkId = kInvalidResourceId;
-    _resourceBytes = nullptr;
-    _runtime = nullptr;
-
     _artworkRequest.reset();
     _artworkTask.reset();
     _snapshotSub.reset();
-
-    // Unlike an in-window widget, the system transport overlay outlives this
-    // window. Leaving it enabled with a stale thumbnail is visible to the user,
-    // so this reset is owed on teardown rather than only on rebind.
-    runOptionalWinRt("clearing the SMTC thumbnail",
-                     [this]
-                     {
-                       auto updater = _statePtr->controls.DisplayUpdater();
-                       updater.Thumbnail(nullptr);
-                       updater.Update();
-                     });
-    runOptionalWinRt("disabling SMTC controls", [this] { _statePtr->controls.IsEnabled(false); });
+    _nativeSessionRetirement.reset();
   }
 
   void SmtcBridge::handleSnapshot(rt::PlaybackSnapshot const& snapshot)

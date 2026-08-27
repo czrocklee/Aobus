@@ -23,69 +23,38 @@
 
 namespace ao::rt
 {
-  ResourceByteLoader::ResourceByteLoader() = default;
-
   ResourceByteLoader::ResourceByteLoader(CoreRuntime& runtime)
+    : _readBytesPtr{std::make_shared<ReadBytes const>(
+        [&runtime](ResourceId const resourceId, std::stop_token const stopToken)
+        {
+          return runtime.library().taskService().loadResourceAsync(
+            resourceId, ResourceSizeLimit::Interactive, stopToken);
+        })}
+    , _asyncRuntime{&runtime.async()}
+    , _scopePtr{std::make_unique<async::LifetimeScope>()}
   {
-    bind(runtime);
   }
 
   ResourceByteLoader::ResourceByteLoader(async::Runtime& runtime, ReadBytes readBytes)
+    : _readBytesPtr{std::make_shared<ReadBytes const>(std::move(readBytes))}
+    , _asyncRuntime{&runtime}
+    , _scopePtr{std::make_unique<async::LifetimeScope>()}
   {
-    bind(runtime, std::move(readBytes));
+    AO_EXPECTS(_readBytesPtr && *_readBytesPtr);
   }
 
   ResourceByteLoader::~ResourceByteLoader()
   {
-    unbind();
-  }
-
-  void ResourceByteLoader::bind(std::shared_ptr<CoreRuntime> runtimePtr)
-  {
-    AO_EXPECTS(runtimePtr);
-    auto& asyncRuntime = runtimePtr->async();
-    bind(asyncRuntime,
-         [runtimePtr = std::move(runtimePtr)](ResourceId const resourceId, std::stop_token const stopToken)
-         {
-           return runtimePtr->library().taskService().loadResourceAsync(
-             resourceId, ResourceSizeLimit::Interactive, stopToken);
-         });
-  }
-
-  void ResourceByteLoader::bind(CoreRuntime& runtime)
-  {
-    bind(runtime.async(),
-         [&runtime](ResourceId const resourceId, std::stop_token const stopToken)
-         {
-           return runtime.library().taskService().loadResourceAsync(
-             resourceId, ResourceSizeLimit::Interactive, stopToken);
-         });
-  }
-
-  void ResourceByteLoader::bind(async::Runtime& runtime, ReadBytes readBytes)
-  {
-    AO_EXPECTS(readBytes);
-    auto readBytesPtr = std::make_shared<ReadBytes const>(std::move(readBytes));
-    auto scopePtr = std::make_unique<async::LifetimeScope>();
-
-    unbind();
-    _readBytesPtr = std::move(readBytesPtr);
-    _scopePtr = std::move(scopePtr);
-    _asyncRuntime = &runtime;
-  }
-
-  void ResourceByteLoader::unbind() noexcept
-  {
+    // Cancel external work before the flights and cached bytes it completes into
+    // are released. Member declaration order is the fallback, not the mechanism.
     _scopePtr.reset();
     _requests.clear();
     _cache.reset();
-    _readBytesPtr.reset();
-    _asyncRuntime = nullptr;
   }
 
   ResourceByteLoader::Request ResourceByteLoader::request(ResourceId const resourceId, OnReady onReady)
   {
-    if (_asyncRuntime == nullptr || resourceId == kInvalidResourceId || !onReady)
+    if (resourceId == kInvalidResourceId || !onReady)
     {
       return {};
     }

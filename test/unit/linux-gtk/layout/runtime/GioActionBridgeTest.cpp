@@ -6,7 +6,6 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
@@ -31,17 +30,15 @@ namespace ao::gtk::layout::test
     class FakeActionContextProvider final : public ActionContextProvider
     {
     public:
-      FakeActionContextProvider(rt::AppRuntime& runtime, Gtk::Window& window, Gtk::Widget& widget)
-        : _runtime{runtime}, _window{window}, _widget{widget}
+      FakeActionContextProvider(Gtk::Window& window, Gtk::Widget& widget)
+        : _window{window}, _widget{widget}
       {
       }
 
       ActionActivationContext actionContext(std::string_view componentId) override
       {
-        return ActionActivationContext{.runtime = _runtime,
-                                       .parentWindow = _window,
-                                       .anchorWidget = _widget,
-                                       .componentId = std::string{componentId}};
+        return ActionActivationContext{
+          .parentWindow = _window, .anchorWidget = _widget, .componentId = std::string{componentId}};
       }
 
       bool canProvideSafeAnchor(LayoutActionDescriptor const& /*desc*/) const override { return _canProvideSafeAnchor; }
@@ -49,7 +46,6 @@ namespace ao::gtk::layout::test
       void setCanProvideSafeAnchor(bool val) { _canProvideSafeAnchor = val; }
 
     private:
-      rt::AppRuntime& _runtime;
       Gtk::Window& _window;
       Gtk::Widget& _widget;
       bool _canProvideSafeAnchor = false;
@@ -64,7 +60,7 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto widget = Gtk::Box{};
-    auto contextProvider = FakeActionContextProvider{*runtimePtr, window, widget};
+    auto contextProvider = FakeActionContextProvider{window, widget};
 
     auto registry = ActionRegistry{};
     auto actionMapPtr = Gio::SimpleActionGroup::create();

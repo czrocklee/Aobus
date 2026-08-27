@@ -6,33 +6,58 @@
 #include "app/AppConfigStore.h"
 #include "app/AppDialog.h"
 #include "app/GtkAccelTranslator.h"
+#include "app/GtkLayoutStateStore.h"
 #include "app/KeymapApplicator.h"
-#include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
 #include "app/MouseNavigationPolicy.h"
 #include "app/PlaybackShortcutPolicy.h"
+#include "app/ShellLayoutCollaborators.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ThemeCoordinator.h"
 #include "app/WindowActionRegistry.h"
 #include "app/WindowState.h"
 #include "i18n/GtkTextCatalog.h"
+#include "image/ImageCache.h"
+#include "image/ResourceImageLoader.h"
 #include "list/ListNavigationController.h"
 #include "platform/MprisArtUrlCache.h"
 #include "platform/MprisBridge.h"
+#include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinator.h"
+#include "tag/TagEditController.h"
 #include "track/TrackOrderActions.h"
+#include "track/TrackPageHost.h"
+#include "track/TrackRowCache.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/AppState.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>
@@ -40,11 +65,14 @@
 #include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/stack.h>
+#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -52,6 +80,151 @@
 
 namespace ao::gtk
 {
+  struct MainWindow::Impl final
+  {
+    Impl(Gtk::Window& window, rt::AppRuntime& runtime, i18n::MessageCatalog catalog)
+      : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
+      , trackRowCache{runtime.library(), catalog}
+      , imageCache{100}
+      , resourceByteLoader{runtime}
+      , resourceImageLoader{resourceByteLoader, imageCache, runtime.async()}
+      , playbackCommandSurface{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
+      , textCatalog{std::move(catalog)}
+      , trackPresentationCatalog{runtime.workspace(), textCatalog}
+      , trackPresentationPreferences{trackPresentationCatalog, runtime.library().changes()}
+      , tagEditController{window,
+                          runtime,
+                          textCatalog,
+                          TagEditController::Callbacks{
+                            .onTagsMutated = [] {},
+                            .onManageListsRequested = [this] { listNavigationController.openNewPlaylistDialog(); },
+                          },
+                          themeCoordinator}
+      , listNavigationController{window,
+                                 runtime,
+                                 textCatalog,
+                                 ListNavigationController::Callbacks{
+                                   .onListSelected = [&runtime, this](ListId listId)
+                                   { return navigateToList(listId, runtime).has_value(); },
+                                   .onListPresentationSaved = [this](ListId listId, std::string const& presentationId)
+                                   { trackPresentationPreferences.setPresentationIdForList(listId, presentationId); },
+                                   .listPresentationCallback = [this](ListId listId) -> std::optional<std::string>
+                                   {
+                                     if (auto const optPres =
+                                           trackPresentationPreferences.presentationIdForList(listId);
+                                         optPres)
+                                     {
+                                       return std::string{*optPres};
+                                     }
+
+                                     return std::nullopt;
+                                   }},
+                                 themeCoordinator}
+      , trackPageHost{stack,
+                      runtime,
+                      tagEditController,
+                      listNavigationController,
+                      trackColumnLayouts,
+                      textCatalog,
+                      resourceByteLoader}
+      , importExportCoordinator{window,
+                                runtime,
+                                textCatalog,
+                                portal::ImportExportCallbacks{
+                                  .onOpenNewLibrary = [](std::filesystem::path const&, bool) {},
+                                  .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
+                                themeCoordinator}
+    {
+      tagEditController.setDataProvider(&trackRowCache);
+    }
+
+    rt::TrackPresentationSpec presentationForList(ListId listId, rt::AppRuntime& runtime) const
+    {
+      auto const fallback = [this, listId]
+      {
+        return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
+          .listId = listId,
+          .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
+        });
+      };
+
+      if (rt::isVirtualListId(listId))
+      {
+        return fallback();
+      }
+
+      auto const optNode = runtime.library().reader().listNode(listId);
+
+      if (!optNode)
+      {
+        return fallback();
+      }
+
+      return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
+        .listId = listId,
+        .sourceKind = uimodel::ListPresentationSourceKind::SavedList,
+        .listExpression = optNode->expression,
+      });
+    }
+
+    Result<rt::ViewId> navigateToList(ListId listId, rt::AppRuntime& runtime) const
+    {
+      auto const spec = presentationForList(listId, runtime);
+      return runtime.workspace().navigate({
+        .target = listId,
+        .optPresentation =
+          rt::NavigationPresentation{
+            .mode = rt::NavigationPresentationMode::NewViewDefault,
+            .spec = spec,
+          },
+      });
+    }
+
+    void restorePlaybackSession(rt::AppRuntime& runtime) const
+    {
+      auto restoredRes = runtime.restorePlaybackSession();
+
+      if (!restoredRes)
+      {
+        APP_LOG_WARN("MainWindow: Failed to restore playback session - {}", restoredRes.error().message);
+        return;
+      }
+
+      if (!restoredRes->restored)
+      {
+        return;
+      }
+
+      std::ignore = navigateToList(restoredRes->sourceListId, runtime);
+      runtime.playback().commands().revealTrack(restoredRes->trackId, rt::kInvalidViewId, restoredRes->sourceListId);
+    }
+
+    GtkLayoutStateStore layoutStateStore;
+    ThemeCoordinator themeCoordinator;
+    TrackRowCache trackRowCache;
+    ImageCache imageCache;
+    rt::ResourceByteLoader resourceByteLoader;
+    ResourceImageLoader resourceImageLoader;
+    uimodel::PlaybackCommandSurface playbackCommandSurface;
+    i18n::MessageCatalog textCatalog;
+    ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
+    ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
+    ao::uimodel::TrackColumnLayoutStore trackColumnLayouts;
+    TagEditController tagEditController;
+    ListNavigationController listNavigationController;
+    Gtk::Stack stack;
+    TrackPageHost trackPageHost;
+    portal::ImportExportCoordinator importExportCoordinator;
+
+    WindowState windowState;
+    std::optional<ThemeRegistrationToken> optThemeToken;
+    bool restoringLayoutState = false;
+
+    async::Subscription listsMutatedSub;
+    async::Subscription trackPresentationChangedSub;
+    async::Subscription trackColumnLayoutChangedSub;
+  };
+
   MainWindow::MainWindow(rt::AppRuntime& runtime,
                          std::shared_ptr<AppConfigStore> configStorePtr,
                          std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
@@ -60,21 +233,27 @@ namespace ao::gtk
     : _runtime{runtime}
     , _configStorePtr{std::move(configStorePtr)}
     , _textCatalog{std::move(textCatalog)}
-    , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configStorePtr, _textCatalog)}
+    , _implPtr{std::make_unique<Impl>(*this, _runtime, _textCatalog)}
+    , _menuControllerPtr{std::make_unique<MenuController>(_textCatalog)}
     , _shellLayout{_runtime,
                    *this,
                    _configStorePtr,
                    std::move(shellLayoutStorePtr),
                    std::move(componentStateStorePtr),
-                   _mainWindowCoordinatorPtr->uiDependencies()}
+                   shellLayoutCollaborators(_menuControllerPtr->menuModel())}
   {
     set_title("Aobus");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
 
-    _mainWindowCoordinatorPtr->loadSession();
+    _implPtr->trackPresentationChangedSub = _implPtr->trackPresentationPreferences.signalChanged().connect(
+      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
+    _implPtr->trackColumnLayoutChangedSub = _implPtr->trackColumnLayouts.signalChanged().connect(
+      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
+
+    loadSessionState();
 
     _windowActionRegistryPtr = std::make_unique<WindowActionRegistry>(
-      _mainWindowCoordinatorPtr->importExport(),
+      _implPtr->importExportCoordinator,
       WindowActionRegistry::Callbacks{
         .onEditLayout = [this] { openLayoutEditor(); },
         .onResetRuntimeLayoutState = [this] { resetRuntimeLayoutState(); },
@@ -82,17 +261,14 @@ namespace ao::gtk
       });
     _windowActionRegistryPtr->install(*this);
 
-    _menuControllerPtr = std::make_unique<MenuController>();
-    _menuControllerPtr->setup(_textCatalog);
-    _mainWindowCoordinatorPtr->listNavigationController()->addActionsTo(*this);
-    _shellLayout.setMenuModel(_menuControllerPtr->menuModel());
+    _implPtr->listNavigationController.addActionsTo(*this);
     _shellLayout.attachToWindow();
 
     auto mprisArtUrlCachePtr =
-      std::make_shared<platform::MprisArtUrlCache>(*_mainWindowCoordinatorPtr->resourceByteLoader(), _runtime.async());
+      std::make_shared<platform::MprisArtUrlCache>(_implPtr->resourceByteLoader, _runtime.async());
     _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
       _runtime.playback(),
-      *_mainWindowCoordinatorPtr->playbackCommandSurface(),
+      _implPtr->playbackCommandSurface,
       platform::MprisBridge::Callbacks{
         .raise =
           [this]
@@ -169,6 +345,14 @@ namespace ao::gtk
     {
       AO_FATAL_EXCEPTION(std::current_exception(), "GTK MainWindow session save during destruction");
     }
+
+    // Stop observing before the collaborators the callbacks read are released.
+    // Member order would release them in the same order, but a subscription is
+    // a registration on a live source, not a member whose order proves it is
+    // gone; the window states its retirement rather than implying it.
+    _implPtr->listsMutatedSub.reset();
+    _implPtr->trackPresentationChangedSub.reset();
+    _implPtr->trackColumnLayoutChangedSub.reset();
   }
 
   void MainWindow::saveSession()
@@ -179,11 +363,10 @@ namespace ao::gtk
     }
 
     auto const persistenceReady = _playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready;
-    auto const policy = persistenceReady ? MainWindowCoordinator::SessionSavePolicy::Full
-                                         : MainWindowCoordinator::SessionSavePolicy::ExcludeSelectedRootAndPlayback;
-    _mainWindowCoordinatorPtr->recordWindowSnapshot(
-      WindowState{.width = get_width(), .height = get_height(), .maximized = is_maximized()});
-    _mainWindowCoordinatorPtr->saveSession(policy);
+    auto const policy = persistenceReady ? SessionSavePolicy::Full : SessionSavePolicy::ExcludeSelectedRootAndPlayback;
+    recordWindowGeometry(
+      _implPtr->windowState, WindowState{.width = get_width(), .height = get_height(), .maximized = is_maximized()});
+    saveSessionState(policy);
   }
 
   Result<> MainWindow::retireForLibrarySwitch()
@@ -209,11 +392,8 @@ namespace ao::gtk
                                                    .role = AppDialogActionRole::Cancel}},
                                   Gtk::ResponseType::CLOSE);
 
-      if (auto* const themeCoordinator = _mainWindowCoordinatorPtr->themeCoordinator(); themeCoordinator != nullptr)
-      {
-        auto tokenPtr = std::make_shared<ThemeRegistrationToken>(themeCoordinator->registerToplevel(*dialog));
-        dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
-      }
+      auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_implPtr->themeCoordinator.registerToplevel(*dialog));
+      dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
 
       return discardedRes;
     }
@@ -247,23 +427,23 @@ namespace ao::gtk
   {
     Gtk::ApplicationWindow::size_allocate_vfunc(width, height, baseline);
 
-    if (_mainWindowCoordinatorPtr)
+    if (_implPtr)
     {
-      _mainWindowCoordinatorPtr->recordWindowSnapshot(
-        WindowState{.width = width, .height = height, .maximized = is_maximized()});
+      recordWindowGeometry(
+        _implPtr->windowState, WindowState{.width = width, .height = height, .maximized = is_maximized()});
     }
   }
 
   portal::ImportExportCoordinator& MainWindow::importExportCoordinator()
   {
-    return _mainWindowCoordinatorPtr->importExport();
+    return _implPtr->importExportCoordinator;
   }
 
   Result<> MainWindow::prepareSession()
   {
     AO_EXPECTS(_sessionPhase == SessionPhase::Constructed, "Only a constructed GTK session can be prepared");
 
-    _mainWindowCoordinatorPtr->prepareSession();
+    prepareRuntimeSession();
 
     _shellLayout.refreshExportedActions();
 
@@ -284,7 +464,7 @@ namespace ao::gtk
     if (restoreMode == PlaybackRestoreMode::Restore)
     {
       _runtime.startPlaybackSessionPersistence();
-      _mainWindowCoordinatorPtr->restorePlaybackSession();
+      restorePlaybackSession();
     }
 
     try
@@ -357,10 +537,7 @@ namespace ao::gtk
 
   void MainWindow::applyTheme(uimodel::ThemePreset const theme)
   {
-    if (auto* const themeCoordinator = _mainWindowCoordinatorPtr->themeCoordinator(); themeCoordinator != nullptr)
-    {
-      themeCoordinator->setTheme(theme);
-    }
+    _implPtr->themeCoordinator.setTheme(theme);
   }
 
   rt::PlaybackService& MainWindow::playback()
@@ -371,6 +548,171 @@ namespace ao::gtk
   uimodel::LayoutActionCatalog const& MainWindow::layoutActionCatalog() const
   {
     return _shellLayout.actionCatalog();
+  }
+
+  void MainWindow::prepareRuntimeSession()
+  {
+    // Track-row coherence is the cache's own business; the window only needs to
+    // know when the list tree it shows has to be rebuilt.
+    _implPtr->listsMutatedSub = _runtime.library().changes().onChanged(
+      [this](rt::LibraryChangeSet const& mutation)
+      {
+        if (!mutation.libraryReset && mutation.listsUpserted.empty() && mutation.listsDeleted.empty() &&
+            mutation.listOrderChanges.empty())
+        {
+          return;
+        }
+
+        rebuildListPages();
+      });
+
+    auto const restoredRes = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore());
+
+    if (!restoredRes)
+    {
+      APP_LOG_WARN("MainWindow: Failed to restore workspace session - {}", restoredRes.error().message);
+    }
+
+    if (_runtime.workspace().snapshot().openViews.empty())
+    {
+      std::ignore = _implPtr->navigateToList(rt::kAllTracksListId, _runtime);
+    }
+
+    rebuildListPages();
+  }
+
+  Result<rt::ViewId> MainWindow::navigateToList(ListId const listId)
+  {
+    return _implPtr->navigateToList(listId, _runtime);
+  }
+
+  void MainWindow::restorePlaybackSession()
+  {
+    _implPtr->restorePlaybackSession(_runtime);
+  }
+
+  void MainWindow::saveSessionState(SessionSavePolicy const policy)
+  {
+    auto const fullSave = policy == SessionSavePolicy::Full;
+
+    _configStorePtr->saveWindow(_implPtr->windowState);
+
+    saveColumnLayout();
+
+    // Session state: per-window shutdown must not overwrite explicit application preferences.
+    auto session = rt::AppSessionState{};
+    _configStorePtr->loadAppSession(session);
+
+    if (fullSave)
+    {
+      session.lastLibraryPath = utility::pathToUtf8(_runtime.musicRoot());
+    }
+
+    session.lastOutputSelection = _runtime.playback().snapshot().transport.output.selectedDevice;
+
+    if (auto const savedRes = _configStorePtr->saveAppSession(session); !savedRes)
+    {
+      APP_LOG_WARN("MainWindow: Failed to save application session - {}", savedRes.error().message);
+    }
+
+    if (fullSave)
+    {
+      if (auto const savedRes = _runtime.savePlaybackSession(); !savedRes)
+      {
+        APP_LOG_WARN("MainWindow: Failed to checkpoint playback session - {}", savedRes.error().message);
+      }
+    }
+
+    _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
+  }
+
+  void MainWindow::loadSessionState()
+  {
+    // Window state
+    _configStorePtr->loadWindow(_implPtr->windowState);
+    set_default_size(_implPtr->windowState.width, _implPtr->windowState.height);
+
+    if (_implPtr->windowState.maximized)
+    {
+      maximize();
+    }
+
+    // Column layouts (widths and order)
+    auto columnState = ao::uimodel::TrackColumnLayoutState{};
+    auto prefState = ao::uimodel::ListPresentationPreferenceState{};
+    _implPtr->layoutStateStore.load(columnState, prefState);
+    _implPtr->restoringLayoutState = true;
+    auto const restoreGuard = utility::ScopedRegistration{[this] { _implPtr->restoringLayoutState = false; }};
+    _implPtr->trackColumnLayouts.setListLayouts(columnState.listLayouts);
+    _implPtr->trackPresentationPreferences.setListPresentations(prefState.presentations);
+
+    // App prefs (playback restoration)
+    auto prefs = rt::AppPrefsState{};
+    _configStorePtr->loadAppPrefs(prefs);
+    auto session = rt::AppSessionState{};
+    _configStorePtr->loadAppSession(session);
+
+    auto& playback = _runtime.playback();
+    auto const optOutputSelection = uimodel::resolveOutputDeviceSelectionToRestore(
+      prefs.preferredOutputSelection, session.lastOutputSelection, playback.snapshot().transport.output);
+
+    if (optOutputSelection)
+    {
+      playback.commands().setOutputDevice(
+        optOutputSelection->backendId, optOutputSelection->deviceId, optOutputSelection->profileId);
+    }
+
+    _implPtr->themeCoordinator.load(*_configStorePtr);
+    _implPtr->optThemeToken = _implPtr->themeCoordinator.registerToplevel(*this);
+  }
+
+  ShellLayoutCollaborators MainWindow::shellLayoutCollaborators(Glib::RefPtr<Gio::MenuModel> menuModelPtr)
+  {
+    return ShellLayoutCollaborators{
+      .textCatalog = _implPtr->textCatalog,
+      .playbackCommandSurface = &_implPtr->playbackCommandSurface,
+      .themeCoordinator = &_implPtr->themeCoordinator,
+      .trackRowCache = &_implPtr->trackRowCache,
+      .imageLoader = &_implPtr->resourceImageLoader,
+      .tagEditController = &_implPtr->tagEditController,
+      .importExportActions = &_implPtr->importExportCoordinator,
+      .trackPageHost = &_implPtr->trackPageHost,
+      .trackPresentationCatalog = &_implPtr->trackPresentationCatalog,
+      .trackPresentationPreferences = &_implPtr->trackPresentationPreferences,
+      .listNavigationController = &_implPtr->listNavigationController,
+      .outputDeviceIntent = preferredOutputDeviceRecorder(_configStorePtr),
+      .createSmartListFromExpression = [navigationController = &_implPtr->listNavigationController](
+                                         ao::ListId parentListId, std::string expression)
+      { navigationController->createSmartListFromExpression(parentListId, std::move(expression)); },
+      .menuModelPtr = std::move(menuModelPtr),
+    };
+  }
+
+  void MainWindow::rebuildListPages()
+  {
+    APP_LOG_DEBUG("rebuildListPages called");
+    _implPtr->trackPageHost.rebuild(_implPtr->trackRowCache);
+
+    _implPtr->listNavigationController.rebuildTree(_implPtr->trackRowCache);
+  }
+
+  void MainWindow::saveColumnLayout()
+  {
+    auto columnState = ao::uimodel::TrackColumnLayoutState{};
+    columnState.listLayouts = _implPtr->trackColumnLayouts.listLayouts();
+
+    auto prefState = ao::uimodel::ListPresentationPreferenceState{};
+    prefState.presentations = _implPtr->trackPresentationPreferences.listPresentations();
+
+    _implPtr->layoutStateStore.save(columnState, prefState);
+  }
+
+  void MainWindow::saveColumnLayoutIfNotRestoring()
+  {
+    if (!_implPtr->restoringLayoutState)
+    {
+      saveColumnLayout();
+    }
   }
 
   void MainWindow::installPlaybackSpaceShortcut()

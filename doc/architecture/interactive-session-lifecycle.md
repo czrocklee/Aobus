@@ -59,8 +59,7 @@ Its public construction is also a `Result<std::unique_ptr<...>>` factory rather 
 GTK owns one main-window/runtime pair for the active library and never constructs a second pair in that process.
 Application-global configuration, shell layout stores, component state, application preferences, library database, per-library workspace state, views, sources, playback stack, runtime observers, and the window all finish their owned teardown before a successor is launched.
 
-`MainWindowCoordinator` sequences per-library presentation-preference loading, library-backed page initialization, workspace restoration, default-view creation, playback restoration, and checkpoints.
-`MainWindow` separates preparation from activation: preparation builds library-backed views and shell layout without restoring playback or starting process-wide adapters, while activation selects ordinary startup restore or successor idle-start behavior and starts MPRIS.
+`MainWindow` is the one GTK session owner. It sequences per-library presentation-preference loading, library-backed page initialization, workspace restoration, default-view creation, playback restoration, and checkpoints, and it separates preparation from activation: preparation builds library-backed views and shell layout without restoring playback or starting process-wide adapters, while activation selects ordinary startup restore or successor idle-start behavior and starts MPRIS.
 Ordinary restore admits playback observation immediately; successor idle start keeps playback observation pending until the selected root is durable.
 Workspace restoration retains the exact presentation stored with every restored view.
 GTK resolves a per-list preference or recommendation and submits it as new-view-default intent; `WorkspaceService` decides whether navigation reuses a plain view or creates one.
@@ -282,7 +281,7 @@ After successor activation, initial-scan or explicit-rescan planning and applica
 What a finished scan is reported as - its verdict, severity, retention, and sentence - is decided once in UIModel and enumerated by the [library scan report reference](../reference/shell/library-scan-report.md); a session posts that decision rather than reaching its own.
 An Open Library request may cancel an active scan through ordinary parent teardown; explicit Rescan still has no public cancellation or supersession command.
 The dispatcher executor is the only route by which runtime callbacks may update XAML.
-Window controllers, projections, resource loader, SMTC bridge, and artwork tasks are unbound before the session releases its unique runtime.
+The window retires generation controllers and projections, destroys SMTC and artwork consumers, then destroys its constructor-bound resource loader before the session releases its unique runtime.
 The runtime destructor joins its worker tasks; no deferred runtime release or quarantine owner is used.
 
 ## Implementation map
@@ -291,7 +290,7 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`app/include/ao/desktop/`](../../app/include/ao/desktop/) and
   [`app/desktop/`](../../app/desktop/) own shared root identity, pure startup and
   switch plans, the private successor protocol, and detached process creation.
-- [`GtkStartupPlan.cpp`](../../app/linux-gtk/app/GtkStartupPlan.cpp), [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`MainWindowCoordinator.cpp`](../../app/linux-gtk/app/MainWindowCoordinator.cpp), [`SuccessorProcessLauncher.cpp`](../../app/linux-gtk/platform/SuccessorProcessLauncher.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK startup planning, prepare/activate composition, terminal retirement, complete unwind, direct process launch, diagnostics, and pair lifetime.
+- [`GtkStartupPlan.cpp`](../../app/linux-gtk/app/GtkStartupPlan.cpp), [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`SuccessorProcessLauncher.cpp`](../../app/linux-gtk/platform/SuccessorProcessLauncher.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK startup planning, prepare/activate composition, terminal retirement, complete unwind, direct process launch, diagnostics, and pair lifetime.
 - [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
@@ -306,8 +305,7 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 ## Test map
 
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive composition and callback-producer teardown.
-- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects final checkpoints, terminal retirement failure, the stale-write guard, and failed successor-root commit isolation while ordinary window, output, layout, and workspace saves continue.
-- [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK restoration and checkpoint ordering.
+- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects final checkpoints, terminal retirement failure, the stale-write guard, failed successor-root commit isolation, workspace and playback restoration, and checkpoint ordering while ordinary window, output, layout, and workspace saves continue.
 - [`MainWindowSessionPresentationTest.cpp`](../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) protects presentation precedence across GTK workspace and playback restoration.
 - [`GtkStartupPlanTest.cpp`](../../test/unit/linux-gtk/app/GtkStartupPlanTest.cpp) and [`SuccessorProcessLauncherTest.cpp`](../../test/unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp) protect the paired private `--aobus-successor` protocol, GTK-owned standard replacement passthrough, exact launch plan, activation-environment cleanup, exec failure, and detach.
 - [`GApplicationReplacementTest.cpp`](../../test/unit/linux-gtk/app/GApplicationReplacementTest.cpp) protects ordinary remote activation and live-owner replacement on an isolated session bus; it does not claim serialization against an independently launched graph.

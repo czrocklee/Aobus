@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <filesystem>
 #include <memory>
@@ -64,4 +65,15 @@ namespace ao::gtk
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;
   };
+
+  /**
+   * @brief The intent that records a chosen output device as the user's preference.
+   *
+   * A surface that lets the user pick a device is stating a preference for the
+   * next start, not a one-off route, so recording writes only
+   * `preferredOutputSelection` back into the existing preferences. The store is
+   * shared rather than borrowed because the recorder outlives the call that
+   * builds it.
+   */
+  uimodel::OutputDeviceIntent preferredOutputDeviceRecorder(std::shared_ptr<AppConfigStore> configStorePtr);
 } // namespace ao::gtk

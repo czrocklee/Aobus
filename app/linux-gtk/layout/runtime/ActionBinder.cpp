@@ -4,7 +4,6 @@
 #include "ActionBinder.h"
 
 #include "ActionRegistry.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -15,8 +14,8 @@
 
 namespace ao::gtk::layout
 {
-  ActionBinder::ActionBinder(ActionRegistry const& registry, rt::AppRuntime& runtime, Gtk::Window& parentWindow)
-    : _registry{registry}, _runtime{runtime}, _parentWindow{parentWindow}
+  ActionBinder::ActionBinder(ActionRegistry const& registry, Gtk::Window& parentWindow)
+    : _registry{registry}, _parentWindow{parentWindow}
   {
   }
 
@@ -34,15 +33,10 @@ namespace ao::gtk::layout
 
     // Capture pointers to the dependencies to ensure the lambda uses the actual objects,
     // as the ActionBinder instance itself is typically short-lived (local to component ctor).
-    return [registry = &_registry,
-            runtime = &_runtime,
-            parentWindow = &_parentWindow,
-            actionId,
-            anchor = &anchorWidget,
-            nodeId = node.id]
+    return [registry = &_registry, parentWindow = &_parentWindow, actionId, anchor = &anchorWidget, nodeId = node.id]
     {
-      auto actionCtx = ActionActivationContext{
-        .runtime = *runtime, .parentWindow = *parentWindow, .anchorWidget = *anchor, .componentId = nodeId};
+      auto actionCtx =
+        ActionActivationContext{.parentWindow = *parentWindow, .anchorWidget = *anchor, .componentId = nodeId};
       registry->activate(actionId, actionCtx);
     };
   }

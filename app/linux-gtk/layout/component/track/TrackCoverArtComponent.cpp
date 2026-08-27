@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "i18n/GtkTextCatalog.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
@@ -34,6 +33,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -128,16 +128,19 @@ namespace ao::gtk::layout
         std::int32_t _targetSize = 0;
       };
 
-      TrackCoverArtComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _textCatalog{ctx.dependencies.textCatalog}, _slot{_imageWidget}
+      TrackCoverArtComponent(ResourceImageLoader* imageLoader,
+                             i18n::MessageCatalog textCatalog,
+                             LayoutBuildContext const& ctx,
+                             LayoutNode const& node)
+        : _textCatalog{std::move(textCatalog)}, _slot{_imageWidget}
       {
-        if (ctx.dependencies.imageLoader == nullptr)
+        if (imageLoader == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: imageLoader missing");
           return;
         }
 
-        _imageControllerPtr = std::make_unique<ResourceImageController>(_imageWidget, *ctx.dependencies.imageLoader);
+        _imageControllerPtr = std::make_unique<ResourceImageController>(_imageWidget, *imageLoader);
         auto const defaultStyle = uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector);
         auto const styleId = node.propertyOr<std::string>(
           uimodel::kPlaceholderStyleProp, std::string{uimodel::coverArtPlaceholderStyleId(defaultStyle)});
@@ -238,14 +241,11 @@ namespace ao::gtk::layout
         uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector)};
       sigc::connection _scopeConn;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackCoverArt(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TrackCoverArtComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTrackCoverArtComponent(ComponentRegistry& registry)
+  void registerTrackCoverArtComponent(ComponentRegistry& registry,
+                                      ResourceImageLoader* imageLoader,
+                                      i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
       withShellLayoutProperties(
@@ -261,6 +261,7 @@ namespace ao::gtk::layout
         {{.name = "widthRequest", .kind = LayoutPropertyKind::Int, .label = "Width Request"},
          {.name = "heightRequest", .kind = LayoutPropertyKind::Int, .label = "Height Request"},
          {.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}}),
-      createTrackCoverArt);
+      [imageLoader, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
+      { return std::make_unique<TrackCoverArtComponent>(imageLoader, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

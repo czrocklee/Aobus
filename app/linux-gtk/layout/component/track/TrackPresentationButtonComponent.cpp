@@ -2,11 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPresentationButton.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -25,15 +25,17 @@ namespace ao::gtk::layout
     class TrackPresentationButtonComponent final : public LayoutComponent
     {
     public:
-      TrackPresentationButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _widget{ctx.runtime, ctx.dependencies.textCatalog}
+      TrackPresentationButtonComponent(rt::AppRuntime& runtime,
+                                       uimodel::TrackPresentationCatalog* presentationCatalog,
+                                       uimodel::ListPresentationPreferenceStore* presentationPreferences,
+                                       ThemeCoordinator* themeCoordinator,
+                                       i18n::MessageCatalog const& textCatalog,
+                                       LayoutNode const& node)
+        : _widget{runtime, textCatalog}
       {
-        if (ctx.dependencies.trackPresentationCatalog != nullptr &&
-            ctx.dependencies.trackPresentationPreferences != nullptr)
+        if (presentationCatalog != nullptr && presentationPreferences != nullptr)
         {
-          _widget.setPresentationServices(ctx.dependencies.trackPresentationCatalog,
-                                          ctx.dependencies.trackPresentationPreferences,
-                                          ctx.dependencies.themeCoordinator);
+          _widget.setPresentationServices(presentationCatalog, presentationPreferences, themeCoordinator);
         }
 
         if (auto const it = node.props.find(kVariantProp); it != node.props.end())
@@ -50,16 +52,22 @@ namespace ao::gtk::layout
     private:
       TrackPresentationButton _widget;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackPresentationButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TrackPresentationButtonComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTrackPresentationButtonComponent(ComponentRegistry& registry)
+  void registerTrackPresentationButtonComponent(ComponentRegistry& registry,
+                                                rt::AppRuntime& runtime,
+                                                uimodel::TrackPresentationCatalog* presentationCatalog,
+                                                uimodel::ListPresentationPreferenceStore* presentationPreferences,
+                                                ThemeCoordinator* themeCoordinator,
+                                                i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::TrackPresentationButton), createTrackPresentationButton);
+      sharedComponentDescriptor(SharedLayoutComponentType::TrackPresentationButton),
+      [&runtime, presentationCatalog, presentationPreferences, themeCoordinator, textCatalog](
+        LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      {
+        return std::make_unique<TrackPresentationButtonComponent>(
+          runtime, presentationCatalog, presentationPreferences, themeCoordinator, textCatalog, node);
+      });
   }
 } // namespace ao::gtk::layout

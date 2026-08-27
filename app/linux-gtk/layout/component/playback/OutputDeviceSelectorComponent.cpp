@@ -2,14 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/PopoverAttachment.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/OutputDevicePopover.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -35,13 +33,15 @@ namespace ao::gtk::layout
     class OutputDeviceSelectorComponent final : public LayoutComponent
     {
     public:
-      OutputDeviceSelectorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _playback{ctx.runtime.playback()}
-        , _textCatalog{ctx.dependencies.textCatalog}
-        , _intent{ctx.dependencies.outputDeviceIntent}
+      OutputDeviceSelectorComponent(rt::PlaybackService& playback,
+                                    i18n::MessageCatalog textCatalog,
+                                    uimodel::OutputDeviceIntent intent)
+        : _playback{playback}
+        , _textCatalog{std::move(textCatalog)}
+        , _intent{std::move(intent)}
         // The button only names the active route; the popover it raises is what records a request.
         , _viewModel{_playback,
-                     ctx.dependencies.textCatalog,
+                     _textCatalog,
                      [this](uimodel::OutputDeviceViewState const& view)
                      {
                        _label.set_text(view.outputBackendSummary);
@@ -81,16 +81,17 @@ namespace ao::gtk::layout
       uimodel::OutputDeviceViewModel _viewModel;
       PopoverAttachment _popoverAttachment;
     };
-
-    std::unique_ptr<LayoutComponent> createOutputDeviceSelector(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<OutputDeviceSelectorComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerOutputDeviceSelectorComponent(ComponentRegistry& registry)
+  void registerOutputDeviceSelectorComponent(ComponentRegistry& registry,
+                                             rt::PlaybackService& playback,
+                                             i18n::MessageCatalog const& textCatalog,
+                                             uimodel::OutputDeviceIntent const& outputDeviceIntent)
   {
     registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackOutputDeviceSelector), createOutputDeviceSelector);
+      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackOutputDeviceSelector),
+      [&playback, textCatalog, intent = outputDeviceIntent](
+        LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<OutputDeviceSelectorComponent>(playback, textCatalog, intent); });
   }
 } // namespace ao::gtk::layout

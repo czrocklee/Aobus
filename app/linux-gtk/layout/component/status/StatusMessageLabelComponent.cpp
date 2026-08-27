@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "i18n/GtkTextCatalog.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
@@ -17,6 +16,7 @@
 #include <pangomm/layout.h>
 
 #include <memory>
+
 namespace ao::gtk::layout
 {
   using namespace uimodel;
@@ -28,11 +28,11 @@ namespace ao::gtk::layout
     class StatusMessageLabelComponent final : public LayoutComponent
     {
     public:
-      StatusMessageLabelComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+      explicit StatusMessageLabelComponent(i18n::MessageCatalog const& textCatalog)
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
         _label.set_halign(Gtk::Align::START);
-        _label.set_text(gtkText(ctx.dependencies.textCatalog, i18n::MessageId::GtkStatusReady));
+        _label.set_text(gtkText(textCatalog, i18n::MessageId::GtkStatusReady));
       }
 
       Gtk::Widget& widget() override { return _label; }
@@ -40,16 +40,12 @@ namespace ao::gtk::layout
     private:
       Gtk::Label _label;
     };
-
-    std::unique_ptr<LayoutComponent> createStatusMessageLabel(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<StatusMessageLabelComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerStatusMessageLabelComponent(ComponentRegistry& registry)
+  void registerStatusMessageLabelComponent(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::StatusMessage), createStatusMessageLabel);
+    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::StatusMessage),
+                               [textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                               { return std::make_unique<StatusMessageLabelComponent>(textCatalog); });
   }
 } // namespace ao::gtk::layout

@@ -8,13 +8,13 @@
 
 namespace ao::gtk::layout
 {
-  void registerContainerComponents(ComponentRegistry& registry)
+  void registerContainerComponents(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog)
   {
     registerAbsoluteCanvasComponent(registry);
     registerBoxComponent(registry);
     registerCenterBoxComponent(registry);
     registerSplitComponent(registry);
-    registerCollapsibleSplitComponent(registry);
+    registerCollapsibleSplitComponent(registry, textCatalog);
     registerResponsiveClassComponent(registry);
     registerScrollComponent(registry);
     registerSpacerComponent(registry);

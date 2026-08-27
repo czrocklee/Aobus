@@ -12,11 +12,6 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::rt
-{
-  class AppRuntime;
-}
-
 namespace Gtk
 {
   class Window;
@@ -27,7 +22,6 @@ namespace ao::gtk::layout
 {
   struct ActionActivationContext final
   {
-    rt::AppRuntime& runtime;
     Gtk::Window& parentWindow;
     Gtk::Widget& anchorWidget;
     std::string componentId;

@@ -54,7 +54,7 @@ It does not denote nested mappings.
 
 | Logical document | Literal group | Payload type | Deserialize/serialize path | Current version authority | Semantic writer |
 |---|---|---|---|---|---|
-| Global GTK config | `window` | `ao::gtk::WindowState` | Frontend-local `WindowStateYamlSchema`. | None. | `MainWindowCoordinator::saveSession`. |
+| Global GTK config | `window` | `ao::gtk::WindowState` | Frontend-local `WindowStateYamlSchema`. | None. | `MainWindow::saveSessionState`. |
 | Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppPrefs`. |
 | Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
@@ -241,7 +241,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 
 ## Implementation authority
 
-- [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppState.h`](../../../app/include/ao/rt/AppState.h) own the global GTK groups and their frontend-local schemas; [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) owns window snapshot lifecycle semantics.
+- [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppState.h`](../../../app/include/ao/rt/AppState.h) own the global GTK groups and their frontend-local schemas; [`WindowState.cpp`](../../../app/linux-gtk/app/WindowState.cpp) owns the geometry accumulation rule and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) owns when a checkpoint is taken.
 - [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns `NoLocation` and what a store with nowhere to keep anything does; [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns when a frontend reaches for it.
 - [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h), [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h), [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp), and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, explicit schema, payload marker, and injected-store use.
@@ -258,7 +258,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 ## Test authority
 
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the `window`, `runtime`, and `session` group round trips, missing-file behavior, and the no-location session.
-- [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects current-session normal geometry across a maximized checkpoint.
+- [`WindowStateTest.cpp`](../../../test/unit/linux-gtk/app/WindowStateTest.cpp) protects current-session normal geometry across a maximized checkpoint.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, and store use.

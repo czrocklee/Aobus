@@ -3,6 +3,11 @@
 
 #pragma once
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
@@ -10,5 +15,5 @@ namespace ao::gtk::layout
   /**
    * @brief Register the built-in container components.
    */
-  void registerContainerComponents(ComponentRegistry& registry);
+  void registerContainerComponents(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog);
 } // namespace ao::gtk::layout

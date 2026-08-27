@@ -6,7 +6,6 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/TimeLabel.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -27,8 +26,8 @@ namespace ao::gtk::layout
     class TimeLabelComponent final : public LayoutComponent
     {
     public:
-      TimeLabelComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _label{ctx.runtime.playback(),
+      TimeLabelComponent(rt::PlaybackService& playback, LayoutNode const& node)
+        : _label{playback,
                  [mode = node.propertyOr<std::string>(kModeProp, "combined")]
                  {
                    if (mode == "elapsed")
@@ -51,16 +50,12 @@ namespace ao::gtk::layout
     private:
       TimeLabel _label;
     };
-
-    std::unique_ptr<LayoutComponent> createTimeLabel(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TimeLabelComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTimeLabelComponent(ComponentRegistry& registry)
+  void registerTimeLabelComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
   {
-    registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackTimeLabel), createTimeLabel);
+    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackTimeLabel),
+                               [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+                               { return std::make_unique<TimeLabelComponent>(playback, node); });
   }
 } // namespace ao::gtk::layout

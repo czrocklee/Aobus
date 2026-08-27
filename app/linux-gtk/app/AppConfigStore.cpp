@@ -10,6 +10,7 @@
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/yaml/Serialization.h>
 
 #include <array>
@@ -133,5 +134,17 @@ namespace ao::gtk
   void AppConfigStore::saveKeymap(uimodel::KeymapModel const& keymap)
   {
     uimodel::saveKeymap(*_storePtr, keymap);
+  }
+
+  uimodel::OutputDeviceIntent preferredOutputDeviceRecorder(std::shared_ptr<AppConfigStore> configStorePtr)
+  {
+    return uimodel::OutputDeviceIntent::recordedBy(
+      [configStorePtr = std::move(configStorePtr)](audio::OutputDeviceSelection const& selection)
+      {
+        auto prefs = rt::AppPrefsState{};
+        configStorePtr->loadAppPrefs(prefs);
+        prefs.preferredOutputSelection = selection;
+        configStorePtr->saveAppPrefs(prefs);
+      });
   }
 } // namespace ao::gtk

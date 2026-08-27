@@ -27,7 +27,7 @@ This is a **GTK frontend composition-root** contract under the
 [system architecture](../../architecture/system-overview.md) and
 [interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md).
 Its implementation is `app/linux-gtk/main.cpp`, `GtkStartupPlan.cpp`,
-`LibraryWindowLifecycle.cpp`, `MainWindow.cpp`, `MainWindowCoordinator.cpp`, and
+`LibraryWindowLifecycle.cpp`, `MainWindow.cpp`, and
 `SuccessorProcessLauncher.cpp`. Common root, protocol, startup, and detached
 process rules are supplied by `ao_app_desktop` under `app/include/ao/desktop/`
 and `app/desktop/`.

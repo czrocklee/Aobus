@@ -3,6 +3,11 @@
 
 #pragma once
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
@@ -11,7 +16,7 @@ namespace ao::gtk::layout
   void registerBoxComponent(ComponentRegistry& registry);
   void registerCenterBoxComponent(ComponentRegistry& registry);
   void registerSplitComponent(ComponentRegistry& registry);
-  void registerCollapsibleSplitComponent(ComponentRegistry& registry);
+  void registerCollapsibleSplitComponent(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog);
   void registerResponsiveClassComponent(ComponentRegistry& registry);
   void registerScrollComponent(ComponentRegistry& registry);
   void registerSpacerComponent(ComponentRegistry& registry);

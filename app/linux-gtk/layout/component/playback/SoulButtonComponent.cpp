@@ -47,8 +47,8 @@ namespace ao::gtk::layout
     class SoulButtonComponent final : public LayoutComponent
     {
     public:
-      SoulButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _soulViewModel{ctx.runtime.playback(),
+      SoulButtonComponent(rt::PlaybackService& playback, LayoutNode const& node)
+        : _soulViewModel{playback,
                          [this](uimodel::AobusSoulViewState const& state)
                          {
                            _soul.setMotionMode(state.motionMode);
@@ -94,14 +94,9 @@ namespace ao::gtk::layout
       AobusSoul _soul;
       uimodel::AobusSoulViewModel _soulViewModel;
     };
-
-    std::unique_ptr<LayoutComponent> createSoulButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<SoulButtonComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerSoulButtonComponent(ComponentRegistry& registry)
+  void registerSoulButtonComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
   {
     registry.registerComponent(
       // GDK tells a secondary hold apart from a primary one, which Windows
@@ -120,6 +115,7 @@ namespace ao::gtk::layout
                                                  .label = "Show Full Logo",
                                                  .defaultValue = LayoutValue{false}}}),
                            kAllExternalActions),
-      createSoulButton);
+      [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      { return std::make_unique<SoulButtonComponent>(playback, node); });
   }
 } // namespace ao::gtk::layout

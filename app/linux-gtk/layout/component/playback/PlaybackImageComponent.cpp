@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
 #include "i18n/GtkTextCatalog.h"
 #include "image/CoverArtView.h"
@@ -110,25 +109,26 @@ namespace ao::gtk::layout
         JumpToAlbum
       };
 
-      PlaybackImageComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _runtime{ctx.runtime}
+      PlaybackImageComponent(rt::AppRuntime& runtime,
+                             ResourceImageLoader* imageLoader,
+                             i18n::MessageCatalog const& textCatalog,
+                             LayoutBuildContext const& ctx,
+                             LayoutNode const& node)
+        : _runtime{runtime}
         , _tooltipSurface{ctx.surface == uimodel::LayoutSurface::Tooltip}
         , _authoredVisible{node.layoutOr<bool>("visible", true)}
       {
-        if (ctx.dependencies.imageLoader == nullptr)
+        if (imageLoader == nullptr)
         {
-          APP_LOG_ERROR("PlaybackImage: Failed to create because imageLoader is null in context");
+          APP_LOG_ERROR("PlaybackImage: Failed to create because imageLoader is null");
           _error = Gtk::make_managed<Gtk::Label>("Error: imageLoader missing");
           return;
         }
 
         _imageWidgetPtr = std::make_unique<CoverArtView>();
-        _imageWidgetPtr->setAlternativeText(
-          gtkText(ctx.dependencies.textCatalog, i18n::MessageId::GtkPlaybackNowPlayingCoverArt));
-        _imageControllerPtr = std::make_unique<ResourceImageController>(*_imageWidgetPtr,
-                                                                        *ctx.dependencies.imageLoader,
-                                                                        [this](bool const imageAvailable)
-                                                                        { applyImageVisibility(imageAvailable); });
+        _imageWidgetPtr->setAlternativeText(gtkText(textCatalog, i18n::MessageId::GtkPlaybackNowPlayingCoverArt));
+        _imageControllerPtr = std::make_unique<ResourceImageController>(
+          *_imageWidgetPtr, *imageLoader, [this](bool const imageAvailable) { applyImageVisibility(imageAvailable); });
         auto const defaultStyle =
           uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying);
         auto const styleId = node.propertyOr<std::string>(
@@ -176,7 +176,7 @@ namespace ao::gtk::layout
         }();
 
         setAccessibleLabel(_button,
-                           gtkText(ctx.dependencies.textCatalog,
+                           gtkText(textCatalog,
                                    _action == Action::JumpToAlbum ? i18n::MessageId::GtkPlaybackShowCurrentAlbum
                                                                   : i18n::MessageId::GtkPlaybackNowPlayingCoverArt));
 
@@ -347,14 +347,12 @@ namespace ao::gtk::layout
       async::Subscription _snapshotSub;
       async::Subscription _tracksMutatedSub;
     };
-
-    std::unique_ptr<LayoutComponent> createPlaybackImage(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<PlaybackImageComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerPlaybackImageComponent(ComponentRegistry& registry)
+  void registerPlaybackImageComponent(ComponentRegistry& registry,
+                                      rt::AppRuntime& runtime,
+                                      ResourceImageLoader* imageLoader,
+                                      i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
       {.type = "playback.image",
@@ -383,6 +381,7 @@ namespace ao::gtk::layout
        .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |
                    static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Tooltip),
        .actionPolicy = uimodel::kExternalSecondaryActions},
-      createPlaybackImage);
+      [&runtime, imageLoader, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
+      { return std::make_unique<PlaybackImageComponent>(runtime, imageLoader, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

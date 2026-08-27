@@ -2,12 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/NowPlayingStatusLabel.h"
-#include <ao/rt/AppRuntime.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -23,8 +22,8 @@ namespace ao::gtk::layout
     class NowPlayingStatusComponent final : public LayoutComponent
     {
     public:
-      NowPlayingStatusComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.playback(), ctx.dependencies.textCatalog}
+      NowPlayingStatusComponent(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
+        : _widget{playback, textCatalog}
       {
       }
 
@@ -33,17 +32,15 @@ namespace ao::gtk::layout
     private:
       NowPlayingStatusLabel _widget;
     };
-
-    std::unique_ptr<LayoutComponent> createNowPlayingStatus(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<NowPlayingStatusComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerNowPlayingStatusComponent(ComponentRegistry& registry)
+  void registerNowPlayingStatusComponent(ComponentRegistry& registry,
+                                         rt::PlaybackService& playback,
+                                         i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
       {.type = "status.nowPlaying", .displayName = "Now Playing Status", .category = LayoutComponentCategory::Status},
-      createNowPlayingStatus);
+      [&playback, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<NowPlayingStatusComponent>(playback, textCatalog); });
   }
 } // namespace ao::gtk::layout

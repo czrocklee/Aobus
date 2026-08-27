@@ -2,12 +2,10 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/AudioPipelinePanel.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutSurface.h>
@@ -30,8 +28,11 @@ namespace ao::gtk::layout
     class AudioPipelinePanelComponent final : public LayoutComponent
     {
     public:
-      AudioPipelinePanelComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _panel{ctx.dependencies.textCatalog,
+      AudioPipelinePanelComponent(rt::PlaybackService& playback,
+                                  i18n::MessageCatalog const& textCatalog,
+                                  LayoutBuildContext const& ctx,
+                                  LayoutNode const& node)
+        : _panel{textCatalog,
                  [](LayoutBuildContext const& ctx2, LayoutNode const& n)
                  {
                    auto const variantStr = n.propertyOr<std::string>("variant", "");
@@ -54,9 +55,7 @@ namespace ao::gtk::layout
                    return ctx2.surface == uimodel::LayoutSurface::Tooltip ? AudioPipelinePanelVariant::Tooltip
                                                                           : AudioPipelinePanelVariant::Inline;
                  }(ctx, node)}
-        , _viewModel{ctx.runtime.playback(),
-                     ctx.dependencies.textCatalog,
-                     [this](auto const& view) { _panel.apply(view.audioPipeline); }}
+        , _viewModel{playback, textCatalog, [this](auto const& view) { _panel.apply(view.audioPipeline); }}
       {
       }
 
@@ -66,14 +65,11 @@ namespace ao::gtk::layout
       AudioPipelinePanel _panel;
       uimodel::NowPlayingViewModel _viewModel;
     };
-
-    std::unique_ptr<LayoutComponent> createAudioPipelinePanel(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<AudioPipelinePanelComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerAudioPipelinePanelComponent(ComponentRegistry& registry)
+  void registerAudioPipelinePanelComponent(ComponentRegistry& registry,
+                                           rt::PlaybackService& playback,
+                                           i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
       {.type = "playback.audioPipelinePanel",
@@ -88,6 +84,7 @@ namespace ao::gtk::layout
        .optMaxChildren = 0,
        .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |
                    static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Tooltip)},
-      createAudioPipelinePanel);
+      [&playback, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
+      { return std::make_unique<AudioPipelinePanelComponent>(playback, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

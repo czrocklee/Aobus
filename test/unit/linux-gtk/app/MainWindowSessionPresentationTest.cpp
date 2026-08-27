@@ -4,8 +4,6 @@
 #include "app/AppConfigStore.h"
 #include "app/GtkLayoutStateStore.h"
 #include "app/MainWindow.h"
-#include "app/MainWindowCoordinator.h"
-#include "list/ListNavigationController.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -15,6 +13,7 @@
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -28,7 +27,6 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <memory>
@@ -94,7 +92,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("MainWindowCoordinator - restored workspace presentation survives startup and history replay",
+  TEST_CASE("MainWindow - restored workspace presentation survives startup and history replay",
             "[gtk][regression][session-presentation]")
   {
     auto const appPtr = ensureGtkApplication();
@@ -133,7 +131,7 @@ namespace ao::gtk::test
     CHECK(state.presentation.id == rt::kListOrderTrackPresentationId);
   }
 
-  TEST_CASE("MainWindowCoordinator - empty workspace creates All Tracks with its saved preference",
+  TEST_CASE("MainWindow - empty workspace creates All Tracks with its saved preference",
             "[gtk][regression][session-presentation]")
   {
     auto const appPtr = ensureGtkApplication();
@@ -155,7 +153,7 @@ namespace ao::gtk::test
     CHECK(state.presentation.id == "songs");
   }
 
-  TEST_CASE("MainWindowCoordinator - ordinary list selection applies a default only to a new plain view",
+  TEST_CASE("MainWindow - ordinary list selection applies a default only to a new plain view",
             "[gtk][regression][session-presentation]")
   {
     auto const appPtr = ensureGtkApplication();
@@ -169,29 +167,27 @@ namespace ao::gtk::test
     }
 
     auto runtimePtr = makeRuntime(tempDir);
-    auto configStorePtr = appConfigStore(tempDir);
-    auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{window, *runtimePtr, configStorePtr, ao::test::englishMessageCatalog()};
-    coordinator.loadSession();
-    coordinator.prepareSession();
+    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr, ao::test::englishMessageCatalog()};
+    REQUIRE(window.prepareSession());
 
-    coordinator.listNavigationController()->select(listId);
+    // navigateToList is what the navigation tree drives when a list is picked.
+    REQUIRE(window.navigateToList(listId));
     drainGtkEvents();
     auto const firstViewId = runtimePtr->workspace().snapshot().activeViewId;
     REQUIRE(firstViewId != rt::kInvalidViewId);
     CHECK(runtimePtr->views().trackListState(firstViewId).presentation.id == "albums");
 
     REQUIRE(runtimePtr->workspace().setActivePresentation(presentation("songs")));
-    coordinator.listNavigationController()->select(rt::kAllTracksListId);
+    REQUIRE(window.navigateToList(rt::kAllTracksListId));
     drainGtkEvents();
-    coordinator.listNavigationController()->select(listId);
+    REQUIRE(window.navigateToList(listId));
     drainGtkEvents();
 
     CHECK(runtimePtr->workspace().snapshot().activeViewId == firstViewId);
     CHECK(runtimePtr->views().trackListState(firstViewId).presentation.id == "songs");
   }
 
-  TEST_CASE("MainWindowCoordinator - playback restore reuses a restored plain view without changing presentation",
+  TEST_CASE("MainWindow - playback restore reuses a restored plain view without changing presentation",
             "[gtk][regression][session-presentation]")
   {
     auto const appPtr = ensureGtkApplication();
@@ -265,7 +261,7 @@ namespace ao::gtk::test
     CHECK(snapshot.succession.currentTrackId == kInvalidTrackId);
   }
 
-  TEST_CASE("MainWindowCoordinator - playback restore creates a preferred plain view beside a filtered view",
+  TEST_CASE("MainWindow - playback restore creates a preferred plain view beside a filtered view",
             "[gtk][regression][session-presentation]")
   {
     auto const appPtr = ensureGtkApplication();
@@ -329,7 +325,7 @@ namespace ao::gtk::test
     CHECK(plainCount == 1);
   }
 
-  TEST_CASE("MainWindowCoordinator - playback restore creates a preferred plain view when no target view exists",
+  TEST_CASE("MainWindow - playback restore creates a preferred plain view when no target view exists",
             "[gtk][regression][session-presentation]")
   {
     auto const appPtr = ensureGtkApplication();

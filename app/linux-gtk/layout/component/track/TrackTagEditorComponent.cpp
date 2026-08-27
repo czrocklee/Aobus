@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/UiWorkflow.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -44,13 +43,17 @@ namespace ao::gtk::layout
     class TrackTagEditorComponent final : public LayoutComponent
     {
     public:
-      TrackTagEditorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _tagEditor{ctx.dependencies.textCatalog, ctx.runtime.textOrderingPolicy()}
-        , _textCatalog{ctx.dependencies.textCatalog}
-        , _runtime{ctx.runtime}
-        , _library{ctx.runtime.library()}
-        , _notifications{ctx.runtime.notifications()}
-        , _tagEditController{ctx.dependencies.tagEditController}
+      TrackTagEditorComponent(rt::AppRuntime& runtime,
+                              TagEditController* tagEditController,
+                              i18n::MessageCatalog const& textCatalog,
+                              LayoutBuildContext const& ctx,
+                              LayoutNode const& /*node*/)
+        : _tagEditor{textCatalog, runtime.textOrderingPolicy()}
+        , _textCatalog{textCatalog}
+        , _runtime{runtime}
+        , _library{runtime.library()}
+        , _notifications{runtime.notifications()}
+        , _tagEditController{tagEditController}
       {
         if (ctx.detailScope != nullptr)
         {
@@ -179,20 +182,20 @@ namespace ao::gtk::layout
       sigc::scoped_connection _scopeConn;
       async::LifetimeScope _tasks;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackTagEditor(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TrackTagEditorComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTrackTagEditorComponent(ComponentRegistry& registry)
+  void registerTrackTagEditorComponent(ComponentRegistry& registry,
+                                       rt::AppRuntime& runtime,
+                                       TagEditController* tagEditController,
+                                       i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent({.type = "track.tagEditor",
-                                .displayName = "Tag Editor",
-                                .category = LayoutComponentCategory::Track,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createTrackTagEditor);
+    registry.registerComponent(
+      {.type = "track.tagEditor",
+       .displayName = "Tag Editor",
+       .category = LayoutComponentCategory::Track,
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      [&runtime, tagEditController, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
+      { return std::make_unique<TrackTagEditorComponent>(runtime, tagEditController, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

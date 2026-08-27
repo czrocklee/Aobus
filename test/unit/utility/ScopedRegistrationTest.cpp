@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <stdexcept>
 #include <utility>
 
 namespace ao::utility::test
@@ -53,5 +54,21 @@ namespace ao::utility::test
 
     CHECK(firstReleaseCount == 1);
     CHECK(secondReleaseCount == 1);
+  }
+
+  TEST_CASE("ScopedRegistration - stack unwinding releases a registration",
+            "[utility][regression][scoped-registration]")
+  {
+    std::int32_t releaseCount = 0;
+
+    CHECK_THROWS_AS(
+      [&]
+      {
+        auto registration = ScopedRegistration{[&releaseCount] { ++releaseCount; }};
+        throw std::runtime_error{"construction failed"};
+      }(),
+      std::runtime_error);
+
+    CHECK(releaseCount == 1);
   }
 } // namespace ao::utility::test

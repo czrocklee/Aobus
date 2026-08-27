@@ -47,7 +47,9 @@ namespace ao::winui
   class TrackListController final
   {
   public:
-    explicit TrackListController(i18n::MessageCatalog textCatalog);
+    TrackListController(rt::AppRuntime& runtime,
+                        uimodel::TrackColumnLayoutState& columnLayouts,
+                        i18n::MessageCatalog textCatalog);
     ~TrackListController();
 
     TrackListController(TrackListController const&) = delete;
@@ -55,9 +57,7 @@ namespace ao::winui
     TrackListController(TrackListController&&) = delete;
     TrackListController& operator=(TrackListController&&) = delete;
 
-    void bind(rt::AppRuntime& runtime, uimodel::TrackColumnLayoutState& columnLayouts);
     async::Signal<>& signalChanged() noexcept { return _changed; }
-    void unbind() noexcept;
     void reload();
     void setViewportWidth(double width, double trailingChromeWidth);
     void publishSelection(std::span<TrackId const> trackIds);
@@ -92,7 +92,7 @@ namespace ao::winui
     double contentWidth() const noexcept { return _contentWidth; }
 
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish empty native vectors before adopting the constructor-bound runtime's active view.
     void resetPresentation();
 
     static constexpr std::int32_t kDefaultViewportWidth = 1200;
