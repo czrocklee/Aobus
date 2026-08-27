@@ -3,7 +3,7 @@
 
 #include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -58,7 +58,7 @@ namespace ao::winui::test
                                       .detail = rt::CompletionDetail::makeUsageFrequency(42),
                                       .rank = 7}}};
 
-    auto const rows = quickFilterSuggestionRows(result, ao::test::englishPresentationTextCatalog());
+    auto const rows = quickFilterSuggestionRows(result, ao::test::englishMessageCatalog());
 
     REQUIRE(rows.size() == 1);
     CHECK(rows[0].displayText == "\xE5\xAE\x87\xE5\xA4\x9A\xE7\x94\xB0\xE5\x85\x89");

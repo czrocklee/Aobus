@@ -3,10 +3,10 @@
 
 #include "OutputDeviceController.h"
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -18,7 +18,7 @@
 namespace ao::tui
 {
   OutputDeviceController::OutputDeviceController(rt::PlaybackService& playback,
-                                                 uimodel::PresentationTextCatalog const& textCatalog,
+                                                 i18n::MessageCatalog const& textCatalog,
                                                  uimodel::OutputDeviceIntent intent,
                                                  std::function<void()> onChanged)
     : _onChanged{std::move(onChanged)}

@@ -6,7 +6,7 @@
 #include "CommandCompletion.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
-#include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -106,7 +106,7 @@ namespace ao::tui
     return state != nullptr && state->compact.kind != uimodel::ActivityStatusKind::Idle && !state->compact.text.empty();
   }
 
-  ftxui::Element statusBar(TuiTextCatalog const& textCatalog, StatusBarViewState const& state)
+  ftxui::Element statusBar(i18n::MessageCatalog const& textCatalog, StatusBarViewState const& state)
   {
     using namespace ftxui;
 
@@ -136,27 +136,31 @@ namespace ao::tui
       auto appendCommandChip = [&](CommandAction const action, std::string_view const label)
       { appendChip(shortcutFor(action), label); };
 
-      appendChip(
-        "/",
-        state.filterDraft.empty() ? textCatalog.text(TuiTextId::FilterLabel) : std::string_view{state.filterDraft});
+      appendChip("/",
+                 state.filterDraft.empty() ? i18n::requiredText(textCatalog, i18n::MessageId::TuiShellFilterLabel)
+                                           : std::string_view{state.filterDraft});
 
       if (!state.filterDraft.empty())
       {
-        appendCommandChip(CommandAction::ClearFilter, textCatalog.text(TuiTextId::StatusClearFilter));
+        appendCommandChip(
+          CommandAction::ClearFilter, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusClearFilter));
       }
 
       // Opening the text inputs is not a command, so it is named here rather
       // than added to the key-binding declaration.
-      appendChip(":", textCatalog.text(TuiTextId::StatusCommand));
+      appendChip(":", i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusCommand));
 
       if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
       {
-        appendCommandChip(CommandAction::OpenLists, textCatalog.text(TuiTextId::StatusLists));
-        appendCommandChip(CommandAction::OpenPresentationPanel, textCatalog.text(TuiTextId::StatusView));
-        appendCommandChip(CommandAction::OpenDetail, textCatalog.text(TuiTextId::StatusDetail));
+        appendCommandChip(
+          CommandAction::OpenLists, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusLists));
+        appendCommandChip(
+          CommandAction::OpenPresentationPanel, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusView));
+        appendCommandChip(
+          CommandAction::OpenDetail, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusDetail));
       }
 
-      appendCommandChip(CommandAction::ShowHelp, textCatalog.text(TuiTextId::StatusHelp));
+      appendCommandChip(CommandAction::ShowHelp, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusHelp));
       return hbox(std::move(parts));
     };
 

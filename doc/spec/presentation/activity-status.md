@@ -54,7 +54,7 @@ A posted info replaces the current temporary info compact when no warning or err
 An effective keyed update refreshes a visible info compact from the same snapshot.
 Expiry and automatic history eviction reproject compact and detail together.
 
-Structured notification reports are resolved once through `PresentationTextCatalog` while projecting.
+Structured notification reports are resolved once through feature presentation functions over `MessageCatalog` while projecting.
 Runtime carries no widget action, icon, or progress presentation state.
 
 ## Detail

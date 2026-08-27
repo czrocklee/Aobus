@@ -7,13 +7,12 @@
 #include "TrackListEntry.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackSection.h"
-#include "TuiTextCatalog.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <string>
@@ -42,9 +41,7 @@ namespace ao::tui
   class LibraryController final
   {
   public:
-    LibraryController(rt::AppRuntime& runtime,
-                      uimodel::PresentationTextCatalog textCatalog,
-                      TuiTextCatalog tuiTextCatalog);
+    LibraryController(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog);
 
     std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
     std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
@@ -58,7 +55,7 @@ namespace ao::tui
     std::int32_t selectedTrack() const noexcept { return _selectedTrack; }
     std::string const& filterDraft() const noexcept { return _filterDraft; }
     std::string const& filterError() const noexcept { return _filterError; }
-    uimodel::PresentationTextCatalog const& textCatalog() const noexcept { return _textCatalog; }
+    i18n::MessageCatalog const& textCatalog() const noexcept { return _textCatalog; }
 
     std::string currentListTitle() const;
     std::string activePresentationId() const;
@@ -98,8 +95,7 @@ namespace ao::tui
     TrackItemsSnapshot loadTrackItems(ListId listId);
 
     rt::AppRuntime& _runtime;
-    uimodel::PresentationTextCatalog _textCatalog;
-    TuiTextCatalog _tuiTextCatalog;
+    i18n::MessageCatalog _textCatalog;
     std::vector<LibraryNavEntry> _libraryEntries{};
     std::vector<std::string> _libraryLabels{};
     std::vector<TrackPresentationNavEntry> _presentationEntries{};

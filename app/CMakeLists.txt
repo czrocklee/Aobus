@@ -176,7 +176,7 @@ target_include_directories(ao_app_i18n
       "${CMAKE_SOURCE_DIR}/include"
     PRIVATE "${CMAKE_SOURCE_DIR}")
 target_link_libraries(ao_app_i18n
-    PRIVATE ao_catalog_pattern ao_unicode_text ICU::i18n ICU::uc ICU::data)
+    PRIVATE ao_catalog_pattern ao_unicode_text ao_utility ICU::i18n ICU::uc ICU::data)
 
 # Locale collation stays in an interactive leaf. The policy interface itself
 # contains no ICU types, so runtime/UIModel consumers do not inherit ICU::i18n.
@@ -229,7 +229,7 @@ target_link_libraries(ao_app_desktop PRIVATE Boost::process)
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
-    runtime/AppStateStore.cpp
+    runtime/AppState.cpp
     runtime/CoreRuntime.cpp
     runtime/library/Library.cpp
     runtime/library/LibraryPaths.cpp
@@ -331,7 +331,7 @@ endif()
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
     uimodel/presentation/CoverArtPlaceholder.cpp
-    uimodel/presentation/PresentationTextCatalog.cpp
+    uimodel/presentation/PresentationText.cpp
     uimodel/layout/action/LayoutActionCatalog.cpp
     uimodel/layout/action/LayoutActionSlotResolution.cpp
     uimodel/layout/action/LayoutActionValidator.cpp

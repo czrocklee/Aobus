@@ -3,7 +3,7 @@
 
 #include "track/TrackSelectionController.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -83,7 +83,7 @@ namespace ao::gtk::test
           musicLibrary, library::test::TrackSpec{.title = "Track 4", .duration = std::chrono::minutes{4}});
       }};
     auto const& library = fixture.runtime().musicLibrary();
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishPresentationTextCatalog()};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
 
     auto modelPtr = TrackListModel::create(cache);
     auto selectionModelPtr = Gtk::MultiSelection::create(modelPtr);

@@ -9,12 +9,13 @@ summary: Enumerates the shared UIModel text surface and the interactive localiza
 
 ## Scope and version
 
-This reference enumerates the locale-selected `ao::i18n::MessageCatalog`, shared `ao::uimodel::PresentationTextCatalog`, and frontend shell-catalog surfaces.
+This reference enumerates the locale-selected `ao::i18n::MessageCatalog`, the fail-closed `requiredText` / `requiredFormat` helpers, and the feature-local formatters that map domain values onto that catalog.
 They are in-process presentation surfaces with no persisted format version.
 Stable ids remain owned by their runtime or Core domains; catalog output is display text and is never persisted, parsed for control flow, or used as an aggregation key.
 
 `MessageCatalog` is the immutable startup-selected ICU catalog.
-`PresentationTextCatalog` is the required-message resolver over that catalog: fixed messages use typed `MessageId` values, while methods remain only where UIModel must map a domain value or derive message selectors.
+`requiredText` and `requiredFormat` are the required-message resolvers over that catalog: fixed messages use typed `MessageId` values, while named functions remain only where UIModel must map a domain value or derive message selectors.
+The canonical id/key inventory is [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def).
 
 ## Code boundary
 
@@ -22,8 +23,8 @@ The shared typed catalog belongs to UIModel under `app/include/ao/uimodel/presen
 The interactive facade belongs to the presentation leaf under `app/include/ao/i18n/` and `app/i18n/`.
 Runtime and Core publish stable ids, typed semantic kinds, raw values, and structured arguments.
 GTK, TUI, and WinUI composition roots own the locale-selected facade; CLI does not link it.
-Each root constructs one `PresentationTextCatalog` and injects copies that share immutable backing storage.
-GTK and TUI additionally construct one frontend-owned typed shell catalog and inject references with process-lifetime storage; WinUI resolves generated shell resources through its configured MRT context.
+Each root injects the process `MessageCatalog`; copies share immutable backing storage.
+GTK and TUI resolve shell copy through canonical `MessageId` values on that catalog; WinUI resolves generated shell resources through its configured MRT context.
 Text returned as `std::string_view` remains valid for the lifetime of the source catalog value; state that crosses that lifetime owns a copy.
 
 The following text is not catalog copy:
@@ -86,15 +87,15 @@ The production shared-id families are:
 | `playback_*` | shared now-playing, transport, action, volume, and audio-pipeline copy |
 | `audio_node_*`, `audio_format`, `audio_channels_compact` | audio-pipeline node and format presentation |
 | `audio_finding_*`, `audio_quality_*` | audio-quality findings and conclusions |
-| `gtk_shell_*`, `gtk_playback_*`, `gtk_library_*`, `gtk_list_*`, `gtk_smart_list_*` | GTK shell, playback, and library/List copy through `GtkTextCatalog` |
+| `gtk_shell_*`, `gtk_playback_*`, `gtk_library_*`, `gtk_list_*`, `gtk_smart_list_*` | GTK shell, playback, and library/List copy through canonical `MessageId` values |
 | `gtk_preferences_*`, `gtk_shortcut_*`, `gtk_action_*`, `gtk_custom_view_*`, `gtk_presentation_*` | GTK preferences, shortcut/action, and presentation-editor copy through direct typed ids |
 | `gtk_track_*`, `gtk_tag_*`, `gtk_custom_metadata_*`, `gtk_activity_*`, `gtk_manual_order_*` | GTK metadata/property editing, activity, and authoring accessibility copy |
 | `gtk_layout_*`, `gtk_edit_value`, `gtk_*_panel`, `gtk_*_details`, `gtk_startup_*` | GTK Layout Editor vocabulary, structural accessibility, and recoverable startup copy |
-| `tui_shell_*`, `tui_playback_*`, `tui_library_*` | TUI navigation, help, playback, and library copy through `TuiTextCatalog` |
+| `tui_shell_*`, `tui_playback_*`, `tui_library_*` | TUI navigation, help, playback, and library copy through canonical `MessageId` values |
 | `tui_presentation_*`, `tui_*_opened`, `tui_*_closed`, `tui_*_failed` | TUI presentation-navigation, accessibility state, and recoverable-error copy |
 | `winui_shell_*`, `winui_playback_*`, `winui_library_*`, `winui_*_failed` | WinUI shell, playback, library, native tooltip, empty-state, and recoverable-error copy through MRT |
 
-[`MessageIds.h`](../../../app/i18n/MessageIds.h) is the exact typed-id-to-key map.
+[`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def) is the exact typed-id-to-key map. `MessageCatalog.h` and `MessageIds.h` include it to emit enumerators and definition entries.
 The complete English patterns and maintained localized overrides live in [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt); generated WinUI resources use those same keys.
 
 Bare `value` and simple-format arguments accept any `MessageArgumentValue` alternative.
@@ -108,16 +109,17 @@ The exact fallback behavior belongs to the [interactive localization specificati
 
 ### Frontend shell catalogs
 
-`GtkTextCatalog` and `TuiTextCatalog` are frontend-local typed values rather than additions to the shared UIModel catalog.
-They eagerly resolve every member from the process `MessageCatalog` at construction and retain owned strings for the frontend lifetime.
-Their `text()` references therefore remain stable without moving GTK or terminal vocabulary into UIModel.
+GTK and TUI resolve shell copy through the process `MessageCatalog` and canonical `MessageId` values.
+There is no separate frontend message-id space.
+GTK widget APIs that require owned strings copy `requiredText` at the widget boundary.
+TUI argument-bearing chrome (help, hints, footers) is formatted through `tuiChromeText`.
 
 The completed frontend migration owns these families:
 
 | Frontend | Typed or native owner | Exact scope |
 |---|---|---|
-| GTK | `GtkTextCatalog` plus direct `MessageId` calls through `PresentationTextCatalog` | application menus; shell/playback accessibility copy; library and authoring dialogs; preferences and shortcut/action descriptors; presentation and metadata/property editing; Layout Editor display vocabulary; tooltips, empty states, startup, and recoverable errors |
-| TUI | `TuiTextCatalog` plus direct `MessageId` calls through `PresentationTextCatalog` | workspace and overlay copy, status shortcuts, command metadata, help, playback/output empty states, library navigation/filter status, presentation-navigation qualifiers, accessibility states, and recoverable errors |
+| GTK | Canonical `MessageId` values through `requiredText` / `requiredFormat` | application menus; shell/playback accessibility copy; library and authoring dialogs; preferences and shortcut/action descriptors; presentation and metadata/property editing; Layout Editor display vocabulary; tooltips, empty states, startup, and recoverable errors |
+| TUI | Canonical `MessageId` values through `requiredText` / `requiredFormat` / `tuiChromeText` | workspace and overlay copy, status shortcuts, command metadata, help, playback/output empty states, library navigation/filter status, presentation-navigation qualifiers, accessibility states, and recoverable errors |
 | WinUI | generated MRT resources | shell menus/actions, playback/output, library, metadata, tooltips, accessibility, empty states, and recoverable native wrappers |
 
 TUI command strings and key names remain shell identity, not translated copy.
@@ -129,36 +131,35 @@ WinUI-generated resources normally retain the canonical catalog key. Single-argu
 
 ## Surface
 
-`PresentationTextCatalog` exposes two direct typed-id operations plus semantic mappings:
+Required lookup and semantic mappings:
 
 | Member | Semantic input | Result |
 |---|---|---|
-| `text` | fixed `i18n::MessageId` | non-owning required message |
-| `format` | `i18n::MessageId` plus deduced named arguments | owning required message |
+| `requiredText` | fixed `i18n::MessageId` | non-owning required message |
+| `requiredFormat` | `i18n::MessageId` plus deduced named arguments | owning required message |
 | `trackFieldLabel` | `rt::TrackField` | non-owning field label |
 | `trackGroupKeyLabel` | `rt::TrackGroupKey` | non-owning group-key label |
 | `missingTrackValueLabel` | `rt::MissingTrackValueKind` | non-owning placeholder |
 | `builtinTrackPresentation` | stable preset id | optional label and description |
-| `audioBackend` | `audio::BackendId` | owning label, description, short label, device-description fallback, and semantic icon kind |
-| `audioProfile` | `audio::ProfileId` | owning label and description |
+| `audioBackendPresentation` | `audio::BackendId` | owning label, description, short label, device-description fallback, and semantic icon kind |
+| `audioProfilePresentation` | `audio::ProfileId` | owning label and description |
 | `completionDetail` | `rt::CompletionDetail` | owning detail text |
 | `notificationMessage` | `rt::NotificationMessage` | owning resolved message |
 | `notificationGroupMessage` | severity and count | owning severity-selected plural message |
 | `libraryTaskProgressDetail` | typed progress kind and subject | owning detail text |
 | `libraryTaskProgressCompact` | typed progress kind and subject | owning compact text |
-| `libraryScanMessage` | typed scan outcome | owning result text |
+| `formatLibraryScanMessage` | typed scan outcome | owning result text |
 | `trackSelectionSummary` | count and optional duration | owning selection summary with derived selectors |
 | `smartListMembershipEditingText` | membership kind and optional expression | owning membership explanation |
 | `smartListPreviewStatus` | validity, source, and count state | owning preview status |
-| `listMembershipNotification` | typed authoring status, operation, List/tag values, and counts | owning Playlist-membership result |
+| `formatListMembershipMessage` | typed authoring status, operation, List/tag values, and counts | owning Playlist-membership result |
 | `trackChannelText` | nonzero channel count | owning lexical or pluralized text |
 | `transportControlLabel` | typed playback command | non-owning control label and tooltip |
 | `playbackActionLabel` | typed playback command | non-owning action-list label |
 | `volumeTooltip` | percent plus muted/hardware state | owning volume presentation |
-| `audioQualityFormatter` | none | catalog-lifetime formatter for audio nodes, formats, findings, and conclusions |
 
-Fixed one-id values such as `LibraryAllTracks` use `text(id)` directly.
-One-pattern values whose callers already own the arguments, such as `TrackCount` or `TrackFilterError`, use `format(id, {{"name", value}})` directly.
+Fixed one-id values such as `LibraryAllTracks` use `requiredText(catalog, id)` directly.
+One-pattern values whose callers already own the arguments, such as `TrackCount` or `TrackFilterError`, use `requiredFormat(catalog, id, {{"name", value}})` directly.
 A semantic method is retained only when it maps a domain object to one or more ids, selects an id from state, derives hidden select arguments, or applies a documented open-id fallback.
 
 Invalid values in a closed enum return empty text.
@@ -191,9 +192,9 @@ Group-key labels are `None`, `Artist`, `Album`, `Album Artist`, `Genre`, `Compos
 
 ### Track-field lexical formatting
 
-`TrackFieldFormatter` receives the injected `PresentationTextCatalog` for language-bearing values only.
+`TrackFieldFormatter` receives the injected `MessageCatalog` for language-bearing values only.
 Channel counts resolve to `Mono`, `Stereo`, or the catalog's plural `count` pattern; zero remains empty.
-The technical placeholder resolves through `text(MessageId::TrackTechnicalUnknown)` when that placeholder is requested.
+The technical placeholder resolves through `requiredText(catalog, MessageId::TrackTechnicalUnknown)` when that placeholder is requested.
 
 ASCII digits, clock durations, ISO-style dates, decimal punctuation, codec symbols, and the fixed `Hz`, `kbps`, `KB`/`MB`/`GB`, `kHz`, and `-bit` unit syntax remain locale-neutral in this tranche.
 
@@ -360,11 +361,12 @@ Open backend/profile ids remain usable through id-only fallback; Aobus does not 
 
 ## Implementation authority
 
-- [`PresentationTextCatalog.h`](../../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h)
-- [`PresentationTextCatalog.cpp`](../../../app/uimodel/presentation/PresentationTextCatalog.cpp)
-- [`TrackGroupHeadingPresentation.cpp`](../../../app/uimodel/library/presentation/TrackGroupHeadingPresentation.cpp)
+- [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def)
 - [`MessageCatalog.h`](../../../app/include/ao/i18n/MessageCatalog.h)
 - [`MessageIds.h`](../../../app/i18n/MessageIds.h)
+- [`PresentationText.h`](../../../app/include/ao/uimodel/presentation/PresentationText.h)
+- [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp)
+- [`TrackGroupHeadingPresentation.cpp`](../../../app/uimodel/library/presentation/TrackGroupHeadingPresentation.cpp)
 - [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt)
 - [`GtkTextCatalog.h`](../../../app/linux-gtk/i18n/GtkTextCatalog.h) and [`GtkTextCatalog.cpp`](../../../app/linux-gtk/i18n/GtkTextCatalog.cpp)
 - [`TuiTextCatalog.h`](../../../app/tui/TuiTextCatalog.h) and [`TuiTextCatalog.cpp`](../../../app/tui/TuiTextCatalog.cpp)
@@ -373,7 +375,7 @@ Open backend/profile ids remain usable through id-only fallback; Aobus does not 
 
 ## Test authority
 
-- [`PresentationTextCatalogTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) protects closed-set coverage, exact representative copy, open-id fallbacks, typed report expansion, and kind-based progress selection.
+- [`PresentationTextTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextTest.cpp) protects closed-set coverage, exact representative copy, open-id fallbacks, typed report expansion, and kind-based progress selection.
 - [`MessageCatalogTest.cpp`](../../../test/unit/i18n/MessageCatalogTest.cpp) protects typed ids, exact fallback, argument kinds, owned results, pseudo output, and concurrent formatting.
 - [`CatalogPatternTest.cpp`](../../../test/unit/i18n/CatalogPatternTest.cpp) protects signature validation and deterministic generated assets.
 - [`MenuControllerTest.cpp`](../../../test/unit/linux-gtk/app/MenuControllerTest.cpp) protects typed GTK menu copy and German/pseudo resolution.

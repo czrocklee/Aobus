@@ -38,7 +38,7 @@ Runtime group headers contain three structured slots.
 Each slot retains absence, raw text, a numeric year, or a typed `MissingTrackValueKind`; compound album/work keys retain the secondary album-artist or composer value independently.
 Every grouping populates the primary slot with raw text, a numeric year, or a typed missing value before materializing a section.
 Unknown group values remain distinct semantic keys rather than merging with an unrelated concrete value or becoming English inside runtime.
-UIModel resolves the slots through `PresentationTextCatalog`, and frontend adapters own only markup and geometry.
+UIModel resolves the slots through feature presentation functions over `MessageCatalog`, and frontend adapters own only markup and geometry.
 
 Text display, group identity, and ordering use separate keys:
 

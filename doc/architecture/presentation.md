@@ -59,18 +59,18 @@ Authored labels are not part of the runtime definitions.
 UIModel owns deterministic platform-neutral presentation behavior.
 Its feature capsules contain view models, editor/form models, interaction models, policies, projections, formatters, catalogs, resolvers, and UI-local stores.
 
-Shared authored copy is owned by the immutable `PresentationTextCatalog`.
-It is a required-message resolver over the startup-selected `MessageCatalog` and is injected from each interactive composition root.
-Fixed and caller-parameterized copy uses the canonical typed `MessageId` directly; named methods remain where UIModel maps a domain value, derives selectors, or owns an open-id fallback.
+Shared authored copy is owned by the startup-selected `MessageCatalog`.
+Interactive call sites resolve required messages with `requiredText` and `requiredFormat`.
+Fixed and caller-parameterized copy uses the canonical typed `MessageId` directly; named functions remain where UIModel maps a domain value, derives selectors, or owns an open-id fallback.
 Closed inputs such as track fields, missing-value kinds, completion roles, progress kinds, and report templates resolve exhaustively.
 Open backend/profile ids use their stable id as the documented fallback.
 Catalog output is never persisted or parsed for recovery, ordering, grouping, aggregation, or navigation.
-Borrowed catalog views point into shared immutable storage retained by `PresentationTextCatalog` copies; state crossing that lifetime owns its text.
+Borrowed catalog views point into shared immutable storage retained by `MessageCatalog` copies; state crossing that lifetime owns its text.
 
-Interactive process roots also own one leaf `MessageCatalog` selected from the operating-system locale before frontend construction.
-That facade is the governed ICU localization and formatting boundary; it backs the shared UIModel semantic surface and each frontend-local slice as migration proceeds.
+Interactive process roots own one leaf `MessageCatalog` selected from the operating-system locale before frontend construction.
+That facade is the governed ICU localization and formatting boundary; it backs the shared UIModel semantic surface and each frontend-local slice.
 GTK, TUI, and WinUI retain the catalog for their process lifetime; there is no mutable process-global locale service.
-Frontend-specific vocabulary stays at the leaves: GTK and TUI eagerly derive immutable typed catalogs for dense closed surfaces and use canonical typed ids through the injected shared resolver for one-to-one messages, while WinUI uses generated MRT resources selected by the same canonical locale.
+Frontend-specific vocabulary stays at the leaves and uses canonical typed ids; WinUI also uses generated MRT resources selected by the same canonical locale.
 Stable action names, command syntax, and shortcut tokens remain untranslated identities and enter localized patterns only as arguments.
 
 Those roots also construct one locale-aware text-ordering policy from the
@@ -168,7 +168,7 @@ TUI-local interaction models may own transient shell/overlay state but cannot be
 Its output overlay consumes the same UIModel output-device view model as GTK and WinUI.
 Its list chooser consumes the shared UIModel list-tree projection, and its live Quick Filter consumes the same UIModel track-filter completer as GTK's Quick-filter entry.
 Its separate Command Palette retains terminal-only command and presentation routing and delegates only explicit filter arguments to that completer.
-The process root retains one `PresentationTextCatalog` and one `TuiTextCatalog`; terminal renderers and completion adapters borrow them, while command, key, and presentation ids remain owned by the shell interaction model or runtime.
+The process root retains one `MessageCatalog`; terminal renderers and completion adapters borrow it, while command, key, and presentation ids remain owned by the shell interaction model or runtime.
 
 ### WinUI
 
@@ -228,7 +228,7 @@ Presentation state flows outward:
 
 ```text
 runtime semantic snapshot/event + raw arguments
-  -> UIModel projection + PresentationTextCatalog when shared copy is needed
+  -> UIModel projection + feature presentation functions using MessageCatalog
   -> GTK widget binding, WinUI control, or TUI render function
 ```
 
@@ -316,7 +316,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
-- [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) owns shared authored copy and open-id fallback.
+- [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h) plus `requiredText` / `requiredFormat` own required lookup; [`PresentationText.h`](../../app/include/ao/uimodel/presentation/PresentationText.h) owns feature-local formatters and open-id fallback.
 - [`OutputDeviceIntent`](../../app/include/ao/uimodel/playback/output/OutputDeviceIntent.h) owns the typed destination for a requested route and its explicit absence.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
   owns shared output-route projection, selection commands, and requested-intent reporting;
@@ -335,7 +335,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
 - [`aobus-winui-lib`](../../app/windows-winui/CMakeLists.txt), [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`StringResources`](../../app/windows-winui/platform/StringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
 - [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h), its [`ICU implementation`](../../app/i18n/MessageCatalog.cpp), and the canonical [`catalog assets`](../../app/i18n/catalog/root.txt) define the interactive localization leaf.
-- [`GtkTextCatalog`](../../app/linux-gtk/i18n/GtkTextCatalog.h), [`TuiTextCatalog`](../../app/tui/TuiTextCatalog.h), direct typed-id call sites, and [`WinUiResourceProjection`](../../app/i18n/WinUiResourceProjection.h) define frontend-owned copy and native projection boundaries without adding forwarding getters or frontend enums for one-to-one messages.
+- [`GtkTextCatalog.h`](../../app/linux-gtk/i18n/GtkTextCatalog.h) and [`TuiTextCatalog.h`](../../app/tui/TuiTextCatalog.h) keep frontend-local formatted helpers; [`WinUiResourceProjection`](../../app/i18n/WinUiResourceProjection.h) defines the native projection boundary. There is no separate frontend message-id space.
 - [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) and [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) enforce organization, dependency, and platform-vocabulary constraints.
 
 ## Test map
@@ -343,7 +343,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
-- [`PresentationTextCatalogTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
+- [`PresentationTextTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
 - [`MessageCatalogTest.cpp`](../../test/unit/i18n/MessageCatalogTest.cpp), [`CatalogPatternTest.cpp`](../../test/unit/i18n/CatalogPatternTest.cpp), and the native [`WinUiLocalizationProbe.cpp`](../../test/helper/WinUiLocalizationProbe.cpp) protect explicit fallback, format signatures, immutable concurrent use, deterministic generation, and ICU/MRT parity.
 - [`MenuControllerTest.cpp`](../../test/unit/linux-gtk/app/MenuControllerTest.cpp), [`PreferencesWindowTest.cpp`](../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), [`TrackCustomViewDialogTest.cpp`](../../test/unit/linux-gtk/track/TrackCustomViewDialogTest.cpp), [`LayoutEditorTextTest.cpp`](../../test/unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp), and [`RenderTest.cpp`](../../test/unit/tui/RenderTest.cpp) protect the migrated GTK/TUI surface, localized built-in layout vocabulary, and preservation of command/key/document identities.
 - [`OutputDeviceIntentTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceIntentTest.cpp) protects the undecided-destination compile barrier and recorder dispatch.

@@ -89,6 +89,7 @@ namespace ao::uimodel
     std::optional<std::size_t> optMaxChildren = {};
     LayoutSurfaceCapabilityMask surfaces = static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Main);
     LayoutComponentActionPolicy actionPolicy = kNoExternalActions;
+    bool persistentState = false;
   };
 
   constexpr bool isContainer(LayoutComponentDescriptor const& descriptor) noexcept

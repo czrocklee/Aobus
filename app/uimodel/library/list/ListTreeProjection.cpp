@@ -7,7 +7,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -93,7 +92,7 @@ namespace ao::uimodel
     }
   } // namespace
 
-  ListTreeProjection buildListTreeProjection(PresentationTextCatalog const& textCatalog,
+  ListTreeProjection buildListTreeProjection(i18n::MessageCatalog const& textCatalog,
                                              std::span<rt::ListNode const> snapshot)
   {
     auto projection = ListTreeProjection{};
@@ -102,7 +101,7 @@ namespace ao::uimodel
       rt::kAllTracksListId,
       ListTreeProjectionRow{.id = rt::kAllTracksListId,
                             .parentId = kInvalidListId,
-                            .name = std::string{textCatalog.text(i18n::MessageId::LibraryAllTracks)},
+                            .name = std::string{i18n::requiredText(textCatalog, i18n::MessageId::LibraryAllTracks)},
                             .isSystem = true});
     projection.rootIds.push_back(rt::kAllTracksListId);
 

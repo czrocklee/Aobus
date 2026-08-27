@@ -3,8 +3,9 @@
 
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <cstdint>
 #include <string_view>
@@ -146,8 +147,8 @@ namespace ao::uimodel
     }
   }
 
-  std::string_view trackFieldColumnTitle(PresentationTextCatalog const& textCatalog, rt::TrackField field)
+  std::string_view trackFieldColumnTitle(i18n::MessageCatalog const& textCatalog, rt::TrackField field)
   {
-    return textCatalog.trackFieldLabel(field);
+    return trackFieldLabel(textCatalog, field);
   }
 } // namespace ao::uimodel

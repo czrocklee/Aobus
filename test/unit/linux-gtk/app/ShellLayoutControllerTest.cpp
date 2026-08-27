@@ -9,21 +9,20 @@
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
 #include "playback/OutputDevicePopover.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -144,8 +143,7 @@ namespace ao::gtk::test
                             storePtr,
                             componentStateStorePtr,
                             GtkUiDependencies{
-                              .textCatalog = ao::test::englishPresentationTextCatalog(),
-                              .gtkTextCatalog = englishGtkTextCatalog(),
+                              .textCatalog = ao::test::englishMessageCatalog(),
                               .playbackCommandSurface = &commandSurface,
                               .themeCoordinator = &themeCoordinator,
                               .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
@@ -712,8 +710,7 @@ namespace ao::gtk::test
                               std::make_shared<AppConfigStore>(tempDir / "config.yaml"),
                               std::make_shared<ShellLayoutStore>(tempDir / "layouts"),
                               std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state"),
-                              GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
-                                                .gtkTextCatalog = englishGtkTextCatalog(),
+                              GtkUiDependencies{.textCatalog = ao::test::englishMessageCatalog(),
                                                 .playbackCommandSurface = &commandSurface,
                                                 .themeCoordinator = &themeCoordinator,
                                                 .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
@@ -759,8 +756,7 @@ namespace ao::gtk::test
                               std::move(configStorePtr),
                               std::move(layoutStorePtr),
                               std::move(componentStateStorePtr),
-                              GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
-                                                .gtkTextCatalog = englishGtkTextCatalog(),
+                              GtkUiDependencies{.textCatalog = ao::test::englishMessageCatalog(),
                                                 .playbackCommandSurface = &commandSurface,
                                                 .themeCoordinator = &themeCoordinator,
                                                 .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};

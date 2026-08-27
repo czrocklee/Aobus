@@ -3,16 +3,12 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 
 #include <cstdint>
 #include <filesystem>
 #include <string>
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
 
 namespace ao::rt
 {
@@ -22,7 +18,6 @@ namespace ao::rt
 
 namespace ao::tui
 {
-  class TuiTextCatalog;
   struct AppOptions final
   {
     std::filesystem::path libraryRoot{"."};
@@ -33,8 +28,7 @@ namespace ao::tui
   };
 
   std::int32_t run(AppOptions const& options,
-                   uimodel::PresentationTextCatalog const& textCatalog,
-                   TuiTextCatalog const& tuiTextCatalog,
+                   i18n::MessageCatalog const& textCatalog,
                    rt::TextOrderingPolicy const& textOrderingPolicy,
                    rt::CompletionAliasPolicy const& completionAliasPolicy);
 } // namespace ao::tui

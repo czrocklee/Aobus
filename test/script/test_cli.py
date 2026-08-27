@@ -720,6 +720,15 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.deps_action, "report")
         self.assertEqual(args.path, "/tmp/aobus-deps")
         self.assertEqual(args.json, Path("/tmp/aobus-deps.json"))
+        self.assertFalse(args.concepts)
+
+    def test_concept_report_arguments(self):
+        args = self.parse(["deps", "report", "--concepts", "-p", "/tmp/aobus-debug", "-j", "4"])
+
+        self.assertEqual(args.deps_action, "report")
+        self.assertTrue(args.concepts)
+        self.assertEqual(args.path, "/tmp/aobus-debug")
+        self.assertEqual(args.jobs, 4)
 
     def test_dependency_verify_arguments(self):
         args = self.parse(["deps", "verify", "-p", "/tmp/aobus-deps"])

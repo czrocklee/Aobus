@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
@@ -32,7 +33,7 @@ namespace ao::winui
 
     /// Where a route requested through this control is recorded.
     uimodel::OutputDeviceIntent intent;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
   };
 
   class OutputDeviceControl final
@@ -61,7 +62,7 @@ namespace ao::winui
 
     winrt::Microsoft::UI::Xaml::Controls::Button _presenter{nullptr};
     uimodel::OutputDeviceIntent _intent;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyout _flyout{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _presenterClickRevoker{};
     std::vector<winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem::Click_revoker> _itemClickRevokers;

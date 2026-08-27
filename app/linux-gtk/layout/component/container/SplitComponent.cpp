@@ -9,7 +9,6 @@
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/component/StatefulComponentState.h>
-#include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <glibmm/main.h>
@@ -39,7 +38,11 @@ namespace ao::gtk::layout
     {
     public:
       SplitComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _state{ctx.runtimeState, ctx.buildState, ctx.surface, node, kSplitComponentType}
+        : _state{ctx.runtimeState,
+                 ctx.buildState,
+                 ctx.surface,
+                 node,
+                 componentTypeName(SharedLayoutComponentType::Split)}
       {
         if (node.children.size() != 2)
         {

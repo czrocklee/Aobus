@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 #include <ao/uimodel/layout/component/StatefulComponentState.h>
 
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/component/LayoutSurface.h>
@@ -34,7 +35,12 @@ namespace ao::uimodel::test
         _saved.emplace_back(std::string{presetId}, doc);
       }
 
-      bool prune(std::string_view /*presetId*/, PreparedLayout const& /*layout*/) override { return false; }
+      bool prune(std::string_view /*presetId*/,
+                 PreparedLayout const& /*layout*/,
+                 LayoutComponentCatalog const& /*catalog*/) override
+      {
+        return false;
+      }
       bool removePreset(std::string_view /*presetId*/) override { return false; }
 
       std::vector<std::pair<std::string, LayoutComponentStateDocument>> const& savedEntries() const noexcept

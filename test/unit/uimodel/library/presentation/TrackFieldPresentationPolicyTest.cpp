@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_message.hpp>
@@ -93,7 +93,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("trackFieldColumnTitle returns runtime field labels", "[uimodel][unit][library][presentation]")
   {
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(trackFieldColumnTitle(textCatalog, rt::TrackField::Title) == "Title");
     CHECK(trackFieldColumnTitle(textCatalog, rt::TrackField::Artist) == "Artist");
     CHECK(trackFieldColumnTitle(textCatalog, rt::TrackField::Duration) == "Duration");
@@ -101,7 +101,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("presentable runtime fields have default presentation policy", "[uimodel][unit][library][presentation]")
   {
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
 
     for (auto const& rtDef : rt::trackFieldDefinitions())
     {

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "TrackRowItem.g.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 
@@ -22,11 +23,6 @@ namespace ao::winui
   };
 } // namespace ao::winui
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace winrt::Aobus::implementation
 {
   // C++/WinRT generates the projected virtual metadata plumbing in this CRTP base.
@@ -43,7 +39,7 @@ namespace winrt::Aobus::implementation
     TrackRowItem(std::uint32_t displayIndex,
                  std::uint32_t sourceIndex,
                  ao::rt::TrackRow const& row,
-                 ao::uimodel::PresentationTextCatalog const& textCatalog,
+                 ao::i18n::MessageCatalog const& textCatalog,
                  std::span<ao::winui::TrackColumnCellSpec const> columns);
     TrackRowItem(std::uint32_t displayIndex,
                  std::uint32_t sourceIndex,

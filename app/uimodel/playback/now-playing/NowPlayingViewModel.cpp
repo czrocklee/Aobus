@@ -16,7 +16,7 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <array>
@@ -55,7 +55,7 @@ namespace ao::uimodel
       AudioIconKind iconKind = AudioIconKind::OutputDevice;
     };
 
-    SelectedDevicePresentation resolveSelectedDevicePresentation(PresentationTextCatalog const& textCatalog,
+    SelectedDevicePresentation resolveSelectedDevicePresentation(i18n::MessageCatalog const& textCatalog,
                                                                  rt::OutputState const& output)
     {
       for (auto const& backend : output.availableBackends)
@@ -76,10 +76,10 @@ namespace ao::uimodel
 
           if (device.isDefault && device.id.empty() && name.empty())
           {
-            name = textCatalog.text(i18n::MessageId::SystemDefaultOutputDevice);
+            name = i18n::requiredText(textCatalog, i18n::MessageId::SystemDefaultOutputDevice);
           }
 
-          return {.name = std::move(name), .iconKind = textCatalog.audioBackend(backend.id).iconKind};
+          return {.name = std::move(name), .iconKind = audioBackendPresentation(textCatalog, backend.id).iconKind};
         }
       }
 
@@ -94,7 +94,7 @@ namespace ao::uimodel
   } // namespace
 
   NowPlayingViewModel::NowPlayingViewModel(rt::PlaybackService& playback,
-                                           PresentationTextCatalog textCatalog,
+                                           i18n::MessageCatalog textCatalog,
                                            std::function<void(NowPlayingViewState const&)> onRender)
     : _playback{playback}, _onRender{std::move(onRender)}, _textCatalog{std::move(textCatalog)}
   {
@@ -143,16 +143,17 @@ namespace ao::uimodel
 
     if (state.nowPlaying.title.empty())
     {
-      view.title = _textCatalog.text(i18n::MessageId::PlaybackNotPlaying);
+      view.title = i18n::requiredText(_textCatalog, i18n::MessageId::PlaybackNotPlaying);
       view.streamInfo =
-        state.ready ? "" : std::string{_textCatalog.text(i18n::MessageId::PlaybackConnectingAudioEngine)};
+        state.ready ? ""
+                    : std::string{i18n::requiredText(_textCatalog, i18n::MessageId::PlaybackConnectingAudioEngine)};
       view.isActive = false;
     }
     else
     {
       view.title = state.nowPlaying.title;
       view.artist = state.nowPlaying.artist.empty()
-                      ? std::string{_textCatalog.text(i18n::MessageId::PlaybackUnknownArtist)}
+                      ? std::string{i18n::requiredText(_textCatalog, i18n::MessageId::PlaybackUnknownArtist)}
                       : state.nowPlaying.artist;
 
       if (!state.nowPlaying.artist.empty())
@@ -164,11 +165,11 @@ namespace ao::uimodel
         view.combinedStatus = state.nowPlaying.title;
       }
 
-      auto const& qualityFormatter = _textCatalog.audioQualityFormatter();
+      auto const qualityFormatter = AudioQualityFormatter{_textCatalog};
       auto const presentation = qualityFormatter.presentation(state.quality);
       view.streamInfo = sourceStreamInfo(qualityFormatter, state.quality);
 
-      auto plainTextFallback = std::string{_textCatalog.text(i18n::MessageId::PlaybackAudioPipeline)};
+      auto plainTextFallback = std::string{i18n::requiredText(_textCatalog, i18n::MessageId::PlaybackAudioPipeline)};
       plainTextFallback.append(":\n");
 
       if (!presentation.headline.empty())

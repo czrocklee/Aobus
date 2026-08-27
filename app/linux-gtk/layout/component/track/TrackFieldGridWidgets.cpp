@@ -6,6 +6,7 @@
 #include "common/AccessibleLabel.h"
 #include "common/WidgetMeasure.h"
 #include "completion/EntryCompletionController.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <gdk/gdkkeysyms.h>
@@ -284,7 +285,7 @@ namespace ao::gtk::layout::track_field_grid
     }
   }
 
-  void DetailFieldEditor::setCompletionProvider(uimodel::PresentationTextCatalog const& textCatalog,
+  void DetailFieldEditor::setCompletionProvider(i18n::MessageCatalog const& textCatalog,
                                                 rt::CompletionProvider provider)
   {
     _completionControllerPtr = std::make_unique<EntryCompletionController>(_entry, textCatalog, std::move(provider));

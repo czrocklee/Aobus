@@ -55,10 +55,10 @@ It does not denote nested mappings.
 | Logical document | Literal group | Payload type | Deserialize/serialize path | Current version authority | Semantic writer |
 |---|---|---|---|---|---|
 | Global GTK config | `window` | `ao::gtk::WindowState` | Frontend-local `WindowStateYamlSchema`. | None. | `MainWindowCoordinator::saveSession`. |
-| Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppStateStore`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppPrefs`. |
-| Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppStateStore`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
+| Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppPrefs`. |
+| Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
-| Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppStateStore`. | None. | `ao::rt::saveAppPrefs`. |
+| Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | None. | `ao::rt::saveAppPrefs`. |
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `LibrarySession`. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `3`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
@@ -241,7 +241,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 
 ## Implementation authority
 
-- [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppPrefsState.h`](../../../app/include/ao/rt/AppPrefsState.h) own the global GTK groups and their frontend-local schemas; [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) owns window snapshot lifecycle semantics.
+- [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppState.h`](../../../app/include/ao/rt/AppState.h) own the global GTK groups and their frontend-local schemas; [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) owns window snapshot lifecycle semantics.
 - [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns `NoLocation` and what a store with nowhere to keep anything does; [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns when a frontend reaches for it.
 - [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h), [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h), [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp), and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, explicit schema, payload marker, and injected-store use.

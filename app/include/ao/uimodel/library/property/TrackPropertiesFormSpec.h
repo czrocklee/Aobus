@@ -9,10 +9,13 @@
 #include <string>
 #include <vector>
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   enum class TrackPropertiesFormEditorKind : std::uint8_t
   {
     Text,
@@ -35,5 +38,5 @@ namespace ao::uimodel
     std::vector<TrackPropertiesFormRow> propertyRows;
   };
 
-  TrackPropertiesFormSpec buildTrackPropertiesFormSpec(PresentationTextCatalog const& textCatalog);
+  TrackPropertiesFormSpec buildTrackPropertiesFormSpec(i18n::MessageCatalog const& textCatalog);
 } // namespace ao::uimodel

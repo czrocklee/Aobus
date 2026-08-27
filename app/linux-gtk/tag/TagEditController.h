@@ -5,7 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>
@@ -34,7 +34,6 @@ namespace ao::uimodel
 }
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   class TrackRowCache;
   class ThemeCoordinator;
   class TagPopover;
@@ -64,8 +63,7 @@ namespace ao::gtk
 
     TagEditController(Gtk::Window& parent,
                       rt::AppRuntime& runtime,
-                      uimodel::PresentationTextCatalog textCatalog,
-                      GtkTextCatalog const& gtkTextCatalog,
+                      i18n::MessageCatalog textCatalog,
                       Callbacks callbacks,
                       ThemeCoordinator& themeCoordinator);
     ~TagEditController();
@@ -113,8 +111,7 @@ namespace ao::gtk
 
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;
-    uimodel::PresentationTextCatalog _textCatalog;
-    GtkTextCatalog const& _gtkTextCatalog;
+    i18n::MessageCatalog _textCatalog;
     TrackRowCache* _dataProvider = nullptr;
     Gtk::Window& _parent;
     ThemeCoordinator& _themeCoordinator;

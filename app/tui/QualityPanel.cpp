@@ -7,11 +7,10 @@
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
-#include "TuiTextCatalog.h"
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
@@ -81,8 +80,7 @@ namespace ao::tui
     }
   } // namespace
 
-  std::int32_t qualityPanelColumns(TuiTextCatalog const& textCatalog,
-                                   uimodel::PresentationTextCatalog const& presentationText,
+  std::int32_t qualityPanelColumns(i18n::MessageCatalog const& textCatalog,
                                    rt::PlaybackTransportSnapshot const& state,
                                    std::int32_t const terminalColumns)
   {
@@ -91,10 +89,11 @@ namespace ao::tui
 
     if (state.quality.assessments.empty())
     {
-      contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(TuiTextId::PlaybackNoAudioPipeline)));
+      contentColumns = std::max(
+        contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoAudioPipeline)));
     }
 
-    auto const& formatter = presentationText.audioQualityFormatter();
+    auto const formatter = uimodel::AudioQualityFormatter{textCatalog};
 
     for (auto const& assessment : state.quality.assessments)
     {
@@ -119,8 +118,7 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element qualityPanel(TuiTextCatalog const& textCatalog,
-                              uimodel::PresentationTextCatalog const& presentationText,
+  ftxui::Element qualityPanel(i18n::MessageCatalog const& textCatalog,
                               rt::PlaybackTransportSnapshot const& state,
                               std::int32_t columns)
   {
@@ -128,7 +126,7 @@ namespace ao::tui
 
     if (columns <= 0)
     {
-      columns = qualityPanelColumns(textCatalog, presentationText, state, 0);
+      columns = qualityPanelColumns(textCatalog, state, 0);
     }
 
     auto rows = Elements{};
@@ -136,10 +134,11 @@ namespace ao::tui
 
     if (state.quality.assessments.empty())
     {
-      rows.push_back(text(std::string{textCatalog.text(TuiTextId::PlaybackNoAudioPipeline)}) | dim);
+      rows.push_back(text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoAudioPipeline)}) |
+                     dim);
     }
 
-    auto const& formatter = presentationText.audioQualityFormatter();
+    auto const formatter = uimodel::AudioQualityFormatter{textCatalog};
 
     for (auto const& assessment : state.quality.assessments)
     {

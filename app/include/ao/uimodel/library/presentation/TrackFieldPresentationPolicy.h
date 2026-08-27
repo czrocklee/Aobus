@@ -8,10 +8,13 @@
 #include <cstdint>
 #include <string_view>
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   enum class TrackColumnSizing : std::uint8_t
   {
     Fixed,
@@ -30,5 +33,5 @@ namespace ao::uimodel
   TrackColumnSizing trackFieldColumnSizing(rt::TrackField field);
   TrackColumnAlignment trackFieldColumnAlignment(rt::TrackField field);
 
-  std::string_view trackFieldColumnTitle(PresentationTextCatalog const& textCatalog, rt::TrackField field);
+  std::string_view trackFieldColumnTitle(i18n::MessageCatalog const& textCatalog, rt::TrackField field);
 } // namespace ao::uimodel

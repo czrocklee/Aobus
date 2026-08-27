@@ -3,6 +3,7 @@
 
 #include "track/TrackPageHost.h"
 
+#include "i18n/GtkTextCatalog.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "track/TrackListModel.h"
@@ -25,7 +26,6 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -47,7 +47,7 @@ namespace ao::gtk
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
                                uimodel::TrackColumnLayoutStore& layoutStore,
-                               uimodel::PresentationTextCatalog textCatalog,
+                               i18n::MessageCatalog textCatalog,
                                rt::ResourceByteLoader& byteLoader)
     : _stack{stack}
     , _runtime{runtime}
@@ -373,7 +373,7 @@ namespace ao::gtk
     trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
     auto const pageId = std::format("view-{}", viewId.raw());
 
-    auto listName = std::string{_textCatalog.text(i18n::MessageId::LibraryUnnamedList)};
+    auto listName = gtkText(_textCatalog, i18n::MessageId::LibraryUnnamedList);
 
     if (!rt::isVirtualListId(listId))
     {
@@ -381,13 +381,12 @@ namespace ao::gtk
 
       if (auto optNode = scope.listNode(listId); optNode)
       {
-        listName =
-          optNode->name.empty() ? std::string{_textCatalog.text(i18n::MessageId::LibraryUnnamedList)} : optNode->name;
+        listName = optNode->name.empty() ? gtkText(_textCatalog, i18n::MessageId::LibraryUnnamedList) : optNode->name;
       }
     }
     else if (listId == rt::kAllTracksListId)
     {
-      listName = _textCatalog.text(i18n::MessageId::LibraryAllTracks);
+      listName = gtkText(_textCatalog, i18n::MessageId::LibraryAllTracks);
     }
 
     _stack.add(*trackPagePtr, pageId, listName);

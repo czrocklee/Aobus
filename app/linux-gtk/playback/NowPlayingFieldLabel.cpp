@@ -3,6 +3,7 @@
 
 #include "playback/NowPlayingFieldLabel.h"
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -11,7 +12,6 @@
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/eventcontroller.h>
@@ -39,7 +39,7 @@ namespace ao::gtk
   } // namespace
 
   NowPlayingFieldLabel::NowPlayingFieldLabel(rt::AppRuntime& runtime,
-                                             uimodel::PresentationTextCatalog const& textCatalog,
+                                             i18n::MessageCatalog const& textCatalog,
                                              rt::TrackField field,
                                              Action action)
     : _runtime{runtime}

@@ -3,18 +3,15 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::tui
 {
-  std::string selectionSummary(uimodel::PresentationTextCatalog const& textCatalog,
+  std::string selectionSummary(i18n::MessageCatalog const& textCatalog,
                                std::size_t trackCount,
                                std::int32_t selectedIndex);
   std::int32_t moveSelection(std::int32_t selectedIndex, std::int32_t delta, std::size_t itemCount);

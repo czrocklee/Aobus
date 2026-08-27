@@ -130,13 +130,12 @@ target_link_libraries(ao_test_support_runtime
       FakeIt::FakeIt-catch
 )
 
-add_library(ao_test_support_presentation STATIC
-    unit/PresentationTextCatalogTestSupport.cpp
+add_library(ao_test_support_i18n STATIC
+    unit/MessageCatalogTestSupport.cpp
 )
-target_link_libraries(ao_test_support_presentation
+target_link_libraries(ao_test_support_i18n
     PUBLIC
       ao_test_options
-      ao_app_uimodel
       ao_app_i18n
 )
 
@@ -150,7 +149,6 @@ if(AOBUS_BUILD_GTK)
       unit/linux-gtk/GtkApplicationTestSupport.cpp
       unit/linux-gtk/GtkLayoutTestSupport.cpp
       unit/linux-gtk/GtkRuntimeTestSupport.cpp
-      unit/linux-gtk/GtkTextCatalogTestSupport.cpp
       unit/linux-gtk/GtkWidgetTestSupport.cpp
       unit/linux-gtk/image/ImageTestSupport.cpp
       unit/linux-gtk/layout/LayoutTestSupport.cpp
@@ -160,7 +158,7 @@ if(AOBUS_BUILD_GTK)
   target_link_libraries(ao_test_support_gtk
       PUBLIC
         ao_test_options
-        ao_test_support_presentation
+        ao_test_support_i18n
         aobus-gtk-lib
         PkgGTKMM
       PRIVATE
@@ -404,7 +402,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/shell/ShellGenerationSequenceTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
     unit/uimodel/presentation/CoverArtPlaceholderTest.cpp
-    unit/uimodel/presentation/PresentationTextCatalogTest.cpp
+    unit/uimodel/presentation/PresentationTextTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
     unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
@@ -553,7 +551,7 @@ add_executable(ao_core_test
     unit/runtime/WorkspaceSessionYamlSchemaTest.cpp
     unit/runtime/WorkspaceSessionTest.cpp
     unit/runtime/AppRuntimeTest.cpp
-    unit/runtime/AppStateStoreTest.cpp
+    unit/runtime/AppStateTest.cpp
     unit/runtime/HeadlessShellTest.cpp
     unit/runtime/library/LibraryExportImportCoverArtTest.cpp
     unit/runtime/library/LibraryExportImportDeltaTest.cpp
@@ -649,7 +647,7 @@ target_link_libraries(ao_core_test PRIVATE
     ao_app_i18n_ordering
     ao_catalog_pattern
     ao_unicode_text
-    ao_test_support_presentation
+    ao_test_support_i18n
     ao_test_support_runtime
     ao_test_options
     Catch2::Catch2
@@ -717,16 +715,6 @@ add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_pro
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
 if(AOBUS_BUILD_TUI)
-add_library(ao_test_support_tui STATIC
-    unit/tui/TuiTextCatalogTestSupport.cpp
-)
-target_link_libraries(ao_test_support_tui
-    PUBLIC
-      ao_test_options
-      ao_test_support_presentation
-      aobus-tui-lib
-)
-
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
     unit/tui/CoverArtTestSupport.cpp
@@ -766,9 +754,8 @@ target_link_libraries(ao_tui_test PRIVATE
     aobus-tui-lib
     ao_app_uimodel
     ao_app_runtime
-    ao_test_support_presentation
+    ao_test_support_i18n
     ao_test_support_runtime
-    ao_test_support_tui
     ao_test_options
     Catch2::Catch2WithMain
     FakeIt::FakeIt-catch
@@ -791,7 +778,7 @@ add_executable(ao_tui_bench EXCLUDE_FROM_ALL
     unit/tui/TrackTableBenchmark.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_bench)
-target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_support_presentation ao_test_support_tui ao_test_options Catch2::Catch2WithMain mimalloc)
+target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_support_i18n ao_test_options Catch2::Catch2WithMain mimalloc)
 endif()
 
 if(AOBUS_BUILD_CLI)

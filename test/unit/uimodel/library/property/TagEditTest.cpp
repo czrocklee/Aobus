@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/library/property/TagEdit.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
 #include <ao/CoreIds.h>
@@ -39,7 +39,7 @@ namespace ao::uimodel::test
   TEST_CASE("applyTagEdit reports tag mutations for a bound authoring session", "[uimodel][unit][tag-edit]")
   {
     auto fixture = TrackAuthoringFixture{2};
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const trackId = fixture.trackIds()[0];
     auto const trackId2 = fixture.trackIds()[1];
 

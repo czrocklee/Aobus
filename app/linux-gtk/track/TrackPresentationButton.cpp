@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
+#include "i18n/GtkTextCatalog.h"
 #include "track/TrackCustomViewDialog.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -15,7 +16,6 @@
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/button.h>
@@ -35,8 +35,7 @@ namespace ao::gtk
 {
   using i18n::MessageId;
 
-  TrackPresentationButton::TrackPresentationButton(rt::AppRuntime& runtime,
-                                                   uimodel::PresentationTextCatalog textCatalog)
+  TrackPresentationButton::TrackPresentationButton(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog)
     : _runtime{runtime}, _textCatalog{std::move(textCatalog)}
   {
     set_valign(Gtk::Align::CENTER);
@@ -164,7 +163,7 @@ namespace ao::gtk
       {
         if (_runtime.workspace().snapshot().activeViewId != selection.targetViewId)
         {
-          auto const message = std::string{_textCatalog.text(MessageId::GtkPresentationViewInactive)};
+          auto const message = gtkText(_textCatalog, MessageId::GtkPresentationViewInactive);
           APP_LOG_ERROR("Failed to apply track presentation: {}", message);
           showPresentationError(message);
           return false;
@@ -196,9 +195,9 @@ namespace ao::gtk
 
     auto* const dialog =
       AppDialog::presentMessage(*parentWindow,
-                                std::string{_textCatalog.text(MessageId::GtkPresentationUnableToChange)},
+                                gtkText(_textCatalog, MessageId::GtkPresentationUnableToChange),
                                 std::string{message},
-                                {AppDialogAction{.label = std::string{_textCatalog.text(MessageId::GtkCommonClose)},
+                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkCommonClose),
                                                  .responseId = Gtk::ResponseType::CLOSE,
                                                  .role = AppDialogActionRole::Cancel}},
                                 Gtk::ResponseType::CLOSE);
@@ -238,7 +237,7 @@ namespace ao::gtk
     auto const& spec = foundRes->presentation;
 
     auto const labelText = std::string{_button.get_label()};
-    auto const label = _textCatalog.format(MessageId::GtkPresentationCopyLabel, {{"label", labelText}});
+    auto const label = i18n::requiredFormat(_textCatalog, MessageId::GtkPresentationCopyLabel, {{"label", labelText}});
     auto dialog = TrackCustomViewDialog{*parentWindow, _textCatalog, spec, label};
     auto optToken = std::optional<ThemeRegistrationToken>{};
 

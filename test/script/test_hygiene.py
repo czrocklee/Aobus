@@ -73,6 +73,35 @@ class FormatCommandTest(unittest.TestCase):
             cwd=format_command.PROJECT_ROOT,
         )
 
+    def test_clang_format_batches_include_fragments_with_cpp_sources(self):
+        with mock.patch.object(
+            format_command.builddir,
+            "platform_profile",
+            return_value=format_command.builddir.LINUX_PROFILE,
+        ):
+            with mock.patch.object(
+                format_command.subprocess,
+                "run",
+                return_value=mock.Mock(returncode=0),
+            ) as run:
+                self.assertEqual(
+                    format_command.run_clang_format(
+                        ["lib/Foo.cpp", "app/include/ao/i18n/MessageInventory.def"], check=True
+                    ),
+                    0,
+                )
+
+        run.assert_called_once_with(
+            [
+                "clang-format",
+                "--dry-run",
+                "-Werror",
+                "lib/Foo.cpp",
+                "app/include/ao/i18n/MessageInventory.def",
+            ],
+            cwd=format_command.PROJECT_ROOT,
+        )
+
 
 class TidyCommandTest(unittest.TestCase):
     def test_header_filters_accept_native_and_posix_separators(self):
@@ -81,6 +110,15 @@ class TidyCommandTest(unittest.TestCase):
 
         self.assertRegex(native, tidy.STRICT_HEADER_FILTER)
         self.assertRegex(posix, tidy.STRICT_HEADER_FILTER)
+
+    def test_def_include_fragment_is_tidied_through_its_consumer(self):
+        fragment = tidy.PROJECT_ROOT / "app" / "include" / "ao" / "i18n" / "MessageInventory.def"
+        companion = tidy.PROJECT_ROOT / "app" / "i18n" / "MessageCatalog.cpp"
+        invocation = tidy.TidyInvocation(fragment, companion)
+
+        self.assertTrue(invocation.is_include_fragment)
+        self.assertFalse(invocation.is_header)
+        self.assertFalse(tidy.TidyInvocation(companion, companion).is_include_fragment)
 
     def test_default_tidy_uses_only_an_existing_normal_debug_dependency_tree(self):
         with tempfile.TemporaryDirectory() as temp_dir:

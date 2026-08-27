@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
@@ -15,14 +15,12 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusFeedProjection - projects detail feed items and helpers",
             "[uimodel][unit][status][activity]")
   {
-    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishPresentationTextCatalog()};
     auto const retainedError = entry(
       rt::NotificationId{12}, rt::NotificationSeverity::Error, "Write failed", rt::NotificationLifetime::pinned());
     auto const clearableWarning = entry(rt::NotificationId{13}, rt::NotificationSeverity::Warning, "Clearable warning");
     auto const latestWarning = entry(rt::NotificationId{14}, rt::NotificationSeverity::Warning, "Latest warning");
     auto currentFeed = feed({clearableWarning, retainedError, latestWarning});
-
-    feedProjection.initialize(currentFeed);
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), currentFeed};
 
     SECTION("detail items use latest-first ordering")
     {

@@ -10,6 +10,7 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -17,7 +18,7 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
@@ -124,7 +125,7 @@ namespace ao::winui::layout
                          snapshot.selectionKind != rt::SelectionKind::None);
       }
 
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       Border _root{};
       Image _image{};
       Grid _placeholder{};

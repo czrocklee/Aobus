@@ -3,8 +3,9 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -20,7 +21,7 @@ namespace ao::winui
   struct VolumeControlConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::Slider slider{nullptr};
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
   };
 
   class VolumeControl final
@@ -44,7 +45,7 @@ namespace ao::winui
     void applyState(uimodel::VolumeViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Slider _slider{nullptr};
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     winrt::Microsoft::UI::Xaml::Controls::Slider::ValueChanged_revoker _valueChangedRevoker{};
     std::unique_ptr<uimodel::VolumeViewModel> _viewModelPtr;
     bool _updating = false;

@@ -3,6 +3,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -41,6 +42,13 @@ namespace ao::uimodel::test
         .state = {{"positionPercent", LayoutValue{0.42}}},
       };
       return doc;
+    }
+
+    LayoutComponentCatalog persistentLayoutCatalog()
+    {
+      auto catalog = LayoutComponentCatalog{};
+      catalog.registerComponentDescriptor(sharedComponentDescriptor(SharedLayoutComponentType::Split));
+      return catalog;
     }
   } // namespace
 
@@ -246,7 +254,7 @@ namespace ao::uimodel::test
 
     auto const preparedRes = prepareLayout(doc);
     REQUIRE(preparedRes);
-    pruneComponentState(stateDoc, *preparedRes);
+    pruneComponentState(stateDoc, *preparedRes, persistentLayoutCatalog());
 
     CHECK(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));

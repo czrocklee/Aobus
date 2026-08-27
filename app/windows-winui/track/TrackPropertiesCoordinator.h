@@ -8,11 +8,12 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -53,7 +54,7 @@ namespace ao::winui
     rt::Library& library;
     rt::WorkspaceService& workspace;
     rt::CompletionService& completion;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     std::vector<TrackId> trackIds;
   };
 
@@ -144,7 +145,7 @@ namespace ao::winui
     rt::Library& _library;
     rt::WorkspaceService& _workspace;
     rt::CompletionService& _completion;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     std::vector<TrackId> _trackIds;
     uimodel::TrackPropertiesFormModel _formModel;
     rt::TrackDetailSnapshot _snapshot;

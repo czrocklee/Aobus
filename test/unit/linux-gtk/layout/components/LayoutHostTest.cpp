@@ -10,11 +10,10 @@
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/components/ContainerTestHelpers.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
@@ -65,9 +64,8 @@ namespace ao::gtk::layout::test
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
-                                          .gtkTextCatalog = ao::gtk::test::englishGtkTextCatalog(),
-                                          .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
+    auto dependencies = GtkUiDependencies{
+      .textCatalog = ao::test::englishMessageCatalog(), .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = *runtimePtr,
@@ -187,8 +185,7 @@ namespace ao::gtk::layout::test
       std::unique_ptr<rt::AppRuntime> runtime2Ptr = makeRuntime(tempDir2);
       auto const actionRegistry2 = ActionRegistry{};
       auto runtimeState2 = uimodel::LayoutRuntimeState{};
-      auto dependencies2 = GtkUiDependencies{.textCatalog = ao::test::englishPresentationTextCatalog(),
-                                             .gtkTextCatalog = ao::gtk::test::englishGtkTextCatalog(),
+      auto dependencies2 = GtkUiDependencies{.textCatalog = ao::test::englishMessageCatalog(),
                                              .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
       auto ctx2 = LayoutBuildContext{.registry = registry2,
                                      .actionRegistry = actionRegistry2,

@@ -4,6 +4,7 @@
 #include "TrackComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
 #include "common/UiWorkflow.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
@@ -16,7 +17,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -27,6 +27,7 @@
 #include <sigc++/connection.h>
 
 #include <memory>
+#include <string>
 
 namespace ao::gtk::layout
 {
@@ -42,7 +43,7 @@ namespace ao::gtk::layout
         , _notifications{ctx.runtime.notifications()}
         , _textCatalog{ctx.dependencies.textCatalog}
       {
-        _undoButton.set_label(std::string{_textCatalog.text(i18n::MessageId::GtkCommonUndo)});
+        _undoButton.set_label(gtkText(_textCatalog, i18n::MessageId::GtkCommonUndo));
         _bar.set_orientation(Gtk::Orientation::HORIZONTAL);
         _bar.set_spacing(8);
         _bar.set_margin(8);
@@ -62,32 +63,31 @@ namespace ao::gtk::layout
           {
             if (_undoController != nullptr)
             {
-              spawnUiTask(_runtime.async(),
-                          _tasks,
-                          *this,
-                          "metadata undo",
-                          _undoController->undo(),
-                          [](TrackDetailUndoBarComponent* owner, Result<> result)
-                          {
-                            if (result)
-                            {
-                              return;
-                            }
+              spawnUiTask(
+                _runtime.async(),
+                _tasks,
+                *this,
+                "metadata undo",
+                _undoController->undo(),
+                [](TrackDetailUndoBarComponent* owner, Result<> result)
+                {
+                  if (result)
+                  {
+                    return;
+                  }
 
-                            if (result.error().code == Error::Code::ResourceBusy)
-                            {
-                              owner->_notifications.post(
-                                rt::NotificationSeverity::Warning,
-                                std::string{owner->_textCatalog.text(i18n::MessageId::LibraryBusyTryAgain)},
-                                rt::NotificationLifetime::transient());
-                            }
-                            else
-                            {
-                              owner->_notifications.post(rt::NotificationSeverity::Error,
-                                                         result.error().message,
-                                                         rt::NotificationLifetime::history());
-                            }
-                          });
+                  if (result.error().code == Error::Code::ResourceBusy)
+                  {
+                    owner->_notifications.post(rt::NotificationSeverity::Warning,
+                                               gtkText(owner->_textCatalog, i18n::MessageId::LibraryBusyTryAgain),
+                                               rt::NotificationLifetime::transient());
+                  }
+                  else
+                  {
+                    owner->_notifications.post(
+                      rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+                  }
+                });
             }
           });
         _bar.append(_undoButton);
@@ -127,7 +127,8 @@ namespace ao::gtk::layout
         }
 
         auto const& pending = *_undoController->pendingCustomMetadataUndo();
-        auto const text = _textCatalog.format(i18n::MessageId::GtkCustomMetadataDeleted, {{"key", pending.key}});
+        auto const text =
+          i18n::requiredFormat(_textCatalog, i18n::MessageId::GtkCustomMetadataDeleted, {{"key", pending.key}});
         _label.set_text(text);
         _label.set_tooltip_text(text);
         _bar.set_visible(true);
@@ -136,7 +137,7 @@ namespace ao::gtk::layout
       TrackDetailUndoController* _undoController = nullptr;
       rt::AppRuntime& _runtime;
       rt::NotificationService& _notifications;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       Gtk::Box _bar{Gtk::Orientation::HORIZONTAL, 0};
       Gtk::Label _label;
       Gtk::Button _undoButton;

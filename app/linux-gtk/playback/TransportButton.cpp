@@ -4,6 +4,7 @@
 #include "playback/TransportButton.h"
 
 #include "common/AccessibleLabel.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
@@ -50,7 +51,7 @@ namespace ao::gtk
 
   TransportButton::TransportButton(rt::PlaybackService& playback,
                                    ao::uimodel::PlaybackCommandSurface& commands,
-                                   ao::uimodel::PresentationTextCatalog const& textCatalog,
+                                   ao::i18n::MessageCatalog const& textCatalog,
                                    Action action,
                                    bool showLabel,
                                    std::string const& size)

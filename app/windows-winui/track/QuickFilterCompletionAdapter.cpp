@@ -3,9 +3,10 @@
 
 #include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/utility/UnicodeText.h>
 
 #include <cstddef>
@@ -130,7 +131,7 @@ namespace ao::winui
   }
 
   std::vector<QuickFilterSuggestionRow> quickFilterSuggestionRows(rt::CompletionResult const& result,
-                                                                  uimodel::PresentationTextCatalog const& textCatalog)
+                                                                  i18n::MessageCatalog const& textCatalog)
   {
     auto rows = std::vector<QuickFilterSuggestionRow>{};
     rows.reserve(result.items.size());
@@ -139,7 +140,7 @@ namespace ao::winui
     {
       rows.push_back(QuickFilterSuggestionRow{
         .displayText = item.displayText,
-        .detailText = textCatalog.completionDetail(item.detail),
+        .detailText = uimodel::completionDetail(textCatalog, item.detail),
         .insertText = item.insertText,
         .detailKind = item.detail.kind,
         .rank = item.rank,

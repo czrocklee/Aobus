@@ -114,21 +114,22 @@ namespace ao::winui
       dialog = ContentDialog{};
       dialog.XamlRoot(xamlRoot ? xamlRoot() : XamlRoot{nullptr});
       dialog.MinWidth(kDialogMinWidth);
-      dialog.Title(
-        winrt::box_value(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibrarySelectImportMode))));
-      dialog.PrimaryButtonText(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryNext)));
-      dialog.CloseButtonText(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiCommonCancel)));
+      dialog.Title(winrt::box_value(
+        winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibrarySelectImportMode))));
+      dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryNext)));
+      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiCommonCancel)));
       dialog.DefaultButton(ContentDialogButton::Primary);
 
       auto content = StackPanel{};
       content.Spacing(kDialogSpacing);
-      content.Children().Append(wrappedText(textCatalog.text(i18n::MessageId::WinUiLibraryChooseImportMode)));
+      content.Children().Append(
+        wrappedText(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryChooseImportMode)));
       modeInput = ComboBox{};
       modeInput.HorizontalAlignment(HorizontalAlignment::Stretch);
-      modeInput.Items().Append(
-        winrt::box_value(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryImportModeMerge))));
-      modeInput.Items().Append(
-        winrt::box_value(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryImportModeRestore))));
+      modeInput.Items().Append(winrt::box_value(
+        winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryImportModeMerge))));
+      modeInput.Items().Append(winrt::box_value(
+        winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryImportModeRestore))));
       modeInput.SelectedIndex(0);
       content.Children().Append(modeInput);
       dialog.Content(content);
@@ -145,17 +146,19 @@ namespace ao::winui
       dialog = ContentDialog{};
       dialog.XamlRoot(xamlRoot ? xamlRoot() : XamlRoot{nullptr});
       dialog.MinWidth(kDialogMinWidth);
-      dialog.Title(
-        winrt::box_value(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibrarySelectExportMode))));
-      dialog.PrimaryButtonText(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryNext)));
-      dialog.CloseButtonText(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiCommonCancel)));
+      dialog.Title(winrt::box_value(
+        winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibrarySelectExportMode))));
+      dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryNext)));
+      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiCommonCancel)));
       dialog.DefaultButton(ContentDialogButton::Primary);
 
       auto content = StackPanel{};
       content.Spacing(kDialogSpacing);
-      content.Children().Append(wrappedText(textCatalog.text(i18n::MessageId::WinUiLibraryChooseBackupContents)));
+      content.Children().Append(
+        wrappedText(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryChooseBackupContents)));
       modeInput = ComboBox{};
-      modeInput.Header(winrt::box_value(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryInclude))));
+      modeInput.Header(
+        winrt::box_value(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryInclude))));
       modeInput.HorizontalAlignment(HorizontalAlignment::Stretch);
 
       for (auto const id : {i18n::MessageId::WinUiLibraryExportModeDelta,
@@ -163,7 +166,7 @@ namespace ao::winui
                             i18n::MessageId::WinUiLibraryExportModeFull,
                             i18n::MessageId::WinUiLibraryExportModeListOnly})
       {
-        modeInput.Items().Append(winrt::box_value(winrt::to_hstring(textCatalog.text(id))));
+        modeInput.Items().Append(winrt::box_value(winrt::to_hstring(i18n::requiredText(textCatalog, id))));
       }
 
       modeInput.SelectedIndex(2);
@@ -222,7 +225,8 @@ namespace ao::winui
       {
         if (!weakLifetimePtr.expired())
         {
-          reportNativeFailure(textCatalog.text(i18n::MessageId::WinUiLibraryImportYaml), hresultMessage(error));
+          reportNativeFailure(
+            i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryImportYaml), hresultMessage(error));
         }
       }
       catch (...)
@@ -272,7 +276,8 @@ namespace ao::winui
       {
         if (!weakLifetimePtr.expired())
         {
-          reportNativeFailure(textCatalog.text(i18n::MessageId::WinUiLibraryExportYaml), hresultMessage(error));
+          reportNativeFailure(
+            i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryExportYaml), hresultMessage(error));
         }
       }
       catch (...)
@@ -292,7 +297,8 @@ namespace ao::winui
       {
         auto picker = FileOpenPicker{windowId};
         picker.SuggestedStartLocation(PickerLocationId::DocumentsLibrary);
-        picker.CommitButtonText(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryImportYaml)));
+        picker.CommitButtonText(
+          winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryImportYaml)));
         picker.FileTypeFilter().Append(L".yaml");
         picker.FileTypeFilter().Append(L".yml");
         auto operation = picker.PickSingleFileAsync();
@@ -319,7 +325,7 @@ namespace ao::winui
         if (!weakLifetimePtr.expired())
         {
           reportNativeFailure(
-            textCatalog.text(i18n::MessageId::WinUiLibraryCouldNotSelectBackup), hresultMessage(error));
+            i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryCouldNotSelectBackup), hresultMessage(error));
         }
       }
       catch (...)
@@ -339,12 +345,13 @@ namespace ao::winui
       {
         auto picker = FileSavePicker{windowId};
         picker.SuggestedStartLocation(PickerLocationId::DocumentsLibrary);
-        picker.CommitButtonText(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryExportYaml)));
+        picker.CommitButtonText(
+          winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryExportYaml)));
         auto extensions = winrt::single_threaded_vector<winrt::hstring>();
         extensions.Append(L".yaml");
         extensions.Append(L".yml");
         picker.FileTypeChoices().Insert(
-          winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiLibraryYamlFiles)), extensions);
+          winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryYamlFiles)), extensions);
         picker.DefaultFileExtension(L".yaml");
         picker.SuggestedFileName(L"aobus-library-backup");
         auto operation = picker.PickSaveFileAsync();
@@ -370,8 +377,8 @@ namespace ao::winui
       {
         if (!weakLifetimePtr.expired())
         {
-          reportNativeFailure(
-            textCatalog.text(i18n::MessageId::WinUiLibraryCouldNotSelectExportFile), hresultMessage(error));
+          reportNativeFailure(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryCouldNotSelectExportFile),
+                              hresultMessage(error));
         }
       }
       catch (...)
@@ -446,7 +453,7 @@ namespace ao::winui
       dialog.MinWidth(kDialogMinWidth);
       dialog.Title(winrt::box_value(winrt::to_hstring(preview.title)));
       dialog.PrimaryButtonText(winrt::to_hstring(preview.primaryActionText));
-      dialog.CloseButtonText(winrt::to_hstring(textCatalog.text(i18n::MessageId::WinUiCommonCancel)));
+      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiCommonCancel)));
       dialog.DefaultButton(ContentDialogButton::Close);
       dialog.Content(wrappedText(preview.message));
       showRestoreConfirmation();
@@ -484,7 +491,8 @@ namespace ao::winui
       {
         if (!weakLifetimePtr.expired())
         {
-          reportNativeFailure(textCatalog.text(i18n::MessageId::WinUiLibraryConfirmRestore), hresultMessage(error));
+          reportNativeFailure(
+            i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryConfirmRestore), hresultMessage(error));
         }
       }
       catch (...)
@@ -542,7 +550,7 @@ namespace ao::winui
 
     void reportSuccess(i18n::MessageId const id)
     {
-      auto message = std::string{textCatalog.text(id)};
+      auto message = std::string{i18n::requiredText(textCatalog, id)};
       notifications.post(rt::NotificationSeverity::Info, message, rt::NotificationLifetime::transient());
 
       if (reportStatus)
@@ -560,8 +568,9 @@ namespace ao::winui
                     error.location.file_name(),
                     error.location.line());
       auto message =
-        textCatalog.format(importing ? i18n::MessageId::LibraryImportFailed : i18n::MessageId::LibraryExportFailed,
-                           {{"error", error.message}});
+        i18n::requiredFormat(textCatalog,
+                             importing ? i18n::MessageId::LibraryImportFailed : i18n::MessageId::LibraryExportFailed,
+                             {{"error", error.message}});
       notifications.post(rt::NotificationSeverity::Error, message, rt::NotificationLifetime::history());
 
       if (reportStatus)
@@ -575,8 +584,8 @@ namespace ao::winui
     void reportNativeFailure(std::string_view const operation, std::string detail)
     {
       APP_LOG_ERROR("Windows library file selection failed: {}: {}", operation, detail);
-      auto message = textCatalog.format(
-        i18n::MessageId::WinUiLibraryFileSelectionError, {{"operation", operation}, {"message", detail}});
+      auto message = i18n::requiredFormat(
+        textCatalog, i18n::MessageId::WinUiLibraryFileSelectionError, {{"operation", operation}, {"message", detail}});
       notifications.post(rt::NotificationSeverity::Error, message, rt::NotificationLifetime::history());
 
       if (reportStatus)
@@ -633,7 +642,7 @@ namespace ao::winui
     async::Runtime& asyncRuntime;
     rt::LibraryTaskService& taskService;
     rt::NotificationService& notifications;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     std::function<void(std::string)> reportStatus;
     async::LifetimeScope tasks;
     std::shared_ptr<std::monostate> lifetimePtr;

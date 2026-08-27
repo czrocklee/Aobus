@@ -152,7 +152,8 @@ namespace ao::uimodel
                 .category = LayoutComponentCategory::Container,
                 .props = {orientationProp()},
                 .minChildren = 2,
-                .optMaxChildren = 2};
+                .optMaxChildren = 2,
+                .persistentState = true};
 
       case SharedLayoutComponentType::Label:
         // What a shell does with the text before showing it is its own affair -
@@ -354,6 +355,14 @@ namespace ao::uimodel
                                          registered.type,
                                          describeChildRange(registered),
                                          describeChildRange(shared)));
+      }
+
+      if (registered.persistentState != shared.persistentState)
+      {
+        departures.push_back(std::format("{}: persistent state is {}, shared is {}",
+                                         registered.type,
+                                         registered.persistentState,
+                                         shared.persistentState));
       }
 
       // The shared mask is a floor, not an equality: every slot the vocabulary

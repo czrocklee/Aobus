@@ -3,9 +3,8 @@
 
 #include "tui/PlaybackPanel.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
-#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/QualityPanel.h"
 #include <ao/audio/BackendIds.h>
@@ -39,34 +38,34 @@ namespace ao::tui::test
 {
   namespace
   {
-    ftxui::Element qualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t const columns = 0)
+    ftxui::Element englishQualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t const columns = 0)
     {
-      return ao::tui::qualityPanel(englishTuiTextCatalog(), ao::test::englishPresentationTextCatalog(), state, columns);
+      return qualityPanel(ao::test::englishMessageCatalog(), state, columns);
     }
 
-    ftxui::Element playbackBar(PlaybackBarViewState const& view)
+    ftxui::Element englishPlaybackBar(PlaybackBarViewState const& view)
     {
-      return ao::tui::playbackBar(englishTuiTextCatalog(), view);
+      return playbackBar(ao::test::englishMessageCatalog(), view);
     }
 
-    std::int32_t qualityPanelColumns(rt::PlaybackTransportSnapshot const& state, std::int32_t const terminalColumns)
+    std::int32_t englishQualityPanelColumns(rt::PlaybackTransportSnapshot const& state,
+                                            std::int32_t const terminalColumns)
     {
-      return ao::tui::qualityPanelColumns(
-        englishTuiTextCatalog(), ao::test::englishPresentationTextCatalog(), state, terminalColumns);
+      return qualityPanelColumns(ao::test::englishMessageCatalog(), state, terminalColumns);
     }
 
-    ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
-                                     std::int32_t const selectedRow,
-                                     std::vector<OutputDeviceRowHitRegion>* const rowHitRegions = nullptr,
-                                     std::int32_t const columns = 0)
+    ftxui::Element englishOutputDevicePanel(uimodel::OutputDeviceViewState const& view,
+                                            std::int32_t const selectedRow,
+                                            std::vector<OutputDeviceRowHitRegion>* const rowHitRegions = nullptr,
+                                            std::int32_t const columns = 0)
     {
-      return ao::tui::outputDevicePanel(englishTuiTextCatalog(), view, selectedRow, rowHitRegions, columns);
+      return outputDevicePanel(ao::test::englishMessageCatalog(), view, selectedRow, rowHitRegions, columns);
     }
 
-    std::int32_t outputDevicePanelColumns(uimodel::OutputDeviceViewState const& view,
-                                          std::int32_t const terminalColumns)
+    std::int32_t englishOutputDevicePanelColumns(uimodel::OutputDeviceViewState const& view,
+                                                 std::int32_t const terminalColumns)
     {
-      return ao::tui::outputDevicePanelColumns(englishTuiTextCatalog(), view, terminalColumns);
+      return outputDevicePanelColumns(ao::test::englishMessageCatalog(), view, terminalColumns);
     }
 
     std::string renderPlaybackText(ftxui::Element elementPtr)
@@ -141,7 +140,7 @@ namespace ao::tui::test
   {
     auto const state = rt::PlaybackTransportSnapshot{};
 
-    auto const text = renderPlaybackText(playbackBar(PlaybackBarViewState{.playbackState = &state}));
+    auto const text = renderPlaybackText(englishPlaybackBar(PlaybackBarViewState{.playbackState = &state}));
 
     CHECK_FALSE(text.contains("Aobus"));
     CHECK_FALSE(text.contains("Library"));
@@ -157,7 +156,7 @@ namespace ao::tui::test
   TEST_CASE("PlaybackPanel - playback bar uses localized copy without changing track data",
             "[tui][unit][playback][localization]")
   {
-    auto const german = tuiTextCatalog("de-DE");
+    auto const german = ao::test::messageCatalog("de-DE");
     auto state = rt::PlaybackTransportSnapshot{
       .nowPlaying = rt::NowPlayingInfo{.title = "誰か、海を。"}, .volume = rt::VolumeState{.level = 0.42F}};
     auto text = renderPlaybackText(playbackBar(german, {.playbackState = &state}));
@@ -180,7 +179,7 @@ namespace ao::tui::test
                                     .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat}};
 
     auto const text = renderPlaybackText(
-      playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}));
+      englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}));
 
     CHECK_FALSE(text.contains("view:"));
     CHECK(text.contains("Signal Path"));
@@ -206,7 +205,7 @@ namespace ao::tui::test
     {
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
       ftxui::Render(screen,
-                    playbackBar(PlaybackBarViewState{
+                    englishPlaybackBar(PlaybackBarViewState{
                       .playbackState = &state,
                       .animationElapsed = animationElapsed,
                       .soulMotion = uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080}),
@@ -240,7 +239,8 @@ namespace ao::tui::test
     auto soulButtonBox = ftxui::Box{};
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
-    ftxui::Render(screen, playbackBar(PlaybackBarViewState{.playbackState = &state, .soulButtonBox = &soulButtonBox}));
+    ftxui::Render(
+      screen, englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .soulButtonBox = &soulButtonBox}));
 
     CHECK(isBrailleGlyph(screen.PixelAt(1, 0).character));
     CHECK(soulButtonBox.x_min == 0);
@@ -255,7 +255,7 @@ namespace ao::tui::test
                                                .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
 
     auto const text = renderPlaybackText(
-      playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}));
+      englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}));
 
     CHECK_FALSE(text.contains("50%"));
     CHECK(text.contains("●"));
@@ -271,7 +271,7 @@ namespace ao::tui::test
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
     ftxui::Render(screen,
-                  playbackBar(PlaybackBarViewState{
+                  englishPlaybackBar(PlaybackBarViewState{
                     .playbackState = &state, .displayElapsed = std::chrono::seconds{50}, .seekRailBox = &seekRailBox}));
 
     CHECK(screen.ToString().contains("0:50"));
@@ -295,11 +295,11 @@ namespace ao::tui::test
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));
     ftxui::Render(screen,
-                  playbackBar(PlaybackBarViewState{.playbackState = &state,
-                                                   .outputView = &output,
-                                                   .outputDeviceBox = &outputDeviceBox,
-                                                   .seekRailBox = &seekRailBox,
-                                                   .terminalColumns = 120}));
+                  englishPlaybackBar(PlaybackBarViewState{.playbackState = &state,
+                                                          .outputView = &output,
+                                                          .outputDeviceBox = &outputDeviceBox,
+                                                          .seekRailBox = &seekRailBox,
+                                                          .terminalColumns = 120}));
 
     auto const elapsedColumn = cellIndexOf(screen, "0:00");
     REQUIRE(elapsedColumn >= 0);
@@ -316,14 +316,14 @@ namespace ao::tui::test
     auto wideRailBox = ftxui::Box{};
 
     auto narrowScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));
-    ftxui::Render(
-      narrowScreen,
-      playbackBar(PlaybackBarViewState{.playbackState = &state, .seekRailBox = &narrowRailBox, .terminalColumns = 72}));
+    ftxui::Render(narrowScreen,
+                  englishPlaybackBar(PlaybackBarViewState{
+                    .playbackState = &state, .seekRailBox = &narrowRailBox, .terminalColumns = 72}));
 
     auto wideScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(160), ftxui::Dimension::Fixed(1));
-    ftxui::Render(
-      wideScreen,
-      playbackBar(PlaybackBarViewState{.playbackState = &state, .seekRailBox = &wideRailBox, .terminalColumns = 150}));
+    ftxui::Render(wideScreen,
+                  englishPlaybackBar(PlaybackBarViewState{
+                    .playbackState = &state, .seekRailBox = &wideRailBox, .terminalColumns = 150}));
 
     CHECK(narrowRailBox.x_max - narrowRailBox.x_min + 1 == 24);
     CHECK(wideRailBox.x_max - wideRailBox.x_min + 1 == 48);
@@ -338,7 +338,7 @@ namespace ao::tui::test
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));
     ftxui::Render(screen,
-                  playbackBar(PlaybackBarViewState{
+                  englishPlaybackBar(PlaybackBarViewState{
                     .playbackState = &state, .displayElapsed = std::chrono::seconds{50}, .seekRailBox = &seekRailBox}));
 
     CHECK(playbackBarRows(20) == 1);
@@ -360,7 +360,7 @@ namespace ao::tui::test
     };
 
     auto const text =
-      renderPlaybackText(playbackBar(PlaybackBarViewState{.playbackState = &state, .outputView = &output}));
+      renderPlaybackText(englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .outputView = &output}));
 
     CHECK(text.contains("PW"));
     CHECK(text.contains("No active track"));
@@ -378,10 +378,10 @@ namespace ao::tui::test
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
     ftxui::Render(screen,
-                  playbackBar(PlaybackBarViewState{.playbackState = &state,
-                                                   .outputView = &output,
-                                                   .outputDeviceBox = &outputDeviceBox,
-                                                   .outputDeviceHovered = true}));
+                  englishPlaybackBar(PlaybackBarViewState{.playbackState = &state,
+                                                          .outputView = &output,
+                                                          .outputDeviceBox = &outputDeviceBox,
+                                                          .outputDeviceHovered = true}));
 
     auto const pixel = screen.PixelAt(outputDeviceBox.x_min, outputDeviceBox.y_min);
     checkInteractiveSurface(pixel);
@@ -391,7 +391,7 @@ namespace ao::tui::test
   {
     auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
 
-    auto const text = renderPlaybackText(qualityPanel(state));
+    auto const text = renderPlaybackText(englishQualityPanel(state));
 
     CHECK_FALSE(text.contains("Quality"));
     CHECK_FALSE(text.contains("Audio Pipeline"));
@@ -456,7 +456,7 @@ namespace ao::tui::test
           },
       };
 
-    auto const text = renderPlaybackText(qualityPanel(state));
+    auto const text = renderPlaybackText(englishQualityPanel(state));
 
     CHECK(text.contains("Studio DAC"));
     CHECK_FALSE(text.contains("Quality"));
@@ -470,8 +470,7 @@ namespace ao::tui::test
   TEST_CASE("PlaybackPanel - quality panel localizes semantic copy and preserves external names",
             "[tui][unit][playback][localization]")
   {
-    auto const tuiText = tuiTextCatalog("de-DE");
-    auto const presentationText = ao::test::presentationTextCatalog("de-DE");
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto state = rt::PlaybackTransportSnapshot{
       .output =
         rt::OutputState{
@@ -499,7 +498,7 @@ namespace ao::tui::test
                                   }}},
     };
 
-    auto const text = renderPlaybackText(qualityPanel(tuiText, presentationText, state, 0));
+    auto const text = renderPlaybackText(qualityPanel(textCatalog, state, 0));
 
     CHECK(text.contains("Dvořák DAC"));
     CHECK(text.contains("[Quelle] 誰か"));
@@ -507,14 +506,14 @@ namespace ao::tui::test
     CHECK(text.contains("Signalverarbeitung in der Audiokette"));
 
     state.quality.assessments.clear();
-    auto const emptyText = renderPlaybackText(qualityPanel(tuiText, presentationText, state, 0));
+    auto const emptyText = renderPlaybackText(qualityPanel(textCatalog, state, 0));
     CHECK(emptyText.contains("Noch keine Audiokette"));
   }
 
   TEST_CASE("PlaybackPanel - quality panel width follows content and terminal bounds", "[tui][unit][playback]")
   {
     auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
-    auto const narrowColumns = qualityPanelColumns(state, 120);
+    auto const narrowColumns = englishQualityPanelColumns(state, 120);
 
     state.quality.assessments = std::vector{
       audio::NodeQualityAssessment{
@@ -524,8 +523,8 @@ namespace ao::tui::test
       },
     };
 
-    CHECK(qualityPanelColumns(state, 120) > narrowColumns);
-    CHECK(qualityPanelColumns(state, 32) == 32);
+    CHECK(englishQualityPanelColumns(state, 120) > narrowColumns);
+    CHECK(englishQualityPanelColumns(state, 32) == 32);
   }
 
   TEST_CASE("PlaybackPanel - output device panel renders grouped selectable rows", "[tui][unit][playback]")
@@ -562,7 +561,7 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderPlaybackText(outputDevicePanel(view, 2, &rowHitRegions));
+    auto const text = renderPlaybackText(englishOutputDevicePanel(view, 2, &rowHitRegions));
 
     CHECK(text.contains("Output Devices"));
     CHECK(text.contains("PipeWire"));
@@ -581,7 +580,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - output device empty state uses the selected locale", "[tui][unit][playback][localization]")
   {
-    auto const german = tuiTextCatalog("de-AT");
+    auto const german = ao::test::messageCatalog("de-AT");
     auto const view = uimodel::OutputDeviceViewState{};
     auto const text = renderPlaybackText(outputDevicePanel(german, view, 0));
 
@@ -606,12 +605,12 @@ namespace ao::tui::test
       .outputBackendSummary = "PW",
       .outputDeviceStatus = "PipeWire: Studio DAC",
     };
-    auto const narrowColumns = outputDevicePanelColumns(view, 120);
+    auto const narrowColumns = englishOutputDevicePanelColumns(view, 120);
 
     view.rows[0].description = "USB interface with a very long ALSA/PipeWire profile identifier";
 
-    CHECK(outputDevicePanelColumns(view, 120) > narrowColumns);
-    CHECK(outputDevicePanelColumns(view, 40) == 40);
+    CHECK(englishOutputDevicePanelColumns(view, 120) > narrowColumns);
+    CHECK(englishOutputDevicePanelColumns(view, 40) == 40);
   }
 
   TEST_CASE("PlaybackPanel - output device panel frames long device lists", "[tui][unit][playback]")
@@ -644,7 +643,7 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderPlaybackText(outputDevicePanel(view, 1), 48, 24);
+    auto const text = renderPlaybackText(englishOutputDevicePanel(view, 1), 48, 24);
 
     CHECK_FALSE(text.contains("very_long_identifier"));
     CHECK(text.contains("o toggle"));

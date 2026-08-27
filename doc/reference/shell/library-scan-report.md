@@ -19,7 +19,7 @@ The report carries no version of its own. It is an in-process decision, never se
 
 The report belongs to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md).
 
-`uimodel::decideLibraryScanOutcome` reduces the workflow result to a `LibraryScanOutcome`, `uimodel::libraryScanSeverity` and `uimodel::libraryScanLifetime` decide how it is presented, and `uimodel::PresentationTextCatalog::libraryScanMessage` writes the sentence.
+`uimodel::decideLibraryScanOutcome` reduces the workflow result to a `LibraryScanOutcome`, `uimodel::libraryScanSeverity` and `uimodel::libraryScanLifetime` decide how it is presented, and `uimodel::formatLibraryScanMessage` writes the sentence.
 
 A shell posts the result. It does not decide it.
 A scan that lost twelve files is the same event whichever window reports it, and a shell that reaches its own verdict is how two windows come to describe one scan differently.
@@ -70,7 +70,7 @@ The GTK shell bootstraps this way at startup and starts the backfill. The Window
 ## Implementation authority
 
 - [`LibraryScanOutcome.h`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h) and [`LibraryScanOutcome.cpp`](../../../app/uimodel/library/task/LibraryScanOutcome.cpp) own the verdicts, the severity and lifetime mapping, and the diagnostics.
-- [`PresentationTextCatalog.cpp`](../../../app/uimodel/presentation/PresentationTextCatalog.cpp) owns the sentences.
+- [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp) owns `formatLibraryScanMessage`.
 - [`LibraryScanWorkflow.h`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h) owns the result this reduces.
 - [`LibraryImportExportWorkflow.cpp`](../../../app/linux-gtk/portal/LibraryImportExportWorkflow.cpp) and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) post the decision in their shells.
 

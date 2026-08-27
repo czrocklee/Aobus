@@ -3,11 +3,10 @@
 
 #include "track/TrackQuickFilter.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
@@ -58,7 +57,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto filter = TrackQuickFilter{runtime, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto filter = TrackQuickFilter{runtime, ao::test::englishMessageCatalog()};
     auto windowFixture = GtkWindowFixture{};
     windowFixture.mount(filter);
     windowFixture.present();
@@ -83,7 +82,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto filter = TrackQuickFilter{runtime, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto filter = TrackQuickFilter{runtime, ao::test::englishMessageCatalog()};
     auto* const clearButton = findWidgetByClass<Gtk::Button>(filter, "ao-quick-filter-clear");
     REQUIRE(clearButton != nullptr);
 
@@ -106,7 +105,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto filter = TrackQuickFilter{runtime, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto filter = TrackQuickFilter{runtime, ao::test::englishMessageCatalog()};
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
 
     CHECK(emitFocusEnter(filter));
@@ -122,7 +121,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto filter = TrackQuickFilter{runtime, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto filter = TrackQuickFilter{runtime, ao::test::englishMessageCatalog()};
     filter.setText("$al");
     filter.setPosition(3);
     drainGtkEvents();
@@ -139,7 +138,7 @@ namespace ao::gtk::test
     addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Completion Track", .artist = "Aimer"});
 
     auto window = Gtk::Window{};
-    auto filter = TrackQuickFilter{runtime, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto filter = TrackQuickFilter{runtime, ao::test::englishMessageCatalog()};
     window.set_child(filter);
     auto* const popover = findWidget<Gtk::Popover>(filter.entry());
     REQUIRE(popover != nullptr);

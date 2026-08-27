@@ -5,6 +5,7 @@
 
 #include "app/GtkStyleRuntime.h"
 #include "common/UiWorkflow.h"
+#include "i18n/GtkTextCatalog.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
@@ -41,7 +42,7 @@
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -163,7 +164,7 @@ namespace ao::gtk
     {
     public:
       TrackSectionHeaderWidget(ResourceImageLoader& thumbnailLoader,
-                               uimodel::PresentationTextCatalog textCatalog,
+                               i18n::MessageCatalog textCatalog,
                                uimodel::CoverArtPlaceholderStyle const placeholderStyle)
         : Gtk::Box{Gtk::Orientation::HORIZONTAL}
         , _coverArtSlot{_coverArt, layout::kSectionCoverLogicalSize}
@@ -174,7 +175,7 @@ namespace ao::gtk
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
 
-        _coverArt.setAlternativeText(_textCatalog.text(i18n::MessageId::CoverArtTitle));
+        _coverArt.setAlternativeText(gtkText(_textCatalog, i18n::MessageId::CoverArtTitle));
         _coverArtController.enableThumbnailMode(layout::kSectionCoverLogicalSize);
         _coverArtSlot.add_css_class("ao-track-section-cover");
         _coverArtSlot.set_valign(Gtk::Align::CENTER);
@@ -222,7 +223,8 @@ namespace ao::gtk
         _secondaryLabel.set_text(heading.secondaryText);
         _tertiaryLabel.set_text(heading.tertiaryText);
 
-        if (auto const countText = "(" + _textCatalog.format(i18n::MessageId::TrackCount, {{"count", count}}) + ")";
+        if (auto const countText =
+              "(" + i18n::requiredFormat(_textCatalog, i18n::MessageId::TrackCount, {{"count", count}}) + ")";
             heading.secondaryText.empty() && heading.tertiaryText.empty())
         {
           _countLabel.set_text(countText);
@@ -257,7 +259,7 @@ namespace ao::gtk
       CoverArtView _coverArt;
       TrackSectionCoverSlot _coverArtSlot;
       ResourceImageController _coverArtController;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       uimodel::CoverArtPlaceholderStyle _placeholderStyle;
       Gtk::Label _primaryLabel;
       Gtk::Label _secondaryLabel;
@@ -270,7 +272,7 @@ namespace ao::gtk
   TrackViewPage::TrackViewPage(ListId listId,
                                Glib::RefPtr<TrackListModel> modelPtr,
                                uimodel::TrackColumnLayoutStore& layoutStore,
-                               uimodel::PresentationTextCatalog textCatalog,
+                               i18n::MessageCatalog textCatalog,
                                rt::AppRuntime& runtime,
                                ResourceImageLoader& thumbnailLoader,
                                rt::TrackPresentationSpec const& presentation,
@@ -625,7 +627,7 @@ namespace ao::gtk
     if (!stateRes)
     {
       return uimodel::ListOrderCapabilityState{
-        .disabledReason = std::string{_textCatalog.text(i18n::MessageId::ListOrderListUnavailable)},
+        .disabledReason = gtkText(_textCatalog, i18n::MessageId::ListOrderListUnavailable),
       };
     }
 
@@ -655,39 +657,40 @@ namespace ao::gtk
 
     auto submit = [this](auto task, i18n::MessageId const appliedMessage)
     {
-      spawnUiTask(_runtime.async(),
-                  _tasks,
-                  *this,
-                  "list order command",
-                  std::move(task),
-                  [appliedMessage](TrackViewPage* owner, auto result)
-                  {
-                    if (!result)
-                    {
-                      owner->setStatusMessage(result.error().message);
-                      return;
-                    }
+      spawnUiTask(
+        _runtime.async(),
+        _tasks,
+        *this,
+        "list order command",
+        std::move(task),
+        [appliedMessage](TrackViewPage* owner, auto result)
+        {
+          if (!result)
+          {
+            owner->setStatusMessage(result.error().message);
+            return;
+          }
 
-                    switch (result->status)
-                    {
-                      case rt::AuthoringStatus::Applied:
-                        owner->setStatusMessage(
-                          owner->_textCatalog.format(appliedMessage, {{"count", affectedTrackCount(result->reply)}}));
-                        return;
-                      case rt::AuthoringStatus::NoOp:
-                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderUnchanged));
-                        return;
-                      case rt::AuthoringStatus::Busy:
-                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderLibraryBusy));
-                        return;
-                      case rt::AuthoringStatus::Stale:
-                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderChanged));
-                        return;
-                      case rt::AuthoringStatus::Unavailable:
-                        owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable));
-                        return;
-                    }
-                  });
+          switch (result->status)
+          {
+            case rt::AuthoringStatus::Applied:
+              owner->setStatusMessage(i18n::requiredFormat(
+                owner->_textCatalog, appliedMessage, {{"count", affectedTrackCount(result->reply)}}));
+              return;
+            case rt::AuthoringStatus::NoOp:
+              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderUnchanged));
+              return;
+            case rt::AuthoringStatus::Busy:
+              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderLibraryBusy));
+              return;
+            case rt::AuthoringStatus::Stale:
+              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderChanged));
+              return;
+            case rt::AuthoringStatus::Unavailable:
+              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderEditingUnavailable));
+              return;
+          }
+        });
     };
     auto& session = **sessionRes;
     auto selectedIds = _viewHostPtr->selectionController().selectedTrackIds();
@@ -798,13 +801,13 @@ namespace ao::gtk
                   {
                     case rt::AuthoringStatus::NoOp: return;
                     case rt::AuthoringStatus::Busy:
-                      owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::TrackEditingUnavailable));
+                      owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::TrackEditingUnavailable));
                       return;
                     case rt::AuthoringStatus::Stale:
-                      owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::TrackEditStale));
+                      owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::TrackEditStale));
                       return;
                     case rt::AuthoringStatus::Unavailable:
-                      owner->setStatusMessage(owner->_textCatalog.text(i18n::MessageId::TrackEditingUnavailable));
+                      owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::TrackEditingUnavailable));
                       return;
                     case rt::AuthoringStatus::Applied: break;
                   }

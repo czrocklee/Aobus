@@ -6,12 +6,13 @@
 #include "common/UStringConvert.h"
 #include <ao/CoreIds.h>
 #include <ao/compat/Enumerate.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <giomm/listmodel.h>
 #include <glib.h>
@@ -40,7 +41,7 @@ namespace ao::gtk
 {
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
                                                uimodel::TrackColumnLayoutStore& layoutStore,
-                                               uimodel::PresentationTextCatalog textCatalog,
+                                               i18n::MessageCatalog textCatalog,
                                                ao::ListId listId)
     : _listId{listId}, _columnView{columnView}, _layoutStore{layoutStore}, _textCatalog{std::move(textCatalog)}
   {
@@ -95,7 +96,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const title = toUString(_textCatalog.trackFieldLabel(rtDef.field));
+      auto const title = toUString(uimodel::trackFieldLabel(_textCatalog, rtDef.field));
       auto const columnPtr = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
 
       columnPtr->set_id(toUString(rtDef.id));

@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.h>
@@ -32,7 +33,7 @@ namespace ao::winui
     async::Runtime& asyncRuntime;
     rt::LibraryTaskService& taskService;
     rt::NotificationService& notifications;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     std::function<void(std::string)> reportStatus;
   };
 

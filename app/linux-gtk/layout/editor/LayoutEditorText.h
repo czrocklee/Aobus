@@ -3,17 +3,13 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
+
 #include <string>
 #include <string_view>
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
 
 namespace ao::gtk::layout::editor
 {
   /** Resolves built-in descriptor vocabulary while preserving unknown extension text. */
-  std::string layoutEditorVocabularyText(uimodel::PresentationTextCatalog const& textCatalog,
-                                         std::string_view sourceText);
+  std::string layoutEditorVocabularyText(i18n::MessageCatalog const& textCatalog, std::string_view sourceText);
 } // namespace ao::gtk::layout::editor

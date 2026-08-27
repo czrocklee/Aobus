@@ -4,6 +4,7 @@
 #pragma once
 
 #include "completion/EntryCompletionController.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/library/track/TrackFilterCompleter.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
@@ -31,15 +32,8 @@ namespace ao::rt
   class AppRuntime;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::gtk
 {
-  class GtkTextCatalog;
-
   /**
    * @brief TrackQuickFilter is a global entry control that manages filtering for the focused track view.
    */
@@ -50,8 +44,7 @@ namespace ao::gtk
     using DebounceScheduler = std::function<sigc::connection(std::chrono::milliseconds, sigc::slot<bool()>)>;
 
     TrackQuickFilter(rt::AppRuntime& runtime,
-                     uimodel::PresentationTextCatalog const& textCatalog,
-                     GtkTextCatalog const& gtkTextCatalog,
+                     i18n::MessageCatalog const& textCatalog,
                      DebounceScheduler debounceScheduler = {});
     ~TrackQuickFilter() override;
 

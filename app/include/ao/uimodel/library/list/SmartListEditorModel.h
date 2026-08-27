@@ -10,10 +10,13 @@
 #include <string>
 #include <string_view>
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   /**
    * Saved-List authoring: the editor's expression handling, live preview, view
    * state, and the draft it finally submits.
@@ -54,25 +57,25 @@ namespace ao::uimodel
     bool errorVisible = false;
   };
 
-  SmartListEditorViewState makeSmartListEditorViewState(PresentationTextCatalog const& textCatalog,
+  SmartListEditorViewState makeSmartListEditorViewState(i18n::MessageCatalog const& textCatalog,
                                                         SmartListPreviewState const& input);
 
   // Expression text
 
-  std::string formatSmartListExpressionDisplayText(PresentationTextCatalog const& textCatalog,
+  std::string formatSmartListExpressionDisplayText(i18n::MessageCatalog const& textCatalog,
                                                    std::string_view expression);
 
   std::string combineSmartListEffectiveExpression(std::string_view parent, std::string_view local);
 
   // Preview
 
-  std::string formatSmartListPreviewStatusText(PresentationTextCatalog const& textCatalog,
+  std::string formatSmartListPreviewStatusText(i18n::MessageCatalog const& textCatalog,
                                                bool expressionValid,
                                                std::size_t count,
                                                bool isAllTracks,
                                                bool localEmpty);
 
-  std::string formatSmartListPreviewTrackLabel(PresentationTextCatalog const& textCatalog,
+  std::string formatSmartListPreviewTrackLabel(i18n::MessageCatalog const& textCatalog,
                                                std::string_view title,
                                                std::string_view artist,
                                                std::string_view album);

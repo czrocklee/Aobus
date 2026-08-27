@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     {
     public:
       VolumeControlComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _control{ctx.runtime.playback(), ctx.dependencies.textCatalog, ctx.dependencies.gtkTextCatalog}
+        : _control{ctx.runtime.playback(), ctx.dependencies.textCatalog}
       {
         auto const orient = node.propertyOr<std::string>(kOrientationProp, "horizontal");
 

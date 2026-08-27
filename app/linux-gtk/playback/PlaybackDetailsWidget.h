@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/box.h>
@@ -16,11 +17,6 @@ namespace ao::rt
   class PlaybackService;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::gtk
 {
   /**
@@ -30,7 +26,7 @@ namespace ao::gtk
   class PlaybackDetailsWidget final
   {
   public:
-    PlaybackDetailsWidget(rt::PlaybackService& playback, uimodel::PresentationTextCatalog const& textCatalog);
+    PlaybackDetailsWidget(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog);
     ~PlaybackDetailsWidget();
 
     // Not copyable or movable

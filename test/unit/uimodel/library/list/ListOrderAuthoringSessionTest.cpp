@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
@@ -117,10 +117,8 @@ namespace ao::uimodel::test
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open();
-    auto sessionRes = ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
-                                                       fixture.runtime.service,
-                                                       viewId,
-                                                       ao::test::englishPresentationTextCatalog());
+    auto sessionRes = ListOrderAuthoringSession::begin(
+      fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
     auto& session = **sessionRes;
 
@@ -139,10 +137,8 @@ namespace ao::uimodel::test
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open("true");
-    auto sessionRes = ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
-                                                       fixture.runtime.service,
-                                                       viewId,
-                                                       ao::test::englishPresentationTextCatalog());
+    auto sessionRes = ListOrderAuthoringSession::begin(
+      fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
     auto& session = **sessionRes;
 
@@ -168,11 +164,8 @@ namespace ao::uimodel::test
     SECTION("presentation")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr =
-        ao::test::requireValue(ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
-                                                                fixture.runtime.service,
-                                                                viewId,
-                                                                ao::test::englishPresentationTextCatalog()));
+      auto sessionPtr = ao::test::requireValue(ListOrderAuthoringSession::begin(
+        fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
       fixture.runtime.drainCallbacks();
       CHECK_FALSE(sessionPtr->isCurrent());
@@ -181,11 +174,8 @@ namespace ao::uimodel::test
     SECTION("quick filter")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr =
-        ao::test::requireValue(ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
-                                                                fixture.runtime.service,
-                                                                viewId,
-                                                                ao::test::englishPresentationTextCatalog()));
+      auto sessionPtr = ao::test::requireValue(ListOrderAuthoringSession::begin(
+        fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.service.setFilter(viewId, "true"));
       fixture.runtime.drainCallbacks();
       CHECK_FALSE(sessionPtr->isCurrent());
@@ -194,11 +184,8 @@ namespace ao::uimodel::test
     SECTION("view close")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr =
-        ao::test::requireValue(ListOrderAuthoringSession::begin(fixture.runtime.writerFixture.library(),
-                                                                fixture.runtime.service,
-                                                                viewId,
-                                                                ao::test::englishPresentationTextCatalog()));
+      auto sessionPtr = ao::test::requireValue(ListOrderAuthoringSession::begin(
+        fixture.runtime.writerFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.workspace.closeView(viewId));
       fixture.runtime.drainCallbacks();
       CHECK_FALSE(sessionPtr->isCurrent());
@@ -211,7 +198,7 @@ namespace ao::uimodel::test
     auto fixture = PendingSessionFixture{};
     auto const viewId = fixture.open();
     auto sessionRes = ListOrderAuthoringSession::begin(
-      fixture.writerFixture.library(), fixture.service, viewId, ao::test::englishPresentationTextCatalog());
+      fixture.writerFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
     auto sessionPtr = std::move(*sessionRes);
     std::size_t invalidatedCount = 0;

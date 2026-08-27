@@ -6,7 +6,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -109,7 +109,7 @@ namespace ao::gtk::layout::editor::test
     auto dialog = LayoutEditorDialog{fixture.window,
                                      fixture.registry,
                                      fixture.actionRegistry,
-                                     ao::test::englishPresentationTextCatalog(),
+                                     ao::test::englishMessageCatalog(),
                                      fixture.doc,
                                      "classic",
                                      "modern",
@@ -162,7 +162,7 @@ namespace ao::gtk::layout::editor::test
     auto dialog = LayoutEditorDialog{fixture.window,
                                      fixture.registry,
                                      fixture.actionRegistry,
-                                     ao::test::englishPresentationTextCatalog(),
+                                     ao::test::englishMessageCatalog(),
                                      fixture.doc,
                                      "classic",
                                      "modern",
@@ -219,7 +219,7 @@ namespace ao::gtk::layout::editor::test
     auto dialog = LayoutEditorDialog{fixture.window,
                                      fixture.registry,
                                      fixture.actionRegistry,
-                                     ao::test::englishPresentationTextCatalog(),
+                                     ao::test::englishMessageCatalog(),
                                      fixture.doc,
                                      "classic",
                                      "modern",
@@ -259,7 +259,7 @@ namespace ao::gtk::layout::editor::test
     auto dialog = LayoutEditorDialog{fixture.window,
                                      fixture.registry,
                                      fixture.actionRegistry,
-                                     ao::test::englishPresentationTextCatalog(),
+                                     ao::test::englishMessageCatalog(),
                                      fixture.doc,
                                      "classic",
                                      "modern",
@@ -292,7 +292,7 @@ namespace ao::gtk::layout::editor::test
     auto dialog = LayoutEditorDialog{fixture.window,
                                      fixture.registry,
                                      fixture.actionRegistry,
-                                     ao::test::englishPresentationTextCatalog(),
+                                     ao::test::englishMessageCatalog(),
                                      fixture.doc,
                                      "classic",
                                      "modern",

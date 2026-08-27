@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 
 #include <filesystem>
@@ -31,7 +32,9 @@ namespace ao::gtk
 
     std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override;
     void save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc) override;
-    bool prune(std::string_view presetId, uimodel::PreparedLayout const& layout) override;
+    bool prune(std::string_view presetId,
+               uimodel::PreparedLayout const& layout,
+               uimodel::LayoutComponentCatalog const& catalog) override;
     bool removePreset(std::string_view presetId) override;
 
   private:

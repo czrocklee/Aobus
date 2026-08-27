@@ -5,7 +5,7 @@
 
 #include "tag/TagEditor.h"
 #include <ao/CoreIds.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <gtkmm/popover.h>
 
@@ -23,7 +23,7 @@ namespace ao::gtk
   {
   public:
     TagPopover(rt::Library const& reads,
-               uimodel::PresentationTextCatalog const& textCatalog,
+               i18n::MessageCatalog const& textCatalog,
                std::vector<TrackId> selectedTrackIds,
                rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~TagPopover() override;

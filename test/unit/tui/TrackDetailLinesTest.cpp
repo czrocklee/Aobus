@@ -3,10 +3,11 @@
 
 #include "tui/TrackDetailLines.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -55,7 +56,7 @@ namespace ao::tui::test
 
   TEST_CASE("TrackDetailLines - expose user-facing metadata", "[tui][unit][track-detail]")
   {
-    auto const lines = trackDetailLines(ao::test::englishPresentationTextCatalog(), fullyPopulatedRow());
+    auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), fullyPopulatedRow());
 
     CHECK(lines.size() == trackDetailFields().size());
     CHECK(lines[0].label == "Title");
@@ -70,7 +71,7 @@ namespace ao::tui::test
     CHECK(valueFor(lines, "Bit Depth") == "16-bit");
     CHECK(valueFor(lines, "Tags") == "favourite");
 
-    auto const german = ao::test::presentationTextCatalog("de-DE");
+    auto const german = ao::test::messageCatalog("de-DE");
     auto const germanLines = trackDetailLines(german, fullyPopulatedRow());
     CHECK(germanLines[0].label == "Titel");
     CHECK(germanLines[0].value == "Seven");
@@ -79,7 +80,7 @@ namespace ao::tui::test
 
   TEST_CASE("TrackDetailLines - keep every field a fully tagged track carries", "[tui][unit][track-detail]")
   {
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const lines = trackDetailLines(textCatalog, fullyPopulatedRow());
     auto lineIt = lines.begin();
 
@@ -88,7 +89,7 @@ namespace ao::tui::test
     for (auto const field : trackDetailFields())
     {
       REQUIRE(lineIt != lines.end());
-      CHECK(lineIt->label == textCatalog.trackFieldLabel(field));
+      CHECK(lineIt->label == uimodel::trackFieldLabel(textCatalog, field));
       ++lineIt;
     }
 
@@ -99,7 +100,7 @@ namespace ao::tui::test
             "[tui][unit][track-detail]")
   {
     auto const row = rt::TrackRow{.id = TrackId{3}, .title = "Untagged"};
-    auto const lines = trackDetailLines(ao::test::englishPresentationTextCatalog(), row);
+    auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), row);
 
     CHECK(hasLabel(lines, "Title"));
     CHECK(hasLabel(lines, "Artist"));

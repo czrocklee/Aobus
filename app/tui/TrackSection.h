@@ -4,14 +4,10 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <cstddef>
 #include <string>
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
 
 namespace ao::tui
 {
@@ -25,5 +21,5 @@ namespace ao::tui
     ResourceId imageId{kInvalidResourceId};
   };
 
-  std::string trackSectionDisplayName(uimodel::PresentationTextCatalog const& textCatalog, TrackSection const& section);
+  std::string trackSectionDisplayName(i18n::MessageCatalog const& textCatalog, TrackSection const& section);
 } // namespace ao::tui

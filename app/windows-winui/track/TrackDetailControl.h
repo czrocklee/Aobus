@@ -4,10 +4,11 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -50,7 +51,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::TextBlock technicalHeader{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::FontIcon technicalChevron{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel technicalRows{nullptr};
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
   };
 
   /**
@@ -107,7 +108,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _showEmptyClickRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _technicalHeaderClickRevoker{};
 
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     uimodel::TrackFieldGridSchema _schema;
     rt::TrackDetailSnapshot _snapshot;
     std::shared_ptr<rt::TrackDetailProjection> _projectionPtr;

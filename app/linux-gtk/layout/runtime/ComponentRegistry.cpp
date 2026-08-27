@@ -113,8 +113,6 @@ namespace ao::gtk::layout
 
       ctx.surface = uimodel::LayoutSurface::Tooltip;
 
-      auto tooltipComponentPtr = std::unique_ptr<LayoutComponent>{};
-
       // Ignore nested tooltips when already building a tooltip surface.
       if (guard.saved != uimodel::LayoutSurface::Tooltip)
       {

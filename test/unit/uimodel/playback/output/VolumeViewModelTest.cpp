@@ -4,7 +4,7 @@
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
@@ -25,8 +25,8 @@ namespace ao::uimodel::test
     auto& playbackTransport = fixture.playbackTransport;
 
     auto log = ao::test::RenderLog<VolumeViewState>{};
-    auto viewModel = VolumeViewModel{
-      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
+    auto viewModel =
+      VolumeViewModel{playback, ao::test::englishMessageCatalog(), [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render")
     {
@@ -107,7 +107,7 @@ namespace ao::uimodel::test
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto const viewModel = VolumeViewModel{
-      fixture.playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
+      fixture.playback, ao::test::englishMessageCatalog(), [&log](auto const& view) { log.render(view); }};
     REQUIRE(log.states.size() == 1);
     fixture.commands().setShuffleMode(ShuffleMode::On);
 
@@ -118,7 +118,7 @@ namespace ao::uimodel::test
   TEST_CASE("VolumeViewModel - formats volume state in the selected locale", "[uimodel][unit][playback]")
   {
     auto fixture = ApplicationPlaybackFixture{};
-    auto catalog = ao::test::presentationTextCatalog("de-DE");
+    auto catalog = ao::test::messageCatalog("de-DE");
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto viewModel = VolumeViewModel{fixture.playback, catalog, [&log](auto const& view) { log.render(view); }};
 

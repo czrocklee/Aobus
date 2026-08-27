@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <glibmm/refptr.h>
@@ -36,7 +36,7 @@ namespace ao::gtk
   class TrackRowCache final
   {
   public:
-    TrackRowCache(rt::Library const& reads, uimodel::PresentationTextCatalog textCatalog);
+    TrackRowCache(rt::Library const& reads, i18n::MessageCatalog textCatalog);
 
     /**
      * Get the shared TrackRowObject for a given ID.
@@ -59,7 +59,7 @@ namespace ao::gtk
 
   private:
     rt::Library const& _reads;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
 
     mutable boost::unordered_flat_map<TrackId, Glib::RefPtr<TrackRowObject>, std::hash<TrackId>> _rowCache;
 

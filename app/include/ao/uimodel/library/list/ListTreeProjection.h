@@ -11,10 +11,13 @@
 #include <string>
 #include <vector>
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   struct ListTreeProjectionRow final
   {
     ListId id = kInvalidListId;
@@ -31,6 +34,6 @@ namespace ao::uimodel
     std::map<ListId, ListTreeProjectionRow> rowsById;
   };
 
-  ListTreeProjection buildListTreeProjection(PresentationTextCatalog const& textCatalog,
+  ListTreeProjection buildListTreeProjection(i18n::MessageCatalog const& textCatalog,
                                              std::span<rt::ListNode const> snapshot);
 } // namespace ao::uimodel

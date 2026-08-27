@@ -65,6 +65,7 @@ namespace ao::uimodel::test
       INFO("type: " << descriptor.type);
       CHECK(descriptor.type == componentTypeName(component));
       CHECK_FALSE(descriptor.displayName.empty());
+      CHECK(descriptor.persistentState == (component == SharedLayoutComponentType::Split));
     }
   }
 
@@ -150,6 +151,17 @@ namespace ao::uimodel::test
 
       REQUIRE(departures.size() == 1);
       CHECK(departures.front().contains("display name"));
+    }
+
+    SECTION("a different persistent-state policy")
+    {
+      auto descriptor = sharedComponentDescriptor(SharedLayoutComponentType::Split);
+      descriptor.persistentState = false;
+
+      auto const departures = sharedVocabularyDepartures(catalogOf(std::move(descriptor)));
+
+      REQUIRE(departures.size() == 1);
+      CHECK(departures.front().contains("persistent state"));
     }
   }
 

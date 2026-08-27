@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -77,7 +77,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackFieldFormatter - channels formatting", "[uimodel][unit][field][formatter]")
   {
-    auto const& catalog = ao::test::englishPresentationTextCatalog();
+    auto const& catalog = ao::test::englishMessageCatalog();
     CHECK(formatChannels(catalog, 0).empty());
     CHECK(formatChannels(catalog, 1) == "Mono");
     CHECK(formatChannels(catalog, 2) == "Stereo");
@@ -88,7 +88,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackFieldFormatter - lexical output follows the injected locale", "[uimodel][unit][field][localization]")
   {
-    auto const catalog = ao::test::presentationTextCatalog("de-AT");
+    auto const catalog = ao::test::messageCatalog("de-AT");
     auto snap = makeTrackDetailSnapshot();
 
     CHECK(formatChannels(catalog, 1) == "Mono");
@@ -137,7 +137,7 @@ namespace ao::uimodel::test
   TEST_CASE("formatTrackFieldRawValue formats raw values by field policy", "[uimodel][unit][field][formatter]")
   {
     using Raw = TrackFieldRawValue;
-    auto const& catalog = ao::test::englishPresentationTextCatalog();
+    auto const& catalog = ao::test::englishMessageCatalog();
 
     CHECK(formatTrackFieldRawValue(catalog, TrackField::Title, Raw{std::in_place_type<std::string>, "Hello"}) ==
           "Hello");
@@ -173,7 +173,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("formatTrackFieldDisplayText resolves aggregate display text", "[uimodel][unit][field][formatter]")
   {
-    auto const& catalog = ao::test::englishPresentationTextCatalog();
+    auto const& catalog = ao::test::englishMessageCatalog();
 
     SECTION("mixed aggregate returns caller-provided mixed text")
     {

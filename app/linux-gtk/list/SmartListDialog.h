@@ -5,11 +5,10 @@
 
 #include "app/AppDialog.h"
 #include "common/MainContextCallbackScope.h"
-#include "i18n/GtkTextCatalog.h"
 #include "list/QueryExpressionBox.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
@@ -57,8 +56,7 @@ namespace ao::gtk
   public:
     SmartListDialog(Gtk::Window& parent,
                     rt::AppRuntime& runtime,
-                    uimodel::PresentationTextCatalog const& textCatalog,
-                    GtkTextCatalog gtkTextCatalog,
+                    i18n::MessageCatalog textCatalog,
                     ListId parentListId,
                     TrackRowCache const& provider);
     ~SmartListDialog() override;
@@ -126,8 +124,7 @@ namespace ao::gtk
 
     // Preview infrastructure
     rt::AppRuntime& _runtime;
-    uimodel::PresentationTextCatalog _textCatalog;
-    GtkTextCatalog _gtkTextCatalog;
+    i18n::MessageCatalog _textCatalog;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
     std::shared_ptr<rt::SmartListSource> _previewFilteredListPtr;

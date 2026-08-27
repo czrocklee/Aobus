@@ -5,6 +5,7 @@
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <ftxui/screen/box.hpp>
@@ -21,7 +22,6 @@ namespace ftxui
 
 namespace ao::tui
 {
-  class TuiTextCatalog;
   struct OutputDeviceRowHitRegion final
   {
     std::int32_t rowIndex = -1;
@@ -33,10 +33,10 @@ namespace ao::tui
   };
 
   ftxui::Element outputDeviceBadge(uimodel::OutputDeviceViewState const* outputView, bool hovered);
-  std::int32_t outputDevicePanelColumns(TuiTextCatalog const& textCatalog,
+  std::int32_t outputDevicePanelColumns(i18n::MessageCatalog const& textCatalog,
                                         uimodel::OutputDeviceViewState const& view,
                                         std::int32_t terminalColumns);
-  ftxui::Element outputDevicePanel(TuiTextCatalog const& textCatalog,
+  ftxui::Element outputDevicePanel(i18n::MessageCatalog const& textCatalog,
                                    uimodel::OutputDeviceViewState const& view,
                                    std::int32_t selectedRow,
                                    std::vector<OutputDeviceRowHitRegion>* rowHitRegions = nullptr,

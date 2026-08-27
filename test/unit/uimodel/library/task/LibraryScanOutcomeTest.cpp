@@ -3,12 +3,12 @@
 
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/Error.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -33,7 +33,7 @@ namespace ao::uimodel::test
 
     std::string messageFor(ScanResult const& result)
     {
-      return ao::test::englishPresentationTextCatalog().libraryScanMessage(decideLibraryScanOutcome(result));
+      return formatLibraryScanMessage(ao::test::englishMessageCatalog(), decideLibraryScanOutcome(result));
     }
   } // namespace
 
@@ -198,7 +198,7 @@ namespace ao::uimodel::test
                                LibraryScanVerdict::Unreadable,
                                LibraryScanVerdict::Failed})
     {
-      CHECK_FALSE(ao::test::englishPresentationTextCatalog().libraryScanMessage({.verdict = verdict}).empty());
+      CHECK_FALSE(formatLibraryScanMessage(ao::test::englishMessageCatalog(), {.verdict = verdict}).empty());
     }
   }
 } // namespace ao::uimodel::test

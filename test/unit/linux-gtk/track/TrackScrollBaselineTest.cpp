@@ -11,7 +11,7 @@
 // app-owned bind cost we can actually optimize, not the toolkit's.
 
 #include "../../TestFixtureSupport.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -119,7 +119,7 @@ namespace ao::gtk::test
       GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary) { ids = seedLibrary(musicLibrary, kRowCount); }};
     CHECK(ids.size() == kRowCount);
 
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishPresentationTextCatalog()};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
 
     // Cold scroll: walk every row once, top to bottom. Each row is materialized
     // lazily (the first trackRow() opens a read transaction, resolves dictionary strings,

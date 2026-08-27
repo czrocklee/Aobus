@@ -6,7 +6,8 @@
 #include <ao/Error.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/desktop/LibrarySwitch.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -42,7 +43,7 @@ namespace ao::winui
 
     LibraryWindowSession(std::filesystem::path stateRoot,
                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                         uimodel::PresentationTextCatalog textCatalog,
+                         i18n::MessageCatalog textCatalog,
                          rt::TextOrderingPolicy const& textOrderingPolicy,
                          rt::CompletionAliasPolicy const& completionAliasPolicy);
     ~LibraryWindowSession();
@@ -75,7 +76,7 @@ namespace ao::winui
 
     std::filesystem::path _stateRoot;
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::TextOrderingPolicy const& _textOrderingPolicy;
     rt::CompletionAliasPolicy const& _completionAliasPolicy;
     // Declared before the window so fallback member destruction releases the

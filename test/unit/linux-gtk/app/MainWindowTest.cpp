@@ -10,20 +10,19 @@
 #include "app/WindowState.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -52,8 +51,7 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     configStorePtr->saveWindow(WindowState{.width = 640, .height = 480, .maximized = false});
 
-    auto window = MainWindow{
-      fixture.runtime(), configStorePtr, nullptr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
 
     CHECK(window.get_title() == "Aobus");
 
@@ -86,8 +84,7 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{
-      fixture.runtime(), configStorePtr, nullptr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
 
@@ -111,8 +108,7 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{
-      fixture.runtime(), configStorePtr, nullptr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
 
@@ -139,8 +135,7 @@ namespace ao::gtk::test
     REQUIRE(runtime.playbackSessionConfigStore().save(
       rt::kPlaybackSessionConfigGroup, rt::PlaybackSessionState{}, rt::PlaybackSessionYamlSchema{}));
 
-    auto window =
-      MainWindow{runtime, configStorePtr, nullptr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
     REQUIRE(window.retireForLibrarySwitch());
@@ -197,8 +192,7 @@ namespace ao::gtk::test
     auto const trackId = addRuntimeTrack(*runtimePtr, {.title = "Successor Track", .uri = fixturePath});
 
     {
-      auto window = MainWindow{
-        *runtimePtr, configStorePtr, nullptr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+      auto window = MainWindow{*runtimePtr, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
       REQUIRE(window.prepareSession());
       REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
       auto const viewId = runtimePtr->workspace().snapshot().activeViewId;
@@ -292,8 +286,7 @@ namespace ao::gtk::test
       .playbackSessionConfigStore = &invalidPlaybackStore,
     }));
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
-    auto window = MainWindow{
-      *runtimePtr, configStorePtr, nullptr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto window = MainWindow{*runtimePtr, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     window.applyTheme(uimodel::ThemePreset::Modern);
@@ -348,8 +341,7 @@ namespace ao::gtk::test
 
     rt::test::addReadyAudioProvider(fixture.runtime());
 
-    auto window = MainWindow{
-      fixture.runtime(), configStorePtr, nullptr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
     drainGtkEvents();
 
     auto const output = fixture.runtime().playback().snapshot().transport.output.selectedDevice;
@@ -367,11 +359,7 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
     {
-      auto window = MainWindow{fixture.runtime(),
-                               configStorePtr,
-                               nullptr,
-                               ao::test::englishPresentationTextCatalog(),
-                               englishGtkTextCatalog()};
+      auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
       REQUIRE(window.prepareSession());
 
       CHECK(window.sessionPhase() == MainWindow::SessionPhase::Prepared);
@@ -404,8 +392,7 @@ namespace ao::gtk::test
                                           configStorePtr,
                                           nullptr,
                                           nullptr,
-                                          ao::test::englishPresentationTextCatalog(),
-                                          englishGtkTextCatalog());
+                                          ao::test::englishMessageCatalog());
     REQUIRE(windowRes);
     auto windowPtr = std::move(*windowRes);
     ::g_object_weak_ref(

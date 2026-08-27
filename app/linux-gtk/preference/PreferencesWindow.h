@@ -4,10 +4,10 @@
 #pragma once
 
 #include "preference/ShortcutEditorWidget.h"
-#include <ao/rt/AppPrefsState.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/AppState.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/comboboxtext.h>
@@ -50,7 +50,7 @@ namespace ao::gtk
       uimodel::PreferencesEditorModel::ThemeApplyCallback onApplyTheme{};
     };
 
-    PreferencesWindow(uimodel::PresentationTextCatalog textCatalog, Callbacks callbacks);
+    PreferencesWindow(i18n::MessageCatalog textCatalog, Callbacks callbacks);
     ~PreferencesWindow() override;
 
     PreferencesWindow(PreferencesWindow const&) = delete;
@@ -89,7 +89,7 @@ namespace ao::gtk
     void rebuildOutputSelector(rt::PlaybackService* playback, Gtk::Window* targetWindow);
 
     Callbacks _callbacks;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     std::unique_ptr<uimodel::PreferencesEditorModel> _modelPtr;
     sigc::scoped_connection _targetHideConn;
     sigc::connection _themeComboConn;

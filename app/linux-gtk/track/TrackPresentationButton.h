@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -35,7 +35,7 @@ namespace ao::gtk
   class TrackPresentationButton final : public Gtk::Box
   {
   public:
-    TrackPresentationButton(rt::AppRuntime& runtime, uimodel::PresentationTextCatalog textCatalog);
+    TrackPresentationButton(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog);
     ~TrackPresentationButton() override;
 
     TrackPresentationButton(TrackPresentationButton const&) = delete;
@@ -55,7 +55,7 @@ namespace ao::gtk
     void showPresentationError(std::string_view message);
 
     rt::AppRuntime& _runtime;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     uimodel::TrackPresentationCatalog* _catalog = nullptr;
     std::unique_ptr<uimodel::TrackPresentationPickerViewModel> _viewModelPtr;
     ThemeCoordinator* _themeCoordinator = nullptr;

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "completion/EntryCompletionController.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
 
@@ -19,17 +20,12 @@ namespace ao::rt
   class CompletionService;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::gtk
 {
   class QueryExpressionBox final : public Gtk::Box
   {
   public:
-    QueryExpressionBox(rt::CompletionService& completion, uimodel::PresentationTextCatalog const& textCatalog);
+    QueryExpressionBox(rt::CompletionService& completion, i18n::MessageCatalog const& textCatalog);
     ~QueryExpressionBox() override;
 
     QueryExpressionBox(QueryExpressionBox const&) = delete;

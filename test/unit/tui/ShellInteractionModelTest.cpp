@@ -3,7 +3,7 @@
 
 #include "tui/ShellInteractionModel.h"
 
-#include "test/unit/tui/TuiTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -138,7 +138,7 @@ namespace ao::tui::test
 
   TEST_CASE("ShellInteractionModel - overlay labels are stable", "[tui][unit][shell]")
   {
-    auto const& textCatalog = englishTuiTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(overlayLabel(textCatalog, Overlay::None) == "Tracks");
     CHECK(overlayLabel(textCatalog, Overlay::ListChooser) == "Lists");
     CHECK(overlayLabel(textCatalog, Overlay::DetailPanel) == "Detail");
@@ -151,7 +151,7 @@ namespace ao::tui::test
 
   TEST_CASE("ShellInteractionModel - overlay hints are stable", "[tui][unit][shell]")
   {
-    auto const& textCatalog = englishTuiTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(overlayHint(textCatalog, Overlay::None).empty());
     CHECK(overlayHint(textCatalog, Overlay::ListChooser) == "l toggle  Enter open  Esc close");
     CHECK(overlayHint(textCatalog, Overlay::DetailPanel) == "d toggle  Esc close");

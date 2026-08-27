@@ -15,8 +15,7 @@
 // counts reported alongside are allocator-independent, so they carry directly to
 // the Windows debug build where each allocation simply costs far more.
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
-#include "test/unit/tui/TuiTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
 #include "tui/TrackTable.h"
@@ -55,8 +54,7 @@ namespace ao::tui::bench
     template<typename... Args>
     ftxui::Element buildTrackTableView(Args&&... args)
     {
-      return trackTableView(
-        ao::test::englishPresentationTextCatalog(), test::englishTuiTextCatalog(), std::forward<Args>(args)...);
+      return trackTableView(test::englishMessageCatalog(), std::forward<Args>(args)...);
     }
 
     std::vector<TrackListEntry> manyTracks(std::size_t const count)
@@ -66,7 +64,7 @@ namespace ao::tui::bench
 
       for (std::size_t index = 0; index < count; ++index)
       {
-        tracks.push_back(makeTrackListEntry(ao::test::englishPresentationTextCatalog(),
+        tracks.push_back(makeTrackListEntry(test::englishMessageCatalog(),
                                             rt::TrackRow{.id = TrackId{static_cast<std::uint32_t>(index + 1)},
                                                          .title = std::format("Track {:05}", index),
                                                          .artist = "Artist",

@@ -5,10 +5,10 @@
 
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <functional>
 #include <optional>
@@ -51,7 +51,7 @@ namespace ao::uimodel
     bool operator==(TrackPresentationEligibility const&) const = default;
   };
 
-  TrackPresentationEligibility trackPresentationEligibility(PresentationTextCatalog const& textCatalog,
+  TrackPresentationEligibility trackPresentationEligibility(i18n::MessageCatalog const& textCatalog,
                                                             ListId listId,
                                                             std::string_view presentationId);
 
@@ -62,7 +62,7 @@ namespace ao::uimodel
                                      rt::WorkspaceService& workspace,
                                      TrackPresentationCatalog& catalog,
                                      ListPresentationPreferenceStore& preferences,
-                                     PresentationTextCatalog textCatalog,
+                                     i18n::MessageCatalog textCatalog,
                                      std::function<void(TrackPresentationPickerState const&)> onRender);
     ~TrackPresentationPickerViewModel() = default;
 
@@ -87,7 +87,7 @@ namespace ao::uimodel
     rt::WorkspaceService& _workspace;
     TrackPresentationCatalog& _catalog;
     ListPresentationPreferenceStore& _preferences;
-    PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     std::function<void(TrackPresentationPickerState const&)> _onRender;
     async::Subscription _focusSub;
     async::Subscription _presentationSub;

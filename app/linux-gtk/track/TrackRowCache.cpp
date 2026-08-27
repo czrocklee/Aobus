@@ -5,10 +5,10 @@
 
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <glibmm/refptr.h>
@@ -27,7 +27,7 @@ namespace ao::gtk
     }
   }
 
-  TrackRowCache::TrackRowCache(rt::Library const& reads, uimodel::PresentationTextCatalog textCatalog)
+  TrackRowCache::TrackRowCache(rt::Library const& reads, i18n::MessageCatalog textCatalog)
     : _reads{reads}, _textCatalog{std::move(textCatalog)}
   {
   }

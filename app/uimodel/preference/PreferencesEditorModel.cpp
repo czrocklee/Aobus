@@ -4,7 +4,7 @@
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 
 #include <ao/audio/OutputDeviceSelection.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <string_view>

@@ -5,8 +5,7 @@
 
 #include "WindowState.h"
 #include <ao/Error.h>
-#include <ao/rt/AppPrefsState.h>
-#include <ao/rt/AppStateStore.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "layout/LayoutConstants.h"
+#include <ao/i18n/MessageCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -15,17 +16,12 @@
 
 #include <string>
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::gtk::layout::track_field_grid
 {
   class AddCustomMetadataButton final
   {
   public:
-    explicit AddCustomMetadataButton(uimodel::PresentationTextCatalog const& textCatalog);
+    explicit AddCustomMetadataButton(i18n::MessageCatalog const& textCatalog);
     ~AddCustomMetadataButton();
 
     AddCustomMetadataButton(AddCustomMetadataButton const&) = delete;

@@ -3,9 +3,8 @@
 
 #include "tui/TrackTable.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
-#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
 #include <ao/CoreIds.h>
@@ -35,7 +34,7 @@ namespace ao::tui::test
   {
     TrackListEntry makeTrackListEntry(rt::TrackRow const& row)
     {
-      return ao::tui::makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
+      return ao::tui::makeTrackListEntry(ao::test::englishMessageCatalog(), row);
     }
 
     ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
@@ -44,13 +43,8 @@ namespace ao::tui::test
                                   rt::TrackPresentationSpec const& presentation,
                                   TrackTableViewOptions const& options = {})
     {
-      return ao::tui::trackTableView(ao::test::englishPresentationTextCatalog(),
-                                     englishTuiTextCatalog(),
-                                     tracks,
-                                     selectedIndex,
-                                     playingTrackId,
-                                     presentation,
-                                     options);
+      return ao::tui::trackTableView(
+        ao::test::englishMessageCatalog(), tracks, selectedIndex, playingTrackId, presentation, options);
     }
 
     ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
@@ -60,26 +54,20 @@ namespace ao::tui::test
                                   rt::TrackPresentationSpec const& presentation,
                                   TrackTableViewOptions const& options = {})
     {
-      return ao::tui::trackTableView(ao::test::englishPresentationTextCatalog(),
-                                     englishTuiTextCatalog(),
-                                     tracks,
-                                     sections,
-                                     selectedIndex,
-                                     playingTrackId,
-                                     presentation,
-                                     options);
+      return ao::tui::trackTableView(
+        ao::test::englishMessageCatalog(), tracks, sections, selectedIndex, playingTrackId, presentation, options);
     }
 
     std::int32_t libraryChooserPaneColumns(std::vector<std::string> const& labels, std::int32_t const terminalColumns)
     {
-      return ao::tui::libraryChooserPaneColumns(englishTuiTextCatalog(), labels, terminalColumns);
+      return ao::tui::libraryChooserPaneColumns(ao::test::englishMessageCatalog(), labels, terminalColumns);
     }
 
     ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
                                       std::int32_t const selected,
                                       std::int32_t const columns = 0)
     {
-      return ao::tui::libraryChooserPane(englishTuiTextCatalog(), labels, selected, columns);
+      return ao::tui::libraryChooserPane(ao::test::englishMessageCatalog(), labels, selected, columns);
     }
 
     std::string lineContaining(std::string_view text, std::string_view needle)

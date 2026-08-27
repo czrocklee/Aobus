@@ -5,6 +5,7 @@
 
 #include "app/MainWindow.h"
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <glibmm/refptr.h>
 
@@ -16,11 +17,6 @@ namespace Gtk
   class Application;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::rt
 {
   class CompletionAliasPolicy;
@@ -30,7 +26,6 @@ namespace ao::rt
 namespace ao::gtk
 {
   class AppConfigStore;
-  class GtkTextCatalog;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
 
@@ -45,8 +40,7 @@ namespace ao::gtk
     std::shared_ptr<AppConfigStore> appConfigStorePtr,
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-    uimodel::PresentationTextCatalog const& textCatalog,
-    GtkTextCatalog const& gtkTextCatalog,
+    i18n::MessageCatalog const& textCatalog,
     rt::TextOrderingPolicy const* textOrderingPolicy = nullptr,
     rt::CompletionAliasPolicy const* completionAliasPolicy = nullptr);
 

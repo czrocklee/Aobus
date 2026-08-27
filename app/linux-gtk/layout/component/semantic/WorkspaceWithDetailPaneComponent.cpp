@@ -4,6 +4,7 @@
 #include "SemanticComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -11,7 +12,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -94,10 +94,10 @@ namespace ao::gtk::layout
       {
         _handle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
         auto const id = active ? i18n::MessageId::GtkHideDetails : i18n::MessageId::GtkShowDetails;
-        setTooltipAndAccessibleLabel(_handle, _textCatalog.text(id));
+        setTooltipAndAccessibleLabel(_handle, gtkText(_textCatalog, id));
       }
 
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       Gtk::Box _container;
       Gtk::ToggleButton _handle;
       Gtk::Revealer _revealer;

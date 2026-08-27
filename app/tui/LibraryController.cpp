@@ -26,7 +26,6 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -42,12 +41,9 @@
 
 namespace ao::tui
 {
-  LibraryController::LibraryController(rt::AppRuntime& runtime,
-                                       uimodel::PresentationTextCatalog textCatalog,
-                                       TuiTextCatalog tuiTextCatalog)
+  LibraryController::LibraryController(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog)
     : _runtime{runtime}
     , _textCatalog{std::move(textCatalog)}
-    , _tuiTextCatalog{std::move(tuiTextCatalog)}
     , _libraryEntries{loadLibraryNavigation()}
     , _libraryLabels{libraryNavigationLabels(_libraryEntries)}
     , _presentationEntries{loadPresentationNavigation()}
@@ -174,7 +170,7 @@ namespace ao::tui
   {
     if (_sections.empty())
     {
-      return std::string{_tuiTextCatalog.text(TuiTextId::LibraryNoSections)};
+      return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoSections);
     }
 
     auto optContainingSection = std::optional<std::int32_t>{};
@@ -229,14 +225,14 @@ namespace ao::tui
   {
     if (sectionIndex < 0 || static_cast<std::size_t>(sectionIndex) >= _sections.size())
     {
-      return std::string{_tuiTextCatalog.text(TuiTextId::LibraryNoSectionSelected)};
+      return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoSectionSelected);
     }
 
     auto const& section = _sections[static_cast<std::size_t>(sectionIndex)];
     std::size_t const lastTrackIndex = _tracks.empty() ? 0 : _tracks.size() - 1;
     _selectedTrack = static_cast<std::int32_t>(std::min(section.rowBegin, lastTrackIndex));
     publishSelection();
-    return _tuiTextCatalog.librarySection(trackSectionDisplayName(_textCatalog, section));
+    return librarySection(_textCatalog, trackSectionDisplayName(_textCatalog, section));
   }
 
   bool LibraryController::setSelectedTrackById(TrackId const trackId)
@@ -275,23 +271,23 @@ namespace ao::tui
   {
     if (trackId == kInvalidTrackId)
     {
-      return std::string{_tuiTextCatalog.text(TuiTextId::LibraryNoCurrentTrack)};
+      return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoCurrentTrack);
     }
 
     if (setSelectedTrackById(trackId))
     {
       publishSelection();
-      return _tuiTextCatalog.libraryRevealedTrack(trackDisplayTitle(_textCatalog, _tracks[_selectedTrack].row));
+      return libraryRevealedTrack(_textCatalog, trackDisplayTitle(_textCatalog, _tracks[_selectedTrack].row));
     }
 
-    return std::string{_tuiTextCatalog.text(TuiTextId::LibraryCurrentTrackNotInView)};
+    return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView);
   }
 
   std::string LibraryController::setPresentation(std::string_view const presentationId)
   {
     if (_activeViewId == rt::kInvalidViewId)
     {
-      return std::string{_tuiTextCatalog.text(TuiTextId::LibraryNoActiveTrackView)};
+      return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoActiveTrackView);
     }
 
     auto const selectedBefore = selectedTrackView();
@@ -300,7 +296,7 @@ namespace ao::tui
 
     if (!result)
     {
-      return _tuiTextCatalog.libraryUnknownView(presentationId);
+      return libraryUnknownView(_textCatalog, presentationId);
     }
 
     auto const& spec = *result;
@@ -316,14 +312,14 @@ namespace ao::tui
     }
 
     publishSelection();
-    return _tuiTextCatalog.libraryView(spec.id);
+    return libraryView(_textCatalog, spec.id);
   }
 
   std::string LibraryController::selectSelectedPresentation()
   {
     if (_presentationEntries.empty())
     {
-      return std::string{_tuiTextCatalog.text(TuiTextId::LibraryNoViewsAvailable)};
+      return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable);
     }
 
     auto const selectedIndex =
@@ -341,7 +337,7 @@ namespace ao::tui
       _selectedTrack = 0;
       _currentListId = rt::kAllTracksListId;
       _activeViewId = rt::kInvalidViewId;
-      return {.opened = false, .status = std::string{_tuiTextCatalog.text(TuiTextId::LibraryNoListsAvailable)}};
+      return {.opened = false, .status = tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoListsAvailable)};
     }
 
     auto const selectedIndex =
@@ -354,7 +350,7 @@ namespace ao::tui
     _filterDraft.clear();
     publishSelection();
 
-    return {.opened = true, .status = _tuiTextCatalog.libraryOpenedList(currentListTitle())};
+    return {.opened = true, .status = libraryOpenedList(_textCatalog, currentListTitle())};
   }
 
   std::string LibraryController::reloadActiveList()
@@ -365,14 +361,14 @@ namespace ao::tui
     _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
     _filterDraft.clear();
     publishSelection();
-    return _tuiTextCatalog.libraryReloadedTracks(_tracks.size());
+    return libraryReloadedTracks(_textCatalog, _tracks.size());
   }
 
   Result<std::string> LibraryController::applyFilter()
   {
     if (_activeViewId == rt::kInvalidViewId)
     {
-      return std::string{_tuiTextCatalog.text(TuiTextId::LibraryNoActiveTrackView)};
+      return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoActiveTrackView);
     }
 
     auto const resolved = uimodel::resolveTrackFilterExpression(_filterDraft);
@@ -380,8 +376,8 @@ namespace ao::tui
 
     if (!filterRes)
     {
-      _filterError =
-        _textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", filterRes.error().message}});
+      _filterError = i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", filterRes.error().message}});
       return std::unexpected{filterRes.error()};
     }
 
@@ -395,18 +391,18 @@ namespace ao::tui
 
     switch (resolved.mode)
     {
-      case uimodel::TrackFilterMode::None: return std::string{_tuiTextCatalog.text(TuiTextId::LibraryFilterCleared)};
-      case uimodel::TrackFilterMode::Quick: return _tuiTextCatalog.libraryQuickFilterMatched(_tracks.size());
-      case uimodel::TrackFilterMode::Expression: return _tuiTextCatalog.libraryExpressionFilterMatched(_tracks.size());
+      case uimodel::TrackFilterMode::None: return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryFilterCleared);
+      case uimodel::TrackFilterMode::Quick: return libraryQuickFilterMatched(_textCatalog, _tracks.size());
+      case uimodel::TrackFilterMode::Expression: return libraryExpressionFilterMatched(_textCatalog, _tracks.size());
     }
 
-    return std::string{_tuiTextCatalog.text(TuiTextId::LibraryFilterApplied)};
+    return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryFilterApplied);
   }
 
   std::vector<LibraryNavEntry> LibraryController::loadLibraryNavigation()
   {
     auto const reader = _runtime.library().reader();
-    return makeLibraryNavigation(_textCatalog, _tuiTextCatalog, reader.lists());
+    return makeLibraryNavigation(_textCatalog, reader.lists());
   }
 
   void LibraryController::syncSelectedPresentation(std::string_view const presentationId)
@@ -447,8 +443,8 @@ namespace ao::tui
 
     if (stateRes && stateRes->optFilterError)
     {
-      _filterError =
-        _textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", stateRes->optFilterError->message}});
+      _filterError = i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", stateRes->optFilterError->message}});
     }
   }
 

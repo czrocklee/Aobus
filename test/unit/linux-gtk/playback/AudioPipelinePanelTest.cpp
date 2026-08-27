@@ -3,7 +3,7 @@
 
 #include "playback/AudioPipelinePanel.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/audio/Quality.h>
@@ -109,7 +109,7 @@ namespace ao::gtk::test
   TEST_CASE("AudioPipelinePanel - renders no rows for an empty pipeline", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog()};
+    auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog()};
     auto inspector = AudioPipelinePanelInspector{widget};
 
     auto view = uimodel::AudioPipelineViewState{};
@@ -121,7 +121,7 @@ namespace ao::gtk::test
   TEST_CASE("AudioPipelinePanel - renders pipeline nodes with header and conclusion", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog()};
+    auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog()};
     auto inspector = AudioPipelinePanelInspector{widget};
 
     auto view = uimodel::AudioPipelineViewState{};
@@ -154,7 +154,7 @@ namespace ao::gtk::test
   TEST_CASE("AudioPipelinePanel - replaces variant CSS classes", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog(), AudioPipelinePanelVariant::Inline};
+    auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog(), AudioPipelinePanelVariant::Inline};
     auto inspector = AudioPipelinePanelInspector{widget};
 
     CHECK(inspector.hasCssClass("ao-quality-panel"));
@@ -173,7 +173,7 @@ namespace ao::gtk::test
             "[gtk][unit][playback][localization]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto catalog = ao::test::presentationTextCatalog("de-DE");
+    auto catalog = ao::test::messageCatalog("de-DE");
     auto widget = AudioPipelinePanel{catalog};
     auto inspector = AudioPipelinePanelInspector{widget};
     auto view = uimodel::AudioPipelineViewState{
@@ -205,7 +205,7 @@ namespace ao::gtk::test
             "[gtk][unit][playback][regression]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto widget = AudioPipelinePanel{ao::test::englishPresentationTextCatalog()};
+    auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog()};
     auto inspector = AudioPipelinePanelInspector{widget};
     auto view = uimodel::AudioPipelineViewState{
       .quality =

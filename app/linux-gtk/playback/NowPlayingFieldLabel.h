@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
@@ -14,11 +15,6 @@ namespace ao::rt
   class AppRuntime;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::gtk
 {
   class NowPlayingFieldLabel final
@@ -27,7 +23,7 @@ namespace ao::gtk
     using Action = uimodel::NowPlayingFieldAction;
 
     NowPlayingFieldLabel(rt::AppRuntime& runtime,
-                         uimodel::PresentationTextCatalog const& textCatalog,
+                         i18n::MessageCatalog const& textCatalog,
                          rt::TrackField field,
                          Action action = Action::None);
 

@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ShellLibraryAccess.h"
 #include <ao/async/Signal.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
@@ -37,7 +38,6 @@ namespace ao::uimodel
   class LayoutComponentCatalog;
   class ListPresentationPreferenceStore;
   class PlaybackCommandSurface;
-  class PresentationTextCatalog;
   class ShellGenerationGate;
   class TrackPresentationCatalog;
   struct LayoutRuntimeState;
@@ -120,7 +120,7 @@ namespace ao::winui::layout
     uimodel::PlaybackCommandSurface& playbackCommands;
     uimodel::TrackPresentationCatalog& presentationCatalog;
     uimodel::ListPresentationPreferenceStore& presentationPreferences;
-    uimodel::PresentationTextCatalog const& textCatalog;
+    i18n::MessageCatalog const& textCatalog;
     TrackListController& trackList;
     rt::ResourceByteLoader& resourceBytes;
     ThemeCoordinator& theme;

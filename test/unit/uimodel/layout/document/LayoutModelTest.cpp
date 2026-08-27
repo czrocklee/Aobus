@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
@@ -24,6 +26,15 @@ namespace ao::uimodel::test
     PreparedLayout preparedLayout(LayoutDocument const& document)
     {
       return ao::test::requireValue(prepareLayout(document));
+    }
+
+    LayoutComponentCatalog persistentLayoutCatalog()
+    {
+      auto catalog = LayoutComponentCatalog{};
+      catalog.registerComponentDescriptor(sharedComponentDescriptor(SharedLayoutComponentType::Split));
+      catalog.registerComponentDescriptor(
+        {.type = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true});
+      return catalog;
     }
   } // namespace
 
@@ -473,7 +484,7 @@ namespace ao::uimodel::test
         LayoutNode{.id = "shared-split", .type = "collapsibleSplit"},
       };
 
-      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc));
+      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc), persistentLayoutCatalog());
 
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
@@ -486,7 +497,7 @@ namespace ao::uimodel::test
       auto doc = LayoutDocument{};
       doc.root.type = "split";
 
-      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc));
+      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc), persistentLayoutCatalog());
 
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Warning);
@@ -503,7 +514,7 @@ namespace ao::uimodel::test
         LayoutNode{.id = "same", .type = "separator"},
       };
 
-      CHECK(validateStatefulLayoutNodeIds(preparedLayout(doc)).empty());
+      CHECK(validateStatefulLayoutNodeIds(preparedLayout(doc), persistentLayoutCatalog()).empty());
     }
 
     SECTION("template expansion participates in duplicate detection")
@@ -516,7 +527,7 @@ namespace ao::uimodel::test
         LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"pane"}}}}},
       };
 
-      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc));
+      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc), persistentLayoutCatalog());
 
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].componentId == "templated-split");
@@ -532,7 +543,7 @@ namespace ao::uimodel::test
         LayoutNode{.id = "shared", .type = "split"},
       };
 
-      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc));
+      auto const diagnostics = validateStatefulLayoutNodeIds(preparedLayout(doc), persistentLayoutCatalog());
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
       CHECK(diagnostics[0].componentId == "shared");
@@ -548,7 +559,7 @@ namespace ao::uimodel::test
         LayoutNode{.type = "spacer"},
       };
 
-      CHECK(validateStatefulLayoutNodeIds(preparedLayout(doc)).empty());
+      CHECK(validateStatefulLayoutNodeIds(preparedLayout(doc), persistentLayoutCatalog()).empty());
     }
   }
 

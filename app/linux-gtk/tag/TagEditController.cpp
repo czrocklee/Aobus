@@ -66,14 +66,12 @@ namespace ao::gtk
 
   TagEditController::TagEditController(Gtk::Window& parent,
                                        rt::AppRuntime& runtime,
-                                       uimodel::PresentationTextCatalog textCatalog,
-                                       GtkTextCatalog const& gtkTextCatalog,
+                                       i18n::MessageCatalog textCatalog,
                                        Callbacks callbacks,
                                        ThemeCoordinator& themeCoordinator)
     : _callbacks{std::move(callbacks)}
     , _runtime{runtime}
     , _textCatalog{std::move(textCatalog)}
-    , _gtkTextCatalog{gtkTextCatalog}
     , _parent{parent}
     , _themeCoordinator{themeCoordinator}
   {
@@ -282,7 +280,7 @@ namespace ao::gtk
     };
 
     addAction(menuModelPtr,
-              std::string{_textCatalog.text(i18n::MessageId::GtkActionEditTags)},
+              gtkText(_textCatalog, i18n::MessageId::GtkActionEditTags),
               "edit-tags",
               [this]
               {
@@ -297,7 +295,7 @@ namespace ao::gtk
                 }
               });
     addAction(menuModelPtr,
-              std::string{_textCatalog.text(i18n::MessageId::GtkActionTrackProperties)},
+              gtkText(_textCatalog, i18n::MessageId::GtkActionTrackProperties),
               "properties",
               [this]
               {
@@ -357,7 +355,7 @@ namespace ao::gtk
     {
       addAction(
         addToListMenuPtr,
-        _gtkTextCatalog.text(GtkTextId::ListOtherComputedMembership),
+        gtkText(_textCatalog, i18n::MessageId::GtkListOtherComputedMembership),
         "computed-lists-omitted",
         [] {},
         false);
@@ -367,18 +365,18 @@ namespace ao::gtk
     {
       addAction(
         addToListMenuPtr,
-        _gtkTextCatalog.text(GtkTextId::ListNoEditablePlaylists),
+        gtkText(_textCatalog, i18n::MessageId::GtkListNoEditablePlaylists),
         "add-to-list-unavailable",
         [] {},
         false);
-      addManageListsAction(_gtkTextCatalog.text(GtkTextId::ListCreatePlaylist));
+      addManageListsAction(gtkText(_textCatalog, i18n::MessageId::GtkListCreatePlaylist));
     }
     else if (hasOmittedComputedTargets)
     {
-      addManageListsAction(_gtkTextCatalog.text(GtkTextId::ListManageLists));
+      addManageListsAction(gtkText(_textCatalog, i18n::MessageId::GtkListManageLists));
     }
 
-    menuModelPtr->append_submenu(_gtkTextCatalog.text(GtkTextId::ListAddToPlaylist), addToListMenuPtr);
+    menuModelPtr->append_submenu(gtkText(_textCatalog, i18n::MessageId::GtkListAddToPlaylist), addToListMenuPtr);
 
     if (_optActiveSelection)
     {
@@ -388,7 +386,7 @@ namespace ao::gtk
       if (current != targets.end())
       {
         addAction(menuModelPtr,
-                  _gtkTextCatalog.removeFromCurrentList(current->name, tagExpression(current->tag)),
+                  removeFromCurrentList(_textCatalog, current->name, tagExpression(current->tag)),
                   "remove-from-current-list",
                   [this, listId = current->listId]
                   {
@@ -401,7 +399,7 @@ namespace ao::gtk
       {
         addAction(
           menuModelPtr,
-          _gtkTextCatalog.text(GtkTextId::ListRemoveComputedUnavailable),
+          gtkText(_textCatalog, i18n::MessageId::GtkListRemoveComputedUnavailable),
           "remove-from-current-list-unavailable",
           [] {},
           false);
@@ -431,37 +429,40 @@ namespace ao::gtk
     {
       if (capabilities.canRelativeMove)
       {
-        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListMoveUp), "order-up", TrackOrderCommand::MoveUp);
-        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListMoveDown), "order-down", TrackOrderCommand::MoveDown);
+        addOrderAction(gtkText(_textCatalog, i18n::MessageId::GtkListMoveUp), "order-up", TrackOrderCommand::MoveUp);
+        addOrderAction(
+          gtkText(_textCatalog, i18n::MessageId::GtkListMoveDown), "order-down", TrackOrderCommand::MoveDown);
       }
       else
       {
-        addAction(orderingMenuPtr, _gtkTextCatalog.text(GtkTextId::ListMoveUp), "order-up", [] {}, false);
-        addAction(orderingMenuPtr, _gtkTextCatalog.text(GtkTextId::ListMoveDown), "order-down", [] {}, false);
+        addAction(orderingMenuPtr, gtkText(_textCatalog, i18n::MessageId::GtkListMoveUp), "order-up", [] {}, false);
+        addAction(orderingMenuPtr, gtkText(_textCatalog, i18n::MessageId::GtkListMoveDown), "order-down", [] {}, false);
         addAction(orderingMenuPtr, capabilities.disabledReason, "relative-ordering-unavailable", [] {}, false);
       }
 
       if (capabilities.canAbsoluteMove)
       {
-        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListMoveToTop), "order-top", TrackOrderCommand::MoveToTop);
         addOrderAction(
-          _gtkTextCatalog.text(GtkTextId::ListMoveToBottom), "order-bottom", TrackOrderCommand::MoveToBottom);
+          gtkText(_textCatalog, i18n::MessageId::GtkListMoveToTop), "order-top", TrackOrderCommand::MoveToTop);
+        addOrderAction(
+          gtkText(_textCatalog, i18n::MessageId::GtkListMoveToBottom), "order-bottom", TrackOrderCommand::MoveToBottom);
       }
 
       if (capabilities.canResetOrder)
       {
-        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListResetOrder), "order-reset", TrackOrderCommand::Reset);
+        addOrderAction(
+          gtkText(_textCatalog, i18n::MessageId::GtkListResetOrder), "order-reset", TrackOrderCommand::Reset);
       }
 
       if (capabilities.canForgetHiddenPositions)
       {
-        addOrderAction(_gtkTextCatalog.text(GtkTextId::ListForgetHiddenPositions),
+        addOrderAction(gtkText(_textCatalog, i18n::MessageId::GtkListForgetHiddenPositions),
                        "order-forget-hidden",
                        TrackOrderCommand::ForgetHidden);
       }
     }
 
-    menuModelPtr->append_submenu(_gtkTextCatalog.text(GtkTextId::ListManualOrder), orderingMenuPtr);
+    menuModelPtr->append_submenu(gtkText(_textCatalog, i18n::MessageId::GtkListManualOrder), orderingMenuPtr);
     _contextPopoverPtr->set_menu_model(menuModelPtr);
   }
 

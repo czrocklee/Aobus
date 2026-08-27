@@ -101,7 +101,6 @@ namespace ao::rt
     void invalidatePreparedNext(std::optional<PreparedNextToken> optDisarmedToken);
     void clearPreparedCoveredBy(PreparedCancellationBarrier barrier) noexcept;
 
-    std::size_t consecutiveFailureCount() const noexcept { return _consecutiveFailureCount; }
     std::size_t incrementConsecutiveFailureCount() noexcept { return ++_consecutiveFailureCount; }
     void resetConsecutiveFailureCount() noexcept { _consecutiveFailureCount = 0; }
 

@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -93,7 +93,7 @@ namespace ao::uimodel::test
     auto const tag = std::array{std::string{"road-trip"}};
     REQUIRE(writerFixture.editTags(std::array{trackId}, tag, {}));
     auto sessionRes = ListMembershipAuthoringSession::begin(
-      writerFixture.library(), std::array{trackId}, ao::test::presentationTextCatalog("de-DE"));
+      writerFixture.library(), std::array{trackId}, ao::test::messageCatalog("de-DE"));
     REQUIRE(sessionRes);
 
     auto const result = writerFixture.runTask((*sessionRes)->removeFromList(listId));
@@ -121,7 +121,7 @@ namespace ao::uimodel::test
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
     auto sessionRes = ListMembershipAuthoringSession::begin(
-      writerFixture.library(), std::array{trackId}, ao::test::presentationTextCatalog("de-DE"));
+      writerFixture.library(), std::array{trackId}, ao::test::messageCatalog("de-DE"));
     REQUIRE(sessionRes);
 
     auto const result = writerFixture.runTask((*sessionRes)->addToList(listId));

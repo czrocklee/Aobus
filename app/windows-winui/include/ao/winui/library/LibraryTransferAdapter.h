@@ -3,17 +3,13 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 
 #include <cstdint>
 #include <optional>
 #include <string>
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
 
 namespace ao::winui
 {
@@ -35,6 +31,6 @@ namespace ao::winui
   bool libraryImportRequiresDestructiveConfirmation(rt::ImportMode mode) noexcept;
 
   /// Turns the shared dry-run report into the destructive native confirmation.
-  LibraryRestorePreviewState makeLibraryRestorePreviewState(uimodel::PresentationTextCatalog const& textCatalog,
+  LibraryRestorePreviewState makeLibraryRestorePreviewState(i18n::MessageCatalog const& textCatalog,
                                                             rt::ImportReport const& report);
 } // namespace ao::winui

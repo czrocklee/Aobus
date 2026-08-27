@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
@@ -15,11 +15,13 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusFeedProjection - projects compact state from runtime priority",
             "[uimodel][unit][status][activity]")
   {
-    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishPresentationTextCatalog()};
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
 
     SECTION("initial state is idle without surfacing historical info")
     {
-      feedProjection.initialize(feed({entry(rt::NotificationId{1}, rt::NotificationSeverity::Info, "Saved playlist")}));
+      feedProjection = ActivityStatusFeedProjection{
+        ao::test::englishMessageCatalog(),
+        feed({entry(rt::NotificationId{1}, rt::NotificationSeverity::Info, "Saved playlist")})};
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
       CHECK(feedProjection.viewState().detail.items.empty());
@@ -112,7 +114,7 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusFeedProjection - finishing an overlapping export restores active scan progress",
             "[uimodel][regression][activity-status][concurrency]")
   {
-    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishPresentationTextCatalog()};
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
     auto const scanId = rt::LibraryTaskProgressId{11};
     auto const exportId = rt::LibraryTaskProgressId{12};
     feedProjection.handleLibraryTaskProgress(

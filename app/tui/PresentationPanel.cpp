@@ -9,6 +9,7 @@
 #include "TextCell.h"
 #include "TrackPresentationNavigation.h"
 #include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -42,17 +43,16 @@ namespace ao::tui
     }
   } // namespace
 
-  std::int32_t presentationPanelColumns(uimodel::PresentationTextCatalog const& textCatalog,
-                                        TuiTextCatalog const& tuiTextCatalog,
+  std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view const activePresentationId,
                                         std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max(
-      cellWidth(tuiTextCatalog.text(TuiTextId::LibraryNoViewsAvailable)) + kPresentationPanelScrollIndicatorColumns,
-      cellWidth(overlayHint(tuiTextCatalog, Overlay::PresentationPanel)));
+    auto contentColumns = std::max(cellWidth(tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)) +
+                                     kPresentationPanelScrollIndicatorColumns,
+                                   cellWidth(overlayHint(textCatalog, Overlay::PresentationPanel)));
     contentColumns = std::max(contentColumns,
-                              cellWidth(overlayLabel(tuiTextCatalog, Overlay::PresentationPanel)) + cellWidth(" · ") +
+                              cellWidth(overlayLabel(textCatalog, Overlay::PresentationPanel)) + cellWidth(" · ") +
                                 cellWidth(trackPresentationDisplayId(textCatalog, activePresentationId)));
 
     for (auto const& item : items)
@@ -65,8 +65,7 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element presentationPanel(uimodel::PresentationTextCatalog const& textCatalog,
-                                   TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element presentationPanel(i18n::MessageCatalog const& textCatalog,
                                    std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view const activePresentationId,
                                    std::int32_t const selectedIndex,
@@ -76,7 +75,7 @@ namespace ao::tui
     using namespace ftxui;
 
     auto const panelColumns =
-      columns <= 0 ? presentationPanelColumns(textCatalog, tuiTextCatalog, items, activePresentationId, 0) : columns;
+      columns <= 0 ? presentationPanelColumns(textCatalog, items, activePresentationId, 0) : columns;
 
     auto rows = Elements{};
     auto listRows = std::vector<SelectableListRow>{};
@@ -121,12 +120,12 @@ namespace ao::tui
       std::move(listRows),
       SelectableListOptions{.focusRow = focusRow,
                             .height = kPresentationPanelListRows,
-                            .emptyText = std::string{tuiTextCatalog.text(TuiTextId::LibraryNoViewsAvailable)}}));
+                            .emptyText = tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)}));
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(overlayHint(tuiTextCatalog, Overlay::PresentationPanel)));
+    rows.push_back(style::panelFooterHint(overlayHint(textCatalog, Overlay::PresentationPanel)));
 
     auto activePresentationLabel = trackPresentationDisplayId(textCatalog, activePresentationId);
-    return style::popupPanel(overlayLabel(tuiTextCatalog, Overlay::PresentationPanel),
+    return style::popupPanel(overlayLabel(textCatalog, Overlay::PresentationPanel),
                              vbox(std::move(rows)),
                              style::PanelOptions{.rightTitle = activePresentationLabel}) |
            size(WIDTH, EQUAL, panelColumns);

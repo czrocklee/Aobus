@@ -25,14 +25,13 @@
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -377,7 +376,7 @@ namespace
   void presentPreferences(Glib::RefPtr<Gtk::Application> const& appPtr,
                           std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
                           std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
-                          uimodel::PresentationTextCatalog const& textCatalog)
+                          i18n::MessageCatalog const& textCatalog)
   {
     auto* const targetWindow = activeMainWindow(appPtr);
 
@@ -450,7 +449,7 @@ namespace
   void addAppActions(Glib::RefPtr<Gtk::Application>& appPtr,
                      std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
                      std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
-                     uimodel::PresentationTextCatalog const& textCatalog)
+                     i18n::MessageCatalog const& textCatalog)
   {
     auto const aboutActionPtr = Gio::SimpleAction::create("about");
     aboutActionPtr->signal_activate().connect(
@@ -520,8 +519,7 @@ namespace
                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
                          std::shared_ptr<ShellLayoutStore> const& shellLayoutStorePtr,
                          std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr,
-                         uimodel::PresentationTextCatalog const& textCatalog,
-                         GtkTextCatalog const& gtkTextCatalog,
+                         i18n::MessageCatalog const& textCatalog,
                          rt::TextOrderingPolicy const& textOrderingPolicy,
                          rt::CompletionAliasPolicy const& completionAliasPolicy,
                          GtkStartupPlan const& startupPlan,
@@ -546,7 +544,8 @@ namespace
       failStartup(
         appPtr,
         optDiagnosticMessage,
-        textCatalog.format(i18n::MessageId::GtkStartupSelectLibraryFailed, {{"detail", pathsRes.error().message}}));
+        i18n::requiredFormat(
+          textCatalog, i18n::MessageId::GtkStartupSelectLibraryFailed, {{"detail", pathsRes.error().message}}));
       return;
     }
 
@@ -559,7 +558,6 @@ namespace
                            shellLayoutStorePtr,
                            componentStateStorePtr,
                            textCatalog,
-                           gtkTextCatalog,
                            &textOrderingPolicy,
                            &completionAliasPolicy);
 
@@ -568,7 +566,8 @@ namespace
       failStartup(
         appPtr,
         optDiagnosticMessage,
-        textCatalog.format(i18n::MessageId::GtkStartupOpenLibraryFailed, {{"detail", windowRes.error().message}}));
+        i18n::requiredFormat(
+          textCatalog, i18n::MessageId::GtkStartupOpenLibraryFailed, {{"detail", windowRes.error().message}}));
       return;
     }
 
@@ -582,10 +581,11 @@ namespace
     if (auto const activatedRes = activateLibraryWindow(*appPtr, mainWindowPtr, restoreMode); !activatedRes)
     {
       mainWindowPtr.reset();
-      failStartup(appPtr,
-                  optDiagnosticMessage,
-                  textCatalog.format(
-                    i18n::MessageId::GtkStartupActivateLibraryFailed, {{"detail", activatedRes.error().message}}));
+      failStartup(
+        appPtr,
+        optDiagnosticMessage,
+        i18n::requiredFormat(
+          textCatalog, i18n::MessageId::GtkStartupActivateLibraryFailed, {{"detail", activatedRes.error().message}}));
       return;
     }
 
@@ -634,8 +634,7 @@ namespace
 
   RunAppResult runApp(std::span<char*> args,
                       ProcessSignalHandlers& processSignalHandlers,
-                      uimodel::PresentationTextCatalog const& textCatalog,
-                      GtkTextCatalog const& gtkTextCatalog,
+                      i18n::MessageCatalog const& textCatalog,
                       rt::TextOrderingPolicy const& textOrderingPolicy,
                       rt::CompletionAliasPolicy const& completionAliasPolicy)
   {
@@ -771,7 +770,6 @@ namespace
        shellLayoutStorePtr,
        componentStateStorePtr,
        &textCatalog,
-       &gtkTextCatalog,
        &textOrderingPolicy,
        &completionAliasPolicy,
        &startupPlan,
@@ -787,7 +785,6 @@ namespace
                           shellLayoutStorePtr,
                           componentStateStorePtr,
                           textCatalog,
-                          gtkTextCatalog,
                           textOrderingPolicy,
                           completionAliasPolicy,
                           startupPlan,
@@ -881,12 +878,10 @@ int main(int argc, char* argv[])
 
     auto textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
     auto completionAliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
-    auto const textCatalog = uimodel::PresentationTextCatalog{catalog};
-    auto const gtkTextCatalog = GtkTextCatalog{catalog};
+    auto const textCatalog = i18n::MessageCatalog{catalog};
     auto result = runApp({argv, static_cast<std::size_t>(argc)},
                          processSignalHandlers,
                          textCatalog,
-                         gtkTextCatalog,
                          *textOrderingPolicyPtr,
                          *completionAliasPolicyPtr);
     processSignalHandlers.uninstall();
@@ -908,19 +903,20 @@ int main(int argc, char* argv[])
           request.activation.contextPtr->launch_failed(*request.activation.optToken);
         }
 
-        auto const message =
-          textCatalog.format(i18n::MessageId::GtkStartupLaunchLibraryFailed, {{"detail", launchedRes.error().message}});
+        auto const message = i18n::requiredFormat(
+          textCatalog, i18n::MessageId::GtkStartupLaunchLibraryFailed, {{"detail", launchedRes.error().message}});
         APP_LOG_ERROR("{}", message);
-        std::ignore =
-          runDiagnosticApp(textCatalog.text(i18n::MessageId::GtkStartupFailedTitle), message, processSignalHandlers);
+        std::ignore = runDiagnosticApp(
+          gtkText(textCatalog, i18n::MessageId::GtkStartupFailedTitle), message, processSignalHandlers);
         rt::Log::shutdown();
         return EXIT_FAILURE;
       }
     }
     else if (result.optDiagnosticMessage)
     {
-      std::ignore = runDiagnosticApp(
-        textCatalog.text(i18n::MessageId::GtkStartupFailedTitle), *result.optDiagnosticMessage, processSignalHandlers);
+      std::ignore = runDiagnosticApp(gtkText(textCatalog, i18n::MessageId::GtkStartupFailedTitle),
+                                     *result.optDiagnosticMessage,
+                                     processSignalHandlers);
     }
 
     rt::Log::shutdown();

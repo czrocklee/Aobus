@@ -4,7 +4,7 @@
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
-#include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -117,7 +117,7 @@ namespace ao::uimodel
                                  {
                                    bool promoted = false;
 
-                                   if (node.type == kSplitComponentType)
+                                   if (node.type == componentTypeName(SharedLayoutComponentType::Split))
                                    {
                                      promoted = promoteSplitState(node, *optEntry, stateDoc);
                                    }

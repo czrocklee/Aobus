@@ -9,7 +9,7 @@
 #include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/WritableTagList.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <cstddef>
 #include <format>
@@ -19,7 +19,7 @@
 
 namespace ao::uimodel
 {
-  SmartListEditorViewState makeSmartListEditorViewState(PresentationTextCatalog const& textCatalog,
+  SmartListEditorViewState makeSmartListEditorViewState(i18n::MessageCatalog const& textCatalog,
                                                         SmartListPreviewState const& input)
   {
     auto state = SmartListEditorViewState{};
@@ -34,11 +34,11 @@ namespace ao::uimodel
     {
       auto const expression =
         query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = *optWritableTag});
-      state.membershipEditingText = textCatalog.smartListMembershipEditingText(true, expression);
+      state.membershipEditingText = smartListMembershipEditingText(textCatalog, true, expression);
     }
     else
     {
-      state.membershipEditingText = textCatalog.smartListMembershipEditingText(false);
+      state.membershipEditingText = smartListMembershipEditingText(textCatalog, false);
     }
 
     if (!input.hasPreviewSource)
@@ -59,16 +59,16 @@ namespace ao::uimodel
 
     if (state.errorVisible)
     {
-      state.errorText = textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", input.errorMessage}});
+      state.errorText =
+        i18n::requiredFormat(textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", input.errorMessage}});
     }
 
     return state;
   }
 
-  std::string formatSmartListExpressionDisplayText(PresentationTextCatalog const& textCatalog,
-                                                   std::string_view expression)
+  std::string formatSmartListExpressionDisplayText(i18n::MessageCatalog const& textCatalog, std::string_view expression)
   {
-    return expression.empty() ? std::string{textCatalog.text(i18n::MessageId::SmartListExpressionNone)}
+    return expression.empty() ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::SmartListExpressionNone)}
                               : std::string{expression};
   }
 
@@ -87,16 +87,16 @@ namespace ao::uimodel
     return std::format("({}) and ({})", parent, local);
   }
 
-  std::string formatSmartListPreviewStatusText(PresentationTextCatalog const& textCatalog,
+  std::string formatSmartListPreviewStatusText(i18n::MessageCatalog const& textCatalog,
                                                bool const expressionValid,
                                                std::size_t count,
                                                bool isAllTracks,
                                                bool localEmpty)
   {
-    return textCatalog.smartListPreviewStatus(expressionValid, count, isAllTracks, localEmpty);
+    return smartListPreviewStatus(textCatalog, expressionValid, count, isAllTracks, localEmpty);
   }
 
-  std::string formatSmartListPreviewTrackLabel(PresentationTextCatalog const& textCatalog,
+  std::string formatSmartListPreviewTrackLabel(i18n::MessageCatalog const& textCatalog,
                                                std::string_view title,
                                                std::string_view artist,
                                                std::string_view album)
@@ -130,7 +130,7 @@ namespace ao::uimodel
       return formatted;
     }
 
-    return std::string{textCatalog.text(i18n::MessageId::SmartListUntitledTrack)};
+    return std::string{i18n::requiredText(textCatalog, i18n::MessageId::SmartListUntitledTrack)};
   }
 
   // The draft owns its strings, so they are taken by value and moved in: a

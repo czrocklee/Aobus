@@ -286,7 +286,9 @@ def clang_tool(build_dir: Path, name: str, *, os_name: str | None = None) -> str
 
 
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx"))
-_HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
+_SELF_CONTAINED_HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
+_INCLUDE_FRAGMENT_SUFFIXES = frozenset((".def",))
+_HEADER_SUFFIXES = _SELF_CONTAINED_HEADER_SUFFIXES | _INCLUDE_FRAGMENT_SUFFIXES
 _PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Posix", "Windows")
 
 
@@ -644,7 +646,11 @@ class CompileCommandTarget:
 
     @property
     def is_header(self) -> bool:
-        return self.selected.suffix.lower() in _HEADER_SUFFIXES
+        return self.selected.suffix.lower() in _SELF_CONTAINED_HEADER_SUFFIXES
+
+    @property
+    def is_include_fragment(self) -> bool:
+        return self.selected.suffix.lower() in _INCLUDE_FRAGMENT_SUFFIXES
 
 
 @dataclass(frozen=True)
@@ -664,8 +670,9 @@ class CompileCommandDeferral:
 class CompileCommandPlan:
     """Native clang-tidy targets plus files deferred to another platform.
 
-    Header targets prefer a same-component implementation, then a real consumer
-    recorded by Ninja, and are checked as main files using that exact compile command.
+    Self-contained headers are checked as main files. Headers and include fragments
+    prefer a same-component implementation, then a real consumer recorded by Ninja,
+    and use that exact compile command.
     """
 
     targets: tuple[CompileCommandTarget, ...]

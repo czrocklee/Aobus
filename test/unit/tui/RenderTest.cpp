@@ -3,9 +3,8 @@
 
 #include "tui/Render.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
-#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/CommandPalettePanel.h"
 #include "tui/CoverArt.h"
 #include "tui/NotificationCenterPanel.h"
@@ -21,11 +20,13 @@
 #include "tui/TuiTextCatalog.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_message.hpp>
@@ -53,19 +54,19 @@ namespace ao::tui::test
   {
     TrackListEntry englishTrackListEntry(rt::TrackRow const& row)
     {
-      return makeTrackListEntry(ao::test::englishPresentationTextCatalog(), row);
+      return makeTrackListEntry(ao::test::englishMessageCatalog(), row);
     }
 
     std::int32_t englishDetailPaneColumns(std::int32_t const terminalColumns)
     {
-      return detailPaneColumns(ao::test::englishPresentationTextCatalog(), terminalColumns, kCoverArtDefaultColumns);
+      return detailPaneColumns(ao::test::englishMessageCatalog(), terminalColumns, kCoverArtDefaultColumns);
     }
 
     ftxui::Element englishDetailPane(TrackListEntry const* const selectedTrack,
                                      ftxui::Element coverElementPtr,
                                      std::int32_t const columns)
     {
-      return detailPane(ao::test::englishPresentationTextCatalog(), selectedTrack, std::move(coverElementPtr), columns);
+      return detailPane(ao::test::englishMessageCatalog(), selectedTrack, std::move(coverElementPtr), columns);
     }
 
     /// The upper-half block a Blocks-mode cover paints its cells with.
@@ -119,13 +120,13 @@ namespace ao::tui::test
                            terminalRows);
     }
 
-    std::int32_t widestDetailLabelColumns(uimodel::PresentationTextCatalog const& textCatalog)
+    std::int32_t widestDetailLabelColumns(i18n::MessageCatalog const& textCatalog)
     {
       std::int32_t widest = 0;
 
       for (auto const field : trackDetailFields())
       {
-        widest = std::max(widest, cellWidth(textCatalog.trackFieldLabel(field)));
+        widest = std::max(widest, cellWidth(uimodel::trackFieldLabel(textCatalog, field)));
       }
 
       return std::min(widest, kDetailLabelColumns) + cellWidth(": ");
@@ -166,39 +167,31 @@ namespace ao::tui::test
 
     ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t const columns = 0)
     {
-      return ao::tui::commandPalettePanel(
-        ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), shell, columns);
+      return ao::tui::commandPalettePanel(ao::test::englishMessageCatalog(), shell, columns);
     }
 
     ftxui::Element quickFilterCompletionPanel(ShellInteractionModel const& shell,
                                               std::int32_t const columns = 0,
                                               std::string_view const filterError = {})
     {
-      return ao::tui::quickFilterCompletionPanel(
-        ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), shell, columns, filterError);
+      return ao::tui::quickFilterCompletionPanel(ao::test::englishMessageCatalog(), shell, columns, filterError);
     }
 
     ftxui::Element helpPane(std::int32_t const columns = 0)
     {
-      return ao::tui::helpPane(englishTuiTextCatalog(), columns);
-    }
-
-    std::int32_t helpPaneColumns(std::int32_t const terminalColumns)
-    {
-      return ao::tui::helpPaneColumns(englishTuiTextCatalog(), terminalColumns);
+      return ao::tui::helpPane(ao::test::englishMessageCatalog(), columns);
     }
 
     ftxui::Element statusBar(StatusBarViewState const& state)
     {
-      return ao::tui::statusBar(englishTuiTextCatalog(), state);
+      return ao::tui::statusBar(ao::test::englishMessageCatalog(), state);
     }
 
     ftxui::Element notificationCenterPanel(uimodel::ActivityStatusViewState const& state,
                                            std::vector<NotificationDetailRowHitRegion>* const rowHitRegions = nullptr,
                                            std::int32_t const columns = 0)
     {
-      return ao::tui::notificationCenterPanel(
-        ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog(), state, rowHitRegions, columns);
+      return ao::tui::notificationCenterPanel(ao::test::englishMessageCatalog(), state, rowHitRegions, columns);
     }
 
     ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
@@ -207,50 +200,42 @@ namespace ao::tui::test
                                      std::vector<PresentationRowHitRegion>* const rowHitRegions = nullptr,
                                      std::int32_t const columns = 0)
     {
-      return ao::tui::presentationPanel(ao::test::englishPresentationTextCatalog(),
-                                        englishTuiTextCatalog(),
-                                        items,
-                                        activePresentationId,
-                                        selectedIndex,
-                                        rowHitRegions,
-                                        columns);
+      return ao::tui::presentationPanel(
+        ao::test::englishMessageCatalog(), items, activePresentationId, selectedIndex, rowHitRegions, columns);
     }
 
     std::int32_t presentationPanelColumns(std::vector<TrackPresentationNavEntry> const& items,
                                           std::string_view const activePresentationId,
                                           std::int32_t const terminalColumns)
     {
-      return ao::tui::presentationPanelColumns(ao::test::englishPresentationTextCatalog(),
-                                               englishTuiTextCatalog(),
-                                               items,
-                                               activePresentationId,
-                                               terminalColumns);
+      return ao::tui::presentationPanelColumns(
+        ao::test::englishMessageCatalog(), items, activePresentationId, terminalColumns);
     }
   } // namespace
 
-  TEST_CASE("TuiTextCatalog - resolves German and pseudo shell copy", "[tui][unit][localization]")
+  TEST_CASE("i18n::MessageCatalog - resolves German and pseudo shell copy", "[tui][unit][localization]")
   {
-    auto const german = tuiTextCatalog("de-AT");
-    CHECK(german.text(TuiTextId::CommandPaletteTitle) == "Befehlspalette");
-    CHECK(german.text(TuiTextId::QuickFilterTitle) == "Schnellfilter");
-    CHECK(german.text(TuiTextId::QuickFilterFooter).contains("Enter übernehmen"));
-    CHECK(german.text(TuiTextId::OverlayViews) == "Ansichten");
-    CHECK(german.text(TuiTextId::HintLists).contains("Enter öffnen"));
-    CHECK(german.text(TuiTextId::LibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
-    CHECK(german.libraryReloadedTracks(2) == "2 Titel neu geladen");
-    CHECK(german.libraryQuickFilterMatched(1) == "Schnellfilter fand 1 Titel");
+    auto const german = ao::test::messageCatalog("de-AT");
+    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellCommandPaletteTitle) == "Befehlspalette");
+    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellQuickFilterTitle) == "Schnellfilter");
+    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellQuickFilterFooter).contains("Enter übernehmen"));
+    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellOverlayViews) == "Ansichten");
+    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellHintLists).contains("Enter öffnen"));
+    CHECK(tuiChromeText(german, i18n::MessageId::TuiLibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
+    CHECK(libraryReloadedTracks(german, 2) == "2 Titel neu geladen");
+    CHECK(libraryQuickFilterMatched(german, 1) == "Schnellfilter fand 1 Titel");
 
-    auto const pseudo = tuiTextCatalog("qps-ploc");
-    CHECK(pseudo.text(TuiTextId::CommandPaletteTitle) != "Command Palette");
-    CHECK(pseudo.text(TuiTextId::QuickFilterTitle) != "Quick Filter");
-    CHECK(pseudo.text(TuiTextId::HintViews).contains("Enter"));
-    CHECK(pseudo.text(TuiTextId::LibraryNoTracksFound) != "No tracks found. Run `aobus init` in this library first.");
-    CHECK(pseudo.libraryOpenedList("Road Trip").contains("Road Trip"));
+    auto const pseudo = ao::test::messageCatalog("qps-ploc");
+    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellCommandPaletteTitle) != "Command Palette");
+    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellQuickFilterTitle) != "Quick Filter");
+    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellHintViews).contains("Enter"));
+    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiLibraryNoTracksFound) !=
+          "No tracks found. Run `aobus init` in this library first.");
+    CHECK(libraryOpenedList(pseudo, "Road Trip").contains("Road Trip"));
 
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "view albums");
-    auto const narrow =
-      renderElement(commandPalettePanel(ao::test::englishPresentationTextCatalog(), pseudo, shell, 32), 32, 8);
+    auto const narrow = renderElement(commandPalettePanel(pseudo, shell, 32), 32, 8);
     CHECK(narrow.text.contains(":view albums"));
     CHECK_FALSE(narrow.text.empty());
   }
@@ -269,8 +254,13 @@ namespace ao::tui::test
 
   TEST_CASE("Render - side panes size to content and terminal bounds", "[tui][unit][render]")
   {
-    CHECK(helpPaneColumns(120) > 0);
-    CHECK(helpPaneColumns(30) == 30);
+    auto wideHelpBox = ftxui::Box{};
+    auto narrowHelpBox = ftxui::Box{};
+    std::ignore = renderBesideWorkspace(helpPane(120), wideHelpBox, 120);
+    std::ignore = renderBesideWorkspace(helpPane(30), narrowHelpBox, 30);
+
+    CHECK(boxColumns(wideHelpBox) > 0);
+    CHECK(boxColumns(narrowHelpBox) == 30);
     CHECK(englishDetailPaneColumns(120) > 0);
     CHECK(englishDetailPaneColumns(40) == 40);
   }
@@ -295,7 +285,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - detail rows keep labels and values inside their budgets", "[tui][unit][render][detail]")
   {
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const columns = englishDetailPaneColumns(120);
     auto const bodyColumns = style::popupPanelBodyColumns(columns);
     auto const labelColumns = widestDetailLabelColumns(textCatalog);
@@ -304,7 +294,8 @@ namespace ao::tui::test
     auto const rendered = renderBesideWorkspace(englishDetailPane(&populated, {}, columns), paneBox);
 
     // English labels fit the cap, so they are spelled out in full.
-    CHECK(rendered.text.contains(std::string{textCatalog.trackFieldLabel(rt::TrackField::AlbumArtist)} + ": "));
+    CHECK(
+      rendered.text.contains(std::string{uimodel::trackFieldLabel(textCatalog, rt::TrackField::AlbumArtist)} + ": "));
     CHECK(labelColumns <= kDetailLabelColumns + cellWidth(": "));
     CHECK(labelColumns * 100 <= bodyColumns * kDetailLabelPercent);
     CHECK(bodyColumns - labelColumns >= kMinimumDetailValueColumns);
@@ -349,7 +340,7 @@ namespace ao::tui::test
     auto artworkBox = ftxui::Box{};
     auto paneBox = ftxui::Box{};
     auto const optPreview = std::optional{solidPreview()};
-    auto coverPtr = detailCoverArt(ao::test::englishPresentationTextCatalog(),
+    auto coverPtr = detailCoverArt(ao::test::englishMessageCatalog(),
                                    CoverArtDeliveryMode::Blocks,
                                    optPreview,
                                    std::nullopt,
@@ -368,7 +359,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - block and Kitty artwork claim the same cells", "[tui][unit][render][cover-art]")
   {
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const populated = englishTrackListEntry(fullyPopulatedRow());
     auto const optPng = std::optional{std::vector{std::byte{0x89}}};
 
@@ -407,7 +398,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - artwork the loader has not published costs one line", "[tui][unit][render][cover-art]")
   {
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const columns = englishDetailPaneColumns(120);
     auto const populated = englishTrackListEntry(fullyPopulatedRow());
     auto artworkBox = ftxui::Box{.x_min = 1, .x_max = 24, .y_min = 1, .y_max = 12};
@@ -522,15 +513,14 @@ namespace ao::tui::test
   {
     auto const columns = englishDetailPaneColumns(120);
     auto paneBox = ftxui::Box{};
-    auto const rendered =
-      renderBesideWorkspace(englishDetailPane(nullptr,
-                                              detailCoverArt(ao::test::englishPresentationTextCatalog(),
-                                                             CoverArtDeliveryMode::Blocks,
-                                                             std::optional{solidPreview()},
-                                                             std::nullopt,
-                                                             kCoverArtDefaultColumns),
-                                              columns),
-                            paneBox);
+    auto const rendered = renderBesideWorkspace(englishDetailPane(nullptr,
+                                                                  detailCoverArt(ao::test::englishMessageCatalog(),
+                                                                                 CoverArtDeliveryMode::Blocks,
+                                                                                 std::optional{solidPreview()},
+                                                                                 std::nullopt,
+                                                                                 kCoverArtDefaultColumns),
+                                                                  columns),
+                                                paneBox);
 
     CHECK(rendered.text.contains("No track selected"));
     CHECK_FALSE(rendered.text.contains("Title"));
@@ -543,7 +533,7 @@ namespace ao::tui::test
 
     for (auto const* const locale : {"de-DE", "es-ES", "fr-FR", "ja-JP", "zh-Hans-CN", "zh-Hant-TW", "qps-ploc"})
     {
-      auto const textCatalog = ao::test::presentationTextCatalog(locale);
+      auto const textCatalog = ao::test::messageCatalog(locale);
       auto const columns = detailPaneColumns(textCatalog, kTerminalColumns / 2, kCoverArtDefaultColumns);
       auto const sparse = makeTrackListEntry(textCatalog, sparseRow());
       auto const populated = makeTrackListEntry(textCatalog, fullyPopulatedRow());

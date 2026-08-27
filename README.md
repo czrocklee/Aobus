@@ -60,7 +60,9 @@ exclusive lock beside that tree and report when they wait for another writer.
 The adjacent `.ao-build.lock` file survives `--clean`; it does not reserve a
 stable read snapshot for running applications, tests, or analysis tools.
 Governed dependency versions and native resolver identities can be inspected
-with `./ao deps report`. Follow the [dependency upgrade workflow](doc/development/dependency-upgrade.md)
+with `./ao deps report`. Public-concept metrics for [RFC 0002](doc/rfc/0002-application-concept-debloat.md)
+use `./ao deps report --concepts`; the procedure is in the
+[concept metrics guide](doc/development/concept-metrics.md). Follow the [dependency upgrade workflow](doc/development/dependency-upgrade.md)
 when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
 
 ### macOS

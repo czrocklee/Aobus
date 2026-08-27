@@ -8,7 +8,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <optional>
@@ -20,8 +20,7 @@
 
 namespace ao::uimodel
 {
-  TrackPresentationCatalog::TrackPresentationCatalog(rt::WorkspaceService& workspace,
-                                                     PresentationTextCatalog textCatalog)
+  TrackPresentationCatalog::TrackPresentationCatalog(rt::WorkspaceService& workspace, i18n::MessageCatalog textCatalog)
     : _workspace{workspace}, _textCatalog{std::move(textCatalog)}
   {
     _customPresetsSub = _workspace.onChanged(
@@ -71,7 +70,7 @@ namespace ao::uimodel
   {
     if (auto const* builtin = rt::builtinTrackPresentationPreset(id); builtin != nullptr)
     {
-      if (auto const optText = _textCatalog.builtinTrackPresentation(builtin->spec.id); optText)
+      if (auto const optText = builtinTrackPresentation(_textCatalog, builtin->spec.id); optText)
       {
         return std::string{optText->label};
       }
@@ -91,7 +90,7 @@ namespace ao::uimodel
 
     for (auto const& preset : builtinPresets())
     {
-      auto const optText = _textCatalog.builtinTrackPresentation(preset.spec.id);
+      auto const optText = builtinTrackPresentation(_textCatalog, preset.spec.id);
 
       items.push_back(TrackPresentationMenuItem{
         .type = TrackPresentationMenuItemType::Preset,
@@ -121,7 +120,7 @@ namespace ao::uimodel
     });
     items.push_back(TrackPresentationMenuItem{
       .type = TrackPresentationMenuItemType::CreateCustomView,
-      .label = std::string{_textCatalog.text(i18n::MessageId::CreateCustomTrackPresentation)},
+      .label = std::string{i18n::requiredText(_textCatalog, i18n::MessageId::CreateCustomTrackPresentation)},
     });
 
     return items;

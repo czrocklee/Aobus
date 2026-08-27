@@ -17,7 +17,7 @@
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -340,8 +340,8 @@ namespace winrt::Aobus::implementation
     {
       auto item = Microsoft::UI::Xaml::Controls::ToggleMenuFlyoutItem{};
       auto const fieldId = ao::rt::trackFieldId(choice.field);
-      item.Text(
-        to_hstring(ao::winui::stableResourceString("track_field_", fieldId, text.trackFieldLabel(choice.field))));
+      item.Text(to_hstring(
+        ao::winui::stableResourceString("track_field_", fieldId, ao::uimodel::trackFieldLabel(text, choice.field))));
       item.IsChecked(choice.visible);
       item.Tag(box_value(to_hstring(std::string{fieldId})));
       item.Click(

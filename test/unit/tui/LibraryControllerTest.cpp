@@ -3,12 +3,11 @@
 
 #include "tui/LibraryController.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include "test/unit/tui/TuiTextCatalogTestSupport.h"
 #include "tui/LibraryNavigation.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ListMutation.h>
@@ -67,8 +66,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     auto const trackId = fixture.addTrack("Needle");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
 
     REQUIRE(controller.activeViewId() != rt::kInvalidViewId);
     REQUIRE(controller.tracks().size() == 1);
@@ -86,8 +84,7 @@ namespace ao::tui::test
     fixture.addTrack("Needle");
     fixture.addTrack("Other");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     controller.setFilterDraft("Needle");
     CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
     REQUIRE(controller.tracks().size() == 1);
@@ -104,8 +101,7 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack("Needle");
     fixture.addTrack("Other");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     controller.setFilterDraft("$title ~ \"Needle\"");
 
     CHECK(requireAppliedFilter(controller) == "Expression filter matched 1 track");
@@ -118,8 +114,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Needle");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     controller.setFilterDraft("$artist =");
 
     REQUIRE(controller.applyFilter());
@@ -137,8 +132,7 @@ namespace ao::tui::test
     fixture.addTrack("Needle");
     auto const cleanListId = fixture.addList("Clean");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     controller.setFilterDraft("$artist =");
     REQUIRE(controller.applyFilter());
     REQUIRE(controller.filterError().contains("Filter error:"));
@@ -161,8 +155,7 @@ namespace ao::tui::test
     auto const firstTrackId = fixture.addTrack("Needle");
     fixture.addTrack("Other");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     auto const activeViewId = controller.activeViewId();
     auto const selectedTrack = controller.selectedTrack();
     auto const sectionCount = controller.sections().size();
@@ -187,8 +180,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Needle");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     controller.setFilterDraft("not-present");
 
     CHECK(requireAppliedFilter(controller) == "Quick filter matched 0 tracks");
@@ -205,8 +197,7 @@ namespace ao::tui::test
     fixture.addTrack("First");
     auto const secondId = fixture.addTrack("Second");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
 
     CHECK(controller.revealTrack(secondId) == "Revealed Second");
     CHECK(controller.selectedTrack() == 1);
@@ -220,8 +211,7 @@ namespace ao::tui::test
     fixture.addTrack("First");
     auto const hiddenId = fixture.addTrack("Hidden");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
 
     CHECK(controller.revealTrack(kInvalidTrackId) == "No current track");
 
@@ -253,8 +243,7 @@ namespace ao::tui::test
                                                                     .uri = "a2.flac",
                                                                     .year = 2020});
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     REQUIRE(controller.setPresentation("albums") == "View: albums");
     REQUIRE(controller.tracks().size() == 3);
     CHECK(controller.tracks()[0].id == targetId);
@@ -272,8 +261,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("First");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
 
     CHECK(controller.setPresentation("albums") == "View: albums");
     CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "albums");
@@ -286,8 +274,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("First");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     auto customSpec = rt::defaultTrackPresentationSpec();
     customSpec.id = "custom-songs";
 
@@ -320,8 +307,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "Newer", .artist = "Same Artist", .album = "A Album", .uri = "newer.flac", .year = 2025});
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     REQUIRE(controller.tracks().size() == 2);
     REQUIRE(controller.tracks()[1].id == olderId);
 
@@ -345,8 +331,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "B One", .artist = "Artist", .album = "Album B", .albumArtist = "Artist", .year = 2021});
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
 
     CHECK(controller.setPresentation("albums") == "View: albums");
     REQUIRE(controller.sections().size() == 2);
@@ -370,8 +355,7 @@ namespace ao::tui::test
     fixture.addTrack(
       library::test::TrackSpec{.title = "B One", .artist = "Artist", .album = "Album B", .albumArtist = "Artist"});
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     REQUIRE(controller.setPresentation("albums") == "View: albums");
     REQUIRE(controller.sections().size() == 2);
 
@@ -387,8 +371,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("First");
 
-    auto controller =
-      LibraryController{*fixture.runtimePtr, ao::test::englishPresentationTextCatalog(), englishTuiTextCatalog()};
+    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog()};
     REQUIRE(controller.sections().empty());
 
     CHECK(controller.jumpToAdjacentSection(1) == "No sections in this view");

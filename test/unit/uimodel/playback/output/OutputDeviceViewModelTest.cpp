@@ -4,7 +4,7 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
@@ -33,7 +33,7 @@ namespace ao::uimodel::test
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
     auto viewModel = OutputDeviceViewModel{fixture.playback,
-                                           ao::test::englishPresentationTextCatalog(),
+                                           ao::test::englishMessageCatalog(),
                                            [&log](auto const& view) { log.render(view); },
                                            OutputDeviceIntent::discarded()};
 
@@ -62,7 +62,7 @@ namespace ao::uimodel::test
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
     auto viewModel = OutputDeviceViewModel{playback,
-                                           ao::test::englishPresentationTextCatalog(),
+                                           ao::test::englishMessageCatalog(),
                                            [&log](auto const& view) { log.render(view); },
                                            OutputDeviceIntent::discarded()};
 
@@ -216,7 +216,7 @@ namespace ao::uimodel::test
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
     auto viewModel = OutputDeviceViewModel{fixture.playback,
-                                           ao::test::englishPresentationTextCatalog(),
+                                           ao::test::englishMessageCatalog(),
                                            [&log](auto const& view) { log.render(view); },
                                            OutputDeviceIntent::discarded()};
     viewModel.refresh();
@@ -237,7 +237,7 @@ namespace ao::uimodel::test
     auto optRequested = std::optional<audio::OutputDeviceSelection>{};
     auto viewModel = OutputDeviceViewModel{
       fixture.playback,
-      ao::test::englishPresentationTextCatalog(),
+      ao::test::englishMessageCatalog(),
       {},
       OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
                                      { optRequested = selection; }),
@@ -262,7 +262,7 @@ namespace ao::uimodel::test
     auto optRequested = std::optional<audio::OutputDeviceSelection>{};
     auto viewModel = OutputDeviceViewModel{
       fixture.playback,
-      ao::test::englishPresentationTextCatalog(),
+      ao::test::englishMessageCatalog(),
       [&rendered](OutputDeviceViewState const& view)
       {
         auto replacement = view;

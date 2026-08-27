@@ -11,6 +11,7 @@
 #include "pch.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
@@ -131,9 +132,7 @@ namespace ao::winui::layout
                                                                      : winrt::Microsoft::UI::Xaml::Visibility::Visible);
       }
 
-      void follow(async::Runtime& asyncRuntime,
-                  rt::PlaybackService& playback,
-                  uimodel::PresentationTextCatalog const& textCatalog)
+      void follow(async::Runtime& asyncRuntime, rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
       {
         _coverArt.bind(asyncRuntime);
         _viewModelPtr = std::make_unique<uimodel::NowPlayingViewModel>(

@@ -13,6 +13,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
@@ -27,7 +28,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <gdkmm/rectangle.h>
@@ -84,15 +84,13 @@ namespace ao::gtk
 
   ListNavigationController::ListNavigationController(Gtk::Window& parent,
                                                      rt::AppRuntime& runtime,
-                                                     uimodel::PresentationTextCatalog textCatalog,
-                                                     GtkTextCatalog const& gtkTextCatalog,
+                                                     i18n::MessageCatalog textCatalog,
                                                      Callbacks callbacks,
                                                      ThemeCoordinator& themeCoordinator)
     : _parent{parent}
     , _callbacks{std::move(callbacks)}
     , _runtime{runtime}
     , _textCatalog{std::move(textCatalog)}
-    , _gtkTextCatalog{gtkTextCatalog}
     , _themeCoordinator{themeCoordinator}
   {
     auto panelCallbacks = ListNavigationPanel::Callbacks{
@@ -101,7 +99,7 @@ namespace ao::gtk
       { handleContextMenuRequested(listId, rect); },
     };
 
-    _panelPtr = std::make_unique<ListNavigationPanel>(_textCatalog, _gtkTextCatalog, std::move(panelCallbacks));
+    _panelPtr = std::make_unique<ListNavigationPanel>(_textCatalog, std::move(panelCallbacks));
     createActions();
     auto const initialWorkspace = _runtime.workspace().snapshot();
     _observedViewId = initialWorkspace.activeViewId;
@@ -321,8 +319,7 @@ namespace ao::gtk
     }
 
     auto const parentListId = ao::uimodel::parentForNewSmartList(_panelPtr->selectedListId());
-    auto* dialog = Gtk::make_managed<SmartListDialog>(
-      _parent, _runtime, _textCatalog, _gtkTextCatalog, parentListId, *_dataProvider);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, _textCatalog, parentListId, *_dataProvider);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->configurePlaylistTemplate();
     dialog->signal_response().connect(
@@ -347,8 +344,7 @@ namespace ao::gtk
       return;
     }
 
-    auto* dialog = Gtk::make_managed<SmartListDialog>(
-      _parent, _runtime, _textCatalog, _gtkTextCatalog, parentListId, *_dataProvider);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, _textCatalog, parentListId, *_dataProvider);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
 
     if (!initialExpression.empty())
@@ -390,8 +386,8 @@ namespace ao::gtk
     {
       auto const optPres =
         _callbacks.listPresentationCallback ? _callbacks.listPresentationCallback(listId) : std::nullopt;
-      auto* dialog = Gtk::make_managed<SmartListDialog>(
-        _parent, _runtime, _textCatalog, _gtkTextCatalog, optNode->parentId, *_dataProvider);
+      auto* dialog =
+        Gtk::make_managed<SmartListDialog>(_parent, _runtime, _textCatalog, optNode->parentId, *_dataProvider);
       auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
       dialog->populate(listId, *optNode, optPres);
       dialog->signal_response().connect(
@@ -507,8 +503,8 @@ namespace ao::gtk
                   owner->presentDeleteConfirmation(
                     listId,
                     false,
-                    std::string{owner->_gtkTextCatalog.text(GtkTextId::ListDeleteQuestionTitle)},
-                    owner->_gtkTextCatalog.deleteListQuestion(previewRes->name),
+                    gtkText(owner->_textCatalog, i18n::MessageId::GtkListDeleteQuestionTitle),
+                    deleteListQuestion(owner->_textCatalog, previewRes->name),
                     previewRes->optTagImpact);
                 });
   }
@@ -542,13 +538,13 @@ namespace ao::gtk
                     entries.append(std::format("• {} ({})\n", list.name, list.listId));
                   }
 
-                  auto message = owner->_gtkTextCatalog.deleteSubtreeQuestion(previewRes->deletedLists.size(), entries);
+                  auto message = deleteSubtreeQuestion(owner->_textCatalog, previewRes->deletedLists.size(), entries);
                   auto optTagImpact = previewRes->deletedLists.empty() ? std::optional<rt::DeleteListReply::TagImpact>{}
                                                                        : previewRes->deletedLists.front().optTagImpact;
                   owner->presentDeleteConfirmation(
                     listId,
                     true,
-                    std::string{owner->_gtkTextCatalog.text(GtkTextId::ListDeleteSubtreeTitle)},
+                    gtkText(owner->_textCatalog, i18n::MessageId::GtkListDeleteSubtreeTitle),
                     std::move(message),
                     std::move(optTagImpact));
                 });
@@ -564,9 +560,10 @@ namespace ao::gtk
     dialog->set_title(std::move(title));
     dialog->configureForParent(_parent);
     dialog->setCloseResponse(Gtk::ResponseType::CANCEL);
-    dialog->addCancelAction(_gtkTextCatalog.text(GtkTextId::CommonCancel), Gtk::ResponseType::CANCEL);
+    dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
     dialog->addPrimaryAction(
-      _gtkTextCatalog.text(deleteDescendants ? GtkTextId::ListDeleteAllAction : GtkTextId::ListDeleteAction),
+      gtkText(_textCatalog,
+              deleteDescendants ? i18n::MessageId::GtkListDeleteAllAction : i18n::MessageId::GtkListDeleteAction),
       Gtk::ResponseType::YES);
     dialog->setDefaultResponse(Gtk::ResponseType::CANCEL);
 
@@ -584,7 +581,7 @@ namespace ao::gtk
     if (optTagImpact)
     {
       cleanupCheck = Gtk::make_managed<Gtk::CheckButton>(
-        _gtkTextCatalog.removeMembershipTagQuestion(displayedTag(optTagImpact->tag), optTagImpact->taggedTrackCount));
+        removeMembershipTagQuestion(_textCatalog, displayedTag(optTagImpact->tag), optTagImpact->taggedTrackCount));
       cleanupCheck->set_active(false);
       content->append(*cleanupCheck);
 
@@ -603,7 +600,7 @@ namespace ao::gtk
         }
 
         auto* const warningLabel = Gtk::make_managed<Gtk::Label>(
-          _gtkTextCatalog.membershipTagReferencesWarning(displayedTag(optTagImpact->tag), references));
+          membershipTagReferencesWarning(_textCatalog, displayedTag(optTagImpact->tag), references));
         warningLabel->set_halign(Gtk::Align::START);
         warningLabel->set_xalign(0.0F);
         warningLabel->set_wrap(true);
@@ -669,9 +666,9 @@ namespace ao::gtk
     APP_LOG_ERROR("Failed to delete list {}: {}", listId, message);
     auto* const dialog =
       AppDialog::presentMessage(_parent,
-                                _gtkTextCatalog.text(GtkTextId::ListUnableToDeleteTitle),
+                                gtkText(_textCatalog, i18n::MessageId::GtkListUnableToDeleteTitle),
                                 std::string{message},
-                                {AppDialogAction{.label = std::string{_gtkTextCatalog.text(GtkTextId::CommonClose)},
+                                {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonClose),
                                                  .responseId = Gtk::ResponseType::CLOSE,
                                                  .role = AppDialogActionRole::Cancel}},
                                 Gtk::ResponseType::CLOSE);

@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/document/LayoutPresets.h"
-#include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
@@ -22,6 +23,18 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
+
+  namespace
+  {
+    LayoutComponentCatalog persistentLayoutCatalog()
+    {
+      auto catalog = LayoutComponentCatalog{};
+      catalog.registerComponentDescriptor(sharedComponentDescriptor(SharedLayoutComponentType::Split));
+      catalog.registerComponentDescriptor(
+        {.type = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true});
+      return catalog;
+    }
+  } // namespace
 
   TEST_CASE("LayoutModel - GTK built-in layout documents define stable preset contracts", "[gtk][unit][layout][model]")
   {
@@ -98,17 +111,19 @@ namespace ao::gtk::layout::test
 
         REQUIRE(preparedRes);
 
+        auto const catalog = persistentLayoutCatalog();
         visitLayoutDocumentNodes(doc,
                                  [&](LayoutNode const& node)
                                  {
-                                   if (isStatefulLayoutComponentType(node.type) && node.id.empty())
+                                   if (auto const optDescriptor = catalog.descriptor(node.type);
+                                       optDescriptor && optDescriptor->persistentState && node.id.empty())
                                    {
                                      missingStatefulIds.push_back(node.type);
                                    }
                                  });
 
         CHECK(missingStatefulIds.empty());
-        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(*preparedRes)));
+        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(*preparedRes, catalog)));
       }
     }
 

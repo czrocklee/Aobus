@@ -28,7 +28,6 @@
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/button.h>
@@ -36,7 +35,6 @@
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/widget.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <array>
@@ -119,14 +117,14 @@ namespace ao::gtk::layout
       {
         if (ctx.dependencies.imageLoader == nullptr)
         {
-          APP_LOG_ERROR("[PID {}] PlaybackImage: FAILED to create - imageLoader is NULL in context!", getpid());
+          APP_LOG_ERROR("PlaybackImage: Failed to create because imageLoader is null in context");
           _error = Gtk::make_managed<Gtk::Label>("Error: imageLoader missing");
           return;
         }
 
         _imageWidgetPtr = std::make_unique<CoverArtView>();
         _imageWidgetPtr->setAlternativeText(
-          ctx.dependencies.textCatalog.text(i18n::MessageId::GtkPlaybackNowPlayingCoverArt));
+          gtkText(ctx.dependencies.textCatalog, i18n::MessageId::GtkPlaybackNowPlayingCoverArt));
         _imageControllerPtr = std::make_unique<ResourceImageController>(*_imageWidgetPtr,
                                                                         *ctx.dependencies.imageLoader,
                                                                         [this](bool const imageAvailable)
@@ -165,7 +163,7 @@ namespace ao::gtk::layout
         }
 
         auto const actionStr = node.propertyOr<std::string>("action", "none");
-        APP_LOG_DEBUG("[PID {}] PlaybackImage: Parsing action property, raw value: '{}'", getpid(), actionStr);
+        APP_LOG_DEBUG("PlaybackImage: Parsing action property, raw value: '{}'", actionStr);
 
         _action = [actionStr]
         {
@@ -177,10 +175,10 @@ namespace ao::gtk::layout
           return Action::None;
         }();
 
-        setAccessibleLabel(
-          _button,
-          ctx.dependencies.gtkTextCatalog.text(_action == Action::JumpToAlbum ? GtkTextId::PlaybackShowCurrentAlbum
-                                                                              : GtkTextId::PlaybackNowPlayingCoverArt));
+        setAccessibleLabel(_button,
+                           gtkText(ctx.dependencies.textCatalog,
+                                   _action == Action::JumpToAlbum ? i18n::MessageId::GtkPlaybackShowCurrentAlbum
+                                                                  : i18n::MessageId::GtkPlaybackNowPlayingCoverArt));
 
         if (forceSquare)
         {
@@ -239,11 +237,11 @@ namespace ao::gtk::layout
       {
         if (_currentTrackId == kInvalidTrackId)
         {
-          APP_LOG_DEBUG("[PID {}] PlaybackImage: Click ignored, no current track", getpid());
+          APP_LOG_DEBUG("PlaybackImage: Click ignored, no current track");
           return;
         }
 
-        APP_LOG_DEBUG("[PID {}] PlaybackImage: Cover clicked, action: {}", getpid(), static_cast<int>(_action));
+        APP_LOG_DEBUG("PlaybackImage: Cover clicked, action: {}", static_cast<int>(_action));
 
         switch (_action)
         {

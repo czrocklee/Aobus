@@ -3,8 +3,8 @@
 
 #include "LayoutEditorText.h"
 
+#include "i18n/GtkTextCatalog.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <array>
 #include <string>
@@ -177,19 +177,18 @@ namespace ao::gtk::layout::editor
     });
   } // namespace
 
-  std::string layoutEditorVocabularyText(uimodel::PresentationTextCatalog const& textCatalog,
-                                         std::string_view const sourceText)
+  std::string layoutEditorVocabularyText(i18n::MessageCatalog const& textCatalog, std::string_view const sourceText)
   {
     if (sourceText.empty())
     {
-      return std::string{textCatalog.text(MessageId::GtkLayoutNone)};
+      return gtkText(textCatalog, MessageId::GtkLayoutNone);
     }
 
     for (auto const& entry : kVocabulary)
     {
       if (entry.source == sourceText)
       {
-        return std::string{textCatalog.text(entry.messageId)};
+        return gtkText(textCatalog, entry.messageId);
       }
     }
 

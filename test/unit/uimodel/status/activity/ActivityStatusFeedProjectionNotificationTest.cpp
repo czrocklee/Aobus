@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
@@ -17,17 +17,16 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusFeedProjection - projects compact notifications and dismissal state",
             "[uimodel][unit][status][activity]")
   {
-    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishPresentationTextCatalog()};
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
 
     SECTION("warning and error notifications are severity-grouped")
     {
       auto currentFeed = feed({entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Warn A"),
                                entry(rt::NotificationId{3}, rt::NotificationSeverity::Error, "Error A"),
                                entry(rt::NotificationId{4}, rt::NotificationSeverity::Error, "Error B")});
+      auto severityProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), currentFeed};
 
-      feedProjection.initialize(currentFeed);
-
-      auto const& compact = feedProjection.viewState().compact;
+      auto const& compact = severityProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Error);
       CHECK(compact.text == "2 errors");
       CHECK(compact.hasDetails);
@@ -35,15 +34,12 @@ namespace ao::uimodel::test
 
     SECTION("severity groups use the selected locale and plural rules")
     {
-      auto germanProjection = ActivityStatusFeedProjection{ao::test::presentationTextCatalog("de-DE")};
       auto currentFeed = feed({entry(rt::NotificationId{30}, rt::NotificationSeverity::Warning, "Warn A"),
                                entry(rt::NotificationId{31}, rt::NotificationSeverity::Warning, "Warn B")});
-
-      germanProjection.initialize(currentFeed);
+      auto germanProjection = ActivityStatusFeedProjection{ao::test::messageCatalog("de-DE"), currentFeed};
       CHECK(germanProjection.viewState().compact.text == "2 Warnungen");
 
-      auto pseudoProjection = ActivityStatusFeedProjection{ao::test::presentationTextCatalog("qps-ploc")};
-      pseudoProjection.initialize(currentFeed);
+      auto pseudoProjection = ActivityStatusFeedProjection{ao::test::messageCatalog("qps-ploc"), currentFeed};
       auto const& pseudoText = pseudoProjection.viewState().compact.text;
       CHECK(pseudoText.starts_with("[!! "));
       CHECK(pseudoText.contains('2'));
@@ -145,17 +141,16 @@ namespace ao::uimodel::test
     {
       auto currentFeed = feed({entry(rt::NotificationId{23}, rt::NotificationSeverity::Warning, "Older warning"),
                                entry(rt::NotificationId{24}, rt::NotificationSeverity::Warning, "Latest warning")});
+      auto dismissProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), currentFeed};
+      REQUIRE(dismissProjection.viewState().detail.items.size() == 2);
 
-      feedProjection.initialize(currentFeed);
-      REQUIRE(feedProjection.viewState().detail.items.size() == 2);
-
-      feedProjection.hideDetailNotification(rt::NotificationId{24}, currentFeed);
+      dismissProjection.hideDetailNotification(rt::NotificationId{24}, currentFeed);
 
       CHECK(currentFeed.entries.size() == 2);
-      REQUIRE(feedProjection.viewState().detail.items.size() == 1);
-      CHECK(feedProjection.viewState().detail.items[0].id == rt::NotificationId{23});
-      CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
-      CHECK(feedProjection.viewState().compact.text == "Older warning");
+      REQUIRE(dismissProjection.viewState().detail.items.size() == 1);
+      CHECK(dismissProjection.viewState().detail.items[0].id == rt::NotificationId{23});
+      CHECK(dismissProjection.viewState().compact.kind == ActivityStatusKind::Warning);
+      CHECK(dismissProjection.viewState().compact.text == "Older warning");
     }
   }
 } // namespace ao::uimodel::test

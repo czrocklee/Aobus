@@ -238,7 +238,7 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live runtime completion.
 - [`CompletionAliasPolicy`](../../app/include/ao/rt/completion/CompletionAliasPolicy.h) defines the ICU-free alias seam; [`IcuCompletionAliases`](../../app/include/ao/i18n/IcuCompletionAliases.h) supplies the interactive implementation.
 - [`TrackFilterResolver`](../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) own shared quick-filter authoring and completion policy.
-- [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) resolves completion roles and counts without changing query syntax.
+- [`completionDetail`](../../app/include/ao/uimodel/presentation/PresentationText.h) resolves completion roles and counts without changing query syntax.
 - [`TrackCommand.cpp`](../../app/cli/TrackCommand.cpp) is the current format-expression consumer.
 
 ## Test map

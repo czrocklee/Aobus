@@ -6,7 +6,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -45,7 +45,7 @@ namespace ao::gtk::layout::editor::test
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
     auto actionRegistry = ActionRegistry{};
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
 
     auto window = Gtk::Window{};
     auto const doc = makeDefaultLayout();

@@ -24,7 +24,7 @@ namespace ao::gtk::layout
     {
     public:
       NowPlayingStatusComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.playback(), ctx.dependencies.textCatalog, ctx.dependencies.gtkTextCatalog}
+        : _widget{ctx.runtime.playback(), ctx.dependencies.textCatalog}
       {
       }
 

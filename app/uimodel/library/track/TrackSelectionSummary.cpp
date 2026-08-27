@@ -3,8 +3,9 @@
 
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <chrono>
 #include <cstddef>
@@ -13,7 +14,7 @@
 
 namespace ao::uimodel
 {
-  std::string trackSelectionSummaryText(PresentationTextCatalog const& textCatalog,
+  std::string trackSelectionSummaryText(i18n::MessageCatalog const& textCatalog,
                                         std::size_t const count,
                                         std::optional<std::chrono::milliseconds> const optTotalDuration)
   {
@@ -24,6 +25,6 @@ namespace ao::uimodel
       duration = formatDuration(*optTotalDuration);
     }
 
-    return textCatalog.trackSelectionSummary(count, duration);
+    return trackSelectionSummary(textCatalog, count, duration);
   }
 } // namespace ao::uimodel

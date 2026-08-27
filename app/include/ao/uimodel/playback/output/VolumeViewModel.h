@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <functional>
@@ -44,7 +44,7 @@ namespace ao::uimodel
   public:
     explicit VolumeViewModel(rt::PlaybackService& playback);
     VolumeViewModel(rt::PlaybackService& playback,
-                    PresentationTextCatalog const& textCatalog,
+                    i18n::MessageCatalog const& textCatalog,
                     std::function<void(VolumeViewState const&)> onRender);
 
     VolumeViewModel(VolumeViewModel const&) = delete;
@@ -70,7 +70,7 @@ namespace ao::uimodel
 
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _commands;
-    std::optional<PresentationTextCatalog> _optTextCatalog;
+    std::optional<i18n::MessageCatalog> _optTextCatalog;
     std::function<void(VolumeViewState const&)> _onRender;
     rt::VolumeState _lastVolume{};
 

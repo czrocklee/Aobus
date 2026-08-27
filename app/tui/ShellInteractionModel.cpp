@@ -4,6 +4,7 @@
 #include "ShellInteractionModel.h"
 
 #include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/utility/String.h>
 #include <ao/utility/UnicodeText.h>
@@ -24,192 +25,192 @@ namespace ao::tui
     constexpr auto kPrefixCommands = std::to_array<CommandPrefixSpec>({
       {.prefix = "filter ",
        .action = CommandAction::QuickFilter,
-       .detail = TuiTextId::DetailQuickFilter,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailQuickFilter,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.prefix = "presentation ",
        .action = CommandAction::SetPresentation,
-       .detail = TuiTextId::DetailTrackView,
-       .category = TuiTextId::CategoryView},
+       .detail = i18n::MessageId::TuiShellDetailTrackView,
+       .category = i18n::MessageId::TuiShellCategoryView},
       {.prefix = "preset ",
        .action = CommandAction::SetPresentation,
-       .detail = TuiTextId::DetailTrackView,
-       .category = TuiTextId::CategoryView},
+       .detail = i18n::MessageId::TuiShellDetailTrackView,
+       .category = i18n::MessageId::TuiShellCategoryView},
       {.prefix = "view ",
        .action = CommandAction::SetPresentation,
-       .detail = TuiTextId::DetailTrackView,
-       .category = TuiTextId::CategoryView,
+       .detail = i18n::MessageId::TuiShellDetailTrackView,
+       .category = i18n::MessageId::TuiShellCategoryView,
        .optShortcutAction = CommandAction::OpenPresentationPanel},
     });
 
     constexpr auto kAliasCommands = std::to_array<CommandAliasSpec>({
       {.alias = "lists",
        .action = CommandAction::OpenLists,
-       .detail = TuiTextId::DetailChooseList,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailChooseList,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "l",
        .action = CommandAction::OpenLists,
-       .detail = TuiTextId::DetailChooseList,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailChooseList,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "detail",
        .action = CommandAction::OpenDetail,
-       .detail = TuiTextId::DetailTrackDetail,
-       .category = TuiTextId::CategoryTrack},
+       .detail = i18n::MessageId::TuiShellDetailTrackDetail,
+       .category = i18n::MessageId::TuiShellCategoryTrack},
       {.alias = "details",
        .action = CommandAction::OpenDetail,
-       .detail = TuiTextId::DetailTrackDetail,
-       .category = TuiTextId::CategoryTrack},
+       .detail = i18n::MessageId::TuiShellDetailTrackDetail,
+       .category = i18n::MessageId::TuiShellCategoryTrack},
       {.alias = "d",
        .action = CommandAction::OpenDetail,
-       .detail = TuiTextId::DetailTrackDetail,
-       .category = TuiTextId::CategoryTrack},
+       .detail = i18n::MessageId::TuiShellDetailTrackDetail,
+       .category = i18n::MessageId::TuiShellCategoryTrack},
       {.alias = "quality",
        .action = CommandAction::OpenQuality,
-       .detail = TuiTextId::DetailAudioPipeline,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "audio",
        .action = CommandAction::OpenQuality,
-       .detail = TuiTextId::DetailAudioPipeline,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "pipeline",
        .action = CommandAction::OpenQuality,
-       .detail = TuiTextId::DetailAudioPipeline,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "a",
        .action = CommandAction::OpenQuality,
-       .detail = TuiTextId::DetailAudioPipeline,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "output",
        .action = CommandAction::OpenOutputDevices,
-       .detail = TuiTextId::DetailOutputDevice,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "outputs",
        .action = CommandAction::OpenOutputDevices,
-       .detail = TuiTextId::DetailOutputDevice,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "device",
        .action = CommandAction::OpenOutputDevices,
-       .detail = TuiTextId::DetailOutputDevice,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "devices",
        .action = CommandAction::OpenOutputDevices,
-       .detail = TuiTextId::DetailOutputDevice,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "o",
        .action = CommandAction::OpenOutputDevices,
-       .detail = TuiTextId::DetailOutputDevice,
-       .category = TuiTextId::CategoryAudio},
+       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
+       .category = i18n::MessageId::TuiShellCategoryAudio},
       {.alias = "views",
        .action = CommandAction::OpenPresentationPanel,
-       .detail = TuiTextId::DetailChooseView,
-       .category = TuiTextId::CategoryView},
+       .detail = i18n::MessageId::TuiShellDetailChooseView,
+       .category = i18n::MessageId::TuiShellCategoryView},
       {.alias = "v",
        .action = CommandAction::OpenPresentationPanel,
-       .detail = TuiTextId::DetailChooseView,
-       .category = TuiTextId::CategoryView},
+       .detail = i18n::MessageId::TuiShellDetailChooseView,
+       .category = i18n::MessageId::TuiShellCategoryView},
       {.alias = "notifications",
        .action = CommandAction::OpenNotifications,
-       .detail = TuiTextId::DetailNotificationCenter,
-       .category = TuiTextId::CategoryStatus},
+       .detail = i18n::MessageId::TuiShellDetailNotificationCenter,
+       .category = i18n::MessageId::TuiShellCategoryStatus},
       {.alias = "notification",
        .action = CommandAction::OpenNotifications,
-       .detail = TuiTextId::DetailNotificationCenter,
-       .category = TuiTextId::CategoryStatus},
+       .detail = i18n::MessageId::TuiShellDetailNotificationCenter,
+       .category = i18n::MessageId::TuiShellCategoryStatus},
       {.alias = "n",
        .action = CommandAction::OpenNotifications,
-       .detail = TuiTextId::DetailNotificationCenter,
-       .category = TuiTextId::CategoryStatus},
+       .detail = i18n::MessageId::TuiShellDetailNotificationCenter,
+       .category = i18n::MessageId::TuiShellCategoryStatus},
       {.alias = "close",
        .action = CommandAction::CloseOverlay,
-       .detail = TuiTextId::DetailCloseOverlay,
-       .category = TuiTextId::CategoryUi},
+       .detail = i18n::MessageId::TuiShellDetailCloseOverlay,
+       .category = i18n::MessageId::TuiShellCategoryUi},
       {.alias = "hide",
        .action = CommandAction::CloseOverlay,
-       .detail = TuiTextId::DetailCloseOverlay,
-       .category = TuiTextId::CategoryUi},
+       .detail = i18n::MessageId::TuiShellDetailCloseOverlay,
+       .category = i18n::MessageId::TuiShellCategoryUi},
       {.alias = "esc",
        .action = CommandAction::CloseOverlay,
-       .detail = TuiTextId::DetailCloseOverlay,
-       .category = TuiTextId::CategoryUi},
+       .detail = i18n::MessageId::TuiShellDetailCloseOverlay,
+       .category = i18n::MessageId::TuiShellCategoryUi},
       {.alias = "help",
        .action = CommandAction::ShowHelp,
-       .detail = TuiTextId::DetailHelp,
-       .category = TuiTextId::CategoryUi},
+       .detail = i18n::MessageId::TuiShellDetailHelp,
+       .category = i18n::MessageId::TuiShellCategoryUi},
       {.alias = "h",
        .action = CommandAction::ShowHelp,
-       .detail = TuiTextId::DetailHelp,
-       .category = TuiTextId::CategoryUi},
+       .detail = i18n::MessageId::TuiShellDetailHelp,
+       .category = i18n::MessageId::TuiShellCategoryUi},
       {.alias = "?",
        .action = CommandAction::ShowHelp,
-       .detail = TuiTextId::DetailHelp,
-       .category = TuiTextId::CategoryUi},
+       .detail = i18n::MessageId::TuiShellDetailHelp,
+       .category = i18n::MessageId::TuiShellCategoryUi},
       {.alias = "current",
        .action = CommandAction::RevealCurrentTrack,
-       .detail = TuiTextId::DetailNowPlaying,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailNowPlaying,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "now",
        .action = CommandAction::RevealCurrentTrack,
-       .detail = TuiTextId::DetailNowPlaying,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailNowPlaying,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "reveal",
        .action = CommandAction::RevealCurrentTrack,
-       .detail = TuiTextId::DetailNowPlaying,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailNowPlaying,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "clear",
        .action = CommandAction::ClearFilter,
-       .detail = TuiTextId::DetailClearFilter,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailClearFilter,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "c",
        .action = CommandAction::ClearFilter,
-       .detail = TuiTextId::DetailClearFilter,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailClearFilter,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "reload",
        .action = CommandAction::Reload,
-       .detail = TuiTextId::DetailReloadList,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailReloadList,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "refresh",
        .action = CommandAction::Reload,
-       .detail = TuiTextId::DetailReloadList,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailReloadList,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "r",
        .action = CommandAction::Reload,
-       .detail = TuiTextId::DetailReloadList,
-       .category = TuiTextId::CategoryLibrary},
+       .detail = i18n::MessageId::TuiShellDetailReloadList,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "play",
        .action = CommandAction::Play,
-       .detail = TuiTextId::DetailPlay,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailPlay,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "p",
        .action = CommandAction::Play,
-       .detail = TuiTextId::DetailPlay,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailPlay,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "pause",
        .action = CommandAction::TogglePlayback,
-       .detail = TuiTextId::DetailPause,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailPause,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "toggle",
        .action = CommandAction::TogglePlayback,
-       .detail = TuiTextId::DetailTogglePlayback,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailTogglePlayback,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "space",
        .action = CommandAction::TogglePlayback,
-       .detail = TuiTextId::DetailTogglePlayback,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailTogglePlayback,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "stop",
        .action = CommandAction::Stop,
-       .detail = TuiTextId::DetailStop,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailStop,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "s",
        .action = CommandAction::Stop,
-       .detail = TuiTextId::DetailStop,
-       .category = TuiTextId::CategoryPlayback},
+       .detail = i18n::MessageId::TuiShellDetailStop,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "quit",
        .action = CommandAction::Quit,
-       .detail = TuiTextId::DetailQuit,
-       .category = TuiTextId::CategoryApp},
+       .detail = i18n::MessageId::TuiShellDetailQuit,
+       .category = i18n::MessageId::TuiShellCategoryApp},
       {.alias = "q",
        .action = CommandAction::Quit,
-       .detail = TuiTextId::DetailQuit,
-       .category = TuiTextId::CategoryApp},
+       .detail = i18n::MessageId::TuiShellDetailQuit,
+       .category = i18n::MessageId::TuiShellCategoryApp},
     });
 
     std::string lower(std::string value)
@@ -329,35 +330,36 @@ namespace ao::tui
     return std::nullopt;
   }
 
-  std::string_view overlayLabel(TuiTextCatalog const& textCatalog, Overlay const overlay)
+  std::string_view overlayLabel(i18n::MessageCatalog const& textCatalog, Overlay const overlay)
   {
     switch (overlay)
     {
-      case Overlay::None: return textCatalog.text(TuiTextId::OverlayTracks);
-      case Overlay::ListChooser: return textCatalog.text(TuiTextId::OverlayLists);
-      case Overlay::DetailPanel: return textCatalog.text(TuiTextId::OverlayDetail);
-      case Overlay::QualityPanel: return textCatalog.text(TuiTextId::OverlayPipeline);
-      case Overlay::OutputDevices: return textCatalog.text(TuiTextId::OverlayOutput);
-      case Overlay::PresentationPanel: return textCatalog.text(TuiTextId::OverlayViews);
-      case Overlay::Notifications: return textCatalog.text(TuiTextId::OverlayNotifications);
-      case Overlay::Help: return textCatalog.text(TuiTextId::OverlayHelp);
+      case Overlay::None: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
+      case Overlay::ListChooser: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayLists);
+      case Overlay::DetailPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayDetail);
+      case Overlay::QualityPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayPipeline);
+      case Overlay::OutputDevices: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayOutput);
+      case Overlay::PresentationPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayViews);
+      case Overlay::Notifications:
+        return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayNotifications);
+      case Overlay::Help: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayHelp);
     }
 
-    return textCatalog.text(TuiTextId::OverlayTracks);
+    return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
   }
 
-  std::string_view overlayHint(TuiTextCatalog const& textCatalog, Overlay const overlay)
+  std::string overlayHint(i18n::MessageCatalog const& textCatalog, Overlay const overlay)
   {
     switch (overlay)
     {
       case Overlay::None: return {};
-      case Overlay::ListChooser: return textCatalog.text(TuiTextId::HintLists);
-      case Overlay::DetailPanel: return textCatalog.text(TuiTextId::HintDetail);
-      case Overlay::QualityPanel: return textCatalog.text(TuiTextId::HintPipeline);
-      case Overlay::OutputDevices: return textCatalog.text(TuiTextId::HintOutput);
-      case Overlay::PresentationPanel: return textCatalog.text(TuiTextId::HintViews);
-      case Overlay::Notifications: return textCatalog.text(TuiTextId::HintNotifications);
-      case Overlay::Help: return textCatalog.text(TuiTextId::HintHelp);
+      case Overlay::ListChooser: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintLists);
+      case Overlay::DetailPanel: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintDetail);
+      case Overlay::QualityPanel: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintPipeline);
+      case Overlay::OutputDevices: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintOutput);
+      case Overlay::PresentationPanel: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintViews);
+      case Overlay::Notifications: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintNotifications);
+      case Overlay::Help: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintHelp);
     }
 
     return {};

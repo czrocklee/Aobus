@@ -4,10 +4,14 @@
 #pragma once
 
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <optional>
 #include <string>
+
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
 
 namespace ao::uimodel
 {
@@ -20,7 +24,7 @@ namespace ao::uimodel
     bool operator==(TrackGroupHeadingPresentation const&) const = default;
   };
 
-  TrackGroupHeadingPresentation formatTrackGroupHeading(PresentationTextCatalog const& textCatalog,
+  TrackGroupHeadingPresentation formatTrackGroupHeading(i18n::MessageCatalog const& textCatalog,
                                                         rt::TrackGroupHeading const& heading);
   std::optional<std::string> trackGroupCoverArtMonogram(rt::TrackGroupHeading const& heading);
 } // namespace ao::uimodel

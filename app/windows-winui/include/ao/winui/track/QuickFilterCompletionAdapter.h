@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 
 #include <cstddef>
@@ -15,11 +16,6 @@
 namespace ao::rt
 {
   struct CompletionResult;
-}
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
 }
 
 namespace ao::winui
@@ -53,7 +49,7 @@ namespace ao::winui
 
   /** Projects semantic completion items without making localized text an identity. */
   std::vector<QuickFilterSuggestionRow> quickFilterSuggestionRows(rt::CompletionResult const& result,
-                                                                  uimodel::PresentationTextCatalog const& textCatalog);
+                                                                  i18n::MessageCatalog const& textCatalog);
 
   /** Whether accepting this row still needs another expression token before submission. */
   bool quickFilterSuggestionContinuesEditing(QuickFilterSuggestionRow const& row) noexcept;

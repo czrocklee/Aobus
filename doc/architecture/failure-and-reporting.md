@@ -126,7 +126,7 @@ Typed domain events remain available when consumers need structured recovery or 
 
 UIModel adapts runtime reporting state into reusable platform-neutral presentation state.
 The activity-status feature consumes canonical feed updates, combines each immutable snapshot with library-task progress, and selects compact and detail representations.
-It resolves structured notification reports and typed library-progress kinds through the immutable `PresentationTextCatalog`; neither report nor task behavior depends on the resulting English text.
+It resolves structured notification reports and typed library-progress kinds through feature presentation functions over the immutable `MessageCatalog`; neither report nor task behavior depends on the resulting English text.
 It owns presentation-local timeout only for history or pinned info and synthetic completion state; it observes runtime-transient expiry rather than starting a competing authoritative timer.
 It also owns presentation-local suppression policy.
 
@@ -286,7 +286,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) composes the notification owner with library, source, completion, async, and diagnostic collaborators.
 - [`PlaybackFailure`](../../app/include/ao/rt/PlaybackFailure.h), public [`PlaybackService.cpp`](../../app/runtime/playback/PlaybackService.cpp), internal [`PlaybackTransport.cpp`](../../app/runtime/playback/PlaybackTransport.cpp), and [`PlaybackSuccession.cpp`](../../app/runtime/playback/PlaybackSuccession.cpp) are the principal typed asynchronous failure, recovery, and summary-reporting path.
 - [`ActivityStatusViewModel`](../../app/include/ao/uimodel/status/activity/ActivityStatusViewModel.h) and [`ActivityStatusFeedProjection`](../../app/uimodel/status/activity/ActivityStatusFeedProjection.cpp) define the platform-neutral reporting projection.
-- [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) owns shared report expansion and typed library-progress copy.
+- [`PresentationText.h`](../../app/include/ao/uimodel/presentation/PresentationText.h) owns shared report expansion and typed library-progress copy.
 - GTK [`UiWorkflow`](../../app/linux-gtk/common/UiWorkflow.h), TUI [`Executor.cpp`](../../app/tui/Executor.cpp), and CLI [`CommandError`](../../app/cli/CommandError.h) plus [`Run.cpp`](../../app/cli/Run.cpp) define representative application-leaf containment and presentation boundaries.
 - [`Log.h`](../../app/include/ao/rt/Log.h) exposes the application logging surface used by runtime and frontend boundary adapters.
 - [`Log.cpp`](../../app/runtime/Log.cpp) also owns fatal-sink registration and bounded asynchronous fatal-log submission.

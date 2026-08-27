@@ -6,10 +6,10 @@
 #include "OutputDeviceListItems.h"
 #include "layout/LayoutConstants.h"
 #include <ao/audio/Device.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/ustring.h>
@@ -39,10 +39,11 @@ namespace ao::gtk
   } // namespace
 
   OutputDevicePopover::OutputDevicePopover(rt::PlaybackService& playback,
-                                           uimodel::PresentationTextCatalog const& textCatalog,
+                                           i18n::MessageCatalog const& textCatalog,
                                            uimodel::OutputDeviceIntent intent,
                                            Gtk::PositionType position)
-    : _outputDeviceViewModel{playback,
+    : _storePtr{Gio::ListStore<Glib::Object>::create()}
+    , _outputDeviceViewModel{playback,
                              textCatalog,
                              [this](ao::uimodel::OutputDeviceViewState const& view)
                              {
@@ -90,7 +91,6 @@ namespace ao::gtk
     _listBox.set_show_separators(true);
     _listBox.add_css_class("ao-rich-list");
 
-    _storePtr = Gio::ListStore<Glib::Object>::create();
     _listBox.bind_model(_storePtr, [this](auto const& itemPtr) { return createRow(itemPtr); });
 
     _listBox.signal_row_activated().connect(

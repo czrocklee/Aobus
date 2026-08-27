@@ -9,9 +9,10 @@
 #include "Style.h"
 #include "TextCell.h"
 #include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <ftxui/dom/elements.hpp>
 
@@ -63,7 +64,7 @@ namespace ao::tui
       return ":" + std::string{prefix};
     }
 
-    std::optional<CommandPaletteEntryDescriptor> commandPaletteEntryDescriptor(TuiTextCatalog const& textCatalog,
+    std::optional<CommandPaletteEntryDescriptor> commandPaletteEntryDescriptor(i18n::MessageCatalog const& textCatalog,
                                                                                rt::CompletionItem const& item)
     {
       for (auto const& spec : commandPrefixSpecs())
@@ -71,7 +72,7 @@ namespace ao::tui
         if (item.insertText == spec.prefix && item.displayText == commandPrefixDisplayText(spec.prefix))
         {
           return CommandPaletteEntryDescriptor{
-            .category = textCatalog.text(spec.category),
+            .category = i18n::requiredText(textCatalog, spec.category),
             .shortcut = shortcutFor(spec.optShortcutAction.value_or(spec.action)),
           };
         }
@@ -82,29 +83,26 @@ namespace ao::tui
         if (item.insertText == spec.alias && item.displayText == ":" + std::string{spec.alias})
         {
           return CommandPaletteEntryDescriptor{
-            .category = textCatalog.text(spec.category), .shortcut = shortcutFor(spec.action)};
+            .category = i18n::requiredText(textCatalog, spec.category), .shortcut = shortcutFor(spec.action)};
         }
       }
 
       return std::nullopt;
     }
 
-    std::string commandPaletteTrailingText(uimodel::PresentationTextCatalog const& textCatalog,
-                                           TuiTextCatalog const& tuiTextCatalog,
-                                           rt::CompletionItem const& item)
+    std::string commandPaletteTrailingText(i18n::MessageCatalog const& textCatalog, rt::CompletionItem const& item)
     {
-      if (auto const optDescriptor = commandPaletteEntryDescriptor(tuiTextCatalog, item);
+      if (auto const optDescriptor = commandPaletteEntryDescriptor(textCatalog, item);
           optDescriptor && !optDescriptor->shortcut.empty())
       {
         return std::string{optDescriptor->shortcut};
       }
 
-      return textCatalog.completionDetail(item.detail);
+      return uimodel::completionDetail(textCatalog, item.detail);
     }
 
     std::vector<SelectableListRow> commandCompletionRows(rt::CompletionResult const& completion,
-                                                         uimodel::PresentationTextCatalog const& textCatalog,
-                                                         TuiTextCatalog const& tuiTextCatalog,
+                                                         i18n::MessageCatalog const& textCatalog,
                                                          std::int32_t const selectedIndex,
                                                          std::int32_t const contentColumns)
     {
@@ -115,13 +113,12 @@ namespace ao::tui
 
       for (auto const& item : completion.items)
       {
-        if (auto const optDescriptor = commandPaletteEntryDescriptor(tuiTextCatalog, item); optDescriptor)
+        if (auto const optDescriptor = commandPaletteEntryDescriptor(textCatalog, item); optDescriptor)
         {
           categoryColumns = std::max(categoryColumns, cellWidth(optDescriptor->category));
         }
 
-        trailingColumns =
-          std::max(trailingColumns, cellWidth(commandPaletteTrailingText(textCatalog, tuiTextCatalog, item)));
+        trailingColumns = std::max(trailingColumns, cellWidth(commandPaletteTrailingText(textCatalog, item)));
       }
 
       categoryColumns = std::min(categoryColumns, contentColumns);
@@ -141,7 +138,7 @@ namespace ao::tui
         if (categoryColumns > 0)
         {
           auto categoryPtr = fixedText(
-            commandPaletteEntryDescriptor(tuiTextCatalog, item).value_or(CommandPaletteEntryDescriptor{}).category,
+            commandPaletteEntryDescriptor(textCatalog, item).value_or(CommandPaletteEntryDescriptor{}).category,
             categoryColumns);
           cells.push_back(selected ? std::move(categoryPtr) : std::move(categoryPtr) | style::accent() | dim);
           cells.push_back(text("  "));
@@ -151,8 +148,8 @@ namespace ao::tui
 
         if (trailingColumns > 0)
         {
-          auto trailingPtr = fixedText(
-            commandPaletteTrailingText(textCatalog, tuiTextCatalog, item), trailingColumns, CellAlignment::Right);
+          auto trailingPtr =
+            fixedText(commandPaletteTrailingText(textCatalog, item), trailingColumns, CellAlignment::Right);
           cells.push_back(text("  "));
           cells.push_back(selected ? std::move(trailingPtr) : std::move(trailingPtr) | style::accent());
         }
@@ -165,22 +162,20 @@ namespace ao::tui
       return rows;
     }
 
-    ftxui::Element commandCompletionList(uimodel::PresentationTextCatalog const& textCatalog,
-                                         TuiTextCatalog const& tuiTextCatalog,
+    ftxui::Element commandCompletionList(i18n::MessageCatalog const& textCatalog,
                                          ShellInteractionModel const& shell,
                                          std::int32_t const contentColumns)
     {
       if (auto const& optCompletion = shell.commandCompletion(); optCompletion && !optCompletion->items.empty())
       {
         return selectableList(
-          commandCompletionRows(
-            *optCompletion, textCatalog, tuiTextCatalog, shell.commandCompletionSelection(), contentColumns),
+          commandCompletionRows(*optCompletion, textCatalog, shell.commandCompletionSelection(), contentColumns),
           SelectableListOptions{.focusRow = shell.commandCompletionSelection(), .flex = true});
       }
 
       return selectableList(
         {},
-        SelectableListOptions{.emptyText = std::string{tuiTextCatalog.text(TuiTextId::CommandPaletteNoMatches)},
+        SelectableListOptions{.emptyText = tuiChromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteNoMatches),
                               .flex = true,
                               .centerEmpty = true});
     }
@@ -230,8 +225,7 @@ namespace ao::tui
     return std::min(desiredRows, std::max(1, terminalRows - 1));
   }
 
-  ftxui::Element commandPalettePanel(uimodel::PresentationTextCatalog const& textCatalog,
-                                     TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element commandPalettePanel(i18n::MessageCatalog const& textCatalog,
                                      ShellInteractionModel const& shell,
                                      std::int32_t columns)
   {
@@ -254,17 +248,17 @@ namespace ao::tui
     rows.push_back(separator());
 
     auto const contentColumns = style::popupPanelBodyColumns(columns);
-    rows.push_back(commandCompletionList(textCatalog, tuiTextCatalog, shell, contentColumns));
+    rows.push_back(commandCompletionList(textCatalog, shell, contentColumns));
 
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(tuiTextCatalog.text(TuiTextId::CommandPaletteFooter)));
+    rows.push_back(style::panelFooterHint(tuiChromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteFooter)));
 
-    return style::popupPanel(tuiTextCatalog.text(TuiTextId::CommandPaletteTitle), vbox(std::move(rows))) |
+    return style::popupPanel(
+             tuiChromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteTitle), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, columns);
   }
 
-  ftxui::Element quickFilterCompletionPanel(uimodel::PresentationTextCatalog const& textCatalog,
-                                            TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element quickFilterCompletionPanel(i18n::MessageCatalog const& textCatalog,
                                             ShellInteractionModel const& shell,
                                             std::int32_t columns,
                                             std::string_view const filterError)
@@ -285,11 +279,12 @@ namespace ao::tui
       rows.push_back(separator());
     }
 
-    rows.push_back(commandCompletionList(textCatalog, tuiTextCatalog, shell, contentColumns));
+    rows.push_back(commandCompletionList(textCatalog, shell, contentColumns));
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(tuiTextCatalog.text(TuiTextId::QuickFilterFooter)));
+    rows.push_back(style::panelFooterHint(tuiChromeText(textCatalog, i18n::MessageId::TuiShellQuickFilterFooter)));
 
-    return style::popupPanel(tuiTextCatalog.text(TuiTextId::QuickFilterTitle), vbox(std::move(rows))) |
+    return style::popupPanel(
+             tuiChromeText(textCatalog, i18n::MessageId::TuiShellQuickFilterTitle), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

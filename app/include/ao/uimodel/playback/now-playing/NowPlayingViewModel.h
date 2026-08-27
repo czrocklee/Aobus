@@ -5,11 +5,12 @@
 
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <cstdint>
 #include <functional>
@@ -73,7 +74,7 @@ namespace ao::uimodel
   {
   public:
     NowPlayingViewModel(rt::PlaybackService& playback,
-                        PresentationTextCatalog textCatalog,
+                        i18n::MessageCatalog textCatalog,
                         std::function<void(NowPlayingViewState const&)> onRender);
 
     NowPlayingViewModel(NowPlayingViewModel const&) = delete;
@@ -94,7 +95,7 @@ namespace ao::uimodel
 
     rt::PlaybackService& _playback;
     std::function<void(NowPlayingViewState const&)> _onRender;
-    PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::NowPlayingInfo _lastNowPlaying{};
     rt::OutputState _lastOutput{};
     rt::QualityState _lastQuality{};

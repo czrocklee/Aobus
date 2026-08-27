@@ -59,7 +59,7 @@ namespace ao::uimodel
     }
   } // namespace
 
-  TrackPropertiesFormModel::TrackPropertiesFormModel(PresentationTextCatalog textCatalog)
+  TrackPropertiesFormModel::TrackPropertiesFormModel(i18n::MessageCatalog textCatalog)
     : _textCatalog{std::move(textCatalog)}
   {
   }
@@ -106,7 +106,7 @@ namespace ao::uimodel
     {
       return TrackPropertiesFormRowView{
         .field = state->field,
-        .text = state->mixed ? std::string{_textCatalog.text(i18n::MessageId::TrackMultipleValues)}
+        .text = state->mixed ? std::string{i18n::requiredText(_textCatalog, i18n::MessageId::TrackMultipleValues)}
                              : formatTrackFieldRawValue(_textCatalog, state->field, state->originalRawValue),
         .mixed = state->mixed,
         .editable = state->editable,

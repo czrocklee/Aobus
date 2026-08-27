@@ -4,9 +4,9 @@
 #pragma once
 
 #include "common/MainContextCallbackScope.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/widget.h>
@@ -54,7 +54,7 @@ namespace ao::gtk
     using ConflictConfirmer = std::function<
       void(std::string const& ownerLabel, std::string const& chordText, std::function<void(bool)> respond)>;
 
-    ShortcutEditorWidget(uimodel::PresentationTextCatalog textCatalog,
+    ShortcutEditorWidget(i18n::MessageCatalog textCatalog,
                          uimodel::LayoutActionCatalog const& catalog,
                          uimodel::KeymapModel keymap,
                          ChangedCallback onChanged,
@@ -93,7 +93,7 @@ namespace ao::gtk
     void closeCapture();
     std::string labelFor(std::string const& actionId) const;
 
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     Gtk::Window& _hostForDialogs;
     uimodel::KeymapModel _keymap;
     ChangedCallback _onChanged;

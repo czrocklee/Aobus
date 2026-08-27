@@ -8,6 +8,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/OutputDevicePopover.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
@@ -73,7 +74,7 @@ namespace ao::gtk::layout
 
     private:
       rt::PlaybackService& _playback;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       uimodel::OutputDeviceIntent _intent;
       Gtk::Button _button;
       Gtk::Label _label;

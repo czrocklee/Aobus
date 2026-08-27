@@ -15,6 +15,7 @@
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -40,7 +41,7 @@
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
@@ -100,7 +101,7 @@ namespace ao::winui
   Result<std::unique_ptr<LibrarySession>> LibrarySession::create(
     std::filesystem::path stateRoot,
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-    uimodel::PresentationTextCatalog textCatalog,
+    i18n::MessageCatalog textCatalog,
     rt::TextOrderingPolicy const& textOrderingPolicy,
     rt::CompletionAliasPolicy const& completionAliasPolicy,
     std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
@@ -118,7 +119,7 @@ namespace ao::winui
 
   LibrarySession::LibrarySession(std::filesystem::path stateRoot,
                                  winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                                 uimodel::PresentationTextCatalog textCatalog,
+                                 i18n::MessageCatalog textCatalog,
                                  rt::TextOrderingPolicy const& textOrderingPolicy,
                                  rt::CompletionAliasPolicy const& completionAliasPolicy)
     : _stateRoot{std::move(stateRoot)}
@@ -560,7 +561,7 @@ namespace ao::winui
     // reporting a plain ready library.
     auto const outcome = uimodel::decideLibraryScanOutcome(result);
     auto const severity = uimodel::libraryScanSeverity(outcome.verdict);
-    auto message = _textCatalog.libraryScanMessage(outcome);
+    auto message = formatLibraryScanMessage(_textCatalog, outcome);
 
     _runtimePtr->notifications().post(severity, message, uimodel::libraryScanLifetime(outcome.verdict));
 

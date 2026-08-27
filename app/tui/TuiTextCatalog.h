@@ -5,7 +5,6 @@
 
 #include <ao/i18n/MessageCatalog.h>
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -13,119 +12,15 @@
 
 namespace ao::tui
 {
-  enum class TuiTextId : std::uint8_t
-  {
-    CommandPaletteTitle,
-    CommandPaletteNoMatches,
-    CommandPaletteFooter,
-    QuickFilterTitle,
-    QuickFilterFooter,
-    WorkspaceList,
-    WorkspaceView,
-    OverlayTracks,
-    OverlayLists,
-    OverlayDetail,
-    OverlayPipeline,
-    OverlayOutput,
-    OverlayViews,
-    OverlayNotifications,
-    OverlayHelp,
-    HintLists,
-    HintDetail,
-    HintPipeline,
-    HintOutput,
-    HintViews,
-    HintNotifications,
-    HintHelp,
-    StatusCommand,
-    StatusLists,
-    StatusView,
-    StatusDetail,
-    StatusClearFilter,
-    StatusHelp,
-    FilterLabel,
-    CategoryLibrary,
-    CategoryView,
-    CategoryTrack,
-    CategoryAudio,
-    CategoryStatus,
-    CategoryUi,
-    CategoryPlayback,
-    CategoryApp,
-    DetailQuickFilter,
-    DetailTrackView,
-    DetailChooseList,
-    DetailTrackDetail,
-    DetailAudioPipeline,
-    DetailOutputDevice,
-    DetailChooseView,
-    DetailNotificationCenter,
-    DetailCloseOverlay,
-    DetailHelp,
-    DetailNowPlaying,
-    DetailClearFilter,
-    DetailReloadList,
-    DetailPlay,
-    DetailPause,
-    DetailTogglePlayback,
-    DetailStop,
-    DetailQuit,
-    OutputDevicesTitle,
-    PlaybackNoActiveTrack,
-    PlaybackNoOutputDeviceSelected,
-    PlaybackNoOutputDevicesFound,
-    PlaybackNoAudioPipeline,
-    HelpQuickFilter,
-    HelpChooseList,
-    HelpTrackDetail,
-    HelpAudioPipeline,
-    HelpOutputDevice,
-    HelpChooseView,
-    HelpNotifications,
-    HelpCurrentTrack,
-    HelpSwitchPresentation,
-    HelpPreviousNextGroup,
-    HelpClearFilter,
-    HelpReloadList,
-    HelpPlayback,
-    HelpQuit,
-    HelpFooter,
-    NotificationFooter,
-    LibraryDetail,
-    LibraryNoSections,
-    LibraryNoSectionSelected,
-    LibraryNoCurrentTrack,
-    LibraryCurrentTrackNotInView,
-    LibraryNoActiveTrackView,
-    LibraryNoViewsAvailable,
-    LibraryNoListsAvailable,
-    LibraryFilterCleared,
-    LibraryFilterApplied,
-    LibraryNoTracksFound,
-    LibraryNoListsFound,
-    LibraryReady,
-    Count,
-  };
-
-  /** TUI-local copy resolved once from the process catalog. */
-  class TuiTextCatalog final
-  {
-  public:
-    explicit TuiTextCatalog(i18n::MessageCatalog const& catalog);
-
-    std::string_view text(TuiTextId id) const noexcept;
-    std::string playbackVolume(std::int32_t percent) const;
-    std::string librarySection(std::string_view name) const;
-    std::string libraryRevealedTrack(std::string_view track) const;
-    std::string libraryUnknownView(std::string_view id) const;
-    std::string libraryView(std::string_view id) const;
-    std::string libraryOpenedList(std::string_view list) const;
-    std::string libraryReloadedTracks(std::size_t count) const;
-    std::string libraryQuickFilterMatched(std::size_t count) const;
-    std::string libraryExpressionFilterMatched(std::size_t count) const;
-
-  private:
-    i18n::MessageCatalog _catalog;
-    std::array<std::string, static_cast<std::size_t>(TuiTextId::Count)> _text;
-  };
+  /// Resolves argument-free text and the fixed argument-bearing TUI chrome cases; other invalid selections fail closed.
+  std::string tuiChromeText(i18n::MessageCatalog const& catalog, i18n::MessageId id);
+  std::string playbackVolume(i18n::MessageCatalog const& catalog, std::int32_t percent);
+  std::string librarySection(i18n::MessageCatalog const& catalog, std::string_view name);
+  std::string libraryRevealedTrack(i18n::MessageCatalog const& catalog, std::string_view track);
+  std::string libraryUnknownView(i18n::MessageCatalog const& catalog, std::string_view id);
+  std::string libraryView(i18n::MessageCatalog const& catalog, std::string_view id);
+  std::string libraryOpenedList(i18n::MessageCatalog const& catalog, std::string_view list);
+  std::string libraryReloadedTracks(i18n::MessageCatalog const& catalog, std::size_t count);
+  std::string libraryQuickFilterMatched(i18n::MessageCatalog const& catalog, std::size_t count);
+  std::string libraryExpressionFilterMatched(i18n::MessageCatalog const& catalog, std::size_t count);
 } // namespace ao::tui

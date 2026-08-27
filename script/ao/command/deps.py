@@ -4,10 +4,10 @@ import argparse
 import json
 from pathlib import Path
 
-from ..core import builddir, dependency_policy
+from ..core import builddir, concept_report, dependency_policy, tidyengine
 from ..core.proc import die
 
-HELP = "Report or verify the governed dependency resolution for a configured build"
+HELP = "Report or verify governed dependencies, or emit the RFC 0002 concept baseline"
 NAME = "deps"
 REQUIRES_BUILD_ENV = True
 
@@ -16,9 +16,18 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     actions = parser.add_subparsers(dest="deps_action", metavar="<action>", required=True)
 
-    report = actions.add_parser("report", help="verify and print the dependency report")
+    report = actions.add_parser(
+        "report",
+        help="verify and print the dependency report, or emit concept metrics",
+    )
     report.add_argument("-p", "--path", metavar="<dir>", help="configured build directory")
     report.add_argument("--json", type=Path, metavar="<path>", help="write the complete report as JSON")
+    report.add_argument(
+        "--concepts",
+        action="store_true",
+        help="write concept-report.json from the Clang AST of public headers",
+    )
+    report.add_argument("-j", "--jobs", type=int, default=tidyengine.default_jobs(), help="parallel header parses")
     report.set_defaults(func=run_report)
 
     verify = actions.add_parser("verify", help="fail unless the dependency report is current and valid")
@@ -38,6 +47,8 @@ def _verified(args: argparse.Namespace) -> dict[str, object]:
 
 
 def run_report(args: argparse.Namespace) -> int:
+    if args.concepts:
+        return _run_concept_report(args)
     report = _verified(args)
     print(dependency_policy.format_summary(report))
     if args.json:
@@ -46,6 +57,23 @@ def run_report(args: argparse.Namespace) -> int:
             args.json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         except OSError as exc:
             raise die(f"cannot write dependency report to {args.json}: {exc}") from exc
+        print(f"Full report: {args.json}")
+    return 0
+
+
+def _run_concept_report(args: argparse.Namespace) -> int:
+    build_dir = _build_dir(args)
+    try:
+        report = concept_report.write_report(build_dir, jobs=args.jobs)
+    except OSError as exc:
+        raise die(f"cannot write concept report: {exc}") from exc
+    print(concept_report.format_summary(report))
+    if args.json:
+        try:
+            args.json.parent.mkdir(parents=True, exist_ok=True)
+            args.json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        except OSError as exc:
+            raise die(f"cannot write concept report to {args.json}: {exc}") from exc
         print(f"Full report: {args.json}")
     return 0
 

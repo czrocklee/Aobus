@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <glibmm/ustring.h>
@@ -25,11 +26,6 @@
 namespace Gtk
 {
   class Grid;
-}
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
 }
 
 namespace ao::gtk
@@ -98,7 +94,7 @@ namespace ao::gtk::layout::track_field_grid
 
     void startEditing();
     void stopEditing(bool commit);
-    void setCompletionProvider(uimodel::PresentationTextCatalog const& textCatalog, rt::CompletionProvider provider);
+    void setCompletionProvider(i18n::MessageCatalog const& textCatalog, rt::CompletionProvider provider);
 
     Gtk::Label& displayLabel() { return _displayLabel; }
     Gtk::Entry& entry() { return _entry; }

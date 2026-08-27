@@ -21,10 +21,13 @@ namespace ao::rt
   class TextOrderingPolicy;
 }
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   struct WritableTagListTarget final
   {
     ListId listId = kInvalidListId;
@@ -56,7 +59,7 @@ namespace ao::uimodel
   public:
     static Result<std::unique_ptr<ListMembershipAuthoringSession>> begin(rt::Library& library,
                                                                          std::span<TrackId const> trackIds,
-                                                                         PresentationTextCatalog const& textCatalog);
+                                                                         i18n::MessageCatalog const& textCatalog);
 
     ~ListMembershipAuthoringSession();
 

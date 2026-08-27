@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -49,7 +49,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][list][list-order]")
   {
     auto input = eligibleInput();
-    auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+    auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
 
     CHECK(state.canAuthorOrder);
     CHECK(state.canGapMove);
@@ -61,7 +61,7 @@ namespace ao::uimodel::test
 
     input.presentation.id = std::string{rt::kListOrderTrackPresentationId};
     input.presentation.sortBy = {rt::TrackSortTerm{.field = rt::TrackSortField::Title, .ascending = true}};
-    auto const sorted = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+    auto const sorted = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
     CHECK_FALSE(sorted.canAuthorOrder);
     CHECK_FALSE(sorted.canAbsoluteMove);
   }
@@ -71,7 +71,7 @@ namespace ao::uimodel::test
     auto input = eligibleInput();
     input.quickFilterExpression = "$year >= 2020";
 
-    auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+    auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
 
     CHECK(state.canAuthorOrder);
     CHECK_FALSE(state.canGapMove);
@@ -88,7 +88,7 @@ namespace ao::uimodel::test
     auto input = eligibleInput();
     input.authoring.state = rt::LibraryAuthoringState::Maintenance;
 
-    auto const state = describeListOrderCapabilities(ao::test::presentationTextCatalog("de-AT"), input);
+    auto const state = describeListOrderCapabilities(ao::test::messageCatalog("de-AT"), input);
 
     CHECK_FALSE(state.canAuthorOrder);
     CHECK(state.disabledReason ==
@@ -103,7 +103,7 @@ namespace ao::uimodel::test
     SECTION("All Tracks")
     {
       input.listId = rt::kAllTracksListId;
-      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("saved Lists"));
     }
@@ -111,7 +111,7 @@ namespace ao::uimodel::test
     SECTION("grouped")
     {
       input.presentation.groupBy = rt::TrackGroupKey::Album;
-      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("flat unsorted"));
     }
@@ -119,7 +119,7 @@ namespace ao::uimodel::test
     SECTION("maintenance")
     {
       input.authoring.state = rt::LibraryAuthoringState::Maintenance;
-      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("Library is busy"));
     }
@@ -127,7 +127,7 @@ namespace ao::uimodel::test
     SECTION("source gone")
     {
       input.sourceLive = false;
-      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("no longer available"));
     }
@@ -135,7 +135,7 @@ namespace ao::uimodel::test
     SECTION("filter error")
     {
       input.sourceHasError = true;
-      auto const state = describeListOrderCapabilities(ao::test::englishPresentationTextCatalog(), input);
+      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("Fix the List or quick-filter expression"));
     }

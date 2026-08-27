@@ -3,10 +3,11 @@
 
 #include "ActivityStatusFeedProjection.h"
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <algorithm>
@@ -66,12 +67,12 @@ namespace ao::uimodel
       return isDetailEligible(entry) && entry.lifetime.kind() != rt::NotificationLifetimeKind::Pinned;
     }
 
-    std::string primaryText(PresentationTextCatalog const& textCatalog, rt::NotificationEntry const& entry)
+    std::string primaryText(i18n::MessageCatalog const& textCatalog, rt::NotificationEntry const& entry)
     {
-      return textCatalog.notificationMessage(entry.message);
+      return notificationMessage(textCatalog, entry.message);
     }
 
-    std::string groupedText(PresentationTextCatalog const& textCatalog,
+    std::string groupedText(i18n::MessageCatalog const& textCatalog,
                             rt::NotificationSeverity const severity,
                             std::size_t const count)
     {
@@ -80,34 +81,31 @@ namespace ao::uimodel
         return {};
       }
 
-      return textCatalog.notificationGroupMessage(severity, count);
+      return notificationGroupMessage(textCatalog, severity, count);
     }
 
-    ActivityDetailItem detailItem(PresentationTextCatalog const& textCatalog, rt::NotificationEntry const& entry)
+    ActivityDetailItem detailItem(i18n::MessageCatalog const& textCatalog, rt::NotificationEntry const& entry)
     {
       return ActivityDetailItem{
         .id = entry.id,
         .severity = entry.severity,
-        .message = textCatalog.notificationMessage(entry.message),
+        .message = notificationMessage(textCatalog, entry.message),
         .dismissible = isDetailClearable(entry),
       };
     }
   } // namespace
 
-  ActivityStatusFeedProjection::ActivityStatusFeedProjection(PresentationTextCatalog textCatalog)
+  ActivityStatusFeedProjection::ActivityStatusFeedProjection(i18n::MessageCatalog textCatalog,
+                                                             rt::NotificationFeedState const& initialFeed)
     : _textCatalog{std::move(textCatalog)}
   {
+    projectDetail(initialFeed);
+    projectPersistentCompact(initialFeed);
   }
 
   bool hasDetailContent(ActivityDetailState const& detail) noexcept
   {
     return !detail.items.empty() || detail.optLibraryTask;
-  }
-
-  void ActivityStatusFeedProjection::initialize(rt::NotificationFeedState const& feed)
-  {
-    projectDetail(feed);
-    projectPersistentCompact(feed);
   }
 
   void ActivityStatusFeedProjection::handleFeedUpdated(rt::NotificationFeedUpdate const& update)
@@ -250,11 +248,11 @@ namespace ao::uimodel
   {
     setCompact(ActivityCompactState{
       .kind = ActivityStatusKind::Processing,
-      .text = _textCatalog.libraryTaskProgressCompact(progress.kind, progress.subject),
+      .text = libraryTaskProgressCompact(_textCatalog, progress.kind, progress.subject),
       .optProgressFraction = progress.fraction,
     });
     _state.detail.optLibraryTask = ActivityTaskDetail{
-      .message = _textCatalog.libraryTaskProgressDetail(progress.kind, progress.subject),
+      .message = libraryTaskProgressDetail(_textCatalog, progress.kind, progress.subject),
       .progressFraction = progress.fraction,
     };
   }
@@ -361,7 +359,7 @@ namespace ao::uimodel
     {
       auto const& progress = _libraryProgressStates.back();
       optLibraryTask = ActivityTaskDetail{
-        .message = _textCatalog.libraryTaskProgressDetail(progress.kind, progress.subject),
+        .message = libraryTaskProgressDetail(_textCatalog, progress.kind, progress.subject),
         .progressFraction = progress.fraction,
       };
     }

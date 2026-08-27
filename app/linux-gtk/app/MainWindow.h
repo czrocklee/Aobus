@@ -5,11 +5,11 @@
 
 #include "app/ShellLayoutController.h"
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyRepeatGuard.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/preference/ThemePreset.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/applicationwindow.h>
 
@@ -25,7 +25,6 @@ namespace ao::rt
 
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   class AppConfigStore;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
@@ -61,8 +60,7 @@ namespace ao::gtk
     explicit MainWindow(rt::AppRuntime& runtime,
                         std::shared_ptr<AppConfigStore> configStorePtr,
                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                        uimodel::PresentationTextCatalog textCatalog,
-                        GtkTextCatalog const& gtkTextCatalog,
+                        i18n::MessageCatalog textCatalog,
                         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr = nullptr);
     ~MainWindow() override;
 
@@ -108,7 +106,7 @@ namespace ao::gtk
 
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfigStore> _configStorePtr;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
 
     std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinatorPtr;
     ShellLayoutController _shellLayout;

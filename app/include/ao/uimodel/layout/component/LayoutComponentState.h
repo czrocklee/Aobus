@@ -16,8 +16,11 @@ namespace ao::uimodel
 {
   struct LayoutDocument;
   class PreparedLayout;
+  class LayoutComponentCatalog;
   inline constexpr std::uint32_t kStateFileVersion = 1;
   inline constexpr std::uint32_t kStateEntryVersion = 1;
+  /// Persisted GTK container type whose baseline and promotion rules are owned here.
+  inline constexpr std::string_view kCollapsibleSplitComponentType = "collapsibleSplit";
 
   struct LayoutComponentStateEntry final
   {
@@ -44,5 +47,7 @@ namespace ao::uimodel
   std::optional<LayoutComponentStateEntry> resolveComponentState(LayoutComponentStateDocument const& stateDoc,
                                                                  LayoutNode const& node);
 
-  void pruneComponentState(LayoutComponentStateDocument& stateDoc, PreparedLayout const& layout);
+  void pruneComponentState(LayoutComponentStateDocument& stateDoc,
+                           PreparedLayout const& layout,
+                           LayoutComponentCatalog const& catalog);
 } // namespace ao::uimodel

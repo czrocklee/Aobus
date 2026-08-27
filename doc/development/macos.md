@@ -89,6 +89,7 @@ The supported commands are:
 ./ao check --asan             # Supported suites with ASan/UBSan
 ./ao check --tsan             # Core suite with TSan
 ./ao deps report              # Governed versions and vcpkg identities
+./ao deps report --concepts   # Public-concept baseline into concept-report.json
 ./ao deps verify              # Reject stale or mismatched dependency evidence
 ```
 

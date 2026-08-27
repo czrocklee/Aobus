@@ -5,6 +5,7 @@
 
 #include <ao/Contract.h>
 #include <ao/rt/Log.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -144,13 +145,15 @@ namespace ao::gtk
     return true;
   }
 
-  bool ShellLayoutComponentStateStore::prune(std::string_view presetId, uimodel::PreparedLayout const& layout)
+  bool ShellLayoutComponentStateStore::prune(std::string_view presetId,
+                                             uimodel::PreparedLayout const& layout,
+                                             uimodel::LayoutComponentCatalog const& catalog)
   {
     auto const lock = std::scoped_lock{_mutex};
 
     auto doc = loadUnlocked(presetId).value_or(uimodel::LayoutComponentStateDocument{.preset = std::string{presetId}});
     auto const beforeCount = doc.components.size();
-    uimodel::pruneComponentState(doc, layout);
+    uimodel::pruneComponentState(doc, layout, catalog);
     auto const changed =
       doc.components.size() != beforeCount || (doc.components.empty() && std::filesystem::exists(filePath(presetId)));
 
