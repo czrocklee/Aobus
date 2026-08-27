@@ -6,6 +6,7 @@
 #include "list/ListNavigationSectionModel.h"
 #include "list/ListTreeItem.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/refptr.h>
@@ -17,11 +18,6 @@
 namespace ao::rt
 {
   class Library;
-}
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
 }
 
 namespace ao::gtk
@@ -38,6 +34,6 @@ namespace ao::gtk
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 
-    static BuildResult build(rt::Library const& reads, uimodel::PresentationTextCatalog const& textCatalog);
+    static BuildResult build(rt::Library const& reads, i18n::MessageCatalog const& textCatalog);
   };
 } // namespace ao::gtk

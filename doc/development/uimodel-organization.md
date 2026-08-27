@@ -91,7 +91,7 @@ What is left in UIModel is what more than one frontend genuinely decides the sam
 
 Before adding a user-visible string below a frontend, classify it by authority:
 
-- **shared Aobus copy** is a label, description, placeholder, report template, or pluralized summary authored by the application and consumed by more than one interactive frontend; represent its input semantically and resolve it through `PresentationTextCatalog`;
+- **shared Aobus copy** is a label, description, placeholder, report template, or pluralized summary authored by the application and consumed by more than one interactive frontend; represent its input semantically and resolve it with `requiredText` / `requiredFormat` or a feature-local formatter over `MessageCatalog`;
 - **user or external data** includes metadata, user-authored preset/list names, paths, and operating-system device names or descriptions; preserve it as data and escape it only at the frontend rendering boundary;
 - **language or protocol text** includes query syntax, stable ids, persisted tokens, and CLI machine output; keep it with the owning grammar or format and never translate it as presentation copy;
 - **diagnostic text** explains a failure to logs or typed errors and remains with the failure owner; UI control flow must not parse it; and

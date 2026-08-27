@@ -12,7 +12,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <format>
 #include <functional>
@@ -30,8 +30,7 @@ namespace ao::uimodel
       std::string device;
     };
 
-    BackendDeviceNames resolveBackendDeviceNames(rt::OutputState const& output,
-                                                 PresentationTextCatalog const& textCatalog)
+    BackendDeviceNames resolveBackendDeviceNames(rt::OutputState const& output, i18n::MessageCatalog const& textCatalog)
     {
       auto result = BackendDeviceNames{};
 
@@ -42,7 +41,7 @@ namespace ao::uimodel
           continue;
         }
 
-        result.backend = textCatalog.audioBackend(backend.id).label;
+        result.backend = audioBackendPresentation(textCatalog, backend.id).label;
 
         for (auto const& device : backend.devices)
         {
@@ -52,7 +51,7 @@ namespace ao::uimodel
 
             if (device.isDefault && device.id.empty() && result.device.empty())
             {
-              result.device = textCatalog.text(i18n::MessageId::SystemDefaultOutputDevice);
+              result.device = i18n::requiredText(textCatalog, i18n::MessageId::SystemDefaultOutputDevice);
             }
 
             break;
@@ -77,7 +76,7 @@ namespace ao::uimodel
   } // namespace
 
   OutputDeviceViewModel::OutputDeviceViewModel(rt::PlaybackService& playback,
-                                               PresentationTextCatalog textCatalog,
+                                               i18n::MessageCatalog textCatalog,
                                                RenderCallback onRender,
                                                OutputDeviceIntent intent)
     : _playback{playback}
@@ -128,7 +127,7 @@ namespace ao::uimodel
 
     for (auto const& backend : output.availableBackends)
     {
-      auto const backendPresentation = _textCatalog.audioBackend(backend.id);
+      auto const backendPresentation = audioBackendPresentation(_textCatalog, backend.id);
       view.rows.push_back(OutputDeviceRow{
         .kind = OutputDeviceRow::Kind::BackendHeader,
         .backendId = backend.id,
@@ -155,7 +154,7 @@ namespace ao::uimodel
 
           if (device.isDefault && device.id.empty() && deviceTitle.empty())
           {
-            deviceTitle = _textCatalog.text(i18n::MessageId::SystemDefaultOutputDevice);
+            deviceTitle = i18n::requiredText(_textCatalog, i18n::MessageId::SystemDefaultOutputDevice);
           }
 
           bool const isActive =
@@ -185,7 +184,7 @@ namespace ao::uimodel
     {
       view.hasActiveOutputDevice = true;
 
-      view.outputBackendSummary = _textCatalog.audioBackend(output.selectedDevice.backendId).shortLabel;
+      view.outputBackendSummary = audioBackendPresentation(_textCatalog, output.selectedDevice.backendId).shortLabel;
 
       auto const names = resolveBackendDeviceNames(output, _textCatalog);
       bool const isExclusive = (output.selectedDevice.profileId == audio::kProfileExclusive);
@@ -194,7 +193,7 @@ namespace ao::uimodel
 
       if (isExclusive)
       {
-        view.outputDeviceStatus += " (" + _textCatalog.audioProfile(audio::kProfileExclusive).label + ")";
+        view.outputDeviceStatus += " (" + audioProfilePresentation(_textCatalog, audio::kProfileExclusive).label + ")";
       }
     }
 

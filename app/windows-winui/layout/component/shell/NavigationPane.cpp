@@ -24,7 +24,7 @@
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
@@ -219,14 +219,14 @@ namespace ao::winui::layout
 
         if (state.canCreate && _createList)
         {
-          append(_textCatalog.text(i18n::MessageId::WinUiListNew),
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListNew),
                  [create = _createList, parentId = uimodel::parentForNewSmartList(row.id)] { create(parentId, {}); });
         }
 
         if (state.canEdit && _editList)
         {
-          append(
-            _textCatalog.text(i18n::MessageId::WinUiListEdit), [edit = _editList, listId = row.id] { edit(listId); });
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListEdit),
+                 [edit = _editList, listId = row.id] { edit(listId); });
         }
 
         if ((state.canEdit && _editList) &&
@@ -237,12 +237,12 @@ namespace ao::winui::layout
 
         if (state.canDelete && _deleteList)
         {
-          append(_textCatalog.text(i18n::MessageId::WinUiListDelete),
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDelete),
                  [remove = _deleteList, listId = row.id] { remove(listId, false); });
         }
         else if (state.canDeleteSubtree && _deleteList)
         {
-          append(_textCatalog.text(i18n::MessageId::WinUiListDeleteSubtree),
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDeleteSubtree),
                  [remove = _deleteList, listId = row.id] { remove(listId, true); });
         }
 
@@ -300,7 +300,7 @@ namespace ao::winui::layout
       std::function<void(ListId, std::string)> _createList;
       std::function<void(ListId)> _editList;
       std::function<void(ListId, bool)> _deleteList;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
       std::function<void(std::string)> _reportStatus;
     };

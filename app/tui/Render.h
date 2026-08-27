@@ -6,6 +6,7 @@
 #include "CoverArt.h"
 #include "TrackListEntry.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/screen/box.hpp>
 
@@ -24,14 +25,6 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
-namespace ao::tui
-{
-  class TuiTextCatalog;
-} // namespace ao::tui
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-} // namespace ao::uimodel
 namespace ao::tui
 {
   using KittyEscapeSink = std::function<void(std::string_view)>;
@@ -54,7 +47,7 @@ namespace ao::tui
    * frame that shows no artwork leaves an invalid box behind for out-of-band
    * paint state to recognize.
    */
-  ftxui::Element detailCoverArt(uimodel::PresentationTextCatalog const& textCatalog,
+  ftxui::Element detailCoverArt(i18n::MessageCatalog const& textCatalog,
                                 CoverArtDeliveryMode mode,
                                 std::optional<CoverArtRows> const& optPreview,
                                 std::optional<std::vector<std::byte>> const& optKittyPng,
@@ -102,13 +95,12 @@ namespace ao::tui
                            KittyEscapeSink const& sink = defaultKittyEscapeSink);
 
   ftxui::Element centerPopover(ftxui::Element popoverPtr);
-  std::int32_t detailPaneColumns(uimodel::PresentationTextCatalog const& textCatalog,
+  std::int32_t detailPaneColumns(i18n::MessageCatalog const& textCatalog,
                                  std::int32_t terminalColumns,
                                  std::int32_t coverColumns);
-  ftxui::Element detailPane(uimodel::PresentationTextCatalog const& textCatalog,
+  ftxui::Element detailPane(i18n::MessageCatalog const& textCatalog,
                             TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
                             std::int32_t columns);
-  std::int32_t helpPaneColumns(TuiTextCatalog const& textCatalog, std::int32_t terminalColumns);
-  ftxui::Element helpPane(TuiTextCatalog const& textCatalog, std::int32_t columns = 0);
+  ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog, std::int32_t terminalColumns = 0);
 } // namespace ao::tui

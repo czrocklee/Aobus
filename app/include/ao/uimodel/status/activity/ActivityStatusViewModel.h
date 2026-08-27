@@ -16,10 +16,13 @@ namespace ao::rt
   class NotificationService;
 }
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   using ActivityStatusClock = std::function<std::chrono::steady_clock::time_point()>;
 
   struct ActivityStatusViewModelOptions final
@@ -33,7 +36,7 @@ namespace ao::uimodel
   {
   public:
     ActivityStatusViewModel(rt::NotificationService& notifications,
-                            PresentationTextCatalog const& textCatalog,
+                            i18n::MessageCatalog const& textCatalog,
                             std::function<void(ActivityStatusViewState const&)> onRender,
                             ActivityStatusViewModelOptions options = {});
 

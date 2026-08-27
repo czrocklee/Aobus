@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackPresentation.h>
@@ -21,7 +21,7 @@ namespace ao::uimodel::test
 {
   TEST_CASE("TrackPresentationPickerViewModel - localizes shared eligibility copy", "[uimodel][unit][localization]")
   {
-    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto const eligibility =
       trackPresentationEligibility(textCatalog, rt::kAllTracksListId, rt::kListOrderTrackPresentationId);
 

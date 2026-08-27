@@ -41,6 +41,7 @@ Each file owns a distinct question:
 | Which Windows Python artifacts and transitive packages are accepted? | `script/ao/windows-requirements.txt` |
 | Which macOS Python artifacts and transitive packages are accepted? | `script/ao/macos-requirements.txt` |
 | Did the configured build satisfy the contract? | CMake dependency checks and `./ao deps verify` |
+| How many public concepts does a configured debug build expose? | [Concept metrics](concept-metrics.md) and `./ao deps report --concepts` |
 
 Linux Nix is the normal **lead resolver**, not the policy source of truth. A
 routine upgrade normally starts by evaluating the Linux Nixpkgs pin, but

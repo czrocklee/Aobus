@@ -1,17 +1,30 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2026 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/audio/OutputDeviceSelection.h>
 
+#include <string>
 #include <string_view>
 
 namespace ao::rt
 {
   class ConfigStore;
-  struct AppPrefsState;
-  struct AppSessionState;
+
+  struct AppPrefsState final
+  {
+    audio::OutputDeviceSelection preferredOutputSelection{};
+    std::string lastLayoutPreset;
+    std::string lastThemePreset;
+  };
+
+  struct AppSessionState final
+  {
+    std::string lastLibraryPath;
+    audio::OutputDeviceSelection lastOutputSelection{};
+  };
 
   /**
    * @name Application-global configuration groups
@@ -37,11 +50,9 @@ namespace ao::rt
    * loses more than it protects.
    */
   void loadAppPrefs(ConfigStore& store, AppPrefsState& state);
-
   Result<> saveAppPrefs(ConfigStore& store, AppPrefsState const& state);
 
   /// Reads the persisted application session over @p state, under the same rule as `loadAppPrefs`.
   void loadAppSession(ConfigStore& store, AppSessionState& state);
-
   Result<> saveAppSession(ConfigStore& store, AppSessionState const& state);
 } // namespace ao::rt

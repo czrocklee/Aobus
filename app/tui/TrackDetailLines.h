@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 
 #include <span>
@@ -13,10 +14,6 @@ namespace ao::rt
 {
   struct TrackRow;
 } // namespace ao::rt
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
 
 namespace ao::tui
 {
@@ -43,6 +40,5 @@ namespace ao::tui
    * a value, so a sparse track reads as short rather than as a column of
    * dashes.
    */
-  std::vector<TrackDetailLine> trackDetailLines(uimodel::PresentationTextCatalog const& textCatalog,
-                                                rt::TrackRow const& row);
+  std::vector<TrackDetailLine> trackDetailLines(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row);
 } // namespace ao::tui

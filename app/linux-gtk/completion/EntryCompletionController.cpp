@@ -3,9 +3,10 @@
 
 #include "completion/EntryCompletionController.h"
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -104,7 +105,7 @@ namespace ao::gtk
   } // namespace
 
   EntryCompletionController::EntryCompletionController(Gtk::Entry& entry,
-                                                       uimodel::PresentationTextCatalog textCatalog,
+                                                       i18n::MessageCatalog textCatalog,
                                                        rt::CompletionProvider provider,
                                                        EntryCompletionControllerOptions options)
     : _entry{entry}, _textCatalog{std::move(textCatalog)}, _provider{std::move(provider)}, _options{options}
@@ -155,7 +156,7 @@ namespace ao::gtk
         }
 
         auto const& item = itemPtr->item();
-        auto const detailText = _textCatalog.completionDetail(item.detail);
+        auto const detailText = uimodel::completionDetail(_textCatalog, item.detail);
         title->set_text(item.displayText);
         detail->set_text(detailText);
         detail->set_visible(!detailText.empty());

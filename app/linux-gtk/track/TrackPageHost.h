@@ -9,11 +9,11 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <map>
 #include <memory>
@@ -58,7 +58,7 @@ namespace ao::gtk
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
                   uimodel::TrackColumnLayoutStore& layoutStore,
-                  uimodel::PresentationTextCatalog textCatalog,
+                  i18n::MessageCatalog textCatalog,
                   rt::ResourceByteLoader& byteLoader);
     ~TrackPageHost();
 
@@ -102,7 +102,7 @@ namespace ao::gtk
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
     rt::AppRuntime& _runtime;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
     uimodel::TrackColumnLayoutStore& _layoutStore;

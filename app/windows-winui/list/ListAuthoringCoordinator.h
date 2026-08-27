@@ -8,11 +8,12 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
 #include <ao/uimodel/library/list/SmartListEditorModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -62,7 +63,7 @@ namespace ao::winui
     uimodel::TrackPresentationCatalog& presentationCatalog;
     uimodel::ListPresentationPreferenceStore& presentationPreferences;
     rt::TextOrderingPolicy const* textOrderingPolicy = nullptr;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     std::function<void(std::string)> reportStatus;
   };
 
@@ -152,7 +153,7 @@ namespace ao::winui
     uimodel::TrackPresentationCatalog& _presentationCatalog;
     uimodel::ListPresentationPreferenceStore& _presentationPreferences;
     rt::TextOrderingPolicy const* _textOrderingPolicy = nullptr;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     std::function<void(std::string)> _reportStatus;
     std::unique_ptr<async::LifetimeScope> _dialogTasksPtr;
     async::LifetimeScope _commandTasks;

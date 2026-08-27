@@ -5,10 +5,11 @@
 
 #include "PlaybackStatusFormatter.h"
 #include "TrackListEntry.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <array>
 #include <cstdint>
@@ -55,15 +56,14 @@ namespace ao::tui
     return kTrackDetailFields;
   }
 
-  std::vector<TrackDetailLine> trackDetailLines(uimodel::PresentationTextCatalog const& textCatalog,
-                                                rt::TrackRow const& row)
+  std::vector<TrackDetailLine> trackDetailLines(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
   {
     auto lines = std::vector<TrackDetailLine>{};
     lines.reserve(kTrackDetailFields.size());
 
     auto appendCore = [&](rt::TrackField const field, std::string value)
     {
-      lines.push_back({.label = std::string{textCatalog.trackFieldLabel(field)},
+      lines.push_back({.label = std::string{uimodel::trackFieldLabel(textCatalog, field)},
                        .value = value.empty() ? std::string{kAbsentCoreValue} : std::move(value)});
     };
     auto appendOptional = [&](rt::TrackField const field, std::string value)
@@ -73,7 +73,7 @@ namespace ao::tui
         return;
       }
 
-      lines.push_back({.label = std::string{textCatalog.trackFieldLabel(field)}, .value = std::move(value)});
+      lines.push_back({.label = std::string{uimodel::trackFieldLabel(textCatalog, field)}, .value = std::move(value)});
     };
 
     appendCore(rt::TrackField::Title, trackDisplayTitle(textCatalog, row));

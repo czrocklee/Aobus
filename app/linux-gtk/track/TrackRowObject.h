@@ -5,9 +5,9 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
@@ -23,7 +23,7 @@ namespace ao::gtk
   class TrackRowObject final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<TrackRowObject> create(TrackId id, uimodel::PresentationTextCatalog const& textCatalog);
+    static Glib::RefPtr<TrackRowObject> create(TrackId id, i18n::MessageCatalog const& textCatalog);
     static ::GType objectType();
 
     TrackId trackId() const { return _id; }
@@ -39,7 +39,7 @@ namespace ao::gtk
     Glib::ustring const* displayText(rt::TrackField field) const;
 
     Glib::ustring fieldText(rt::TrackField field) const;
-    uimodel::PresentationTextCatalog const& textCatalog() const;
+    i18n::MessageCatalog const& textCatalog() const;
 
     Glib::ustring const& tags() const { return _tags; }
 
@@ -111,7 +111,7 @@ namespace ao::gtk
 
   protected:
     explicit TrackRowObject();
-    explicit TrackRowObject(uimodel::PresentationTextCatalog const& textCatalog);
+    explicit TrackRowObject(i18n::MessageCatalog const& textCatalog);
 
   private:
     // Clears every memoized computed-field string. Called by any mutator: computed
@@ -122,7 +122,7 @@ namespace ao::gtk
 
     TrackId _id;
     // Empty only on the private GObject type-registration sentinel.
-    std::optional<uimodel::PresentationTextCatalog> _optTextCatalog;
+    std::optional<i18n::MessageCatalog> _optTextCatalog;
 
     // Holds both text-backed fields (filled at populate) and lazily memoized
     // computed-field strings; mutable so displayText() can fill computed slots

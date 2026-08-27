@@ -12,7 +12,7 @@
 #include "TuiTextCatalog.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -52,25 +52,52 @@ namespace ao::tui
     /// Frame edges and the artwork separator: the rows Detail spends on chrome.
     constexpr std::int32_t kDetailChromeRows = 3;
 
-    constexpr auto kHelpPaneLines = std::to_array<TuiTextId>({
-      TuiTextId::HelpQuickFilter,
-      TuiTextId::HelpChooseList,
-      TuiTextId::HelpTrackDetail,
-      TuiTextId::HelpAudioPipeline,
-      TuiTextId::HelpOutputDevice,
-      TuiTextId::HelpChooseView,
-      TuiTextId::HelpNotifications,
-      TuiTextId::HelpCurrentTrack,
-      TuiTextId::HelpSwitchPresentation,
-      TuiTextId::HelpPreviousNextGroup,
-      TuiTextId::HelpClearFilter,
-      TuiTextId::HelpReloadList,
-      TuiTextId::HelpPlayback,
-      TuiTextId::HelpQuit,
-      TuiTextId::HelpFooter,
+    constexpr auto kHelpPaneLines = std::to_array<i18n::MessageId>({
+      i18n::MessageId::TuiShellHelpQuickFilter,
+      i18n::MessageId::TuiShellHelpChooseList,
+      i18n::MessageId::TuiShellHelpTrackDetail,
+      i18n::MessageId::TuiShellHelpAudioPipeline,
+      i18n::MessageId::TuiShellHelpOutputDevice,
+      i18n::MessageId::TuiShellHelpChooseView,
+      i18n::MessageId::TuiShellHelpNotifications,
+      i18n::MessageId::TuiShellHelpCurrentTrack,
+      i18n::MessageId::TuiShellHelpSwitchPresentation,
+      i18n::MessageId::TuiShellHelpPreviousNextGroup,
+      i18n::MessageId::TuiShellHelpClearFilter,
+      i18n::MessageId::TuiShellHelpReloadList,
+      i18n::MessageId::TuiShellHelpPlayback,
+      i18n::MessageId::TuiShellHelpQuit,
+      i18n::MessageId::TuiShellHelpFooter,
     });
     constexpr std::size_t kHelpPaneFooterLine = kHelpPaneLines.size() - 1;
     constexpr std::size_t kHelpPaneSeparatorCount = 2;
+    using ResolvedHelpPaneLines = std::array<std::string, kHelpPaneLines.size()>;
+
+    ResolvedHelpPaneLines resolveHelpPaneLines(i18n::MessageCatalog const& textCatalog)
+    {
+      auto result = ResolvedHelpPaneLines{};
+
+      for (std::size_t index = 0; index < kHelpPaneLines.size(); ++index)
+      {
+        result[index] = tuiChromeText(textCatalog, kHelpPaneLines[index]);
+      }
+
+      return result;
+    }
+
+    std::int32_t resolvedHelpPaneColumns(ResolvedHelpPaneLines const& lines,
+                                         std::string_view const title,
+                                         std::int32_t const terminalColumns)
+    {
+      std::int32_t contentColumns = cellWidth(title);
+
+      for (auto const& line : lines)
+      {
+        contentColumns = std::max(contentColumns, cellWidth(line));
+      }
+
+      return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
+    }
 
     ftxui::Element popoverClearHalo(ftxui::Element popoverPtr)
     {
@@ -99,13 +126,13 @@ namespace ao::tui
     }
 
     /// The label column this locale asks for, capped and delimiter included.
-    std::int32_t detailLabelContentColumns(uimodel::PresentationTextCatalog const& textCatalog)
+    std::int32_t detailLabelContentColumns(i18n::MessageCatalog const& textCatalog)
     {
       std::int32_t labelColumns = 0;
 
       for (auto const field : trackDetailFields())
       {
-        labelColumns = std::max(labelColumns, cellWidth(textCatalog.trackFieldLabel(field)));
+        labelColumns = std::max(labelColumns, cellWidth(uimodel::trackFieldLabel(textCatalog, field)));
       }
 
       return std::min(labelColumns, kDetailLabelColumns) + cellWidth(kDetailLabelDelimiter);
@@ -124,7 +151,7 @@ namespace ao::tui
      * never take more than their share of the body, and never take so much
      * that values fall below what a value needs to say anything.
      */
-    DetailBodySplit detailBodySplit(uimodel::PresentationTextCatalog const& textCatalog, std::int32_t const bodyColumns)
+    DetailBodySplit detailBodySplit(i18n::MessageCatalog const& textCatalog, std::int32_t const bodyColumns)
     {
       auto const labelShare = bodyColumns * kDetailLabelPercent / 100;
       auto const valueFloor = bodyColumns - kMinimumDetailValueColumns;
@@ -170,7 +197,7 @@ namespace ao::tui
     return state.visible && coverArtId == state.paintedCoverArtId && isSameBox(coverBox, state.paintedCoverBox);
   }
 
-  ftxui::Element detailCoverArt(uimodel::PresentationTextCatalog const& textCatalog,
+  ftxui::Element detailCoverArt(i18n::MessageCatalog const& textCatalog,
                                 CoverArtDeliveryMode const mode,
                                 std::optional<CoverArtRows> const& optPreview,
                                 std::optional<std::vector<std::byte>> const& optKittyPng,
@@ -202,7 +229,7 @@ namespace ao::tui
 
     if (artworkPtr == nullptr)
     {
-      return text(std::string{textCatalog.text(i18n::MessageId::CoverArtNone)}) | dim;
+      return text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::CoverArtNone)}) | dim;
     }
 
     if (optArtworkBox != nullptr)
@@ -299,19 +326,21 @@ namespace ao::tui
     });
   }
 
-  std::int32_t detailPaneColumns(uimodel::PresentationTextCatalog const& textCatalog,
+  std::int32_t detailPaneColumns(i18n::MessageCatalog const& textCatalog,
                                  std::int32_t const terminalColumns,
                                  std::int32_t const coverColumns)
   {
     auto const labelColumns = detailLabelContentColumns(textCatalog);
     auto contentColumns = std::max(coverColumns, labelColumns + kDetailValueColumns);
-    contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackDetailTitle)));
-    contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(i18n::MessageId::TrackNoSelection)));
+    contentColumns =
+      std::max(contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TrackDetailTitle)));
+    contentColumns =
+      std::max(contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TrackNoSelection)));
 
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element detailPane(uimodel::PresentationTextCatalog const& textCatalog,
+  ftxui::Element detailPane(i18n::MessageCatalog const& textCatalog,
                             TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
                             std::int32_t const columns)
@@ -325,7 +354,8 @@ namespace ao::tui
     if (selectedTrack == nullptr)
     {
       detailElements.push_back(
-        text(ellipsizeToCellWidth(textCatalog.text(i18n::MessageId::TrackNoSelection), bodyColumns)) | dim);
+        text(ellipsizeToCellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TrackNoSelection), bodyColumns)) |
+        dim);
     }
     else
     {
@@ -350,45 +380,30 @@ namespace ao::tui
 
     bodyElements.push_back(vbox(std::move(detailElements)) | frame | flex);
 
-    return style::popupPanel(textCatalog.text(i18n::MessageId::TrackDetailTitle), vbox(std::move(bodyElements))) |
+    return style::popupPanel(
+             i18n::requiredText(textCatalog, i18n::MessageId::TrackDetailTitle), vbox(std::move(bodyElements))) |
            size(WIDTH, EQUAL, columns);
   }
 
-  std::int32_t helpPaneColumns(TuiTextCatalog const& textCatalog, std::int32_t const terminalColumns)
-  {
-    std::int32_t contentColumns = 0;
-
-    for (auto const line : kHelpPaneLines)
-    {
-      contentColumns = std::max(contentColumns, cellWidth(textCatalog.text(line)));
-    }
-
-    contentColumns = std::max(contentColumns, cellWidth(overlayLabel(textCatalog, Overlay::Help)));
-
-    return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
-  }
-
-  ftxui::Element helpPane(TuiTextCatalog const& textCatalog, std::int32_t columns)
+  ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog, std::int32_t const terminalColumns)
   {
     using namespace ftxui;
 
-    if (columns <= 0)
-    {
-      columns = helpPaneColumns(textCatalog, 0);
-    }
+    auto lines = resolveHelpPaneLines(textCatalog);
+    auto const title = std::string{overlayLabel(textCatalog, Overlay::Help)};
+    auto const columns = resolvedHelpPaneColumns(lines, title, terminalColumns);
 
     auto rows = Elements{};
     rows.reserve(kHelpPaneLines.size() + kHelpPaneSeparatorCount);
 
     for (std::size_t line = 0; line < kHelpPaneFooterLine; ++line)
     {
-      rows.push_back(text(std::string{textCatalog.text(kHelpPaneLines[line])}));
+      rows.push_back(text(std::move(lines[line])));
     }
 
     rows.push_back(separator());
-    rows.push_back(text(std::string{textCatalog.text(kHelpPaneLines[kHelpPaneFooterLine])}) | dim);
+    rows.push_back(text(std::move(lines[kHelpPaneFooterLine])) | dim);
 
-    return style::popupPanel(overlayLabel(textCatalog, Overlay::Help), vbox(std::move(rows))) |
-           size(WIDTH, EQUAL, columns);
+    return style::popupPanel(title, vbox(std::move(rows))) | size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

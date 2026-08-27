@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <giomm/menumodel.h>
@@ -15,11 +16,9 @@
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
-  class PresentationTextCatalog;
 }
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   class TrackRowCache;
   class ResourceImageLoader;
   class TagEditController;
@@ -43,8 +42,7 @@ namespace ao::gtk
    */
   struct GtkUiDependencies final
   {
-    uimodel::PresentationTextCatalog const& textCatalog;
-    GtkTextCatalog const& gtkTextCatalog;
+    i18n::MessageCatalog const& textCatalog;
     TrackRowCache* trackRowCache = nullptr;
     ResourceImageLoader* imageLoader = nullptr;
     uimodel::PlaybackCommandSurface* playbackCommandSurface = nullptr;

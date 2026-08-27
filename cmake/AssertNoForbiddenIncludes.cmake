@@ -59,7 +59,8 @@ foreach(root IN LISTS ROOTS)
       "${root}/*.cpp"
       "${root}/*.cxx"
       "${root}/*.inl"
-      "${root}/*.ipp")
+      "${root}/*.ipp"
+      "${root}/*.def")
   elseif(EXISTS "${root}")
     set(sources "${root}")
   else()

@@ -4,7 +4,6 @@
 #include <ao/utility/StrongType.h>
 
 #include <ao/utility/StrongTypeFormatter.h>
-#include <ao/utility/StrongTypeStream.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -12,7 +11,6 @@
 #include <concepts>
 #include <cstdint>
 #include <format>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -92,11 +90,6 @@ namespace ao::utility::test
     CHECK(id1 == 42);
     CHECK(id1 != 10);
     CHECK((id1 <=> 10) == std::strong_ordering::greater);
-
-    // Output stream
-    auto oss = std::ostringstream{};
-    oss << id1;
-    CHECK(oss.str() == "42");
 
     // hash
     auto set = std::unordered_set<IntId>{};

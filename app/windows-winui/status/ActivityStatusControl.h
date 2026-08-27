@@ -3,8 +3,9 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationIds.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -42,7 +43,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::ProgressBar progress{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button dismissButton{nullptr};
     bool reserveIdle = false;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
   };
 
   class ActivityStatusControl final
@@ -84,7 +85,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _dismissClickRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _autoDismissTickRevoker{};
     std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _detailDismissRevokers;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::NotificationService* _notifications = nullptr;
     rt::LibraryTaskService* _libraryTasks = nullptr;
     std::unique_ptr<uimodel::ActivityStatusViewModel> _viewModelPtr;

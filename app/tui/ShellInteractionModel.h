@@ -4,7 +4,7 @@
 #pragma once
 
 #include "CommandCompletionState.h"
-#include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <cstdint>
@@ -65,8 +65,8 @@ namespace ao::tui
   {
     std::string_view prefix;
     CommandAction action;
-    TuiTextId detail;
-    TuiTextId category;
+    i18n::MessageId detail;
+    i18n::MessageId category;
     /**
      * @brief The action whose key this entry advertises, when not its own.
      *
@@ -82,8 +82,8 @@ namespace ao::tui
   {
     std::string_view alias;
     CommandAction action;
-    TuiTextId detail;
-    TuiTextId category;
+    i18n::MessageId detail;
+    i18n::MessageId category;
   };
 
   /**
@@ -117,8 +117,8 @@ namespace ao::tui
    */
   bool isModalOverlay(Overlay overlay) noexcept;
   std::optional<Command> parseCommand(std::string_view input);
-  std::string_view overlayLabel(TuiTextCatalog const& textCatalog, Overlay overlay);
-  std::string_view overlayHint(TuiTextCatalog const& textCatalog, Overlay overlay);
+  std::string_view overlayLabel(i18n::MessageCatalog const& textCatalog, Overlay overlay);
+  std::string overlayHint(i18n::MessageCatalog const& textCatalog, Overlay overlay);
 
   class ShellInteractionModel final
   {

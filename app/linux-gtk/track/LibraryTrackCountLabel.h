@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -20,7 +20,7 @@ namespace ao::gtk
   class LibraryTrackCountLabel final
   {
   public:
-    LibraryTrackCountLabel(rt::TrackSourceLease sourceLease, uimodel::PresentationTextCatalog textCatalog);
+    LibraryTrackCountLabel(rt::TrackSourceLease sourceLease, i18n::MessageCatalog textCatalog);
     ~LibraryTrackCountLabel();
 
     // Not copyable or movable
@@ -36,7 +36,7 @@ namespace ao::gtk
     void updateCount();
 
     rt::TrackSourceLease _sourceLease;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     async::Subscription _sourceSubscription;
     Gtk::Label _label;
   };

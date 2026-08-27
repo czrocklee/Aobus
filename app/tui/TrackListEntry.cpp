@@ -7,7 +7,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <format>
@@ -25,7 +24,7 @@ namespace ao::tui
     }
   } // namespace
 
-  std::string trackDisplayTitle(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row)
+  std::string trackDisplayTitle(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
   {
     if (!row.title.empty())
     {
@@ -37,7 +36,7 @@ namespace ao::tui
       return utility::pathToUtf8(row.optUriPath->filename());
     }
 
-    return textCatalog.format(i18n::MessageId::TrackFallback, {{"id", row.id.raw()}});
+    return i18n::requiredFormat(textCatalog, i18n::MessageId::TrackFallback, {{"id", row.id.raw()}});
   }
 
   std::string trackDisplayDetail(rt::TrackRow const& row)
@@ -72,7 +71,7 @@ namespace ao::tui
     return detail;
   }
 
-  TrackListEntry makeTrackListEntry(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row)
+  TrackListEntry makeTrackListEntry(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
   {
     auto detail = trackDisplayDetail(row);
 
@@ -83,7 +82,7 @@ namespace ao::tui
                           .detail = std::move(detail)};
   }
 
-  std::string trackTableLabel(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row)
+  std::string trackTableLabel(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
   {
     auto trackNo = textOrPlaceholder(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber));
     return std::format("{:>2}  {}  {}  {}",

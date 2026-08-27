@@ -87,6 +87,31 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual([(target.selected, target.translation_unit) for target in plan.targets], [(header, companion)])
 
+    def test_def_include_fragment_uses_consuming_translation_unit(self):
+        fragment = self.fixture.file("app/include/ao/i18n/MessageInventory.def")
+        consumer = self.fixture.file("app/i18n/MessageCatalog.cpp")
+        (self.fixture.build_dir / "build.ninja").touch()
+        self.fixture.write_compile_database(consumer)
+        output = self.fixture.dependencies((consumer, [fragment]), base=self.fixture.build_dir)
+
+        with mock.patch.object(
+            tidyengine.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(["ninja", "-t", "deps"], 0, output),
+        ):
+            plan = tidyengine.compile_command_plan(
+                self.fixture.build_dir,
+                [fragment],
+                project_root=self.fixture.root,
+            )
+
+        self.assertFalse(plan.targets[0].is_header)
+        self.assertTrue(plan.targets[0].is_include_fragment)
+        self.assertEqual(
+            [(target.selected, target.translation_unit) for target in plan.targets],
+            [(fragment, consumer)],
+        )
+
     def test_header_uses_real_consumer_from_ninja_dependency_graph(self):
         header = self.fixture.file("include/ao/utility/HeaderOnly.h")
         consumer = self.fixture.file("lib/utility/Consumer.cpp")

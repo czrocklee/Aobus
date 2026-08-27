@@ -13,6 +13,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
@@ -167,7 +168,7 @@ namespace ao::gtk::layout
       }
 
       TagEditor _tagEditor;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       rt::AppRuntime& _runtime;
       rt::Library& _library;
       rt::NotificationService& _notifications;

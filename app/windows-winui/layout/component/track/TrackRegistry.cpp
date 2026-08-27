@@ -100,7 +100,7 @@ namespace ao::winui::layout
         _input.PlaceholderText(winrt::to_hstring(resourceString("winui_library_quick_filter_placeholder")));
         _root.Children().Append(_input);
 
-        auto const createLabel = ctx.textCatalog.text(i18n::MessageId::WinUiListCreateFromFilter);
+        auto const createLabel = i18n::requiredText(ctx.textCatalog, i18n::MessageId::WinUiListCreateFromFilter);
         _createButton.Content(winrt::box_value(winrt::to_hstring(createLabel)));
         _createButton.Visibility(Visibility::Collapsed);
         ToolTipService::SetToolTip(_createButton, winrt::box_value(winrt::to_hstring(createLabel)));

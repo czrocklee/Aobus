@@ -3,9 +3,10 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -21,7 +22,7 @@ namespace ao::winui
   struct TransportButtonConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::Button button{nullptr};
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     uimodel::PlaybackCommand command = uimodel::PlaybackCommand::PlayPause;
     bool showLabel = false;
   };
@@ -48,7 +49,7 @@ namespace ao::winui
     void applyState(uimodel::TransportViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Button _button{nullptr};
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     uimodel::PlaybackCommand _command = uimodel::PlaybackCommand::PlayPause;
     bool _showLabel = false;
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _clickRevoker{};

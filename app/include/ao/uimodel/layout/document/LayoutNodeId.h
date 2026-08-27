@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/document/LayoutNode.h>
-
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -14,6 +12,8 @@
 namespace ao::uimodel
 {
   struct LayoutDocument;
+  struct LayoutNode;
+  class LayoutComponentCatalog;
   class PreparedLayout;
   enum class LayoutNodeIdDiagnosticSeverity : std::uint8_t
   {
@@ -34,7 +34,8 @@ namespace ao::uimodel
   void visitLayoutDocumentNodes(LayoutDocument const& doc, LayoutNodeVisitor const& visitor);
   void visitExpandedLayoutNodes(PreparedLayout const& layout, LayoutNodeVisitor const& visitor);
 
-  std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(PreparedLayout const& layout);
+  std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(PreparedLayout const& layout,
+                                                                    LayoutComponentCatalog const& catalog);
   bool hasLayoutNodeIdErrors(std::vector<LayoutNodeIdDiagnostic> const& diagnostics);
 
   std::string makeUniqueLayoutNodeId(LayoutDocument const& doc, std::string_view componentType, std::string_view role);

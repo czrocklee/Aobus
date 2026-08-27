@@ -11,13 +11,14 @@
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -62,7 +63,7 @@ namespace ao::winui
     static Result<std::unique_ptr<LibrarySession>> create(
       std::filesystem::path stateRoot,
       winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-      uimodel::PresentationTextCatalog textCatalog,
+      i18n::MessageCatalog textCatalog,
       rt::TextOrderingPolicy const& textOrderingPolicy,
       rt::CompletionAliasPolicy const& completionAliasPolicy,
       std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
@@ -78,7 +79,7 @@ namespace ao::winui
     bool scanAfterOpen() const noexcept { return _scanAfterOpen; }
     bool operationActive() const noexcept { return _operationActive; }
     uimodel::PlaybackCommandSurface& playbackCommands() const noexcept;
-    uimodel::PresentationTextCatalog const& textCatalog() const noexcept { return _textCatalog; }
+    i18n::MessageCatalog const& textCatalog() const noexcept { return _textCatalog; }
 
     DesktopSettings const& settings() const noexcept { return _settings; }
     DesktopSettings& settings() noexcept { return _settings; }
@@ -112,7 +113,7 @@ namespace ao::winui
   private:
     LibrarySession(std::filesystem::path stateRoot,
                    winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                   uimodel::PresentationTextCatalog textCatalog,
+                   i18n::MessageCatalog textCatalog,
                    rt::TextOrderingPolicy const& textOrderingPolicy,
                    rt::CompletionAliasPolicy const& completionAliasPolicy);
 
@@ -145,7 +146,7 @@ namespace ao::winui
 
     std::filesystem::path _stateRoot;
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::TextOrderingPolicy const& _textOrderingPolicy;
     rt::CompletionAliasPolicy const& _completionAliasPolicy;
     std::unique_ptr<rt::ConfigStore> _settingsStorePtr;

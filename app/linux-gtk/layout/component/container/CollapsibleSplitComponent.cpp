@@ -5,16 +5,16 @@
 #include "ContainerComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/StatefulComponentState.h>
-#include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/box.h>
@@ -36,6 +36,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -680,10 +681,10 @@ namespace ao::gtk::layout
         }
 
         auto const id = revealed ? i18n::MessageId::GtkCollapsePanel : i18n::MessageId::GtkExpandPanel;
-        setTooltipAndAccessibleLabel(_toggleButton, _textCatalog.text(id));
+        setTooltipAndAccessibleLabel(_toggleButton, gtkText(_textCatalog, id));
       }
 
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       uimodel::StatefulComponentState _state;
       AllocationObserver _allocationRoot;
       Gtk::Box _container;
@@ -746,7 +747,8 @@ namespace ao::gtk::layout
                                            .label = "Initially Revealed",
                                            .defaultValue = LayoutValue{true}}},
                                 .minChildren = 2,
-                                .optMaxChildren = 2},
+                                .optMaxChildren = 2,
+                                .persistentState = true},
                                createCollapsibleSplit);
   }
 } // namespace ao::gtk::layout

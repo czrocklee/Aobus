@@ -9,8 +9,9 @@
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.h>
 
@@ -40,7 +41,7 @@ namespace ao::winui
 
   LibraryWindowSession::LibraryWindowSession(std::filesystem::path stateRoot,
                                              winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                                             uimodel::PresentationTextCatalog textCatalog,
+                                             i18n::MessageCatalog textCatalog,
                                              rt::TextOrderingPolicy const& textOrderingPolicy,
                                              rt::CompletionAliasPolicy const& completionAliasPolicy)
     : _stateRoot{std::move(stateRoot)}

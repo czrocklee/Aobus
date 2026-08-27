@@ -10,7 +10,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -21,44 +20,44 @@
 
 namespace ao::uimodel
 {
-  ListOrderCapabilityState describeListOrderCapabilities(PresentationTextCatalog const& textCatalog,
+  ListOrderCapabilityState describeListOrderCapabilities(i18n::MessageCatalog const& textCatalog,
                                                          ListOrderCapabilityInput const& input)
   {
     auto state = ListOrderCapabilityState{};
 
     if (rt::isVirtualListId(input.listId))
     {
-      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderSavedListsOnly);
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderSavedListsOnly);
       return state;
     }
 
     if (input.authoring.state == rt::LibraryAuthoringState::Maintenance)
     {
-      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderLibraryBusy);
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderLibraryBusy);
       return state;
     }
 
     if (input.authoring.state != rt::LibraryAuthoringState::Available)
     {
-      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderAuthoringUnavailable);
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderAuthoringUnavailable);
       return state;
     }
 
     if (!input.sourceLive)
     {
-      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderListUnavailable);
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderListUnavailable);
       return state;
     }
 
     if (input.sourceHasError)
     {
-      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderFixFilter);
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderFixFilter);
       return state;
     }
 
     if (input.presentation.groupBy != rt::TrackGroupKey::None || !input.presentation.sortBy.empty())
     {
-      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderChooseFlatPresentation);
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderChooseFlatPresentation);
       return state;
     }
 
@@ -74,7 +73,7 @@ namespace ao::uimodel
     }
     else
     {
-      state.disabledReason = textCatalog.text(i18n::MessageId::ListOrderClearQuickFilter);
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderClearQuickFilter);
     }
 
     return state;

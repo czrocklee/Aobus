@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Task.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
@@ -17,7 +18,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -157,12 +158,13 @@ namespace ao::uimodel
           .changedTrackCount = completed.reply.tagEdit.changes.size(),
           .forgottenPositionCount = forgottenPositionCount(completed.reply),
         };
-        uiResult.notificationText = implPtr->textCatalog.listMembershipNotification(uiResult.status,
-                                                                                    operation,
-                                                                                    uiResult.listName,
-                                                                                    tagExpression(uiResult.tag),
-                                                                                    uiResult.changedTrackCount,
-                                                                                    uiResult.forgottenPositionCount);
+        uiResult.notificationText = formatListMembershipMessage(implPtr->textCatalog,
+                                                                uiResult.status,
+                                                                operation,
+                                                                uiResult.listName,
+                                                                tagExpression(uiResult.tag),
+                                                                uiResult.changedTrackCount,
+                                                                uiResult.forgottenPositionCount);
 
         if (completed.optNextTargets)
         {
@@ -202,14 +204,14 @@ namespace ao::uimodel
 
     rt::Library& library;
     rt::BoundTrackTargets targets;
-    PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     bool submitting = false;
   };
 
   Result<std::unique_ptr<ListMembershipAuthoringSession>> ListMembershipAuthoringSession::begin(
     rt::Library& library,
     std::span<TrackId const> const trackIds,
-    PresentationTextCatalog const& textCatalog)
+    i18n::MessageCatalog const& textCatalog)
   {
     auto targetsRes = library.bindTrackTargets(trackIds);
 

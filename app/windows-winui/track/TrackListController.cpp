@@ -31,7 +31,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackRevealAdapter.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
@@ -66,7 +66,7 @@ namespace ao::winui
     public:
       TrackItemMaterializer(rt::AppRuntime& inputRuntime,
                             rt::TrackListProjection& inputProjection,
-                            uimodel::PresentationTextCatalog textCatalog,
+                            i18n::MessageCatalog textCatalog,
                             uimodel::TrackDisplayIndex displayIndex,
                             std::vector<TrackColumnCellSpec> columns,
                             std::weak_ptr<void> lifetimePtr)
@@ -117,7 +117,7 @@ namespace ao::winui
             static_cast<std::uint32_t>(displayIndex),
             static_cast<std::uint32_t>(optItem->sourceIndex),
             group.imageId.raw(),
-            _textCatalog.format(i18n::MessageId::TrackCount, {{"count", group.rows.count}}),
+            i18n::requiredFormat(_textCatalog, i18n::MessageId::TrackCount, {{"count", group.rows.count}}),
             std::move(heading.primaryText),
             std::move(heading.secondaryText),
             std::move(heading.tertiaryText),
@@ -142,7 +142,7 @@ namespace ao::winui
     private:
       rt::AppRuntime* _runtime = nullptr;
       rt::TrackListProjection* _projection = nullptr;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       uimodel::TrackDisplayIndex _displayIndex;
       std::vector<TrackColumnCellSpec> _columns;
       uimodel::IndexedTrackRowCache _rows;
@@ -197,7 +197,7 @@ namespace ao::winui
     }
   } // namespace
 
-  TrackListController::TrackListController(uimodel::PresentationTextCatalog textCatalog)
+  TrackListController::TrackListController(i18n::MessageCatalog textCatalog)
     : _textCatalog{std::move(textCatalog)}
     , _items{makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries)}
     , _headers{winrt::single_threaded_observable_vector<winrt::Windows::Foundation::IInspectable>()}
@@ -445,7 +445,7 @@ namespace ao::winui
 
       auto const* definition = rt::trackFieldDefinition(field);
       auto const fieldId = rt::trackFieldId(field);
-      auto label = stableResourceString("track_field_", fieldId, _textCatalog.trackFieldLabel(field));
+      auto label = stableResourceString("track_field_", fieldId, uimodel::trackFieldLabel(_textCatalog, field));
 
       if (definition != nullptr && definition->optSortField && !state.presentation.sortBy.empty() &&
           state.presentation.sortBy.front().field == *definition->optSortField)

@@ -7,9 +7,9 @@
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
@@ -53,12 +53,12 @@ namespace ao::gtk
   {
   }
 
-  TrackRowObject::TrackRowObject(uimodel::PresentationTextCatalog const& textCatalog)
+  TrackRowObject::TrackRowObject(i18n::MessageCatalog const& textCatalog)
     : Glib::ObjectBase{"TrackRowObject"}, _optTextCatalog{textCatalog}
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, uimodel::PresentationTextCatalog const& textCatalog)
+  Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, i18n::MessageCatalog const& textCatalog)
   {
     auto objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{textCatalog});
     objPtr->_id = id;
@@ -211,7 +211,7 @@ namespace ao::gtk
     return kEmpty;
   }
 
-  uimodel::PresentationTextCatalog const& TrackRowObject::textCatalog() const
+  i18n::MessageCatalog const& TrackRowObject::textCatalog() const
   {
     AO_INVARIANT(_optTextCatalog, "The GObject type-registration sentinel cannot format row text");
     return *_optTextCatalog;

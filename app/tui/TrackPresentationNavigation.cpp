@@ -5,7 +5,7 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <span>
 #include <string>
@@ -17,7 +17,7 @@ namespace ao::tui
   using i18n::MessageId;
 
   std::vector<TrackPresentationNavEntry> makeTrackPresentationNavigation(
-    uimodel::PresentationTextCatalog const& textCatalog,
+    i18n::MessageCatalog const& textCatalog,
     std::span<rt::TrackPresentationPreset const> const builtinPresets,
     std::span<rt::CustomTrackPresentationPreset const> const customPresets)
   {
@@ -26,7 +26,7 @@ namespace ao::tui
 
     for (auto const& preset : builtinPresets)
     {
-      auto const optText = textCatalog.builtinTrackPresentation(preset.spec.id);
+      auto const optText = uimodel::builtinTrackPresentation(textCatalog, preset.spec.id);
       items.push_back(TrackPresentationNavEntry{
         .id = preset.spec.id,
         .label = optText ? std::string{optText->label} : preset.spec.id,
@@ -39,26 +39,26 @@ namespace ao::tui
       items.push_back(TrackPresentationNavEntry{
         .id = preset.spec.id,
         .label = preset.label.empty() ? preset.spec.id : preset.label,
-        .detail = preset.basePresetId.empty()
-                    ? std::string{textCatalog.text(MessageId::TuiPresentationCustom)}
-                    : textCatalog.format(MessageId::TuiPresentationCustomFrom, {{"id", preset.basePresetId}}),
+        .detail =
+          preset.basePresetId.empty()
+            ? std::string{i18n::requiredText(textCatalog, MessageId::TuiPresentationCustom)}
+            : i18n::requiredFormat(textCatalog, MessageId::TuiPresentationCustomFrom, {{"id", preset.basePresetId}}),
       });
     }
 
     return items;
   }
 
-  std::string trackPresentationDisplayId(uimodel::PresentationTextCatalog const& textCatalog,
-                                         std::string_view const presentationId)
+  std::string trackPresentationDisplayId(i18n::MessageCatalog const& textCatalog, std::string_view const presentationId)
   {
-    return presentationId.empty() ? std::string{textCatalog.text(MessageId::TuiPresentationDefault)}
+    return presentationId.empty() ? std::string{i18n::requiredText(textCatalog, MessageId::TuiPresentationDefault)}
                                   : std::string{presentationId};
   }
 
-  std::string trackPresentationBadgeLabel(uimodel::PresentationTextCatalog const& textCatalog,
+  std::string trackPresentationBadgeLabel(i18n::MessageCatalog const& textCatalog,
                                           std::string_view const presentationId)
   {
     auto const id = trackPresentationDisplayId(textCatalog, presentationId);
-    return textCatalog.format(MessageId::TuiPresentationBadge, {{"id", id}});
+    return i18n::requiredFormat(textCatalog, MessageId::TuiPresentationBadge, {{"id", id}});
   }
 } // namespace ao::tui

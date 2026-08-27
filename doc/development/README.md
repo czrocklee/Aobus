@@ -23,6 +23,7 @@ Use the [development guide template](../template/development.md) for a new contr
 - [Linting](linting.md) defines warning triage, suppression, cleanup, Python hygiene, and automatic-fix policy.
 - [Dependency governance](dependency-governance.md) owns cross-platform dependency policy, reproducibility, and exceptions.
 - [Dependency upgrade](dependency-upgrade.md) gives the supported procedure for changing dependency and tool pins.
+- [Concept metrics](concept-metrics.md) owns `./ao deps report --concepts` and the RFC 0002 measurement denominator.
 - [Optimized builds](optimized-builds.md) defines Release, IPO/LTO, and sampling-oriented profiling roles and workflows.
 - [macOS development](macos.md) covers native prerequisites, portal bootstrap, local state, supported commands, and current limitations.
 - [Windows development](windows.md) covers the native Windows portal, local state, tool bootstrap, and mapped-source workflow.

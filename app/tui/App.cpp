@@ -33,9 +33,9 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/audio/OutputDeviceSelection.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/AppStateStore.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
@@ -52,7 +52,6 @@
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 #include <ao/utility/PlatformDirectories.h>
@@ -93,8 +92,7 @@ namespace ao::tui
     constexpr auto kPlaybackTickInterval = std::chrono::milliseconds{250};
     constexpr std::int32_t kNotificationCenterPanelRows = 12;
 
-    ftxui::Element commandPalettePopover(uimodel::PresentationTextCatalog const& textCatalog,
-                                         TuiTextCatalog const& tuiTextCatalog,
+    ftxui::Element commandPalettePopover(i18n::MessageCatalog const& textCatalog,
                                          ShellInteractionModel const& shell,
                                          std::int32_t const terminalColumns,
                                          std::int32_t const terminalRows)
@@ -107,13 +105,12 @@ namespace ao::tui
       auto const panelColumns = commandPalettePanelColumns(terminalColumns);
       auto const panelRows = commandPalettePanelRows(terminalRows);
 
-      return centerPopover(commandPalettePanel(textCatalog, tuiTextCatalog, shell, panelColumns) |
+      return centerPopover(commandPalettePanel(textCatalog, shell, panelColumns) |
                            ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
                            ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, panelRows));
     }
 
-    ftxui::Element quickFilterPopover(uimodel::PresentationTextCatalog const& textCatalog,
-                                      TuiTextCatalog const& tuiTextCatalog,
+    ftxui::Element quickFilterPopover(i18n::MessageCatalog const& textCatalog,
                                       ShellInteractionModel const& shell,
                                       std::string_view const filterError,
                                       std::int32_t const terminalColumns,
@@ -127,7 +124,7 @@ namespace ao::tui
       auto const panelColumns = commandPalettePanelColumns(terminalColumns);
       auto const panelRows = quickFilterPanelRows(shell, !filterError.empty(), terminalRows);
 
-      return anchoredOverlay(quickFilterCompletionPanel(textCatalog, tuiTextCatalog, shell, panelColumns, filterError) |
+      return anchoredOverlay(quickFilterCompletionPanel(textCatalog, shell, panelColumns, filterError) |
                                ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
                                ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, panelRows),
                              {},
@@ -137,8 +134,7 @@ namespace ao::tui
                              AnchoredOverlayOptions{.fallbackToBottom = true});
     }
 
-    ftxui::Element presentationPopover(uimodel::PresentationTextCatalog const& textCatalog,
-                                       TuiTextCatalog const& tuiTextCatalog,
+    ftxui::Element presentationPopover(i18n::MessageCatalog const& textCatalog,
                                        ShellInteractionModel const& shell,
                                        LibraryController const& library,
                                        ftxui::Box const& presentationButtonBox,
@@ -151,11 +147,10 @@ namespace ao::tui
       }
 
       auto const activePresentationId = library.activePresentationId();
-      auto const panelColumns = presentationPanelColumns(
-        textCatalog, tuiTextCatalog, library.presentationEntries(), activePresentationId, terminalColumns);
+      auto const panelColumns =
+        presentationPanelColumns(textCatalog, library.presentationEntries(), activePresentationId, terminalColumns);
 
       return anchoredOverlay(presentationPanel(textCatalog,
-                                               tuiTextCatalog,
                                                library.presentationEntries(),
                                                activePresentationId,
                                                library.selectedPresentation(),
@@ -168,8 +163,7 @@ namespace ao::tui
                              AnchoredOverlayTerminal{.columns = terminalColumns});
     }
 
-    ftxui::Element notificationPopover(uimodel::PresentationTextCatalog const& textCatalog,
-                                       TuiTextCatalog const& tuiTextCatalog,
+    ftxui::Element notificationPopover(i18n::MessageCatalog const& textCatalog,
                                        ShellInteractionModel const& shell,
                                        uimodel::ActivityStatusViewState const& state,
                                        ftxui::Box const& activityStatusBox,
@@ -182,9 +176,9 @@ namespace ao::tui
         return {};
       }
 
-      auto const panelColumns = notificationCenterPanelColumns(textCatalog, tuiTextCatalog, state, terminalColumns);
+      auto const panelColumns = notificationCenterPanelColumns(textCatalog, state, terminalColumns);
 
-      return anchoredOverlay(notificationCenterPanel(textCatalog, tuiTextCatalog, state, rowHitRegions, panelColumns) |
+      return anchoredOverlay(notificationCenterPanel(textCatalog, state, rowHitRegions, panelColumns) |
                                ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
                                ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kNotificationCenterPanelRows),
                              activityStatusBox,
@@ -322,8 +316,7 @@ namespace ao::tui
     struct AppFrameRenderer final
     {
       FrameTimer& frameTimer;
-      uimodel::PresentationTextCatalog const& textCatalog;
-      TuiTextCatalog const& tuiTextCatalog;
+      i18n::MessageCatalog const& textCatalog;
       LibraryController& library;
       ShellInteractionModel& shell;
       rt::AppRuntime& runtime;
@@ -401,7 +394,6 @@ namespace ao::tui
         auto const hoveredButton = shell.isInputActive() ? HoveredButton::None : events.hoveredButton();
         auto tableElementPtr =
           trackTableView(textCatalog,
-                         tuiTextCatalog,
                          library.tracks(),
                          library.sections(),
                          library.selectedTrack(),
@@ -419,14 +411,16 @@ namespace ao::tui
             "",
             std::move(tableElementPtr),
             style::PanelOptions{
-              .leftFooter = style::PanelEdgeButton{.label = tuiTextCatalog.text(TuiTextId::WorkspaceList),
-                                                   .value = currentListTitle,
-                                                   .box = &hitRegions.libraryButtonBox,
-                                                   .hovered = hoveredButton == HoveredButton::Library},
-              .leftFooterRight = style::PanelEdgeButton{.label = tuiTextCatalog.text(TuiTextId::WorkspaceView),
-                                                        .value = presentationTitle,
-                                                        .box = &hitRegions.presentationButtonBox,
-                                                        .hovered = hoveredButton == HoveredButton::Presentation},
+              .leftFooter =
+                style::PanelEdgeButton{.label = tuiChromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceList),
+                                       .value = currentListTitle,
+                                       .box = &hitRegions.libraryButtonBox,
+                                       .hovered = hoveredButton == HoveredButton::Library},
+              .leftFooterRight =
+                style::PanelEdgeButton{.label = tuiChromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceView),
+                                       .value = presentationTitle,
+                                       .box = &hitRegions.presentationButtonBox,
+                                       .hovered = hoveredButton == HoveredButton::Presentation},
               .rightFooter = selectionSummary(textCatalog, library.tracks().size(), library.selectedTrack())}) |
           flex;
         auto mainContentPtr = workspaceElementPtr;
@@ -450,8 +444,7 @@ namespace ao::tui
           case Overlay::None: break;
           case Overlay::ListChooser:
           {
-            auto const panelColumns =
-              libraryChooserPaneColumns(tuiTextCatalog, library.libraryLabels(), terminalColumns);
+            auto const panelColumns = libraryChooserPaneColumns(textCatalog, library.libraryLabels(), terminalColumns);
             auto const panelRows =
               static_cast<std::int32_t>(std::max<std::size_t>(1, library.libraryLabels().size())) + 4;
             popoverElementPtr = mainLayerPopover(
@@ -459,7 +452,7 @@ namespace ao::tui
               AnchoredOverlayPlacement::Above,
               panelColumns,
               panelRows,
-              libraryChooserPane(tuiTextCatalog, library.libraryLabels(), library.selectedList(), panelColumns));
+              libraryChooserPane(textCatalog, library.libraryLabels(), library.selectedList(), panelColumns));
             break;
           }
           case Overlay::DetailPanel:
@@ -474,23 +467,22 @@ namespace ao::tui
           }
           case Overlay::QualityPanel:
           {
-            auto const panelColumns = qualityPanelColumns(tuiTextCatalog, textCatalog, state, terminalColumns);
+            auto const panelColumns = qualityPanelColumns(textCatalog, state, terminalColumns);
             popoverElementPtr = mainLayerPopover(hitRegions.soulButtonBox,
                                                  AnchoredOverlayPlacement::Below,
                                                  panelColumns,
                                                  0,
-                                                 qualityPanel(tuiTextCatalog, textCatalog, state, panelColumns));
+                                                 qualityPanel(textCatalog, state, panelColumns));
             break;
           }
           case Overlay::OutputDevices:
           {
-            auto const panelColumns =
-              outputDevicePanelColumns(tuiTextCatalog, outputDevices.viewState(), terminalColumns);
+            auto const panelColumns = outputDevicePanelColumns(textCatalog, outputDevices.viewState(), terminalColumns);
             popoverElementPtr = mainLayerPopover(hitRegions.outputDeviceButtonBox,
                                                  AnchoredOverlayPlacement::Below,
                                                  panelColumns,
                                                  0,
-                                                 outputDevicePanel(tuiTextCatalog,
+                                                 outputDevicePanel(textCatalog,
                                                                    outputDevices.viewState(),
                                                                    outputDevices.selectedRow(),
                                                                    &hitRegions.outputDeviceRows,
@@ -501,10 +493,9 @@ namespace ao::tui
           case Overlay::Notifications: break;
           case Overlay::Help:
           {
-            auto const panelColumns = helpPaneColumns(tuiTextCatalog, sidePanelColumnsLimit(terminalColumns));
             mainContentPtr = hbox({
               workspaceElementPtr,
-              helpPane(tuiTextCatalog, panelColumns),
+              helpPane(textCatalog, sidePanelColumnsLimit(terminalColumns)),
             });
             break;
           }
@@ -513,12 +504,12 @@ namespace ao::tui
         if (!shell.isInputActive() && shell.overlay() == Overlay::None && popoverElementPtr == nullptr &&
             events.isQualityHoverVisible())
         {
-          auto const panelColumns = qualityPanelColumns(tuiTextCatalog, textCatalog, state, terminalColumns);
+          auto const panelColumns = qualityPanelColumns(textCatalog, state, terminalColumns);
           popoverElementPtr = mainLayerPopover(hitRegions.soulButtonBox,
                                                AnchoredOverlayPlacement::Below,
                                                panelColumns,
                                                0,
-                                               qualityPanel(tuiTextCatalog, textCatalog, state, panelColumns));
+                                               qualityPanel(textCatalog, state, panelColumns));
         }
 
         auto mainLayerPtr = popoverElementPtr == nullptr ? std::move(mainContentPtr)
@@ -527,7 +518,7 @@ namespace ao::tui
                                                              std::move(popoverElementPtr),
                                                            });
         auto rootPtr = vbox({
-          playbackBar(tuiTextCatalog,
+          playbackBar(textCatalog,
                       PlaybackBarViewState{.playbackState = &state,
                                            .displayElapsed = displayElapsed,
                                            .animationElapsed = animationElapsed,
@@ -539,7 +530,7 @@ namespace ao::tui
                                            .outputDeviceHovered = hoveredButton == HoveredButton::OutputDevice,
                                            .terminalColumns = terminalColumns}),
           std::move(mainLayerPtr) | flex,
-          statusBar(tuiTextCatalog,
+          statusBar(textCatalog,
                     StatusBarViewState{.activityStatus = &activityStatusViewModel.viewState(),
                                        .terminalColumns = terminalColumns,
                                        .filterDraft = library.filterDraft(),
@@ -556,8 +547,7 @@ namespace ao::tui
           visibleFilterError = library.filterError();
         }
 
-        if (auto commandPopoverPtr =
-              commandPalettePopover(textCatalog, tuiTextCatalog, shell, terminalColumns, terminalRows);
+        if (auto commandPopoverPtr = commandPalettePopover(textCatalog, shell, terminalColumns, terminalRows);
             commandPopoverPtr != nullptr)
         {
           return dbox({
@@ -567,7 +557,7 @@ namespace ao::tui
         }
 
         if (auto quickFilterPopoverPtr =
-              quickFilterPopover(textCatalog, tuiTextCatalog, shell, visibleFilterError, terminalColumns, terminalRows);
+              quickFilterPopover(textCatalog, shell, visibleFilterError, terminalColumns, terminalRows);
             quickFilterPopoverPtr != nullptr)
         {
           return dbox({
@@ -577,7 +567,6 @@ namespace ao::tui
         }
 
         if (auto presentationPopoverPtr = presentationPopover(textCatalog,
-                                                              tuiTextCatalog,
                                                               shell,
                                                               library,
                                                               hitRegions.presentationButtonBox,
@@ -592,7 +581,6 @@ namespace ao::tui
         }
 
         if (auto notificationPopoverPtr = notificationPopover(textCatalog,
-                                                              tuiTextCatalog,
                                                               shell,
                                                               activityStatusViewModel.viewState(),
                                                               hitRegions.activityStatusBox,
@@ -705,8 +693,7 @@ namespace ao::tui
   } // namespace
 
   std::int32_t run(AppOptions const& options,
-                   uimodel::PresentationTextCatalog const& textCatalog,
-                   TuiTextCatalog const& tuiTextCatalog,
+                   i18n::MessageCatalog const& textCatalog,
                    rt::TextOrderingPolicy const& textOrderingPolicy,
                    rt::CompletionAliasPolicy const& completionAliasPolicy)
   {
@@ -759,7 +746,7 @@ namespace ao::tui
     registerPlatformAudioBackends(runtime);
     restoreOutputDeviceSelection(*appConfigStorePtr, runtime.playback());
 
-    auto library = LibraryController{runtime, textCatalog, tuiTextCatalog};
+    auto library = LibraryController{runtime, textCatalog};
     auto shell = ShellInteractionModel{};
     auto hitRegions = TuiHitRegions{};
     auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
@@ -811,15 +798,14 @@ namespace ao::tui
       },
       uimodel::ActivityStatusViewModelOptions{.libraryTasks = &runtime.library().taskService()}};
     runtime.notifications().post(rt::NotificationSeverity::Info,
-                                 std::string{tuiTextCatalog.text(TuiTextId::LibraryReady)},
+                                 tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryReady),
                                  rt::NotificationLifetime::transient());
 
     auto playbackSub =
       playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) { requestRefresh(); });
     auto outputDevices =
       OutputDeviceController{playback, textCatalog, makeOutputDeviceIntent(*appConfigStorePtr), requestRefresh};
-    auto commandCompletions =
-      CommandCompletionProvider{runtime.completion(), runtime.workspace(), textCatalog, tuiTextCatalog};
+    auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace(), textCatalog};
     auto events = EventController{screen,
                                   shell,
                                   library,
@@ -840,7 +826,6 @@ namespace ao::tui
     auto frameRenderer = AppFrameRenderer{
       .frameTimer = frameTimer,
       .textCatalog = textCatalog,
-      .tuiTextCatalog = tuiTextCatalog,
       .library = library,
       .shell = shell,
       .runtime = runtime,

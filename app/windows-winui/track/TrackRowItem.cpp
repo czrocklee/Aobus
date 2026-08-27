@@ -6,6 +6,7 @@
 #include "pch.h"
 #include "platform/StringResources.h"
 #include "track/TrackCellItem.h"
+#include <ao/i18n/MessageCatalog.h>
 
 #if __has_include("TrackRowItem.g.cpp")
 #include "TrackRowItem.g.cpp"
@@ -14,7 +15,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/utility/Path.h>
 
 #include <concepts>
@@ -53,7 +54,7 @@ namespace winrt::Aobus::implementation
       return ao::winui::formatResource("track_fallback", row.id.raw());
     }
 
-    std::string cellText(ao::uimodel::PresentationTextCatalog const& textCatalog,
+    std::string cellText(ao::i18n::MessageCatalog const& textCatalog,
                          ao::rt::TrackRow const& row,
                          ao::rt::TrackField const field)
     {
@@ -132,7 +133,7 @@ namespace winrt::Aobus::implementation
   TrackRowItem::TrackRowItem(std::uint32_t const displayIndex,
                              std::uint32_t const sourceIndex,
                              ao::rt::TrackRow const& row,
-                             ao::uimodel::PresentationTextCatalog const& textCatalog,
+                             ao::i18n::MessageCatalog const& textCatalog,
                              std::span<ao::winui::TrackColumnCellSpec const> const columns)
     : _displayIndex{displayIndex}
     , _index{sourceIndex}

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 
 #include <glibmm/refptr.h>
@@ -21,10 +22,6 @@ namespace Gtk
 namespace ao::rt
 {
   class AppRuntime;
-}
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
 }
 
 namespace ao::gtk
@@ -45,7 +42,7 @@ namespace ao::gtk
 
     TrackOrderDragController(rt::AppRuntime& runtime,
                              rt::ViewId viewId,
-                             uimodel::PresentationTextCatalog const& textCatalog,
+                             i18n::MessageCatalog const& textCatalog,
                              Gtk::ColumnView& columnView,
                              Gtk::ScrolledWindow& scrolledWindow,
                              TrackSelectionController& selectionController,

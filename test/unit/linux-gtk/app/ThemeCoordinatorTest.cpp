@@ -6,7 +6,7 @@
 #include "app/AppConfigStore.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>

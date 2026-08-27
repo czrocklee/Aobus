@@ -19,7 +19,8 @@ A shell's full inventory - the shared types it registers plus the types only it 
 The vocabulary belongs to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md).
 
 Membership is a claim about a concept both shells present, not about how either presents it.
-A shared entry decides the type id, the display name, the category, the child range, the action slots, and the properties whose authored value means the same thing everywhere.
+A shared entry decides the type id, the display name, the category, the child range, the action slots, whether runtime component state is persistent, and the properties whose authored value means the same thing everywhere.
+`split` is the only shared type with `persistentState`.
 Everything past that stays with the shell: which widget is constructed, what its chrome looks like, and any property only its toolkit can honor.
 
 A type id naming one shell - `windows.navigationPane`, `collapsibleSplit` - is by that admission not shared and belongs to that shell's catalog.

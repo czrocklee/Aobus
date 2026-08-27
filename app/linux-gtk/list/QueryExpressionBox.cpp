@@ -4,10 +4,10 @@
 #include "list/QueryExpressionBox.h"
 
 #include "completion/EntryCompletionController.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -18,8 +18,7 @@
 
 namespace ao::gtk
 {
-  QueryExpressionBox::QueryExpressionBox(rt::CompletionService& completion,
-                                         uimodel::PresentationTextCatalog const& textCatalog)
+  QueryExpressionBox::QueryExpressionBox(rt::CompletionService& completion, i18n::MessageCatalog const& textCatalog)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _completer{completion}
     , _completionController{_entry,

@@ -3,8 +3,9 @@
 
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <array>
 #include <charconv>
@@ -19,7 +20,7 @@ namespace ao::uimodel
 {
   namespace
   {
-    std::string presentHeadingValue(PresentationTextCatalog const& textCatalog, rt::TrackGroupHeadingValue const& value)
+    std::string presentHeadingValue(i18n::MessageCatalog const& textCatalog, rt::TrackGroupHeadingValue const& value)
     {
       return std::visit(
         [&textCatalog]<typename Value>(Value const& item) -> std::string
@@ -38,14 +39,14 @@ namespace ao::uimodel
           }
           else
           {
-            return std::string{textCatalog.missingTrackValueLabel(item)};
+            return std::string{missingTrackValueLabel(textCatalog, item)};
           }
         },
         value);
     }
   } // namespace
 
-  TrackGroupHeadingPresentation formatTrackGroupHeading(PresentationTextCatalog const& textCatalog,
+  TrackGroupHeadingPresentation formatTrackGroupHeading(i18n::MessageCatalog const& textCatalog,
                                                         rt::TrackGroupHeading const& heading)
   {
     return TrackGroupHeadingPresentation{

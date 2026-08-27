@@ -24,17 +24,20 @@ namespace ao::rt
   class ViewService;
 }
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   class [[nodiscard]] ListOrderAuthoringSession final
   {
   public:
     static Result<std::unique_ptr<ListOrderAuthoringSession>> begin(rt::Library& library,
                                                                     rt::ViewService& views,
                                                                     rt::ViewId viewId,
-                                                                    PresentationTextCatalog const& textCatalog);
+                                                                    i18n::MessageCatalog const& textCatalog);
 
     ~ListOrderAuthoringSession();
 

@@ -6,6 +6,7 @@
 #include "common/AccessibleLabel.h"
 #include "common/DismissController.h"
 #include "common/WidgetMeasure.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/LayoutConstants.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -13,7 +14,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/String.h>
 
 #include <gdk/gdkkeysyms.h>
@@ -160,7 +160,7 @@ namespace ao::gtk
     class TagChip final : public Gtk::Box
     {
     public:
-      TagChip(uimodel::PresentationTextCatalog const& textCatalog, std::string const& tag)
+      TagChip(i18n::MessageCatalog const& textCatalog, std::string const& tag)
         : Gtk::Box{Gtk::Orientation::HORIZONTAL, kChipSpacing}, _label{tag}
       {
         set_overflow(Gtk::Overflow::HIDDEN);
@@ -177,7 +177,8 @@ namespace ao::gtk
         _removeBtn.set_valign(Gtk::Align::CENTER);
         _removeBtn.set_margin_end(kRemoveBtnMarginEnd);
         _removeBtn.add_css_class("ao-tag-chip-remove");
-        setTooltipAndAccessibleLabel(_removeBtn, textCatalog.format(MessageId::GtkTagRemove, {{"tag", tag}}));
+        setTooltipAndAccessibleLabel(
+          _removeBtn, i18n::requiredFormat(textCatalog, MessageId::GtkTagRemove, {{"tag", tag}}));
         append(_removeBtn);
 
         add_css_class("ao-tag-chip");
@@ -247,7 +248,7 @@ namespace ao::gtk
     using SubmitSignal = sigc::signal<void(std::string const&)>;
     using FilterSignal = sigc::signal<void()>;
 
-    explicit AddTagTrigger(uimodel::PresentationTextCatalog const& textCatalog)
+    explicit AddTagTrigger(i18n::MessageCatalog const& textCatalog)
       : Gtk::Box{Gtk::Orientation::HORIZONTAL, 0}
     {
       add_css_class("ao-tag-add");
@@ -255,13 +256,13 @@ namespace ao::gtk
 
       // A bare "Add…" label (no "+") keeps this reading as an action and avoids echoing the "+"
       // glyph the suggested chips use; the frameless ghost styling sets it apart from the pills.
-      _button.set_label(std::string{textCatalog.text(MessageId::GtkTagAdd)});
+      _button.set_label(gtkText(textCatalog, MessageId::GtkTagAdd));
       _button.set_has_frame(false);
       _button.add_css_class("ao-tag-add-trigger");
       _button.signal_clicked().connect(sigc::mem_fun(*this, &AddTagTrigger::openEntry));
       append(_button);
 
-      _entry.set_placeholder_text(std::string{textCatalog.text(MessageId::GtkTagAddPlaceholder)});
+      _entry.set_placeholder_text(gtkText(textCatalog, MessageId::GtkTagAddPlaceholder));
       _entry.add_css_class("ao-tags-entry");
       // A comfortable typing width; longer input scrolls within the entry. The flow layout sizes
       // each child independently, so a wider entry no longer stretches neighbouring chips (the
@@ -367,7 +368,7 @@ namespace ao::gtk
     DismissController _dismissController;
   };
 
-  TagEditor::TagEditor(uimodel::PresentationTextCatalog textCatalog, rt::TextOrderingPolicy const* textOrderingPolicy)
+  TagEditor::TagEditor(i18n::MessageCatalog textCatalog, rt::TextOrderingPolicy const* textOrderingPolicy)
     : _textCatalog{std::move(textCatalog)}, _textOrderingPolicy{textOrderingPolicy}
   {
     set_overflow(Gtk::Overflow::HIDDEN);

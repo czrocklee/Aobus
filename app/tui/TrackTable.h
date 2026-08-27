@@ -6,6 +6,7 @@
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 
@@ -24,14 +25,8 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::tui
 {
-  class TuiTextCatalog;
   inline constexpr std::int32_t kMinimumTrackColumnWidthColumns = 8;
   inline constexpr std::int32_t kMaximumTrackColumnResizeColumns = 160;
 
@@ -105,25 +100,23 @@ namespace ao::tui
                                       std::size_t trackCount,
                                       std::span<TrackSection const> sections) noexcept;
 
-  ftxui::Element trackTableView(uimodel::PresentationTextCatalog const& textCatalog,
-                                TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element trackTableView(i18n::MessageCatalog const& textCatalog,
                                 std::span<TrackListEntry const> tracks,
                                 std::int32_t selected,
                                 TrackId playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
                                 TrackTableViewOptions options = {});
-  ftxui::Element trackTableView(uimodel::PresentationTextCatalog const& textCatalog,
-                                TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element trackTableView(i18n::MessageCatalog const& textCatalog,
                                 std::span<TrackListEntry const> tracks,
                                 std::span<TrackSection const> sections,
                                 std::int32_t selected,
                                 TrackId playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
                                 TrackTableViewOptions options = {});
-  std::int32_t libraryChooserPaneColumns(TuiTextCatalog const& textCatalog,
+  std::int32_t libraryChooserPaneColumns(i18n::MessageCatalog const& textCatalog,
                                          std::vector<std::string> const& labels,
                                          std::int32_t terminalColumns);
-  ftxui::Element libraryChooserPane(TuiTextCatalog const& textCatalog,
+  ftxui::Element libraryChooserPane(i18n::MessageCatalog const& textCatalog,
                                     std::vector<std::string> const& labels,
                                     std::int32_t selected,
                                     std::int32_t columns = 0);

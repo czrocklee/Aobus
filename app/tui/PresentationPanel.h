@@ -4,6 +4,7 @@
 #pragma once
 
 #include "TrackPresentationNavigation.h"
+#include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/screen/box.hpp>
 
@@ -18,14 +19,8 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::tui
 {
-  class TuiTextCatalog;
   inline constexpr std::int32_t kPresentationPanelColumns = 48;
   inline constexpr std::int32_t kPresentationPanelListRows = 10;
   inline constexpr std::int32_t kPresentationPanelChromeRows = 6;
@@ -37,13 +32,11 @@ namespace ao::tui
     ftxui::Box box{};
   };
 
-  std::int32_t presentationPanelColumns(uimodel::PresentationTextCatalog const& textCatalog,
-                                        TuiTextCatalog const& tuiTextCatalog,
+  std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view activePresentationId,
                                         std::int32_t terminalColumns);
-  ftxui::Element presentationPanel(uimodel::PresentationTextCatalog const& textCatalog,
-                                   TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element presentationPanel(i18n::MessageCatalog const& textCatalog,
                                    std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view activePresentationId,
                                    std::int32_t selectedIndex,

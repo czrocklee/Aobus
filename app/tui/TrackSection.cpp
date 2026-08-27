@@ -4,15 +4,15 @@
 #include "TrackSection.h"
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <string>
 
 namespace ao::tui
 {
-  std::string trackSectionDisplayName(uimodel::PresentationTextCatalog const& textCatalog, TrackSection const& section)
+  std::string trackSectionDisplayName(i18n::MessageCatalog const& textCatalog, TrackSection const& section)
   {
-    return section.primaryText.empty() ? std::string{textCatalog.text(i18n::MessageId::TuiUntitledSection)}
-                                       : section.primaryText;
+    return section.primaryText.empty()
+             ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiUntitledSection)}
+             : section.primaryText;
   }
 } // namespace ao::tui

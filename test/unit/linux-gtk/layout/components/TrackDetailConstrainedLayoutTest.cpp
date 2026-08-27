@@ -5,7 +5,7 @@
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
@@ -228,7 +228,7 @@ namespace ao::gtk::layout::test
   TEST_CASE("AddCustomMetadataButton - submits popover values", "[gtk][unit][track]")
   {
     auto windowFixture = ao::gtk::test::GtkWindowFixture{};
-    auto addButton = track_field_grid::AddCustomMetadataButton{ao::test::englishPresentationTextCatalog()};
+    auto addButton = track_field_grid::AddCustomMetadataButton{ao::test::englishMessageCatalog()};
     auto submissions = std::vector<std::pair<std::string, std::string>>{};
     addButton.signalAddRequested().connect([&submissions](std::string key, std::string value)
                                            { submissions.emplace_back(std::move(key), std::move(value)); });

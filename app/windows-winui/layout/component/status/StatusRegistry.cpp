@@ -16,6 +16,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/library/track/TrackSelectionSummary.h>
 #include <ao/winui/layout/LayoutCatalog.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 
@@ -218,12 +219,13 @@ namespace ao::winui::layout
       void refreshTrackCount()
       {
         auto const count = _trackList.rowCount();
-        _text.Text(winrt::to_hstring(_textCatalog.format(i18n::MessageId::TrackCount, {{"count", count}})));
+        _text.Text(
+          winrt::to_hstring(i18n::requiredFormat(_textCatalog, i18n::MessageId::TrackCount, {{"count", count}})));
       }
 
       TextBlock _text{};
       TrackListController& _trackList;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       bool _summary = false;
       async::Subscription _shellStateSub;
       async::Subscription _trackListChangedSub;
@@ -274,14 +276,14 @@ namespace ao::winui::layout
 
       void apply(std::size_t const count)
       {
-        auto summary =
-          count == 0 ? resourceString("winui_library_no_selection") : _textCatalog.trackSelectionSummary(count);
+        auto summary = count == 0 ? resourceString("winui_library_no_selection")
+                                  : uimodel::trackSelectionSummaryText(_textCatalog, count);
         _text.Text(winrt::to_hstring(summary));
       }
 
       TextBlock _text{};
       TrackListController& _trackList;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       bool _summary = false;
       // Destroyed first, so handlers cannot run against a half-torn component.
       async::Subscription _selectionSub;

@@ -3,17 +3,13 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
 
 namespace ao::tui
 {
@@ -24,12 +20,10 @@ namespace ao::tui
     std::string detail{};
   };
 
-  std::string trackPresentationDisplayId(uimodel::PresentationTextCatalog const& textCatalog,
-                                         std::string_view presentationId);
-  std::string trackPresentationBadgeLabel(uimodel::PresentationTextCatalog const& textCatalog,
-                                          std::string_view presentationId);
+  std::string trackPresentationDisplayId(i18n::MessageCatalog const& textCatalog, std::string_view presentationId);
+  std::string trackPresentationBadgeLabel(i18n::MessageCatalog const& textCatalog, std::string_view presentationId);
   std::vector<TrackPresentationNavEntry> makeTrackPresentationNavigation(
-    uimodel::PresentationTextCatalog const& textCatalog,
+    i18n::MessageCatalog const& textCatalog,
     std::span<rt::TrackPresentationPreset const> builtinPresets,
     std::span<rt::CustomTrackPresentationPreset const> customPresets);
 } // namespace ao::tui

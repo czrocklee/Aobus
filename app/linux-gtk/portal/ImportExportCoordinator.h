@@ -9,8 +9,8 @@
 #include "portal/ImportExportActions.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/cancellable.h>
@@ -54,8 +54,7 @@ namespace ao::gtk::portal
   public:
     ImportExportCoordinator(Gtk::Window& parent,
                             rt::AppRuntime& runtime,
-                            uimodel::PresentationTextCatalog const& textCatalog,
-                            GtkTextCatalog gtkTextCatalog,
+                            i18n::MessageCatalog textCatalog,
                             ImportExportCallbacks callbacks,
                             ThemeCoordinator& themeCoordinator);
 
@@ -92,7 +91,7 @@ namespace ao::gtk::portal
     Gtk::Window& _parent;
     ImportExportCallbacks _callbacks;
     ThemeCoordinator& _themeCoordinator;
-    GtkTextCatalog _gtkTextCatalog;
+    i18n::MessageCatalog _textCatalog;
     LibraryImportExportWorkflow _workflow;
     Glib::RefPtr<Gio::Cancellable> _fileDialogCancellablePtr;
     MainContextCallbackScope _callbackScope;

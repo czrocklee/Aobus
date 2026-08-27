@@ -4,7 +4,7 @@
 #include "CommandCompletionProvider.h"
 
 #include "CommandCompletion.h"
-#include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -19,12 +19,8 @@ namespace ao::tui
 {
   CommandCompletionProvider::CommandCompletionProvider(rt::CompletionService& completion,
                                                        rt::WorkspaceService& workspace,
-                                                       uimodel::PresentationTextCatalog textCatalog,
-                                                       TuiTextCatalog const& tuiTextCatalog)
-    : _workspace{workspace}
-    , _textCatalog{std::move(textCatalog)}
-    , _tuiTextCatalog{tuiTextCatalog}
-    , _filterCompleter{completion}
+                                                       i18n::MessageCatalog textCatalog)
+    : _workspace{workspace}, _textCatalog{std::move(textCatalog)}, _filterCompleter{completion}
   {
   }
 
@@ -32,7 +28,6 @@ namespace ao::tui
   {
     return completeCommandDraft(
       _textCatalog,
-      _tuiTextCatalog,
       draft,
       CommandCompletionContext{
         .builtinPresentations = rt::builtinTrackPresentationPresets(),

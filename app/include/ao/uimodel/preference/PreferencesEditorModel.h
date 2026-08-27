@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/audio/OutputDeviceSelection.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <cstdint>

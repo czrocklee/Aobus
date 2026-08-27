@@ -4,9 +4,10 @@
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <ao/Contract.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +23,7 @@ namespace ao::uimodel
   }
 
   VolumeViewModel::VolumeViewModel(rt::PlaybackService& playback,
-                                   PresentationTextCatalog const& textCatalog,
+                                   i18n::MessageCatalog const& textCatalog,
                                    std::function<void(VolumeViewState const&)> onRender)
     : VolumeViewModel{playback}
   {
@@ -111,8 +112,10 @@ namespace ao::uimodel
       .isHardwareAssisted = volume.hardwareAssisted,
       .muted = volume.muted,
       .indicatorKind = resolveIndicatorKind(volume.level, volume.muted),
-      .tooltip = _optTextCatalog->volumeTooltip(
-        static_cast<std::int32_t>(std::round(volume.level * 100.0F)), volume.muted, volume.hardwareAssisted),
+      .tooltip = volumeTooltip(*_optTextCatalog,
+                               static_cast<std::int32_t>(std::round(volume.level * 100.0F)),
+                               volume.muted,
+                               volume.hardwareAssisted),
     };
 
     _onRender(view);

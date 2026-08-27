@@ -4,12 +4,13 @@
 #include "preference/PreferencesWindow.h"
 
 #include "app/FormBuilder.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/document/LayoutPresets.h"
 #include "playback/OutputDevicePopover.h"
 #include "preference/ShortcutEditorWidget.h"
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
@@ -18,7 +19,6 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 // Gtk::Window forward-declares Application, but remove_window requires the complete type.
 // NOLINTNEXTLINE(misc-include-cleaner)
@@ -84,10 +84,10 @@ namespace ao::gtk
     };
   } // namespace
 
-  PreferencesWindow::PreferencesWindow(uimodel::PresentationTextCatalog textCatalog, Callbacks callbacks)
+  PreferencesWindow::PreferencesWindow(i18n::MessageCatalog textCatalog, Callbacks callbacks)
     : _callbacks{std::move(callbacks)}, _textCatalog{std::move(textCatalog)}
   {
-    set_title(std::string{_textCatalog.text(MessageId::GtkPreferencesTitle)});
+    set_title(gtkText(_textCatalog, MessageId::GtkPreferencesTitle));
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
 
     _sidebar.set_stack(_stack);
@@ -100,12 +100,12 @@ namespace ao::gtk
 
     set_child(_root);
 
-    auto const general = _textCatalog.text(MessageId::GtkPreferencesPageGeneral);
+    auto const general = gtkText(_textCatalog, MessageId::GtkPreferencesPageGeneral);
     addPage("general", general).append(placeholderLabel(general));
-    addPage("appearance", _textCatalog.text(MessageId::GtkPreferencesPageAppearance));
-    addPage("playback", _textCatalog.text(MessageId::GtkPreferencesPagePlaybackOutput));
-    addPage("layout", _textCatalog.text(MessageId::GtkPreferencesPageLayout));
-    addPage("keyboard", _textCatalog.text(MessageId::GtkPreferencesPageKeyboard));
+    addPage("appearance", gtkText(_textCatalog, MessageId::GtkPreferencesPageAppearance));
+    addPage("playback", gtkText(_textCatalog, MessageId::GtkPreferencesPagePlaybackOutput));
+    addPage("layout", gtkText(_textCatalog, MessageId::GtkPreferencesPageLayout));
+    addPage("keyboard", gtkText(_textCatalog, MessageId::GtkPreferencesPageKeyboard));
 
     buildAppearancePage();
     buildPlaybackPage();
@@ -176,23 +176,23 @@ namespace ao::gtk
   void PreferencesWindow::buildAppearancePage()
   {
     _themeCombo.append(std::string{uimodel::themePresetId(uimodel::ThemePreset::Classic)},
-                       std::string{_textCatalog.text(MessageId::GtkPreferencesThemeClassic)});
+                       gtkText(_textCatalog, MessageId::GtkPreferencesThemeClassic));
     _themeCombo.append(std::string{uimodel::themePresetId(uimodel::ThemePreset::Modern)},
-                       std::string{_textCatalog.text(MessageId::GtkPreferencesThemeModern)});
+                       gtkText(_textCatalog, MessageId::GtkPreferencesThemeModern));
     _themeComboConn = _themeCombo.signal_changed().connect([this] { handleThemeChanged(); });
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
-    list->addRow(std::string{_textCatalog.text(MessageId::GtkPreferencesTheme)}, _themeCombo);
+    list->addRow(gtkText(_textCatalog, MessageId::GtkPreferencesTheme), _themeCombo);
     _appearancePage.append(*list);
   }
 
   void PreferencesWindow::buildPlaybackPage()
   {
-    _outputDeviceLabel.set_text(std::string{_textCatalog.text(MessageId::GtkPreferencesChooseOutputDevice)});
+    _outputDeviceLabel.set_text(gtkText(_textCatalog, MessageId::GtkPreferencesChooseOutputDevice));
     _outputDeviceButton.set_child(_outputDeviceLabel);
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
-    list->addRow(std::string{_textCatalog.text(MessageId::GtkPreferencesOutputDevice)}, _outputDeviceButton);
+    list->addRow(gtkText(_textCatalog, MessageId::GtkPreferencesOutputDevice), _outputDeviceButton);
     _playbackPage.append(*list);
   }
 
@@ -201,16 +201,15 @@ namespace ao::gtk
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
     _layoutPresetCombo.append(std::string{uimodel::ShellLayoutSessionModel::kDefaultPresetId},
-                              std::string{_textCatalog.text(MessageId::GtkPreferencesLayoutPresetClassic)});
+                              gtkText(_textCatalog, MessageId::GtkPreferencesLayoutPresetClassic));
     _layoutPresetCombo.append(std::string{layout::presetIdToString(layout::LayoutPresetId::Modern)},
-                              std::string{_textCatalog.text(MessageId::GtkPreferencesLayoutPresetModern)});
+                              gtkText(_textCatalog, MessageId::GtkPreferencesLayoutPresetModern));
     _layoutPresetComboConn = _layoutPresetCombo.signal_changed().connect([this] { handleLayoutPresetChanged(); });
-    list->addRow(std::string{_textCatalog.text(MessageId::GtkPreferencesDefaultLayoutPreset)}, _layoutPresetCombo);
+    list->addRow(gtkText(_textCatalog, MessageId::GtkPreferencesDefaultLayoutPreset), _layoutPresetCombo);
 
     _layoutPage.append(*list);
 
-    auto* const actionsLabel =
-      Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::GtkPreferencesActions)});
+    auto* const actionsLabel = Gtk::make_managed<Gtk::Label>(gtkText(_textCatalog, MessageId::GtkPreferencesActions));
     actionsLabel->set_xalign(0.0F);
     actionsLabel->add_css_class("title-4");
     actionsLabel->set_margin_top(16);
@@ -218,8 +217,7 @@ namespace ao::gtk
 
     auto* const actionsBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
 
-    auto* const editLayoutButton =
-      Gtk::make_managed<Gtk::Button>(std::string{_textCatalog.text(MessageId::GtkShellEditLayout)});
+    auto* const editLayoutButton = Gtk::make_managed<Gtk::Button>(gtkText(_textCatalog, MessageId::GtkShellEditLayout));
     editLayoutButton->set_halign(Gtk::Align::START);
     editLayoutButton->signal_clicked().connect(
       [this]
@@ -232,7 +230,7 @@ namespace ao::gtk
     actionsBox->append(*editLayoutButton);
 
     auto* const savePanelsButton =
-      Gtk::make_managed<Gtk::Button>(std::string{_textCatalog.text(MessageId::GtkShellSavePanelSizesAsLayoutDefaults)});
+      Gtk::make_managed<Gtk::Button>(gtkText(_textCatalog, MessageId::GtkShellSavePanelSizesAsLayoutDefaults));
     savePanelsButton->set_halign(Gtk::Align::START);
     savePanelsButton->signal_clicked().connect(
       [this]
@@ -245,7 +243,7 @@ namespace ao::gtk
     actionsBox->append(*savePanelsButton);
 
     auto* const resetRuntimeButton =
-      Gtk::make_managed<Gtk::Button>(std::string{_textCatalog.text(MessageId::GtkShellResetRuntimeLayoutState)});
+      Gtk::make_managed<Gtk::Button>(gtkText(_textCatalog, MessageId::GtkShellResetRuntimeLayoutState));
     resetRuntimeButton->set_halign(Gtk::Align::START);
     resetRuntimeButton->signal_clicked().connect(
       [this]
@@ -311,7 +309,7 @@ namespace ao::gtk
     _targetHideConn.disconnect();
     _outputDeviceViewModelPtr.reset();
     _outputDeviceButton.unset_popover();
-    _outputDeviceLabel.set_text(std::string{_textCatalog.text(MessageId::GtkPreferencesOutputUnavailable)});
+    _outputDeviceLabel.set_text(gtkText(_textCatalog, MessageId::GtkPreferencesOutputUnavailable));
     _outputDeviceButton.set_tooltip_text({});
   }
 
@@ -376,7 +374,7 @@ namespace ao::gtk
       [this](uimodel::OutputDeviceViewState const& view)
       {
         _outputDeviceLabel.set_text(view.outputBackendSummary.empty()
-                                      ? std::string{_textCatalog.text(MessageId::GtkPreferencesChooseOutputDevice)}
+                                      ? gtkText(_textCatalog, MessageId::GtkPreferencesChooseOutputDevice)
                                       : view.outputBackendSummary);
         _outputDeviceButton.set_tooltip_text(view.outputDeviceStatus);
       },

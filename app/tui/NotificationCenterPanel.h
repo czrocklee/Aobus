@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -18,14 +19,8 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::tui
 {
-  class TuiTextCatalog;
   struct NotificationDetailRowHitRegion final
   {
     rt::NotificationId id{};
@@ -33,12 +28,10 @@ namespace ao::tui
     ftxui::Box box{};
   };
 
-  std::int32_t notificationCenterPanelColumns(uimodel::PresentationTextCatalog const& textCatalog,
-                                              TuiTextCatalog const& tuiTextCatalog,
+  std::int32_t notificationCenterPanelColumns(i18n::MessageCatalog const& textCatalog,
                                               uimodel::ActivityStatusViewState const& state,
                                               std::int32_t terminalColumns);
-  ftxui::Element notificationCenterPanel(uimodel::PresentationTextCatalog const& textCatalog,
-                                         TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element notificationCenterPanel(i18n::MessageCatalog const& textCatalog,
                                          uimodel::ActivityStatusViewState const& state,
                                          std::vector<NotificationDetailRowHitRegion>* rowHitRegions = nullptr,
                                          std::int32_t columns = 0);

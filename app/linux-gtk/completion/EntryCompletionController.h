@@ -5,8 +5,8 @@
 
 #include "common/DismissController.h"
 #include "layout/LayoutConstants.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
@@ -43,7 +43,7 @@ namespace ao::gtk
   {
   public:
     EntryCompletionController(Gtk::Entry& entry,
-                              uimodel::PresentationTextCatalog textCatalog,
+                              i18n::MessageCatalog textCatalog,
                               rt::CompletionProvider provider,
                               EntryCompletionControllerOptions options = {});
     ~EntryCompletionController();
@@ -66,7 +66,7 @@ namespace ao::gtk
     void clearCompletionState();
 
     Gtk::Entry& _entry;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::CompletionProvider _provider;
     EntryCompletionControllerOptions _options;
     Gtk::Popover _popover;

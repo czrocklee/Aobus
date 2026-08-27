@@ -3,10 +3,9 @@
 
 #include "playback/VolumeControlWidget.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/rt/playback/PlaybackService.h>
@@ -28,7 +27,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     playback.commands().setVolume(0.5F);
 
-    auto control = VolumeControlWidget{playback, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto control = VolumeControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* btn = dynamic_cast<Gtk::Button*>(&control.widget());
     REQUIRE(btn != nullptr);
     auto* icon = dynamic_cast<Gtk::Image*>(btn->get_child());
@@ -71,10 +70,9 @@ namespace ao::gtk::test
     auto& playback = fixture.runtime().playback();
     rt::test::addReadyAudioProvider(fixture.runtime());
     playback.commands().setVolume(0.5F);
-    auto catalog = ao::test::presentationTextCatalog("de-DE");
-    auto gtkCatalog = gtkTextCatalog("de-DE");
+    auto catalog = ao::test::messageCatalog("de-DE");
 
-    auto control = VolumeControlWidget{playback, catalog, gtkCatalog};
+    auto control = VolumeControlWidget{playback, catalog};
     auto* const button = dynamic_cast<Gtk::Button*>(&control.widget());
     REQUIRE(button != nullptr);
     CHECK(button->get_tooltip_text() == "Lautstärke: 50%");

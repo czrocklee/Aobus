@@ -4,7 +4,9 @@
 #include "app/ShellLayoutComponentStateStore.h"
 
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -44,6 +46,14 @@ namespace ao::gtk::test
         .state = {{"positionPercent", uimodel::LayoutValue{0.35}}},
       };
       return doc;
+    }
+
+    uimodel::LayoutComponentCatalog persistentStateCatalog()
+    {
+      auto catalog = uimodel::LayoutComponentCatalog{};
+      catalog.registerComponentDescriptor(
+        uimodel::sharedComponentDescriptor(uimodel::SharedLayoutComponentType::Split));
+      return catalog;
     }
   } // namespace
 
@@ -121,8 +131,9 @@ namespace ao::gtk::test
       layoutDoc.root.children = {liveNode, uimodel::LayoutNode{.id = "wrong-type", .type = "split"}, staleNode};
       auto const preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
+      auto const catalog = persistentStateCatalog();
 
-      store.prune("classic", *preparedRes);
+      store.prune("classic", *preparedRes, catalog);
 
       auto const optLoaded = store.load("classic");
       REQUIRE(optLoaded);
@@ -154,13 +165,14 @@ namespace ao::gtk::test
       layoutDoc.root.children = {node};
       auto preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
+      auto const catalog = persistentStateCatalog();
 
-      CHECK_FALSE(store.prune("classic", *preparedRes));
+      CHECK_FALSE(store.prune("classic", *preparedRes, catalog));
 
       layoutDoc.root.children.clear();
       preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
-      CHECK(store.prune("classic", *preparedRes));
+      CHECK(store.prune("classic", *preparedRes, catalog));
     }
 
     SECTION("saved state file is readable only by owner")

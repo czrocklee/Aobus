@@ -21,11 +21,6 @@ namespace ao::i18n
   class MessageCatalog;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::rt
 {
   class CompletionAliasPolicy;
@@ -63,7 +58,6 @@ namespace winrt::Aobus::implementation
 
     Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     std::unique_ptr<ao::i18n::MessageCatalog> _messageCatalogPtr;
-    std::unique_ptr<ao::uimodel::PresentationTextCatalog> _presentationTextCatalogPtr;
     std::unique_ptr<ao::rt::TextOrderingPolicy> _textOrderingPolicyPtr;
     std::unique_ptr<ao::rt::CompletionAliasPolicy> _completionAliasPolicyPtr;
     std::unique_ptr<ao::winui::LibraryWindowSession> _windowSessionPtr;

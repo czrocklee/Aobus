@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
+
 #include <cstdint>
 #include <memory>
 
@@ -17,21 +19,12 @@ namespace ao::rt
   struct PlaybackTransportSnapshot;
 } // namespace ao::rt
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-} // namespace ao::uimodel
-
 namespace ao::tui
 {
-  class TuiTextCatalog;
-
-  std::int32_t qualityPanelColumns(TuiTextCatalog const& textCatalog,
-                                   uimodel::PresentationTextCatalog const& presentationText,
+  std::int32_t qualityPanelColumns(i18n::MessageCatalog const& textCatalog,
                                    rt::PlaybackTransportSnapshot const& state,
                                    std::int32_t terminalColumns);
-  ftxui::Element qualityPanel(TuiTextCatalog const& textCatalog,
-                              uimodel::PresentationTextCatalog const& presentationText,
+  ftxui::Element qualityPanel(i18n::MessageCatalog const& textCatalog,
                               rt::PlaybackTransportSnapshot const& state,
                               std::int32_t columns = 0);
 } // namespace ao::tui

@@ -3,10 +3,10 @@
 
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -153,7 +153,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("CoverArtPlaceholder - group headings preserve semantic monograms", "[uimodel][unit][cover-art]")
   {
-    auto const& textCatalog = ao::test::englishPresentationTextCatalog();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
 
     auto const yearHeading = rt::TrackGroupHeading{.primary = std::uint16_t{2023}};
     auto const yearText = formatTrackGroupHeading(textCatalog, yearHeading);

@@ -45,6 +45,8 @@ namespace ao::i18n::test
     auto englishTextRes = englishRes->text(MessageId::PilotLibraryTitle);
     REQUIRE(englishTextRes);
     CHECK(*englishTextRes == "Music library");
+    CHECK(requiredText(*englishRes, MessageId::PilotLibraryTitle) == "Music library");
+    CHECK(requiredFormat(*englishRes, MessageId::PilotGreeting, {{"name", "Ada"}}) == "Welcome, Ada");
 
     for (auto const* const request : {"de-DE", "de-AT"})
     {

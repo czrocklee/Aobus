@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
@@ -41,8 +41,7 @@ namespace ao::gtk
   public:
     using TagsChangedSignal = sigc::signal<void(std::span<std::string const>, std::span<std::string const>)>;
 
-    explicit TagEditor(uimodel::PresentationTextCatalog textCatalog,
-                       rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
+    explicit TagEditor(i18n::MessageCatalog textCatalog, rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
     ~TagEditor() override;
 
     TagEditor(TagEditor const&) = delete;
@@ -79,7 +78,7 @@ namespace ao::gtk
     // suggested chips live-filter by the entry text), then reflow.
     void applyFilter();
 
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::TextOrderingPolicy const* _textOrderingPolicy = nullptr;
     rt::Library const* _reads = nullptr;
     std::vector<TrackId> _selectedTrackIds;

@@ -7,10 +7,10 @@
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
@@ -58,7 +58,7 @@ namespace ao::gtk
                           async::Runtime& asyncRuntime,
                           rt::Library& library,
                           rt::CompletionService& completion,
-                          uimodel::PresentationTextCatalog textCatalog,
+                          i18n::MessageCatalog textCatalog,
                           TrackRowCache& rowCache,
                           std::vector<TrackId> trackIds);
     ~TrackPropertiesDialog() override;
@@ -100,7 +100,7 @@ namespace ao::gtk
     rt::Library& _library;
     async::Runtime& _asyncRuntime;
     rt::CompletionService& _completion;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
     std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;

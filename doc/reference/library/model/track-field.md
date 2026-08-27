@@ -160,7 +160,7 @@ Adding a field requires coordinated decisions about persistence source, projecti
 ## Test authority
 
 - [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks runtime catalog completeness, ids, capabilities, exhaustive typed mappings, and invalid lookup behavior.
-- [`PresentationTextCatalogTest.cpp`](../../../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) locks exhaustive UIModel field labels.
+- [`PresentationTextTest.cpp`](../../../../test/unit/uimodel/presentation/PresentationTextTest.cpp) locks exhaustive UIModel field labels.
 - [`TrackFieldPresentationPolicyTest.cpp`](../../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) ensures every presentable field has UIModel column policy.
 - [`CompletionServiceTest.cpp`](../../../../test/unit/runtime/completion/CompletionServiceTest.cpp) locks vocabulary support.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) and [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect stable presentation tokens at persistence boundaries.

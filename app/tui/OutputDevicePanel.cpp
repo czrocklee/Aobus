@@ -7,7 +7,7 @@
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
-#include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -37,14 +37,14 @@ namespace ao::tui
       return outputView->outputBackendSummary;
     }
 
-    std::string outputDeviceFooter(TuiTextCatalog const& textCatalog, uimodel::OutputDeviceViewState const& view)
+    std::string outputDeviceFooter(i18n::MessageCatalog const& textCatalog, uimodel::OutputDeviceViewState const& view)
     {
       if (!view.outputDeviceStatus.empty())
       {
         return view.outputDeviceStatus;
       }
 
-      return std::string{textCatalog.text(TuiTextId::PlaybackNoOutputDeviceSelected)};
+      return std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDeviceSelected)};
     }
 
     ftxui::Element outputText(std::string value, std::int32_t const columns, bool const dimmed = false)
@@ -79,11 +79,11 @@ namespace ao::tui
     return elementPtr | style::accent() | bold;
   }
 
-  std::int32_t outputDevicePanelColumns(TuiTextCatalog const& textCatalog,
+  std::int32_t outputDevicePanelColumns(i18n::MessageCatalog const& textCatalog,
                                         uimodel::OutputDeviceViewState const& view,
                                         std::int32_t const terminalColumns)
   {
-    auto const title = textCatalog.text(TuiTextId::OutputDevicesTitle);
+    auto const title = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle);
     auto contentColumns = std::max({cellWidth(title) + cellWidth(outputDeviceSummary(&view)),
                                     cellWidth(title) + cellWidth(" · ") + cellWidth(outputDeviceSummary(&view)),
                                     cellWidth(outputDeviceFooter(textCatalog, view)),
@@ -93,7 +93,8 @@ namespace ao::tui
     {
       contentColumns =
         std::max(contentColumns,
-                 cellWidth(textCatalog.text(TuiTextId::PlaybackNoOutputDevicesFound)) + kPanelScrollIndicatorColumns);
+                 cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)) +
+                   kPanelScrollIndicatorColumns);
     }
 
     for (auto const& row : view.rows)
@@ -116,7 +117,7 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element outputDevicePanel(TuiTextCatalog const& textCatalog,
+  ftxui::Element outputDevicePanel(i18n::MessageCatalog const& textCatalog,
                                    uimodel::OutputDeviceViewState const& view,
                                    std::int32_t const selectedRow,
                                    std::vector<OutputDeviceRowHitRegion>* const rowHitRegions,
@@ -186,15 +187,16 @@ namespace ao::tui
 
     rows.push_back(selectableList(
       std::move(listRows),
-      SelectableListOptions{.focusRow = focusRow,
-                            .height = kOutputDeviceRows,
-                            .emptyText = std::string{textCatalog.text(TuiTextId::PlaybackNoOutputDevicesFound)}}));
+      SelectableListOptions{
+        .focusRow = focusRow,
+        .height = kOutputDeviceRows,
+        .emptyText = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)}}));
     rows.push_back(separator());
     rows.push_back(outputText(outputDeviceFooter(textCatalog, view), footerTextColumns, true));
     rows.push_back(outputText(std::string{overlayHint(textCatalog, Overlay::OutputDevices)}, footerTextColumns, true));
 
     auto const summary = outputDeviceSummary(&view);
-    return style::popupPanel(textCatalog.text(TuiTextId::OutputDevicesTitle),
+    return style::popupPanel(i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle),
                              vbox(std::move(rows)),
                              style::PanelOptions{.rightTitle = summary}) |
            size(WIDTH, EQUAL, columns);

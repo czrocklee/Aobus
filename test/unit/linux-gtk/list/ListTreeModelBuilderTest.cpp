@@ -4,7 +4,7 @@
 #include "list/ListTreeModelBuilder.h"
 
 #include "../../TestFixtureSupport.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
@@ -46,8 +46,7 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     // 2. Build the model
-    auto const result =
-      ListTreeModelBuilder::build(fixture.runtime().library(), ao::test::englishPresentationTextCatalog());
+    auto const result = ListTreeModelBuilder::build(fixture.runtime().library(), ao::test::englishMessageCatalog());
 
     SECTION("Basic structure")
     {

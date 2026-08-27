@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <string>
@@ -17,9 +17,8 @@ namespace ao::uimodel
   class ActivityStatusFeedProjection final
   {
   public:
-    explicit ActivityStatusFeedProjection(PresentationTextCatalog textCatalog);
+    ActivityStatusFeedProjection(i18n::MessageCatalog textCatalog, rt::NotificationFeedState const& initialFeed);
 
-    void initialize(rt::NotificationFeedState const& feed);
     void handleFeedUpdated(rt::NotificationFeedUpdate const& update);
     void handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event);
     void handleLibraryProgressFinished(rt::LibraryTaskProgressFinished const& event,
@@ -56,7 +55,7 @@ namespace ao::uimodel
     void pruneHiddenSources(rt::NotificationFeedState const& feed);
 
     ActivityStatusViewState _state{};
-    PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     std::vector<LibraryProgressState> _libraryProgressStates{};
     std::vector<rt::NotificationId> _compactSourceNotificationIds{};
     std::vector<rt::NotificationId> _hiddenCompactIds{};

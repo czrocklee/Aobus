@@ -153,6 +153,7 @@ ao.bat test --all            rem all Windows suites, including tooling
 ao.bat check                 rem full Windows gate
 ao.bat check --asan          rem full Windows gate with MSVC AddressSanitizer
 ao.bat deps report           rem show governed versions and vcpkg identities
+ao.bat deps report --concepts rem write concept-report.json from public headers
 ao.bat deps verify           rem reject stale or mismatched dependency evidence
 ao.bat format --check        rem check changed C++/Python formatting
 ao.bat tidy                  rem lint changed files with the native compile database

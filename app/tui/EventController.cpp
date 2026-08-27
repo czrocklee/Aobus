@@ -243,7 +243,8 @@ namespace ao::tui
       {
         postActivityNotification(
           rt::NotificationSeverity::Error,
-          _library.textCatalog().format(i18n::MessageId::TuiFilterFailed, {{"detail", result.error().message}}));
+          i18n::requiredFormat(
+            _library.textCatalog(), i18n::MessageId::TuiFilterFailed, {{"detail", result.error().message}}));
       }
 
       return;
@@ -261,13 +262,14 @@ namespace ao::tui
     {
       closeOverlay();
       postActivityNotification(
-        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiListsClosed)});
+        rt::NotificationSeverity::Info,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiListsClosed)});
       return;
     }
 
     openOverlay(Overlay::ListChooser);
-    postActivityNotification(
-      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiListsOpened)});
+    postActivityNotification(rt::NotificationSeverity::Info,
+                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiListsOpened)});
   }
 
   void EventController::toggleDetailPanel()
@@ -276,13 +278,14 @@ namespace ao::tui
     {
       closeOverlay();
       postActivityNotification(
-        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiDetailClosed)});
+        rt::NotificationSeverity::Info,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiDetailClosed)});
       return;
     }
 
     openOverlay(Overlay::DetailPanel);
-    postActivityNotification(
-      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiDetailOpened)});
+    postActivityNotification(rt::NotificationSeverity::Info,
+                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiDetailOpened)});
   }
 
   void EventController::toggleQualityPanel()
@@ -291,13 +294,15 @@ namespace ao::tui
     {
       closeOverlay();
       postActivityNotification(
-        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiPipelineClosed)});
+        rt::NotificationSeverity::Info,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPipelineClosed)});
       return;
     }
 
     openOverlay(Overlay::QualityPanel);
     postActivityNotification(
-      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiPipelineOpened)});
+      rt::NotificationSeverity::Info,
+      std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPipelineOpened)});
   }
 
   void EventController::toggleOutputDevices()
@@ -306,21 +311,23 @@ namespace ao::tui
     {
       closeOverlay();
       postActivityNotification(
-        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputClosed)});
+        rt::NotificationSeverity::Info,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputClosed)});
       return;
     }
 
     if (_outputDevices == nullptr)
     {
-      postActivityNotification(rt::NotificationSeverity::Warning,
-                               std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputUnavailable)});
+      postActivityNotification(
+        rt::NotificationSeverity::Warning,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputUnavailable)});
       return;
     }
 
     _outputDevices->refresh();
     openOverlay(Overlay::OutputDevices);
-    postActivityNotification(
-      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputOpened)});
+    postActivityNotification(rt::NotificationSeverity::Info,
+                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputOpened)});
   }
 
   void EventController::togglePresentationPanel()
@@ -329,13 +336,14 @@ namespace ao::tui
     {
       closeOverlay();
       postActivityNotification(
-        rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiViewsClosed)});
+        rt::NotificationSeverity::Info,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiViewsClosed)});
       return;
     }
 
     openOverlay(Overlay::PresentationPanel);
-    postActivityNotification(
-      rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiViewsOpened)});
+    postActivityNotification(rt::NotificationSeverity::Info,
+                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiViewsOpened)});
   }
 
   void EventController::toggleNotificationCenter()
@@ -343,8 +351,9 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::Notifications)
     {
       closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info,
-                               std::string{_library.textCatalog().text(i18n::MessageId::TuiNotificationsClosed)});
+      postActivityNotification(
+        rt::NotificationSeverity::Info,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiNotificationsClosed)});
       return;
     }
 
@@ -360,16 +369,18 @@ namespace ao::tui
     }
 
     openOverlay(Overlay::Notifications);
-    postActivityNotification(rt::NotificationSeverity::Info,
-                             std::string{_library.textCatalog().text(i18n::MessageId::TuiNotificationsOpened)});
+    postActivityNotification(
+      rt::NotificationSeverity::Info,
+      std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiNotificationsOpened)});
   }
 
   void EventController::selectOutputDevice()
   {
     if (_outputDevices == nullptr)
     {
-      postActivityNotification(rt::NotificationSeverity::Warning,
-                               std::string{_library.textCatalog().text(i18n::MessageId::TuiOutputUnavailable)});
+      postActivityNotification(
+        rt::NotificationSeverity::Warning,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputUnavailable)});
       return;
     }
 
@@ -392,8 +403,9 @@ namespace ao::tui
   {
     if (!playSelected(_playback.commands(), _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
     {
-      postActivityNotification(rt::NotificationSeverity::Warning,
-                               std::string{_library.textCatalog().text(i18n::MessageId::TuiPlaybackStartFailed)});
+      postActivityNotification(
+        rt::NotificationSeverity::Warning,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackStartFailed)});
     }
   }
 
@@ -403,7 +415,7 @@ namespace ao::tui
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning,
-        std::string{_library.textCatalog().text(i18n::MessageId::TuiPlaybackControlUnavailable)});
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackControlUnavailable)});
     }
   }
 
@@ -424,12 +436,14 @@ namespace ao::tui
       case CommandAction::CloseOverlay:
         closeOverlay();
         postActivityNotification(
-          rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiOverlayClosed)});
+          rt::NotificationSeverity::Info,
+          std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOverlayClosed)});
         break;
       case CommandAction::ShowHelp:
         openOverlay(Overlay::Help);
         postActivityNotification(
-          rt::NotificationSeverity::Info, std::string{_library.textCatalog().text(i18n::MessageId::TuiHelpOpened)});
+          rt::NotificationSeverity::Info,
+          std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiHelpOpened)});
         break;
       case CommandAction::RevealCurrentTrack: revealCurrentTrack(); break;
       case CommandAction::SetPresentation: _library.setPresentation(command.argument); break;
@@ -813,8 +827,9 @@ namespace ao::tui
     if (hitRegionIt->sectionIndex < 0 ||
         static_cast<std::size_t>(hitRegionIt->sectionIndex) >= _library.sections().size())
     {
-      postActivityNotification(rt::NotificationSeverity::Warning,
-                               std::string{_library.textCatalog().text(i18n::MessageId::TuiSectionUnavailable)});
+      postActivityNotification(
+        rt::NotificationSeverity::Warning,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiSectionUnavailable)});
       return true;
     }
 
@@ -1053,7 +1068,8 @@ namespace ao::tui
         {
           postActivityNotification(
             rt::NotificationSeverity::Warning,
-            _library.textCatalog().format(i18n::MessageId::TuiUnknownCommand, {{"command", _shell.inputDraft()}}));
+            i18n::requiredFormat(
+              _library.textCatalog(), i18n::MessageId::TuiUnknownCommand, {{"command", _shell.inputDraft()}}));
         }
 
         return true;

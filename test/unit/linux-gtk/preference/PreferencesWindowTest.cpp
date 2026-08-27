@@ -3,13 +3,13 @@
 
 #include "preference/PreferencesWindow.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/audio/BackendIds.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
@@ -68,7 +68,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(), {}};
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
 
     CHECK(window.hasPage("general"));
     CHECK(window.hasPage("appearance"));
@@ -87,7 +87,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto window = PreferencesWindow{textCatalog, {}};
 
     CHECK(window.get_title() == "Einstellungen");
@@ -105,7 +105,7 @@ namespace ao::gtk::test
     std::int32_t savePanelsCount = 0;
 
     auto window =
-      PreferencesWindow{ao::test::englishPresentationTextCatalog(),
+      PreferencesWindow{ao::test::englishMessageCatalog(),
                         PreferencesWindow::Callbacks{
                           .onEditLayout = [&editCount] { ++editCount; },
                           .onResetRuntimeLayoutState = [&resetCount] { ++resetCount; },
@@ -134,7 +134,7 @@ namespace ao::gtk::test
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
     auto optTheme = std::optional<uimodel::ThemePreset>{};
-    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(),
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(),
                                     PreferencesWindow::Callbacks{
                                       .onPersistPreferences = [&](rt::AppPrefsState const& prefs,
                                                                   uimodel::PreferencesChange) { optPersisted = prefs; },
@@ -163,7 +163,7 @@ namespace ao::gtk::test
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
     auto window = PreferencesWindow{
-      ao::test::englishPresentationTextCatalog(),
+      ao::test::englishMessageCatalog(),
       PreferencesWindow::Callbacks{
         .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange)
         { optPersisted = prefs; },
@@ -194,7 +194,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
-    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(),
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(),
                                     PreferencesWindow::Callbacks{
                                       .onPersistPreferences =
                                         [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange const change)
@@ -236,7 +236,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto target = Gtk::Window{};
-    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(), {}};
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
     auto prefs = rt::AppPrefsState{};
 
     window.refreshPreferences(prefs, &fixture.runtime().playback(), &target);
@@ -254,7 +254,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window = PreferencesWindow{ao::test::englishPresentationTextCatalog(), {}};
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "future-theme";
     prefs.lastLayoutPreset = "future-layout";

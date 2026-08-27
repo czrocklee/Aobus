@@ -9,7 +9,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <functional>
 #include <string>
@@ -19,7 +18,7 @@ namespace ao::uimodel
 {
   TrackFilterViewModel::TrackFilterViewModel(rt::ViewService& viewService,
                                              rt::WorkspaceService& workspaceService,
-                                             PresentationTextCatalog textCatalog,
+                                             i18n::MessageCatalog textCatalog,
                                              std::function<void(TrackFilterViewState const&)> onRender)
     : _viewService{viewService}
     , _workspaceService{workspaceService}
@@ -127,8 +126,8 @@ namespace ao::uimodel
       if (_optFilterError)
       {
         view.hasError = true;
-        view.tooltip =
-          _textCatalog.format(i18n::MessageId::TrackFilterError, {{"diagnostic", _optFilterError->message}});
+        view.tooltip = i18n::requiredFormat(
+          _textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", _optFilterError->message}});
       }
 
       view.canCreateSmartList = !view.resolvedExpression.empty() && !view.hasError;

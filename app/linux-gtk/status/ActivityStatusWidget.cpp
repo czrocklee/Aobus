@@ -4,6 +4,7 @@
 #include "status/ActivityStatusWidget.h"
 
 #include "common/AccessibleLabel.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/LayoutConstants.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
@@ -133,7 +134,7 @@ namespace ao::gtk
     _dismissButton.add_css_class("flat");
     _dismissButton.add_css_class("ao-activity-status-dismiss");
     _dismissButton.set_icon_name("window-close-symbolic");
-    setTooltipAndAccessibleLabel(_dismissButton, _textCatalog.text(MessageId::GtkActivityHideStatus));
+    setTooltipAndAccessibleLabel(_dismissButton, gtkText(_textCatalog, MessageId::GtkActivityHideStatus));
     _dismissButton.signal_clicked().connect([this] { handleDismissClicked(); });
 
     _detailBox.add_css_class("ao-activity-detail");
@@ -251,7 +252,7 @@ namespace ao::gtk
     row->add_css_class("ao-activity-detail-row");
     row->add_css_class("ao-activity-detail-task");
 
-    auto* const title = Gtk::make_managed<Gtk::Label>(std::string{_textCatalog.text(MessageId::LibraryTaskLabel)});
+    auto* const title = Gtk::make_managed<Gtk::Label>(gtkText(_textCatalog, MessageId::LibraryTaskLabel));
     title->set_xalign(0.0F);
     title->add_css_class("ao-activity-detail-title");
     row->append(*title);
@@ -293,7 +294,7 @@ namespace ao::gtk
       dismissButton->add_css_class("flat");
       dismissButton->add_css_class("ao-activity-detail-dismiss");
       dismissButton->set_icon_name("window-close-symbolic");
-      setTooltipAndAccessibleLabel(*dismissButton, _textCatalog.text(MessageId::GtkActivityHideNotification));
+      setTooltipAndAccessibleLabel(*dismissButton, gtkText(_textCatalog, MessageId::GtkActivityHideNotification));
       dismissButton->signal_clicked().connect([this, id = item.id] { handleDetailDismissClicked(id); });
       header->append(*dismissButton);
     }

@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "portal/ImportExportActions.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -16,7 +17,6 @@
 #include <gtkmm/widget.h>
 
 #include <memory>
-
 namespace ao::gtk::layout
 {
   using namespace uimodel;
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     public:
       OpenLibraryButton(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
       {
-        auto const label = std::string{ctx.dependencies.gtkTextCatalog.text(GtkTextId::OpenLibrary)};
+        auto const label = gtkText(ctx.dependencies.textCatalog, i18n::MessageId::GtkShellOpenLibrary);
         _button.set_icon_name("folder-open-symbolic");
         setTooltipAndAccessibleLabel(_button, label);
 

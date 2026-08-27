@@ -3,7 +3,7 @@
 
 #include "tag/TagEditor.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -109,7 +109,7 @@ namespace ao::gtk::test
     {
       addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
       addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ä"}});
-      auto editor = TagEditor{ao::test::englishPresentationTextCatalog(), &policy};
+      auto editor = TagEditor{ao::test::englishMessageCatalog(), &policy};
       editor.setup(runtime.library(), {selectedTrackId});
 
       CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ä", "z"});
@@ -120,7 +120,7 @@ namespace ao::gtk::test
       addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
       addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
       addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ä"}});
-      auto editor = TagEditor{ao::test::englishPresentationTextCatalog(), &policy};
+      auto editor = TagEditor{ao::test::englishMessageCatalog(), &policy};
       editor.setup(runtime.library(), {selectedTrackId});
 
       CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-suggested") == std::vector<std::string>{"z", "ä"});
@@ -130,7 +130,7 @@ namespace ao::gtk::test
     {
       addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ＡＢＣ"}});
       addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ABC"}});
-      auto editor = TagEditor{ao::test::englishPresentationTextCatalog(), &policy};
+      auto editor = TagEditor{ao::test::englishMessageCatalog(), &policy};
       editor.setup(runtime.library(), {selectedTrackId});
 
       CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ABC", "ＡＢＣ"});
@@ -149,7 +149,7 @@ namespace ao::gtk::test
     addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Jazz"}});
     auto const emptyTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{});
 
-    auto editor = TagEditor{ao::test::englishPresentationTextCatalog()};
+    auto editor = TagEditor{ao::test::englishMessageCatalog()};
     auto window = Gtk::Window{};
     window.set_child(editor);
 

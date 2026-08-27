@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
@@ -13,7 +14,6 @@
 
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
   class PlaybackCommandSurface;
 }
 
@@ -31,7 +31,7 @@ namespace ao::gtk
 
     TransportButton(rt::PlaybackService& playback,
                     uimodel::PlaybackCommandSurface& commands,
-                    uimodel::PresentationTextCatalog const& textCatalog,
+                    i18n::MessageCatalog const& textCatalog,
                     Action action,
                     bool showLabel = false,
                     std::string const& size = "normal");

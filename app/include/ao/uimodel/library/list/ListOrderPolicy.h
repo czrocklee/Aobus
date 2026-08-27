@@ -15,10 +15,13 @@
 #include <string_view>
 #include <vector>
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
-  class PresentationTextCatalog;
-
   struct ListOrderCapabilityInput final
   {
     ListId listId = kInvalidListId;
@@ -42,7 +45,7 @@ namespace ao::uimodel
     bool operator==(ListOrderCapabilityState const&) const = default;
   };
 
-  ListOrderCapabilityState describeListOrderCapabilities(PresentationTextCatalog const& textCatalog,
+  ListOrderCapabilityState describeListOrderCapabilities(i18n::MessageCatalog const& textCatalog,
                                                          ListOrderCapabilityInput const& input);
 
   std::vector<TrackId> listOrderDragSelection(TrackId draggedTrackId,

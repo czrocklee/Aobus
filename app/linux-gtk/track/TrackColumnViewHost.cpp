@@ -7,8 +7,8 @@
 #include "track/TrackListModel.h"
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
@@ -24,7 +24,7 @@ namespace ao::gtk
 {
   TrackColumnViewHost::TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
                                            uimodel::TrackColumnLayoutStore& layoutStore,
-                                           uimodel::PresentationTextCatalog textCatalog,
+                                           i18n::MessageCatalog textCatalog,
                                            Glib::RefPtr<Gtk::MultiSelection> const& selectionModelPtr,
                                            ao::ListId listId)
     : _textCatalog{std::move(textCatalog)}

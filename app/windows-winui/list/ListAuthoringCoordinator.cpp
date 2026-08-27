@@ -145,7 +145,7 @@ namespace ao::winui
 
     if (!optNode)
     {
-      setDialogError(std::string{_textCatalog.text(i18n::MessageId::ListOrderListUnavailable)});
+      setDialogError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderListUnavailable)});
       return;
     }
 
@@ -199,12 +199,14 @@ namespace ao::winui
     _dialog = ContentDialog{};
     _dialog.XamlRoot(_xamlRoot ? _xamlRoot() : XamlRoot{nullptr});
     _dialog.MinWidth(kEditorMinWidth);
-    _dialog.Title(winrt::box_value(
-      winrt::to_hstring(_textCatalog.text(_editListId == kInvalidListId ? i18n::MessageId::WinUiListEditorNewTitle
-                                                                        : i18n::MessageId::WinUiListEditorEditTitle))));
-    _dialog.PrimaryButtonText(winrt::to_hstring(_textCatalog.text(
+    _dialog.Title(winrt::box_value(winrt::to_hstring(
+      i18n::requiredText(_textCatalog,
+                         _editListId == kInvalidListId ? i18n::MessageId::WinUiListEditorNewTitle
+                                                       : i18n::MessageId::WinUiListEditorEditTitle))));
+    _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(
+      _textCatalog,
       _editListId == kInvalidListId ? i18n::MessageId::WinUiCommonCreate : i18n::MessageId::WinUiCommonSave)));
-    _dialog.CloseButtonText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiCommonCancel)));
+    _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiCommonCancel)));
     _dialog.DefaultButton(ContentDialogButton::Primary);
 
     auto content = StackPanel{};
@@ -215,23 +217,27 @@ namespace ao::winui
     content.Children().Append(_errorText);
 
     _nameInput = TextBox{};
-    _nameInput.Header(winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListName))));
-    _nameInput.PlaceholderText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListNamePlaceholder)));
+    _nameInput.Header(
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListName))));
+    _nameInput.PlaceholderText(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListNamePlaceholder)));
     content.Children().Append(_nameInput);
 
     _descriptionInput = TextBox{};
     _descriptionInput.Header(
-      winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListDescription))));
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDescription))));
     _descriptionInput.PlaceholderText(
-      winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListDescriptionPlaceholder)));
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDescriptionPlaceholder)));
     content.Children().Append(_descriptionInput);
 
     _inheritedFilterText = makeWrappedText(kContextTextOpacity);
     content.Children().Append(_inheritedFilterText);
 
     _filterInput = TextBox{};
-    _filterInput.Header(winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListLocalFilter))));
-    _filterInput.PlaceholderText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListFilterPlaceholder)));
+    _filterInput.Header(
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListLocalFilter))));
+    _filterInput.PlaceholderText(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListFilterPlaceholder)));
     content.Children().Append(_filterInput);
 
     _effectiveFilterText = makeWrappedText(kContextTextOpacity);
@@ -241,12 +247,12 @@ namespace ao::winui
 
     _presentationInput = ComboBox{};
     _presentationInput.Header(
-      winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListPresentation))));
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListPresentation))));
     _presentationInput.HorizontalAlignment(HorizontalAlignment::Stretch);
     _presentationIds.clear();
     _presentationIds.emplace_back();
-    _presentationInput.Items().Append(
-      winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListAutoPresentation))));
+    _presentationInput.Items().Append(winrt::box_value(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListAutoPresentation))));
 
     for (auto const& item : _presentationCatalog.menuItems())
     {
@@ -262,7 +268,7 @@ namespace ao::winui
     content.Children().Append(_presentationInput);
 
     auto previewHeading = TextBlock{};
-    previewHeading.Text(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiListPreview)));
+    previewHeading.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListPreview)));
     previewHeading.FontSize(kPreviewHeadingFontSize);
     content.Children().Append(previewHeading);
     _previewText = makeWrappedText(kSupportingTextOpacity);
@@ -350,12 +356,12 @@ namespace ao::winui
     auto const inherited = uimodel::formatSmartListExpressionDisplayText(_textCatalog, _inheritedExpression);
     auto const effective = uimodel::formatSmartListExpressionDisplayText(
       _textCatalog, uimodel::combineSmartListEffectiveExpression(_inheritedExpression, expression));
-    _inheritedFilterText.Text(
-      winrt::to_hstring(labeled(_textCatalog.text(i18n::MessageId::WinUiListInheritedFilter), inherited)));
-    _effectiveFilterText.Text(
-      winrt::to_hstring(labeled(_textCatalog.text(i18n::MessageId::WinUiListEffectiveFilter), effective)));
-    _membershipText.Text(winrt::to_hstring(
-      labeled(_textCatalog.text(i18n::MessageId::WinUiListMembership), _editorState.membershipEditingText)));
+    _inheritedFilterText.Text(winrt::to_hstring(
+      labeled(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListInheritedFilter), inherited)));
+    _effectiveFilterText.Text(winrt::to_hstring(
+      labeled(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListEffectiveFilter), effective)));
+    _membershipText.Text(winrt::to_hstring(labeled(
+      i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMembership), _editorState.membershipEditingText)));
     _previewText.Text(winrt::to_hstring(_editorState.previewStatusText));
 
     auto error = _mutationError;
@@ -455,21 +461,23 @@ namespace ao::winui
     {
       if (_reportStatus)
       {
-        _reportStatus(_textCatalog.format(
-          i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
+        _reportStatus(i18n::requiredFormat(
+          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
       }
     }
     else if (auto const selectedRes = _trackList.selectPresentation(presentation); !selectedRes)
     {
       if (_reportStatus)
       {
-        _reportStatus(_textCatalog.format(
-          i18n::MessageId::WinUiPresentationFailed, {i18n::MessageArgument{"detail", selectedRes.error().message}}));
+        _reportStatus(i18n::requiredFormat(_textCatalog,
+                                           i18n::MessageId::WinUiPresentationFailed,
+                                           {i18n::MessageArgument{"detail", selectedRes.error().message}}));
       }
     }
     else if (_reportStatus)
     {
-      _reportStatus(_textCatalog.format(i18n::MessageId::WinUiListStatus, {i18n::MessageArgument{"list", name}}));
+      _reportStatus(
+        i18n::requiredFormat(_textCatalog, i18n::MessageId::WinUiListStatus, {i18n::MessageArgument{"list", name}}));
     }
 
     if (_dialog)
@@ -546,8 +554,8 @@ namespace ao::winui
 
       if (_reportStatus)
       {
-        _reportStatus(
-          _textCatalog.format(i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", result.error().message}}));
+        _reportStatus(i18n::requiredFormat(
+          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", result.error().message}}));
       }
 
       return;
@@ -570,11 +578,13 @@ namespace ao::winui
 
     _dialog = ContentDialog{};
     _dialog.XamlRoot(_xamlRoot ? _xamlRoot() : XamlRoot{nullptr});
-    _dialog.Title(winrt::box_value(winrt::to_hstring(_textCatalog.text(
+    _dialog.Title(winrt::box_value(winrt::to_hstring(i18n::requiredText(
+      _textCatalog,
       includeDescendants ? i18n::MessageId::WinUiListDeleteSubtreeTitle : i18n::MessageId::WinUiListDeleteTitle))));
-    _dialog.PrimaryButtonText(winrt::to_hstring(_textCatalog.text(
+    _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(
+      _textCatalog,
       includeDescendants ? i18n::MessageId::WinUiListDeleteAllCommit : i18n::MessageId::WinUiListDeleteCommit)));
-    _dialog.CloseButtonText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiCommonCancel)));
+    _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiCommonCancel)));
     _dialog.DefaultButton(ContentDialogButton::Close);
 
     auto content = StackPanel{};
@@ -591,11 +601,13 @@ namespace ao::winui
     }
 
     auto const message = includeDescendants
-                           ? _textCatalog.format(i18n::MessageId::WinUiListDeleteSubtreeQuestion,
-                                                 {i18n::MessageArgument{"count", preview.deletedLists.size()},
-                                                  i18n::MessageArgument{"entries", entries}})
-                           : _textCatalog.format(i18n::MessageId::WinUiListDeleteQuestion,
-                                                 {i18n::MessageArgument{"name", preview.deletedLists.front().name}});
+                           ? i18n::requiredFormat(_textCatalog,
+                                                  i18n::MessageId::WinUiListDeleteSubtreeQuestion,
+                                                  {i18n::MessageArgument{"count", preview.deletedLists.size()},
+                                                   i18n::MessageArgument{"entries", entries}})
+                           : i18n::requiredFormat(_textCatalog,
+                                                  i18n::MessageId::WinUiListDeleteQuestion,
+                                                  {i18n::MessageArgument{"name", preview.deletedLists.front().name}});
     auto messageText = makeWrappedText();
     messageText.Text(winrt::to_hstring(message));
     content.Children().Append(messageText);
@@ -607,7 +619,8 @@ namespace ao::winui
     {
       auto const tag = displayedTag(optTagImpact->tag);
       _removeTagCheck = CheckBox{};
-      _removeTagCheck.Content(winrt::box_value(winrt::to_hstring(_textCatalog.format(
+      _removeTagCheck.Content(winrt::box_value(winrt::to_hstring(i18n::requiredFormat(
+        _textCatalog,
         i18n::MessageId::WinUiListRemoveTag,
         {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"count", optTagImpact->taggedTrackCount}}))));
       content.Children().Append(_removeTagCheck);
@@ -618,8 +631,9 @@ namespace ao::winui
         appendReferences(references, optTagImpact->otherListReferences);
         auto warning = makeWrappedText(kSupportingTextOpacity);
         warning.Text(winrt::to_hstring(
-          _textCatalog.format(i18n::MessageId::WinUiListTagReferences,
-                              {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"references", references}})));
+          i18n::requiredFormat(_textCatalog,
+                               i18n::MessageId::WinUiListTagReferences,
+                               {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"references", references}})));
         content.Children().Append(warning);
       }
     }
@@ -700,8 +714,8 @@ namespace ao::winui
     {
       if (auto const navigatedRes = _trackList.navigateTo(rt::kAllTracksListId); !navigatedRes && _reportStatus)
       {
-        _reportStatus(_textCatalog.format(
-          i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
+        _reportStatus(i18n::requiredFormat(
+          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
       }
     }
 
@@ -736,8 +750,8 @@ namespace ao::winui
     {
       if (_reportStatus)
       {
-        _reportStatus(_textCatalog.format(
-          i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", sessionRes.error().message}}));
+        _reportStatus(i18n::requiredFormat(
+          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", sessionRes.error().message}}));
       }
 
       return;
@@ -775,8 +789,8 @@ namespace ao::winui
 
     if (!result)
     {
-      _reportStatus(
-        _textCatalog.format(i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", result.error().message}}));
+      _reportStatus(i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", result.error().message}}));
       return;
     }
 
@@ -790,7 +804,7 @@ namespace ao::winui
     if (!stateRes)
     {
       return uimodel::ListOrderCapabilityState{
-        .disabledReason = std::string{_textCatalog.text(i18n::MessageId::ListOrderListUnavailable)},
+        .disabledReason = std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderListUnavailable)},
       };
     }
 
@@ -906,20 +920,21 @@ namespace ao::winui
     switch (result->status)
     {
       case rt::AuthoringStatus::Applied:
-        _reportStatus(_textCatalog.format(
-          i18n::MessageId::ListOrderMoved, {i18n::MessageArgument{"count", affectedTrackCount(result->reply)}}));
+        _reportStatus(i18n::requiredFormat(_textCatalog,
+                                           i18n::MessageId::ListOrderMoved,
+                                           {i18n::MessageArgument{"count", affectedTrackCount(result->reply)}}));
         return;
       case rt::AuthoringStatus::NoOp:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderUnchanged)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderUnchanged)});
         return;
       case rt::AuthoringStatus::Busy:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderLibraryBusy)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderLibraryBusy)});
         return;
       case rt::AuthoringStatus::Stale:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderChanged)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderChanged)});
         return;
       case rt::AuthoringStatus::Unavailable:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderEditingUnavailable)});
         return;
     }
   }
@@ -940,20 +955,21 @@ namespace ao::winui
     switch (result->status)
     {
       case rt::AuthoringStatus::Applied:
-        _reportStatus(_textCatalog.format(
-          i18n::MessageId::ListOrderReset, {i18n::MessageArgument{"count", result->reply.forgottenPositionCount}}));
+        _reportStatus(i18n::requiredFormat(_textCatalog,
+                                           i18n::MessageId::ListOrderReset,
+                                           {i18n::MessageArgument{"count", result->reply.forgottenPositionCount}}));
         return;
       case rt::AuthoringStatus::NoOp:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderUnchanged)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderUnchanged)});
         return;
       case rt::AuthoringStatus::Busy:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderLibraryBusy)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderLibraryBusy)});
         return;
       case rt::AuthoringStatus::Stale:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderChanged)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderChanged)});
         return;
       case rt::AuthoringStatus::Unavailable:
-        _reportStatus(std::string{_textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable)});
+        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderEditingUnavailable)});
         return;
     }
   }

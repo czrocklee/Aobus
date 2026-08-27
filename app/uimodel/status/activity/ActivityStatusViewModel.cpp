@@ -5,12 +5,12 @@
 
 #include "ActivityStatusFeedProjection.h"
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryTaskService.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
@@ -50,21 +50,18 @@ namespace ao::uimodel
     async::Subscription libraryProgressFinishedSub;
 
     Impl(rt::NotificationService& notificationService,
-         PresentationTextCatalog const& textCatalog,
+         i18n::MessageCatalog const& textCatalog,
          std::function<void(ActivityStatusViewState const&)> renderCallback,
          ActivityStatusViewModelOptions options)
       : notifications{notificationService}
       , onRender{std::move(renderCallback)}
       , clock{std::move(options.clock)}
-      , feedProjection{textCatalog}
+      , feedProjection{textCatalog, notifications.feed()}
     {
       if (!clock)
       {
         clock = defaultActivityStatusNow;
       }
-
-      auto const initialFeed = notifications.feed();
-      feedProjection.initialize(initialFeed);
 
       feedUpdatedSub = notifications.onFeedUpdated(
         [this](rt::NotificationFeedUpdate const& update)
@@ -159,7 +156,7 @@ namespace ao::uimodel
   };
 
   ActivityStatusViewModel::ActivityStatusViewModel(rt::NotificationService& notifications,
-                                                   PresentationTextCatalog const& textCatalog,
+                                                   i18n::MessageCatalog const& textCatalog,
                                                    std::function<void(ActivityStatusViewState const&)> onRender,
                                                    ActivityStatusViewModelOptions options)
     : _implPtr{std::make_unique<Impl>(notifications, textCatalog, std::move(onRender), std::move(options))}

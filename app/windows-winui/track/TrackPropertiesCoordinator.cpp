@@ -128,8 +128,9 @@ namespace ao::winui
     if (!sessionRes)
     {
       _sessionInvalid = true;
-      setError(_textCatalog.format(
-        i18n::MessageId::WinUiTrackPropertiesEditingUnavailable, {{"detail", sessionRes.error().message}}));
+      setError(i18n::requiredFormat(_textCatalog,
+                                    i18n::MessageId::WinUiTrackPropertiesEditingUnavailable,
+                                    {{"detail", sessionRes.error().message}}));
     }
 
     _callbackLifetimePtr = std::make_shared<std::monostate>();
@@ -228,14 +229,17 @@ namespace ao::winui
     _dialog = ContentDialog{};
     _dialog.XamlRoot(_xamlRoot);
     _dialog.MinWidth(kDialogMinWidth);
-    _dialog.PrimaryButtonText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesSave)));
-    _dialog.CloseButtonText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesCancel)));
+    _dialog.PrimaryButtonText(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesSave)));
+    _dialog.CloseButtonText(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCancel)));
     _dialog.DefaultButton(ContentDialogButton::Primary);
 
     auto const title =
       _trackIds.size() > 1
-        ? _textCatalog.format(i18n::MessageId::WinUiTrackPropertiesSelectedTitle, {{"count", _trackIds.size()}})
-        : std::string{_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesTitle)};
+        ? i18n::requiredFormat(
+            _textCatalog, i18n::MessageId::WinUiTrackPropertiesSelectedTitle, {{"count", _trackIds.size()}})
+        : std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesTitle)};
     _dialog.Title(winrt::box_value(winrt::to_hstring(title)));
 
     auto content = StackPanel{};
@@ -270,7 +274,8 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::buildMetadataSection(StackPanel const& content)
   {
-    content.Children().Append(makeSectionHeading(_textCatalog.text(i18n::MessageId::TrackMetadataHeading)));
+    content.Children().Append(
+      makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::TrackMetadataHeading)));
     auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
 
     for (auto const& row : spec.metadataRows)
@@ -281,7 +286,8 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::buildTechnicalSection(StackPanel const& content)
   {
-    content.Children().Append(makeSectionHeading(_textCatalog.text(i18n::MessageId::TrackAudioPropertiesHeading)));
+    content.Children().Append(
+      makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::TrackAudioPropertiesHeading)));
     auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
 
     for (auto const& row : spec.propertyRows)
@@ -410,10 +416,11 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::buildTagsSection(StackPanel const& content)
   {
-    content.Children().Append(makeSectionHeading(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesTags)));
+    content.Children().Append(
+      makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesTags)));
 
     auto hint = TextBlock{};
-    hint.Text(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesTagsHint)));
+    hint.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesTagsHint)));
     hint.TextWrapping(TextWrapping::Wrap);
     hint.Opacity(kHintTextOpacity);
     content.Children().Append(hint);
@@ -433,7 +440,8 @@ namespace ao::winui
     addRow.ColumnSpacing(kRowSpacing);
 
     _tagInput = AutoSuggestBox{};
-    _tagInput.PlaceholderText(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesTags)));
+    _tagInput.PlaceholderText(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesTags)));
     _tagInput.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
     _tagTextChangedRevoker =
       _tagInput.TextChanged(winrt::auto_revoke,
@@ -449,7 +457,8 @@ namespace ao::winui
     addRow.Children().Append(_tagInput);
 
     auto addButton = Button{};
-    addButton.Content(winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesAdd))));
+    addButton.Content(
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesAdd))));
     addButton.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
     _tagAddClickRevoker =
       addButton.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addTag(); });
@@ -484,8 +493,8 @@ namespace ao::winui
       row.Children().Append(label);
 
       auto remove = Button{};
-      remove.Content(
-        winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesDelete))));
+      remove.Content(winrt::box_value(
+        winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesDelete))));
       remove.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid && !_saving);
       _tagRemoveClickRevokers.push_back(remove.Click(winrt::auto_revoke,
                                                      [this, tag](IInspectable const&, RoutedEventArgs const&)
@@ -542,7 +551,7 @@ namespace ao::winui
   void TrackPropertiesCoordinator::buildCustomMetadataSection(StackPanel const& content)
   {
     content.Children().Append(
-      makeSectionHeading(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesCustomMetadata)));
+      makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCustomMetadata)));
     _customRows = StackPanel{};
     _customRows.Spacing(kRowSpacing);
     content.Children().Append(_customRows);
@@ -566,7 +575,7 @@ namespace ao::winui
 
     _customKeyInput = AutoSuggestBox{};
     _customKeyInput.PlaceholderText(
-      winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesCustomKey)));
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCustomKey)));
     _customKeyInput.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
     _customKeyChangedRevoker =
       _customKeyInput.TextChanged(winrt::auto_revoke,
@@ -581,13 +590,14 @@ namespace ao::winui
 
     _customValueInput = TextBox{};
     _customValueInput.PlaceholderText(
-      winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesCustomValue)));
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCustomValue)));
     _customValueInput.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
     Grid::SetColumn(_customValueInput, 1);
     addRow.Children().Append(_customValueInput);
 
     auto addButton = Button{};
-    addButton.Content(winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesAdd))));
+    addButton.Content(
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesAdd))));
     addButton.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
     _customAddClickRevoker =
       addButton.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addCustomMetadata(); });
@@ -611,13 +621,14 @@ namespace ao::winui
     value.Header(winrt::box_value(winrt::to_hstring(item.key)));
     auto const editable = item.presentOnAll && !item.value.mixed;
     auto const display = editable ? item.value.optValue.value_or("")
-                                  : std::string{_textCatalog.text(i18n::MessageId::TrackMultipleValues)};
+                                  : std::string{i18n::requiredText(_textCatalog, i18n::MessageId::TrackMultipleValues)};
     value.Text(winrt::to_hstring(display));
     value.IsEnabled(editable && _sessionPtr != nullptr && !_sessionInvalid);
     panel.Children().Append(value);
 
     auto remove = Button{};
-    remove.Content(winrt::box_value(winrt::to_hstring(_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesDelete))));
+    remove.Content(winrt::box_value(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesDelete))));
     remove.VerticalAlignment(VerticalAlignment::Bottom);
     remove.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
     auto const index = _customEditors.size();
@@ -694,8 +705,8 @@ namespace ao::winui
 
     if (keyView.empty() || (existing != _customEditors.end() && !existing->deleted))
     {
-      setError(
-        _textCatalog.format(i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", std::string{keyView}}}));
+      setError(i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", std::string{keyView}}}));
       return;
     }
 
@@ -718,8 +729,8 @@ namespace ao::winui
 
     if (validation != uimodel::CustomMetadataAddValidation::Accepted)
     {
-      setError(
-        _textCatalog.format(i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", std::string{keyView}}}));
+      setError(i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", std::string{keyView}}}));
       return;
     }
 
@@ -756,8 +767,8 @@ namespace ao::winui
 
       if (!editRes)
       {
-        setError(_textCatalog.format(
-          i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", editRes.error().message}}));
+        setError(i18n::requiredFormat(
+          _textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", editRes.error().message}}));
         return false;
       }
 
@@ -892,7 +903,7 @@ namespace ao::winui
     }
 
     _sessionInvalid = true;
-    setError(std::string{_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesStale)});
+    setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesStale)});
     updateSaveEnabled();
   }
 
@@ -976,8 +987,8 @@ namespace ao::winui
     {
       updateSaveEnabled();
       rebuildTagRows();
-      setError(
-        _textCatalog.format(i18n::MessageId::WinUiTrackPropertiesSaveFailed, {{"detail", result.error().message}}));
+      setError(i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::WinUiTrackPropertiesSaveFailed, {{"detail", result.error().message}}));
       return;
     }
 
@@ -993,12 +1004,12 @@ namespace ao::winui
       case TrackPropertiesCommitState::Busy:
         updateSaveEnabled();
         rebuildTagRows();
-        setError(std::string{_textCatalog.text(i18n::MessageId::LibraryBusyTryAgain)});
+        setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::LibraryBusyTryAgain)});
         return;
       case TrackPropertiesCommitState::Stale:
       case TrackPropertiesCommitState::Unavailable:
         _sessionInvalid = true;
-        setError(std::string{_textCatalog.text(i18n::MessageId::WinUiTrackPropertiesStale)});
+        setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesStale)});
         updateSaveEnabled();
         rebuildTagRows();
         return;

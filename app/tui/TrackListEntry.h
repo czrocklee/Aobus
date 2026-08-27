@@ -4,15 +4,11 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
 
 #include <string>
 #include <vector>
-
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
 
 namespace ao::tui
 {
@@ -25,9 +21,9 @@ namespace ao::tui
     std::string detail{};
   };
 
-  std::string trackDisplayTitle(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row);
+  std::string trackDisplayTitle(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row);
   std::string trackDisplayDetail(rt::TrackRow const& row);
-  TrackListEntry makeTrackListEntry(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row);
-  std::string trackTableLabel(uimodel::PresentationTextCatalog const& textCatalog, rt::TrackRow const& row);
+  TrackListEntry makeTrackListEntry(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row);
+  std::string trackTableLabel(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row);
   std::vector<std::string> menuLabels(std::vector<TrackListEntry> const& tracks);
 } // namespace ao::tui

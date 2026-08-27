@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "App.h"
-#include "TuiTextCatalog.h"
 #include <ao/AppVersion.h>
 #include <ao/Contract.h>
 #include <ao/i18n/IcuCompletionAliases.h>
@@ -10,7 +9,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <CLI/CLI.hpp>
 
@@ -116,11 +114,9 @@ int main(int argc, char* argv[])
 
     auto textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
     auto completionAliasPolicyPtr = ao::i18n::createIcuCompletionAliasPolicy();
-    auto const textCatalog = ao::uimodel::PresentationTextCatalog{catalog};
-    auto const tuiTextCatalog = ao::tui::TuiTextCatalog{catalog};
+    auto const textCatalog = ao::i18n::MessageCatalog{catalog};
     return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}),
                         textCatalog,
-                        tuiTextCatalog,
                         *textOrderingPolicyPtr,
                         *completionAliasPolicyPtr);
   }

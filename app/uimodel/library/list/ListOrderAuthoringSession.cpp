@@ -21,7 +21,7 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -46,7 +46,7 @@ namespace ao::uimodel
          rt::BoundListOrder orderValue,
          ListOrderCapabilityState capabilitiesValue,
          std::shared_ptr<rt::TrackListProjection> projectionValuePtr,
-         PresentationTextCatalog textCatalogValue)
+         i18n::MessageCatalog textCatalogValue)
       : library{libraryValue}
       , views{viewsValue}
       , viewId{viewIdValue}
@@ -60,7 +60,7 @@ namespace ao::uimodel
         {
           if (availability.state == rt::LibraryAuthoringState::Maintenance)
           {
-            capabilities.disabledReason = textCatalog.text(i18n::MessageId::ListOrderLibraryBusy);
+            capabilities.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderLibraryBusy);
           }
 
           if (!order.matches(availability))
@@ -128,7 +128,7 @@ namespace ao::uimodel
 
       if (capabilities.disabledReason.empty())
       {
-        capabilities.disabledReason = textCatalog.text(i18n::MessageId::ListOrderChanged);
+        capabilities.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderChanged);
       }
 
       invalidated.emit();
@@ -314,7 +314,7 @@ namespace ao::uimodel
     rt::BoundListOrder order;
     ListOrderCapabilityState capabilities;
     std::shared_ptr<rt::TrackListProjection> projectionPtr;
-    PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     bool current = true;
     bool submitting = false;
     bool invalidationPending = false;
@@ -331,7 +331,7 @@ namespace ao::uimodel
     rt::Library& library,
     rt::ViewService& views,
     rt::ViewId const viewId,
-    PresentationTextCatalog const& textCatalog)
+    i18n::MessageCatalog const& textCatalog)
   {
     auto stateRes = views.findTrackListState(viewId);
 

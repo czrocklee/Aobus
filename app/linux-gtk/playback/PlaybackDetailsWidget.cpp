@@ -5,9 +5,9 @@
 
 #include "layout/LayoutConstants.h"
 #include "playback/AudioQualityCss.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
@@ -18,8 +18,7 @@ namespace ao::gtk
   {
   }
 
-  PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playback,
-                                               uimodel::PresentationTextCatalog const& textCatalog)
+  PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
     : _nowPlayingViewModel{playback,
                            textCatalog,
                            [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}

@@ -5,10 +5,11 @@
 
 #include "ShellInteractionModel.h"
 #include "TuiTextCatalog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionText.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -54,7 +55,7 @@ namespace ao::tui
     }
 
     void appendCommandItems(std::vector<rt::CompletionItem>& items,
-                            TuiTextCatalog const& textCatalog,
+                            i18n::MessageCatalog const& textCatalog,
                             std::string_view const prefix,
                             std::size_t const limit)
     {
@@ -71,7 +72,7 @@ namespace ao::tui
                           limit,
                           ":" + std::string{text},
                           std::string{spec.prefix},
-                          std::string{textCatalog.text(spec.detail)}))
+                          tuiChromeText(textCatalog, spec.detail)))
           {
             return;
           }
@@ -91,7 +92,7 @@ namespace ao::tui
                           limit,
                           ":" + std::string{spec.alias},
                           std::string{spec.alias},
-                          std::string{textCatalog.text(spec.detail)}))
+                          tuiChromeText(textCatalog, spec.detail)))
           {
             return;
           }
@@ -100,7 +101,7 @@ namespace ao::tui
     }
 
     void appendPresentationItems(std::vector<rt::CompletionItem>& items,
-                                 uimodel::PresentationTextCatalog const& textCatalog,
+                                 i18n::MessageCatalog const& textCatalog,
                                  CommandCompletionContext const& context,
                                  std::string_view const prefix,
                                  std::size_t const limit)
@@ -114,7 +115,7 @@ namespace ao::tui
 
         if (rt::startsWithCompletionPrefixInsensitive(preset.spec.id, prefix))
         {
-          auto const optText = textCatalog.builtinTrackPresentation(preset.spec.id);
+          auto const optText = uimodel::builtinTrackPresentation(textCatalog, preset.spec.id);
 
           if (!appendItem(
                 items, limit, preset.spec.id, preset.spec.id, optText ? std::string{optText->label} : preset.spec.id))
@@ -180,8 +181,7 @@ namespace ao::tui
     }
   } // namespace
 
-  std::optional<rt::CompletionResult> completeCommandDraft(uimodel::PresentationTextCatalog const& textCatalog,
-                                                           TuiTextCatalog const& tuiTextCatalog,
+  std::optional<rt::CompletionResult> completeCommandDraft(i18n::MessageCatalog const& textCatalog,
                                                            std::string_view const draft,
                                                            CommandCompletionContext const& context,
                                                            std::size_t const limit)
@@ -208,7 +208,7 @@ namespace ao::tui
 
     if (draft.find_first_of(" \t") == std::string_view::npos)
     {
-      appendCommandItems(items, tuiTextCatalog, draft, limit);
+      appendCommandItems(items, textCatalog, draft, limit);
 
       if (!items.empty())
       {

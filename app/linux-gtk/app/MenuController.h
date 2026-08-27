@@ -3,13 +3,14 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
+
 #include <giomm/menu.h>
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
 
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   class WindowActionRegistry;
 
   // Owns the main menu model. Window-scoped action installation lives in WindowActionRegistry so
@@ -19,7 +20,7 @@ namespace ao::gtk
   public:
     MenuController() = default;
 
-    void setup(GtkTextCatalog const& textCatalog);
+    void setup(i18n::MessageCatalog const& textCatalog);
 
     Glib::RefPtr<Gio::MenuModel> menuModel() const { return _menuModelPtr; }
 

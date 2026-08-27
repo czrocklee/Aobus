@@ -68,6 +68,34 @@ class GitFilesTest(unittest.TestCase):
             )
         )
 
+    def test_include_fragment_suffixes_cover_def_without_treating_it_as_a_translation_unit(self):
+        self.assertEqual(gitfiles.CPP_TRANSLATION_UNIT_SUFFIXES, (".cpp",))
+        self.assertIn(".def", gitfiles.CPP_INCLUDE_FRAGMENT_SUFFIXES)
+        self.assertNotIn(".def", gitfiles.CPP_TRANSLATION_UNIT_SUFFIXES)
+        self.assertTrue("app/include/ao/i18n/MessageInventory.def".endswith(gitfiles.CPP_SUFFIXES))
+        self.assertTrue("app/include/ao/i18n/MessageInventory.def".endswith(gitfiles.SOURCE_SUFFIXES))
+        self.assertFalse("app/include/ao/i18n/MessageInventory.def".endswith(gitfiles.CPP_TRANSLATION_UNIT_SUFFIXES))
+
+    def test_changed_files_selects_def_include_fragments(self):
+        def git_lines(*args: str) -> list[str]:
+            if args[:2] == ("diff", "--name-only"):
+                return ["app/include/ao/i18n/MessageInventory.def", "README.md"]
+            if args[:2] == ("ls-files", "--others"):
+                return ["app/i18n/MessageCatalog.cpp"]
+            return []
+
+        with mock.patch.object(gitfiles, "diff_base", return_value="main"):
+            with mock.patch.object(gitfiles, "_git_lines", side_effect=git_lines):
+                files = gitfiles.changed_files()
+
+        self.assertEqual(
+            files,
+            [
+                "app/i18n/MessageCatalog.cpp",
+                "app/include/ao/i18n/MessageInventory.def",
+            ],
+        )
+
     def test_git_discovery_failure_is_not_reported_as_an_empty_scope(self):
         completed = mock.Mock(returncode=128, stdout="", stderr="fatal: dubious ownership")
         errors = io.StringIO()

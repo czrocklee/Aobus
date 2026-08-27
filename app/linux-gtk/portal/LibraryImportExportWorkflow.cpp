@@ -4,6 +4,7 @@
 #include "portal/LibraryImportExportWorkflow.h"
 
 #include "common/UiWorkflow.h"
+#include "i18n/GtkTextCatalog.h"
 #include "portal/ImportExportCallbacks.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
@@ -19,7 +20,7 @@
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <cstdint>
 #include <expected>
@@ -53,7 +54,7 @@ namespace ao::gtk::portal
 
   LibraryImportExportWorkflow::LibraryImportExportWorkflow(rt::AppRuntime& runtime,
                                                            ImportExportCallbacks const& callbacks,
-                                                           uimodel::PresentationTextCatalog textCatalog)
+                                                           i18n::MessageCatalog textCatalog)
     : _runtime{runtime}, _callbacks{callbacks}, _textCatalog{std::move(textCatalog)}
   {
   }
@@ -117,10 +118,9 @@ namespace ao::gtk::portal
         if (optError)
         {
           logStructuredError("Audio identity indexing failed", *optError);
-          _runtime.notifications().post(
-            rt::NotificationSeverity::Warning,
-            std::string{_textCatalog.text(i18n::MessageId::LibraryAudioIdentityIndexingFailed)},
-            rt::NotificationLifetime::history());
+          _runtime.notifications().post(rt::NotificationSeverity::Warning,
+                                        gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingFailed),
+                                        rt::NotificationLifetime::history());
           return;
         }
 
@@ -128,15 +128,14 @@ namespace ao::gtk::portal
         {
           _runtime.notifications().post(
             rt::NotificationSeverity::Warning,
-            std::string{_textCatalog.text(i18n::MessageId::LibraryAudioIdentityIndexingCompletedWithErrors)},
+            gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingCompletedWithErrors),
             rt::NotificationLifetime::history());
         }
         else if (completedCount > 0)
         {
-          _runtime.notifications().post(
-            rt::NotificationSeverity::Info,
-            std::string{_textCatalog.text(i18n::MessageId::LibraryAudioIdentityIndexingComplete)},
-            rt::NotificationLifetime::transient());
+          _runtime.notifications().post(rt::NotificationSeverity::Info,
+                                        gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingComplete),
+                                        rt::NotificationLifetime::transient());
         }
       });
     auto* const taskService = &_runtime.library().taskService();
@@ -161,13 +160,14 @@ namespace ao::gtk::portal
         if (!result)
         {
           presentFailure("Export failed",
-                         _textCatalog.format(i18n::MessageId::LibraryExportFailed, {{"error", result.error().message}}),
+                         i18n::requiredFormat(
+                           _textCatalog, i18n::MessageId::LibraryExportFailed, {{"error", result.error().message}}),
                          result.error());
           return;
         }
 
         _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                      std::string{_textCatalog.text(i18n::MessageId::LibraryExported)},
+                                      gtkText(_textCatalog, i18n::MessageId::LibraryExported),
                                       rt::NotificationLifetime::transient());
       });
     auto* const taskService = &_runtime.library().taskService();
@@ -185,7 +185,8 @@ namespace ao::gtk::portal
         if (!result)
         {
           presentFailure("Import failed",
-                         _textCatalog.format(i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
+                         i18n::requiredFormat(
+                           _textCatalog, i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
                          result.error());
           return;
         }
@@ -194,9 +195,8 @@ namespace ao::gtk::portal
         {
           auto const error =
             Error{.code = Error::Code::InvalidState, .message = "Library restore confirmation is unavailable"};
-          presentFailure("Import failed",
-                         std::string{_textCatalog.text(i18n::MessageId::LibraryImportConfirmationUnavailable)},
-                         error);
+          presentFailure(
+            "Import failed", gtkText(_textCatalog, i18n::MessageId::LibraryImportConfirmationUnavailable), error);
           return;
         }
 
@@ -248,13 +248,14 @@ namespace ao::gtk::portal
         if (!result)
         {
           presentFailure("Import failed",
-                         _textCatalog.format(i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
+                         i18n::requiredFormat(
+                           _textCatalog, i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
                          result.error());
           return;
         }
 
         _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                      std::string{_textCatalog.text(i18n::MessageId::LibraryImported)},
+                                      gtkText(_textCatalog, i18n::MessageId::LibraryImported),
                                       rt::NotificationLifetime::transient());
       });
     auto* const taskService = &_runtime.library().taskService();
@@ -268,7 +269,7 @@ namespace ao::gtk::portal
     // decided in uimodel, which is what keeps this window and the Windows one
     // reporting the same scan the same way. Posting it is all that is left.
     _runtime.notifications().post(uimodel::libraryScanSeverity(outcome.verdict),
-                                  _textCatalog.libraryScanMessage(outcome),
+                                  uimodel::formatLibraryScanMessage(_textCatalog, outcome),
                                   uimodel::libraryScanLifetime(outcome.verdict));
 
     if (outcome.shouldBackfillAudioIdentity)
@@ -280,7 +281,7 @@ namespace ao::gtk::portal
   void LibraryImportExportWorkflow::startAudioIdentityIndexing()
   {
     _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                  std::string{_textCatalog.text(i18n::MessageId::LibraryReadyIndexingAudioIdentity)},
+                                  gtkText(_textCatalog, i18n::MessageId::LibraryReadyIndexingAudioIdentity),
                                   rt::NotificationLifetime::transient());
 
     spawnUiWorkflow(_runtime.async(),

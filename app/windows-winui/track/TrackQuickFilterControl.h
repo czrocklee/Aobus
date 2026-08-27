@@ -3,8 +3,9 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -43,7 +44,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox input{nullptr};
     std::function<void(std::string)> onError;
     std::function<void(uimodel::TrackFilterViewState const&)> onState;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
   };
 
   class TrackQuickFilterControl final
@@ -85,7 +86,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _debounceTimer{nullptr};
     std::function<void(std::string)> _onError;
     std::function<void(uimodel::TrackFilterViewState const&)> _onState;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     winrt::Windows::Foundation::Collections::IObservableVector<winrt::Windows::Foundation::IInspectable>
       _suggestionItems{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBox _editor{nullptr};

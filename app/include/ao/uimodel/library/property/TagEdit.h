@@ -10,10 +10,14 @@
 #include <string>
 #include <vector>
 
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::uimodel
 {
   class TrackAuthoringSession;
-  class PresentationTextCatalog;
 
   struct TagEditResult final
   {
@@ -22,7 +26,7 @@ namespace ao::uimodel
   };
 
   async::Task<Result<TagEditResult>> applyTagEdit(TrackAuthoringSession& session,
-                                                  PresentationTextCatalog const& textCatalog,
+                                                  i18n::MessageCatalog const& textCatalog,
                                                   std::vector<std::string> tagsToAdd,
                                                   std::vector<std::string> tagsToRemove);
 } // namespace ao::uimodel

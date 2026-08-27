@@ -4,12 +4,11 @@
 #include "LayoutTestSupport.h"
 
 #include "app/linux-gtk/app/GtkUiDependencies.h"
-#include "app/linux-gtk/i18n/GtkTextCatalog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/compat/MoveOnlyFunction.h>
@@ -86,13 +85,9 @@ namespace ao::gtk::layout::test
       : appPtr{Gtk::Application::create(std::string{applicationId})}
       , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary), textOrderingPolicy)}
       , messageCatalog{ao::test::messageCatalog(locale)}
-      , textCatalog{messageCatalog}
-      , gtkTextCatalog{messageCatalog}
       , playbackCommandSurface{runtimePtr->playback(),
                                [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
-      , dependencies{.textCatalog = textCatalog,
-                     .gtkTextCatalog = gtkTextCatalog,
-                     .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}
+      , dependencies{.textCatalog = messageCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}
       , context{.registry = components,
                 .actionRegistry = actions,
                 .runtime = *runtimePtr,
@@ -129,8 +124,6 @@ namespace ao::gtk::layout::test
     ao::test::TempDir tempDir;
     std::unique_ptr<rt::AppRuntime> runtimePtr;
     i18n::MessageCatalog messageCatalog;
-    uimodel::PresentationTextCatalog textCatalog;
-    GtkTextCatalog gtkTextCatalog;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ComponentRegistry components;
     ActionRegistry actions;

@@ -51,9 +51,13 @@ The remaining proposal asks whether nested savepoints can preserve a usable pare
 
 - Hard: None.
 - Conditional: None.
-- Integration: None.
+- Integration: [RFC 0002](0002-application-concept-debloat.md).
 
 Any implementation must preserve the synchronous root/preview kernel and sole live-runtime transaction owner established by [Decision 0015](../decision/0015-sequence-live-runtime-library-writes.md).
+
+RFC 0002 renames `LibraryMutationService` to `LibraryWriteLane` and makes it an implementation type, and renames `LibraryWriter` to `LibraryCommands`.
+This proposal names both types throughout its design.
+Contract alignment is mutual: whichever lands second adopts the other's surviving names, and neither may rename these types independently.
 
 ## Goals
 

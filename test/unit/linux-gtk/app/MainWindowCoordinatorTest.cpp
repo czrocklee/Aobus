@@ -7,13 +7,12 @@
 #include "app/ThemeCoordinator.h"
 #include "app/WindowState.h"
 #include "portal/ImportExportCoordinator.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -23,8 +22,8 @@
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
@@ -84,8 +83,7 @@ namespace ao::gtk::test
     configStorePtr->saveAppPrefs(initialPrefs);
 
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, runtime, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr, ao::test::englishMessageCatalog()};
     coordinator.loadSession();
 
     coordinator.themeCoordinator()->setTheme(uimodel::ThemePreset::Classic);
@@ -112,8 +110,8 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     configStorePtr->saveWindow(WindowState{.width = 720, .height = 540, .maximized = false});
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, fixture.runtime(), configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator =
+      MainWindowCoordinator{window, fixture.runtime(), configStorePtr, ao::test::englishMessageCatalog()};
     coordinator.loadSession();
 
     coordinator.recordWindowSnapshot(WindowState{.width = 900, .height = 700, .maximized = false});
@@ -140,8 +138,8 @@ namespace ao::gtk::test
     };
     configStorePtr->saveAppPrefs(initialPrefs);
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, fixture.runtime(), configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator =
+      MainWindowCoordinator{window, fixture.runtime(), configStorePtr, ao::test::englishMessageCatalog()};
     auto const dependencies = coordinator.uiDependencies();
     auto const selection = audio::OutputDeviceSelection{
       .backendId = audio::BackendId{"pipewire"},
@@ -174,8 +172,7 @@ namespace ao::gtk::test
     auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, runtime, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr, ao::test::englishMessageCatalog()};
 
     coordinator.prepareSession();
 
@@ -204,8 +201,7 @@ namespace ao::gtk::test
     auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, runtime, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr, ao::test::englishMessageCatalog()};
 
     coordinator.loadSession();
 
@@ -224,8 +220,7 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, runtime, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr, ao::test::englishMessageCatalog()};
     coordinator.prepareSession();
 
     auto const trackId = addTrackWithTitle(runtime, "Before Import");
@@ -267,8 +262,7 @@ namespace ao::gtk::test
     REQUIRE(configStorePtr->saveAppSession(session));
 
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, runtime, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr, ao::test::englishMessageCatalog()};
     coordinator.loadSession();
     drainGtkEvents();
 
@@ -311,8 +305,7 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, runtime, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr, ao::test::englishMessageCatalog()};
 
     coordinator.prepareSession();
     coordinator.restorePlaybackSession();
@@ -348,8 +341,7 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{
-      window, runtime, configStorePtr, ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog()};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr, ao::test::englishMessageCatalog()};
 
     coordinator.prepareSession();
     coordinator.restorePlaybackSession();

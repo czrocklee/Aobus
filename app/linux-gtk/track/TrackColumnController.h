@@ -4,10 +4,10 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
@@ -38,7 +38,7 @@ namespace ao::gtk
 
     TrackColumnController(Gtk::ColumnView& columnView,
                           uimodel::TrackColumnLayoutStore& layoutStore,
-                          uimodel::PresentationTextCatalog textCatalog,
+                          i18n::MessageCatalog textCatalog,
                           ListId listId);
     ~TrackColumnController();
 
@@ -105,7 +105,7 @@ namespace ao::gtk
     ListId _listId;
     Gtk::ColumnView& _columnView;
     uimodel::TrackColumnLayoutStore& _layoutStore;
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
 
     std::vector<ColumnBinding> _columns;
     std::size_t _leadingUtilityColumnCount = 0;

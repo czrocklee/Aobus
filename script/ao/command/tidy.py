@@ -191,6 +191,10 @@ class TidyInvocation:
     def is_header(self) -> bool:
         return self.selected.suffix.lower() in {".h", ".hh", ".hpp", ".hxx"}
 
+    @property
+    def is_include_fragment(self) -> bool:
+        return self.selected.suffix.lower() == ".def"
+
 
 def build_invocations(
     plan: tidyengine.CompileCommandPlan,
@@ -925,7 +929,7 @@ def run_command(args: argparse.Namespace) -> int:
             checks = checks_for(mode, args.check)
             header_filter = args.header_filter or (
                 exact_header_filter([invocation.selected])
-                if invocation.is_header
+                if invocation.is_header or invocation.is_include_fragment
                 else (RELAXED_HEADER_FILTER if mode == "RELAXED" else STRICT_HEADER_FILTER)
             )
             extra: list[str] = list(isystem)
@@ -956,6 +960,7 @@ def run_command(args: argparse.Namespace) -> int:
             compile_database = header_database_dir if invocation.is_header else native_database_dir
             if compile_database is None:
                 raise die(f"synthetic compile database was not created for {invocation.selected}")
+            tidy_file = invocation.compile_command_source if invocation.is_include_fragment else invocation.selected
             command = [
                 clang_tidy,
                 "--quiet",
@@ -965,7 +970,7 @@ def run_command(args: argparse.Namespace) -> int:
                 f"-config={config}",
                 f"-header-filter={header_filter}",
                 *extra,
-                str(invocation.selected),
+                str(tidy_file),
             ]
             with open(log, "w", encoding="utf-8") as sink:
                 if args.debug:

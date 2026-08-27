@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <gtkmm/button.h>
@@ -13,30 +14,22 @@
 #include <gtkmm/scale.h>
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/widget.h>
-#include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 
 namespace ao::rt
 {
   class PlaybackService;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   /**
    * @brief A composite widget for controlling playback volume.
    */
   class VolumeControlWidget final
   {
   public:
-    VolumeControlWidget(rt::PlaybackService& playback,
-                        uimodel::PresentationTextCatalog const& textCatalog,
-                        GtkTextCatalog const& gtkTextCatalog);
+    VolumeControlWidget(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog);
     ~VolumeControlWidget();
 
     VolumeControlWidget(VolumeControlWidget const&) = delete;
@@ -60,7 +53,7 @@ namespace ao::gtk
     Gtk::Popover _scrollBubble;
     Gtk::Label _scrollBubbleLabel;
 
-    sigc::connection _scrollBubbleTimeout;
+    sigc::scoped_connection _scrollBubbleTimeout;
 
     bool _updating = false;
     uimodel::VolumeViewModel _volumeViewModel;

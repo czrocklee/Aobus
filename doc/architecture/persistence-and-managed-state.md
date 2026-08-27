@@ -94,7 +94,7 @@ Persistence through a shared file mechanism does not transfer that responsibilit
 |---|---|---|
 | Runtime workspace and custom track presentations | `WorkspaceService` | The `ConfigStore` owned by `AppRuntime`, at the path injected by GTK or TUI |
 | Restorable playback intent | `PlaybackSessionPersistence` behind `AppRuntime` | The injected playback-session `ConfigStore`; it may be the workspace store or a separately owned store |
-| Application-global preferences and session state | `AppStateStore` owns the group names, schemas, and compatibility rule; the frontend owns only the file | Any frontend's `ConfigStore`; today GTK's `AppConfigStore` |
+| Application-global preferences and session state | `AppState` owns the group names, schemas, and compatibility rule; the frontend owns only the file | Any frontend's `ConfigStore`; today GTK's `AppConfigStore` |
 | Global GTK window and keymap state | The GTK workflow plus the runtime/UIModel value owner for each payload | `AppConfigStore` and the GTK composition root |
 | Customized shell layout documents | UIModel layout document and validation code, coordinated by the GTK shell-layout workflow | `ShellLayoutStore`, one document per preset |
 | Shell layout component runtime state | UIModel component-state model, pruning, and promotion rules | `ShellLayoutComponentStateStore` |
@@ -313,8 +313,8 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h) and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own workspace snapshot and restore coordination.
 - [`WorkspaceSessionYamlSchema`](../../app/runtime/WorkspaceSessionYamlSchema.h) owns the strict workspace persistence DTO and stable presentation conversion.
 - [`PlaybackSessionYamlSchema`](../../app/runtime/PlaybackSessionYamlSchema.h) owns playback-session structural and semantic candidate validation; [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) owns scheduling, restore, and store use.
-- [`AppStateStore`](../../app/include/ao/rt/AppStateStore.h) owns the `runtime` and `session` group names, their schemas, and their optional-over-seed compatibility rule, for every frontend that keeps application-global state.
-- [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary and the GTK-only `window` group; it delegates the shared groups to `AppStateStore`.
+- [`AppState`](../../app/include/ao/rt/AppState.h) owns the `runtime` and `session` group names, their schemas, and their optional-over-seed compatibility rule, for every frontend that keeps application-global state.
+- [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary and the GTK-only `window` group; it delegates the shared groups to the `AppState` API.
 - [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation schemas own platform-neutral state and serialization helpers.
 - [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
   owns shared route-intent validation and fallback resolution without issuing a
@@ -338,7 +338,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects stable workspace presentation conversion and strict semantic rejection.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects exact deserialization, semantic validation, event-driven saving, discard, failure propagation, and store selection.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
-- [`AppStateStoreTest.cpp`](../../test/unit/runtime/AppStateStoreTest.cpp) protects the shared application groups, their seed-preserving reads, and per-group rejection isolation without composing a frontend.
+- [`AppStateTest.cpp`](../../test/unit/runtime/AppStateTest.cpp) protects the shared application groups, their seed-preserving reads, and per-group rejection isolation without composing a frontend.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect the GTK file boundary and delta-from-default keymaps.
 - [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
   protects the shared persisted-route admission rule.

@@ -4,12 +4,13 @@
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <ao/audio/Transport.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <functional>
 #include <utility>
@@ -42,7 +43,7 @@ namespace ao::uimodel
     }
 
     TransportViewState describeTransportButton(PlaybackCommand command,
-                                               PresentationTextCatalog const& textCatalog,
+                                               i18n::MessageCatalog const& textCatalog,
                                                rt::PlaybackTransportSnapshot const& transport,
                                                rt::PlaybackSuccessionSnapshot const& succession,
                                                bool enabled,
@@ -52,24 +53,24 @@ namespace ao::uimodel
       bool const isPlaying = isPresentedAsPlaying(transport.transport);
 
       view.icon = iconForCommand(command);
-      view.tooltip = textCatalog.transportControlLabel(command);
+      view.tooltip = transportControlLabel(textCatalog, command);
       view.enabled = enabled;
 
       if (showLabel)
       {
-        view.label = textCatalog.transportControlLabel(command);
+        view.label = transportControlLabel(textCatalog, command);
       }
 
       if (command == PlaybackCommand::PlayPause)
       {
         view.icon = isPlaying ? TransportIcon::Pause : TransportIcon::Play;
         auto const presentedCommand = isPlaying ? PlaybackCommand::Pause : PlaybackCommand::Play;
-        view.tooltip = textCatalog.transportControlLabel(presentedCommand);
+        view.tooltip = transportControlLabel(textCatalog, presentedCommand);
         view.playing = isPlaying;
 
         if (showLabel)
         {
-          view.label = textCatalog.transportControlLabel(presentedCommand);
+          view.label = transportControlLabel(textCatalog, presentedCommand);
         }
       }
       else if (command == PlaybackCommand::ToggleShuffle)
@@ -101,7 +102,7 @@ namespace ao::uimodel
 
   TransportViewModel::TransportViewModel(rt::PlaybackService& playback,
                                          PlaybackCommandSurface& commands,
-                                         PresentationTextCatalog textCatalog,
+                                         i18n::MessageCatalog textCatalog,
                                          PlaybackCommand command,
                                          bool showLabel,
                                          std::function<void(TransportViewState const&)> onRender)

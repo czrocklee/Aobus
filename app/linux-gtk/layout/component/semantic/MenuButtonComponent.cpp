@@ -8,6 +8,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -33,7 +34,7 @@ namespace ao::gtk::layout
       {
         // The vocabulary lets a document name the button; without one it is
         // still the application menu, and still has to describe itself.
-        auto const fallbackLabel = std::string{ctx.dependencies.gtkTextCatalog.text(GtkTextId::ApplicationMenu)};
+        auto const fallbackLabel = gtkText(ctx.dependencies.textCatalog, i18n::MessageId::GtkShellApplicationMenu);
         setTooltipAndAccessibleLabel(_button, node.propertyOr<std::string>(kTextProp, fallbackLabel));
 
         if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())

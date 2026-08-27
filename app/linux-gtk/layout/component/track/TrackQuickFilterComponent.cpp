@@ -31,7 +31,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackQuickFilterComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime, ctx.dependencies.textCatalog, ctx.dependencies.gtkTextCatalog, ctx.timeoutScheduler}
+        : _widget{ctx.runtime, ctx.dependencies.textCatalog, ctx.timeoutScheduler}
       {
         auto* const pageHost = ctx.dependencies.trackPageHost;
         auto createSmartListFromExpression = ctx.dependencies.createSmartListFromExpression;

@@ -5,6 +5,7 @@
 #include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
@@ -39,7 +40,7 @@
 #include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
 #include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/box.h>
@@ -147,9 +148,9 @@ namespace ao::gtk::layout
         , _notifications{ctx.runtime.notifications()}
         , _scope{ctx.detailScope}
         , _detailUndo{ctx.detailUndo}
-        , _metadataHeader{std::string{_textCatalog.text(MessageId::TrackMetadataHeading)}}
-        , _technicalHeader{std::string{_textCatalog.text(MessageId::TrackAudioPropertiesHeading)}}
-        , _showAllFieldsButton{std::string{_textCatalog.text(MessageId::TrackShowEmptyFields)}}
+        , _metadataHeader{gtkText(_textCatalog, MessageId::TrackMetadataHeading)}
+        , _technicalHeader{gtkText(_textCatalog, MessageId::TrackAudioPropertiesHeading)}
+        , _showAllFieldsButton{gtkText(_textCatalog, MessageId::TrackShowEmptyFields)}
         , _addMetadataButton{_textCatalog}
         , _compositePrimarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
         , _compositeSecondarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
@@ -258,7 +259,7 @@ namespace ao::gtk::layout
       bool shouldShowRow(BuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
       {
         auto const text = uimodel::formatTrackFieldDisplayText(
-          _textCatalog, row.field, snap, _textCatalog.text(MessageId::TrackMultipleValues), true);
+          _textCatalog, row.field, snap, gtkText(_textCatalog, MessageId::TrackMultipleValues), true);
         return shouldShowTrackFieldGridMetadataFieldRow(
           TrackFieldGridMetadataFieldVisibility{.metadataExpanded = _metadataExpanded,
                                                 .showEmptyMetadata = _showEmptyMetadata,
@@ -286,23 +287,23 @@ namespace ao::gtk::layout
       {
         if (_metadataExpanded)
         {
-          _metadataHeader.label.set_text(std::string{_textCatalog.text(MessageId::TrackMetadataHeading)});
+          _metadataHeader.label.set_text(gtkText(_textCatalog, MessageId::TrackMetadataHeading));
         }
         else
         {
           auto const titleText = validUtf8Text(uimodel::formatTrackFieldDisplayText(
-            _textCatalog, rt::TrackField::Title, snap, _textCatalog.text(MessageId::TrackMultipleValues), true));
+            _textCatalog, rt::TrackField::Title, snap, gtkText(_textCatalog, MessageId::TrackMultipleValues), true));
           auto const artistText = validUtf8Text(uimodel::formatTrackFieldDisplayText(
-            _textCatalog, rt::TrackField::Artist, snap, _textCatalog.text(MessageId::TrackMultipleValues), true));
+            _textCatalog, rt::TrackField::Artist, snap, gtkText(_textCatalog, MessageId::TrackMultipleValues), true));
 
           _metadataHeader.label.set_text(titleText.empty() && artistText.empty()
-                                           ? std::string{_textCatalog.text(MessageId::TrackMetadataHeading)}
+                                           ? gtkText(_textCatalog, MessageId::TrackMetadataHeading)
                                            : uimodel::formatMetadataHeader(titleText, artistText));
         }
 
         if (_technicalExpanded)
         {
-          _technicalHeader.label.set_text(std::string{_textCatalog.text(MessageId::TrackAudioPropertiesHeading)});
+          _technicalHeader.label.set_text(gtkText(_textCatalog, MessageId::TrackAudioPropertiesHeading));
         }
         else
         {
@@ -314,7 +315,7 @@ namespace ao::gtk::layout
             uimodel::formatTrackFieldDisplayText(_textCatalog, rt::TrackField::BitDepth, snap, "", false));
 
           _technicalHeader.label.set_text(codec.empty() && sampleRate.empty() && bitDepth.empty()
-                                            ? std::string{_textCatalog.text(MessageId::TrackAudioPropertiesHeading)}
+                                            ? gtkText(_textCatalog, MessageId::TrackAudioPropertiesHeading)
                                             : uimodel::formatTechnicalHeader(codec, sampleRate, bitDepth));
         }
       }
@@ -341,7 +342,7 @@ namespace ao::gtk::layout
           row.valueSlot.set_visible(_metadataExpanded);
         }
 
-        _metadataHeader.label.set_text(std::string{_textCatalog.text(MessageId::TrackMetadataHeading)});
+        _metadataHeader.label.set_text(gtkText(_textCatalog, MessageId::TrackMetadataHeading));
       }
 
       void updateMetadataVisibility(rt::TrackDetailSnapshot const& snap)
@@ -373,8 +374,8 @@ namespace ao::gtk::layout
       void handleToggleShowEmptyMetadata()
       {
         _showEmptyMetadata = !_showEmptyMetadata;
-        _showAllFieldsButton.set_label(std::string{
-          _textCatalog.text(_showEmptyMetadata ? MessageId::TrackHideEmptyFields : MessageId::TrackShowEmptyFields)});
+        _showAllFieldsButton.set_label(gtkText(
+          _textCatalog, _showEmptyMetadata ? MessageId::TrackHideEmptyFields : MessageId::TrackShowEmptyFields));
 
         if (_scope != nullptr)
         {
@@ -467,7 +468,8 @@ namespace ao::gtk::layout
       void configureBuiltInRow(BuiltInRow& row, bool isTechnical = false)
       {
         auto const* def = rt::trackFieldDefinition(row.field);
-        configureKeyLabel(row.label, std::string{def != nullptr ? _textCatalog.trackFieldLabel(def->field) : ""});
+        configureKeyLabel(
+          row.label, std::string{def != nullptr ? uimodel::trackFieldLabel(_textCatalog, def->field) : ""});
 
         row.label.set_opacity(kLabelOpacity);
         row.label.add_css_class("ao-property-label");
@@ -518,7 +520,8 @@ namespace ao::gtk::layout
       void configureCompositeRow(CompositeBuiltInRow& row)
       {
         auto const* def = rt::trackFieldDefinition(row.primaryField);
-        configureKeyLabel(row.label, std::string{def != nullptr ? _textCatalog.trackFieldLabel(def->field) : ""});
+        configureKeyLabel(
+          row.label, std::string{def != nullptr ? uimodel::trackFieldLabel(_textCatalog, def->field) : ""});
 
         row.label.set_opacity(kLabelOpacity);
         row.label.add_css_class("ao-property-label");
@@ -586,7 +589,7 @@ namespace ao::gtk::layout
         }
 
         auto const displayText = validUtf8Text(uimodel::formatTrackFieldDisplayText(
-          _textCatalog, row.field, snap, _textCatalog.text(MessageId::TrackMultipleValues), true));
+          _textCatalog, row.field, snap, gtkText(_textCatalog, MessageId::TrackMultipleValues), true));
         row.valueEditor.setText(displayText);
         row.valueEditor.set_tooltip_text(displayText);
       }
@@ -697,12 +700,13 @@ namespace ao::gtk::layout
 
         auto const newValue = row->valueEditor.text().raw();
 
-        if (isProtectedFieldEditValue(field, snap, newValue, _textCatalog.text(MessageId::TrackMultipleValues), false))
+        if (isProtectedFieldEditValue(
+              field, snap, newValue, gtkText(_textCatalog, MessageId::TrackMultipleValues), false))
         {
           return;
         }
 
-        if (!applyFieldEdit(field, newValue, snap, _textCatalog.text(MessageId::TrackMultipleValues), true))
+        if (!applyFieldEdit(field, newValue, snap, gtkText(_textCatalog, MessageId::TrackMultipleValues), true))
         {
           updateBuiltInRow(*row, snap);
         }
@@ -818,18 +822,18 @@ namespace ao::gtk::layout
         row.deleteButton.set_has_frame(false);
         row.deleteButton.add_css_class("ao-icon-button");
         row.deleteButton.add_css_class("ao-detail-field-delete");
-        setTooltipAndAccessibleLabel(row.deleteButton, _textCatalog.text(MessageId::GtkCustomMetadataDelete));
+        setTooltipAndAccessibleLabel(row.deleteButton, gtkText(_textCatalog, MessageId::GtkCustomMetadataDelete));
         row.deleteButton.signal_clicked().connect([this, key = row.key] { handleCustomDeleted(key); });
 
         row.partialIcon.set_from_icon_name("dialog-warning-symbolic");
         row.partialIcon.set_opacity(kLabelOpacity);
-        row.partialIcon.set_tooltip_text(std::string{_textCatalog.text(MessageId::TrackMissingOnSome)});
+        row.partialIcon.set_tooltip_text(gtkText(_textCatalog, MessageId::TrackMissingOnSome));
       }
 
       void updateCustomRow(CustomRow& row, rt::CustomMetadataItem const& item)
       {
         auto const displayText = validUtf8Text(
-          uimodel::formatTrackCustomMetadataDisplayText(item, _textCatalog.text(MessageId::TrackMultipleValues)));
+          uimodel::formatTrackCustomMetadataDisplayText(item, gtkText(_textCatalog, MessageId::TrackMultipleValues)));
         auto const show = shouldShowTrackFieldGridMetadataFieldRow(
           TrackFieldGridMetadataFieldVisibility{.metadataExpanded = _metadataExpanded,
                                                 .showEmptyMetadata = _showEmptyMetadata,
@@ -896,7 +900,7 @@ namespace ao::gtk::layout
         auto const newValue = row->editor.text().raw();
 
         if (uimodel::isProtectedTrackCustomMetadataEditText(
-              newValue, _textCatalog.text(MessageId::TrackMultipleValues)))
+              newValue, gtkText(_textCatalog, MessageId::TrackMultipleValues)))
         {
           return;
         }
@@ -997,12 +1001,12 @@ namespace ao::gtk::layout
             case rt::AuthoringStatus::NoOp: return false;
             case rt::AuthoringStatus::Busy:
               _notifications.post(rt::NotificationSeverity::Warning,
-                                  std::string{_textCatalog.text(MessageId::LibraryBusyTryAgain)},
+                                  gtkText(_textCatalog, MessageId::LibraryBusyTryAgain),
                                   rt::NotificationLifetime::transient());
               return true;
-            case rt::AuthoringStatus::Stale: message = _textCatalog.text(MessageId::TrackEditStale); break;
+            case rt::AuthoringStatus::Stale: message = gtkText(_textCatalog, MessageId::TrackEditStale); break;
             case rt::AuthoringStatus::Unavailable:
-              message = _textCatalog.text(MessageId::TrackEditingUnavailable);
+              message = gtkText(_textCatalog, MessageId::TrackEditingUnavailable);
               break;
           }
         }
@@ -1192,7 +1196,7 @@ namespace ao::gtk::layout
 
       void configureValueEditor(DetailFieldEditor& editor)
       {
-        editor.setEditActionText(_textCatalog.text(MessageId::GtkEditValue));
+        editor.setEditActionText(gtkText(_textCatalog, MessageId::GtkEditValue));
         editor.set_halign(Gtk::Align::FILL);
         editor.set_hexpand(true);
         editor.set_overflow(Gtk::Overflow::HIDDEN);
@@ -1303,7 +1307,7 @@ namespace ao::gtk::layout
       }
 
       Gtk::Grid _grid;
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       DetailEditCoordinator _editCoordinator;
       rt::AppRuntime& _runtime;
       rt::Library& _library;

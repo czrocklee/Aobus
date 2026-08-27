@@ -7,6 +7,7 @@
 #include "app/ThemeCoordinator.h"
 #include "app/WindowState.h"
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 
 #include <cstdint>
@@ -17,7 +18,6 @@ namespace ao::uimodel
 {
   class PlaybackCommandSurface;
   class ListPresentationPreferenceStore;
-  class PresentationTextCatalog;
 }
 namespace ao::rt
 {
@@ -29,7 +29,6 @@ namespace Gtk
 }
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   class AppConfigStore;
   class TrackRowCache;
   class ListNavigationController;
@@ -51,8 +50,7 @@ namespace ao::gtk
     MainWindowCoordinator(Gtk::Window& window,
                           rt::AppRuntime& runtime,
                           std::shared_ptr<AppConfigStore> configStorePtr,
-                          uimodel::PresentationTextCatalog const& textCatalog,
-                          GtkTextCatalog const& gtkTextCatalog);
+                          i18n::MessageCatalog const& textCatalog);
     ~MainWindowCoordinator();
 
     // Not copyable or movable

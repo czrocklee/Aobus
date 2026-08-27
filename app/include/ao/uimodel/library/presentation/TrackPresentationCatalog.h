@@ -5,8 +5,8 @@
 
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <optional>
@@ -43,7 +43,7 @@ namespace ao::uimodel
   class TrackPresentationCatalog final
   {
   public:
-    TrackPresentationCatalog(rt::WorkspaceService& workspace, PresentationTextCatalog textCatalog);
+    TrackPresentationCatalog(rt::WorkspaceService& workspace, i18n::MessageCatalog textCatalog);
 
     std::span<rt::TrackPresentationPreset const> builtinPresets() const noexcept;
     std::span<rt::CustomTrackPresentationPreset const> customPresentations() const noexcept;
@@ -62,6 +62,6 @@ namespace ao::uimodel
     rt::WorkspaceService& _workspace;
     async::Subscription _customPresetsSub;
     async::Signal<> _changed;
-    PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
   };
 } // namespace ao::uimodel

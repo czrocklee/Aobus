@@ -3,7 +3,7 @@
 
 #include <ao/winui/library/LibraryTransferAdapter.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 
@@ -35,7 +35,7 @@ namespace ao::winui::test
 
   TEST_CASE("Library restore preview - preserves every shared dry-run field", "[winui][unit][library-transfer]")
   {
-    auto const state = makeLibraryRestorePreviewState(ao::test::englishPresentationTextCatalog(),
+    auto const state = makeLibraryRestorePreviewState(ao::test::englishMessageCatalog(),
                                                       rt::ImportReport{
                                                         .payloadVersion = 5,
                                                         .payloadMode = rt::ExportMode::Full,
@@ -59,7 +59,7 @@ namespace ao::winui::test
   TEST_CASE("Library restore preview - list-only payload names the narrower destructive scope",
             "[winui][unit][library-transfer]")
   {
-    auto const state = makeLibraryRestorePreviewState(ao::test::englishPresentationTextCatalog(),
+    auto const state = makeLibraryRestorePreviewState(ao::test::englishMessageCatalog(),
                                                       rt::ImportReport{
                                                         .payloadVersion = 5,
                                                         .payloadMode = rt::ExportMode::ListOnly,

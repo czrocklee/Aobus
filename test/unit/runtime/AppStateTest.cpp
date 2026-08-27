@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/rt/AppStateStore.h>
+#include <ao/rt/AppState.h>
 
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
-#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,7 +35,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("AppStateStore - application state round-trips without a frontend", "[runtime][unit][config]")
+  TEST_CASE("AppState - application state round-trips without a frontend", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -78,7 +77,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AppStateStore - an absent group leaves the caller's state untouched", "[runtime][unit][config]")
+  TEST_CASE("AppState - an absent group leaves the caller's state untouched", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto store = ConfigStore{tempDir.path() / "config.yaml"};
@@ -92,7 +91,7 @@ namespace ao::rt::test
     CHECK(session.lastLibraryPath == "/seeded");
   }
 
-  TEST_CASE("AppStateStore - a document written by another build stays readable", "[runtime][unit][config]")
+  TEST_CASE("AppState - a document written by another build stays readable", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -128,7 +127,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AppStateStore - a malformed known field rejects only its own group", "[runtime][unit][config]")
+  TEST_CASE("AppState - a malformed known field rejects only its own group", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";

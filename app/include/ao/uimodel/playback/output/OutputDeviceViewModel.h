@@ -6,10 +6,10 @@
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <functional>
@@ -57,7 +57,7 @@ namespace ao::uimodel
 
     /// @param intent Where a requested route is recorded; `OutputDeviceIntent::discarded()` keeps none.
     OutputDeviceViewModel(rt::PlaybackService& playback,
-                          PresentationTextCatalog textCatalog,
+                          i18n::MessageCatalog textCatalog,
                           RenderCallback onRender,
                           OutputDeviceIntent intent);
 
@@ -82,7 +82,7 @@ namespace ao::uimodel
     rt::PlaybackCommands& _commands;
     RenderCallback _onRender;
     OutputDeviceIntent _intent;
-    PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::OutputState _lastOutput{};
 
     async::Subscription _snapshotSub;

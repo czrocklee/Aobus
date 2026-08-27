@@ -7,6 +7,7 @@
 #include "EmbeddedCatalogData.h"
 #include "MessageIds.h"
 #include "SystemLocale.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/String.h>
@@ -377,8 +378,8 @@ namespace ao::i18n
   struct MessageCatalog::Impl final
   {
     std::string requestedLocale;
-    std::array<CompiledMessage, detail::kMessageDefinitions.size()> messages;
-    mutable std::array<std::mutex, detail::kMessageDefinitions.size()> formatterMutexes;
+    std::array<CompiledMessage, detail::kMessageDefinitionCount> messages;
+    mutable std::array<std::mutex, detail::kMessageDefinitionCount> formatterMutexes;
   };
 
   MessageCatalog::MessageCatalog(std::shared_ptr<Impl const> implPtr)
@@ -645,5 +646,38 @@ namespace ao::i18n
                                                  std::initializer_list<MessageArgument> const arguments) const
   {
     return format(id, std::span{arguments.begin(), arguments.size()});
+  }
+
+  std::string_view requiredText(MessageCatalog const& catalog, MessageId const id)
+  {
+    auto result = catalog.text(id);
+
+    if (!result)
+    {
+      AO_FATAL("Could not resolve required message: {}", result.error().message);
+    }
+
+    return *result;
+  }
+
+  std::string requiredFormat(MessageCatalog const& catalog,
+                             MessageId const id,
+                             std::span<MessageArgument const> const arguments)
+  {
+    auto result = catalog.format(id, arguments);
+
+    if (!result)
+    {
+      AO_FATAL("Could not format required message: {}", result.error().message);
+    }
+
+    return std::move(result->text);
+  }
+
+  std::string requiredFormat(MessageCatalog const& catalog,
+                             MessageId const id,
+                             std::initializer_list<MessageArgument> const arguments)
+  {
+    return requiredFormat(catalog, id, std::span{arguments.begin(), arguments.size()});
   }
 } // namespace ao::i18n

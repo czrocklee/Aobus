@@ -7,6 +7,7 @@
 #include "app/FormBuilder.h"
 #include "common/UiWorkflow.h"
 #include "completion/EntryCompletionController.h"
+#include "i18n/GtkTextCatalog.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
@@ -20,7 +21,6 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
-#include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -68,7 +68,7 @@ namespace ao::gtk
                                                async::Runtime& asyncRuntime,
                                                rt::Library& library,
                                                rt::CompletionService& completion,
-                                               uimodel::PresentationTextCatalog textCatalog,
+                                               i18n::MessageCatalog textCatalog,
                                                TrackRowCache& rowCache,
                                                std::vector<TrackId> trackIds)
     : AppDialog{}
@@ -82,8 +82,9 @@ namespace ao::gtk
     , _formModel{_textCatalog}
   {
     auto const title =
-      _multipleTracks ? _textCatalog.format(MessageId::GtkTrackPropertiesSelectedTitle, {{"count", _trackIds.size()}})
-                      : std::string{_textCatalog.text(MessageId::GtkTrackPropertiesTitle)};
+      _multipleTracks
+        ? i18n::requiredFormat(_textCatalog, MessageId::GtkTrackPropertiesSelectedTitle, {{"count", _trackIds.size()}})
+        : gtkText(_textCatalog, MessageId::GtkTrackPropertiesTitle);
 
     set_title(title);
     configureForParent(parent);
@@ -101,8 +102,8 @@ namespace ao::gtk
     }
     else
     {
-      _sessionErrorLabel.set_text(
-        _textCatalog.format(MessageId::GtkTrackEditingUnavailable, {{"detail", sessionRes.error().message}}));
+      _sessionErrorLabel.set_text(i18n::requiredFormat(
+        _textCatalog, MessageId::GtkTrackEditingUnavailable, {{"detail", sessionRes.error().message}}));
       _sessionErrorLabel.set_visible(true);
 
       for (auto const& editor : _editors)
@@ -120,8 +121,8 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::buildUi()
   {
-    addCancelAction(std::string{_textCatalog.text(MessageId::GtkCommonClose)}, Gtk::ResponseType::CLOSE);
-    _saveButton = addPrimaryAction(std::string{_textCatalog.text(MessageId::GtkCommonSave)}, Gtk::ResponseType::OK);
+    addCancelAction(gtkText(_textCatalog, MessageId::GtkCommonClose), Gtk::ResponseType::CLOSE);
+    _saveButton = addPrimaryAction(gtkText(_textCatalog, MessageId::GtkCommonSave), Gtk::ResponseType::OK);
     _saveButton->set_sensitive(false);
     _saveButton->signal_clicked().connect([this] { handleSaveClicked(); });
 
@@ -174,7 +175,7 @@ namespace ao::gtk
     }
 
     _metadataBox.append(*list);
-    _notebook.append_page(_metadataScroll, std::string{_textCatalog.text(MessageId::TrackMetadataHeading)});
+    _notebook.append_page(_metadataScroll, gtkText(_textCatalog, MessageId::TrackMetadataHeading));
   }
 
   void TrackPropertiesDialog::buildPropertiesTab()
@@ -206,7 +207,7 @@ namespace ao::gtk
     }
 
     _propertiesBox.append(*list);
-    _notebook.append_page(_propertiesScroll, std::string{_textCatalog.text(MessageId::GtkTrackPropertiesTitle)});
+    _notebook.append_page(_propertiesScroll, gtkText(_textCatalog, MessageId::GtkTrackPropertiesTitle));
   }
 
   Gtk::Widget* TrackPropertiesDialog::createEditorWidget(rt::TrackField field,
@@ -342,59 +343,57 @@ namespace ao::gtk
     }
 
     _saveButton->set_sensitive(false);
-    spawnUiTask(_asyncRuntime,
-                _tasks,
-                *this,
-                "track properties save",
-                _editSessionPtr->submitMetadata(std::move(patch)),
-                [](TrackPropertiesDialog* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
-                {
-                  owner->updateSaveEnabled();
+    spawnUiTask(
+      _asyncRuntime,
+      _tasks,
+      *this,
+      "track properties save",
+      _editSessionPtr->submitMetadata(std::move(patch)),
+      [](TrackPropertiesDialog* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
+      {
+        owner->updateSaveEnabled();
 
-                  if (!replyRes)
-                  {
-                    AppDialog::presentMessage(
-                      *owner,
-                      std::string{owner->_textCatalog.text(MessageId::GtkTrackSaveFailed)},
-                      replyRes.error().message,
-                      {AppDialogAction{.label = std::string{owner->_textCatalog.text(MessageId::GtkCommonClose)},
-                                       .responseId = Gtk::ResponseType::CLOSE,
-                                       .role = AppDialogActionRole::Cancel}},
-                      Gtk::ResponseType::CLOSE);
-                    return;
-                  }
+        if (!replyRes)
+        {
+          AppDialog::presentMessage(*owner,
+                                    gtkText(owner->_textCatalog, MessageId::GtkTrackSaveFailed),
+                                    replyRes.error().message,
+                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::GtkCommonClose),
+                                                     .responseId = Gtk::ResponseType::CLOSE,
+                                                     .role = AppDialogActionRole::Cancel}},
+                                    Gtk::ResponseType::CLOSE);
+          return;
+        }
 
-                  if (replyRes->status == rt::AuthoringStatus::Busy)
-                  {
-                    AppDialog::presentMessage(
-                      *owner,
-                      std::string{owner->_textCatalog.text(MessageId::GtkTrackSaveFailed)},
-                      std::string{owner->_textCatalog.text(MessageId::LibraryBusyTryAgain)},
-                      {AppDialogAction{.label = std::string{owner->_textCatalog.text(MessageId::GtkCommonClose)},
-                                       .responseId = Gtk::ResponseType::CLOSE,
-                                       .role = AppDialogActionRole::Cancel}},
-                      Gtk::ResponseType::CLOSE);
-                    return;
-                  }
+        if (replyRes->status == rt::AuthoringStatus::Busy)
+        {
+          AppDialog::presentMessage(*owner,
+                                    gtkText(owner->_textCatalog, MessageId::GtkTrackSaveFailed),
+                                    gtkText(owner->_textCatalog, MessageId::LibraryBusyTryAgain),
+                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::GtkCommonClose),
+                                                     .responseId = Gtk::ResponseType::CLOSE,
+                                                     .role = AppDialogActionRole::Cancel}},
+                                    Gtk::ResponseType::CLOSE);
+          return;
+        }
 
-                  if (replyRes->status != rt::AuthoringStatus::Applied && replyRes->status != rt::AuthoringStatus::NoOp)
-                  {
-                    AppDialog::presentMessage(
-                      *owner,
-                      std::string{owner->_textCatalog.text(MessageId::GtkTrackSaveStaleTitle)},
-                      std::string{owner->_textCatalog.text(MessageId::GtkTrackSaveStale)},
-                      {AppDialogAction{.label = std::string{owner->_textCatalog.text(MessageId::GtkCommonClose)},
-                                       .responseId = Gtk::ResponseType::CLOSE,
-                                       .role = AppDialogActionRole::Cancel}},
-                      Gtk::ResponseType::CLOSE);
-                    return;
-                  }
+        if (replyRes->status != rt::AuthoringStatus::Applied && replyRes->status != rt::AuthoringStatus::NoOp)
+        {
+          AppDialog::presentMessage(*owner,
+                                    gtkText(owner->_textCatalog, MessageId::GtkTrackSaveStaleTitle),
+                                    gtkText(owner->_textCatalog, MessageId::GtkTrackSaveStale),
+                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::GtkCommonClose),
+                                                     .responseId = Gtk::ResponseType::CLOSE,
+                                                     .role = AppDialogActionRole::Cancel}},
+                                    Gtk::ResponseType::CLOSE);
+          return;
+        }
 
-                  for (auto const& change : replyRes->reply.changes)
-                  {
-                    owner->_rowCache.invalidate(change.trackId);
-                  }
-                });
+        for (auto const& change : replyRes->reply.changes)
+        {
+          owner->_rowCache.invalidate(change.trackId);
+        }
+      });
   }
 
   void TrackPropertiesDialog::updateSaveEnabled()

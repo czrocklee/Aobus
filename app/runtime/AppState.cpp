@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/rt/AppStateStore.h>
+#include <ao/rt/AppState.h>
 
 #include <ao/Error.h>
-#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/yaml/Serialization.h>
@@ -84,7 +83,7 @@ namespace ao::rt
     {
       if (auto const result = store.load(group, state, schema); !result && result.error().code != Error::Code::NotFound)
       {
-        APP_LOG_DEBUG("AppStateStore: Failed to load {}: {}", description, result.error().message);
+        APP_LOG_DEBUG("AppState: Failed to load {}: {}", description, result.error().message);
       }
     }
   } // namespace

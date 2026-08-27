@@ -7,6 +7,7 @@
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 
@@ -45,10 +46,8 @@ namespace ao::gtk
     constexpr guint kInvalidListPosition = std::numeric_limits<guint>::max();
   }
 
-  ListNavigationPanel::ListNavigationPanel(uimodel::PresentationTextCatalog textCatalog,
-                                           GtkTextCatalog const& gtkTextCatalog,
-                                           Callbacks callbacks)
-    : _callbacks{std::move(callbacks)}, _textCatalog{std::move(textCatalog)}, _gtkTextCatalog{gtkTextCatalog}
+  ListNavigationPanel::ListNavigationPanel(i18n::MessageCatalog textCatalog, Callbacks callbacks)
+    : _callbacks{std::move(callbacks)}, _textCatalog{std::move(textCatalog)}
   {
     _listScrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _listScrolledWindow.set_child(_listView);
@@ -93,11 +92,11 @@ namespace ao::gtk
     _listView.set_header_factory(headerFactoryPtr);
 
     auto menuModelPtr = Gio::Menu::create();
-    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListNew), "win.list-new-smart-list");
-    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListNewPlaylist), "win.list-new-playlist");
-    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListEdit), "win.list-edit");
-    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListDelete), "win.list-delete");
-    menuModelPtr->append(_gtkTextCatalog.text(GtkTextId::ListDeleteSubtree), "win.list-delete-subtree");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListNew), "win.list-new-smart-list");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListNewPlaylist), "win.list-new-playlist");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListEdit), "win.list-edit");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListDelete), "win.list-delete");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListDeleteSubtree), "win.list-delete-subtree");
     _listContextMenu.set_menu_model(menuModelPtr);
     _listContextMenu.set_parent(_listView);
   }

@@ -17,7 +17,7 @@ Exact built-in labels and descriptions belong to the [presentation text catalog]
 
 The stable ids and structural specs belong to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md) and are consumed through the [presentation architecture](../../architecture/presentation.md).
 Their public values live in `app/include/ao/rt/TrackPresentation.h` and their authoritative definitions live in `app/runtime/TrackPresentation.cpp`.
-UIModel joins those values with `PresentationTextCatalog`; frontends do not redefine ids, shapes, or shared authored copy.
+UIModel joins those values with `builtinTrackPresentation` over `MessageCatalog`; frontends do not redefine ids, shapes, or shared authored copy.
 
 ## Surface
 
@@ -58,12 +58,12 @@ Labels and descriptions may evolve only with matching UIModel catalog tests and 
 
 - [`TrackPresentation.cpp`](../../../app/runtime/TrackPresentation.cpp) owns the exact catalog.
 - [`TrackPresentation.h`](../../../app/include/ao/rt/TrackPresentation.h) owns preset and spec shapes.
-- [`PresentationTextCatalog.cpp`](../../../app/uimodel/presentation/PresentationTextCatalog.cpp) owns built-in labels and descriptions.
+- [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp) owns built-in labels and descriptions.
 
 ## Test authority
 
 - [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks the established catalog ids and most preset shapes; `classical-conductors` still needs its own focused shape assertion.
-- [`PresentationTextCatalogTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
+- [`PresentationTextTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
 
 ## Related documents
 

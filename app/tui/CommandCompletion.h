@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -13,14 +14,8 @@
 #include <string>
 #include <string_view>
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::tui
 {
-  class TuiTextCatalog;
   class ShellInteractionModel;
   inline constexpr std::size_t kInputCompletionResultLimit = 8;
 
@@ -32,8 +27,7 @@ namespace ao::tui
       filterCompleter{};
   };
 
-  std::optional<rt::CompletionResult> completeCommandDraft(uimodel::PresentationTextCatalog const& textCatalog,
-                                                           TuiTextCatalog const& tuiTextCatalog,
+  std::optional<rt::CompletionResult> completeCommandDraft(i18n::MessageCatalog const& textCatalog,
                                                            std::string_view draft,
                                                            CommandCompletionContext const& context,
                                                            std::size_t limit = kInputCompletionResultLimit);

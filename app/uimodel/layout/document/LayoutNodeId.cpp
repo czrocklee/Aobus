@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 
-#include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -139,16 +139,17 @@ namespace ao::uimodel
     visitNodeRecursive(layout.effectiveRoot(), visitor);
   }
 
-  std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(PreparedLayout const& layout)
+  std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(PreparedLayout const& layout,
+                                                                    LayoutComponentCatalog const& catalog)
   {
     auto diagnostics = std::vector<LayoutNodeIdDiagnostic>{};
     auto seenNodeTypesById = LayoutNodeTypesById{};
 
     visitExpandedLayoutNodes(
       layout,
-      [&diagnostics, &seenNodeTypesById](LayoutNode const& node)
+      [&diagnostics, &seenNodeTypesById, &catalog](LayoutNode const& node)
       {
-        if (!isStatefulLayoutComponentType(node.type))
+        if (auto const optDescriptor = catalog.descriptor(node.type); !optDescriptor || !optDescriptor->persistentState)
         {
           return;
         }

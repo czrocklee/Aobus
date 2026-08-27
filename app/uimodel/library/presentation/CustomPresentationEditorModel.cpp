@@ -3,9 +3,10 @@
 
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <cstddef>
 #include <optional>
@@ -15,14 +16,14 @@
 
 namespace ao::uimodel
 {
-  CustomPresentationEditorModel::CustomPresentationEditorModel(PresentationTextCatalog const& textCatalog)
+  CustomPresentationEditorModel::CustomPresentationEditorModel(i18n::MessageCatalog const& textCatalog)
     : _groupOptions{makeGroupOptions(textCatalog)}
     , _sortFieldOptions{makeSortFieldOptions(textCatalog)}
     , _visibleFieldOptions{makeVisibleFieldOptions(textCatalog)}
   {
   }
 
-  CustomPresentationEditorModel::CustomPresentationEditorModel(PresentationTextCatalog const& textCatalog,
+  CustomPresentationEditorModel::CustomPresentationEditorModel(i18n::MessageCatalog const& textCatalog,
                                                                rt::TrackPresentationSpec const& spec,
                                                                std::string_view label)
     : CustomPresentationEditorModel{textCatalog}
@@ -156,7 +157,7 @@ namespace ao::uimodel
   }
 
   std::vector<TrackGroupKeyOption> CustomPresentationEditorModel::makeGroupOptions(
-    PresentationTextCatalog const& textCatalog)
+    i18n::MessageCatalog const& textCatalog)
   {
     auto const keys = std::vector{
       rt::TrackGroupKey::None,
@@ -176,14 +177,14 @@ namespace ao::uimodel
 
     for (auto const key : keys)
     {
-      options.push_back({.value = key, .label = std::string{textCatalog.trackGroupKeyLabel(key)}});
+      options.push_back({.value = key, .label = std::string{trackGroupKeyLabel(textCatalog, key)}});
     }
 
     return options;
   }
 
   std::vector<TrackSortFieldOption> CustomPresentationEditorModel::makeSortFieldOptions(
-    PresentationTextCatalog const& textCatalog)
+    i18n::MessageCatalog const& textCatalog)
   {
     auto options = std::vector<TrackSortFieldOption>{};
     auto const defs = rt::trackFieldDefinitions();
@@ -196,7 +197,7 @@ namespace ao::uimodel
       {
         if (def.optSortField == sortField)
         {
-          options.push_back({.value = sortField, .label = std::string{textCatalog.trackFieldLabel(def.field)}});
+          options.push_back({.value = sortField, .label = std::string{trackFieldLabel(textCatalog, def.field)}});
           break;
         }
       }
@@ -206,7 +207,7 @@ namespace ao::uimodel
   }
 
   std::vector<TrackVisibleFieldOption> CustomPresentationEditorModel::makeVisibleFieldOptions(
-    PresentationTextCatalog const& textCatalog)
+    i18n::MessageCatalog const& textCatalog)
   {
     auto options = std::vector<TrackVisibleFieldOption>{};
 
@@ -214,7 +215,7 @@ namespace ao::uimodel
     {
       if (def.presentable)
       {
-        options.push_back({.value = def.field, .label = std::string{textCatalog.trackFieldLabel(def.field)}});
+        options.push_back({.value = def.field, .label = std::string{trackFieldLabel(textCatalog, def.field)}});
       }
     }
 

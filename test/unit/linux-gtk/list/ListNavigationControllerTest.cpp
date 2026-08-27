@@ -9,11 +9,10 @@
 #include "list/ListNavigationPanel.h"
 #include "list/ListTreeItem.h"
 #include "list/SmartListDialog.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTextCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
@@ -176,7 +175,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishPresentationTextCatalog()};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
 
     auto selectedId = ListId{999};
     bool rejectSelection = false;
@@ -204,12 +203,8 @@ namespace ao::gtk::test
                                                          }};
 
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller = ListNavigationController{window,
-                                               fixture.runtime(),
-                                               ao::test::englishPresentationTextCatalog(),
-                                               englishGtkTextCatalog(),
-                                               std::move(callbacks),
-                                               themeCoordinator};
+    auto controller = ListNavigationController{
+      window, fixture.runtime(), ao::test::englishMessageCatalog(), std::move(callbacks), themeCoordinator};
     window.set_child(controller.widget());
 
     SECTION("rebuildTree populates the navigation panel")
@@ -713,14 +708,10 @@ namespace ao::gtk::test
                                          library, {.title = "Tagged Track", .tags = {"road-trip"}});
                                      }};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishPresentationTextCatalog()};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller = ListNavigationController{window,
-                                               fixture.runtime(),
-                                               ao::test::englishPresentationTextCatalog(),
-                                               englishGtkTextCatalog(),
-                                               {},
-                                               themeCoordinator};
+    auto controller =
+      ListNavigationController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
     window.set_child(controller.widget());
     auto groupPtr = Gio::SimpleActionGroup::create();
     controller.addActionsTo(*groupPtr);
@@ -767,8 +758,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const listId = createList(fixture.runtime(), "Retired Selection Source");
     std::int32_t selectionChangedCount = 0;
     auto panel = ListNavigationPanel{
-      ao::test::englishPresentationTextCatalog(),
-      englishGtkTextCatalog(),
+      ao::test::englishMessageCatalog(),
       {.onSelectionChanged = [&](ListId) { ++selectionChangedCount; }, .onContextMenuRequested = {}}};
 
     panel.rebuildTree(fixture.runtime().library());
@@ -792,7 +782,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto panel = ListNavigationPanel{ao::test::englishPresentationTextCatalog(), englishGtkTextCatalog(), {}};
+    auto panel = ListNavigationPanel{ao::test::englishMessageCatalog(), {}};
     auto host = GtkWindowFixture{};
     host.mount(panel.widget());
 

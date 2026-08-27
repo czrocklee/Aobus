@@ -3,8 +3,9 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -21,7 +22,7 @@ namespace ao::winui
   {
     winrt::Microsoft::UI::Xaml::Controls::Button button{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ContentControl soul{nullptr};
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     bool hasComplexTooltip = false;
     /// Whether the soul carries the play or pause glyph the transport state names.
     bool showGlyph = true;
@@ -60,7 +61,7 @@ namespace ao::winui
 
     winrt::Microsoft::UI::Xaml::Controls::Button _button{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ContentControl _soul{nullptr};
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     bool _hasComplexTooltip = false;
     bool _showGlyph = true;
     bool _activatesOnClick = true;

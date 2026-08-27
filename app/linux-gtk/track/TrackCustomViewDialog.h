@@ -4,9 +4,9 @@
 #pragma once
 
 #include "app/AppDialog.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
@@ -22,7 +22,7 @@ namespace ao::gtk
   {
   public:
     TrackCustomViewDialog(Gtk::Window& parent,
-                          uimodel::PresentationTextCatalog textCatalog,
+                          i18n::MessageCatalog textCatalog,
                           rt::TrackPresentationSpec const& initialSpec,
                           std::string_view initialLabel);
 
@@ -41,7 +41,7 @@ namespace ao::gtk
     Gtk::ListBox _sortTermsList;
     Gtk::ListBox _visibleFieldsList;
 
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     uimodel::CustomPresentationEditorModel _model;
   };
 } // namespace ao::gtk

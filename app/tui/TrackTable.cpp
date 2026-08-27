@@ -19,7 +19,6 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -101,7 +100,7 @@ namespace ao::tui
       return ftxui::text("|") | ftxui::dim;
     }
 
-    rt::TrackFieldRawValue rawValueForField(uimodel::PresentationTextCatalog const& textCatalog,
+    rt::TrackFieldRawValue rawValueForField(i18n::MessageCatalog const& textCatalog,
                                             rt::TrackField const field,
                                             rt::TrackRow const& row)
     {
@@ -154,7 +153,7 @@ namespace ao::tui
       return rt::TrackFieldRawValue{};
     }
 
-    std::string formatFieldDisplayText(uimodel::PresentationTextCatalog const& textCatalog,
+    std::string formatFieldDisplayText(i18n::MessageCatalog const& textCatalog,
                                        rt::TrackField const field,
                                        rt::TrackRow const& row)
     {
@@ -205,7 +204,7 @@ namespace ao::tui
       return std::max(0, availableColumns - chromeColumns);
     }
 
-    std::vector<TrackColumn> columnsForPresentation(uimodel::PresentationTextCatalog const& textCatalog,
+    std::vector<TrackColumn> columnsForPresentation(i18n::MessageCatalog const& textCatalog,
                                                     rt::TrackPresentationSpec const& presentation,
                                                     std::vector<TrackColumnWidthOverride> const* const columnWidths,
                                                     std::int32_t const availableColumns)
@@ -296,7 +295,7 @@ namespace ao::tui
       return hbox(std::move(cells));
     }
 
-    ftxui::Element trackRow(uimodel::PresentationTextCatalog const& textCatalog,
+    ftxui::Element trackRow(i18n::MessageCatalog const& textCatalog,
                             TrackListEntry const& track,
                             TrackId const playingTrackId,
                             std::vector<TrackColumn> const& columns)
@@ -331,7 +330,7 @@ namespace ao::tui
       return hbox(std::move(cells));
     }
 
-    std::string sectionDetailText(uimodel::PresentationTextCatalog const& textCatalog, TrackSection const& section)
+    std::string sectionDetailText(i18n::MessageCatalog const& textCatalog, TrackSection const& section)
     {
       auto details = std::vector<std::string>{};
 
@@ -345,7 +344,7 @@ namespace ao::tui
         details.push_back(section.tertiaryText);
       }
 
-      details.push_back(textCatalog.format(i18n::MessageId::TrackCount, {{"count", section.rowCount}}));
+      details.push_back(i18n::requiredFormat(textCatalog, i18n::MessageId::TrackCount, {{"count", section.rowCount}}));
 
       auto result = std::string{};
 
@@ -362,7 +361,7 @@ namespace ao::tui
       return result;
     }
 
-    ftxui::Element sectionHeaderRow(uimodel::PresentationTextCatalog const& textCatalog, TrackSection const& section)
+    ftxui::Element sectionHeaderRow(i18n::MessageCatalog const& textCatalog, TrackSection const& section)
     {
       using namespace ftxui;
 
@@ -563,26 +562,18 @@ namespace ao::tui
     return rows;
   }
 
-  ftxui::Element trackTableView(uimodel::PresentationTextCatalog const& textCatalog,
-                                TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element trackTableView(i18n::MessageCatalog const& textCatalog,
                                 std::span<TrackListEntry const> const tracks,
                                 std::int32_t const selected,
                                 TrackId const playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
                                 TrackTableViewOptions options)
   {
-    return trackTableView(textCatalog,
-                          tuiTextCatalog,
-                          tracks,
-                          std::span<TrackSection const>{},
-                          selected,
-                          playingTrackId,
-                          presentation,
-                          std::move(options));
+    return trackTableView(
+      textCatalog, tracks, std::span<TrackSection const>{}, selected, playingTrackId, presentation, std::move(options));
   }
 
-  ftxui::Element trackTableView(uimodel::PresentationTextCatalog const& textCatalog,
-                                TuiTextCatalog const& tuiTextCatalog,
+  ftxui::Element trackTableView(i18n::MessageCatalog const& textCatalog,
                                 std::span<TrackListEntry const> const tracks,
                                 std::span<TrackSection const> const sections,
                                 std::int32_t const selected,
@@ -606,7 +597,7 @@ namespace ao::tui
     if (tracks.empty())
     {
       listElementPtr =
-        selectableRows(Elements{}, -1, true, std::string{tuiTextCatalog.text(TuiTextId::LibraryNoTracksFound)});
+        selectableRows(Elements{}, -1, true, tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoTracksFound));
     }
     else
     {
@@ -691,14 +682,14 @@ namespace ao::tui
     return tablePtr;
   }
 
-  std::int32_t libraryChooserPaneColumns(TuiTextCatalog const& textCatalog,
+  std::int32_t libraryChooserPaneColumns(i18n::MessageCatalog const& textCatalog,
                                          std::vector<std::string> const& labels,
                                          std::int32_t const terminalColumns)
   {
-    auto contentColumns =
-      std::max({cellWidth(overlayLabel(textCatalog, Overlay::ListChooser)),
-                cellWidth(textCatalog.text(TuiTextId::LibraryNoListsFound)) + kScrollIndicatorColumns,
-                cellWidth(overlayHint(textCatalog, Overlay::ListChooser))});
+    auto contentColumns = std::max(
+      {cellWidth(overlayLabel(textCatalog, Overlay::ListChooser)),
+       cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryNoListsFound)) + kScrollIndicatorColumns,
+       cellWidth(overlayHint(textCatalog, Overlay::ListChooser))});
 
     for (auto const& label : labels)
     {
@@ -708,7 +699,7 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element libraryChooserPane(TuiTextCatalog const& textCatalog,
+  ftxui::Element libraryChooserPane(i18n::MessageCatalog const& textCatalog,
                                     std::vector<std::string> const& labels,
                                     std::int32_t const selected,
                                     std::int32_t columns)
@@ -732,14 +723,14 @@ namespace ao::tui
     return style::popupPanel(
              overlayLabel(textCatalog, Overlay::ListChooser),
              vbox({
-               selectableList(
-                 std::move(rows),
-                 SelectableListOptions{.focusRow = std::max(0, selected),
-                                       .emptyText = std::string{textCatalog.text(TuiTextId::LibraryNoListsFound)},
-                                       .framed = !labels.empty(),
-                                       .scrollIndicator = !labels.empty(),
-                                       .flex = !labels.empty(),
-                                       .centerEmpty = labels.empty()}),
+               selectableList(std::move(rows),
+                              SelectableListOptions{.focusRow = std::max(0, selected),
+                                                    .emptyText = std::string{i18n::requiredText(
+                                                      textCatalog, i18n::MessageId::TuiLibraryNoListsFound)},
+                                                    .framed = !labels.empty(),
+                                                    .scrollIndicator = !labels.empty(),
+                                                    .flex = !labels.empty(),
+                                                    .centerEmpty = labels.empty()}),
                separator(),
                style::panelFooterHint(overlayHint(textCatalog, Overlay::ListChooser)),
              })) |

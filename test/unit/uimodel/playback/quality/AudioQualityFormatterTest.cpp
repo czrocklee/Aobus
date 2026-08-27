@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
@@ -25,7 +25,8 @@ namespace ao::uimodel::test
   {
     AudioQualityFormatter const& englishFormatter()
     {
-      return ao::test::englishPresentationTextCatalog().audioQualityFormatter();
+      static auto const formatter = AudioQualityFormatter{ao::test::englishMessageCatalog()};
+      return formatter;
     }
 
     std::string audioNodeTypeLabel(audio::flow::NodeType const type)
@@ -376,8 +377,8 @@ namespace ao::uimodel::test
   TEST_CASE("AudioQualityFormatter - localized copy preserves numeric and external values",
             "[uimodel][unit][quality][localization]")
   {
-    auto const catalog = ao::test::presentationTextCatalog("de-DE");
-    auto const& formatter = catalog.audioQualityFormatter();
+    auto const catalog = ao::test::messageCatalog("de-DE");
+    auto const formatter = AudioQualityFormatter{catalog};
     auto const format = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
 
     CHECK(formatter.nodeTypeLabel(audio::flow::NodeType::Source) == "[Quelle]");
@@ -405,8 +406,8 @@ namespace ao::uimodel::test
     for (auto const* const locale : {"de-DE", "zh-CN", "zh-TW", "ja-JP", "es-ES", "fr-FR"})
     {
       INFO("locale: " << locale);
-      auto const catalog = ao::test::presentationTextCatalog(locale);
-      auto const& formatter = catalog.audioQualityFormatter();
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const formatter = AudioQualityFormatter{catalog};
       auto const gainLabel = formatter.findingLabel(gainFinding);
       auto const plainLabel = formatter.findingLabel(plainFinding);
 
@@ -427,8 +428,8 @@ namespace ao::uimodel::test
 
   TEST_CASE("AudioQualityFormatter - localized unclassified volume copy", "[uimodel][unit][quality][localization]")
   {
-    auto const catalog = ao::test::presentationTextCatalog("de-DE");
-    auto const& formatter = catalog.audioQualityFormatter();
+    auto const catalog = ao::test::messageCatalog("de-DE");
+    auto const formatter = AudioQualityFormatter{catalog};
 
     CHECK(formatter.findingLabel(audio::QualityFinding{
             .kind = audio::QualityFindingKind::UnclassifiedVolumeModification,
@@ -441,8 +442,8 @@ namespace ao::uimodel::test
 
   TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values", "[uimodel][unit][quality][localization]")
   {
-    auto const catalog = ao::test::presentationTextCatalog("qps-ploc");
-    auto const& formatter = catalog.audioQualityFormatter();
+    auto const catalog = ao::test::messageCatalog("qps-ploc");
+    auto const formatter = AudioQualityFormatter{catalog};
     auto const finding = formatter.findingLabel(audio::QualityFinding{
       .kind = audio::QualityFindingKind::MixedSources,
       .sharedApps = {"Dvořák", "誰か"},

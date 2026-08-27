@@ -8,12 +8,13 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackRevealAdapter.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
@@ -46,7 +47,7 @@ namespace ao::winui
   class TrackListController final
   {
   public:
-    explicit TrackListController(uimodel::PresentationTextCatalog textCatalog);
+    explicit TrackListController(i18n::MessageCatalog textCatalog);
     ~TrackListController();
 
     TrackListController(TrackListController const&) = delete;
@@ -103,7 +104,7 @@ namespace ao::winui
     void adoptWorkspaceView(rt::ViewId viewId);
     Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
-    uimodel::PresentationTextCatalog _textCatalog;
+    i18n::MessageCatalog _textCatalog;
     rt::AppRuntime* _runtime = nullptr;
     uimodel::TrackColumnLayoutState* _columnLayouts = nullptr;
     rt::ViewId _viewId{rt::kInvalidViewId};

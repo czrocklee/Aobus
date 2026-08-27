@@ -8,7 +8,7 @@
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
 #include "layout/LayoutConstants.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -125,7 +125,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
                                      { albumTrackId = addAlbumTrack(musicLibrary, "Album"); }};
     auto& runtime = fixture.runtime();
-    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto cache = TrackRowCache{runtime.library(), textCatalog};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
@@ -239,7 +239,7 @@ namespace ao::gtk::test
     auto sourcePtr = rt::test::makeMutableTrackSource(trackIds);
     auto projectionPtr = std::make_shared<rt::TrackListProjection>(
       rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
-    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
     auto imageCache = ImageCache{200};
@@ -249,12 +249,8 @@ namespace ao::gtk::test
     auto materializedRowsForPage = [&]
     {
       auto layoutStore = uimodel::TrackColumnLayoutStore{};
-      auto page = TrackViewPage{rt::kAllTracksListId,
-                                modelPtr,
-                                layoutStore,
-                                ao::test::englishPresentationTextCatalog(),
-                                runtime,
-                                thumbnailLoader};
+      auto page = TrackViewPage{
+        rt::kAllTracksListId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
       auto window = Gtk::Window{};
       window.set_child(page);
       window.set_default_size(600, 320);
@@ -301,21 +297,15 @@ namespace ao::gtk::test
         },
     }));
     auto projectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
-    auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(cache);
     modelPtr->bindProjection(projectionPtr);
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
-    auto page = TrackViewPage{listId,
-                              modelPtr,
-                              layoutStore,
-                              ao::test::englishPresentationTextCatalog(),
-                              runtime,
-                              thumbnailLoader,
-                              manual->spec,
-                              viewId};
+    auto page = TrackViewPage{
+      listId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader, manual->spec, viewId};
     auto windowFixture = GtkWindowFixture{};
     windowFixture.mount(page);
     windowFixture.present();
@@ -375,21 +365,15 @@ namespace ao::gtk::test
     REQUIRE(sourceIdsRes->size() == 2);
     auto const& initialTrackIds = *sourceIdsRes;
     auto projectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
-    auto cache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(cache);
     modelPtr->bindProjection(projectionPtr);
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
-    auto page = TrackViewPage{listId,
-                              modelPtr,
-                              layoutStore,
-                              ao::test::englishPresentationTextCatalog(),
-                              runtime,
-                              thumbnailLoader,
-                              manual->spec,
-                              viewId};
+    auto page = TrackViewPage{
+      listId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader, manual->spec, viewId};
     auto windowFixture = GtkWindowFixture{};
     windowFixture.mount(page);
     windowFixture.present();
@@ -474,19 +458,15 @@ namespace ao::gtk::test
     sourcePtr->addInitial(trackId);
     auto projectionPtr = std::make_shared<rt::TrackListProjection>(
       rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
-    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishPresentationTextCatalog()};
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
-    auto page = TrackViewPage{rt::kAllTracksListId,
-                              modelPtr,
-                              layoutStore,
-                              ao::test::englishPresentationTextCatalog(),
-                              runtime,
-                              thumbnailLoader};
+    auto page = TrackViewPage{
+      rt::kAllTracksListId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
     auto window = Gtk::Window{};
     window.set_child(page);
     window.set_default_size(720, 320);

@@ -5,6 +5,7 @@
 
 #include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
+#include "i18n/GtkTextCatalog.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
@@ -18,7 +19,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <gdkmm/contentprovider.h>
 #include <gdkmm/drag.h>
@@ -116,7 +117,7 @@ namespace ao::gtk
   {
     State(rt::AppRuntime& runtimeValue,
           rt::ViewId const viewIdValue,
-          uimodel::PresentationTextCatalog textCatalogValue,
+          i18n::MessageCatalog textCatalogValue,
           Gtk::ScrolledWindow& scrolledWindowValue,
           TrackSelectionController& selectionControllerValue,
           Callbacks callbacksValue)
@@ -229,7 +230,7 @@ namespace ao::gtk
           statePtr->clearIndicator();
           statePtr->showStatus(statePtr->sessionPtr != nullptr
                                  ? statePtr->sessionPtr->capabilities().disabledReason
-                                 : std::string{statePtr->textCatalog.text(i18n::MessageId::ListOrderChanged)});
+                                 : gtkText(statePtr->textCatalog, i18n::MessageId::ListOrderChanged));
         });
       clearStatus();
       return stringContentProvider(token);
@@ -350,47 +351,47 @@ namespace ao::gtk
       auto selectedIds = std::move(selectedTrackIds);
       auto submission = dropSessionPtr->moveBefore(std::move(selectedIds), *anchorRes);
       clearActiveDrag();
-      spawnUiTask(
-        runtime.async(),
-        tasks,
-        *this,
-        "track order drop",
-        std::move(submission),
-        [](State* state, auto result)
-        {
-          if (!result)
-          {
-            APP_LOG_ERROR("Track order drop failed: {}", result.error().message);
-            state->showStatus(result.error().message);
-            return;
-          }
+      spawnUiTask(runtime.async(),
+                  tasks,
+                  *this,
+                  "track order drop",
+                  std::move(submission),
+                  [](State* state, auto result)
+                  {
+                    if (!result)
+                    {
+                      APP_LOG_ERROR("Track order drop failed: {}", result.error().message);
+                      state->showStatus(result.error().message);
+                      return;
+                    }
 
-          switch (result->status)
-          {
-            case rt::AuthoringStatus::Applied:
-              state->showStatus(state->textCatalog.format(
-                i18n::MessageId::ListOrderMoved, {{"count", result->reply.selectedTrackIds.size()}}));
-              break;
-            case rt::AuthoringStatus::NoOp:
-              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderUnchanged)});
-              break;
-            case rt::AuthoringStatus::Busy:
-              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderLibraryBusy)});
-              break;
-            case rt::AuthoringStatus::Stale:
-              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderChanged)});
-              break;
-            case rt::AuthoringStatus::Unavailable:
-              state->showStatus(std::string{state->textCatalog.text(i18n::MessageId::ListOrderEditingUnavailable)});
-              break;
-          }
-        });
+                    switch (result->status)
+                    {
+                      case rt::AuthoringStatus::Applied:
+                        state->showStatus(i18n::requiredFormat(state->textCatalog,
+                                                               i18n::MessageId::ListOrderMoved,
+                                                               {{"count", result->reply.selectedTrackIds.size()}}));
+                        break;
+                      case rt::AuthoringStatus::NoOp:
+                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderUnchanged));
+                        break;
+                      case rt::AuthoringStatus::Busy:
+                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderLibraryBusy));
+                        break;
+                      case rt::AuthoringStatus::Stale:
+                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderChanged));
+                        break;
+                      case rt::AuthoringStatus::Unavailable:
+                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderEditingUnavailable));
+                        break;
+                    }
+                  });
       return true;
     }
 
     rt::AppRuntime& runtime;
     rt::ViewId viewId = rt::kInvalidViewId;
-    uimodel::PresentationTextCatalog textCatalog;
+    i18n::MessageCatalog textCatalog;
     Gtk::ScrolledWindow& scrolledWindow;
     TrackSelectionController& selectionController;
     Callbacks callbacks;
@@ -406,7 +407,7 @@ namespace ao::gtk
 
   TrackOrderDragController::TrackOrderDragController(rt::AppRuntime& runtime,
                                                      rt::ViewId const viewId,
-                                                     uimodel::PresentationTextCatalog const& textCatalog,
+                                                     i18n::MessageCatalog const& textCatalog,
                                                      Gtk::ColumnView& /*columnView*/,
                                                      Gtk::ScrolledWindow& scrolledWindow,
                                                      TrackSelectionController& selectionController,
@@ -434,8 +435,8 @@ namespace ao::gtk
         cell->set_hexpand(true);
         cell->add_css_class("ao-order-drag-handle");
         cell->set_cursor("grab");
-        cell->set_tooltip_text(std::string{statePtr->textCatalog.text(i18n::MessageId::GtkManualOrderDrag)});
-        setAccessibleLabel(*cell, statePtr->textCatalog.text(i18n::MessageId::GtkManualOrderRearrange));
+        cell->set_tooltip_text(gtkText(statePtr->textCatalog, i18n::MessageId::GtkManualOrderDrag));
+        setAccessibleLabel(*cell, gtkText(statePtr->textCatalog, i18n::MessageId::GtkManualOrderRearrange));
 
         auto* const image = Gtk::make_managed<Gtk::Image>();
         image->set_from_icon_name("list-drag-handle-symbolic");

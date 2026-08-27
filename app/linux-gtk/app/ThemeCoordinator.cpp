@@ -4,7 +4,7 @@
 
 #include "app/AppConfigStore.h"
 #include "app/ThemePreset.h"
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <glib-object.h>

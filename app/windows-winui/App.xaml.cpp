@@ -13,7 +13,7 @@
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/utility/PlatformDirectories.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>
@@ -88,7 +88,6 @@ namespace winrt::Aobus::implementation
     }
 
     _messageCatalogPtr = std::make_unique<ao::i18n::MessageCatalog>(std::move(*catalogRes));
-    _presentationTextCatalogPtr = std::make_unique<ao::uimodel::PresentationTextCatalog>(*_messageCatalogPtr);
     auto textOrderingPolicyRes = ao::i18n::createIcuTextOrderingPolicy(_messageCatalogPtr->requestedLocale());
 
     if (!textOrderingPolicyRes)
@@ -118,7 +117,6 @@ namespace winrt::Aobus::implementation
       ao::winui::resetResourceLanguage();
       _completionAliasPolicyPtr.reset();
       _textOrderingPolicyPtr.reset();
-      _presentationTextCatalogPtr.reset();
       _messageCatalogPtr.reset();
     }
     catch (...)
@@ -294,7 +292,7 @@ namespace winrt::Aobus::implementation
       }
 
       _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(
-        appStateRoot, _dispatcher, *_presentationTextCatalogPtr, *_textOrderingPolicyPtr, *_completionAliasPolicyPtr);
+        appStateRoot, _dispatcher, *_messageCatalogPtr, *_textOrderingPolicyPtr, *_completionAliasPolicyPtr);
       auto const weak = get_weak();
       auto startedRes = _windowSessionPtr->start(
         std::move(*startupRequestRes),

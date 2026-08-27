@@ -9,7 +9,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <chrono>
 #include <cstdint>
@@ -146,14 +146,14 @@ namespace ao::uimodel
     return std::format("{} kbps", bitrate / 1000);
   }
 
-  std::string formatChannels(PresentationTextCatalog const& textCatalog, std::uint8_t channels)
+  std::string formatChannels(i18n::MessageCatalog const& textCatalog, std::uint8_t channels)
   {
     if (channels == 0)
     {
       return {};
     }
 
-    return textCatalog.trackChannelText(channels);
+    return trackChannelText(textCatalog, channels);
   }
 
   std::string formatBitDepth(std::uint8_t bitDepth)
@@ -223,7 +223,7 @@ namespace ao::uimodel
     return result;
   }
 
-  std::string formatTrackFieldRawValue(PresentationTextCatalog const& textCatalog,
+  std::string formatTrackFieldRawValue(i18n::MessageCatalog const& textCatalog,
                                        rt::TrackField field,
                                        rt::TrackFieldRawValue const& rawValue)
   {
@@ -289,7 +289,7 @@ namespace ao::uimodel
     return {};
   }
 
-  std::string formatTrackFieldDisplayText(PresentationTextCatalog const& textCatalog,
+  std::string formatTrackFieldDisplayText(i18n::MessageCatalog const& textCatalog,
                                           rt::TrackField field,
                                           rt::TrackDetailSnapshot const& snap,
                                           std::string_view mixedText,
@@ -307,7 +307,7 @@ namespace ao::uimodel
     {
       if (showTechnicalUnknown && def != nullptr && def->category == rt::TrackFieldCategory::Technical)
       {
-        return std::string{textCatalog.text(i18n::MessageId::TrackTechnicalUnknown)};
+        return std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackTechnicalUnknown)};
       }
 
       return {};

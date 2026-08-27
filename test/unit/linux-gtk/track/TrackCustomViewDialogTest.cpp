@@ -3,7 +3,7 @@
 
 #include "track/TrackCustomViewDialog.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/TrackField.h>
@@ -26,7 +26,7 @@ namespace ao::gtk::test
 
     SECTION("dialog creation")
     {
-      auto dialog = TrackCustomViewDialog{window, ao::test::englishPresentationTextCatalog(), spec, "Initial Label"};
+      auto dialog = TrackCustomViewDialog{window, ao::test::englishMessageCatalog(), spec, "Initial Label"};
       drainGtkEvents();
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
@@ -38,7 +38,7 @@ namespace ao::gtk::test
       spec.sortBy = {{.field = rt::TrackSortField::Title, .ascending = true}};
       spec.visibleFields = {rt::TrackField::Title, rt::TrackField::Artist};
 
-      auto dialog = TrackCustomViewDialog{window, ao::test::englishPresentationTextCatalog(), spec, "Initial Label"};
+      auto dialog = TrackCustomViewDialog{window, ao::test::englishMessageCatalog(), spec, "Initial Label"};
       dialog.present();
       drainGtkEvents();
 
@@ -62,7 +62,7 @@ namespace ao::gtk::test
 
     SECTION("section add actions are attached to headers")
     {
-      auto dialog = TrackCustomViewDialog{window, ao::test::englishPresentationTextCatalog(), spec, "Initial Label"};
+      auto dialog = TrackCustomViewDialog{window, ao::test::englishMessageCatalog(), spec, "Initial Label"};
       drainGtkEvents();
 
       bool foundSortAdd = false;
@@ -80,7 +80,7 @@ namespace ao::gtk::test
 
     SECTION("last visible column cannot be removed")
     {
-      auto dialog = TrackCustomViewDialog{window, ao::test::englishPresentationTextCatalog(), spec, "Initial Label"};
+      auto dialog = TrackCustomViewDialog{window, ao::test::englishMessageCatalog(), spec, "Initial Label"};
       drainGtkEvents();
 
       Gtk::Button const* removeButton = nullptr;
@@ -105,7 +105,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto spec = rt::TrackPresentationSpec{};
     spec.visibleFields = {rt::TrackField::Title};
-    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
 
     auto dialog = TrackCustomViewDialog{window, textCatalog, spec, "Meine Ansicht"};
     drainGtkEvents();

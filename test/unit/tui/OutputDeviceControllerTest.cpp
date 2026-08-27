@@ -6,7 +6,7 @@
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/audio/BackendIds.h>
@@ -73,7 +73,7 @@ namespace ao::tui::test
     auto controllerPlayback = ControllerPlayback{fixture};
     std::int32_t refreshCount = 0;
     auto controller = OutputDeviceController{controllerPlayback.playback,
-                                             ao::test::englishPresentationTextCatalog(),
+                                             ao::test::englishMessageCatalog(),
                                              uimodel::OutputDeviceIntent::discarded(),
                                              [&refreshCount] { ++refreshCount; }};
 
@@ -111,7 +111,7 @@ namespace ao::tui::test
     auto optRecorded = std::optional<audio::OutputDeviceSelection>{};
     auto controller = OutputDeviceController{
       controllerPlayback.playback,
-      ao::test::englishPresentationTextCatalog(),
+      ao::test::englishMessageCatalog(),
       uimodel::OutputDeviceIntent::recordedBy([&optRecorded](audio::OutputDeviceSelection const& selection)
                                               { optRecorded = selection; })};
 
@@ -130,9 +130,8 @@ namespace ao::tui::test
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto controllerPlayback = ControllerPlayback{fixture};
-    auto controller = OutputDeviceController{controllerPlayback.playback,
-                                             ao::test::englishPresentationTextCatalog(),
-                                             uimodel::OutputDeviceIntent::discarded()};
+    auto controller = OutputDeviceController{
+      controllerPlayback.playback, ao::test::englishMessageCatalog(), uimodel::OutputDeviceIntent::discarded()};
 
     CHECK_FALSE(controller.selectRow(-1));
     CHECK_FALSE(controller.selectRow(0));
@@ -169,7 +168,7 @@ namespace ao::tui::test
     auto optRecorded = std::optional<audio::OutputDeviceSelection>{};
     auto controller = OutputDeviceController{
       controllerPlayback.playback,
-      ao::test::englishPresentationTextCatalog(),
+      ao::test::englishMessageCatalog(),
       uimodel::OutputDeviceIntent::recordedBy([&optRecorded](audio::OutputDeviceSelection const& selection)
                                               { optRecorded = selection; })};
     REQUIRE(controller.selectRow(1));

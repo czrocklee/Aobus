@@ -3,7 +3,7 @@
 
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -11,6 +11,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/LoopExecutor.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/rt/ListMutation.h>
@@ -22,7 +23,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/TrackSourceCache.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -44,7 +44,7 @@ namespace ao::uimodel::test
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel;
 
-      explicit TrackFilterFixture(PresentationTextCatalog textCatalog = ao::test::presentationTextCatalog("en"))
+      explicit TrackFilterFixture(i18n::MessageCatalog textCatalog = ao::test::messageCatalog("en"))
         : viewModel{viewService, workspaceService, textCatalog, [this](auto const& view) { renderLog.render(view); }}
       {
       }
@@ -192,7 +192,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackFilterViewModel - retains a temporary catalog for later renders",
             "[uimodel][regression][track-filter]")
   {
-    auto fixture = TrackFilterFixture{ao::test::presentationTextCatalog("de-DE")};
+    auto fixture = TrackFilterFixture{ao::test::messageCatalog("de-DE")};
     fixture.focusAllTracksView();
 
     fixture.viewModel.updateFilter("$year >");
@@ -227,10 +227,8 @@ namespace ao::uimodel::test
     auto views = ViewService{executor, libraryFixture.library(), sources, changes};
     auto workspace = WorkspaceService{executor, views, changes};
     auto renderLog = ao::test::RenderLog<TrackFilterViewState>{};
-    auto viewModel = TrackFilterViewModel{views,
-                                          workspace,
-                                          ao::test::englishPresentationTextCatalog(),
-                                          [&renderLog](auto const& view) { renderLog.render(view); }};
+    auto viewModel = TrackFilterViewModel{
+      views, workspace, ao::test::englishMessageCatalog(), [&renderLog](auto const& view) { renderLog.render(view); }};
 
     REQUIRE(
       workspace.navigate(NavigationRequest{.target = FilteredListTarget{.listId = listId, .filterExpression = {}}}));

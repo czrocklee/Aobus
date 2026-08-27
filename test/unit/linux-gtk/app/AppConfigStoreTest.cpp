@@ -7,7 +7,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>

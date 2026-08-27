@@ -3,6 +3,7 @@
 
 #include "track/SelectionInfoLabel.h"
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
@@ -16,7 +17,7 @@
 
 namespace ao::gtk
 {
-  SelectionInfoLabel::SelectionInfoLabel(rt::ViewService& viewService, uimodel::PresentationTextCatalog textCatalog)
+  SelectionInfoLabel::SelectionInfoLabel(rt::ViewService& viewService, i18n::MessageCatalog textCatalog)
     : _viewService{viewService}, _textCatalog{std::move(textCatalog)}
   {
     _label.add_css_class("dim-label");

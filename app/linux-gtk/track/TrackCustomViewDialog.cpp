@@ -6,6 +6,7 @@
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
 #include "common/AccessibleLabel.h"
+#include "i18n/GtkTextCatalog.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -85,13 +86,14 @@ namespace ao::gtk
     }
 
     void updateSortDirectionButton(Gtk::ToggleButton& button,
-                                   uimodel::PresentationTextCatalog const& textCatalog,
+                                   i18n::MessageCatalog const& textCatalog,
                                    bool const ascending)
     {
       configureRowIconButton(
         button,
         ascending ? "view-sort-ascending-symbolic" : "view-sort-descending-symbolic",
-        textCatalog.text(ascending ? MessageId::GtkCustomViewSortAscending : MessageId::GtkCustomViewSortDescending));
+        gtkText(
+          textCatalog, ascending ? MessageId::GtkCustomViewSortAscending : MessageId::GtkCustomViewSortDescending));
     }
 
     void configureSectionAddButton(Gtk::Button& button, std::string_view tooltip)
@@ -117,12 +119,12 @@ namespace ao::gtk
   } // namespace
 
   TrackCustomViewDialog::TrackCustomViewDialog(Gtk::Window& parent,
-                                               uimodel::PresentationTextCatalog textCatalog,
+                                               i18n::MessageCatalog textCatalog,
                                                rt::TrackPresentationSpec const& initialSpec,
                                                std::string_view initialLabel)
     : AppDialog{}, _textCatalog{std::move(textCatalog)}, _model{_textCatalog}
   {
-    set_title(std::string{_textCatalog.text(MessageId::GtkCustomViewTitle)});
+    set_title(gtkText(_textCatalog, MessageId::GtkCustomViewTitle));
     configureForParent(parent);
 
     set_default_size(-1, -1);
@@ -133,15 +135,15 @@ namespace ao::gtk
 
   void TrackCustomViewDialog::buildUi()
   {
-    addCancelAction(std::string{_textCatalog.text(MessageId::GtkCommonCancel)}, Gtk::ResponseType::CANCEL);
-    addPrimaryAction(std::string{_textCatalog.text(MessageId::GtkCommonSave)}, Gtk::ResponseType::OK);
+    addCancelAction(gtkText(_textCatalog, MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
+    addPrimaryAction(gtkText(_textCatalog, MessageId::GtkCommonSave), Gtk::ResponseType::OK);
 
     auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kBoxSpacing * 2);
 
     // Section 1: View details.
     auto* detailsList = Gtk::make_managed<FormBoxedList>();
-    _nameEntry.set_placeholder_text(std::string{_textCatalog.text(MessageId::GtkCustomViewLabelPlaceholder)});
-    detailsList->addEntryRow(std::string{_textCatalog.text(MessageId::GtkCustomViewName)}, _nameEntry);
+    _nameEntry.set_placeholder_text(gtkText(_textCatalog, MessageId::GtkCustomViewLabelPlaceholder));
+    detailsList->addEntryRow(gtkText(_textCatalog, MessageId::GtkCustomViewName), _nameEntry);
 
     _groupDropdown.set_model(createOptionLabelsModel(_model.groupOptions()));
     _groupDropdown.property_selected().signal_changed().connect(
@@ -152,11 +154,11 @@ namespace ao::gtk
           _model.setGroupKeyByOptionIndex(selected);
         }
       });
-    detailsList->addRow(std::string{_textCatalog.text(MessageId::GtkCustomViewGroupBy)}, _groupDropdown);
+    detailsList->addRow(gtkText(_textCatalog, MessageId::GtkCustomViewGroupBy), _groupDropdown);
     mainBox->append(*detailsList);
 
     auto* addSortBtn = Gtk::make_managed<Gtk::Button>();
-    configureSectionAddButton(*addSortBtn, _textCatalog.text(MessageId::GtkCustomViewAddSortField));
+    configureSectionAddButton(*addSortBtn, gtkText(_textCatalog, MessageId::GtkCustomViewAddSortField));
     addSortBtn->signal_clicked().connect(
       [this]
       {
@@ -164,14 +166,14 @@ namespace ao::gtk
         rebuildSortList();
       });
 
-    mainBox->append(*makeSectionHeader(_textCatalog.text(MessageId::GtkCustomViewSortOrder), *addSortBtn));
+    mainBox->append(*makeSectionHeader(gtkText(_textCatalog, MessageId::GtkCustomViewSortOrder), *addSortBtn));
 
     _sortTermsList.add_css_class("ao-boxed-list");
     _sortTermsList.set_selection_mode(Gtk::SelectionMode::NONE);
     mainBox->append(_sortTermsList);
 
     auto* addVisibleBtn = Gtk::make_managed<Gtk::Button>();
-    configureSectionAddButton(*addVisibleBtn, _textCatalog.text(MessageId::GtkCustomViewAddColumn));
+    configureSectionAddButton(*addVisibleBtn, gtkText(_textCatalog, MessageId::GtkCustomViewAddColumn));
     addVisibleBtn->signal_clicked().connect(
       [this]
       {
@@ -179,7 +181,7 @@ namespace ao::gtk
         rebuildVisibleFieldsList();
       });
 
-    mainBox->append(*makeSectionHeader(_textCatalog.text(MessageId::GtkCustomViewVisibleColumns), *addVisibleBtn));
+    mainBox->append(*makeSectionHeader(gtkText(_textCatalog, MessageId::GtkCustomViewVisibleColumns), *addVisibleBtn));
 
     _visibleFieldsList.add_css_class("ao-boxed-list");
     _visibleFieldsList.set_selection_mode(Gtk::SelectionMode::NONE);
@@ -244,7 +246,7 @@ namespace ao::gtk
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto* upBtn = makeRowIconButton("go-up-symbolic", _textCatalog.text(MessageId::GtkListMoveUp));
+      auto* upBtn = makeRowIconButton("go-up-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveUp));
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -255,7 +257,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto* downBtn = makeRowIconButton("go-down-symbolic", _textCatalog.text(MessageId::GtkListMoveDown));
+      auto* downBtn = makeRowIconButton("go-down-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveDown));
       downBtn->set_sensitive(i + 1 < sortTerms.size());
 
       downBtn->signal_clicked().connect(
@@ -266,7 +268,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto* removeBtn = makeRowIconButton("user-trash-symbolic", _textCatalog.text(MessageId::GtkCommonRemove));
+      auto* removeBtn = makeRowIconButton("user-trash-symbolic", gtkText(_textCatalog, MessageId::GtkCommonRemove));
       removeBtn->signal_clicked().connect(
         [this, i]
         {
@@ -313,7 +315,7 @@ namespace ao::gtk
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto* upBtn = makeRowIconButton("go-up-symbolic", _textCatalog.text(MessageId::GtkListMoveUp));
+      auto* upBtn = makeRowIconButton("go-up-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveUp));
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -324,7 +326,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto* downBtn = makeRowIconButton("go-down-symbolic", _textCatalog.text(MessageId::GtkListMoveDown));
+      auto* downBtn = makeRowIconButton("go-down-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveDown));
       downBtn->set_sensitive(i + 1 < visibleFields.size());
 
       downBtn->signal_clicked().connect(
@@ -335,7 +337,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto* removeBtn = makeRowIconButton("user-trash-symbolic", _textCatalog.text(MessageId::GtkCommonRemove));
+      auto* removeBtn = makeRowIconButton("user-trash-symbolic", gtkText(_textCatalog, MessageId::GtkCommonRemove));
       removeBtn->set_sensitive(visibleFields.size() > 1);
       removeBtn->signal_clicked().connect(
         [this, i]

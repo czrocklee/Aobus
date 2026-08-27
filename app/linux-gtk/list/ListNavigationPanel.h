@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <gdkmm/rectangle.h>
 #include <glibmm/refptr.h>
@@ -34,7 +34,6 @@ namespace ao::rt
 
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   class ListTreeItem;
 
   class ListNavigationPanel final
@@ -46,9 +45,7 @@ namespace ao::gtk
       std::function<void(ListId, Gdk::Rectangle const&)> onContextMenuRequested;
     };
 
-    ListNavigationPanel(uimodel::PresentationTextCatalog textCatalog,
-                        GtkTextCatalog const& gtkTextCatalog,
-                        Callbacks callbacks);
+    ListNavigationPanel(i18n::MessageCatalog textCatalog, Callbacks callbacks);
     ~ListNavigationPanel();
 
     // Not copyable or movable
@@ -72,8 +69,7 @@ namespace ao::gtk
     void handleListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;
 
     Callbacks _callbacks;
-    uimodel::PresentationTextCatalog _textCatalog;
-    GtkTextCatalog const& _gtkTextCatalog;
+    i18n::MessageCatalog _textCatalog;
 
     Gtk::ListView _listView;
     Gtk::ScrolledWindow _listScrolledWindow;

@@ -3,6 +3,7 @@
 
 #include "FakeLayoutComponentStateStore.h"
 
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 
 #include <cstdint>
@@ -45,7 +46,9 @@ namespace ao::gtk::layout::test
     ++_statePtr->saveCount;
   }
 
-  bool FakeLayoutComponentStateStore::prune(std::string_view /*presetId*/, uimodel::PreparedLayout const& /*layout*/)
+  bool FakeLayoutComponentStateStore::prune(std::string_view /*presetId*/,
+                                            uimodel::PreparedLayout const& /*layout*/,
+                                            uimodel::LayoutComponentCatalog const& /*catalog*/)
   {
     return false;
   }

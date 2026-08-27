@@ -3,7 +3,7 @@
 
 #include "preference/ShortcutEditorWidget.h"
 
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -122,11 +122,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto host = Gtk::Window{};
-    auto editor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
-                                       makeCatalog(),
-                                       uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                       {},
-                                       host};
+    auto editor = ShortcutEditorWidget{
+      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
     drainGtkEvents();
 
     auto const& ids = editor.editableActionIds();
@@ -140,11 +137,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto host = Gtk::Window{};
-    auto editor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
-                                       makeCatalog(),
-                                       uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                       {},
-                                       host};
+    auto editor = ShortcutEditorWidget{
+      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
     drainGtkEvents();
 
     CHECK(findLabelByText(editor, "Ctrl+P") != nullptr);
@@ -156,7 +150,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto const textCatalog = ao::test::presentationTextCatalog("de-DE");
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto host = Gtk::Window{};
     auto editor =
       ShortcutEditorWidget{textCatalog, makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
@@ -178,11 +172,8 @@ namespace ao::gtk::test
                                       .category = "Playback",
                                       .capabilities = LayoutActionCapability::None});
     auto hostWindow = Gtk::Window{};
-    auto editor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
-                                       catalog,
-                                       uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                       {},
-                                       hostWindow};
+    auto editor = ShortcutEditorWidget{
+      ao::test::englishMessageCatalog(), catalog, uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, hostWindow};
 
     auto allocationHost = AllocationHost{editor};
     allocationHost.allocateChild(420, 480);
@@ -206,7 +197,7 @@ namespace ao::gtk::test
     std::int32_t changeCount = 0;
     auto optLastModel = std::optional<uimodel::KeymapModel>{};
     auto host = Gtk::Window{};
-    auto editor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
+    auto editor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
                                        makeCatalog(),
                                        uimodel::KeymapModel{uimodel::defaultKeymap()},
                                        [&](uimodel::KeymapModel const& model)
@@ -282,7 +273,7 @@ namespace ao::gtk::test
     {
       auto editedKeymap = uimodel::KeymapModel{uimodel::defaultKeymap()};
       editedKeymap.applyOverrides(uimodel::KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
-      auto editedEditor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
+      auto editedEditor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
                                                makeCatalog(),
                                                std::move(editedKeymap),
                                                [&](uimodel::KeymapModel const& model)
@@ -304,7 +295,7 @@ namespace ao::gtk::test
     {
       auto editedKeymap = uimodel::KeymapModel{uimodel::defaultKeymap()};
       editedKeymap.applyOverrides(uimodel::KeymapOverrides{{"playback.next", {"Ctrl+N"}}, {"playback.playPause", {}}});
-      auto editedEditor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
+      auto editedEditor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
                                                makeCatalog(),
                                                std::move(editedKeymap),
                                                [&](uimodel::KeymapModel const& model)
@@ -332,7 +323,7 @@ namespace ao::gtk::test
     auto respond = std::function<void(bool)>{};
     auto host = Gtk::Window{};
     auto editorPtr = std::make_unique<ShortcutEditorWidget>(
-      ao::test::englishPresentationTextCatalog(),
+      ao::test::englishMessageCatalog(),
       makeCatalog(),
       uimodel::KeymapModel{uimodel::defaultKeymap()},
       [&](uimodel::KeymapModel const&) { ++changeCount; },
@@ -355,11 +346,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto host = Gtk::Window{};
-    auto editor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
-                                       makeCatalog(),
-                                       uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                       {},
-                                       host};
+    auto editor = ShortcutEditorWidget{
+      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
 
     clickButtonByLabel(editor, "Add…", 1);
 
@@ -378,11 +366,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto host = Gtk::Window{};
-    auto editor = ShortcutEditorWidget{ao::test::englishPresentationTextCatalog(),
-                                       makeCatalog(),
-                                       uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                       {},
-                                       host};
+    auto editor = ShortcutEditorWidget{
+      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
 
     clickButtonByLabel(editor, "Add…", 1);
     auto* const firstCapture = editor.captureWindow();

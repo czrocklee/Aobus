@@ -4,7 +4,7 @@
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/PresentationTextCatalogTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
@@ -17,7 +17,7 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -51,8 +51,8 @@ namespace ao::uimodel::test
     fixture.addReadyProvider();
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const viewModel = NowPlayingViewModel{
-      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
+    auto const viewModel =
+      NowPlayingViewModel{playback, ao::test::englishMessageCatalog(), [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render when idle")
     {
@@ -173,7 +173,7 @@ namespace ao::uimodel::test
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{
-      fixture.playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
+      fixture.playback, ao::test::englishMessageCatalog(), [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
     CHECK(log.last().streamInfo == "Connecting to audio engine...");
@@ -188,7 +188,7 @@ namespace ao::uimodel::test
     fixture.addReadyProvider();
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const catalog = ao::test::presentationTextCatalog("de-DE");
+    auto const catalog = ao::test::messageCatalog("de-DE");
     auto const viewModel = NowPlayingViewModel{playback, catalog, [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
@@ -214,8 +214,8 @@ namespace ao::uimodel::test
       });
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const viewModel = NowPlayingViewModel{
-      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); }};
+    auto const viewModel =
+      NowPlayingViewModel{playback, ao::test::englishMessageCatalog(), [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(playbackTransport.play(playbackRequest(TrackId{1}, "Song"), ListId{1}));
     REQUIRE(!log.empty());
@@ -233,7 +233,7 @@ namespace ao::uimodel::test
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto viewModelPtr = std::make_unique<NowPlayingViewModel>(
-      playback, ao::test::englishPresentationTextCatalog(), [&log](auto const& view) { log.render(view); });
+      playback, ao::test::englishMessageCatalog(), [&log](auto const& view) { log.render(view); });
 
     REQUIRE(!log.empty());
     log.clear();

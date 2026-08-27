@@ -3,6 +3,7 @@
 
 #include "TrackComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
+#include "i18n/GtkTextCatalog.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
@@ -21,7 +22,6 @@
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -156,7 +156,7 @@ namespace ao::gtk::layout
         _imageWidget.set_hexpand(true);
         _imageWidget.set_vexpand(true);
         _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
-        _imageWidget.setAlternativeText(_textCatalog.text(i18n::MessageId::CoverArtTitle));
+        _imageWidget.setAlternativeText(gtkText(_textCatalog, i18n::MessageId::CoverArtTitle));
 
         auto targetSize =
           static_cast<std::int32_t>(node.propertyOr<std::int64_t>("targetSize", kDefaultCoverArtTargetSize));
@@ -229,7 +229,7 @@ namespace ao::gtk::layout
         _imageWidget.set_visible(true);
       }
 
-      uimodel::PresentationTextCatalog _textCatalog;
+      i18n::MessageCatalog _textCatalog;
       CoverArtView _imageWidget;
       std::unique_ptr<ResourceImageController> _imageControllerPtr;
       CoverArtSlot _slot;

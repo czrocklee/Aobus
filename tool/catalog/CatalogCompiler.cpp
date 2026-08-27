@@ -124,7 +124,7 @@ namespace
   ao::Result<> validateRootIds(std::span<ao::i18n::detail::CatalogMessage const> const messages)
   {
     auto expected = std::vector<std::string_view>{};
-    expected.reserve(ao::i18n::detail::kMessageDefinitions.size());
+    expected.reserve(ao::i18n::detail::kMessageDefinitionCount);
 
     for (auto const& definition : ao::i18n::detail::kMessageDefinitions)
     {
@@ -132,6 +132,12 @@ namespace
     }
 
     std::ranges::sort(expected);
+
+    if (auto const duplicate = std::ranges::adjacent_find(expected); duplicate != expected.end())
+    {
+      return ao::makeError(ao::Error::Code::FormatRejected,
+                           "The typed MessageId registry contains duplicate key '" + std::string{*duplicate} + "'");
+    }
 
     auto actual = std::vector<std::string_view>{};
     actual.reserve(messages.size());

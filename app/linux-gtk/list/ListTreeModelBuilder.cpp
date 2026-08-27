@@ -7,6 +7,7 @@
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
@@ -24,7 +25,7 @@
 namespace ao::gtk
 {
   ListTreeModelBuilder::BuildResult ListTreeModelBuilder::build(rt::Library const& reads,
-                                                                uimodel::PresentationTextCatalog const& textCatalog)
+                                                                i18n::MessageCatalog const& textCatalog)
   {
     auto result = BuildResult{};
     result.storePtr = Gio::ListStore<ListTreeItem>::create();

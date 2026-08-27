@@ -30,8 +30,8 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -52,6 +52,7 @@
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/preference/ThemePreset.h>
+#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/dialog.h>
@@ -303,16 +304,16 @@ namespace ao::gtk
     for (auto const command : uimodel::playbackCommands())
     {
       registerAction(uimodel::playbackCommandActionId(command),
-                     _dependencies.textCatalog.playbackActionLabel(command),
-                     _dependencies.textCatalog.text(MessageId::GtkActionCategoryPlayback),
+                     uimodel::playbackActionLabel(_dependencies.textCatalog, command),
+                     gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryPlayback),
                      uimodel::LayoutActionCapability::None,
                      execute(command),
                      isEnabled(command));
     }
 
     registerAction("playback.showOutputDeviceSelector",
-                   _dependencies.textCatalog.text(MessageId::GtkActionOutputDevices),
-                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryPlayback),
+                   gtkText(_dependencies.textCatalog, MessageId::GtkActionOutputDevices),
+                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryPlayback),
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
@@ -334,8 +335,8 @@ namespace ao::gtk
   void ShellLayoutController::registerShellActions(RegisterActionFn const& registerAction)
   {
     registerAction("shell.showSystemMenu",
-                   _dependencies.textCatalog.text(MessageId::GtkActionSystemMenu),
-                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryShell),
+                   gtkText(_dependencies.textCatalog, MessageId::GtkActionSystemMenu),
+                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
@@ -360,14 +361,14 @@ namespace ao::gtk
 
     registerAction("shell.showSoul",
                    "Aobus Soul",
-                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryShell),
+                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext& ctx) { presentSoul(ctx); },
                    {});
 
     registerAction("shell.editLayout",
-                   _dependencies.textCatalog.text(MessageId::GtkShellEditLayout),
-                   _dependencies.textCatalog.text(MessageId::GtkActionCategoryShell),
+                   gtkText(_dependencies.textCatalog, MessageId::GtkShellEditLayout),
+                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext&)
                    {
@@ -441,8 +442,8 @@ namespace ao::gtk
   {
     registerAction(
       "workspace.revealCurrentTrack",
-      _dependencies.textCatalog.text(MessageId::GtkActionRevealTrack),
-      _dependencies.textCatalog.text(MessageId::GtkActionCategoryWorkspace),
+      gtkText(_dependencies.textCatalog, MessageId::GtkActionRevealTrack),
+      gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryWorkspace),
       uimodel::LayoutActionCapability::None,
       [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().commands().revealPlayingTrack(); },
       hasActiveSequence);
@@ -452,8 +453,8 @@ namespace ao::gtk
   {
     registerAction(
       "track.presentProperties",
-      _dependencies.textCatalog.text(MessageId::GtkActionTrackProperties),
-      _dependencies.textCatalog.text(MessageId::GtkActionCategoryTracks),
+      gtkText(_dependencies.textCatalog, MessageId::GtkActionTrackProperties),
+      gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryTracks),
       uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
@@ -478,8 +479,8 @@ namespace ao::gtk
 
     registerAction(
       "track.editTags",
-      _dependencies.textCatalog.text(MessageId::GtkActionEditTags),
-      _dependencies.textCatalog.text(MessageId::GtkActionCategoryTracks),
+      gtkText(_dependencies.textCatalog, MessageId::GtkActionEditTags),
+      gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryTracks),
       uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
       [this](layout::ActionActivationContext& ctx)
       {
@@ -513,7 +514,7 @@ namespace ao::gtk
       registerAction(
         id,
         label,
-        _dependencies.textCatalog.text(MessageId::GtkActionCategoryTracks),
+        gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryTracks),
         uimodel::LayoutActionCapability::None,
         [this, command](layout::ActionActivationContext&)
         {
@@ -533,18 +534,16 @@ namespace ao::gtk
         {
           if (_dependencies.trackPageHost == nullptr)
           {
-            return {
-              .enabled = false,
-              .disabledReason = std::string{_dependencies.textCatalog.text(i18n::MessageId::GtkNoTrackViewAvailable)}};
+            return {.enabled = false,
+                    .disabledReason = gtkText(_dependencies.textCatalog, i18n::MessageId::GtkNoTrackViewAvailable)};
           }
 
           auto const* const entry = _dependencies.trackPageHost->currentVisible();
 
           if (entry == nullptr || entry->pagePtr == nullptr)
           {
-            return {
-              .enabled = false,
-              .disabledReason = std::string{_dependencies.textCatalog.text(i18n::MessageId::GtkNoTrackViewAvailable)}};
+            return {.enabled = false,
+                    .disabledReason = gtkText(_dependencies.textCatalog, i18n::MessageId::GtkNoTrackViewAvailable)};
           }
 
           auto const capabilities = entry->pagePtr->orderCapabilities();
@@ -570,7 +569,7 @@ namespace ao::gtk
           if (!enabled)
           {
             disabledReason = capabilities.disabledReason.empty()
-                               ? _dependencies.gtkTextCatalog.text(GtkTextId::ListSelectTracksForOrder)
+                               ? gtkText(_dependencies.textCatalog, i18n::MessageId::GtkListSelectTracksForOrder)
                                : capabilities.disabledReason;
           }
 
@@ -579,22 +578,22 @@ namespace ao::gtk
     };
 
     registerOrderAction(kTrackOrderMoveUpActionId,
-                        _dependencies.textCatalog.text(MessageId::GtkListMoveUpAction),
+                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveUpAction),
                         TrackOrderCommand::MoveUp);
     registerOrderAction(kTrackOrderMoveDownActionId,
-                        _dependencies.textCatalog.text(MessageId::GtkListMoveDownAction),
+                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveDownAction),
                         TrackOrderCommand::MoveDown);
     registerOrderAction(kTrackOrderMoveToTopActionId,
-                        _dependencies.textCatalog.text(MessageId::GtkListMoveToTopAction),
+                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveToTopAction),
                         TrackOrderCommand::MoveToTop);
     registerOrderAction(kTrackOrderMoveToBottomActionId,
-                        _dependencies.textCatalog.text(MessageId::GtkListMoveToBottomAction),
+                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveToBottomAction),
                         TrackOrderCommand::MoveToBottom);
     registerOrderAction(kTrackOrderResetActionId,
-                        _dependencies.textCatalog.text(MessageId::GtkListResetOrderAction),
+                        gtkText(_dependencies.textCatalog, MessageId::GtkListResetOrderAction),
                         TrackOrderCommand::Reset);
     registerOrderAction(kTrackOrderForgetHiddenActionId,
-                        _dependencies.textCatalog.text(MessageId::GtkListForgetHiddenPositions),
+                        gtkText(_dependencies.textCatalog, MessageId::GtkListForgetHiddenPositions),
                         TrackOrderCommand::ForgetHidden);
   }
 
@@ -747,7 +746,7 @@ namespace ao::gtk
       return;
     }
 
-    for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(preparedLayout))
+    for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(preparedLayout, _registry.catalog()))
     {
       if (diagnostic.severity == uimodel::LayoutNodeIdDiagnosticSeverity::Error)
       {
@@ -915,7 +914,7 @@ namespace ao::gtk
     {
       nextComponentState = _componentStateStorePtr->load(result.activePresetId)
                              .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(result.activePresetId));
-      uimodel::pruneComponentState(nextComponentState, *activePreparedRes);
+      uimodel::pruneComponentState(nextComponentState, *activePreparedRes, _registry.catalog());
     }
 
     auto pendingRes = prepareHost(
@@ -956,7 +955,8 @@ namespace ao::gtk
     {
       for (auto const& item : result.modified)
       {
-        if (auto const& id = item.first; !_componentStateStorePtr->prune(id, preparedModified.at(id)))
+        if (auto const& id = item.first;
+            !_componentStateStorePtr->prune(id, preparedModified.at(id), _registry.catalog()))
         {
           APP_LOG_WARN("ShellLayoutController: Failed to prune runtime state for preset '{}'", id);
         }

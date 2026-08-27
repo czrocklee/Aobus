@@ -415,9 +415,8 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackCommandSurface`](../../app/include/ao/uimodel/playback/command/PlaybackCommandSurface.h) is the reusable UIModel command boundary.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h),
   [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h),
-  and [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h)
-  own shared output-device presentation, exact selection intent, and pure
-  persisted-intent resolution.
+  and the feature functions in [`PresentationText.h`](../../app/include/ao/uimodel/presentation/PresentationText.h)
+  own shared output-device presentation, exact selection intent, and pure persisted-intent resolution.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
 - [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and the source-private [`StreamingSource`](../../lib/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../lib/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
 - [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary; [`PlatformBackendProvidersLinux.cpp`](../../lib/audio/PlatformBackendProvidersLinux.cpp), [`PlatformBackendProvidersWindows.cpp`](../../lib/audio/PlatformBackendProvidersWindows.cpp), and [`PlatformBackendProvidersMacos.cpp`](../../lib/audio/PlatformBackendProvidersMacos.cpp) own concrete construction and platform preference order.

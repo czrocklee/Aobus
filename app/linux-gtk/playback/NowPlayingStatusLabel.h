@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/label.h>
@@ -14,14 +15,8 @@ namespace ao::rt
   class PlaybackCommands;
 }
 
-namespace ao::uimodel
-{
-  class PresentationTextCatalog;
-}
-
 namespace ao::gtk
 {
-  class GtkTextCatalog;
   /**
    * NowPlayingStatusLabel displays the currently playing track metadata
    * (Artist - Title) and reveals the playing track when clicked.
@@ -29,9 +24,7 @@ namespace ao::gtk
   class NowPlayingStatusLabel final
   {
   public:
-    NowPlayingStatusLabel(rt::PlaybackService& playback,
-                          uimodel::PresentationTextCatalog const& textCatalog,
-                          GtkTextCatalog const& gtkTextCatalog);
+    NowPlayingStatusLabel(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog);
     ~NowPlayingStatusLabel();
 
     // Not copyable or movable
