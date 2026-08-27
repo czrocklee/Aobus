@@ -34,14 +34,15 @@ namespace ao::rt
    *
    * Public methods and loader-owned state are confined to the bound runtime's
    * callback executor. Equal ids share one read, while each callback interest
-   * remains independently cancellable. Unbinding cancels external work before
-   * clearing flights, cached bytes, and the bound byte source.
+   * remains independently cancellable. The runtime is bound for the loader's
+   * whole life; there is no rebinding. Destruction cancels external work before
+   * clearing flights and cached bytes, in that order.
    *
    * A cached id invokes its ready callback synchronously inside request() and
    * returns an empty Request. Callers must establish replacement or generation
-   * state before calling request(). Ready callbacks may reenter request() or
-   * unbind(). The composition owner must not destroy the loader synchronously
-   * from a ready callback.
+   * state before calling request(). Ready callbacks may reenter request(). The
+   * composition owner must not destroy the loader synchronously from a ready
+   * callback.
    */
   class ResourceByteLoader final
   {
@@ -51,7 +52,6 @@ namespace ao::rt
       std::function<async::Task<Result<std::optional<std::vector<std::byte>>>>(ResourceId, std::stop_token)>;
     using Request = utility::ScopedRegistration;
 
-    ResourceByteLoader();
     explicit ResourceByteLoader(CoreRuntime& runtime);
     ResourceByteLoader(async::Runtime& runtime, ReadBytes readBytes);
     ~ResourceByteLoader();
@@ -61,11 +61,6 @@ namespace ao::rt
     ResourceByteLoader(ResourceByteLoader&&) = delete;
     ResourceByteLoader& operator=(ResourceByteLoader&&) = delete;
 
-    void bind(std::shared_ptr<CoreRuntime> runtimePtr);
-    // A borrowed runtime must outlive this loader and all work cancelled by it.
-    void bind(CoreRuntime& runtime);
-    void bind(async::Runtime& runtime, ReadBytes readBytes);
-    void unbind() noexcept;
     Request request(ResourceId resourceId, OnReady onReady);
 
   private:

@@ -9,9 +9,17 @@
 
 #include <memory>
 
+namespace ao::rt
+{
+  class AppRuntime;
+}
 namespace ao::uimodel
 {
   class PreparedLayout;
+}
+namespace ao::gtk
+{
+  struct ShellLayoutCollaborators;
 }
 
 namespace ao::gtk::layout
@@ -33,9 +41,14 @@ namespace ao::gtk::layout
     std::unique_ptr<LayoutComponent> build(LayoutBuildContext& ctx, uimodel::PreparedLayout const& layout);
 
     /**
-     * @brief Register all built-in components (containers, playback, semantic) to the registry.
+     * @brief Register all built-in components to the registry, capturing collaborators into component factories.
+     *
+     * The collaborators are consumed here: each factory keeps only the ones it
+     * names, and the aggregate itself is never retained by the registry.
      */
-    static void registerStandardComponents(ComponentRegistry& registry);
+    static void registerStandardComponents(ComponentRegistry& registry,
+                                           rt::AppRuntime& runtime,
+                                           ShellLayoutCollaborators const& collaborators);
 
   private:
     ComponentRegistry const& _registry;

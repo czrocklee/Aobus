@@ -14,11 +14,6 @@ namespace Gtk
   class Window;
 }
 
-namespace ao::rt
-{
-  class AppRuntime;
-}
-
 namespace ao::gtk::layout
 {
   class ActionRegistry;
@@ -27,7 +22,7 @@ namespace ao::gtk::layout
   class ActionBinder final
   {
   public:
-    ActionBinder(ActionRegistry const& registry, rt::AppRuntime& runtime, Gtk::Window& parentWindow);
+    ActionBinder(ActionRegistry const& registry, Gtk::Window& parentWindow);
 
     /**
      * @brief Binds a layout action to a property.
@@ -45,7 +40,6 @@ namespace ao::gtk::layout
 
   private:
     ActionRegistry const& _registry;
-    rt::AppRuntime& _runtime;
     Gtk::Window& _parentWindow;
   };
 } // namespace ao::gtk::layout

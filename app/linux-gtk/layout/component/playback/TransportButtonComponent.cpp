@@ -2,13 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/TransportButton.h"
 #include <ao/Contract.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
@@ -26,12 +24,11 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    uimodel::PlaybackCommandSurface& commandSurface(LayoutBuildContext& ctx)
+    uimodel::PlaybackCommandSurface& commandSurface(uimodel::PlaybackCommandSurface* playbackCommandSurface)
     {
-      AO_EXPECTS(ctx.dependencies.playbackCommandSurface != nullptr,
-                 "TransportButtonComponent: playback command surface is not bound");
+      AO_EXPECTS(playbackCommandSurface != nullptr, "TransportButtonComponent: playback command surface is not bound");
 
-      return *ctx.dependencies.playbackCommandSurface;
+      return *playbackCommandSurface;
     }
 
     /**
@@ -40,10 +37,14 @@ namespace ao::gtk::layout
     class TransportButtonComponent final : public LayoutComponent
     {
     public:
-      TransportButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node, PlaybackCommand const command)
-        : _button{ctx.runtime.playback(),
-                  commandSurface(ctx),
-                  ctx.dependencies.textCatalog,
+      TransportButtonComponent(rt::PlaybackService& playback,
+                               uimodel::PlaybackCommandSurface* playbackCommands,
+                               i18n::MessageCatalog const& textCatalog,
+                               LayoutNode const& node,
+                               PlaybackCommand const command)
+        : _button{playback,
+                  commandSurface(playbackCommands),
+                  textCatalog,
                   command,
                   node.propertyOr<bool>("showLabel", false),
                   node.propertyOr<std::string>("size", "normal")}
@@ -55,15 +56,12 @@ namespace ao::gtk::layout
     private:
       TransportButton _button;
     };
-
-    std::unique_ptr<LayoutComponent> createTransportButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      auto const optCommand = playbackCommandFor(node.propertyOr<std::string>(kCommandProp, ""));
-      return std::make_unique<TransportButtonComponent>(ctx, node, optCommand.value_or(PlaybackCommand::PlayPause));
-    }
   } // namespace
 
-  void registerTransportButtonComponent(ComponentRegistry& registry)
+  void registerTransportButtonComponent(ComponentRegistry& registry,
+                                        rt::PlaybackService& playback,
+                                        uimodel::PlaybackCommandSurface* playbackCommandSurface,
+                                        i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
       withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackTransportButton),
@@ -76,6 +74,11 @@ namespace ao::gtk::layout
                             .label = "Size",
                             .defaultValue = LayoutValue{"normal"},
                             .enumValues = {"small", "normal", "large"}}}),
-      createTransportButton);
+      [&playback, playbackCommandSurface, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      {
+        auto const optCommand = playbackCommandFor(node.propertyOr<std::string>(kCommandProp, ""));
+        return std::make_unique<TransportButtonComponent>(
+          playback, playbackCommandSurface, textCatalog, node, optCommand.value_or(PlaybackCommand::PlayPause));
+      });
   }
 } // namespace ao::gtk::layout

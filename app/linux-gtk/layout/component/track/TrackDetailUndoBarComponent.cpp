@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/UiWorkflow.h"
 #include "i18n/GtkTextCatalog.h"
 #include "layout/component/track/TrackDetailUndo.h"
@@ -28,6 +27,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace ao::gtk::layout
 {
@@ -37,11 +37,14 @@ namespace ao::gtk::layout
     class TrackDetailUndoBarComponent final : public LayoutComponent
     {
     public:
-      TrackDetailUndoBarComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+      TrackDetailUndoBarComponent(rt::AppRuntime& runtime,
+                                  i18n::MessageCatalog textCatalog,
+                                  LayoutBuildContext const& ctx,
+                                  LayoutNode const& /*node*/)
         : _undoController{ctx.detailUndo}
-        , _runtime{ctx.runtime}
-        , _notifications{ctx.runtime.notifications()}
-        , _textCatalog{ctx.dependencies.textCatalog}
+        , _runtime{runtime}
+        , _notifications{runtime.notifications()}
+        , _textCatalog{std::move(textCatalog)}
       {
         _undoButton.set_label(gtkText(_textCatalog, i18n::MessageId::GtkCommonUndo));
         _bar.set_orientation(Gtk::Orientation::HORIZONTAL);
@@ -144,20 +147,19 @@ namespace ao::gtk::layout
       sigc::connection _changedConn;
       async::LifetimeScope _tasks;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackDetailUndoBar(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TrackDetailUndoBarComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTrackDetailUndoBarComponent(ComponentRegistry& registry)
+  void registerTrackDetailUndoBarComponent(ComponentRegistry& registry,
+                                           rt::AppRuntime& runtime,
+                                           i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent({.type = "track.detailUndoBar",
-                                .displayName = "Detail Undo Bar",
-                                .category = LayoutComponentCategory::Track,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createTrackDetailUndoBar);
+    registry.registerComponent(
+      {.type = "track.detailUndoBar",
+       .displayName = "Detail Undo Bar",
+       .category = LayoutComponentCategory::Track,
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      [&runtime, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
+      { return std::make_unique<TrackDetailUndoBarComponent>(runtime, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

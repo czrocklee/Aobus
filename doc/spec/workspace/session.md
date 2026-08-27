@@ -160,7 +160,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [`WorkspaceSessionYamlSchema`](../../../app/runtime/WorkspaceSessionYamlSchema.h) owns explicit YAML mapping, the private strict document, and stable presentation conversion.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) creates and destroys candidate views.
 - [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) supplies explicit schema invocation, presence-aware candidate loading, and one-shot save.
-- [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) owns current GTK restore/default/checkpoint sequencing.
+- [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) owns current GTK restore/default/checkpoint sequencing.
 
 ## Test map
 
@@ -168,7 +168,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
-- [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK workspace/playback restore composition.
+- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects GTK workspace/playback restore composition.
 - [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves restored presentation preservation, initial history replay, and new-view default selection.
 
 ## Related documents

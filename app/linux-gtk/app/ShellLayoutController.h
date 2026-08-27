@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "app/GtkUiDependencies.h"
+#include "app/ShellLayoutCollaborators.h"
 #include "app/ThemeCoordinator.h"
 #include "common/MainContextCallbackScope.h"
 #include "common/PopoverAttachment.h"
@@ -17,6 +17,7 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
@@ -26,7 +27,10 @@
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
+#include <giomm/menumodel.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/window.h>
 #include <sigc++/scoped_connection.h>
 
@@ -91,7 +95,7 @@ namespace ao::gtk
                           std::shared_ptr<AppConfigStore> configStorePtr,
                           std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                           std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                          GtkUiDependencies dependencies);
+                          ShellLayoutCollaborators collaborators);
     ~ShellLayoutController() override;
 
     ShellLayoutController(ShellLayoutController const&) = delete;
@@ -106,7 +110,6 @@ namespace ao::gtk
     uimodel::LayoutDocument const& activeLayout() const { return _session.snapshot().layout; }
 
     void attachToWindow();
-    void setMenuModel(Glib::RefPtr<Gio::MenuModel> menuModelPtr);
     void refreshExportedActions();
     void loadLayout();
     void openEditor(AppConfigStore& configStore);
@@ -166,7 +169,13 @@ namespace ao::gtk
     layout::ComponentRegistry _registry;
     layout::ActionRegistry _actionRegistry;
     uimodel::LayoutRuntimeState _runtimeState;
-    GtkUiDependencies _dependencies;
+    i18n::MessageCatalog _textCatalog;
+    uimodel::PlaybackCommandSurface& _playbackCommandSurface;
+    ThemeCoordinator& _themeCoordinator;
+    TagEditController* _tagEditController = nullptr;
+    TrackPageHost* _trackPageHost = nullptr;
+    uimodel::OutputDeviceIntent _outputDeviceIntent;
+    Glib::RefPtr<Gio::MenuModel> _menuModelPtr;
     layout::LayoutHost _host;
     PopoverAttachment _outputDevicePopover;
     PopoverAttachment _menuPopover;
@@ -176,7 +185,6 @@ namespace ao::gtk
     std::shared_ptr<AppConfigStore> _configStorePtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;
     std::shared_ptr<ShellLayoutComponentStateStore> _componentStateStorePtr;
-    ThemeCoordinator& _themeCoordinator;
     std::optional<ThemeRegistrationToken> _optEditorThemeToken;
     std::shared_ptr<layout::editor::LayoutEditorDialog> _editorDialogPtr;
     sigc::scoped_connection _queuedEditorDialogRetirementConnection;

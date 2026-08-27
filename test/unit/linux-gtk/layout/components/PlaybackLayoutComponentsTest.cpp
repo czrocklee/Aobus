@@ -2,9 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/AobusSoul.h"
-#include "app/linux-gtk/app/GtkUiDependencies.h"
+#include "app/linux-gtk/layout/component/playback/PlaybackComponentRegistrations.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/playback/OutputDevicePopover.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
@@ -245,8 +246,12 @@ namespace ao::gtk::layout::test
     {
       rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
       auto optRequested = std::optional<audio::OutputDeviceSelection>{};
-      fixture.dependencies().outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
-        [&optRequested](audio::OutputDeviceSelection const& selection) { optRequested = selection; });
+      registerOutputDeviceSelectorComponent(
+        fixture.components(),
+        fixture.runtime().playback(),
+        ao::test::messageCatalog("en"),
+        uimodel::OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
+                                                { optRequested = selection; }));
       auto const node = LayoutNode{.type = "playback.outputDeviceSelector"};
       auto const compPtr = fixture.create(node);
       REQUIRE(compPtr != nullptr);

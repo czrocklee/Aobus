@@ -88,20 +88,15 @@ CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
         leaf="gtk.playback.seekSlider",
         path="app/linux-gtk/layout/component/playback/SeekSliderComponent.cpp",
         steps=(
-            "ComponentRegistry.registerComponent",
-            "createSeekSlider(LayoutBuildContext)",
-            "LayoutBuildContext.runtime",
-            "AppRuntime.playback()",
+            "registerSeekSliderComponent(ComponentRegistry&, PlaybackService&)",
+            "SeekSliderComponent(PlaybackService&)",
             "SeekControlWidget(PlaybackService)",
         ),
     ),
     ConstructionChain(
         leaf="rt.ResourceByteLoader",
         path="app/include/ao/rt/resource/ResourceByteLoader.h",
-        steps=(
-            "ResourceByteLoader()",
-            "bind(CoreRuntime&)",
-        ),
+        steps=("ResourceByteLoader(CoreRuntime&)",),
     ),
     ConstructionChain(
         leaf="uimodel.ActivityStatusFeedProjection",
@@ -111,18 +106,12 @@ CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
     ConstructionChain(
         leaf="winui.TrackListController",
         path="app/windows-winui/track/TrackListController.h",
-        steps=(
-            "TrackListController(MessageCatalog)",
-            "bind(AppRuntime&, TrackColumnLayoutState&)",
-        ),
+        steps=("TrackListController(AppRuntime&, TrackColumnLayoutState&, MessageCatalog)",),
     ),
     ConstructionChain(
         leaf="winui.SmtcBridge",
         path="app/windows-winui/platform/SmtcBridge.h",
-        steps=(
-            "SmtcBridge(HWND, DispatcherQueue)",
-            "bind(AppRuntime&, PlaybackCommandSurface&, ResourceByteLoader&)",
-        ),
+        steps=("SmtcBridge(HWND, DispatcherQueue, AppRuntime&, PlaybackCommandSurface&, ResourceByteLoader&)",),
     ),
 )
 

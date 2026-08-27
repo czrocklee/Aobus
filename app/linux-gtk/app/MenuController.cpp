@@ -11,7 +11,7 @@
 
 namespace ao::gtk
 {
-  void MenuController::setup(i18n::MessageCatalog const& textCatalog)
+  MenuController::MenuController(i18n::MessageCatalog const& textCatalog)
   {
     auto const text = [&textCatalog](i18n::MessageId const id) { return gtkText(textCatalog, id); };
     _menuModelPtr = Gio::Menu::create();

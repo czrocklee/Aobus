@@ -128,7 +128,7 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) resolves global GTK config, layout, component-state, log, selected-root, and workspace locations.
 - [`GtkStyleRuntime.cpp`](../../../app/linux-gtk/app/GtkStyleRuntime.cpp) resolves `user.css`.
 - [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) resolves the MPRIS artwork cache.
-- [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
+- [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
 - [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration override selection and appends its frontend-specific configuration filename.
 - [`app/tui/App.cpp`](../../../app/tui/App.cpp) uses the canonical per-library log path and constructs its runtime store.
 - [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) opens the canonical database for its selected root and resolves the cache directory it passes to the runtime.

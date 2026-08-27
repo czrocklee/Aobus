@@ -50,7 +50,7 @@ namespace ao::gtk::layout
   {
     descriptor = uimodel::componentDescriptorWithActionProperties(std::move(descriptor));
     auto const type = std::string{descriptor.type};
-    _factories[type] = factory;
+    _factories[type] = std::move(factory);
     _catalog.registerComponentDescriptor(std::move(descriptor));
   }
 

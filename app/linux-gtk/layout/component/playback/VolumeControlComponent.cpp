@@ -2,12 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/VolumeControlWidget.h"
-#include <ao/rt/AppRuntime.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -29,8 +28,10 @@ namespace ao::gtk::layout
     class VolumeControlComponent final : public LayoutComponent
     {
     public:
-      VolumeControlComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _control{ctx.runtime.playback(), ctx.dependencies.textCatalog}
+      VolumeControlComponent(rt::PlaybackService& playback,
+                             i18n::MessageCatalog const& textCatalog,
+                             LayoutNode const& node)
+        : _control{playback, textCatalog}
       {
         auto const orient = node.propertyOr<std::string>(kOrientationProp, "horizontal");
 
@@ -45,14 +46,11 @@ namespace ao::gtk::layout
     private:
       VolumeControlWidget _control;
     };
-
-    std::unique_ptr<LayoutComponent> createVolumeControl(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<VolumeControlComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerVolumeControlComponent(ComponentRegistry& registry)
+  void registerVolumeControlComponent(ComponentRegistry& registry,
+                                      rt::PlaybackService& playback,
+                                      i18n::MessageCatalog const& textCatalog)
   {
     // GTK can stand the slider on end, which no other shell offers yet, and
     // which the descriptor has to admit for a document to reach the code below.
@@ -63,6 +61,7 @@ namespace ao::gtk::layout
                             .label = "Orientation",
                             .defaultValue = LayoutValue{"horizontal"},
                             .enumValues = {"horizontal", "vertical"}}}),
-      createVolumeControl);
+      [&playback, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      { return std::make_unique<VolumeControlComponent>(playback, textCatalog, node); });
   }
 } // namespace ao::gtk::layout

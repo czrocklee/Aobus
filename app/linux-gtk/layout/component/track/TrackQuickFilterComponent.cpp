@@ -2,12 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
+#include <ao/CoreIds.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
@@ -15,6 +15,7 @@
 #include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -30,23 +31,23 @@ namespace ao::gtk::layout
     class TrackQuickFilterComponent final : public LayoutComponent
     {
     public:
-      TrackQuickFilterComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime, ctx.dependencies.textCatalog, ctx.timeoutScheduler}
+      TrackQuickFilterComponent(rt::AppRuntime& runtime,
+                                TrackPageHost* pageHost,
+                                std::function<void(ao::ListId, std::string)> const& createSmartListFromExpression,
+                                i18n::MessageCatalog const& textCatalog,
+                                LayoutBuildContext const& ctx)
+        : _widget{runtime, textCatalog, ctx.timeoutScheduler}
       {
-        auto* const pageHost = ctx.dependencies.trackPageHost;
-        auto createSmartListFromExpression = ctx.dependencies.createSmartListFromExpression;
-
         if (pageHost == nullptr || !createSmartListFromExpression)
         {
           return;
         }
 
         _createSmartListConn = _widget.signalCreateSmartListRequested().connect(
-          [createSmartListFromExpression = std::move(createSmartListFromExpression),
-           pageHost](std::string const& expression) mutable
+          [createSmartList = createSmartListFromExpression, pageHost](std::string const& expression)
           {
             auto const parentListId = uimodel::smartListParentIdFromPage(pageHost->activeListId());
-            createSmartListFromExpression(parentListId, expression);
+            createSmartList(parentListId, expression);
           });
       }
 
@@ -56,16 +57,18 @@ namespace ao::gtk::layout
       TrackQuickFilter _widget;
       sigc::scoped_connection _createSmartListConn;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackQuickFilter(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TrackQuickFilterComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTrackQuickFilterComponent(ComponentRegistry& registry)
+  void registerTrackQuickFilterComponent(ComponentRegistry& registry,
+                                         rt::AppRuntime& runtime,
+                                         TrackPageHost* trackPageHost,
+                                         std::function<void(ao::ListId, std::string)> createSmartListFromExpression,
+                                         i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::TrackQuickFilter), createTrackQuickFilter);
+      sharedComponentDescriptor(SharedLayoutComponentType::TrackQuickFilter),
+      [&runtime, trackPageHost, createFn = std::move(createSmartListFromExpression), textCatalog](
+        LayoutBuildContext const& ctx, LayoutNode const& /*node*/)
+      { return std::make_unique<TrackQuickFilterComponent>(runtime, trackPageHost, createFn, textCatalog, ctx); });
   }
 } // namespace ao::gtk::layout

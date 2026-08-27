@@ -807,7 +807,7 @@ add_custom_target(ao_windows_winui_state_subscription_guardrail
 )
 
 # Generation components and leaf adapters bind exact capabilities. Session and
-# runtime composition remain at MainWindow, UiCoordinator, and ShellBuilder.
+# runtime composition remain at MainWindow and ShellBuilder.
 add_custom_target(ao_windows_winui_leaf_capability_guardrail
   COMMAND ${CMAKE_COMMAND}
           "-DROOT=${CMAKE_SOURCE_DIR}/app/windows-winui"

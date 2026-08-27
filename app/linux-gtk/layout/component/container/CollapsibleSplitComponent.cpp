@@ -3,7 +3,6 @@
 
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
 #include "i18n/GtkTextCatalog.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -177,8 +176,8 @@ namespace ao::gtk::layout
         End
       };
 
-      CollapsibleSplitComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _textCatalog{ctx.dependencies.textCatalog}
+      CollapsibleSplitComponent(i18n::MessageCatalog textCatalog, LayoutBuildContext& ctx, LayoutNode const& node)
+        : _textCatalog{std::move(textCatalog)}
         , _state{ctx.runtimeState, ctx.buildState, ctx.surface, node, kCollapsibleSplitComponentType}
       {
         if (node.children.size() != 2)
@@ -712,14 +711,9 @@ namespace ao::gtk::layout
       std::unique_ptr<LayoutComponent> _startChildPtr;
       std::unique_ptr<LayoutComponent> _endChildPtr;
     };
-
-    std::unique_ptr<LayoutComponent> createCollapsibleSplit(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<CollapsibleSplitComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerCollapsibleSplitComponent(ComponentRegistry& registry)
+  void registerCollapsibleSplitComponent(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent({.type = std::string{kCollapsibleSplitComponentType},
                                 .displayName = "Collapsible Split",
@@ -749,6 +743,7 @@ namespace ao::gtk::layout
                                 .minChildren = 2,
                                 .optMaxChildren = 2,
                                 .persistentState = true},
-                               createCollapsibleSplit);
+                               [textCatalog](LayoutBuildContext& ctx, LayoutNode const& node)
+                               { return std::make_unique<CollapsibleSplitComponent>(textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

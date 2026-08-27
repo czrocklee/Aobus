@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/document/LayoutPresets.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
@@ -19,7 +17,6 @@
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
-#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -46,15 +43,11 @@ namespace ao::gtk::layout::test
     {
       auto actionRegistry = ActionRegistry{};
       auto runtimeState = uimodel::LayoutRuntimeState{};
-      auto dependencies = GtkUiDependencies{.textCatalog = ao::test::englishMessageCatalog(),
-                                            .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
       auto actionCtx = LayoutBuildContext{.registry = registry,
                                           .actionRegistry = actionRegistry,
-                                          .runtime = fixture.runtime(),
                                           .parentWindow = fixture.window(),
                                           .runtimeState = runtimeState,
-                                          .buildState = uimodel::LayoutBuildStateView{runtimeState},
-                                          .dependencies = dependencies};
+                                          .buildState = uimodel::LayoutBuildStateView{runtimeState}};
       auto const* const yaml = R"(
       type: actionButton
       props:

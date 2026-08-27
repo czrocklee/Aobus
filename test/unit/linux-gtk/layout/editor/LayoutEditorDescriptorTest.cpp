@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "app/ShellLayoutCollaborators.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -10,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <set>
 #include <string>
 #include <string_view>
@@ -23,8 +28,11 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("LayoutEditorDescriptor - descriptor validation covers all standard layout components",
             "[gtk][unit][layout][editor]")
   {
+    auto const tempDir = ao::test::TempDir{};
+    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
+    LayoutRuntime::registerStandardComponents(
+      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
 
     auto const& descriptors = registry.descriptors();
 

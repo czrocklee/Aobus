@@ -2,12 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/PlaybackDetailsWidget.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -24,8 +22,8 @@ namespace ao::gtk::layout
     class PlaybackDetailsComponent final : public LayoutComponent
     {
     public:
-      PlaybackDetailsComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.playback(), ctx.dependencies.textCatalog}
+      PlaybackDetailsComponent(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
+        : _widget{playback, textCatalog}
       {
       }
 
@@ -34,18 +32,16 @@ namespace ao::gtk::layout
     private:
       PlaybackDetailsWidget _widget;
     };
-
-    std::unique_ptr<LayoutComponent> createPlaybackDetails(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<PlaybackDetailsComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerPlaybackDetailsComponent(ComponentRegistry& registry)
+  void registerPlaybackDetailsComponent(ComponentRegistry& registry,
+                                        rt::PlaybackService& playback,
+                                        i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent({.type = "status.playbackDetails",
                                 .displayName = "Playback Details",
                                 .category = LayoutComponentCategory::Status},
-                               createPlaybackDetails);
+                               [&playback, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                               { return std::make_unique<PlaybackDetailsComponent>(playback, textCatalog); });
   }
 } // namespace ao::gtk::layout

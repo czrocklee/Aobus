@@ -108,13 +108,9 @@ namespace ao::gtk::test
 
   TEST_CASE("MenuController - builds menu model around window and app actions", "[gtk][unit][menu]")
   {
-    auto controller = MenuController{};
+    auto const controller = MenuController{ao::test::englishMessageCatalog()};
 
-    CHECK(controller.menuModel() == nullptr);
-
-    controller.setup(ao::test::englishMessageCatalog());
-
-    CHECK(controller.menuModel() != nullptr);
+    REQUIRE(controller.menuModel() != nullptr);
 
     auto* const fileLabel = ::g_menu_model_get_item_attribute_value(
       controller.menuModel()->gobj(), 0, G_MENU_ATTRIBUTE_LABEL, G_VARIANT_TYPE_STRING);

@@ -5,7 +5,6 @@
 
 #include "layout/runtime/ActionRegistry.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
-#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -24,8 +23,6 @@ namespace ao::gtk::layout::test
   TEST_CASE("ActionBinder - binds layout action properties to activation callbacks", "[gtk][unit][layout][runtime]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto& runtime = fixture.runtime();
     auto window = Gtk::Window{};
     auto anchor = Gtk::Box{};
 
@@ -46,8 +43,8 @@ namespace ao::gtk::layout::test
                               lastAnchor = &ctx.anchorWidget;
                             });
 
-    // Binder doesn't need LayoutBuildContext, only registry, runtime, and parent window
-    auto const binder = ActionBinder{registry, runtime, window};
+    // Binder doesn't need LayoutBuildContext, only registry and parent window
+    auto const binder = ActionBinder{registry, window};
 
     SECTION("bind returns empty function for 'none'")
     {

@@ -4,9 +4,9 @@
 #include "ShellLayoutController.h"
 
 #include "AppConfigStore.h"
+#include "ShellLayoutCollaborators.h"
 #include "ShellLayoutComponentStateStore.h"
 #include "ShellLayoutStore.h"
-#include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
 #include "i18n/GtkTextCatalog.h"
 #include "layout/document/LayoutDialect.h"
@@ -173,18 +173,19 @@ namespace ao::gtk
               .componentState = std::move(stateDoc)};
     }
 
-    uimodel::PlaybackCommandSurface& commandSurface(uimodel::PlaybackCommandSurface* surface)
+    uimodel::PlaybackCommandSurface& requirePlaybackCommandSurface(ShellLayoutCollaborators const& collaborators)
     {
-      AO_EXPECTS(surface != nullptr, "ShellLayoutController: playback command surface is not bound");
+      AO_EXPECTS(collaborators.playbackCommandSurface != nullptr,
+                 "ShellLayoutController: playback command surface is not bound");
 
-      return *surface;
+      return *collaborators.playbackCommandSurface;
     }
 
-    ThemeCoordinator& requireThemeCoordinator(GtkUiDependencies const& dependencies)
+    ThemeCoordinator& requireThemeCoordinator(ShellLayoutCollaborators const& collaborators)
     {
-      AO_EXPECTS(dependencies.themeCoordinator != nullptr, "ShellLayoutController: theme coordinator is not bound");
+      AO_EXPECTS(collaborators.themeCoordinator != nullptr, "ShellLayoutController: theme coordinator is not bound");
 
-      return *dependencies.themeCoordinator;
+      return *collaborators.themeCoordinator;
     }
   } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
@@ -192,17 +193,22 @@ namespace ao::gtk
                                                std::shared_ptr<AppConfigStore> configStorePtr,
                                                std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                                                std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                                               GtkUiDependencies dependencies)
+                                               ShellLayoutCollaborators collaborators)
     : _runtime{runtime}
     , _parentWindow{window}
     , _registry{}
     , _actionRegistry{}
-    , _dependencies{std::move(dependencies)}
+    , _textCatalog{collaborators.textCatalog}
+    , _playbackCommandSurface{requirePlaybackCommandSurface(collaborators)}
+    , _themeCoordinator{requireThemeCoordinator(collaborators)}
+    , _tagEditController{collaborators.tagEditController}
+    , _trackPageHost{collaborators.trackPageHost}
+    , _outputDeviceIntent{collaborators.outputDeviceIntent}
+    , _menuModelPtr{collaborators.menuModelPtr}
     , _host{_registry}
     , _configStorePtr{std::move(configStorePtr)}
     , _layoutStorePtr{std::move(layoutStorePtr)}
     , _componentStateStorePtr{std::move(componentStateStorePtr)}
-    , _themeCoordinator{requireThemeCoordinator(_dependencies)}
     , _callbackScope{[this]
                      {
                        _queuedEditorDialogRetirementConnection.disconnect();
@@ -211,7 +217,7 @@ namespace ao::gtk
                      }}
   {
     _runtimeState.componentStateStore = _componentStateStorePtr.get();
-    layout::LayoutRuntime::registerStandardComponents(_registry);
+    layout::LayoutRuntime::registerStandardComponents(_registry, _runtime, collaborators);
 
     auto const registerAction = [this](std::string_view id,
                                        std::string_view label,
@@ -239,7 +245,7 @@ namespace ao::gtk
     registerTrackActions(registerAction);
 
     _actionStateSubscriptions.push_back(
-      commandSurface(_dependencies.playbackCommandSurface).onAvailabilityChanged([this] { refreshExportedActions(); }));
+      _playbackCommandSurface.onAvailabilityChanged([this] { refreshExportedActions(); }));
     _actionStateSubscriptions.push_back(_runtime.views().onSelectionChanged(
       [this](rt::ViewService::SelectionChanged const&) { refreshExportedActions(); }));
     _actionStateSubscriptions.push_back(_runtime.views().onPresentationChanged(
@@ -279,41 +285,32 @@ namespace ao::gtk
     return _soulWindowPtr.get();
   }
 
-  void ShellLayoutController::setMenuModel(Glib::RefPtr<Gio::MenuModel> menuModelPtr)
-  {
-    _dependencies.menuModelPtr = std::move(menuModelPtr);
-  }
-
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction)
   {
     auto const execute = [this](uimodel::PlaybackCommand command)
-    {
-      return [this, command](layout::ActionActivationContext&)
-      { commandSurface(_dependencies.playbackCommandSurface).execute(command); };
-    };
+    { return [this, command](layout::ActionActivationContext&) { _playbackCommandSurface.execute(command); }; };
 
     auto const isEnabled = [this](uimodel::PlaybackCommand command)
     {
       return [this, command](layout::ActionActivationContext const&) -> layout::ActionAvailability
       {
-        return layout::ActionAvailability{
-          .enabled = commandSurface(_dependencies.playbackCommandSurface).isEnabled(command), .disabledReason = ""};
+        return layout::ActionAvailability{.enabled = _playbackCommandSurface.isEnabled(command), .disabledReason = ""};
       };
     };
 
     for (auto const command : uimodel::playbackCommands())
     {
       registerAction(uimodel::playbackCommandActionId(command),
-                     uimodel::playbackActionLabel(_dependencies.textCatalog, command),
-                     gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryPlayback),
+                     uimodel::playbackActionLabel(_textCatalog, command),
+                     gtkText(_textCatalog, MessageId::GtkActionCategoryPlayback),
                      uimodel::LayoutActionCapability::None,
                      execute(command),
                      isEnabled(command));
     }
 
     registerAction("playback.showOutputDeviceSelector",
-                   gtkText(_dependencies.textCatalog, MessageId::GtkActionOutputDevices),
-                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryPlayback),
+                   gtkText(_textCatalog, MessageId::GtkActionOutputDevices),
+                   gtkText(_textCatalog, MessageId::GtkActionCategoryPlayback),
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
@@ -322,10 +319,8 @@ namespace ao::gtk
                        return;
                      }
 
-                     auto popoverPtr = std::make_unique<OutputDevicePopover>(ctx.runtime.playback(),
-                                                                             _dependencies.textCatalog,
-                                                                             _dependencies.outputDeviceIntent,
-                                                                             Gtk::PositionType::BOTTOM);
+                     auto popoverPtr = std::make_unique<OutputDevicePopover>(
+                       _runtime.playback(), _textCatalog, _outputDeviceIntent, Gtk::PositionType::BOTTOM);
                      _outputDevicePopover.attach(std::move(popoverPtr), ctx.anchorWidget);
                      _outputDevicePopover.popup();
                    },
@@ -335,19 +330,19 @@ namespace ao::gtk
   void ShellLayoutController::registerShellActions(RegisterActionFn const& registerAction)
   {
     registerAction("shell.showSystemMenu",
-                   gtkText(_dependencies.textCatalog, MessageId::GtkActionSystemMenu),
-                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryShell),
+                   gtkText(_textCatalog, MessageId::GtkActionSystemMenu),
+                   gtkText(_textCatalog, MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
-                     if (_dependencies.menuModelPtr)
+                     if (_menuModelPtr)
                      {
                        if (_menuPopover.hasPopover())
                        {
                          return;
                        }
 
-                       auto popoverPtr = std::make_unique<Gtk::PopoverMenu>(_dependencies.menuModelPtr);
+                       auto popoverPtr = std::make_unique<Gtk::PopoverMenu>(_menuModelPtr);
                        popoverPtr->set_has_arrow(true);
                        _menuPopover.attach(std::move(popoverPtr), ctx.anchorWidget);
                        _menuPopover.popup();
@@ -361,14 +356,14 @@ namespace ao::gtk
 
     registerAction("shell.showSoul",
                    "Aobus Soul",
-                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryShell),
+                   gtkText(_textCatalog, MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext& ctx) { presentSoul(ctx); },
                    {});
 
     registerAction("shell.editLayout",
-                   gtkText(_dependencies.textCatalog, MessageId::GtkShellEditLayout),
-                   gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryShell),
+                   gtkText(_textCatalog, MessageId::GtkShellEditLayout),
+                   gtkText(_textCatalog, MessageId::GtkActionCategoryShell),
                    uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext&)
                    {
@@ -404,7 +399,7 @@ namespace ao::gtk
     _soulWindowPtr = std::make_unique<AobusSoulWindow>();
     auto* const window = _soulWindowPtr.get();
     window->set_transient_for(context.parentWindow);
-    window->bind(context.runtime.playback());
+    window->bind(_runtime.playback());
     _soulWindowHideConnection = window->signal_hide().connect(
       [this, window]
       {
@@ -442,10 +437,10 @@ namespace ao::gtk
   {
     registerAction(
       "workspace.revealCurrentTrack",
-      gtkText(_dependencies.textCatalog, MessageId::GtkActionRevealTrack),
-      gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryWorkspace),
+      gtkText(_textCatalog, MessageId::GtkActionRevealTrack),
+      gtkText(_textCatalog, MessageId::GtkActionCategoryWorkspace),
       uimodel::LayoutActionCapability::None,
-      [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().commands().revealPlayingTrack(); },
+      [this](layout::ActionActivationContext&) { _runtime.playback().commands().revealPlayingTrack(); },
       hasActiveSequence);
   }
 
@@ -453,53 +448,53 @@ namespace ao::gtk
   {
     registerAction(
       "track.presentProperties",
-      gtkText(_dependencies.textCatalog, MessageId::GtkActionTrackProperties),
-      gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryTracks),
+      gtkText(_textCatalog, MessageId::GtkActionTrackProperties),
+      gtkText(_textCatalog, MessageId::GtkActionCategoryTracks),
       uimodel::LayoutActionCapability::None,
-      [this](layout::ActionActivationContext& ctx)
+      [this](layout::ActionActivationContext&)
       {
-        if (_dependencies.tagEditController != nullptr)
+        if (_tagEditController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
-          auto projPtr = ctx.runtime.workspace().detailProjection(target);
+          auto projPtr = _runtime.workspace().detailProjection(target);
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            _dependencies.tagEditController->presentProperties(
+            _tagEditController->presentProperties(
               TrackSelection{.listId = kInvalidListId, .selectedIds = snap.trackIds});
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> layout::ActionAvailability
+      [this](layout::ActionActivationContext const&) -> layout::ActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
-        auto projPtr = ctx.runtime.workspace().detailProjection(target);
+        auto projPtr = _runtime.workspace().detailProjection(target);
         return layout::ActionAvailability{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
 
     registerAction(
       "track.editTags",
-      gtkText(_dependencies.textCatalog, MessageId::GtkActionEditTags),
-      gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryTracks),
+      gtkText(_textCatalog, MessageId::GtkActionEditTags),
+      gtkText(_textCatalog, MessageId::GtkActionCategoryTracks),
       uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (_dependencies.tagEditController != nullptr)
+        if (_tagEditController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
-          auto projPtr = ctx.runtime.workspace().detailProjection(target);
+          auto projPtr = _runtime.workspace().detailProjection(target);
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            _dependencies.tagEditController->openTagEditor(
+            _tagEditController->openTagEditor(
               TrackSelection{.listId = kInvalidListId, .selectedIds = snap.trackIds}, ctx.anchorWidget);
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> layout::ActionAvailability
+      [this](layout::ActionActivationContext const&) -> layout::ActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
-        auto projPtr = ctx.runtime.workspace().detailProjection(target);
+        auto projPtr = _runtime.workspace().detailProjection(target);
         return layout::ActionAvailability{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
 
@@ -514,36 +509,34 @@ namespace ao::gtk
       registerAction(
         id,
         label,
-        gtkText(_dependencies.textCatalog, MessageId::GtkActionCategoryTracks),
+        gtkText(_textCatalog, MessageId::GtkActionCategoryTracks),
         uimodel::LayoutActionCapability::None,
         [this, command](layout::ActionActivationContext&)
         {
-          if (_dependencies.trackPageHost == nullptr)
+          if (_trackPageHost == nullptr)
           {
             return;
           }
 
-          auto* const entry = _dependencies.trackPageHost->currentVisible();
-
-          if (entry != nullptr && entry->pagePtr != nullptr)
+          if (auto* const entry = _trackPageHost->currentVisible(); entry != nullptr && entry->pagePtr != nullptr)
           {
             entry->pagePtr->applyListOrderCommand(command);
           }
         },
         [this, command](layout::ActionActivationContext const&) -> layout::ActionAvailability
         {
-          if (_dependencies.trackPageHost == nullptr)
+          if (_trackPageHost == nullptr)
           {
-            return {.enabled = false,
-                    .disabledReason = gtkText(_dependencies.textCatalog, i18n::MessageId::GtkNoTrackViewAvailable)};
+            return {
+              .enabled = false, .disabledReason = gtkText(_textCatalog, i18n::MessageId::GtkNoTrackViewAvailable)};
           }
 
-          auto const* const entry = _dependencies.trackPageHost->currentVisible();
+          auto const* const entry = _trackPageHost->currentVisible();
 
           if (entry == nullptr || entry->pagePtr == nullptr)
           {
-            return {.enabled = false,
-                    .disabledReason = gtkText(_dependencies.textCatalog, i18n::MessageId::GtkNoTrackViewAvailable)};
+            return {
+              .enabled = false, .disabledReason = gtkText(_textCatalog, i18n::MessageId::GtkNoTrackViewAvailable)};
           }
 
           auto const capabilities = entry->pagePtr->orderCapabilities();
@@ -569,7 +562,7 @@ namespace ao::gtk
           if (!enabled)
           {
             disabledReason = capabilities.disabledReason.empty()
-                               ? gtkText(_dependencies.textCatalog, i18n::MessageId::GtkListSelectTracksForOrder)
+                               ? gtkText(_textCatalog, i18n::MessageId::GtkListSelectTracksForOrder)
                                : capabilities.disabledReason;
           }
 
@@ -577,23 +570,21 @@ namespace ao::gtk
         });
     };
 
-    registerOrderAction(kTrackOrderMoveUpActionId,
-                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveUpAction),
-                        TrackOrderCommand::MoveUp);
+    registerOrderAction(
+      kTrackOrderMoveUpActionId, gtkText(_textCatalog, MessageId::GtkListMoveUpAction), TrackOrderCommand::MoveUp);
     registerOrderAction(kTrackOrderMoveDownActionId,
-                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveDownAction),
+                        gtkText(_textCatalog, MessageId::GtkListMoveDownAction),
                         TrackOrderCommand::MoveDown);
     registerOrderAction(kTrackOrderMoveToTopActionId,
-                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveToTopAction),
+                        gtkText(_textCatalog, MessageId::GtkListMoveToTopAction),
                         TrackOrderCommand::MoveToTop);
     registerOrderAction(kTrackOrderMoveToBottomActionId,
-                        gtkText(_dependencies.textCatalog, MessageId::GtkListMoveToBottomAction),
+                        gtkText(_textCatalog, MessageId::GtkListMoveToBottomAction),
                         TrackOrderCommand::MoveToBottom);
-    registerOrderAction(kTrackOrderResetActionId,
-                        gtkText(_dependencies.textCatalog, MessageId::GtkListResetOrderAction),
-                        TrackOrderCommand::Reset);
+    registerOrderAction(
+      kTrackOrderResetActionId, gtkText(_textCatalog, MessageId::GtkListResetOrderAction), TrackOrderCommand::Reset);
     registerOrderAction(kTrackOrderForgetHiddenActionId,
-                        gtkText(_dependencies.textCatalog, MessageId::GtkListForgetHiddenPositions),
+                        gtkText(_textCatalog, MessageId::GtkListForgetHiddenPositions),
                         TrackOrderCommand::ForgetHidden);
   }
 
@@ -625,11 +616,9 @@ namespace ao::gtk
   {
     auto ctx = layout::LayoutBuildContext{.registry = _registry,
                                           .actionRegistry = _actionRegistry,
-                                          .runtime = _runtime,
                                           .parentWindow = _parentWindow,
                                           .runtimeState = _runtimeState,
-                                          .buildState = std::move(buildState),
-                                          .dependencies = _dependencies};
+                                          .buildState = std::move(buildState)};
     return _host.prepare(ctx, preparedLayout);
   }
 
@@ -808,7 +797,7 @@ namespace ao::gtk
     _editorDialogPtr = std::make_shared<layout::editor::LayoutEditorDialog>(dynamic_cast<Gtk::Window&>(_parentWindow),
                                                                             _registry,
                                                                             _actionRegistry,
-                                                                            _dependencies.textCatalog,
+                                                                            _textCatalog,
                                                                             _session.snapshot().layout,
                                                                             initialPresetId,
                                                                             initialThemeId,
@@ -1134,10 +1123,9 @@ namespace ao::gtk
 
     if (auto const availability = _actionRegistry.state(id, ctx); !availability.enabled)
     {
-      if (isTrackOrderAction(id) && _dependencies.trackPageHost != nullptr)
+      if (isTrackOrderAction(id) && _trackPageHost != nullptr)
       {
-        if (auto* const entry = _dependencies.trackPageHost->currentVisible();
-            entry != nullptr && entry->pagePtr != nullptr)
+        if (auto* const entry = _trackPageHost->currentVisible(); entry != nullptr && entry->pagePtr != nullptr)
         {
           entry->pagePtr->setStatusMessage(availability.disabledReason);
         }
@@ -1157,10 +1145,8 @@ namespace ao::gtk
 
   layout::ActionActivationContext ShellLayoutController::actionContext(std::string_view componentId)
   {
-    return layout::ActionActivationContext{.runtime = _runtime,
-                                           .parentWindow = _parentWindow,
-                                           .anchorWidget = _parentWindow,
-                                           .componentId = std::string{componentId}};
+    return layout::ActionActivationContext{
+      .parentWindow = _parentWindow, .anchorWidget = _parentWindow, .componentId = std::string{componentId}};
   }
 
   bool ShellLayoutController::canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const

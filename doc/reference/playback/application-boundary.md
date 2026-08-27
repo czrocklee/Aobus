@@ -179,7 +179,7 @@ keeps no source-compatibility constraint for it.
 - [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp)
   implements command ordering, supersession, commit composition, and
   publication.
-- [`UiCoordinator.cpp`](../../../app/windows-winui/app/UiCoordinator.cpp) and the
+- [`MainWindow.xaml.cpp`](../../../app/windows-winui/MainWindow.xaml.cpp) and the
   GTK main-window coordinator adapt reveal requests to each desktop workspace.
 
 ## Test authority

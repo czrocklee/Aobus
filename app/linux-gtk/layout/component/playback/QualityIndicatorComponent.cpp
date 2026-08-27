@@ -32,8 +32,8 @@ namespace ao::gtk::layout
     class QualityIndicatorComponent final : public LayoutComponent
     {
     public:
-      QualityIndicatorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _runtime{ctx.runtime}
+      explicit QualityIndicatorComponent(rt::AppRuntime& runtime)
+        : _runtime{runtime}
         , _soulViewModel{_runtime.playback(),
                          [this](uimodel::AobusSoulViewState const& view)
                          {
@@ -50,14 +50,9 @@ namespace ao::gtk::layout
       AobusSoul _soul{};
       uimodel::AobusSoulViewModel _soulViewModel;
     };
-
-    std::unique_ptr<LayoutComponent> createQualityIndicator(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<QualityIndicatorComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerQualityIndicatorComponent(ComponentRegistry& registry)
+  void registerQualityIndicatorComponent(ComponentRegistry& registry, rt::AppRuntime& runtime)
   {
     registry.registerComponent(
       {.type = "playback.qualityIndicator",
@@ -69,6 +64,7 @@ namespace ao::gtk::layout
          LayoutComponentActionPolicy{
            .slotMask = slotBit(LayoutActionSlot::SecondaryClick) | slotBit(LayoutActionSlot::SecondaryLongPress),
            .defaultActionIds = {{LayoutActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
-      createQualityIndicator);
+      [&runtime](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<QualityIndicatorComponent>(runtime); });
   }
 } // namespace ao::gtk::layout

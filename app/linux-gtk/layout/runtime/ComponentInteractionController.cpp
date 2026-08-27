@@ -39,7 +39,7 @@ namespace ao::gtk::layout
   {
     detach();
     _target = &target;
-    auto const binder = ActionBinder{ctx.actionRegistry, ctx.runtime, ctx.parentWindow};
+    auto const binder = ActionBinder{ctx.actionRegistry, ctx.parentWindow};
 
     attachPrimaryClick(node, target, policy, binder);
     attachSecondaryClick(node, target, policy, binder);

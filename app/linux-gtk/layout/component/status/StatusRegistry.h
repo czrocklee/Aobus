@@ -3,6 +3,15 @@
 
 #pragma once
 
+namespace ao::rt
+{
+  class AppRuntime;
+}
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
@@ -10,5 +19,7 @@ namespace ao::gtk::layout
   /**
    * @brief Register status-related layout components.
    */
-  void registerStatusComponents(ComponentRegistry& registry);
+  void registerStatusComponents(ComponentRegistry& registry,
+                                rt::AppRuntime& runtime,
+                                i18n::MessageCatalog const& textCatalog);
 } // namespace ao::gtk::layout

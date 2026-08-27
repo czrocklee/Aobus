@@ -60,8 +60,8 @@ A composition root that supplies no cache directory leaves the cache inert, and 
 GTK maintains an LRU pixbuf cache with distinct full-size and physical-thumbnail keys plus one coalesced flight per key.
 A `ResourceImageController` maintains one optional active image interest, while `CoverArtView` distinguishes empty, no-cover placeholder, and decoded-image presentation and delegates decoded-image rendering to `ImageWidget`.
 
-Runtime shares coalesced encoded-byte loads and a cache bounded to 128 entries and 128 MiB of aggregate encoded bytes among GTK, TUI, WinUI, and MPRIS consumers bound to one library runtime.
-Each delivered `ResourceBytes` value owns immutable shared storage and remains valid after cache eviction or loader unbinding.
+Runtime shares coalesced encoded-byte loads and a cache bounded to 128 entries and 128 MiB of aggregate encoded bytes among GTK, TUI, WinUI, and MPRIS consumers of one library runtime.
+Each delivered `ResourceBytes` value owns immutable shared storage and remains valid after cache eviction or loader destruction.
 Each presenter retains one generation-fenced selection.
 Its visible XAML cover state is hidden when there is no group or Inspector entity, remains the configured placeholder when Now Playing has no entity, uses a placeholder for an invalid id, is empty for pending or failed valid-resource delivery, and shows a decoded image for successful delivery.
 
@@ -93,10 +93,10 @@ The result is returned as owned bytes on the callback executor, and the read pub
 An invalid id, an absent descriptor, or a walk that no source could satisfy returns an engaged result containing `nullopt`; materialized bytes above the caller's ceiling return `ValueTooLarge`; cancellation throws `OperationCancelled` and stops the walk between candidates.
 A stale reference that no source can satisfy is never rewritten by a read.
 
-`ResourceByteLoader` binds one asynchronous byte source to one callback runtime.
-Its default shared and borrowed `CoreRuntime` bindings adapt `LibraryTaskService::loadResourceAsync()` to that source contract; an explicit source adapter follows the same delivery, cancellation, and caching behavior.
-An unbound loader or invalid id rejects a request without invoking its callback.
-On a cache miss, equal ids share one source read and each active interest receives completion on the bound callback executor.
+`ResourceByteLoader` is constructed with one asynchronous byte source and one callback runtime for its whole life.
+Its `CoreRuntime&` constructor adapts `LibraryTaskService::loadResourceAsync()` to that source contract; an explicit source adapter follows the same delivery, cancellation, and caching behavior.
+An invalid id rejects a request without invoking its callback.
+On a cache miss, equal ids share one source read and each active interest receives completion on the constructor-selected callback executor.
 On a cache hit, `request()` invokes the callback synchronously before returning and returns an empty request registration.
 A successful read inserts its immutable bytes into the cache after evicting least-recently-used entries until both limits hold.
 An individual value larger than the configured aggregate budget is delivered but not cached.
@@ -174,11 +174,11 @@ Selecting no group or Inspector entity clears and hides both decoded image and p
 Now Playing instead selects its configured placeholder when there is no active track.
 Selecting an invalid id for an entity clears the decoded image and displays the slot's fixed no-cover placeholder.
 Selecting a valid id hides the placeholder before consulting the encoded-byte cache or starting an asynchronous runtime read.
-A coordinator-owned runtime `ResourceByteLoader` coalesces equal resource requests and shares its bounded encoded-byte cache among group-heading and Inspector presenters; playback uses a separate loader shared by Now Playing and SMTC artwork so a retained retiring library remains valid.
+A window-owned runtime `ResourceByteLoader` coalesces equal resource requests and shares its bounded encoded-byte cache among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before that loader and destroys the loader before releasing its session runtime.
 A current cached or loaded payload is copied into owning native memory on a worker; the callback executor wraps that memory as a random-access stream and replaces the image through the native XAML decoder without another application payload copy.
 Absent, over-budget, or undecodable valid resources leave both the decoded image and placeholder hidden.
 Selection replacement, reset, and teardown reject stale completion through generation and task lifetime.
-SMTC keeps its own active request interest and current resource id while consuming the same playback-loader bytes; it does not introduce another byte cache or read workflow.
+SMTC keeps its own active request interest and current resource id while consuming the same window-loader bytes; it does not introduce another byte cache or read workflow.
 
 ### TUI
 
@@ -220,8 +220,7 @@ Deleting the cache directory changes no library fact, and can change only what i
 GTK decode catches `Glib::Error` and publishes an empty result.
 WinUI native decode catches `hresult_error`, logs the adapter diagnostic, and retains the empty valid-resource state.
 An unexpected non-cancellation failure in GTK, runtime resource-byte, or MPRIS shared loading is reported once, completes the flight with the owner's empty result, and leaves the key eligible for retry.
-GTK and MPRIS loader destruction and runtime resource-byte loader unbinding cancel and destroy their lifetime scopes before clearing shared request flights; runtime resource-byte unbinding also clears its byte source and cache and leaves the loader scope-free until the next binding.
-Repeated resource-byte unbinding is harmless, and every later binding creates a fresh lifetime scope.
+GTK, MPRIS, and runtime resource-byte loader destruction cancel and destroy their lifetime scopes before clearing shared request flights; runtime resource-byte loader destruction also clears its byte cache before releasing the constructor-selected source and callback runtime.
 TUI destruction cancels its settle and transform tasks and its byte interest.
 Every owner access follows a cancellation-checked callback-executor transition.
 Individual GTK, runtime resource-byte, and MPRIS interests may be cancelled without discarding successful shared cache work.
@@ -237,7 +236,7 @@ Decode or file-export failure degrades to no image/URL and logs where the adapte
 | Boundary | Limit | Result when exceeded |
 | --- | ---: | --- |
 | Materialized resource bytes for GTK, WinUI, TUI, or MPRIS | 32 MiB | `ValueTooLarge`, adapted to no decoded image/URL |
-| Runtime encoded-byte cache per binding | 128 entries and 128 MiB aggregate | least-recently-used entries are evicted |
+| Runtime encoded-byte cache per loader | 128 entries and 128 MiB aggregate | least-recently-used entries are evicted |
 | GTK or TUI source width or height | 8192 pixels | no image |
 | GTK or TUI decoded source pixels | 32,000,000 | no image |
 | TUI generated Kitty PNG retained bytes | 8 MiB | no image |
@@ -294,7 +293,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`ResourceMaterializationTest.cpp`](../../../test/unit/runtime/library/ResourceMaterializationTest.cpp) protects the walk, its ceilings, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects lazy index construction, one rebuild per stale revision, that one stale stamp still costs one build with several workers, and the exact interactive limit.
 - [`RequestCoalescerTest.cpp`](../../../test/unit/async/RequestCoalescerTest.cpp) protects shared flight, cancellation, fanout, retry, and clear-generation behavior across frontend adapters.
-- [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage, real and adapter-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, idempotent unbinding, and rebinding.
+- [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage beyond loader destruction, constructor-backed CoreRuntime and adapter-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement loader.
 - [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects the grouped-section cover slot across album and non-album presentations.
 - [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, decoded-image tooltip gating, authored visibility, hover timing, and action retention.

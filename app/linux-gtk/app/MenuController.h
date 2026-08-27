@@ -18,9 +18,7 @@ namespace ao::gtk
   class MenuController final
   {
   public:
-    MenuController() = default;
-
-    void setup(i18n::MessageCatalog const& textCatalog);
+    explicit MenuController(i18n::MessageCatalog const& textCatalog);
 
     Glib::RefPtr<Gio::MenuModel> menuModel() const { return _menuModelPtr; }
 

@@ -26,7 +26,11 @@ CPP_COMMENT_OR_LITERAL_RE = re.compile(
     r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'',
     re.DOTALL,
 )
-AGGREGATE_DEFINITION_RE = re.compile(r"\bstruct\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*(?:Context|Dependencies))\b[^;{]*\{")
+# The inventory tracks the collaborator-aggregate pattern, not one spelling: renaming a
+# "*Dependencies" bag to "*Collaborators" must not remove it from the measurement.
+AGGREGATE_DEFINITION_RE = re.compile(
+    r"\bstruct\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*(?:Context|Dependencies|Collaborators))\b[^;{]*\{"
+)
 TYPE_KEYWORDS = frozenset(
     {
         "auto",
@@ -1089,12 +1093,19 @@ def _source_aggregate_inventory(root: Path) -> list[dict[str, object]]:
             entries.append(
                 {
                     "name": name,
-                    "kind": "Context" if name.endswith("Context") else "Dependencies",
+                    "kind": _aggregate_kind(name),
                     "fields": _aggregate_field_count(masked[body_start + 1 : body_end]),
                     "header": _relative(path, root),
                 }
             )
     return sorted(entries, key=lambda item: (str(item["name"]), str(item["header"])))
+
+
+def _aggregate_kind(name: str) -> str:
+    for suffix in ("Context", "Collaborators"):
+        if name.endswith(suffix):
+            return suffix
+    return "Dependencies"
 
 
 def _matching_brace(text: str, opening: int) -> int | None:

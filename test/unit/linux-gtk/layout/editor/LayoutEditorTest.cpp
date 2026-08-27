@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "app/ShellLayoutCollaborators.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -42,10 +45,14 @@ namespace ao::gtk::layout::editor::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-    auto actionRegistry = ActionRegistry{};
+    auto const tempDir = ao::test::TempDir{};
+    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
     auto const& textCatalog = ao::test::englishMessageCatalog();
+
+    auto registry = ComponentRegistry{};
+    LayoutRuntime::registerStandardComponents(
+      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = textCatalog});
+    auto actionRegistry = ActionRegistry{};
 
     auto window = Gtk::Window{};
     auto const doc = makeDefaultLayout();

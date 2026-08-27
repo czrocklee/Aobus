@@ -4,7 +4,6 @@
 #include "MainWindow.xaml.h"
 
 #include "app/LibrarySession.h"
-#include "app/UiCoordinator.h"
 // The window's own destructor destroys the group-cover presenters it retains.
 #include "image/CoverArtPresenter.h" // NOLINT(misc-include-cleaner)
 #include "layout/ShellBuilder.h"
@@ -16,6 +15,7 @@
 #include "platform/StringResources.h"
 #include "playback/OutputDeviceControl.h"
 #include "theme/ThemeCoordinator.h"
+#include "track/TrackListController.h"
 #include "track/TrackPropertiesCoordinator.h"
 
 #if __has_include("MainWindow.g.cpp")
@@ -28,6 +28,9 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 // MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
 #include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 #include <ao/uimodel/library/list/ListOrderPolicy.h>
@@ -105,7 +108,39 @@ namespace winrt::Aobus::implementation
     _session = &session;
     _requestRestart = std::move(requestRestart);
     auto weak = get_weak();
-    auto callbacks = ao::winui::UiCoordinatorCallbacks{
+    auto& runtime = session.runtime();
+
+    // The window's own runtime consumers. They outlive every shell generation
+    // and every dialog the window opens, which is why the window owns them
+    // rather than borrowing them from a layer above or below it.
+    _trackListPtr =
+      std::make_unique<ao::winui::TrackListController>(runtime, session.columnLayouts(), session.textCatalog());
+    _themePtr = std::make_unique<ao::winui::ThemeCoordinator>(session.stateRoot() / "windows-theme.yaml");
+    _resourceBytesPtr = std::make_unique<ao::rt::ResourceByteLoader>(runtime);
+
+    // A reveal request reaches the track list the window owns, not the list a
+    // generation happens to be showing, so it survives every shell rebuild.
+    _revealTrackSub = runtime.playback().events().onRevealTrackRequested(
+      [weak](ao::rt::PlaybackRevealTrackRequest const& request)
+      {
+        auto self = weak.get();
+
+        if (!self || !self->_trackListPtr)
+        {
+          return;
+        }
+
+        if (auto const revealedRes =
+              self->_trackListPtr->revealTrack(request.trackId, request.preferredViewId, request.preferredListId);
+            !revealedRes)
+        {
+          self->updateStatus(ao::winui::formatResource("winui_error", revealedRes.error().message));
+        }
+      });
+
+    // The window is the session's one status sink: it reports on into whichever
+    // shell generation is live, and `shutdown` clears this before releasing it.
+    session.setCallbacks({
       .onStatus =
         [weak](std::string status)
       {
@@ -122,13 +157,8 @@ namespace winrt::Aobus::implementation
           self->updateStatus(ao::winui::formatResource("winui_error", error.message));
         }
       },
-    };
-    _coordinatorPtr = std::make_unique<ao::winui::UiCoordinator>(session, std::move(callbacks));
-    _trackListPtr = &_coordinatorPtr->trackList();
-    _resourceBytes = &_coordinatorPtr->resourceBytes();
-    _themePtr = &_coordinatorPtr->theme();
+    });
 
-    auto& runtime = session.runtime();
     _listAuthoringCoordinatorPtr =
       std::make_unique<ao::winui::ListAuthoringCoordinator>(ao::winui::ListAuthoringCoordinatorConfig{
         .xamlRoot =
@@ -324,10 +354,10 @@ namespace winrt::Aobus::implementation
         .host = ShellLayoutHost(),
         .resources = RootGrid().Resources(),
         // The window owns the builder, so these are reached only from a build
-        // the window itself started while it still owns the coordinator.
-        .trackList = _coordinatorPtr->trackList(),
-        .resourceBytes = _coordinatorPtr->resourceBytes(),
-        .theme = _coordinatorPtr->theme(),
+        // the window itself started while its own consumers are still alive.
+        .trackList = *_trackListPtr,
+        .resourceBytes = *_resourceBytesPtr,
+        .theme = *_themePtr,
         .activeTheme = [this] { return _themeOverride; },
         .saveSettings = command(&MainWindow::saveWindowState),
         .commands = {
@@ -454,17 +484,30 @@ namespace winrt::Aobus::implementation
     _trackPropertiesCoordinatorPtr.reset();
 
     // Generation callbacks and all generation-owned runtime borrowers go away
-    // before the coordinator/resource loader is released. Releasing the owner
-    // is the retirement: each destructor runs its own quiescence, so the order
-    // of these resets is the whole contract.
+    // before the window's own consumers are released. Releasing the owner is
+    // the retirement: each destructor runs its own quiescence, so the order of
+    // these resets is the whole contract.
     _shellBuilderPtr.reset();
     _libraryTransferCoordinatorPtr.reset();
     _listAuthoringCoordinatorPtr.reset();
 
     // SMTC and fullscreen playback adapters must stop observing the runtime
-    // before the coordinator releases its resource and track services.
+    // before the window releases its resource and track services.
     unbindPlayback();
-    _coordinatorPtr.reset();
+
+    // The window's own retirement, run as named steps rather than left to
+    // member order: status publication and reveal routing stop before the
+    // models they publish into are released, and the models go in the order
+    // their borrowers were released.
+    if (_session != nullptr)
+    {
+      _session->setCallbacks({});
+    }
+
+    _revealTrackSub.reset();
+    _resourceBytesPtr.reset();
+    _themePtr.reset();
+    _trackListPtr.reset();
 
     _soulWindowChangedSub.reset();
 
@@ -478,9 +521,6 @@ namespace winrt::Aobus::implementation
     _fullscreenSoul = nullptr;
     _shellOutputDevicePtr.reset();
     _smtcPtr.reset();
-    _trackListPtr = nullptr;
-    _resourceBytes = nullptr;
-    _themePtr = nullptr;
     _session = nullptr;
   }
 

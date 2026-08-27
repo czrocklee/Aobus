@@ -3,7 +3,7 @@
 
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 
-#include "app/linux-gtk/app/GtkUiDependencies.h"
+#include "app/ShellLayoutCollaborators.h"
 #include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -23,7 +23,6 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
-#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -55,24 +54,20 @@ namespace ao::gtk::layout::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
+    std::unique_ptr<rt::AppRuntime> const runtimePtr = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
-    registerContainerComponents(registry);
+    registerContainerComponents(registry, ao::test::englishMessageCatalog());
     registry.registerComponent({.type = "test.null", .displayName = "Null"}, makeFailingComponent);
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{
-      .textCatalog = ao::test::englishMessageCatalog(), .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
-                                  .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
-                                  .dependencies = dependencies};
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState}};
 
     auto host = LayoutHost{registry};
     auto install = [&](LayoutDocument const& document)
@@ -178,22 +173,19 @@ namespace ao::gtk::layout::test
     SECTION("commit renders registered semantic components")
     {
       auto registry2 = ComponentRegistry{};
-      LayoutRuntime::registerStandardComponents(registry2);
-
       auto window2 = Gtk::Window{};
       auto const tempDir2 = ao::test::TempDir{};
       std::unique_ptr<rt::AppRuntime> runtime2Ptr = makeRuntime(tempDir2);
+      LayoutRuntime::registerStandardComponents(
+        registry2, *runtime2Ptr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
+
       auto const actionRegistry2 = ActionRegistry{};
       auto runtimeState2 = uimodel::LayoutRuntimeState{};
-      auto dependencies2 = GtkUiDependencies{.textCatalog = ao::test::englishMessageCatalog(),
-                                             .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
       auto ctx2 = LayoutBuildContext{.registry = registry2,
                                      .actionRegistry = actionRegistry2,
-                                     .runtime = *runtime2Ptr,
                                      .parentWindow = window2,
                                      .runtimeState = runtimeState2,
-                                     .buildState = uimodel::LayoutBuildStateView{runtimeState2},
-                                     .dependencies = dependencies2};
+                                     .buildState = uimodel::LayoutBuildStateView{runtimeState2}};
 
       auto doc = LayoutDocument{};
       doc.root.type = "status.message";

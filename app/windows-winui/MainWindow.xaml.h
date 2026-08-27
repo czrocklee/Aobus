@@ -6,6 +6,7 @@
 #include "MainWindow.g.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -41,7 +42,6 @@ namespace ao::winui
   class SmtcBridge;
   class TrackListController;
   class TrackPropertiesCoordinator;
-  class UiCoordinator;
   class ThemeCoordinator;
 }
 
@@ -157,7 +157,22 @@ namespace winrt::Aobus::implementation
 
     ao::winui::LibrarySession* _session = nullptr;
     RestartLibraryCallback _requestRestart;
-    std::unique_ptr<ao::winui::UiCoordinator> _coordinatorPtr;
+    /**
+     * @name Window-scoped runtime consumers
+     *
+     * Built in `initialize` from the borrowed session and released in
+     * `shutdown`. Declared ahead of every generation and adapter that borrows
+     * them, so fallback destruction cannot outlive them; `shutdown` still
+     * retires them in an explicit order, because a reference-counted XAML graph
+     * is not quiesced by member order alone.
+     * @{
+     */
+    std::unique_ptr<ao::winui::TrackListController> _trackListPtr;
+    std::unique_ptr<ao::winui::ThemeCoordinator> _themePtr;
+    std::unique_ptr<ao::rt::ResourceByteLoader> _resourceBytesPtr;
+    /// Routes the runtime's reveal requests to this window's track list.
+    ao::async::Subscription _revealTrackSub;
+    /// @}
     /// The one shell there is; null only before `initialize` and after `shutdown`.
     std::unique_ptr<ao::winui::layout::ShellBuilder> _shellBuilderPtr;
     /// The selector a document's soul or output button raises, which no generation owns.
@@ -170,10 +185,7 @@ namespace winrt::Aobus::implementation
     std::unique_ptr<ao::winui::LibraryTransferCoordinator> _libraryTransferCoordinatorPtr;
     /// The loaded theme override, or nothing while Windows' own appearance is in force.
     std::optional<ao::winui::Theme> _themeOverride;
-    ao::winui::TrackListController* _trackListPtr = nullptr;
-    ao::rt::ResourceByteLoader* _resourceBytes = nullptr;
     std::unique_ptr<ao::winui::SmtcBridge> _smtcPtr;
-    ao::winui::ThemeCoordinator* _themePtr = nullptr;
     /// The two transport commands a preset's menu can name but no menu item can drive.
     std::unique_ptr<ao::uimodel::TransportViewModel> _playPausePtr;
     std::unique_ptr<ao::uimodel::TransportViewModel> _stopPtr;

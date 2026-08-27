@@ -13,6 +13,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 namespace ao::gtk::test
 {
@@ -131,16 +132,15 @@ namespace ao::gtk::test
     SECTION("Load a valid sibling group when the column layout group is unsupported")
     {
       std::filesystem::create_directories(libraryPath);
-      auto output = std::ofstream{libraryPath / "gtk_layout.yaml"};
-      output << "trackView.columnLayouts:\n"
-                "  version: 3\n"
-                "  layouts: []\n"
-                "trackView.presentations:\n"
-                "  version: 1\n"
-                "  preferences:\n"
-                "    - listId: 42\n"
-                "      presentationId: albums\n";
-      output.close();
+      auto const stored = std::string{"trackView.columnLayouts:\n"
+                                      "  version: 3\n"
+                                      "  layouts: []\n"
+                                      "trackView.presentations:\n"
+                                      "  version: 1\n"
+                                      "  preferences:\n"
+                                      "    - listId: 42\n"
+                                      "      presentationId: albums\n"};
+      std::ofstream{libraryPath / "gtk_layout.yaml"} << stored;
 
       auto const store = GtkLayoutStateStore{libraryPath};
       auto state = uimodel::TrackColumnLayoutState{};
@@ -155,6 +155,9 @@ namespace ao::gtk::test
       CHECK(state.listLayouts.contains(ListId{7}));
       REQUIRE(prefState.presentations.size() == 1);
       CHECK(prefState.presentations.at(ListId{42}) == "albums");
+      // Reading a group this build cannot understand must not cost the user the
+      // document a later build can: loading never rewrites the file.
+      CHECK(ao::test::readFile(libraryPath / "gtk_layout.yaml") == stored);
     }
 
     SECTION("Serialization failure leaves both durable groups unchanged")

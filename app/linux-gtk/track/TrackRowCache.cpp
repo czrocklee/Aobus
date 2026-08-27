@@ -8,6 +8,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/utility/Path.h>
 
@@ -30,6 +31,30 @@ namespace ao::gtk
   TrackRowCache::TrackRowCache(rt::Library const& reads, i18n::MessageCatalog textCatalog)
     : _reads{reads}, _textCatalog{std::move(textCatalog)}
   {
+    _changesSub = _reads.changes().onChanged(
+      [this](rt::LibraryChangeSet const& changeSet)
+      {
+        if (changeSet.libraryReset)
+        {
+          clearCache();
+          return;
+        }
+
+        for (auto const trackId : changeSet.tracksInserted)
+        {
+          invalidate(trackId);
+        }
+
+        for (auto const trackId : changeSet.tracksDeleted)
+        {
+          invalidate(trackId);
+        }
+
+        for (auto const trackId : changeSet.tracksMutated)
+        {
+          invalidate(trackId);
+        }
+      });
   }
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::createRowObject(rt::TrackRow row) const

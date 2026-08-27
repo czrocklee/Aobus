@@ -222,4 +222,26 @@ namespace ao::gtk::test
       CHECK_FALSE(rowPtr);
     }
   }
+
+  TEST_CASE("TrackRowCache - a library mutation invalidates the cached row it changed",
+            "[gtk][regression][track][row-cache]")
+  {
+    auto const appPtr = Gtk::Application::create("io.github.aobus.row_cache_invalidation_test");
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+
+    // The cache keeps itself coherent, so nothing above it has to hold a
+    // library subscription or remember to invalidate after a mutation.
+    auto const trackId = addRuntimeTrack(runtime, {.title = "Before Import"});
+    auto const rowBeforePtr = cache.trackRow(trackId);
+    REQUIRE(rowBeforePtr);
+    CHECK(rowBeforePtr->fieldText(rt::TrackField::Title) == "Before Import");
+
+    updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "After Import"; });
+
+    auto const rowAfterPtr = cache.trackRow(trackId);
+    REQUIRE(rowAfterPtr);
+    CHECK(rowAfterPtr->fieldText(rt::TrackField::Title) == "After Import");
+  }
 } // namespace ao::gtk::test

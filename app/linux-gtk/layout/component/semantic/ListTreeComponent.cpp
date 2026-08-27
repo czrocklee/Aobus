@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -27,24 +26,24 @@ namespace ao::gtk::layout
     class ListTreeComponent final : public LayoutComponent
     {
     public:
-      ListTreeComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+      ListTreeComponent(TrackRowCache* trackRowCache, ListNavigationController* listNavigationController)
       {
-        if (ctx.dependencies.trackRowCache == nullptr)
+        if (trackRowCache == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: trackRowCache missing");
           return;
         }
 
-        if (ctx.dependencies.listNavigationController == nullptr)
+        if (listNavigationController == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: listNavigationController missing");
           return;
         }
 
-        _controller = ctx.dependencies.listNavigationController;
+        _controller = listNavigationController;
 
         // Initial rebuild
-        _controller->rebuildTree(*ctx.dependencies.trackRowCache);
+        _controller->rebuildTree(*trackRowCache);
       }
 
       Gtk::Widget& widget() override
@@ -56,20 +55,19 @@ namespace ao::gtk::layout
       ListNavigationController* _controller = nullptr;
       Gtk::Label* _error = nullptr;
     };
-
-    std::unique_ptr<LayoutComponent> createListTree(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<ListTreeComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerListTreeComponent(ComponentRegistry& registry)
+  void registerListTreeComponent(ComponentRegistry& registry,
+                                 TrackRowCache* trackRowCache,
+                                 ListNavigationController* listNavigationController)
   {
-    registry.registerComponent({.type = "library.listTree",
-                                .displayName = "Library Tree",
-                                .category = LayoutComponentCategory::Library,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createListTree);
+    registry.registerComponent(
+      {.type = "library.listTree",
+       .displayName = "Library Tree",
+       .category = LayoutComponentCategory::Library,
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      [trackRowCache, listNavigationController](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<ListTreeComponent>(trackRowCache, listNavigationController); });
   }
 } // namespace ao::gtk::layout

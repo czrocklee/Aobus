@@ -37,11 +37,6 @@ namespace ao::uimodel
   class PreparedLayout;
 }
 
-namespace ao::gtk
-{
-  struct GtkUiDependencies;
-}
-
 namespace ao::gtk::layout
 {
   class ActionRegistry;
@@ -101,7 +96,6 @@ namespace ao::gtk::layout::test
     ComponentRegistry& components();
     ActionRegistry const& actions() const;
     LayoutBuildContext& context();
-    GtkUiDependencies& dependencies();
     LayoutRuntime& layoutRuntime();
 
     FakeTrackDetailScope& attachTrackDetailScope(rt::TrackDetailSnapshot snap = {});

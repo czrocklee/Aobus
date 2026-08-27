@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "../components/ContainerTestHelpers.h"
-#include "app/linux-gtk/app/GtkUiDependencies.h"
+#include "app/ShellLayoutCollaborators.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
@@ -18,7 +18,6 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
-#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -43,20 +42,17 @@ namespace ao::gtk::layout::editor::test
     std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
+    LayoutRuntime::registerStandardComponents(
+      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{
-      .textCatalog = ao::test::englishMessageCatalog(), .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
-                                  .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
-                                  .dependencies = dependencies};
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState}};
 
     SECTION("absoluteCanvas descriptor is registered as container")
     {
@@ -109,20 +105,17 @@ namespace ao::gtk::layout::editor::test
     std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
+    LayoutRuntime::registerStandardComponents(
+      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{
-      .textCatalog = ao::test::englishMessageCatalog(), .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
-                                  .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
-                                  .dependencies = dependencies};
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState}};
 
     auto doc = LayoutDocument{};
     doc.root.type = "absoluteCanvas";

@@ -2,12 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "status/ActivityStatusWidget.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
@@ -70,11 +68,14 @@ namespace ao::gtk::layout
     class ActivityStatusComponent final : public LayoutComponent
     {
     public:
-      ActivityStatusComponent(LayoutBuildContext& ctx, LayoutNode const& node)
+      ActivityStatusComponent(rt::NotificationService& notifications,
+                              rt::LibraryTaskService& libraryTasks,
+                              i18n::MessageCatalog const& textCatalog,
+                              LayoutNode const& node)
         : _widget{ActivityStatusWidgetDependencies{
-            .notifications = ctx.runtime.notifications(),
-            .textCatalog = ctx.dependencies.textCatalog,
-            .libraryTasks = &ctx.runtime.library().taskService(),
+            .notifications = notifications,
+            .textCatalog = textCatalog,
+            .libraryTasks = &libraryTasks,
             .options = optionsFromNode(node),
           }}
       {
@@ -85,30 +86,30 @@ namespace ao::gtk::layout
     private:
       ActivityStatusWidget _widget;
     };
-
-    std::unique_ptr<LayoutComponent> createActivityStatus(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<ActivityStatusComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerActivityStatusComponent(ComponentRegistry& registry)
+  void registerActivityStatusComponent(ComponentRegistry& registry,
+                                       rt::NotificationService& notifications,
+                                       rt::LibraryTaskService& libraryTasks,
+                                       i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::StatusActivity),
-                                                   {{.name = "variant",
-                                                     .kind = LayoutPropertyKind::Enum,
-                                                     .label = "Variant",
-                                                     .defaultValue = LayoutValue{"ambient"},
-                                                     .enumValues = {"ambient", "classicInline"}},
-                                                    {.name = "idleBehavior",
-                                                     .kind = LayoutPropertyKind::Enum,
-                                                     .label = "Idle Behavior",
-                                                     .defaultValue = LayoutValue{""},
-                                                     .enumValues = {"", "hidden", "reserve"}},
-                                                    {.name = "maxTextChars",
-                                                     .kind = LayoutPropertyKind::Int,
-                                                     .label = "Max Text Chars",
-                                                     .defaultValue = LayoutValue{kDefaultMaxTextChars}}}),
-                               createActivityStatus);
+    registry.registerComponent(
+      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::StatusActivity),
+                          {{.name = "variant",
+                            .kind = LayoutPropertyKind::Enum,
+                            .label = "Variant",
+                            .defaultValue = LayoutValue{"ambient"},
+                            .enumValues = {"ambient", "classicInline"}},
+                           {.name = "idleBehavior",
+                            .kind = LayoutPropertyKind::Enum,
+                            .label = "Idle Behavior",
+                            .defaultValue = LayoutValue{""},
+                            .enumValues = {"", "hidden", "reserve"}},
+                           {.name = "maxTextChars",
+                            .kind = LayoutPropertyKind::Int,
+                            .label = "Max Text Chars",
+                            .defaultValue = LayoutValue{kDefaultMaxTextChars}}}),
+      [&notifications, &libraryTasks, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      { return std::make_unique<ActivityStatusComponent>(notifications, libraryTasks, textCatalog, node); });
   }
 } // namespace ao::gtk::layout

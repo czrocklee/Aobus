@@ -197,24 +197,16 @@ namespace ao::winui
     }
   } // namespace
 
-  TrackListController::TrackListController(i18n::MessageCatalog textCatalog)
-    : _textCatalog{std::move(textCatalog)}
+  TrackListController::TrackListController(rt::AppRuntime& runtime,
+                                           uimodel::TrackColumnLayoutState& columnLayouts,
+                                           i18n::MessageCatalog textCatalog)
+    : _runtime{&runtime}
+    , _columnLayouts{&columnLayouts}
+    , _textCatalog{std::move(textCatalog)}
     , _items{makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries)}
     , _headers{winrt::single_threaded_observable_vector<winrt::Windows::Foundation::IInspectable>()}
   {
-  }
-
-  TrackListController::~TrackListController()
-  {
-    unbind();
-  }
-
-  void TrackListController::bind(rt::AppRuntime& runtime, uimodel::TrackColumnLayoutState& columnLayouts)
-  {
-    unbind();
     resetPresentation();
-    _runtime = &runtime;
-    _columnLayouts = &columnLayouts;
     _viewProjectionSub = _runtime->views().onProjectionChanged(
       [this](rt::TrackListProjectionChanged const& changed)
       {
@@ -234,27 +226,15 @@ namespace ao::winui
     reload();
   }
 
-  void TrackListController::unbind() noexcept
+  TrackListController::~TrackListController()
   {
-    // Invalidate materializers and subscriptions before releasing the last
-    // projection owner. Their closures borrow the runtime directly.
     _bindingLifetimePtr.reset();
-
     _projectionSub.reset();
     _viewProjectionSub.reset();
     _workspaceSub.reset();
-
     _projectionPtr.reset();
     _displayIndex.clear();
-    _projectionInvalidated = false;
     _columns.clear();
-    _viewId = rt::kInvalidViewId;
-    _revealIntent = {};
-    _columnLayouts = nullptr;
-    _runtime = nullptr;
-
-    // Drop the old item view before the runtime owner can disappear. Rebuilding
-    // the empty native vectors is a rebind's concern, not a teardown's.
     _items = nullptr;
     _headers = nullptr;
   }

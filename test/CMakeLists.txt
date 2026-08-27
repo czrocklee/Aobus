@@ -857,7 +857,6 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/FormBuilderTest.cpp
     unit/linux-gtk/app/ThemeCoordinatorTest.cpp
     unit/linux-gtk/app/ThemePresetTest.cpp
-    unit/linux-gtk/app/MainWindowCoordinatorTest.cpp
     unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp
     unit/linux-gtk/app/MenuControllerTest.cpp
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
@@ -876,6 +875,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ShellLayoutStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutControllerTest.cpp
     unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp
+    unit/linux-gtk/app/WindowStateTest.cpp
     unit/linux-gtk/preference/PreferencesWindowTest.cpp
     unit/linux-gtk/track/TrackListModelTest.cpp
     unit/linux-gtk/track/TrackSelectionControllerTest.cpp

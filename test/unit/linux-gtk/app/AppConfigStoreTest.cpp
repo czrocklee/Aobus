@@ -7,13 +7,16 @@
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 
 namespace ao::gtk::test
 {
@@ -177,5 +180,32 @@ namespace ao::gtk::test
       CHECK(state.preferredOutputSelection.deviceId == "seed-device");
       CHECK(state.preferredOutputSelection.profileId == "seed-profile");
     }
+  }
+
+  TEST_CASE("preferredOutputDeviceRecorder - a recorded route updates only the preferred selection",
+            "[gtk][regression][app][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app_config.yaml");
+    configStorePtr->saveAppPrefs(rt::AppPrefsState{
+      .lastLayoutPreset = "classic",
+      .lastThemePreset = "modern",
+    });
+
+    auto const selection = audio::OutputDeviceSelection{
+      .backendId = audio::BackendId{"pipewire"},
+      .deviceId = audio::DeviceId{"headphones"},
+      .profileId = audio::kProfileExclusive,
+    };
+
+    preferredOutputDeviceRecorder(configStorePtr).record(selection);
+
+    // Choosing a device states a preference for the next start; it is not a
+    // reason to forget the unrelated preferences already stored beside it.
+    auto loadedPrefs = rt::AppPrefsState{};
+    configStorePtr->loadAppPrefs(loadedPrefs);
+    CHECK(loadedPrefs.preferredOutputSelection == selection);
+    CHECK(loadedPrefs.lastLayoutPreset == "classic");
+    CHECK(loadedPrefs.lastThemePreset == "modern");
   }
 } // namespace ao::gtk::test

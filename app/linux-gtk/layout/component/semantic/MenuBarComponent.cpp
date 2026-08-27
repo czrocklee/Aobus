@@ -2,13 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
+#include <giomm/menumodel.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/widget.h>
 
@@ -25,11 +26,11 @@ namespace ao::gtk::layout
     class MenuBarComponent final : public LayoutComponent
     {
     public:
-      MenuBarComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+      explicit MenuBarComponent(Glib::RefPtr<Gio::MenuModel> const& menuModelPtr)
       {
-        if (ctx.dependencies.menuModelPtr != nullptr)
+        if (menuModelPtr)
         {
-          _menuBar.set_menu_model(ctx.dependencies.menuModelPtr);
+          _menuBar.set_menu_model(menuModelPtr);
         }
       }
 
@@ -38,15 +39,12 @@ namespace ao::gtk::layout
     private:
       Gtk::PopoverMenuBar _menuBar;
     };
-
-    std::unique_ptr<LayoutComponent> createMenuBar(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<MenuBarComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerMenuBarComponent(ComponentRegistry& registry)
+  void registerMenuBarComponent(ComponentRegistry& registry, Glib::RefPtr<Gio::MenuModel> const& menuModelPtr)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::MenuBar), createMenuBar);
+    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::MenuBar),
+                               [menuModelPtr](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                               { return std::make_unique<MenuBarComponent>(menuModelPtr); });
   }
 } // namespace ao::gtk::layout

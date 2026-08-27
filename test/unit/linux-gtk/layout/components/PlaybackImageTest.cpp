@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/image/CoverArtView.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/image/ResourceImageLoader.h"
+#include "app/linux-gtk/layout/component/playback/PlaybackComponentRegistrations.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
+#include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"
@@ -193,7 +194,8 @@ namespace ao::gtk::layout::test
     auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
     auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
     auto& ctx = fixture.context();
-    fixture.dependencies().imageLoader = imageLoaderPtr.get();
+    auto const textCatalog = ao::test::messageCatalog("en");
+    registerPlaybackImageComponent(fixture.components(), fixture.runtime(), imageLoaderPtr.get(), textCatalog);
 
     SECTION("default image has no extra styling")
     {

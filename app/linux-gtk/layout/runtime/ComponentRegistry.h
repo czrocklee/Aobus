@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -11,6 +10,7 @@
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -19,7 +19,10 @@
 
 namespace ao::gtk::layout
 {
-  using ComponentFactory = std::unique_ptr<LayoutComponent> (*)(LayoutBuildContext&, uimodel::LayoutNode const&);
+  struct LayoutBuildContext;
+
+  using ComponentFactory =
+    std::function<std::unique_ptr<LayoutComponent>(LayoutBuildContext&, uimodel::LayoutNode const&)>;
 
   class ComponentRegistry final
   {

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
 #include "i18n/GtkTextCatalog.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -22,6 +21,7 @@
 #include <gtkmm/togglebutton.h>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -37,10 +37,13 @@ namespace ao::gtk::layout
     class WorkspaceWithDetailPaneComponent final : public LayoutComponent
     {
     public:
-      WorkspaceWithDetailPaneComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _textCatalog{ctx.dependencies.textCatalog}
+      WorkspaceWithDetailPaneComponent(TrackPageHost* trackPageHost,
+                                       i18n::MessageCatalog textCatalog,
+                                       LayoutBuildContext& ctx,
+                                       LayoutNode const& node)
+        : _textCatalog{std::move(textCatalog)}
       {
-        if (ctx.dependencies.trackPageHost == nullptr)
+        if (trackPageHost == nullptr)
         {
           _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageHost missing"));
           return;
@@ -50,7 +53,7 @@ namespace ao::gtk::layout
         _container.set_hexpand(true);
         _container.set_vexpand(true);
 
-        auto& stack = ctx.dependencies.trackPageHost->stack();
+        auto& stack = trackPageHost->stack();
         stack.set_hexpand(true);
         stack.set_vexpand(true);
         _container.append(stack);
@@ -103,20 +106,19 @@ namespace ao::gtk::layout
       Gtk::Revealer _revealer;
       std::unique_ptr<LayoutComponent> _detailPtr;
     };
-
-    std::unique_ptr<LayoutComponent> createWorkspaceWithDetailPane(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<WorkspaceWithDetailPaneComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerWorkspaceWithDetailPaneComponent(ComponentRegistry& registry)
+  void registerWorkspaceWithDetailPaneComponent(ComponentRegistry& registry,
+                                                TrackPageHost* trackPageHost,
+                                                i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent({.type = "workspace.withDetailPane",
-                                .displayName = "Workspace with Detail",
-                                .category = LayoutComponentCategory::Layout,
-                                .minChildren = 0,
-                                .optMaxChildren = 1},
-                               createWorkspaceWithDetailPane);
+    registry.registerComponent(
+      {.type = "workspace.withDetailPane",
+       .displayName = "Workspace with Detail",
+       .category = LayoutComponentCategory::Layout,
+       .minChildren = 0,
+       .optMaxChildren = 1},
+      [trackPageHost, textCatalog](LayoutBuildContext& ctx, LayoutNode const& node)
+      { return std::make_unique<WorkspaceWithDetailPaneComponent>(trackPageHost, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

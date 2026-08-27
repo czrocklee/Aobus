@@ -33,13 +33,12 @@ namespace ao::gtk::layout::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
+    std::unique_ptr<rt::AppRuntime> const runtimePtr = makeRuntime(tempDir);
 
     auto window = Gtk::Window{};
     auto widget = Gtk::Box{};
 
-    auto ctx = ActionActivationContext{
-      .runtime = *runtimePtr, .parentWindow = window, .anchorWidget = widget, .componentId = "test_component"};
+    auto ctx = ActionActivationContext{.parentWindow = window, .anchorWidget = widget, .componentId = "test_component"};
 
     SECTION("Registers and retrieves actions")
     {

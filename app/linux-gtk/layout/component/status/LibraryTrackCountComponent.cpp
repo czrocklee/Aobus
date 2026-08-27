@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -37,8 +36,8 @@ namespace ao::gtk::layout
     class LibraryTrackCountComponent final : public LayoutComponent
     {
     public:
-      LibraryTrackCountComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _widget{acquireAllTracks(ctx.runtime), ctx.dependencies.textCatalog}
+      LibraryTrackCountComponent(rt::AppRuntime& runtime, i18n::MessageCatalog const& textCatalog)
+        : _widget{acquireAllTracks(runtime), textCatalog}
       {
       }
 
@@ -47,16 +46,14 @@ namespace ao::gtk::layout
     private:
       LibraryTrackCountLabel _widget;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackCount(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<LibraryTrackCountComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerLibraryTrackCountComponent(ComponentRegistry& registry)
+  void registerLibraryTrackCountComponent(ComponentRegistry& registry,
+                                          rt::AppRuntime& runtime,
+                                          i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::StatusTrackCount), createTrackCount);
+    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::StatusTrackCount),
+                               [&runtime, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                               { return std::make_unique<LibraryTrackCountComponent>(runtime, textCatalog); });
   }
 } // namespace ao::gtk::layout

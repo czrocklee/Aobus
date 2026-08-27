@@ -60,10 +60,10 @@ namespace ao::gtk::layout
       , public TrackDetailScope
     {
     public:
-      TrackDetailScopeComponent(LayoutBuildContext& ctx, LayoutNode const& node)
+      TrackDetailScopeComponent(rt::AppRuntime& runtime, LayoutBuildContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
         , _undoController{ctx.timeoutScheduler}
-        , _projectionPtr{ctx.runtime.workspace().detailProjection(rt::FocusedViewTarget{})}
+        , _projectionPtr{runtime.workspace().detailProjection(rt::FocusedViewTarget{})}
       {
         _currentSnap = _projectionPtr->snapshot();
 
@@ -154,14 +154,9 @@ namespace ao::gtk::layout
 
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackDetailScope(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TrackDetailScopeComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTrackDetailScopeComponent(ComponentRegistry& registry)
+  void registerTrackDetailScopeComponent(ComponentRegistry& registry, rt::AppRuntime& runtime)
   {
     registry.registerComponent(
       {.type = "track.detailScope",
@@ -169,6 +164,7 @@ namespace ao::gtk::layout
        .category = LayoutComponentCategory::Track,
        .layoutProps = {{.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}},
        .minChildren = 1},
-      createTrackDetailScope);
+      [&runtime](LayoutBuildContext& ctx, LayoutNode const& node)
+      { return std::make_unique<TrackDetailScopeComponent>(runtime, ctx, node); });
   }
 } // namespace ao::gtk::layout

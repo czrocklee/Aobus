@@ -213,8 +213,7 @@ namespace ao::rt::test
                                                  paths.databasePath(),
                                                  tempDir.path() / "cache",
                                                  library::test::kTestMusicLibraryMapBytes))};
-    auto loader = ResourceByteLoader{};
-    loader.bind(runtimePtr);
+    auto loader = ResourceByteLoader{*runtimePtr};
     auto received = std::vector<std::byte>{};
     bool callbackOnExecutor = false;
     auto request = loader.request(resourceId,
@@ -229,7 +228,6 @@ namespace ao::rt::test
     CHECK(received == std::vector<std::byte>(expected.begin(), expected.end()));
     CHECK(callbackOnExecutor);
 
-    loader.unbind();
     runtimePtr->async().requestStop();
     runtimePtr->async().join();
   }
@@ -279,7 +277,7 @@ namespace ao::rt::test
     CHECK(received.back() == expected);
   }
 
-  TEST_CASE("ResourceByteLoader - cached request completes synchronously and permits unbind",
+  TEST_CASE("ResourceByteLoader - cached request completes synchronously",
             "[runtime][regression][resource-byte][concurrency]")
   {
     auto owner = RuntimeOwner{};
@@ -301,7 +299,6 @@ namespace ao::rt::test
                                           callbackBeforeReturn = !requestReturned;
                                           ++callbackCount;
                                           retained = std::move(bytes);
-                                          loader.unbind();
                                         });
     requestReturned = true;
 
@@ -309,62 +306,25 @@ namespace ao::rt::test
     CHECK(callbackBeforeReturn);
     CHECK(callbackCount == 1);
     CHECK(std::vector<std::byte>{retained.view().begin(), retained.view().end()} == expected);
-
-    std::size_t rejectedCallbackCount = 0;
-    auto rejectedRequest = loader.request(ResourceId{73}, [&](ResourceBytes) { ++rejectedCallbackCount; });
-    CHECK_FALSE(rejectedRequest);
-    CHECK(rejectedCallbackCount == 0);
   }
 
-  TEST_CASE("ResourceByteLoader - custom source delivers bytes that survive unbind",
+  TEST_CASE("ResourceByteLoader - custom source delivers bytes that survive loader destruction",
             "[runtime][unit][resource-byte][concurrency]")
   {
     auto owner = RuntimeOwner{};
     auto const expected = std::vector{std::byte{0x27}, std::byte{0x28}};
-    auto loader = ResourceByteLoader{owner.runtimePtr()->async(), std::bind_front(readCustomBytes, expected)};
+    auto loaderPtr =
+      std::make_unique<ResourceByteLoader>(owner.runtimePtr()->async(), std::bind_front(readCustomBytes, expected));
     auto retained = ResourceBytes{};
-    auto request = loader.request(ResourceId{72}, [&](ResourceBytes bytes) { retained = std::move(bytes); });
+    auto request = loaderPtr->request(ResourceId{72}, [&](ResourceBytes bytes) { retained = std::move(bytes); });
 
     REQUIRE(request);
     REQUIRE(owner.executor().drainUntil([&] { return !retained.empty(); }));
     auto const* storage = retained.view().data();
-    loader.unbind();
+    loaderPtr.reset();
 
     CHECK(std::vector<std::byte>{retained.view().begin(), retained.view().end()} == expected);
     CHECK(retained.view().data() == storage);
-  }
-
-  TEST_CASE("ResourceByteLoader - callback unbind keeps the current fanout payload alive",
-            "[runtime][regression][resource-byte][concurrency]")
-  {
-    auto owner = RuntimeOwner{};
-    auto release = AsyncBarrier{};
-    auto readCount = AsyncTestState<std::size_t>::create(0);
-    auto const expected = std::vector{std::byte{0x35}, std::byte{0x36}};
-    auto loader =
-      ResourceByteLoader{owner.runtimePtr()->async(), std::bind_front(readAfterRelease, readCount, &release, expected)};
-    auto callbackOrder = std::vector<std::int32_t>{};
-    auto laterBytes = std::vector<std::byte>{};
-    auto first = loader.request(ResourceId{71},
-                                [&](ResourceBytes)
-                                {
-                                  callbackOrder.push_back(1);
-                                  loader.unbind();
-                                });
-    REQUIRE(first);
-    REQUIRE(readCount.waitUntil(1));
-    auto later = loader.request(ResourceId{71},
-                                [&](ResourceBytes bytes)
-                                {
-                                  callbackOrder.push_back(2);
-                                  laterBytes.assign(bytes.view().begin(), bytes.view().end());
-                                });
-    REQUIRE(later);
-
-    release.release();
-    REQUIRE(owner.executor().drainUntil([&] { return callbackOrder.size() == 2; }));
-    CHECK(callbackOrder == std::vector<std::int32_t>{1, 2});
-    CHECK(laterBytes == expected);
   }
 
   TEST_CASE("ResourceByteLoader - read result failure completes empty and permits retry",
@@ -408,7 +368,7 @@ namespace ao::rt::test
     CHECK(callbackCount.load() == 0);
   }
 
-  TEST_CASE("ResourceByteLoader - unbind fences an old flight from a same-id replacement",
+  TEST_CASE("ResourceByteLoader - destruction fences an old flight from a same-id replacement",
             "[runtime][regression][resource-byte][concurrency]")
   {
     auto owner = RuntimeOwner{};
@@ -416,25 +376,24 @@ namespace ao::rt::test
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto firstReadReleased = AsyncTestState<bool>::create(false);
     auto const readBytes = std::bind_front(readAcrossRebind, readCount, firstReadReleased, &release);
-    auto loader = ResourceByteLoader{owner.runtimePtr()->async(), readBytes};
+    auto loaderPtr = std::make_unique<ResourceByteLoader>(owner.runtimePtr()->async(), readBytes);
     auto callbackCount = AsyncTestState<std::size_t>::create(0);
     auto received = std::vector<std::byte>{};
-    auto oldRequest = loader.request(ResourceId{10}, [callbackCount](ResourceBytes) { callbackCount.increment(); });
+    auto oldRequest = loaderPtr->request(ResourceId{10}, [callbackCount](ResourceBytes) { callbackCount.increment(); });
 
     REQUIRE(oldRequest);
     REQUIRE(readCount.waitUntil(1));
-    loader.unbind();
-    loader.unbind();
+    loaderPtr.reset();
     release.release();
     REQUIRE(firstReadReleased.waitUntil(true));
 
-    loader.bind(owner.runtimePtr()->async(), readBytes);
-    auto replacement = loader.request(ResourceId{10},
-                                      [&](ResourceBytes bytes)
-                                      {
-                                        received.assign(bytes.view().begin(), bytes.view().end());
-                                        callbackCount.increment();
-                                      });
+    auto replacementLoader = ResourceByteLoader{owner.runtimePtr()->async(), readBytes};
+    auto replacement = replacementLoader.request(ResourceId{10},
+                                                 [&](ResourceBytes bytes)
+                                                 {
+                                                   received.assign(bytes.view().begin(), bytes.view().end());
+                                                   callbackCount.increment();
+                                                 });
     REQUIRE(replacement);
     REQUIRE(owner.executor().drainUntil([&] { return callbackCount.load() == 1; }));
     CHECK(readCount.load() == 2);

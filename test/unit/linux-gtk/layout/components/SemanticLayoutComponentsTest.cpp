@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/ShellLayoutCollaborators.h"
 #include "app/ThemeCoordinator.h"
-#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/image/CoverArtView.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/image/ResourceImageLoader.h"
+#include "app/linux-gtk/layout/component/semantic/SemanticComponentRegistrations.h"
+#include "app/linux-gtk/layout/component/track/TrackComponentRegistrations.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -49,7 +51,6 @@
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
-#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -160,7 +161,7 @@ namespace ao::gtk::layout::test
     {
       auto const rdpPtr =
         std::make_unique<TrackRowCache>(fixture.runtime().library(), ao::test::englishMessageCatalog());
-      fixture.dependencies().trackRowCache = rdpPtr.get();
+      registerListTreeComponent(fixture.components(), rdpPtr.get(), nullptr);
       auto const node = LayoutNode{.type = "library.listTree"};
       auto const compPtr = fixture.create(node);
 
@@ -227,8 +228,9 @@ namespace ao::gtk::layout::test
     auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
     auto menuModelPtr = Gio::Menu::create();
     menuModelPtr->append_submenu("Test Menu", Gio::Menu::create());
-    fixture.dependencies().imageLoader = imageLoaderPtr.get();
-    fixture.dependencies().menuModelPtr = menuModelPtr;
+    registerTrackCoverArtComponent(fixture.components(), imageLoaderPtr.get(), ao::test::englishMessageCatalog());
+    registerMenuBarComponent(fixture.components(), menuModelPtr);
+    registerMenuButtonComponent(fixture.components(), menuModelPtr, ao::test::englishMessageCatalog());
 
     {
       auto const node = LayoutNode{.type = "status.message"};
@@ -244,7 +246,7 @@ namespace ao::gtk::layout::test
     SECTION("library.openLibraryButton creates Gtk::Button")
     {
       auto actions = RecordingImportExportActions{};
-      fixture.dependencies().importExportActions = &actions;
+      registerOpenLibraryButtonComponent(fixture.components(), &actions, ao::test::englishMessageCatalog());
       auto const node = LayoutNode{.type = "library.openLibraryButton"};
       auto const compPtr = fixture.create(node);
 
@@ -291,7 +293,7 @@ namespace ao::gtk::layout::test
 
     SECTION("app.menuBar tolerates absent menu model")
     {
-      fixture.dependencies().menuModelPtr.reset();
+      registerMenuBarComponent(fixture.components(), nullptr);
       auto const node = LayoutNode{.type = "app.menuBar"};
       auto const compPtr = fixture.create(node);
 
@@ -1120,34 +1122,36 @@ namespace ao::gtk::layout::test
     pageHost.rebuild(cache);
     drainGtkEvents();
 
+    auto capturedParentId = kInvalidListId;
+    auto capturedExpression = std::string{};
+    auto const createSmartListFromExpression = [&](ListId parentListId, std::string expression)
+    {
+      capturedParentId = parentListId;
+      capturedExpression = std::move(expression);
+    };
+
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
+    LayoutRuntime::registerStandardComponents(registry,
+                                              runtime,
+                                              ShellLayoutCollaborators{
+                                                .textCatalog = ao::test::englishMessageCatalog(),
+                                                .trackPageHost = &pageHost,
+                                                .createSmartListFromExpression = createSmartListFromExpression,
+                                              });
 
     auto actionRegistry = ActionRegistry{};
     auto runtimeState = uimodel::LayoutRuntimeState{};
-    auto dependencies = GtkUiDependencies{
-      .textCatalog = ao::test::englishMessageCatalog(), .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
-                                  .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
-                                  .dependencies = dependencies};
-    dependencies.trackPageHost = &pageHost;
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState}};
     auto pendingDebounce = sigc::slot<bool()>{};
     ctx.timeoutScheduler = [&](std::chrono::milliseconds interval, sigc::slot<bool()> callback)
     {
       CHECK(interval == std::chrono::milliseconds{200});
       pendingDebounce = std::move(callback);
       return sigc::connection{};
-    };
-    auto capturedParentId = kInvalidListId;
-    auto capturedExpression = std::string{};
-    dependencies.createSmartListFromExpression = [&](ListId parentListId, std::string expression)
-    {
-      capturedParentId = parentListId;
-      capturedExpression = std::move(expression);
     };
 
     auto const node = LayoutNode{.type = "track.quickFilter"};

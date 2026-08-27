@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "app/ShellLayoutCollaborators.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -22,6 +26,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -37,9 +42,16 @@ namespace ao::gtk::layout::editor::test
   {
     struct DialogSessionFixture final
     {
-      DialogSessionFixture() { LayoutRuntime::registerStandardComponents(registry); }
+      DialogSessionFixture()
+      {
+        LayoutRuntime::registerStandardComponents(
+          registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = textCatalog});
+      }
 
       Glib::RefPtr<Gtk::Application> appPtr = Gtk::Application::create("io.github.aobus.layout_editor_session_test");
+      ao::test::TempDir tempDir{};
+      std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+      i18n::MessageCatalog textCatalog = ao::test::englishMessageCatalog();
       ComponentRegistry registry{};
       ActionRegistry actionRegistry{};
       Gtk::Window window{};

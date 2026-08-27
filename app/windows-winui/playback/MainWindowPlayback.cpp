@@ -3,7 +3,6 @@
 
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
-#include "app/UiCoordinator.h"
 #include "layout/ShellBuilder.h"
 #include "pch.h"
 #include "platform/SmtcBridge.h"
@@ -53,11 +52,6 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::unbindPlayback() noexcept
   {
-    if (_smtcPtr)
-    {
-      _smtcPtr->unbind();
-    }
-
     _smtcPtr.reset();
     _playPausePtr.reset();
     _stopPtr.reset();
@@ -75,7 +69,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::bindPlayback()
   {
-    if (_session == nullptr || !_coordinatorPtr)
+    if (_session == nullptr || !_resourceBytesPtr)
     {
       return;
     }
@@ -105,9 +99,12 @@ namespace winrt::Aobus::implementation
 
     try
     {
-      _smtcPtr = std::make_unique<ao::winui::SmtcBridge>(
-        nativeWindow(*this), Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread());
-      _smtcPtr->bind(runtime, commands, _coordinatorPtr->resourceBytes());
+      _smtcPtr =
+        std::make_unique<ao::winui::SmtcBridge>(nativeWindow(*this),
+                                                Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread(),
+                                                runtime,
+                                                commands,
+                                                *_resourceBytesPtr);
     }
     catch (hresult_error const& error)
     {

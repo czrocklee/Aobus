@@ -151,8 +151,7 @@ The interactive session lifecycle architecture owns how that platform lifetime c
 The application shell architecture refines the layout document, action/component metadata, GTK registries and builders, component state, and build context.
 Presentation owns the semantic state that those shell components adapt and render.
 
-`MainWindow` owns the visible window composition.
-`MainWindowCoordinator` binds runtime/UIModel collaborators to that composition.
+`MainWindow` owns the visible window composition and the runtime/UIModel collaborators bound to it.
 It also retains the shared resolver and GTK shell catalog used by menus, preferences, shortcut and presentation editors, action descriptors, and layout-component accessibility fallbacks.
 Metadata/property surfaces and the Layout Editor consume that same injected resolver; stable document tokens remain identities while the GTK leaf maps built-in descriptor and enum values to localized display text.
 The List preview dialog may compose read-only runtime evaluators against the const library view, but GTK cannot name committing transaction authority or call `LibraryWriter` directly.
@@ -328,7 +327,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`TrackColumnLayoutYamlSchema`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own versioned UIModel presentation documents.
 - [`ListTreeProjection`](../../app/include/ao/uimodel/library/list/ListTreeProjection.h) owns shared list-navigation hierarchy and recovery policy.
 - [`ThemePreset`](../../app/include/ao/uimodel/preference/ThemePreset.h) owns semantic application-theme choices and stable-id resolution.
-- [`MainWindow`](../../app/linux-gtk/app/MainWindow.h), [`MainWindowCoordinator`](../../app/linux-gtk/app/MainWindowCoordinator.h), and [`GtkUiDependencies`](../../app/linux-gtk/app/GtkUiDependencies.h) define GTK composition boundaries.
+- [`MainWindow`](../../app/linux-gtk/app/MainWindow.h) and [`ShellLayoutCollaborators`](../../app/linux-gtk/app/ShellLayoutCollaborators.h) define GTK composition boundaries.
 - [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) bounds GTK-main-context callbacks to their owner lifetime.
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, and rendering.
@@ -353,7 +352,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
   admission policy.
 - [`ListTreeProjectionTest.cpp`](../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects shared list hierarchy, recovery, and ordering.
 - [`ThemePresetTest.cpp`](../../test/unit/uimodel/preference/ThemePresetTest.cpp) protects theme-id resolution and fallback.
-- [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.
+- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects GTK composition.
 - [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation and teardown ordering.
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy, handoff, and export-mode response invalidation.
 - [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects delayed conflict-response invalidation.

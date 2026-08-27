@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
 #include "i18n/GtkTextCatalog.h"
@@ -139,13 +138,16 @@ namespace ao::gtk::layout
     class TrackFieldGridComponent final : public LayoutComponent
     {
     public:
-      TrackFieldGridComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _textCatalog{ctx.dependencies.textCatalog}
+      TrackFieldGridComponent(rt::AppRuntime& runtime,
+                              i18n::MessageCatalog textCatalog,
+                              LayoutBuildContext& ctx,
+                              LayoutNode const& node)
+        : _textCatalog{std::move(textCatalog)}
         , _editCoordinator{ctx.parentWindow}
-        , _runtime{ctx.runtime}
-        , _library{ctx.runtime.library()}
-        , _completion{ctx.runtime.completion()}
-        , _notifications{ctx.runtime.notifications()}
+        , _runtime{runtime}
+        , _library{runtime.library()}
+        , _completion{runtime.completion()}
+        , _notifications{runtime.notifications()}
         , _scope{ctx.detailScope}
         , _detailUndo{ctx.detailUndo}
         , _metadataHeader{gtkText(_textCatalog, MessageId::TrackMetadataHeading)}
@@ -1349,14 +1351,11 @@ namespace ao::gtk::layout
       ConstrainedGridBox _wrapper;
       async::LifetimeScope _tasks;
     };
-
-    std::unique_ptr<LayoutComponent> createTrackFieldGrid(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TrackFieldGridComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTrackFieldGridComponent(ComponentRegistry& registry)
+  void registerTrackFieldGridComponent(ComponentRegistry& registry,
+                                       rt::AppRuntime& runtime,
+                                       i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
       {.type = "track.fieldGrid",
@@ -1365,6 +1364,7 @@ namespace ao::gtk::layout
        .props = {{.name = "categories", .kind = LayoutPropertyKind::StringList, .label = "Categories"}},
        .minChildren = 0,
        .optMaxChildren = 0},
-      createTrackFieldGrid);
+      [&runtime, textCatalog](LayoutBuildContext& ctx, LayoutNode const& node)
+      { return std::make_unique<TrackFieldGridComponent>(runtime, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

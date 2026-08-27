@@ -6,7 +6,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/SeekControlWidget.h"
-#include <ao/rt/AppRuntime.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -25,8 +25,8 @@ namespace ao::gtk::layout
     class SeekSliderComponent final : public LayoutComponent
     {
     public:
-      SeekSliderComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _control{ctx.runtime.playback()}
+      explicit SeekSliderComponent(rt::PlaybackService& playback)
+        : _control{playback}
       {
       }
 
@@ -35,16 +35,12 @@ namespace ao::gtk::layout
     private:
       SeekControlWidget _control;
     };
-
-    std::unique_ptr<LayoutComponent> createSeekSlider(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<SeekSliderComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerSeekSliderComponent(ComponentRegistry& registry)
+  void registerSeekSliderComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
   {
-    registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackSeekSlider), createSeekSlider);
+    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackSeekSlider),
+                               [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                               { return std::make_unique<SeekSliderComponent>(playback); });
   }
 } // namespace ao::gtk::layout

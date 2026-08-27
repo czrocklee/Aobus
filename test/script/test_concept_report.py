@@ -74,8 +74,8 @@ class ConceptScopeTest(unittest.TestCase):
 
     def test_construction_hops_are_crossed_api_boundaries(self):
         loader = next(chain for chain in concept_scope.CONSTRUCTION_CHAINS if chain.leaf == "rt.ResourceByteLoader")
-        self.assertEqual(loader.hops, 2)
-        self.assertEqual(loader.steps, ("ResourceByteLoader()", "bind(CoreRuntime&)"))
+        self.assertEqual(loader.hops, 1)
+        self.assertEqual(loader.steps, ("ResourceByteLoader(CoreRuntime&)",))
         activity = next(
             chain for chain in concept_scope.CONSTRUCTION_CHAINS if chain.leaf == "uimodel.ActivityStatusFeedProjection"
         )
@@ -683,7 +683,7 @@ class ConceptMetricTest(unittest.TestCase):
 
         self.assertEqual(targets, ["ao_alpha_check", "ao_beta_guardrail", "ao_gamma_boundary_report"])
 
-    def test_source_aggregate_inventory_includes_private_definitions_and_skips_forwards(self):
+    def test_source_aggregate_inventory_covers_collaborator_bags_and_skips_forwards(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             header = root / "app" / "frontend" / "LayoutBuildContext.h"
@@ -703,6 +703,20 @@ class ConceptMetricTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            collaborators = root / "app" / "frontend" / "ShellCollaborators.h"
+            collaborators.write_text(
+                "\n".join(
+                    [
+                        "struct ShellCollaborators final {",
+                        "  Cache* cache = nullptr;",
+                        "  Loader* loader = nullptr;",
+                        "};",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
             inventory = concept_report._source_aggregate_inventory(root)
 
         self.assertEqual(
@@ -713,7 +727,13 @@ class ConceptMetricTest(unittest.TestCase):
                     "kind": "Context",
                     "fields": 2,
                     "header": "app/frontend/LayoutBuildContext.h",
-                }
+                },
+                {
+                    "name": "ShellCollaborators",
+                    "kind": "Collaborators",
+                    "fields": 2,
+                    "header": "app/frontend/ShellCollaborators.h",
+                },
             ],
         )
 

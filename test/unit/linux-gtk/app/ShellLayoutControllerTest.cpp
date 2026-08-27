@@ -4,7 +4,7 @@
 #include "app/ShellLayoutController.h"
 
 #include "app/AppConfigStore.h"
-#include "app/GtkUiDependencies.h"
+#include "app/ShellLayoutCollaborators.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
@@ -142,7 +142,7 @@ namespace ao::gtk::test
                             configStorePtr,
                             storePtr,
                             componentStateStorePtr,
-                            GtkUiDependencies{
+                            ShellLayoutCollaborators{
                               .textCatalog = ao::test::englishMessageCatalog(),
                               .playbackCommandSurface = &commandSurface,
                               .themeCoordinator = &themeCoordinator,
@@ -710,10 +710,10 @@ namespace ao::gtk::test
                               std::make_shared<AppConfigStore>(tempDir / "config.yaml"),
                               std::make_shared<ShellLayoutStore>(tempDir / "layouts"),
                               std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state"),
-                              GtkUiDependencies{.textCatalog = ao::test::englishMessageCatalog(),
-                                                .playbackCommandSurface = &commandSurface,
-                                                .themeCoordinator = &themeCoordinator,
-                                                .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
+                              ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                                                       .playbackCommandSurface = &commandSurface,
+                                                       .themeCoordinator = &themeCoordinator,
+                                                       .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
 
       controller.activateAction("shell.showSoul");
       REQUIRE(controller.soulWindow() != nullptr);
@@ -756,10 +756,10 @@ namespace ao::gtk::test
                               std::move(configStorePtr),
                               std::move(layoutStorePtr),
                               std::move(componentStateStorePtr),
-                              GtkUiDependencies{.textCatalog = ao::test::englishMessageCatalog(),
-                                                .playbackCommandSurface = &commandSurface,
-                                                .themeCoordinator = &themeCoordinator,
-                                                .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
+                              ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                                                       .playbackCommandSurface = &commandSurface,
+                                                       .themeCoordinator = &themeCoordinator,
+                                                       .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
       controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "common/AccessibleLabel.h"
 #include "i18n/GtkTextCatalog.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -17,6 +16,7 @@
 #include <gtkmm/widget.h>
 
 #include <memory>
+
 namespace ao::gtk::layout
 {
   using namespace uimodel;
@@ -28,13 +28,13 @@ namespace ao::gtk::layout
     class OpenLibraryButton final : public LayoutComponent
     {
     public:
-      OpenLibraryButton(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+      OpenLibraryButton(portal::ImportExportActions* actions, i18n::MessageCatalog const& textCatalog)
       {
-        auto const label = gtkText(ctx.dependencies.textCatalog, i18n::MessageId::GtkShellOpenLibrary);
+        auto const label = gtkText(textCatalog, i18n::MessageId::GtkShellOpenLibrary);
         _button.set_icon_name("folder-open-symbolic");
         setTooltipAndAccessibleLabel(_button, label);
 
-        if (auto* const actions = ctx.dependencies.importExportActions; actions != nullptr)
+        if (actions != nullptr)
         {
           _button.signal_clicked().connect([actions] { actions->openLibrary(); });
         }
@@ -49,20 +49,19 @@ namespace ao::gtk::layout
     private:
       Gtk::Button _button;
     };
-
-    std::unique_ptr<LayoutComponent> createOpenLibraryButton(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<OpenLibraryButton>(ctx, node);
-    }
   } // namespace
 
-  void registerOpenLibraryButtonComponent(ComponentRegistry& registry)
+  void registerOpenLibraryButtonComponent(ComponentRegistry& registry,
+                                          portal::ImportExportActions* importExportActions,
+                                          i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent({.type = "library.openLibraryButton",
-                                .displayName = "Open Library Button",
-                                .category = LayoutComponentCategory::Library,
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createOpenLibraryButton);
+    registry.registerComponent(
+      {.type = "library.openLibraryButton",
+       .displayName = "Open Library Button",
+       .category = LayoutComponentCategory::Library,
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      [importExportActions, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<OpenLibraryButton>(importExportActions, textCatalog); });
   }
 } // namespace ao::gtk::layout

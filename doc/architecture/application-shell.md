@@ -48,8 +48,8 @@ App owns dispatcher + one LibraryWindowSession
   -> one process owns one LibrarySession + MainWindow for its lifetime
   -> aobus-winui-lib owns ShellStatePolicy + settings/theme schemas
   -> MainWindow owns the XAML frame, its resources, and one layout host
-     -> UiCoordinator owns session callbacks and borrowed runtime consumers
-        -> TrackListController + cover-art presenters + theme coordinator
+     -> session callbacks, TrackListController, ResourceByteLoader, theme coordinator
+        -> cover-art presenters borrow the loader and theme the window owns
      -> ShellBuilder owns actions, menus, pane accessors, runtime state
         -> one live generation built from the preset the resolved mode names
         -> playback leaf controls own native event tokens + UIModel bindings
@@ -89,7 +89,7 @@ The WinUI window builds its shell from the selected preset. `MainWindow.xaml` ke
 ### GTK shell owner
 
 `MainWindow` owns one `ShellLayoutController` for the complete window lifetime.
-The controller is the current GTK shell composition owner: it selects and loads a preset, owns the active layout session, component and action registries, runtime component state, layout host, editor workflow, stores, action export, and the borrowed collaborators used by factories.
+The controller is the current GTK shell composition owner: it selects and loads a preset, owns the active layout session, component and action registries, runtime component state, layout host, editor workflow, stores, action export, and the borrowed collaborators it hands to component registration and reads from its own action handlers.
 
 This is a broad current responsibility set, not a general-purpose runtime facade.
 Customized-layout load/save/remove operations and candidate preparation return typed results; component-state persistence retains its narrower optional/Boolean contract.
@@ -101,12 +101,13 @@ The underlying grouped store provides fail-closed one-shot replacement without g
 The window session owns exactly one `LibrarySession` and `MainWindow`; the session owns exactly one runtime for the process lifetime, and neither owner can retarget or replace it.
 Opening another root queues an application-level destructive restart rather than constructing another graph in the process.
 Shell mode changes never replace the session.
-`MainWindow` owns the XAML frame, its resource scope, the single layout host, and the commands a preset can name; it holds no shell composition of its own.
+`MainWindow` owns the XAML frame, its resource scope, the single layout host, the commands a preset can name, and the window's own runtime consumers; it holds no shell composition of its own.
 
 `ShellBuilder` is the window's shell-lifetime composition owner. It holds the action registry, the menu composition, the `winui::DesktopSettings` pane accessors, the component runtime state, current shell state, retained status message, native-window activity, their change signals, and the layout host. `LayoutHost` only stages and publishes generations; it does not relay state into their components. The builder decides whether the target shell mode requires a new preset generation and commits a changed shell state only after any required candidate publishes. A build that fails leaves the current generation and its committed state live and reports why; a first build that fails leaves the frame showing a minimal layout-error surface, because a shipped document that does not build is an artifact defect rather than a user-recoverable state.
 
-`UiCoordinator` is the one window-scoped owner of the `LibrarySession` status/failure callbacks and the borrowed track-list, resource-byte, and theme collaborators.
-It exposes those owned collaborators through narrow accessors and retires their bindings before the window releases its session.
+`MainWindow` is also the one window-scoped owner of the `LibrarySession` status/failure callbacks, the reveal-request subscription, and the track-list, resource-byte, and theme consumers those callbacks and the shell read.
+They are constructed from the borrowed session when the window is initialized and released by `MainWindow::shutdown()`, which stops status publication and reveal routing before releasing anything they publish into.
+There is no separate coordinator layer between the window and its consumers: they have exactly the window's lifetime, so `MainWindow` is their owner.
 `ShellBuilder` resolves its existing `LibrarySession` into explicit runtime services and a narrow `ShellLibraryAccess` before constructing a per-build `LayoutBuildContext`; generation components never receive `LibrarySession` or `AppRuntime`.
 Leaf controls receive the exact runtime or UIModel service their binding needs.
 
@@ -133,8 +134,11 @@ It remains the live command authority; layout nodes, keyboard maps, and Gio acti
 `LayoutHost` owns the active component tree and exposes a staged `prepare`/`commit` boundary for load, editor preview/save, reset, and panel-size promotion.
 
 Factories receive one `LayoutBuildContext` assembled for the build.
-They borrow `AppRuntime`, the parent window, registries, shell-lifetime runtime state, an explicit candidate-state view, and `GtkUiDependencies`; they do not reach through a global service locator.
-The context is a GTK aggregate over neutral parts: its surface kind, runtime state, and build-state view are UIModel values, while the parent window, dependency aggregate, detail scope, and timeout scheduler stay GTK-local.
+They borrow the parent window, registries, shell-lifetime runtime state, and an explicit candidate-state view; required collaborators are captured into factory lambdas at registration time rather than reached through a global service locator or dependency bag.
+The context is a GTK aggregate over neutral parts: its surface kind, runtime state, and build-state view are UIModel values, while the parent window, detail scope, and timeout scheduler stay GTK-local.
+
+Registration-time capture makes collaborator availability a construction-order obligation of the window.
+Every shell-owned collaborator a component names, the application menu model included, is supplied in the `ShellLayoutCollaborators` argument the controller is constructed with; a collaborator the window only produces afterwards never reaches the already-registered factories.
 
 ### State and input adaptation
 
@@ -151,7 +155,7 @@ GTK translates those chords to native accelerator syntax and applies eligible wi
 - UIModel shell types may depend on stable runtime values and managed-state mechanisms but never on GTK, GDK, Gio, or frontend-local classes.
 - Build-time state, surface, and action-slot vocabulary lives in UIModel and is usable without a widget toolkit. Whether a second frontend adopts it is a separate decision; hoisting the vocabulary does not by itself make the component system cross-frontend.
 - GTK layout registries depend on UIModel descriptors and concrete GTK factories; UIModel catalogs do not depend back on those registries.
-- Component factories may consume explicit runtime/UIModel collaborators from `LayoutBuildContext`; runtime services never depend on layout components.
+- GTK component factories capture the exact runtime/UIModel collaborators they name when they are registered, never from `LayoutBuildContext`; runtime services never depend on layout components.
 - Layout documents carry stable component types, properties, action ids, and semantic CSS class values, not C++ factory names or widget pointers.
 - The action registry owns activation and availability; a component binding or keymap is a reference, not a parallel handler.
 - Gio export and shortcut application stop at the GTK boundary.
@@ -183,7 +187,7 @@ global application preference selects classic or modern
 ```text
 layout component, menu, shortcut, or Gio action id
   -> ActionRegistry validation and availability
-  -> activation context with runtime, window, anchor, and component id
+  -> activation context with window, anchor, and component id
   -> registered handler
   -> runtime/UIModel command or GTK-local surface
 ```
@@ -256,7 +260,7 @@ Within either process, one build borrows explicit session- and coordinator-owned
 - For WinUI, one main window owns one live generation, built from the preset the resolved shell mode names. Modern is the default. Switching shell mode replaces that generation but cannot replace the window's `LibrarySession`, initiate scanning, or stop playback.
 - WinUI responsive layout may collapse side regions but cannot hide the track list or playback controls. Classic Soul remains a separate 32 by 32 glyph-free control before ordinary Play/Pause and Stop controls.
 - `LibraryWindowSession` owns one immutable window/session relationship; `App` releases its window and then session before launching a successor process.
-- One `UiCoordinator` owns the session callback sink and borrowed runtime consumers for one WinUI main window.
+- One WinUI `MainWindow` owns the session callback sink and the runtime consumers for its own window, and names each retirement step rather than relying on member destruction order.
 - WinUI state sources outlive the layout host; subscriptions are generation-owned members and are destroyed before those sources.
 - Shell state is committed only after any required preset candidate publishes successfully, and equivalent resolved state is not emitted again.
 - A WinUI `LayoutBuildContext` is bounded to one generation build and is not retained; each constructed component stores only the narrow references and subscriptions it needs.
@@ -282,7 +286,7 @@ During teardown the controller clears the host while runtime state, stores, regi
 The final clear does not advance the state generation, allowing the current component tree to flush pending state before its owners disappear.
 Editor theme and callback tokens are released before the controller's collaborators.
 
-WinUI unregisters XAML, runtime, playback, SMTC, and cover-art observations before its window releases the borrowed session. The main window retires `ShellBuilder` first; destroying the live generation releases its scoped shell-state and track-list subscriptions while their `ShellBuilder`- and `UiCoordinator`-owned signal sources still exist. `UiCoordinator::retire()` then clears the session callback registration and unbinds its owned collaborators. Playback leaf destructors unbind their ViewModels before revoking native event tokens, while the main window's XAML tree is still alive.
+WinUI unregisters XAML, runtime, playback, SMTC, and cover-art observations before its window releases the borrowed session. The main window retires `ShellBuilder` first; destroying the live generation releases its scoped shell-state and track-list subscriptions while their `ShellBuilder`- and window-owned signal sources still exist. `MainWindow::shutdown()` then unbinds playback, clears the session callback registration, releases the reveal subscription, and only then releases the resource, theme, and track-list consumers. Playback leaf destructors unbind their ViewModels before revoking native event tokens, while the main window's XAML tree is still alive.
 
 WinUI library restart is requested through the dispatcher so the folder-picker callback returns before teardown.
 The parent retires every shell and runtime borrower, releases its window/session graph and application-state writers, and only then starts the successor.
@@ -299,7 +303,7 @@ The selected root is persisted only after successor activation; its initial scan
 - [`KeymapModel`](../../app/include/ao/uimodel/input/KeymapModel.h), [`KeymapApplicator.cpp`](../../app/linux-gtk/app/KeymapApplicator.cpp), and [`ShortcutEditorWidget.cpp`](../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) own neutral policy and GTK adaptation.
 - [`app/windows-winui/CMakeLists.txt`](../../app/windows-winui/CMakeLists.txt) places all compiled WinUI implementation in the Windows-only `aobus-winui-lib` static library and leaves `aobus-winui` as the final-link and deployed-resource boundary.
 - [`App`](../../app/windows-winui/App.xaml.h), [`LibraryWindowSession`](../../app/windows-winui/app/LibraryWindowSession.h), [`LibrarySession`](../../app/windows-winui/app/LibrarySession.h), [`ProcessLauncher`](../../app/windows-winui/platform/ProcessLauncher.h), and [`MainWindow`](../../app/windows-winui/MainWindow.xaml) own the WinUI shell and destructive library restart; shell, track, and playback code-behind methods are compiled from their matching subsystem directories.
-- [`UiCoordinator`](../../app/windows-winui/app/UiCoordinator.h) owns the WinUI session callback boundary and exposes its track-list, resource-byte, and theme collaborators through narrow accessors.
+- [`MainWindow.xaml.cpp`](../../app/windows-winui/MainWindow.xaml.cpp) owns the WinUI session callback boundary along with the track-list, resource-byte, and theme consumers, and states its retirement order in `shutdown()`.
 - [`LayoutBuildContext`](../../app/windows-winui/layout/runtime/LayoutBuildContext.h) is the per-generation construction carrier, while [`ShellLibraryAccess`](../../app/windows-winui/layout/runtime/ShellLibraryAccess.h) limits session-backed component operations to library-root display, list projection, presentation preference, and track playback.
 - Playback leaves bind directly to `PlaybackService` and, when required, `PlaybackCommandSurface`; [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) prevents generation components and leaf adapters from regaining session/runtime composition authority.
 - [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h) owns WinUI shell composition, [`ShellPresetSource`](../../app/windows-winui/layout/ShellPresetSource.h) reads the packaged presets, and [`LayoutHost`](../../app/windows-winui/layout/runtime/LayoutHost.h) keeps exactly one generation attached to the frame.

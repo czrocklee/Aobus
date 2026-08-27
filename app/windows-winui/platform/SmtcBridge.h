@@ -37,7 +37,11 @@ namespace ao::winui
   class SmtcBridge final
   {
   public:
-    SmtcBridge(HWND window, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher);
+    SmtcBridge(HWND window,
+               winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+               rt::AppRuntime& runtime,
+               uimodel::PlaybackCommandSurface& commands,
+               rt::ResourceByteLoader& resourceBytes);
     ~SmtcBridge();
 
     SmtcBridge(SmtcBridge const&) = delete;
@@ -45,14 +49,10 @@ namespace ao::winui
     SmtcBridge(SmtcBridge&&) = delete;
     SmtcBridge& operator=(SmtcBridge&&) = delete;
 
-    void bind(rt::AppRuntime& runtime,
-              uimodel::PlaybackCommandSurface& commands,
-              rt::ResourceByteLoader& resourceBytes);
-    void unbind() noexcept;
-
   private:
     struct State;
 
+    static void retireNativeSession(State& state) noexcept;
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
     void updateArtwork(ResourceId resourceId);
     static async::Task<void> prepareAndWriteArtwork(std::weak_ptr<State> statePtr,
@@ -68,5 +68,8 @@ namespace ao::winui
     async::Subscription _snapshotSub;
     utility::ScopedRegistration _artworkRequest;
     async::TaskHandle _artworkTask;
+    // Declared last so failed-constructor unwinding closes native admission
+    // before cancelling any partially established callback work.
+    utility::ScopedRegistration _nativeSessionRetirement;
   };
 } // namespace ao::winui

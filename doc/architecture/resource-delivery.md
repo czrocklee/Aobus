@@ -74,11 +74,11 @@ Entries are verified against the digest on read, installed after a carrier answe
 A cache that is absent, unwritable, or destroyed costs re-extraction and never a failed request.
 
 The task service owns the derived cover cache above and nothing else: it holds no in-memory or decoded resource state, publishes no maintenance progress, and introduces no resource-state owner.
-Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a per-binding byte cache bounded by both entry count and aggregate bytes, and delivers immutable copyable `ResourceBytes` values through the bound runtime's callback executor.
-`ResourceBytes` shares owned storage across callbacks and remains valid after loader unbinding or cache eviction.
-The loader has one asynchronous byte-source port regardless of whether its default adapter reads through `CoreRuntime` or a focused test/composition adapter supplies bytes directly.
-WinUI, GTK, and TUI use borrowed-runtime bindings whose `CoreRuntime` must outlive the loader and its cancelled work; each composition root destroys the loader before releasing that runtime.
-Each spawned read retains the selected source independently of later unbinding.
+Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a loader-lifetime byte cache bounded by both entry count and aggregate bytes, and delivers immutable copyable `ResourceBytes` values through its constructor-selected runtime's callback executor.
+`ResourceBytes` shares owned storage across callbacks and remains valid after loader destruction or cache eviction.
+The loader constructor selects one asynchronous byte-source port for its whole life, whether the default adapter reads through `CoreRuntime` or a focused test/composition adapter supplies bytes directly.
+WinUI, GTK, and TUI borrow a `CoreRuntime` that must outlive the loader and all work its destructor cancels; each composition root destroys the loader before releasing that runtime.
+Each spawned read retains the selected source until that flight finishes or loader destruction cancels it.
 It is instantiated by a composition root rather than owned globally by `CoreRuntime`.
 GTK, TUI, WinUI, and MPRIS retain their transform-specific request and cache paths, while every frontend retains its own decode and stale-result policy.
 
@@ -97,7 +97,7 @@ Group-heading, Inspector, and Now Playing layout components expose style enums i
 
 ### WinUI image delivery
 
-Each WinUI `MainWindow` owns one runtime `ResourceByteLoader` through its `UiCoordinator`, bound by reference to that window's session runtime.
+Each WinUI `MainWindow` owns one runtime `ResourceByteLoader` directly, constructed on that window's session runtime and never rebound.
 The loader uses the shared request coalescer for valid-resource reads and owns one bounded encoded-byte cache shared by all Windows presenters and SMTC in that window.
 A library replacement creates a new window and loader; it does not rebind a live loader to another runtime.
 `CoverArtPresenter` owns one generation-fenced selection, renders the fixed slot placeholder through XAML for an invalid identity, supplies the current Windows theme accent to vinyl rendering, and decodes valid bytes through the native image source.
@@ -206,8 +206,8 @@ Missing reads are ordinary absence; LMDB operational faults follow the storage f
 The runtime reader copies the descriptor and the carrier snapshot it read and closes its transaction before any cache or file I/O, so no read transaction spans a materialization.
 
 Runtime byte and GTK/MPRIS transform requests have per-interest cancellation plus an owner lifetime scope; each WinUI presenter additionally owns a generation fence and worker stream-preparation task; TUI owns one selected byte interest plus cancellable settle and transform tasks, all retired together by replacement, clearing, and destruction.
-WinUI window teardown unbinds the resource loader, SMTC bridge, and cover-art presenters before the session destroys its unique runtime; runtime shutdown joins cancelled work rather than deferring or quarantining a runtime owner.
-Resource-byte unbinding destroys its lifetime scope before clearing its shared request coalescer, cache, source, and callback-runtime binding; a later binding creates a fresh scope.
+WinUI window teardown destroys SMTC and its cover-art presenters before the resource loader, then destroys that loader before the session releases its unique runtime; runtime shutdown joins cancelled work rather than deferring or quarantining a runtime owner.
+`ResourceByteLoader` destruction destroys its lifetime scope before clearing the shared request coalescer and byte cache; its constructor-selected source and callback-runtime reference then die with the loader.
 Each delivery owner cancels external work before clearing its shared request coalescer.
 The coalescer's flight token identifies one exact start generation, so a late completion after clear cannot match a same-key replacement.
 Worker cancellation prevents a frontend owner from being touched after destruction.
@@ -240,7 +240,7 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 - [`ScanApplyOperationTest.cpp`](../../test/unit/runtime/library/ScanApplyOperationTest.cpp) protects covers as a scan fact across `New`, `Changed`, `Moved`, and `Unchanged` items.
 - [`TrackBuilderCoverArtTest.cpp`](../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects ordered references and primary selection.
 - [`RequestCoalescerTest.cpp`](../../test/unit/async/RequestCoalescerTest.cpp) protects shared-flight ordering, interest cancellation, exact-flight dependency retention/release, reentrancy, failure rollback, clear generation fencing, and owner-independent request handles.
-- [`ResourceByteCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded encoded-byte retention, shared storage lifetime, real and adapter-source reads, borrowed/shared binding, synchronous cache-hit delivery, retry, callback affinity, cancellation, fanout teardown, idempotent unbinding, and rebinding.
+- [`ResourceByteCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded encoded-byte retention, shared storage lifetime beyond loader destruction, constructor-backed CoreRuntime and adapter-source reads, synchronous cache-hit delivery, retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement loader.
 - GTK image tests under [`test/unit/linux-gtk/image/`](../../test/unit/linux-gtk/image/) protect cache, coalescing, scaling, cancellation, current-request publication, and render targets.
 - [`PlaybackImageTest.cpp`](../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects the runtime identity-to-widget consumer.
 - [`CoverArtPlaceholderTest.cpp`](../../test/unit/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects the shared presentation policy.

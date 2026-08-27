@@ -216,7 +216,7 @@ Subsystem-specific code families and translations belong to their focused specif
 
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive runtime composition and service wiring.
 - [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects canonical per-library path derivation and existing-database detection.
-- [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protects resource-byte delivery, retry, callback affinity, cancellation, and rebinding.
+- [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protects constructor-bound resource-byte delivery, retry, callback affinity, cancellation, and destruction fencing.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.
 - [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects shared signal ordering, reentrancy, exceptions, and deferred lifetime.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`TuiRenderTestSupport.h`](../../test/unit/tui/TuiRenderTestSupport.h) support frontend-boundary tests.

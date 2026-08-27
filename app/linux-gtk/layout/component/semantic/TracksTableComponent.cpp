@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponentRegistrations.h"
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -34,9 +33,9 @@ namespace ao::gtk::layout
     class TracksTableComponent final : public LayoutComponent
     {
     public:
-      TracksTableComponent(LayoutBuildContext& ctx, LayoutNode const& node)
+      TracksTableComponent(TrackPageHost* trackPageHost, LayoutNode const& node)
       {
-        if (ctx.dependencies.trackPageHost == nullptr)
+        if (trackPageHost == nullptr)
         {
           _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageHost missing"));
           return;
@@ -56,9 +55,9 @@ namespace ao::gtk::layout
                        uimodel::coverArtPlaceholderStyleId(defaultStyle));
         }
 
-        ctx.dependencies.trackPageHost->setGroupCoverPlaceholderStyle(style);
+        trackPageHost->setGroupCoverPlaceholderStyle(style);
 
-        Gtk::Stack& stack = ctx.dependencies.trackPageHost->stack();
+        Gtk::Stack& stack = trackPageHost->stack();
         _container.append(stack);
         _container.set_hexpand(true);
         _container.set_vexpand(true);
@@ -69,14 +68,9 @@ namespace ao::gtk::layout
     private:
       Gtk::Box _container{Gtk::Orientation::VERTICAL};
     };
-
-    std::unique_ptr<LayoutComponent> createTracksTable(LayoutBuildContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<TracksTableComponent>(ctx, node);
-    }
   } // namespace
 
-  void registerTracksTableComponent(ComponentRegistry& registry)
+  void registerTracksTableComponent(ComponentRegistry& registry, TrackPageHost* trackPageHost)
   {
     registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::TrackTable),
                                                    {{.name = "view",
@@ -88,6 +82,7 @@ namespace ao::gtk::layout
                                                      .label = "Group Cover Placeholder",
                                                      .defaultValue = LayoutValue{"monogram"},
                                                      .enumValues = coverArtPlaceholderStyleIds()}}),
-                               createTracksTable);
+                               [trackPageHost](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+                               { return std::make_unique<TracksTableComponent>(trackPageHost, node); });
   }
 } // namespace ao::gtk::layout
