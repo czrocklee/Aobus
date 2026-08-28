@@ -16,9 +16,9 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
-#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
-#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
+#include <ao/uimodel/layout/shell/LayoutSession.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 
 #include <glibmm/refptr.h>
@@ -39,6 +39,21 @@ namespace ao::gtk::layout::test
   uimodel::PreparedLayout preparedLayout(uimodel::LayoutDocument const& document)
   {
     return ao::test::requireValue(uimodel::prepareLayout(document));
+  }
+
+  uimodel::LayoutBuildSnapshot activateBuildSnapshot(uimodel::LayoutSession& session,
+                                                     std::string_view const presetId,
+                                                     uimodel::LayoutComponentStateDocument const& componentState,
+                                                     bool const editMode,
+                                                     uimodel::LayoutNodeMovedFn onNodeMoved)
+  {
+    auto candidateState = componentState;
+    candidateState.preset = presetId;
+    auto snapshot = session.buildSnapshot(candidateState, editMode, std::move(onNodeMoved)).value();
+    auto const generation = snapshot.generation();
+    session.apply(session.layout(), std::move(candidateState), generation);
+    session.setEditMode(editMode, snapshot.onNodeMoved());
+    return snapshot;
   }
 
   struct FakeTrackDetailScope::State final
@@ -80,16 +95,19 @@ namespace ao::gtk::layout::test
     explicit State(std::string_view applicationId,
                    compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                    std::string_view locale,
-                   rt::TextOrderingPolicy const* const textOrderingPolicy)
+                   rt::TextOrderingPolicy const* const textOrderingPolicy,
+                   uimodel::LayoutComponentStateStore* const componentStateStore)
       : appPtr{Gtk::Application::create(std::string{applicationId})}
       , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary), textOrderingPolicy)}
       , messageCatalog{ao::test::messageCatalog(locale)}
       , playbackActions{runtimePtr->playback(), [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
+      , actions{components.schema()}
+      , session{componentStateStore}
       , context{.registry = components,
                 .actionRegistry = actions,
                 .parentWindow = window,
-                .runtimeState = runtimeState,
-                .buildState = uimodel::LayoutBuildStateView{runtimeState}}
+                .session = session,
+                .buildSnapshot = activateBuildSnapshot(session)}
       , layoutRuntime{components}
     {
       LayoutRuntime::registerStandardComponents(components,
@@ -127,7 +145,7 @@ namespace ao::gtk::layout::test
     ComponentRegistry components;
     ActionRegistry actions;
     Gtk::Window window;
-    uimodel::LayoutRuntimeState runtimeState;
+    uimodel::LayoutSession session;
     LayoutBuildContext context;
     LayoutRuntime layoutRuntime;
     std::unique_ptr<FakeTrackDetailScope> trackDetailScopePtr;
@@ -136,8 +154,13 @@ namespace ao::gtk::layout::test
   LayoutRuntimeFixture::LayoutRuntimeFixture(std::string_view const applicationId,
                                              compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                                              std::string_view const locale,
-                                             rt::TextOrderingPolicy const* const textOrderingPolicy)
-    : _statePtr{std::make_unique<State>(applicationId, std::move(initializeLibrary), locale, textOrderingPolicy)}
+                                             rt::TextOrderingPolicy const* const textOrderingPolicy,
+                                             uimodel::LayoutComponentStateStore* const componentStateStore)
+    : _statePtr{std::make_unique<State>(applicationId,
+                                        std::move(initializeLibrary),
+                                        locale,
+                                        textOrderingPolicy,
+                                        componentStateStore)}
   {
   }
 
@@ -173,6 +196,26 @@ namespace ao::gtk::layout::test
     return _statePtr->context;
   }
 
+  uimodel::LayoutSession& LayoutRuntimeFixture::session()
+  {
+    return _statePtr->session;
+  }
+
+  void LayoutRuntimeFixture::setComponentState(std::string_view const presetId,
+                                               uimodel::LayoutComponentStateDocument const& componentState,
+                                               bool const editMode,
+                                               uimodel::LayoutNodeMovedFn onNodeMoved)
+  {
+    _statePtr->context.buildSnapshot =
+      activateBuildSnapshot(_statePtr->session, presetId, componentState, editMode, std::move(onNodeMoved));
+  }
+
+  void LayoutRuntimeFixture::advanceGeneration()
+  {
+    auto const snapshot = _statePtr->session.buildSnapshot().value();
+    _statePtr->session.advanceGeneration(snapshot.generation());
+  }
+
   LayoutRuntime& LayoutRuntimeFixture::layoutRuntime()
   {
     return _statePtr->layoutRuntime;
@@ -193,11 +236,15 @@ namespace ao::gtk::layout::test
 
   std::unique_ptr<LayoutComponent> LayoutRuntimeFixture::createWithTransientContext(uimodel::LayoutNode const& node)
   {
+    auto snapshot = activateBuildSnapshot(_statePtr->session,
+                                          _statePtr->session.presetId(),
+                                          _statePtr->session.componentState(),
+                                          _statePtr->session.isEditMode());
     auto context = LayoutBuildContext{.registry = _statePtr->components,
                                       .actionRegistry = _statePtr->actions,
                                       .parentWindow = _statePtr->window,
-                                      .runtimeState = _statePtr->runtimeState,
-                                      .buildState = uimodel::LayoutBuildStateView{_statePtr->runtimeState},
+                                      .session = _statePtr->session,
+                                      .buildSnapshot = std::move(snapshot),
                                       .detailScope = _statePtr->trackDetailScopePtr.get()};
     return _statePtr->components.create(context, node);
   }

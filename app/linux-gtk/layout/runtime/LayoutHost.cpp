@@ -8,16 +8,93 @@
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
-#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
+#include <gtkmm/box.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/widget.h>
 
-#include <cstdint>
-#include <limits>
+#include <algorithm>
+#include <exception>
+#include <format>
+#include <memory>
+#include <ranges>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk::layout
 {
+  namespace
+  {
+    [[noreturn]] void throwLayoutBuildError(std::string_view const message)
+    {
+      AO_EXCEPTION_CARRIER(PrivateErrorTransport);
+      throw std::logic_error{std::string{message}};
+    }
+  } // namespace
+
+  SharedWidgetHandoff::~SharedWidgetHandoff()
+  {
+    if (_committed)
+    {
+      return;
+    }
+
+    for (auto& transfer : _transfers | std::views::reverse)
+    {
+      if (transfer.widget->get_parent() != nullptr)
+      {
+        transfer.widget->unparent();
+      }
+
+      if (transfer.previousParent == nullptr)
+      {
+        continue;
+      }
+
+      if (transfer.previousSibling != nullptr && transfer.previousSibling->get_parent() == transfer.previousParent)
+      {
+        transfer.previousParent->insert_child_after(*transfer.widget, *transfer.previousSibling);
+      }
+      else
+      {
+        transfer.previousParent->prepend(*transfer.widget);
+      }
+    }
+  }
+
+  void SharedWidgetHandoff::transfer(Gtk::Widget& widget, Gtk::Box& destination)
+  {
+    if (std::ranges::any_of(_transfers, [&widget](Transfer const& transfer) { return transfer.widget == &widget; }))
+    {
+      throwLayoutBuildError("A shell-owned widget may appear only once in a layout candidate");
+    }
+
+    auto* const previousWidgetParent = widget.get_parent();
+    auto* const previousParent = dynamic_cast<Gtk::Box*>(previousWidgetParent);
+
+    if (previousWidgetParent != nullptr && previousParent == nullptr)
+    {
+      throwLayoutBuildError("A shell-owned layout widget must be parented by Gtk::Box");
+    }
+
+    auto* const previousSibling = widget.get_prev_sibling();
+    _transfers.push_back({.widget = &widget, .previousParent = previousParent, .previousSibling = previousSibling});
+
+    if (previousWidgetParent != nullptr)
+    {
+      widget.unparent();
+    }
+
+    destination.append(widget);
+  }
+
+  void SharedWidgetHandoff::commit() noexcept
+  {
+    _committed = true;
+  }
+
   LayoutHost::LayoutHost(ComponentRegistry const& registry)
     : _runtime{registry}
   {
@@ -27,29 +104,35 @@ namespace ao::gtk::layout
   Result<LayoutHost::PreparedTree> LayoutHost::prepare(LayoutBuildContext const& ctx,
                                                        uimodel::PreparedLayout const& layout)
   {
-    if (ctx.runtimeState.componentStateGeneration == std::numeric_limits<std::uint64_t>::max())
+    auto buildContext = ctx;
+    auto handoffPtr = std::make_unique<SharedWidgetHandoff>();
+    buildContext.sharedWidgetHandoff = handoffPtr.get();
+    auto rootComponentPtr = std::unique_ptr<LayoutComponent>{};
+
+    try
     {
-      return makeError(Error::Code::ResourceExhausted, "Layout component-state generation is exhausted");
+      rootComponentPtr = _runtime.build(buildContext, layout);
+    }
+    catch (std::exception const& ex)
+    {
+      AO_AUDITED_CATCH(DiagnosticFallback);
+      return makeError(Error::Code::InitFailed, std::format("Failed to build GTK layout candidate: {}", ex.what()));
     }
 
-    auto const nextGeneration = ctx.runtimeState.componentStateGeneration + 1;
-    auto buildContext = ctx;
-    buildContext.buildState.overrideGeneration(nextGeneration);
-
-    auto rootComponentPtr = _runtime.build(buildContext, layout);
-
-    AO_INVARIANT(rootComponentPtr, "Layout component factory returned no root component");
+    if (!rootComponentPtr)
+    {
+      return makeError(Error::Code::InitFailed, "Layout component factory returned no root component");
+    }
 
     auto& activeWidget = rootComponentPtr->widget();
     activeWidget.set_hexpand(true);
     activeWidget.set_vexpand(true);
-    return PreparedTree{std::move(rootComponentPtr), nextGeneration};
+    return PreparedTree{std::move(rootComponentPtr), std::move(handoffPtr), ctx.buildSnapshot.generation()};
   }
 
-  void LayoutHost::commit(uimodel::LayoutRuntimeState& runtimeState, PreparedTree prepared)
+  void LayoutHost::commit(PreparedTree prepared)
   {
-    // Invalidate pending writes before the retiring generation is detached or destroyed.
-    runtimeState.componentStateGeneration = prepared._componentStateGeneration;
+    prepared._sharedWidgetHandoffPtr->commit();
     clearLayout();
 
     _activeComponentPtr = std::move(prepared._rootComponentPtr);

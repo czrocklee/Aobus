@@ -8,12 +8,13 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
 
 #include <memory>
 #include <string>
@@ -62,7 +63,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<LayoutComponent>> _children;
       std::string _showWhen;
       bool _showPlaceholder = false;
-      sigc::connection _scopeConn;
+      sigc::scoped_connection _scopeConn;
     };
 
     std::unique_ptr<LayoutComponent> createTrackSelectionRegion(LayoutBuildContext& ctx, LayoutNode const& node)
@@ -73,18 +74,17 @@ namespace ao::gtk::layout
 
   void registerTrackSelectionRegionComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "track.selectionRegion",
-                                .displayName = "Selection Region",
-                                .category = LayoutComponentCategory::Track,
-                                .props = {{.name = "showWhen",
-                                           .kind = LayoutPropertyKind::String,
-                                           .label = "Show When",
-                                           .defaultValue = LayoutValue{"any"}},
-                                          {.name = "showPlaceholder",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Show Placeholder",
-                                           .defaultValue = LayoutValue{false}}},
-                                .minChildren = 1},
-                               createTrackSelectionRegion);
+    registry.registerComponent(
+      {.id = "track.selectionRegion",
+       .displayName = "Selection Region",
+       .category = ComponentCategory::Track,
+       .properties =
+         {{.name = "showWhen", .kind = PropertyKind::String, .label = "Show When", .defaultValue = LayoutValue{"any"}},
+          {.name = "showPlaceholder",
+           .kind = PropertyKind::Bool,
+           .label = "Show Placeholder",
+           .defaultValue = LayoutValue{false}}},
+       .minChildren = 1},
+      createTrackSelectionRegion);
   }
 } // namespace ao::gtk::layout

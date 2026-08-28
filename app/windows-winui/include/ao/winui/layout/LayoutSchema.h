@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/winui/layout/ElementKind.h>
 
 #include <cstddef>
@@ -19,7 +18,7 @@ namespace ao::uimodel
 namespace ao::winui
 {
   /**
-   * @brief Layout extension this catalog accepts beyond the version 1 common fields.
+   * @brief Layout extension this schema accepts beyond the version 1 common fields.
    *
    * Names a `Style` resource resolved against the window's `RootGrid.Resources`.
    * The style only supplies defaults: explicit document placement and
@@ -43,14 +42,11 @@ namespace ao::winui
   /**
    * @brief Component types the two built-in Windows shell documents may name.
    *
-   * Windows owns this catalog: it is deliberately narrower than the GTK catalog
-   * and grows only when a Windows preset needs a type. Descriptors are already
-   * expanded with the action properties their policy allows.
+   * Windows owns this schema: it is deliberately narrower than the GTK schema
+   * and grows only when a Windows preset needs a type. Schema entries are already
+   * expanded with the action properties their slot mask allows.
    */
-  uimodel::LayoutComponentCatalog layoutCatalog();
-
-  /// Action ids the built-in Windows shell documents may bind.
-  uimodel::LayoutActionCatalog layoutActionCatalog();
+  uimodel::LayoutSchema layoutSchema();
 
   /**
    * @brief Native element @p node constructs, or nullopt when its type is not a Windows component.
@@ -64,7 +60,7 @@ namespace ao::winui
    * @brief Exact child count @p node's authored presentation requires, or nullopt when it fixes none.
    *
    * A presentation that swaps the constructed element also decides whether the
-   * component hosts a content region, which the descriptor's child range alone
+   * component hosts a content region, which the schema entry's child range alone
    * cannot express.
    */
   std::optional<std::size_t> presentationChildCount(uimodel::LayoutNode const& node);

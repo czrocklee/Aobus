@@ -8,10 +8,10 @@
 #include "input/SystemCharacterKey.h"
 #include "layout/ShellPresetSource.h"
 #include "layout/runtime/ActionRegistry.h"
+#include "layout/runtime/ComponentRegistrations.h"
 #include "layout/runtime/FocusedDetail.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
-#include "layout/runtime/ShellLibraryAccess.h"
 #include "pch.h"
 #include "platform/StringResources.h"
 #include "theme/SurfaceBrushes.h"
@@ -25,14 +25,13 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
-#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
@@ -69,50 +68,6 @@ namespace ao::winui::layout
     ShellPreset presetForMode(ShellMode const mode) noexcept
     {
       return mode == ShellMode::Classic ? ShellPreset::Classic : ShellPreset::Modern;
-    }
-
-    ShellLibraryAccess makeLibraryAccess(LibrarySession& sessionValue, ShellListCommands const& listCommands)
-    {
-      auto* const session = &sessionValue;
-      return ShellLibraryAccess{
-        .libraryRoot = session->runtime().musicRoot(),
-        .listTreeProjection =
-          [session]
-        {
-          return uimodel::buildListTreeProjection(
-            session->textCatalog(), session->runtime().library().snapshot().lists());
-        },
-        .subscribeListTreeChanged =
-          [session](compat::MoveOnlyFunction<void()> handler)
-        {
-          return session->runtime().library().changes().onChanged(
-            [handler = std::move(handler)](rt::LibraryChangeSet const& changeSet) mutable
-            {
-              if (listTreeChangeRequiresRebuild(changeSet))
-              {
-                handler();
-              }
-            });
-        },
-        .preferredPresentation = [session](ListId const listId) -> std::optional<rt::TrackPresentationSpec>
-        {
-          if (!session->listPresentations().presentationIdForList(listId))
-          {
-            return std::nullopt;
-          }
-
-          return session->presentationForList(listId);
-        },
-        .playTrack = [session](rt::ViewId const viewId, TrackId const trackId)
-        { return session->playTrack(viewId, trackId); },
-        .createList = listCommands.createList,
-        .editList = listCommands.editList,
-        .deleteList = listCommands.deleteList,
-        .membershipTargets = listCommands.membershipTargets,
-        .editMembership = listCommands.editMembership,
-        .orderCapabilities = listCommands.orderCapabilities,
-        .applyOrder = listCommands.applyOrder,
-      };
     }
 
     /// A menu item that runs @p command, or nothing at all when the frame offers none.
@@ -158,10 +113,12 @@ namespace ao::winui::layout
   ShellBuilder::ShellBuilder(LibrarySession& session, ShellBuilderConfig config)
     : _session{session}
     , _config{std::move(config)}
-    , _libraryAccess{makeLibraryAccess(session, _config.listCommands)}
+    , _schema{layoutSchema()}
+    , _registry{_schema, _actions}
     , _host{_config.host}
   {
     registerActions();
+    registerComponents();
     installKeyboardAccelerators();
   }
 
@@ -220,6 +177,96 @@ namespace ao::winui::layout
       _actions.registerAction("playback.showOutputDeviceSelector",
                               [showSelector](ActionContext const& context) { showSelector(context.anchor); });
     }
+  }
+
+  void ShellBuilder::registerComponents()
+  {
+    auto& runtime = _session.runtime();
+    auto* const session = &_session;
+    auto report = [this](std::string message) { reportStatus(std::move(message)); };
+    auto listTreeProjection = [session]
+    {
+      return uimodel::buildListTreeProjection(session->textCatalog(), session->runtime().library().snapshot().lists());
+    };
+    auto subscribeListTreeChanged = [session](compat::MoveOnlyFunction<void()> handler)
+    {
+      return session->runtime().library().changes().onChanged(
+        [handler = std::move(handler)](rt::LibraryChangeSet const& changeSet) mutable
+        {
+          if (listTreeChangeRequiresRebuild(changeSet))
+          {
+            handler();
+          }
+        });
+    };
+    auto preferredPresentation = [session](ListId const listId) -> std::optional<rt::TrackPresentationSpec>
+    {
+      if (!session->listPresentations().presentationIdForList(listId))
+      {
+        return std::nullopt;
+      }
+
+      return session->presentationForList(listId);
+    };
+    auto playTrack = [session](rt::ViewId const viewId, TrackId const trackId)
+    { return session->playTrack(viewId, trackId); };
+
+    registerContainerComponents(_registry);
+    registerGenericComponents(_registry, menus());
+    registerPlaybackComponents(_registry,
+                               runtime.async(),
+                               runtime.playback(),
+                               _session.playbackActions(),
+                               _config.resourceBytes,
+                               _config.theme,
+                               _session.textCatalog(),
+                               _shellStateChanged,
+                               _windowActivityChanged);
+    registerShellComponents(_registry, runtime.musicRoot(), paneSettings(), menus(), _shellStateChanged);
+    registerNavigationPaneComponent(_registry,
+                                    _config.trackList,
+                                    runtime.workspace(),
+                                    std::move(listTreeProjection),
+                                    std::move(subscribeListTreeChanged),
+                                    std::move(preferredPresentation),
+                                    _config.listCommands.createList,
+                                    _config.listCommands.editList,
+                                    _config.listCommands.deleteList,
+                                    _session.textCatalog(),
+                                    paneSettings(),
+                                    _shellStateChanged,
+                                    report);
+    registerStatusComponents(_registry,
+                             runtime.views(),
+                             runtime.notifications(),
+                             runtime.library().jobs(),
+                             _config.trackList,
+                             _session.textCatalog(),
+                             _shellStateChanged,
+                             _statusMessageChanged);
+    registerTrackComponents(_registry,
+                            runtime.async(),
+                            runtime.views(),
+                            runtime.workspace(),
+                            runtime.completion(),
+                            _config.resourceBytes,
+                            _config.theme,
+                            _config.trackList,
+                            _session.presentationCatalog(),
+                            _session.listPresentations(),
+                            _config.listCommands.createList,
+                            _session.textCatalog(),
+                            report);
+    registerTrackTableComponent(_registry,
+                                _config.trackList,
+                                std::move(playTrack),
+                                _config.listCommands.membershipTargets,
+                                _config.listCommands.editMembership,
+                                _config.listCommands.orderCapabilities,
+                                _config.listCommands.applyOrder,
+                                _actions,
+                                _session.textCatalog(),
+                                std::move(report));
   }
 
   PaneSettingsAccess ShellBuilder::paneSettings()
@@ -347,50 +394,21 @@ namespace ao::winui::layout
       return std::unexpected{preparedRes.error()};
     }
 
-    // The preset id keys the component runtime state, so it names the candidate
-    // being built rather than the generation that is still live.
-    auto const previousPresetId = std::exchange(_runtimeState.activePresetId, std::string{shellPresetId(preset)});
     auto generation = ShellGeneration{};
 
     try
     {
       generation.gatePtr = _host.stage();
       generation.focusedDetailPtr = std::make_shared<FocusedDetail>();
-      auto& runtime = _session.runtime();
       auto context = LayoutBuildContext{
-        .asyncRuntime = runtime.async(),
-        .playback = runtime.playback(),
-        .views = runtime.views(),
-        .workspace = runtime.workspace(),
-        .notifications = runtime.notifications(),
-        .libraryJobs = runtime.library().jobs(),
-        .completion = runtime.completion(),
-        .playbackActions = _session.playbackActions(),
-        .presentationCatalog = _session.presentationCatalog(),
-        .listPresentations = _session.listPresentations(),
-        .textCatalog = _session.textCatalog(),
-        .trackList = _config.trackList,
-        .resourceBytes = _config.resourceBytes,
-        .theme = _config.theme,
-        .library = _libraryAccess,
-        .catalog = layoutCatalog(),
-        .actions = _actions,
         .resources = _config.resources,
         .surfaceBrush = makeSurfaceBrushResolver(_config.activeTheme ? _config.activeTheme() : std::optional<Theme>{}),
-        .runtimeState = _runtimeState,
-        .buildState = uimodel::LayoutBuildStateView{_runtimeState},
         .shellState = _shellState,
-        .shellStateChanged = _shellStateChanged,
         .windowActivity = _windowActivity,
-        .windowActivityChanged = _windowActivityChanged,
         .statusMessage = _statusMessage,
-        .statusMessageChanged = _statusMessageChanged,
         .gatePtr = generation.gatePtr,
-        .paneSettings = paneSettings(),
         .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
           [this](audio::OutputDeviceSelection const& selection) { _session.setPreferredOutputSelection(selection); }),
-        .menus = menus(),
-        .reportStatus = [this](std::string message) { reportStatus(std::move(message)); },
         .focusedDetailPtr = generation.focusedDetailPtr,
         .titleBarSlot = generation.titleBarElement,
       };
@@ -400,7 +418,6 @@ namespace ao::winui::layout
       if (!builtRes)
       {
         _host.discard(std::move(generation));
-        _runtimeState.activePresetId = previousPresetId;
         return std::unexpected{builtRes.error()};
       }
 
@@ -408,7 +425,6 @@ namespace ao::winui::layout
 
       if (auto publishedRes = _host.publish(std::move(generation)); !publishedRes)
       {
-        _runtimeState.activePresetId = previousPresetId;
         return std::unexpected{publishedRes.error()};
       }
 
@@ -419,7 +435,6 @@ namespace ao::winui::layout
     catch (...)
     {
       _host.discard(std::move(generation));
-      _runtimeState.activePresetId = previousPresetId;
       throw;
     }
   }
@@ -540,7 +555,7 @@ namespace ao::winui::layout
     // keyboard would have carried.
     auto const plans = planKeymapAccelerators(
       _session.keymap(),
-      layoutActionCatalog(),
+      _schema,
       [this](std::string_view const id) { return _actions.contains(id); },
       systemCharacterKeyResolver());
 

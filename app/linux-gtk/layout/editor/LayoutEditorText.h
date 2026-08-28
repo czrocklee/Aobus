@@ -10,6 +10,6 @@
 
 namespace ao::gtk::layout::editor
 {
-  /** Resolves built-in descriptor vocabulary while preserving unknown extension text. */
+  /** Resolves built-in schema entry vocabulary while preserving unknown extension text. */
   std::string layoutEditorVocabularyText(i18n::MessageCatalog const& textCatalog, std::string_view sourceText);
 } // namespace ao::gtk::layout::editor

@@ -7,9 +7,10 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -25,7 +26,7 @@ namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
 
-  TEST_CASE("LayoutEditorDescriptor - descriptor validation covers all standard layout components",
+  TEST_CASE("LayoutEditorSchema - schema entry validation covers all standard layout components",
             "[gtk][unit][layout][editor]")
   {
     auto const tempDir = ao::test::TempDir{};
@@ -34,92 +35,104 @@ namespace ao::gtk::layout::editor::test
     LayoutRuntime::registerStandardComponents(
       registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
 
-    auto const& descriptors = registry.descriptors();
+    auto const& schemas = registry.schema().components();
 
-    SECTION("all 26 component types have descriptors")
+    SECTION("all 26 component types have schema entries")
     {
-      CHECK(descriptors.size() >= 26);
+      CHECK(schemas.size() >= 26);
     }
 
-    SECTION("all descriptors have non-empty type")
+    SECTION("all schema entries have non-empty type")
     {
-      for (auto const& desc : descriptors)
+      for (auto const& schema : schemas)
       {
-        CHECK(!desc.type.empty());
+        CHECK(!schema.id.empty());
       }
     }
 
-    SECTION("all descriptors have non-empty displayName")
+    SECTION("all schema entries have non-empty displayName")
     {
-      for (auto const& desc : descriptors)
+      for (auto const& schema : schemas)
       {
-        CHECK(!desc.displayName.empty());
+        CHECK(!schema.displayName.empty());
       }
     }
 
-    SECTION("all descriptors have a category")
+    SECTION("all schema entries have a category")
     {
-      for (auto const& desc : descriptors)
+      for (auto const& schema : schemas)
       {
-        CHECK(!uimodel::toString(desc.category).empty());
+        CHECK(!uimodel::toString(schema.category).empty());
       }
     }
 
-    SECTION("container types are derived from child limits")
+    SECTION("container classification exactly matches the standard component inventory")
     {
-      auto const expectedContainers = std::set<std::string>{"box", "split", "scroll", "tabs"};
+      auto const expectedContainers = std::set<std::string>{"absoluteCanvas",
+                                                            "box",
+                                                            "centerBox",
+                                                            "collapsibleSplit",
+                                                            "responsiveClass",
+                                                            "scroll",
+                                                            "split",
+                                                            "tabs",
+                                                            "track.detailScope",
+                                                            "track.selectionRegion",
+                                                            "workspace.withDetailPane"};
 
-      for (auto const& desc : descriptors)
+      for (auto const& schema : schemas)
       {
-        if (auto const isContainer = uimodel::isContainer(desc); expectedContainers.contains(desc.type))
+        CAPTURE(schema.id);
+        CHECK(uimodel::isContainer(schema) == expectedContainers.contains(schema.id));
+
+        if (!expectedContainers.contains(schema.id))
         {
-          CHECK(isContainer);
-        }
-        else if (!isContainer)
-        {
-          CHECK(desc.optMaxChildren.value_or(0) == 0);
+          REQUIRE(schema.optMaxChildren);
+          CHECK(*schema.optMaxChildren == 0);
         }
       }
     }
 
     SECTION("split requires exactly 2 children")
     {
-      auto const optDesc = registry.descriptor("split");
+      auto const optComponentSchema = registry.schema().component("split");
 
-      REQUIRE(optDesc);
-      CHECK(optDesc->minChildren == 2);
-      REQUIRE(optDesc->optMaxChildren);
-      CHECK(*optDesc->optMaxChildren == 2);
+      REQUIRE(optComponentSchema);
+      CHECK(optComponentSchema->minChildren == 2);
+      REQUIRE(optComponentSchema->optMaxChildren);
+      CHECK(*optComponentSchema->optMaxChildren == 2);
     }
 
     SECTION("scroll requires exactly 1 child")
     {
-      auto const optDesc = registry.descriptor("scroll");
+      auto const optComponentSchema = registry.schema().component("scroll");
 
-      REQUIRE(optDesc);
-      CHECK(optDesc->minChildren == 1);
-      REQUIRE(optDesc->optMaxChildren);
-      CHECK(*optDesc->optMaxChildren == 1);
+      REQUIRE(optComponentSchema);
+      CHECK(optComponentSchema->minChildren == 1);
+      REQUIRE(optComponentSchema->optMaxChildren);
+      CHECK(*optComponentSchema->optMaxChildren == 1);
     }
 
     SECTION("tabs requires at least 1 child")
     {
-      auto const optDesc = registry.descriptor("tabs");
+      auto const optComponentSchema = registry.schema().component("tabs");
 
-      REQUIRE(optDesc);
-      CHECK(optDesc->minChildren == 1);
-      CHECK(!optDesc->optMaxChildren); // unbounded
+      REQUIRE(optComponentSchema);
+      CHECK(optComponentSchema->minChildren == 1);
+      CHECK(!optComponentSchema->optMaxChildren); // unbounded
     }
 
     SECTION("box has orientation, spacing, homogeneous props")
     {
-      auto const optDesc = registry.descriptor("box");
+      auto const optComponentSchema = registry.schema().component("box");
 
-      REQUIRE(optDesc);
-      CHECK(uimodel::isContainer(*optDesc));
+      REQUIRE(optComponentSchema);
+      CHECK(uimodel::isContainer(*optComponentSchema));
 
       auto const hasProp = [&](std::string const& name)
-      { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
+      {
+        return std::ranges::any_of(optComponentSchema->properties, [&](auto const& prop) { return prop.name == name; });
+      };
 
       CHECK(hasProp("orientation"));
       CHECK(hasProp("spacing"));
@@ -128,13 +141,15 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("transportButton has command, showLabel, and size props")
     {
-      auto const optDesc = registry.descriptor("playback.transportButton");
+      auto const optComponentSchema = registry.schema().component("playback.transportButton");
 
-      REQUIRE(optDesc);
-      CHECK(optDesc->category == LayoutComponentCategory::Playback);
+      REQUIRE(optComponentSchema);
+      CHECK(optComponentSchema->category == ComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
-      { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
+      {
+        return std::ranges::any_of(optComponentSchema->properties, [&](auto const& prop) { return prop.name == name; });
+      };
 
       CHECK(hasProp("showLabel"));
       CHECK(hasProp("size"));
@@ -144,13 +159,13 @@ namespace ao::gtk::layout::editor::test
     {
       for (auto const* const type : {"playback.soulButton", "playback.soulPlayPauseButton"})
       {
-        auto const optDesc = registry.descriptor(type);
+        auto const optComponentSchema = registry.schema().component(type);
 
-        REQUIRE(optDesc);
+        REQUIRE(optComponentSchema);
         auto const hasProp = [&](std::string_view const name)
         {
           return std::ranges::any_of(
-            optDesc->props, [name](LayoutPropertyDescriptor const& prop) { return prop.name == name; });
+            optComponentSchema->properties, [name](PropertySchema const& prop) { return prop.name == name; });
         };
 
         CHECK(hasProp("strokeWidth"));
@@ -160,14 +175,15 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("playback.qualityIndicator has gesture action props")
     {
-      auto const optDesc = registry.descriptor("playback.qualityIndicator");
+      auto const optComponentSchema = registry.schema().component("playback.qualityIndicator");
 
-      REQUIRE(optDesc);
-      CHECK(optDesc->category == LayoutComponentCategory::Playback);
+      REQUIRE(optComponentSchema);
+      CHECK(optComponentSchema->category == ComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
       {
-        return std::any_of(optDesc->props.begin(), optDesc->props.end(), [&](auto const& p) { return p.name == name; });
+        return std::ranges::any_of(
+          optComponentSchema->properties, [&](auto const& property) { return property.name == name; });
       };
 
       CHECK_FALSE(hasProp("primaryAction"));
@@ -176,19 +192,19 @@ namespace ao::gtk::layout::editor::test
       CHECK(hasProp("secondaryLongPressAction"));
     }
 
-    SECTION("descriptor returns nullopt for unknown type")
+    SECTION("schema entry returns nullopt for unknown type")
     {
-      auto const optDesc = registry.descriptor("nonexistent.component");
-      CHECK(!optDesc);
+      auto const optComponentSchema = registry.schema().component("nonexistent.component");
+      CHECK(!optComponentSchema);
     }
 
     SECTION("categories span expected groups")
     {
       auto categories = std::set<std::string>{};
 
-      for (auto const& desc : descriptors)
+      for (auto const& schema : schemas)
       {
-        categories.insert(std::string{uimodel::toString(desc.category)});
+        categories.insert(std::string{uimodel::toString(schema.category)});
       }
 
       CHECK(categories.contains("Containers"));
@@ -230,8 +246,8 @@ namespace ao::gtk::layout::editor::test
 
       for (auto const& type : types)
       {
-        auto const optDesc = registry.descriptor(std::string{type});
-        CHECK(optDesc);
+        auto const optComponentSchema = registry.schema().component(std::string{type});
+        CHECK(optComponentSchema);
       }
     }
 
@@ -246,12 +262,12 @@ namespace ao::gtk::layout::editor::test
 
       for (auto const& [type, property] : cases)
       {
-        auto const optDescriptor = registry.descriptor(std::string{type});
-        REQUIRE(optDescriptor);
+        auto const optComponentSchema = registry.schema().component(std::string{type});
+        REQUIRE(optComponentSchema);
         auto const found = std::ranges::find_if(
-          optDescriptor->props, [property](auto const& candidate) { return candidate.name == property; });
-        REQUIRE(found != optDescriptor->props.end());
-        CHECK(found->kind == LayoutPropertyKind::Enum);
+          optComponentSchema->properties, [property](auto const& candidate) { return candidate.name == property; });
+        REQUIRE(found != optComponentSchema->properties.end());
+        CHECK(found->kind == PropertyKind::Enum);
         CHECK(found->enumValues == expected);
       }
     }

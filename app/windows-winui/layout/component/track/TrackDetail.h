@@ -12,6 +12,14 @@ namespace ao::uimodel
 {
   struct LayoutNode;
 }
+namespace ao::rt
+{
+  class WorkspaceService;
+}
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
 
 namespace ao::winui::layout
 {
@@ -26,5 +34,8 @@ namespace ao::winui::layout
    * is what makes those elements live and die with the generation that built
    * them. The artwork belongs to `track.coverArt`, not to this region.
    */
-  Result<std::unique_ptr<LayoutComponent>> makeTrackDetail(LayoutBuildContext& ctx, uimodel::LayoutNode const& node);
+  Result<std::unique_ptr<LayoutComponent>> makeTrackDetail(LayoutBuildContext& ctx,
+                                                           uimodel::LayoutNode const& node,
+                                                           rt::WorkspaceService& workspace,
+                                                           i18n::MessageCatalog const& textCatalog);
 } // namespace ao::winui::layout

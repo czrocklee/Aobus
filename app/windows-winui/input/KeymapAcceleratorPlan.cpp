@@ -6,8 +6,7 @@
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/winui/input/KeyChordAccelerator.h>
 
 #include <algorithm>
@@ -20,23 +19,23 @@ namespace ao::winui
   namespace
   {
     /// Whether running @p actionId from a keystroke has anywhere to present.
-    bool presentsWithoutAnchor(uimodel::LayoutActionCatalog const& catalog, std::string const& actionId)
+    bool presentsWithoutAnchor(uimodel::LayoutSchema const& schema, std::string const& actionId)
     {
-      auto const optDescriptor = catalog.descriptor(actionId);
+      auto const optActionSchema = schema.action(actionId);
 
-      if (!optDescriptor)
+      if (!optActionSchema)
       {
         // An action the shell offers but never described is still runnable; the
-        // catalog only decides what a document may bind.
+        // schema only decides what a document may bind.
         return true;
       }
 
-      return !optDescriptor->capabilities.has(uimodel::LayoutActionCapability::RequiresAnchor);
+      return !optActionSchema->supports(uimodel::ActionCapability::RequiresAnchor);
     }
   } // namespace
 
   std::vector<KeymapAcceleratorPlan> planKeymapAccelerators(uimodel::KeymapModel const& keymap,
-                                                            uimodel::LayoutActionCatalog const& catalog,
+                                                            uimodel::LayoutSchema const& schema,
                                                             KeymapActionAvailability const& isOffered,
                                                             CharacterKeyResolver const& resolveCharacter)
   {
@@ -49,7 +48,7 @@ namespace ao::winui
         continue;
       }
 
-      if (!presentsWithoutAnchor(catalog, actionId))
+      if (!presentsWithoutAnchor(schema, actionId))
       {
         APP_LOG_DEBUG("KeymapAccelerators: '{}' presents from an anchor, which a keystroke has none of", actionId);
         continue;

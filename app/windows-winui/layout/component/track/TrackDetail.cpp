@@ -138,7 +138,9 @@ namespace ao::winui::layout
     class TrackDetailComponent final : public LayoutComponent
     {
     public:
-      explicit TrackDetailComponent(LayoutBuildContext& ctx)
+      TrackDetailComponent(LayoutBuildContext& ctx,
+                           rt::WorkspaceService& workspace,
+                           i18n::MessageCatalog const& textCatalog)
         : _metadata{buildSection(ctx.resources)}
         , _technical{buildSection(ctx.resources)}
         , _focusedDetailPtr{ctx.focusedDetailPtr}
@@ -188,9 +190,9 @@ namespace ao::winui::layout
           .technicalHeader = _technical.label,
           .technicalChevron = _technical.chevron,
           .technicalRows = _technical.rows,
-          .textCatalog = ctx.textCatalog,
+          .textCatalog = textCatalog,
         });
-        follow(ctx.workspace);
+        follow(workspace);
       }
 
       FrameworkElement element() const override { return _scroll; }
@@ -214,8 +216,11 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  Result<std::unique_ptr<LayoutComponent>> makeTrackDetail(LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/)
+  Result<std::unique_ptr<LayoutComponent>> makeTrackDetail(LayoutBuildContext& ctx,
+                                                           uimodel::LayoutNode const& /*node*/,
+                                                           rt::WorkspaceService& workspace,
+                                                           i18n::MessageCatalog const& textCatalog)
   {
-    return std::make_unique<TrackDetailComponent>(ctx);
+    return std::make_unique<TrackDetailComponent>(ctx, workspace, textCatalog);
   }
 } // namespace ao::winui::layout

@@ -18,15 +18,10 @@
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
-#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
-#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
-#include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/layout/shell/LayoutSession.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <giomm/menumodel.h>
@@ -86,7 +81,7 @@ namespace ao::gtk
     using RegisterActionFn = std::function<void(std::string_view,
                                                 std::string_view,
                                                 std::string_view,
-                                                uimodel::LayoutActionCapabilities,
+                                                uimodel::ActionCapabilityMask,
                                                 layout::ActionHandler,
                                                 layout::ActionStateProvider)>;
 
@@ -104,10 +99,10 @@ namespace ao::gtk
     ShellLayoutController& operator=(ShellLayoutController&&) = delete;
 
     layout::ComponentRegistry& registry() { return _registry; }
-    uimodel::LayoutActionCatalog const& actionCatalog() const { return _actionRegistry.catalog(); }
-    uimodel::LayoutRuntimeState const& runtimeState() const { return _runtimeState; }
+    uimodel::LayoutSchema const& layoutSchema() const { return _registry.schema(); }
+    uimodel::LayoutSession const& layoutSession() const { return _session; }
     layout::LayoutHost& host() { return _host; }
-    uimodel::LayoutDocument const& activeLayout() const { return _session.snapshot().layout; }
+    uimodel::LayoutDocument const& activeLayout() const { return _session.layout(); }
 
     void attachToWindow();
     void refreshExportedActions();
@@ -127,7 +122,7 @@ namespace ao::gtk
     Gtk::Window* soulWindow() const noexcept;
 
     layout::ActionActivationContext actionContext(std::string_view componentId) override;
-    bool canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const override;
+    bool canProvideSafeAnchor(uimodel::ActionSchema const& actionSchema) const override;
 
   private:
     void registerPlaybackActions(RegisterActionFn const& registerAction);
@@ -150,25 +145,23 @@ namespace ao::gtk
                                                 std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                                                 std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                                                 std::shared_ptr<AppConfigStore> configStorePtr,
-                                                uimodel::LayoutComponentCatalog componentCatalog,
-                                                uimodel::LayoutActionCatalog actionCatalog,
+                                                uimodel::LayoutSchema schema,
                                                 std::stop_token stopToken);
     Result<> handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 
     Result<layout::LayoutHost::PreparedTree> prepareHost(uimodel::PreparedLayout const& layout,
-                                                         uimodel::LayoutBuildStateView buildState);
+                                                         uimodel::LayoutBuildSnapshot buildSnapshot);
 
     uimodel::LayoutDocumentLimits const& layoutLimits() const noexcept;
 
     /// Prepares and commits a replacement against the current shell state, retaining the old tree on rejection.
     void rebuildHost(uimodel::LayoutDocument const& doc);
-    void rebuildHost(uimodel::LayoutDocument const& doc, uimodel::LayoutBuildStateView buildState);
+    void rebuildHost(uimodel::LayoutDocument const& doc, uimodel::LayoutBuildSnapshot buildSnapshot);
 
     rt::AppRuntime& _runtime;
     Gtk::Window& _parentWindow;
     layout::ComponentRegistry _registry;
     layout::ActionRegistry _actionRegistry;
-    uimodel::LayoutRuntimeState _runtimeState;
     i18n::MessageCatalog _textCatalog;
     uimodel::PlaybackActions& _playbackActions;
     ThemeCoordinator& _themeCoordinator;
@@ -181,7 +174,7 @@ namespace ao::gtk
     PopoverAttachment _menuPopover;
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
     std::vector<async::Subscription> _actionStateSubscriptions;
-    uimodel::ShellLayoutSessionModel _session;
+    uimodel::LayoutSession _session;
     std::shared_ptr<AppConfigStore> _configStorePtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;
     std::shared_ptr<ShellLayoutComponentStateStore> _componentStateStorePtr;

@@ -10,12 +10,12 @@ summary: Defines ownership and lifetime boundaries for the declarative shell, ac
 ## Scope
 
 This document owns the structural graph of Aobus desktop application shells.
-It covers the GTK declarative layout session, catalogs, registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown. It also owns the WinUI Modern/Classic shell boundary, window/session ownership, responsive policy, and native adapter placement.
+It covers the GTK declarative layout session, schema, registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown. It also owns the WinUI Modern/Classic shell boundary, window/session ownership, responsive policy, and native adapter placement.
 
 It does not own the semantic state rendered by a track, playback, workspace, status, or resource component.
-It does not make the GTK declarative layout system a cross-frontend contract: the document, catalogs, and build-time state vocabulary are platform-neutral, but component construction is not, so WinUI builds its own presets against its own catalog while TUI builds its terminal shell independently.
+It does not make the GTK declarative layout system a cross-frontend contract: the document, schema values, and build-time state vocabulary are platform-neutral, but component construction is not, so WinUI builds its own presets against its own schema while TUI builds its terminal shell independently.
 
-The subject qualifies as an application-system architecture because it has an independent document, catalog, construction, action, persistence, rebuild, and lifetime graph that presentation alone cannot explain without absorbing GTK shell orchestration.
+The subject qualifies as an application-system architecture because it has an independent document, schema, construction, action, persistence, rebuild, and lifetime graph that presentation alone cannot explain without absorbing GTK shell orchestration.
 
 ## System context
 
@@ -25,14 +25,14 @@ The [system architecture](system-overview.md) places reusable layout values and 
 ```text
 UIModel
   LayoutDocument -> bounded preparation -> PreparedLayout
-  LayoutComponentCatalog + LayoutActionCatalog
-  SharedLayoutComponentType: the descriptors more than one shell registers
-  ShellLayoutSessionModel + component-state policy + keymap model
+  LayoutSchema: component + action vocabulary, including shared entries
+  LayoutSession -> LayoutBuildSnapshot + ComponentStateBinding
+  component-state policy + keymap model
            |
            v
 GTK MainWindow owns ShellLayoutController
-  ComponentRegistry: descriptor -> GTK factory
-  ActionRegistry: descriptor -> handler/state provider
+  ComponentRegistry: schema entry -> GTK factory
+  ActionRegistry: action id -> handler/state provider
   LayoutHost -> LayoutRuntime -> component tree
   GioActionBridge + keymap accelerator adapter
   ShellLayoutStore + component-state store
@@ -50,7 +50,9 @@ App owns dispatcher + one LibraryWindowSession
   -> MainWindow owns the XAML frame, its resources, and one layout host
      -> session callbacks, TrackListController, ResourceByteLoader, theme coordinator
         -> cover-art presenters borrow the loader and theme the window owns
-     -> ShellBuilder owns actions, menus, pane accessors, runtime state
+     -> ShellBuilder owns schema, actions, menus, pane accessors, and observable shell state
+        -> component factories capture exact window/session services at registration
+        -> LayoutBuildContext carries only generation-scoped build values
         -> one live generation built from the preset the resolved mode names
         -> playback leaf controls own native event tokens + UIModel bindings
      -> mode switch replaces the whole generation
@@ -61,9 +63,9 @@ App owns dispatcher + one LibraryWindowSession
 
 ### Platform-neutral shell language
 
-UIModel owns `LayoutDocument`, `LayoutNode`, `LayoutValue`, shell-owned preparation limits, bounded template expansion, `PreparedLayout`, node-id validation, component and action descriptor types, the platform-neutral component/action catalogs, component-state documents and promotion policy, `ShellLayoutSessionModel`, and keymap values and policy.
+UIModel owns `LayoutDocument`, `LayoutNode`, `LayoutValue`, shell-owned preparation limits, bounded template expansion, `PreparedLayout`, node-id validation, `LayoutSchema`, component-state documents and promotion policy, `LayoutSession`, and keymap values and policy.
 
-It also owns the build-time vocabulary a frontend needs to drive those values: `LayoutSurface` and its descriptor capability mask, the shell-lifetime `LayoutRuntimeState` carrier, the `LayoutBuildStateView` over live or candidate state, the `StatefulComponentState` persistence ritual, and action-slot resolution (`isActionSlotBound`, `boundActionSlots`, `hasBoundActionSlot`).
+`LayoutSchema` is the inert component-and-action vocabulary an authored document may use; executable callbacks remain frontend-local. `LayoutSession` owns the active document, component state, edit state, and generation. Each build receives one immutable owning `LayoutBuildSnapshot`, and each stateful component retains a `ComponentStateBinding` whose generation fence controls restoration and writes.
 
 These values describe structure, stable command identity, validation metadata, and UI-local state without naming GTK widget classes, GDK key symbols, or runtime storage objects beyond narrow managed-state adapters.
 Stable action, component, command, and shortcut identities are never localized.
@@ -74,14 +76,14 @@ The GTK Layout Editor likewise retains component types, property names, enum val
 
 [Decision 0004](../decision/0004-adopt-layout-documents-for-winui-shell-composition.md) makes the version 1 layout language the Windows shell composition language while leaving construction with the frontend.
 That boundary has two halves, and the split is by who decides rather than by what compiles.
-UIModel owns what both shells decide the same way: reading the version 1 common layout fields once, walking a candidate against a catalog and a dialect, the parse-expand-validate step, the `ShellGenerationSequence` that keeps exactly one view generation live, and the component vocabulary a type belongs to when both shells present it.
-The Windows-only `aobus-winui-lib` owns what is this shell's own: which of those types it registers and what it adds to them, the types only Windows has, its action catalog, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and `ShellStatePolicy` for native-window breakpoints and pane modes.
+UIModel owns what both shells decide the same way: reading the version 1 common layout fields once, walking a candidate against a schema and a dialect, the parse-expand-validate step, the `ShellGenerationSequence` that keeps exactly one view generation live, and the canonical component entries whose meaning both shells share.
+The Windows-only `aobus-winui-lib` owns what is this shell's own: which shared entries it imports and extends, the types and actions only Windows has, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and `ShellStatePolicy` for native-window breakpoints and pane modes.
 The two built-in preset documents ship under `app/windows-winui/layout/`.
-The [Windows layout catalog reference](../reference/windows/layout-catalog.md) owns those exact surfaces.
+The [Windows layout schema reference](../reference/windows/layout-schema.md) owns those exact surfaces.
 
 Both halves name XAML type and resource-scope identities as values rather than as C++/WinRT types, so the pure rules remain testable without constructing a XAML host.
-Being portable at the source level is not what makes something shared: a catalog that registers `windows.navigationPane` speaks for one shell however cleanly it compiles, so it lives in `aobus-winui-lib`.
-Where it is gated is a separate question from who owns it. The catalog carries no WinRT, and what it has to get right - that a type both shells present keeps one meaning - is exactly what a change made on Linux can break unseen, so it is built and tested on every host.
+Being portable at the source level is not what makes something shared: a schema builder that registers `windows.navigationPane` speaks for one shell however cleanly it compiles, so it lives in `aobus-winui-lib`.
+Where it is gated is a separate question from who owns it. The Windows schema carries no WinRT, and what it has to get right - that a type both shells present keeps one meaning - is exactly what a change made on Linux can break unseen, so it is built and tested on every host.
 Sharing the language is not sharing a runtime: there is no cross-frontend build plan or responsive classifier, GTK uses none of these contracts, and Windows keeps native construction, parent placement, controller binding, generation-owned view adapters and the focused-selection projection its components share, `winui::ShellStatePolicy` width boundaries, and `winui::DesktopSettings` pane persistence.
 
 The WinUI window builds its shell from the selected preset. `MainWindow.xaml` keeps the window frame, the single layout host, `RootGrid.Resources`, styles, and compiled `DataTemplate` resources; it composes no shell of its own.
@@ -89,7 +91,7 @@ The WinUI window builds its shell from the selected preset. `MainWindow.xaml` ke
 ### GTK shell owner
 
 `MainWindow` owns one `ShellLayoutController` for the complete window lifetime.
-The controller is the current GTK shell composition owner: it selects and loads a preset, owns the active layout session, component and action registries, runtime component state, layout host, editor workflow, stores, action export, and the borrowed collaborators it hands to component registration and reads from its own action handlers.
+The controller is the current GTK shell composition owner: it selects and loads a preset, owns the `LayoutSession`, component and action registries, layout host, editor workflow, stores, action export, and the borrowed collaborators it hands to component registration and reads from its own action handlers.
 
 This is a broad current responsibility set, not a general-purpose runtime facade.
 Customized-layout load/save/remove operations and candidate preparation return typed results; component-state persistence retains its narrower optional/Boolean contract.
@@ -103,12 +105,12 @@ Opening another root queues an application-level destructive restart rather than
 Shell mode changes never replace the session.
 `MainWindow` owns the XAML frame, its resource scope, the single layout host, the commands a preset can name, and the window's own runtime consumers; it holds no shell composition of its own.
 
-`ShellBuilder` is the window's shell-lifetime composition owner. It holds the action registry, the menu composition, the `winui::DesktopSettings` pane accessors, the component runtime state, current shell state, retained status message, native-window activity, their change signals, and the layout host. `LayoutHost` only stages and publishes generations; it does not relay state into their components. The builder decides whether the target shell mode requires a new preset generation and commits a changed shell state only after any required candidate publishes. A build that fails leaves the current generation and its committed state live and reports why; a first build that fails leaves the frame showing a minimal layout-error surface, because a shipped document that does not build is an artifact defect rather than a user-recoverable state.
+`ShellBuilder` is the window's shell-lifetime composition owner. It holds the schema, action registry, menu composition, `winui::DesktopSettings` pane accessors, current shell state, retained status message, native-window activity, their change signals, and the layout host. `LayoutHost` only stages and publishes generations; it does not relay state into their components. The builder decides whether the target shell mode requires a new preset generation and commits a changed shell state only after any required candidate publishes. A build that fails leaves the current generation and its committed state live and reports why; a first build that fails leaves the frame showing a minimal layout-error surface, because a shipped document that does not build is an artifact defect rather than a user-recoverable state.
 
 `MainWindow` is also the one window-scoped owner of the `LibrarySession` status/failure callbacks, the reveal-request subscription, and the track-list, resource-byte, and theme consumers those callbacks and the shell read.
 They are constructed from the borrowed session when the window is initialized and released by `MainWindow::shutdown()`, which stops status publication and reveal routing before releasing anything they publish into.
 There is no separate coordinator layer between the window and its consumers: they have exactly the window's lifetime, so `MainWindow` is their owner.
-`ShellBuilder` resolves its existing `LibrarySession` into explicit runtime services and a narrow `ShellLibraryAccess` before constructing a per-build `LayoutBuildContext`; generation components never receive `LibrarySession` or `AppRuntime`.
+`ShellBuilder` resolves its existing `LibrarySession` into individual callbacks when it registers component families. Each factory captures only the callbacks and services its component needs: the library-path factory retains only the root path, navigation retains list projection, invalidation, presentation, and authoring operations, and track components retain only their own playback, membership, ordering, or creation operations. The per-build `LayoutBuildContext` carries generation-scoped values, and generation components never receive `LibrarySession` or `AppRuntime`.
 Leaf controls receive the exact runtime or UIModel service their binding needs.
 
 Playback buttons, Soul transport, seek, time, and volume adapters are leaf controls. Each leaf owns every XAML event token it registers and its corresponding UIModel ViewModel, starts every bind with an idempotent unbind, and reconciles the native control from the ViewModel's initial callback. Modern and Classic use separate native adapters even when they render the same semantic command.
@@ -121,10 +123,10 @@ WinUI also owns XAML controls, HWND and `AppWindow` adaptation, `DispatcherQueue
 
 ### Component and action registries
 
-The GTK `ComponentRegistry` pairs each platform-neutral `LayoutComponentDescriptor` with one GTK `ComponentFactory`.
-Its embedded UIModel catalog is the editor and validator authority for registered type metadata.
+The GTK `ComponentRegistry` pairs each platform-neutral `ComponentSchema` with one GTK `ComponentFactory`.
+Its embedded `LayoutSchema` is the editor and validator authority for registered type metadata.
 
-The GTK `ActionRegistry` pairs each `LayoutActionDescriptor` with one handler and optional availability provider.
+The GTK `ActionRegistry` adds each `ActionSchema` to that same schema and retains one handler and optional availability provider.
 It remains the live command authority; layout nodes, keyboard maps, and Gio actions refer to stable action ids instead of duplicating command behavior.
 
 ### Layout construction
@@ -134,8 +136,7 @@ It remains the live command authority; layout nodes, keyboard maps, and Gio acti
 `LayoutHost` owns the active component tree and exposes a staged `prepare`/`commit` boundary for load, editor preview/save, reset, and panel-size promotion.
 
 Factories receive one `LayoutBuildContext` assembled for the build.
-They borrow the parent window, registries, shell-lifetime runtime state, and an explicit candidate-state view; required collaborators are captured into factory lambdas at registration time rather than reached through a global service locator or dependency bag.
-The context is a GTK aggregate over neutral parts: its surface kind, runtime state, and build-state view are UIModel values, while the parent window, detail scope, and timeout scheduler stay GTK-local.
+It carries the build environment, borrowed `LayoutSession`, owning immutable `LayoutBuildSnapshot`, candidate-scoped `SharedWidgetHandoff`, and traversal-local detail and scheduling state. Required session-lifetime collaborators are captured into factory lambdas at registration time rather than reached through a global service locator or dependency bag.
 
 Registration-time capture makes collaborator availability a construction-order obligation of the window.
 Every shell-owned collaborator a component names, the application menu model included, is supplied in the `ShellLayoutCollaborators` argument the controller is constructed with; a collaborator the window only produces afterwards never reaches the already-registered factories.
@@ -144,7 +145,7 @@ Every shell-owned collaborator a component names, the application menu model inc
 
 Component runtime state is separate from authored layout structure.
 Stateful components resolve state by stable node id, component type, state version, and a baseline hash, then persist interaction state through the shell-lifetime store.
-`StatefulComponentState` owns that resolution and the write guards, so a frontend component declares only *what* it persists.
+`ComponentStateBinding` owns that resolution and the write guards, so a frontend component declares only *what* it persists.
 It refuses to write on a tooltip surface, in edit mode, for an anonymous node, without an active preset or store, and once the shell has replaced the state document — the captured generation no longer matches, so a component destructing after a reset, load, or save-defaults cannot pollute the new document.
 
 The keymap model binds neutral chords to action ids.
@@ -154,14 +155,14 @@ GTK translates those chords to native accelerator syntax and applies eligible wi
 
 - UIModel shell types may depend on stable runtime values and managed-state mechanisms but never on GTK, GDK, Gio, or frontend-local classes.
 - Build-time state, surface, and action-slot vocabulary lives in UIModel and is usable without a widget toolkit. Whether a second frontend adopts it is a separate decision; hoisting the vocabulary does not by itself make the component system cross-frontend.
-- GTK layout registries depend on UIModel descriptors and concrete GTK factories; UIModel catalogs do not depend back on those registries.
+- GTK layout registries depend on UIModel schema values and concrete GTK factories; `LayoutSchema` does not depend back on those registries.
 - GTK component factories capture the exact runtime/UIModel collaborators they name when they are registered, never from `LayoutBuildContext`; runtime services never depend on layout components.
 - Layout documents carry stable component types, properties, action ids, and semantic CSS class values, not C++ factory names or widget pointers.
 - The action registry owns activation and availability; a component binding or keymap is a reference, not a parallel handler.
 - Gio export and shortcut application stop at the GTK boundary.
 - TUI may reuse action, keymap, or layout values deliberately, but the current GTK document cannot be described as the TUI shell authority.
-- WinUI does not parse or adapt the GTK layout document. It shares the layout language and genuinely cross-frontend semantic policy, while keeping its presets, shell-state policy, and catalog, without introducing a second runtime authority.
-- WinUI construction roots pass explicit borrowed services and `ShellLibraryAccess` operations into `LayoutBuildContext`; generation components and leaf adapters cannot accept `LibrarySession`, `AppRuntime`, or a complete window dependency graph.
+- WinUI does not parse or adapt the GTK layout document. It shares the layout language and genuinely cross-frontend semantic policy, while keeping its presets, shell-state policy, schema extensions, and factories, without introducing a second runtime authority.
+- WinUI component registration captures explicit borrowed services and individual callback values; its `LayoutBuildContext` carries only generation-scoped build values. Generation components and leaf adapters cannot accept `LibrarySession`, `AppRuntime`, or a complete window dependency graph.
 - Coordinator-owned track-list, resource-byte, and theme collaborators remain valid until the window retires its shell generation and then its coordinator before destroying the owning session.
 - A WinUI leaf adapter owns only its native controls, native event registrations, and narrow UIModel bindings. It does not reach through `MainWindow` for ordinary playback state or commands.
 - Presentation owners define the semantic values a component renders; shell owns placement, construction, binding, and component lifetime.
@@ -178,8 +179,8 @@ global application preference selects classic or modern
   -> worker loads matching component-state document or empty state
   -> callback executor builds a detached GTK candidate against candidate state
   -> stateful node ids are diagnosed
-  -> controller installs ShellLayoutSessionModel and runtime state
-  -> LayoutHost commits the prepared tree
+  -> controller applies document/state/generation to LayoutSession
+  -> LayoutHost commits the prepared tree and its widget handoff
 ```
 
 ### Action route
@@ -246,15 +247,16 @@ Within either process, one build borrows explicit session- and coordinator-owned
 ## Structural constraints
 
 - One `ShellLayoutController` and one active `LayoutHost` belong to one GTK `MainWindow`.
-- `ShellLayoutSessionModel` is the active preset/document authority; editor working copies and preview trees are not authoritative.
+- `LayoutSession` is the active preset/document/state/generation authority; editor working copies, build snapshots, and preview trees are not authoritative.
 - Raw `LayoutDocument` values remain authored/session/persistence values; only `PreparedLayout` may enter GTK construction.
 - `LayoutBuildContext` is created for one recursive build and cannot be retained as shell wiring.
-- Candidate construction reads preset, component state, edit mode, callbacks, and generation from its explicit build-state view.
-- `LayoutRuntimeState` outlives every component that can write component state.
+- Candidate construction reads preset, component state, edit mode, callbacks, and generation from its owning immutable `LayoutBuildSnapshot`.
+- `LayoutSession` outlives every `ComponentStateBinding` that can write component state.
 - Stateful component identity is a stable expanded node id, never tree position.
 - Anonymous stateful nodes remain usable but non-persistent; duplicate stateful ids are invalid for save.
 - Component-state generation prevents an old tree from writing into a newly installed state document.
 - A detached tree captures the next generation; commit advances that generation before destroying the retiring tree.
+- A GTK candidate that reparents a shell-owned singleton widget carries one `SharedWidgetHandoff`; rejection rolls the transfer back, while commit finalizes it before the retiring tree is destroyed.
 - Authored layouts, component runtime state, global preset selection, and keyboard overrides remain separate persistence classes.
 - Unknown component and template references become visible diagnostic components rather than undefined factory calls.
 - For WinUI, one main window owns one live generation, built from the preset the resolved shell mode names. Modern is the default. Switching shell mode replaces that generation but cannot replace the window's `LibrarySession`, initiate scanning, or stop playback.
@@ -282,7 +284,7 @@ Document preparation and detached GTK construction happen before active session/
 A failed preparation keeps the old generation live.
 Strict version dispatch, preparation budgets, and rejected-file preservation form the complete layout-document safety boundary; there is no migration or generic candidate framework.
 
-During teardown the controller clears the host while runtime state, stores, registries, and borrowed dependencies are still alive.
+During teardown the controller clears the host while the layout session, stores, registries, and borrowed dependencies are still alive.
 The final clear does not advance the state generation, allowing the current component tree to flush pending state before its owners disappear.
 Editor theme and callback tokens are released before the controller's collaborators.
 
@@ -296,6 +298,7 @@ The selected root is persisted only after successor activation; its initial scan
 ## Implementation map
 
 - [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), [`LayoutNode`](../../app/include/ao/uimodel/layout/document/LayoutNode.h), and [`LayoutPreparation`](../../app/include/ao/uimodel/layout/document/LayoutPreparation.h) own the platform-neutral document and preparation proof.
+- [`LayoutSchema`](../../app/include/ao/uimodel/layout/component/LayoutSchema.h) owns component and action vocabulary and validation; [`LayoutSession`](../../app/include/ao/uimodel/layout/shell/LayoutSession.h) owns the active layout lifetime, build snapshots, and state bindings.
 - UIModel layout action, component, document, and shell types live under [`app/include/ao/uimodel/layout/`](../../app/include/ao/uimodel/layout/) and [`app/uimodel/layout/`](../../app/uimodel/layout/).
 - [`ShellLayoutController`](../../app/linux-gtk/app/ShellLayoutController.h) is the current GTK shell owner.
 - [`ComponentRegistry`](../../app/linux-gtk/layout/runtime/ComponentRegistry.h), [`ActionRegistry`](../../app/linux-gtk/layout/runtime/ActionRegistry.h), [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h), and [`LayoutHost`](../../app/linux-gtk/layout/runtime/LayoutHost.h) own GTK construction and activation.
@@ -304,7 +307,7 @@ The selected root is persisted only after successor activation; its initial scan
 - [`app/windows-winui/CMakeLists.txt`](../../app/windows-winui/CMakeLists.txt) places all compiled WinUI implementation in the Windows-only `aobus-winui-lib` static library and leaves `aobus-winui` as the final-link and deployed-resource boundary.
 - [`App`](../../app/windows-winui/App.xaml.h), [`LibraryWindowSession`](../../app/windows-winui/app/LibraryWindowSession.h), [`LibrarySession`](../../app/windows-winui/app/LibrarySession.h), [`ProcessLauncher`](../../app/windows-winui/platform/ProcessLauncher.h), and [`MainWindow`](../../app/windows-winui/MainWindow.xaml) own the WinUI shell and destructive library restart; shell, track, and playback code-behind methods are compiled from their matching subsystem directories.
 - [`MainWindow.xaml.cpp`](../../app/windows-winui/MainWindow.xaml.cpp) owns the WinUI session callback boundary along with the track-list, resource-byte, and theme consumers, and states its retirement order in `shutdown()`.
-- [`LayoutBuildContext`](../../app/windows-winui/layout/runtime/LayoutBuildContext.h) is the per-generation construction carrier, while [`ShellLibraryAccess`](../../app/windows-winui/layout/runtime/ShellLibraryAccess.h) limits session-backed component operations to library-root display, list projection, presentation preference, and track playback.
+- [`LayoutBuildContext`](../../app/windows-winui/layout/runtime/LayoutBuildContext.h) is the per-generation construction carrier; [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h) binds session-backed operations into exact callback captures when it registers each component family.
 - Playback leaves bind directly to `PlaybackService` and, when required, `PlaybackActions`; [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) prevents generation components and leaf adapters from regaining session/runtime composition authority.
 - [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h) owns WinUI shell composition, [`ShellPresetSource`](../../app/windows-winui/layout/ShellPresetSource.h) reads the packaged presets, and [`LayoutHost`](../../app/windows-winui/layout/runtime/LayoutHost.h) keeps exactly one generation attached to the frame.
 - [`TransportButton`](../../app/windows-winui/playback/TransportButton.h), [`SoulTransportButton`](../../app/windows-winui/playback/SoulTransportButton.h), [`OutputDeviceControl`](../../app/windows-winui/playback/OutputDeviceControl.h), [`SeekControl`](../../app/windows-winui/playback/SeekControl.h), [`PlaybackTimeControl`](../../app/windows-winui/playback/PlaybackTimeControl.h), and [`VolumeControl`](../../app/windows-winui/playback/VolumeControl.h) own playback leaf adaptation; a document's playback components compose them.
@@ -312,14 +315,14 @@ The selected root is persisted only after successor activation; its initial scan
 
 ## Test map
 
-- UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, bounded preparation, templates, catalogs, actions, component-state, promotion, and session policy.
+- UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, bounded preparation, templates, schema, actions, component state, promotion, and session policy.
 - GTK layout runtime and component tests under [`test/unit/linux-gtk/layout/`](../../test/unit/linux-gtk/layout/) protect construction, registry injection, actions, surfaces, editor behavior, and component state.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects shell ownership by the window.
 - Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/) and [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protect neutral and GTK shortcut boundaries.
 - The UIModel organization guardrail in [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) protects platform-neutral placement.
 - [`AssertWinUiStateSubscriptions.cmake`](../../cmake/AssertWinUiStateSubscriptions.cmake) prevents the removed WinUI virtual-callback and raw-observer fan-out contract from returning on platforms without a native widget-test host.
 - [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) enforces narrow WinUI generation and leaf dependencies during native builds.
-- Tests under [`test/unit/winui/`](../../test/unit/winui/) protect breakpoints, persistence, theme fallback, startup/restart policy, shell vocabulary, and command-line behavior. Those needing a native host are included in `ao_core_test` only on Windows; Windows shell policy carrying no WinRT dependency - settings compatibility, output-preference resolution, root-commit sequencing, the component catalog, and the keyboard-accelerator plan - is compiled and run on every host, because those are the rules a Linux-only change is most likely to break unnoticed. Shared UIModel tests protect Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect `aobus-winui-lib`, XAML, generated C++/WinRT, PRI resources, and final executable composition; the current repository has no WinUI widget-test host.
+- Tests under [`test/unit/winui/`](../../test/unit/winui/) protect breakpoints, persistence, theme fallback, startup/restart policy, shell vocabulary, and command-line behavior. Those needing a native host are included in `ao_core_test` only on Windows; Windows shell policy carrying no WinRT dependency - settings compatibility, output-preference resolution, root-commit sequencing, the component schema, and the keyboard-accelerator plan - is compiled and run on every host, because those are the rules a Linux-only change is most likely to break unnoticed. Shared UIModel tests protect Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect `aobus-winui-lib`, XAML, generated C++/WinRT, PRI resources, and final executable composition; the current repository has no WinUI widget-test host.
 
 ## Related documents
 
@@ -333,7 +336,7 @@ The selected root is persisted only after successor activation; its initial scan
 - [Shell layout-adaptation specification](../spec/shell/layout-adaptation.md)
 - [Layout document reference](../reference/shell/layout-document.md)
 - [Layout component-state reference](../reference/shell/layout-state.md)
-- [Layout catalog and action reference](../reference/shell/layout-catalog.md)
+- [GTK layout schema and action reference](../reference/shell/layout-schema.md)
 - [Shared component vocabulary](../reference/shell/component-vocabulary.md)
 - [Keyboard map reference](../reference/shell/keymap.md)
 - [Windows desktop shell specification](../spec/shell/windows-desktop.md)

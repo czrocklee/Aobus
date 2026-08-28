@@ -138,7 +138,7 @@ An empty sequence explicitly unbinds it; an absent action id retains its current
 Saving writes only bindings whose effective chord sequence differs from the defaults supplied to `KeymapModel`.
 
 Action ids are plain strings in this payload.
-Persistence accepts arbitrary action ids; the editor derives shortcut eligibility from the layout action catalog.
+Persistence accepts arbitrary action ids; the editor derives shortcut eligibility from the layout schema.
 Loading the group itself does not reject an unknown action id.
 Chord values use the canonical `KeyChord::toString()` representation; the exact chord tokens, aliases, and shipped default bindings belong to the [keyboard map reference](../shell/keymap.md).
 The schema rejects an empty action id, duplicate action id, non-sequence binding, null or non-scalar sequence element, or other malformed group structure as one failed candidate.

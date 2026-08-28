@@ -332,16 +332,11 @@ endif()
 add_library(ao_app_uimodel STATIC
     uimodel/presentation/CoverArtPlaceholder.cpp
     uimodel/presentation/PresentationText.cpp
-    uimodel/layout/action/LayoutActionCatalog.cpp
-    uimodel/layout/action/LayoutActionSlotResolution.cpp
-    uimodel/layout/action/LayoutActionValidator.cpp
+    uimodel/layout/component/LayoutSchema.cpp
+    uimodel/layout/shell/LayoutSession.cpp
     uimodel/layout/component/AbsoluteCanvasGeometry.cpp
-    uimodel/layout/component/LayoutComponentActionPolicy.cpp
-    uimodel/layout/component/LayoutComponentCatalog.cpp
     uimodel/layout/component/LayoutComponentState.cpp
     uimodel/layout/component/LayoutStatePromoter.cpp
-    uimodel/layout/component/SharedLayoutComponentType.cpp
-    uimodel/layout/component/StatefulComponentState.cpp
     uimodel/layout/document/LayoutDocument.cpp
     uimodel/layout/document/LayoutDocumentLoader.cpp
     uimodel/layout/document/LayoutNodeId.cpp
@@ -349,9 +344,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/document/LayoutPreparation.cpp
     uimodel/layout/document/LayoutValidation.cpp
     uimodel/layout/document/LayoutValue.cpp
-    uimodel/layout/shell/LayoutBuildStateView.cpp
     uimodel/layout/shell/ShellGenerationSequence.cpp
-    uimodel/layout/shell/ShellLayoutSessionModel.cpp
     uimodel/input/KeyChord.cpp
     uimodel/input/KeymapModel.cpp
     uimodel/input/KeyRepeatGuard.cpp
@@ -440,7 +433,7 @@ add_custom_target(ao_uimodel_organization_guardrail
 
 # A frontend's own vocabulary is not a shared model, however portable its code
 # is. The guardrail names the frontends rather than a spelling of "platform"
-# because a frontend-owned LayoutCatalog.h passes every include check there is:
+# because a frontend-owned LayoutSchema.h passes every include check there is:
 # it has no platform includes to find.
 add_custom_target(ao_uimodel_frontend_vocabulary_guardrail
   COMMAND ${CMAKE_COMMAND}

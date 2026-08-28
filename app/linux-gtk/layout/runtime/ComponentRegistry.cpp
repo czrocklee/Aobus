@@ -9,8 +9,8 @@
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/action/LayoutActionSlotResolution.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/Contract.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -22,7 +22,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -44,21 +43,61 @@ namespace ao::gtk::layout
     };
   } // namespace
 
-  ComponentRegistry::ComponentRegistry() = default;
-
-  void ComponentRegistry::registerComponent(uimodel::LayoutComponentDescriptor descriptor, ComponentFactory factory)
+  void ComponentRegistry::registerComponent(uimodel::ComponentSchema schema, ComponentFactory factory)
   {
-    descriptor = uimodel::componentDescriptorWithActionProperties(std::move(descriptor));
-    auto const type = std::string{descriptor.type};
+    auto const type = schema.id;
+
+    // Preserve the established test/composition seam: once a schema is
+    // authoritative, a later registration for that type replaces only the
+    // native factory. The schema cannot drift through this path.
+    if (_schema.component(type))
+    {
+      _factories[type] = std::move(factory);
+      return;
+    }
+
+    auto const added = _schema.addComponent(std::move(schema));
+    AO_EXPECTS(added, "A component registration must provide one unique valid schema entry");
+
+    if (!added)
+    {
+      return;
+    }
+
     _factories[type] = std::move(factory);
-    _catalog.registerComponentDescriptor(std::move(descriptor));
+  }
+
+  void ComponentRegistry::registerSharedComponent(std::string_view const id,
+                                                  uimodel::ComponentSchemaExtension extension,
+                                                  ComponentFactory factory)
+  {
+    // Preserve the registry's established replacement seam: tests and narrow
+    // composition roots may replace a factory while the first schema entry
+    // remains authoritative.
+    if (!_schema.component(id))
+    {
+      auto const added = _schema.addSharedComponent(id, std::move(extension));
+      AO_EXPECTS(added, "A shared component registration must import a valid canonical schema entry");
+
+      if (!added)
+      {
+        return;
+      }
+    }
+
+    _factories[std::string{id}] = std::move(factory);
+  }
+
+  void ComponentRegistry::registerSharedComponent(std::string_view const id, ComponentFactory factory)
+  {
+    registerSharedComponent(id, {}, std::move(factory));
   }
 
   std::unique_ptr<LayoutComponent> ComponentRegistry::create(LayoutBuildContext& ctx,
                                                              uimodel::LayoutNode const& node) const
   {
     auto componentPtr = std::unique_ptr<LayoutComponent>{};
-    auto const optCompDesc = descriptor(node.type);
+    auto const optComponentSchema = _schema.component(node.type);
 
     if (auto const it = _factories.find(node.type); it != _factories.end())
     {
@@ -80,12 +119,12 @@ namespace ao::gtk::layout
     // Phase 2: Automatic interaction controller attachment
     auto interactionControllerPtr = std::unique_ptr<ComponentInteractionController>{};
 
-    if (optCompDesc && ctx.surface != uimodel::LayoutSurface::Tooltip)
+    if (optComponentSchema && ctx.surface != uimodel::LayoutSurface::Tooltip)
     {
-      if (auto const& policy = optCompDesc->actionPolicy; uimodel::hasBoundActionSlot(policy, node))
+      if (optComponentSchema->hasBoundAction(node))
       {
         interactionControllerPtr = std::make_unique<ComponentInteractionController>();
-        interactionControllerPtr->attach(ctx, node, componentPtr->widget(), policy);
+        interactionControllerPtr->attach(ctx, node, componentPtr->widget(), *optComponentSchema);
       }
     }
 
@@ -142,20 +181,5 @@ namespace ao::gtk::layout
     }
 
     return componentPtr;
-  }
-
-  std::vector<uimodel::LayoutComponentDescriptor> const& ComponentRegistry::descriptors() const
-  {
-    return _catalog.descriptors();
-  }
-
-  std::optional<uimodel::LayoutComponentDescriptor> ComponentRegistry::descriptor(std::string_view type) const
-  {
-    return _catalog.descriptor(type);
-  }
-
-  uimodel::LayoutComponentCatalog const& ComponentRegistry::catalog() const noexcept
-  {
-    return _catalog;
   }
 } // namespace ao::gtk::layout

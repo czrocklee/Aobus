@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
@@ -89,12 +89,12 @@ namespace ao::gtk::layout
   void registerTabsComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "tabs",
+      {.id = "tabs",
        .displayName = "Tabs",
-       .category = LayoutComponentCategory::Container,
-       .layoutProps =
-         {{.name = "title", .kind = LayoutPropertyKind::String, .label = "Tab Title", .defaultValue = LayoutValue{""}},
-          {.name = "icon", .kind = LayoutPropertyKind::String, .label = "Tab Icon", .defaultValue = LayoutValue{""}}},
+       .category = ComponentCategory::Container,
+       .layoutProperties =
+         {{.name = "title", .kind = PropertyKind::String, .label = "Tab Title", .defaultValue = LayoutValue{""}},
+          {.name = "icon", .kind = PropertyKind::String, .label = "Tab Icon", .defaultValue = LayoutValue{""}}},
        .minChildren = 1,
        .optMaxChildren = std::nullopt},
       createTabs);

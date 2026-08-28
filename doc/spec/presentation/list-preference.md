@@ -141,7 +141,7 @@ Quick-filter controls and List editors may display the current presentation, but
 - [`TrackPresentationCatalog`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationCatalog.h) resolves built-in and custom ids.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns active presentation state.
 - [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) owns view navigation snapshots and replay under the [workspace navigation specification](../workspace/navigation.md).
-- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization; WinUI [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns its retained preference store and platform settings checkpoint, while [`PresentationButtonComponent`](../../../app/windows-winui/layout/component/track/TrackRegistry.cpp) adapts the shared picker model.
+- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization; WinUI [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns its retained preference store and platform settings checkpoint, while [`PresentationButtonComponent`](../../../app/windows-winui/layout/component/track/TrackComponents.cpp) adapts the shared picker model.
 
 ## Test map
 

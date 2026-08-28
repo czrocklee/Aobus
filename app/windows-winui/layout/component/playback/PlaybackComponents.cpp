@@ -16,7 +16,7 @@
 #include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
 #include <ao/Error.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
@@ -86,11 +86,13 @@ namespace ao::winui::layout
     class TransportButtonComponent final : public LayoutComponent
     {
     public:
-      TransportButtonComponent(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-        : _transport{
-            TransportButtonConfig{.button = _button, .textCatalog = ctx.textCatalog, .command = commandOf(node)}}
+      TransportButtonComponent(rt::PlaybackService& playback,
+                               uimodel::PlaybackActions& playbackActions,
+                               i18n::MessageCatalog const& textCatalog,
+                               uimodel::LayoutNode const& node)
+        : _transport{TransportButtonConfig{.button = _button, .textCatalog = textCatalog, .command = commandOf(node)}}
       {
-        _transport.bind(ctx.playback, ctx.playbackActions);
+        _transport.bind(playback, playbackActions);
       }
 
       FrameworkElement element() const override { return _button; }
@@ -104,16 +106,16 @@ namespace ao::winui::layout
     class SeekSliderComponent final : public LayoutComponent
     {
     public:
-      SeekSliderComponent(LayoutBuildContext& ctx, bool const overlay)
+      SeekSliderComponent(rt::PlaybackService& playback, ResourceDictionary const& resources, bool const overlay)
         : _seek{SeekControlConfig{
             .slider = configuredSlider(_slider),
             .modernOverlay = overlay,
             // The overlay thumb is a template, which a `Style` cannot carry, so
             // the frame hands it over the same way it hands over item templates.
-            .thumbTemplate = adoptChrome(_slider, ctx.resources, overlay),
+            .thumbTemplate = adoptChrome(_slider, resources, overlay),
           }}
       {
-        _seek.bind(ctx.playback);
+        _seek.bind(playback);
       }
 
       FrameworkElement element() const override { return _slider; }
@@ -170,10 +172,10 @@ namespace ao::winui::layout
     class TimeLabelComponent final : public LayoutComponent
     {
     public:
-      TimeLabelComponent(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+      TimeLabelComponent(rt::PlaybackService& playback, uimodel::LayoutNode const& node)
         : _time{PlaybackTimeControlConfig{.text = _text, .mode = timeModeOf(node)}}
       {
-        _time.bind(ctx.playback);
+        _time.bind(playback);
       }
 
       FrameworkElement element() const override { return _text; }
@@ -192,8 +194,8 @@ namespace ao::winui::layout
     class VolumeControlComponent final : public LayoutComponent
     {
     public:
-      VolumeControlComponent(LayoutBuildContext& ctx, bool const flyout)
-        : _volume{VolumeControlConfig{.slider = configuredSlider(_slider), .textCatalog = ctx.textCatalog}}
+      VolumeControlComponent(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog, bool const flyout)
+        : _volume{VolumeControlConfig{.slider = configuredSlider(_slider), .textCatalog = textCatalog}}
       {
         if (flyout)
         {
@@ -218,7 +220,7 @@ namespace ao::winui::layout
           ToolTipService::SetToolTip(_button, winrt::box_value(resourceHstring(L"winui_playback_volume")));
         }
 
-        _volume.bind(ctx.playback);
+        _volume.bind(playback);
       }
 
       FrameworkElement element() const override
@@ -244,14 +246,16 @@ namespace ao::winui::layout
     class OutputDeviceButtonComponent final : public LayoutComponent
     {
     public:
-      explicit OutputDeviceButtonComponent(LayoutBuildContext& ctx)
+      OutputDeviceButtonComponent(rt::PlaybackService& playback,
+                                  uimodel::OutputDeviceIntent intent,
+                                  i18n::MessageCatalog const& textCatalog)
         : _outputDevice{OutputDeviceControlConfig{
             .presenter = _button,
-            .intent = ctx.outputDeviceIntent,
-            .textCatalog = ctx.textCatalog,
+            .intent = std::move(intent),
+            .textCatalog = textCatalog,
           }}
       {
-        _outputDevice.bind(ctx.playback);
+        _outputDevice.bind(playback);
       }
 
       FrameworkElement element() const override { return _button; }
@@ -262,45 +266,73 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  void registerPlaybackComponents(ComponentRegistry& registry)
+  void registerPlaybackComponents(ComponentRegistry& registry,
+                                  async::Runtime& asyncRuntime,
+                                  rt::PlaybackService& playback,
+                                  uimodel::PlaybackActions& playbackActions,
+                                  rt::ResourceByteLoader& resourceBytes,
+                                  ThemeCoordinator& theme,
+                                  i18n::MessageCatalog textCatalog,
+                                  async::Signal<ShellState>& shellStateChanged,
+                                  async::Signal<WindowActivityState>& windowActivityChanged)
   {
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackTransportButton),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<TransportButtonComponent>(ctx, node); });
+      "playback.transportButton",
+      [&playback, &playbackActions, textCatalog](
+        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      { return std::make_unique<TransportButtonComponent>(playback, playbackActions, textCatalog, node); });
 
-    registry.registerComponent(uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackSoulButton),
-                               [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-                               { return makeSoulButton(ctx, node); });
+    auto const optSoulSchema = registry.schema().component("playback.soulButton");
+    registry.registerComponent(
+      "playback.soulButton",
+      [&playback, &playbackActions, textCatalog, &windowActivityChanged, optSoulSchema](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      {
+        if (!optSoulSchema)
+        {
+          return makeError(Error::Code::NotSupported, "The playback.soulButton component schema is not registered");
+        }
+
+        return makeSoulButton(ctx, node, *optSoulSchema, playback, playbackActions, textCatalog, windowActivityChanged);
+      });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackSeekSlider),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      "playback.seekSlider",
+      [&playback](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<SeekSliderComponent>(
-          ctx, node.propertyOr<std::string>("presentation", std::string{kInlinePresentation}) == kOverlayPresentation);
+          playback,
+          ctx.resources,
+          node.propertyOr<std::string>("presentation", std::string{kInlinePresentation}) == kOverlayPresentation);
       });
 
-    registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackTimeLabel),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<TimeLabelComponent>(ctx, node); });
+    registry.registerComponent("playback.timeLabel",
+                               [&playback](LayoutBuildContext& /*ctx*/,
+                                           uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+                               { return std::make_unique<TimeLabelComponent>(playback, node); });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackVolumeControl),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      "playback.volumeControl",
+      [&playback, textCatalog](
+        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<VolumeControlComponent>(
-          ctx, node.propertyOr<std::string>("presentation", "flyout") != kInlinePresentation);
+          playback, textCatalog, node.propertyOr<std::string>("presentation", "flyout") != kInlinePresentation);
       });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::PlaybackOutputDeviceSelector),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<OutputDeviceButtonComponent>(ctx); });
+      "playback.outputDeviceSelector",
+      [&playback, textCatalog](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
+      { return std::make_unique<OutputDeviceButtonComponent>(playback, ctx.outputDeviceIntent, textCatalog); });
 
-    registry.registerComponent("playback.nowPlayingInfo",
-                               [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-                               { return makeNowPlayingInfo(ctx, node); });
+    registry.registerComponent(
+      "playback.nowPlayingInfo",
+      [&asyncRuntime, &playback, &resourceBytes, &theme, textCatalog, &shellStateChanged](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+      {
+        return makeNowPlayingInfo(
+          ctx, node, asyncRuntime, playback, resourceBytes, theme, textCatalog, shellStateChanged);
+      });
   }
 } // namespace ao::winui::layout

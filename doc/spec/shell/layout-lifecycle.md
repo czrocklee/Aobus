@@ -10,7 +10,7 @@ summary: Defines bounded layout preparation, preset loading, staged GTK construc
 ## Scope
 
 This specification defines current behavior from GTK shell preset selection through layout loading, widget construction, action binding, editor preview/save, component-state restoration and promotion, rebuild, and teardown.
-The [layout document reference](../../reference/shell/layout-document.md), [component-state reference](../../reference/shell/layout-state.md), and [catalog reference](../../reference/shell/layout-catalog.md) own exact surfaces.
+The [layout document reference](../../reference/shell/layout-document.md), [component-state reference](../../reference/shell/layout-state.md), and [GTK schema reference](../../reference/shell/layout-schema.md) own exact surfaces.
 
 It does not define the semantic behavior of track, playback, workspace, status, or resource components.
 
@@ -25,7 +25,9 @@ Platform-neutral document and state policy live under `app/include/ao/uimodel/la
 - **Effective layout**: the tree obtained after template expansion.
 - **Prepared layout**: a `PreparedLayout` whose authored and effective trees passed the shared limits.
 - **Prepared tree**: a detached GTK component tree that has not replaced the active host generation.
-- **Active shell session**: the preset id and authored layout held by `ShellLayoutSessionModel`.
+- **Active shell session**: the preset id, authored layout, component state, edit state, and committed generation held by `LayoutSession`.
+- **Build snapshot**: immutable, owning candidate inputs captured by `LayoutSession` for one tree traversal.
+- **Component-state binding**: one node's restored state and generation-fenced write authority.
 - **Runtime component state**: interaction state stored separately from authored layout defaults.
 - **Build generation**: one complete `LayoutHost` component tree created from one context and document.
 
@@ -44,9 +46,10 @@ Platform-neutral document and state policy live under `app/include/ao/uimodel/la
 
 ## State model
 
-The shell session holds `activePresetId` and `activeLayout`.
-The runtime-state carrier holds the active preset id, one `LayoutComponentStateDocument`, its store, a monotonically increasing generation, edit mode, and the node-move callback.
-The carrier is a platform-neutral UIModel value owned by the GTK shell controller for the window lifetime and borrowed by each build.
+`LayoutSession` is the window-lifetime authority for the active preset, authored document, component-state document, state store, monotonically increasing generation, edit mode, and node-move callback.
+It captures those candidate inputs into an owning `LayoutBuildSnapshot`; a build never switches between a borrowed live view and an explicit candidate representation.
+Each persistent component retains a `ComponentStateBinding` produced from that snapshot.
+The binding may write only while its captured generation is the committed session generation and the build was for the main surface, outside edit mode, with a stable node id, active preset, and state store.
 
 The controller is either loading, displaying one active generation, previewing an editor working document, applying an editor save, resetting state, promoting state, or tearing down.
 These are orchestration phases rather than a published enum.
@@ -72,8 +75,11 @@ Preparation recursively replaces it with the referenced template, overlays a non
 Missing, unknown, or recursive references produce a bounded error node.
 Authored and produced entries, owned string bytes, and depth are charged against the limits in the [layout document reference](../../reference/shell/layout-document.md).
 
-`LayoutHost::prepare()` builds a detached root through `LayoutRuntime` and the `ComponentRegistry` against the next component-state generation.
-`LayoutHost::commit()` advances that generation before retiring the old tree, then installs the prepared root.
+`LayoutHost::prepare()` builds a detached root through `LayoutRuntime` and the `ComponentRegistry` against a `LayoutBuildSnapshot` for the next component-state generation.
+The controller applies or advances that generation before `LayoutHost::commit()` retires the old tree, so teardown from the predecessor cannot write into successor state.
+The host then installs the prepared root.
+`TrackPageHost::stack()` is a shell-owned singleton that may occur as either `track.table` or `workspace.withDetailPane`.
+Candidate construction transfers it through a `SharedWidgetHandoff`: the widget has one GTK parent throughout a successful switch, and discarding or failing the candidate restores its exact previous parent before control returns.
 Unknown component types produce a visible layout error component.
 Common layout properties, declared interactions, and an optional tooltip are applied around the created component.
 Authored common properties are applied after construction, so a component that also drives one of those properties at runtime reconciles both sources once they are applied.
@@ -86,7 +92,7 @@ Content that becomes visible under a stationary pointer schedules no new reveal;
 
 ### Action binding and export
 
-Component action props are valid only in slots permitted by the component descriptor.
+Component action props are valid only in slots permitted by the component schema.
 Activation validates the action id, required binding context, availability, and safe anchor before calling the handler.
 
 The Gio bridge exports registry actions to the window action map when the shell can provide any required anchor or menu context.
@@ -94,9 +100,9 @@ It initializes and later refreshes enabled state from the action registry.
 
 ### Editor
 
-Opening the editor copies the active document and enters edit mode.
-Apply rebuilds a preview without making the working document authoritative.
-Cancel rebuilds the active document against a non-edit candidate view and restores the theme active when the editor opened.
+Opening the editor copies the active document and marks the `LayoutSession` as editing.
+Apply rebuilds a preview from an edit-mode snapshot without making the working document authoritative.
+Cancel rebuilds the active document from a non-edit snapshot and restores the theme active when the editor opened.
 The restored tree resumes normal component-state persistence and does not retain editor-only gestures.
 
 Save prepares every modified document and the active document, prunes a candidate active component-state document, and prepares the active GTK tree before persistence begins.
@@ -123,7 +129,8 @@ Malformed, unsupported-version, or over-budget custom layout files return a type
 Malformed, mismatched, absent, or unsupported component-state documents are rejected and fall back to empty state.
 Preset ids reject empty values, path separators, and `..`; component-state ids also reject NUL.
 
-Unknown components and template errors remain visible in the rendered layout instead of aborting the whole build.
+Validated shell candidates reject unknown components; direct component-runtime probes may still construct the visible diagnostic placeholder used for defensive fallback.
+Template-expansion errors remain bounded preparation failures.
 Invalid stateful ids are diagnosed; duplicate stateful ids block editor save, while anonymous stateful nodes remain non-persistent.
 
 Load work observes the shell lifetime stop token at executor transitions.
@@ -156,17 +163,17 @@ GTK responsive and component-specific behavior remains owned by the individual c
 ## Implementation map
 
 - [`ShellLayoutController.cpp`](../../../app/linux-gtk/app/ShellLayoutController.cpp) owns orchestration.
-- [`ShellLayoutSessionModel.cpp`](../../../app/uimodel/layout/shell/ShellLayoutSessionModel.cpp) owns active-session policy.
+- [`LayoutSession.cpp`](../../../app/uimodel/layout/shell/LayoutSession.cpp) owns session state, immutable build snapshots, generation advancement, component-state bindings, and panel-size promotion preparation.
 - [`LayoutPreparation.cpp`](../../../app/uimodel/layout/document/LayoutPreparation.cpp) owns authored limits, bounded template expansion, and the prepared proof.
 - [`LayoutRuntime.cpp`](../../../app/linux-gtk/layout/runtime/LayoutRuntime.cpp), [`ComponentRegistry.cpp`](../../../app/linux-gtk/layout/runtime/ComponentRegistry.cpp), and [`LayoutHost.cpp`](../../../app/linux-gtk/layout/runtime/LayoutHost.cpp) own GTK construction; [`ComponentTooltipController.cpp`](../../../app/linux-gtk/layout/runtime/ComponentTooltipController.cpp) owns tooltip scheduling and visible-content lifetime.
 - [`LayoutDocument.cpp`](../../../app/uimodel/layout/document/LayoutDocument.cpp) and [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp) own explicit document/state schemas; [`LayoutStatePromoter.cpp`](../../../app/uimodel/layout/component/LayoutStatePromoter.cpp) owns reusable promotion policy.
-- [`StatefulComponentState.cpp`](../../../app/uimodel/layout/component/StatefulComponentState.cpp) owns component-state resolution and the write guards; [`LayoutBuildStateView.cpp`](../../../app/uimodel/layout/shell/LayoutBuildStateView.cpp) owns the live-versus-candidate state view; [`LayoutActionSlotResolution.cpp`](../../../app/uimodel/layout/action/LayoutActionSlotResolution.cpp) owns whether an authored node binds an action slot.
+- [`LayoutSchema.cpp`](../../../app/uimodel/layout/component/LayoutSchema.cpp) owns component/action schema lookup and action-slot resolution; `LayoutSession.cpp` owns component-state resolution and write guards.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own files.
 
 ## Test map
 
-- UIModel tests under [`test/unit/uimodel/layout/`](../../../test/unit/uimodel/layout/) protect document, bounded preparation, expansion, state, validation, promotion, and session transitions, plus the headless component-state write guards, build-state view, and action-slot resolution.
-- [`LayoutRuntimeBuildTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime/) protect construction and activation.
+- UIModel tests under [`test/unit/uimodel/layout/`](../../../test/unit/uimodel/layout/) protect document preparation, state, schema validation, action-slot resolution, promotion, session transitions, immutable snapshots, and generation-fenced writes.
+- [`LayoutRuntimeBuildTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime/) protect construction, activation, shared-widget switching, and failed-handoff rollback.
 - Editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor/) protect preview, validation, save, cancel, and template editing.
 - [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention and persistable cancel restoration across the editor/controller boundary.
 - Component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components/) protect stateful and responsive behavior; [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects tooltip visibility gating and delayed-reveal eligibility.
@@ -178,5 +185,5 @@ GTK responsive and component-specific behavior remains owned by the individual c
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Layout document reference](../../reference/shell/layout-document.md)
 - [Layout component-state reference](../../reference/shell/layout-state.md)
-- [Layout catalog and action reference](../../reference/shell/layout-catalog.md)
+- [GTK layout schema and action reference](../../reference/shell/layout-schema.md)
 - [Keyboard shortcut specification](keyboard-shortcut.md)

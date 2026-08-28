@@ -8,7 +8,6 @@
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 
@@ -65,8 +64,8 @@ namespace ao::gtk::layout
                                          std::function<void(ao::ListId, std::string)> createSmartListFromExpression,
                                          i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::TrackQuickFilter),
+    registry.registerSharedComponent(
+      "track.quickFilter",
       [&runtime, trackPageHost, createFn = std::move(createSmartListFromExpression), textCatalog](
         LayoutBuildContext const& ctx, LayoutNode const& /*node*/)
       { return std::make_unique<TrackQuickFilterComponent>(runtime, trackPageHost, createFn, textCatalog, ctx); });

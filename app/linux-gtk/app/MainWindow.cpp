@@ -48,7 +48,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
@@ -542,9 +542,9 @@ namespace ao::gtk
     return _runtime.playback();
   }
 
-  uimodel::LayoutActionCatalog const& MainWindow::layoutActionCatalog() const
+  uimodel::LayoutSchema const& MainWindow::layoutSchema() const
   {
-    return _shellLayout.actionCatalog();
+    return _shellLayout.layoutSchema();
   }
 
   void MainWindow::prepareRuntimeSession()

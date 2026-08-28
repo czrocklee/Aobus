@@ -2,9 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/runtime/ComponentRegistry.h"
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,25 +12,26 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("ComponentRegistry - registers descriptors after uimodel action property injection",
+  TEST_CASE("ComponentRegistry - registers schema entries after uimodel action property injection",
             "[gtk][unit][layout][runtime]")
   {
     auto registry = ComponentRegistry{};
 
-    registry.registerComponent({.type = "test.secondary",
-                                .displayName = "Secondary",
-                                .category = LayoutComponentCategory::Generic,
-                                .actionPolicy = uimodel::kExternalSecondaryActions},
-                               nullptr);
+    registry.registerComponent(
+      {.id = "test.secondary",
+       .displayName = "Secondary",
+       .category = ComponentCategory::Generic,
+       .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress)},
+      nullptr);
 
-    auto const optDesc = registry.descriptor("test.secondary");
-    REQUIRE(optDesc);
+    auto const optComponentSchema = registry.schema().component("test.secondary");
+    REQUIRE(optComponentSchema);
 
-    auto const it = std::find_if(optDesc->props.begin(),
-                                 optDesc->props.end(),
+    auto const it = std::find_if(optComponentSchema->properties.begin(),
+                                 optComponentSchema->properties.end(),
                                  [](auto const& p) { return p.name == uimodel::kSecondaryActionProp; });
-    REQUIRE(it != optDesc->props.end());
-    REQUIRE(it->optActionBinding);
-    CHECK(it->optActionBinding->slot == uimodel::LayoutActionSlot::SecondaryClick);
+    REQUIRE(it != optComponentSchema->properties.end());
+    REQUIRE(it->optActionSlot);
+    CHECK(*it->optActionSlot == uimodel::ActionSlot::SecondaryClick);
   }
 } // namespace ao::gtk::layout::test

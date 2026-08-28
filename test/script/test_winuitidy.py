@@ -68,12 +68,12 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             winui_root = root / "app" / "windows-winui"
             source = winui_root / "layout" / "ShellBuilder.cpp"
             bridge = winui_root / "layout" / "ShellBuilder.h"
-            header = winui_root / "layout" / "runtime" / "ShellLibraryAccess.h"
+            header = winui_root / "include" / "ao" / "winui" / "layout" / "ExactFactoryCapture.h"
             pch = winui_root / "pch.h"
             for path in (source, bridge, header, pch):
                 path.parent.mkdir(parents=True, exist_ok=True)
             source.write_text('#include "pch.h"\n#include "ShellBuilder.h"\n', encoding="utf-8")
-            bridge.write_text('#include "layout/runtime/ShellLibraryAccess.h"\n', encoding="utf-8")
+            bridge.write_text("#include <ao/winui/layout/ExactFactoryCapture.h>\n", encoding="utf-8")
             header.write_text("#pragma once\n", encoding="utf-8")
             pch.write_text("#pragma once\n", encoding="utf-8")
 

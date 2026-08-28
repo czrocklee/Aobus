@@ -7,7 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPresentationButton.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -61,8 +61,8 @@ namespace ao::gtk::layout
                                                 ThemeCoordinator* themeCoordinator,
                                                 i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::TrackPresentationButton),
+    registry.registerSharedComponent(
+      "track.presentationButton",
       [&runtime, presentationCatalog, listPresentations, themeCoordinator, textCatalog](
         LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
       {

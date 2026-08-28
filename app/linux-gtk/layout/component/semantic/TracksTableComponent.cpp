@@ -6,9 +6,9 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPageHost.h"
+#include <ao/Contract.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -33,7 +33,7 @@ namespace ao::gtk::layout
     class TracksTableComponent final : public LayoutComponent
     {
     public:
-      TracksTableComponent(TrackPageHost* trackPageHost, LayoutNode const& node)
+      TracksTableComponent(TrackPageHost* trackPageHost, LayoutBuildContext& ctx, LayoutNode const& node)
       {
         if (trackPageHost == nullptr)
         {
@@ -57,32 +57,57 @@ namespace ao::gtk::layout
 
         trackPageHost->setGroupCoverPlaceholderStyle(style);
 
-        Gtk::Stack& stack = trackPageHost->stack();
-        _container.append(stack);
+        _stack = &trackPageHost->stack();
+
+        if (ctx.sharedWidgetHandoff != nullptr)
+        {
+          ctx.sharedWidgetHandoff->transfer(*_stack, _container);
+        }
+        else
+        {
+          AO_EXPECTS(_stack->get_parent() == nullptr,
+                     "track.table cannot attach an already-parented TrackPageHost stack outside a build");
+          _container.append(*_stack);
+        }
+
         _container.set_hexpand(true);
         _container.set_vexpand(true);
       }
+
+      ~TracksTableComponent() override
+      {
+        if (_stack != nullptr && _stack->get_parent() == &_container)
+        {
+          _container.remove(*_stack);
+        }
+      }
+
+      TracksTableComponent(TracksTableComponent const&) = delete;
+      TracksTableComponent& operator=(TracksTableComponent const&) = delete;
+      TracksTableComponent(TracksTableComponent&&) = delete;
+      TracksTableComponent& operator=(TracksTableComponent&&) = delete;
 
       Gtk::Widget& widget() override { return _container; }
 
     private:
       Gtk::Box _container{Gtk::Orientation::VERTICAL};
+      Gtk::Stack* _stack = nullptr;
     };
   } // namespace
 
   void registerTracksTableComponent(ComponentRegistry& registry, TrackPageHost* trackPageHost)
   {
-    registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::TrackTable),
-                                                   {{.name = "view",
-                                                     .kind = LayoutPropertyKind::String,
-                                                     .label = "View Source",
-                                                     .defaultValue = LayoutValue{"workspace.focused"}},
-                                                    {.name = "groupCoverPlaceholderStyle",
-                                                     .kind = LayoutPropertyKind::Enum,
-                                                     .label = "Group Cover Placeholder",
-                                                     .defaultValue = LayoutValue{"monogram"},
-                                                     .enumValues = coverArtPlaceholderStyleIds()}}),
-                               [trackPageHost](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
-                               { return std::make_unique<TracksTableComponent>(trackPageHost, node); });
+    registry.registerSharedComponent("track.table",
+                                     {.properties = {{.name = "view",
+                                                      .kind = PropertyKind::String,
+                                                      .label = "View Source",
+                                                      .defaultValue = LayoutValue{"workspace.focused"}},
+                                                     {.name = "groupCoverPlaceholderStyle",
+                                                      .kind = PropertyKind::Enum,
+                                                      .label = "Group Cover Placeholder",
+                                                      .defaultValue = LayoutValue{"monogram"},
+                                                      .enumValues = coverArtPlaceholderStyleIds()}}},
+                                     [trackPageHost](LayoutBuildContext& ctx, LayoutNode const& node)
+                                     { return std::make_unique<TracksTableComponent>(trackPageHost, ctx, node); });
   }
 } // namespace ao::gtk::layout

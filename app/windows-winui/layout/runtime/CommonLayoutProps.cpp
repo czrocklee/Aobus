@@ -129,11 +129,11 @@ namespace ao::winui::layout
     }
 
     /**
-     * @brief Whether @p element really is the @p kind its catalog entry declares.
+     * @brief Whether @p element really is the @p kind its schema entry declares.
      *
      * The declared kind decides which styles a document may name and whether a
      * themed surface can land, so a component that builds something else makes
-     * both decisions on false evidence. Checking it here keeps the catalog's
+     * both decisions on false evidence. Checking it here keeps the schema's
      * native-element column enforced rather than merely documented.
      */
     bool elementIsKind(FrameworkElement const& element, ElementKind const kind)
@@ -232,7 +232,7 @@ namespace ao::winui::layout
     if (!elementIsKind(element, kind))
     {
       return makeError(Error::Code::FormatRejected,
-                       std::format("Component '{}' constructs an element that is not the {} its catalog entry declares",
+                       std::format("Component '{}' constructs an element that is not the {} its schema entry declares",
                                    node.type,
                                    toString(kind)));
     }

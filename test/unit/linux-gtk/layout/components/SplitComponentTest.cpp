@@ -24,7 +24,8 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("SplitComponent - applies sizing and persists panel state", "[gtk][unit][geometry]")
   {
-    auto fixture = LayoutRuntimeFixture{};
+    auto stateStore = FakeLayoutComponentStateStore{};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
     auto& ctx = fixture.context();
     auto& layoutRuntime = fixture.layoutRuntime();
 
@@ -83,14 +84,14 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentState.components["main-paned"] = LayoutComponentStateEntry{
+      auto state = LayoutComponentStateDocument{.preset = "classic"};
+      state.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
         .state = {{"positionPercent", LayoutValue{0.6}}},
       };
+      fixture.setComponentState("classic", state);
 
       auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
@@ -114,14 +115,14 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentState.components["main-paned"] = LayoutComponentStateEntry{
+      auto state = LayoutComponentStateDocument{.preset = "classic"};
+      state.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
         .stateVersion = kStateEntryVersion,
         .baselineHash = "stale",
         .state = {{"positionPercent", LayoutValue{0.6}}},
       };
+      fixture.setComponentState("classic", state);
 
       auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
@@ -136,10 +137,7 @@ namespace ao::gtk::layout::test
 
     SECTION("split saves user percent and rebuild restores it")
     {
-      auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentStateStore = &stateStore;
+      fixture.setComponentState("classic", LayoutComponentStateDocument{.preset = "classic"});
 
       auto doc = LayoutDocument{};
       doc.root.id = "main-paned";
@@ -165,7 +163,7 @@ namespace ao::gtk::layout::test
       REQUIRE(stateStore.document().components.contains("main-paned"));
       CHECK(stateStore.document().components.at("main-paned").state.at("positionPercent").asDouble() == 0.4);
 
-      ctx.runtimeState.componentState = stateStore.document();
+      fixture.setComponentState("classic", stateStore.document());
 
       auto const rebuiltPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const rebuiltPaned = splitPaned(*rebuiltPtr);
@@ -180,10 +178,7 @@ namespace ao::gtk::layout::test
 
     SECTION("anonymous split does not persist user percent")
     {
-      auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentStateStore = &stateStore;
+      fixture.setComponentState("classic", LayoutComponentStateDocument{.preset = "classic"});
 
       auto doc = LayoutDocument{};
       doc.root.type = "split";
@@ -208,10 +203,7 @@ namespace ao::gtk::layout::test
 
     SECTION("split defers pending save when context generation advances")
     {
-      auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentStateStore = &stateStore;
+      fixture.setComponentState("classic", LayoutComponentStateDocument{.preset = "classic"});
 
       auto doc = LayoutDocument{};
       doc.root.id = "main-paned";
@@ -232,7 +224,7 @@ namespace ao::gtk::layout::test
         paned->set_position(400);
 
         // Simulate a reset/load/save-defaults operation that invalidates old writes.
-        ++ctx.runtimeState.componentStateGeneration;
+        fixture.advanceGeneration();
       }
 
       CHECK(stateStore.saveCount() == 0);
@@ -250,14 +242,14 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentState.components["main-paned"] = LayoutComponentStateEntry{
+      auto state = LayoutComponentStateDocument{.preset = "classic"};
+      state.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
         .state = {{"positionPercent", LayoutValue{1.5}}},
       };
+      fixture.setComponentState("classic", state);
 
       auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
@@ -269,7 +261,8 @@ namespace ao::gtk::layout::test
       // GTK may clamp the paned handle one pixel inside the total allocation.
       CHECK(paned->get_position() >= 790);
 
-      ctx.runtimeState.componentState.components["main-paned"].state["positionPercent"] = LayoutValue{-0.5};
+      state.components["main-paned"].state["positionPercent"] = LayoutValue{-0.5};
+      fixture.setComponentState("classic", state);
 
       auto const lowPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const lowPaned = splitPaned(*lowPtr);

@@ -146,4 +146,4 @@ The detail cover slot is a deterministic responsive square capped by its target 
 - [Metadata-editing specification](../presentation/metadata-editing.md)
 - [Shell layout adaptation](../shell/layout-adaptation.md)
 - [Cover-art resource delivery](../resource/cover-art-delivery.md)
-- [Layout catalog reference](../../reference/shell/layout-catalog.md)
+- [GTK layout schema reference](../../reference/shell/layout-schema.md)

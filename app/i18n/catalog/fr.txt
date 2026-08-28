@@ -692,8 +692,6 @@ fr:table {
     gtk_layout_validation_preset { "Échec de la validation sur le préréglage ''{preset}'' :\n\n{detail}" }
     gtk_layout_invalid_component_ids { "Identifiants de composant de disposition non valides" }
     gtk_layout_validation_component { "Échec de la validation sur le préréglage ''{preset}'', composant ''{component}'', type ''{type}'' :\n\n{detail}" }
-    gtk_layout_invalid_actions { "Actions de disposition non valides" }
-    gtk_layout_validation_action { "Échec de la validation sur le préréglage ''{preset}'', composant ''{component}'', propriété ''{property}'' :\n\n{detail}" }
     gtk_common_ok { "OK" }
     gtk_common_add { "Ajouter" }
     gtk_common_undo { "Annuler" }

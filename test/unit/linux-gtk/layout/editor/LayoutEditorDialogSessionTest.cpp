@@ -46,6 +46,10 @@ namespace ao::gtk::layout::editor::test
       {
         LayoutRuntime::registerStandardComponents(
           registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = textCatalog});
+        actionRegistry.registerAction(
+          {.id = "playback.showOutputDeviceSelector", .label = "Output Device", .category = "Playback"}, {});
+        actionRegistry.registerAction({.id = "shell.showSystemMenu", .label = "System Menu", .category = "Shell"}, {});
+        actionRegistry.registerAction({.id = "shell.showSoul", .label = "Show Soul", .category = "Shell"}, {});
       }
 
       Glib::RefPtr<Gtk::Application> appPtr = Gtk::Application::create("io.github.aobus.layout_editor_session_test");
@@ -53,7 +57,7 @@ namespace ao::gtk::layout::editor::test
       std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
       i18n::MessageCatalog textCatalog = ao::test::englishMessageCatalog();
       ComponentRegistry registry{};
-      ActionRegistry actionRegistry{};
+      ActionRegistry actionRegistry{registry.schema()};
       Gtk::Window window{};
       LayoutDocument doc = makeDefaultLayout();
     };

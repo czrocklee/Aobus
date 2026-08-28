@@ -11,7 +11,6 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -52,8 +51,9 @@ namespace ao::gtk::layout
                                           rt::AppRuntime& runtime,
                                           i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::StatusTrackCount),
-                               [&runtime, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-                               { return std::make_unique<LibraryTrackCountComponent>(runtime, textCatalog); });
+    registry.registerSharedComponent(
+      "status.trackCount",
+      [&runtime, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<LibraryTrackCountComponent>(runtime, textCatalog); });
   }
 } // namespace ao::gtk::layout

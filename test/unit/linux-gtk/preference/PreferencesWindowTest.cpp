@@ -11,8 +11,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/rt/AppState.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
@@ -27,14 +26,11 @@ namespace ao::gtk::test
 {
   namespace
   {
-    uimodel::LayoutActionCatalog makeCatalog()
+    uimodel::LayoutSchema makeSchema()
     {
-      auto catalog = uimodel::LayoutActionCatalog{};
-      catalog.registerActionDescriptor({.id = "playback.playPause",
-                                        .label = "Play/Pause",
-                                        .category = "Playback",
-                                        .capabilities = uimodel::LayoutActionCapability::None});
-      return catalog;
+      auto schema = uimodel::LayoutSchema{};
+      schema.addAction({.id = "playback.playPause", .label = "Play/Pause", .category = "Playback", .capabilities = 0});
+      return schema;
     }
 
     Gtk::ListBox* outputSelectorListBox(PreferencesWindow& window)
@@ -76,8 +72,8 @@ namespace ao::gtk::test
     CHECK(window.hasPage("layout"));
     CHECK(window.hasPage("keyboard"));
 
-    auto catalog = makeCatalog();
-    window.refreshKeyboardPage(catalog, uimodel::KeymapModel{uimodel::defaultKeymap()}, {});
+    auto schema = makeSchema();
+    window.refreshKeyboardPage(schema, uimodel::KeymapModel{uimodel::defaultKeymap()}, {});
 
     CHECK(findLabelByText(window, "Play/Pause") != nullptr);
     CHECK(findLabelByText(window, "Ctrl+P") != nullptr);

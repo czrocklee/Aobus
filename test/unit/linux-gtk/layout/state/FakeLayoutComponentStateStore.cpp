@@ -3,8 +3,8 @@
 
 #include "FakeLayoutComponentStateStore.h"
 
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <cstdint>
 #include <memory>
@@ -48,7 +48,7 @@ namespace ao::gtk::layout::test
 
   bool FakeLayoutComponentStateStore::prune(std::string_view /*presetId*/,
                                             uimodel::PreparedLayout const& /*layout*/,
-                                            uimodel::LayoutComponentCatalog const& /*catalog*/)
+                                            uimodel::LayoutSchema const& /*schema*/)
   {
     return false;
   }

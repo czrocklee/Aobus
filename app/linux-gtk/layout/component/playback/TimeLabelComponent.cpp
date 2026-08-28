@@ -7,7 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/TimeLabel.h"
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -54,8 +54,8 @@ namespace ao::gtk::layout
 
   void registerTimeLabelComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackTimeLabel),
-                               [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
-                               { return std::make_unique<TimeLabelComponent>(playback, node); });
+    registry.registerSharedComponent("playback.timeLabel",
+                                     [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+                                     { return std::make_unique<TimeLabelComponent>(playback, node); });
   }
 } // namespace ao::gtk::layout

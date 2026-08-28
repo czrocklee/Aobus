@@ -7,9 +7,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "pch.h"
 #include <ao/Error.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/action/LayoutActionSlotResolution.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 
@@ -36,10 +34,10 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Input::TappedRoutedEventArgs;
     using winrt::Windows::Foundation::IInspectable;
 
-    constexpr auto kSlots = std::array{uimodel::LayoutActionSlot::PrimaryClick,
-                                       uimodel::LayoutActionSlot::PrimaryLongPress,
-                                       uimodel::LayoutActionSlot::SecondaryClick,
-                                       uimodel::LayoutActionSlot::SecondaryLongPress};
+    constexpr auto kSlots = std::array{uimodel::ActionSlot::PrimaryClick,
+                                       uimodel::ActionSlot::PrimaryLongPress,
+                                       uimodel::ActionSlot::SecondaryClick,
+                                       uimodel::ActionSlot::SecondaryLongPress};
 
     /// One bound slot, reduced to what a native event handler needs to run it.
     struct BoundAction final
@@ -47,7 +45,7 @@ namespace ao::winui::layout
       ActionRegistry const* registry = nullptr;
       std::weak_ptr<uimodel::ShellGenerationGate> gatePtr;
       std::string actionId;
-      uimodel::LayoutActionSlot slot = uimodel::LayoutActionSlot::PrimaryClick;
+      uimodel::ActionSlot slot = uimodel::ActionSlot::PrimaryClick;
 
       void operator()(FrameworkElement const& anchor) const
       {
@@ -104,13 +102,14 @@ namespace ao::winui::layout
   } // namespace
 
   Result<> bindActions(LayoutBuildContext& ctx,
+                       ActionRegistry const& actions,
                        uimodel::LayoutNode const& node,
-                       uimodel::LayoutComponentActionPolicy const& policy,
+                       uimodel::ComponentSchema const& schema,
                        FrameworkElement const& element)
   {
     for (auto const slot : kSlots)
     {
-      auto const optActionId = uimodel::resolveLayoutActionId(policy, node, slot);
+      auto const optActionId = schema.actionId(node, slot);
 
       if (!optActionId)
       {
@@ -119,21 +118,21 @@ namespace ao::winui::layout
 
       auto actionId = std::string{*optActionId};
 
-      if (!ctx.actions.contains(actionId))
+      if (!actions.contains(actionId))
       {
         return makeError(Error::Code::NotFound,
                          std::format("Node '{}' binds the unimplemented Windows action '{}'", node.id, actionId));
       }
 
       auto bound =
-        BoundAction{.registry = &ctx.actions, .gatePtr = ctx.gatePtr, .actionId = std::move(actionId), .slot = slot};
+        BoundAction{.registry = &actions, .gatePtr = ctx.gatePtr, .actionId = std::move(actionId), .slot = slot};
 
       switch (slot)
       {
-        case uimodel::LayoutActionSlot::PrimaryClick: bindPrimaryClick(element, std::move(bound)); break;
-        case uimodel::LayoutActionSlot::PrimaryLongPress: bindPrimaryLongPress(element, std::move(bound)); break;
-        case uimodel::LayoutActionSlot::SecondaryClick: bindSecondaryClick(element, std::move(bound)); break;
-        case uimodel::LayoutActionSlot::SecondaryLongPress:
+        case uimodel::ActionSlot::PrimaryClick: bindPrimaryClick(element, std::move(bound)); break;
+        case uimodel::ActionSlot::PrimaryLongPress: bindPrimaryLongPress(element, std::move(bound)); break;
+        case uimodel::ActionSlot::SecondaryClick: bindSecondaryClick(element, std::move(bound)); break;
+        case uimodel::ActionSlot::SecondaryLongPress:
           // Windows raises one holding sequence per press regardless of button,
           // so a second long-press slot cannot be told apart from the first.
           return makeError(

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/component/shell/NavigationPane.h"
 #include "layout/component/shell/PaneSplitter.h"
 #include "layout/runtime/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -10,7 +9,7 @@
 #include "layout/runtime/UiSubscription.h"
 #include "pch.h"
 #include <ao/Error.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/utility/Path.h>
@@ -96,9 +95,12 @@ namespace ao::winui::layout
     class InspectorPaneComponent final : public LayoutContainer
     {
     public:
-      InspectorPaneComponent(LayoutBuildContext& ctx, Brush overlayFill)
+      InspectorPaneComponent(LayoutBuildContext& ctx,
+                             Brush overlayFill,
+                             PaneSettingsAccess settings,
+                             async::Signal<ShellState>& shellStateChanged)
         : _overlayFill{std::move(overlayFill)}
-        , _settings{ctx.paneSettings}
+        , _settings{std::move(settings)}
         , _gatePtr{ctx.gatePtr}
         , _splitter{PaneEdge::Leading, [this](double const change) { resizeBy(change); }, [this] { commitWidth(); }}
         , _shellState{ctx.shellState}
@@ -136,7 +138,7 @@ namespace ao::winui::layout
                          applyUiUpdate("InspectorPaneComponent", [this] { applyShellState(_shellState); });
                        });
         _shellStateSub = subscribeUiUpdate(
-          ctx.shellStateChanged, "InspectorPaneComponent", [this](ShellState const state) { setShellState(state); });
+          shellStateChanged, "InspectorPaneComponent", [this](ShellState const state) { setShellState(state); });
       }
 
       InspectorPaneComponent(InspectorPaneComponent const&) = delete;
@@ -389,20 +391,22 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  void registerShellComponents(ComponentRegistry& registry)
+  void registerShellComponents(ComponentRegistry& registry,
+                               std::filesystem::path libraryRoot,
+                               PaneSettingsAccess paneSettings,
+                               MenuComposer menus,
+                               async::Signal<ShellState>& shellStateChanged)
   {
     registry.registerComponent(
       "windows.libraryPath",
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<LibraryPathComponent>(ctx.library.libraryRoot); });
-
-    registry.registerComponent("windows.navigationPane",
-                               [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-                               { return makeNavigationPane(ctx, node); });
+      [libraryRoot = std::move(libraryRoot)](
+        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
+      { return std::make_unique<LibraryPathComponent>(libraryRoot); });
 
     registry.registerComponent(
       "windows.inspectorPane",
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      [paneSettings, &shellStateChanged](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         // Every width below the widest presents this pane as an overlay, and a
         // pane's own surface may be a translucent tint, so without the frame's
@@ -420,14 +424,15 @@ namespace ao::winui::layout
                                        kInspectorOverlayFillKey));
         }
 
-        return std::make_unique<InspectorPaneComponent>(ctx, overlayFill);
+        return std::make_unique<InspectorPaneComponent>(ctx, overlayFill, paneSettings, shellStateChanged);
       });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::MenuBar),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      "app.menuBar",
+      [menus = std::move(menus)](
+        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
-        if (!ctx.menus.composeMenuBar)
+        if (!menus.composeMenuBar)
         {
           return makeError(
             Error::Code::NotFound,
@@ -435,7 +440,7 @@ namespace ao::winui::layout
         }
 
         auto bar = MenuBar{};
-        ctx.menus.composeMenuBar(bar);
+        menus.composeMenuBar(bar);
         return std::make_unique<MenuBarComponent>(std::move(bar));
       });
   }

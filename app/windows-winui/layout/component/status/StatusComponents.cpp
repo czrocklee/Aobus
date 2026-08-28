@@ -14,10 +14,10 @@
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewService.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -89,7 +89,9 @@ namespace ao::winui::layout
     class ActivityStatusComponent final : public LayoutComponent
     {
     public:
-      explicit ActivityStatusComponent(LayoutBuildContext& ctx)
+      ActivityStatusComponent(rt::NotificationService& notifications,
+                              rt::LibraryJobs& libraryJobs,
+                              i18n::MessageCatalog const& textCatalog)
         : _control{ActivityStatusControlConfig{
             .root = _root,
             .detailButton = _detailButton,
@@ -101,7 +103,7 @@ namespace ao::winui::layout
             // The strip is the only place notifications can be reached from, so
             // it keeps an affordance even when nothing is running.
             .reserveIdle = true,
-            .textCatalog = ctx.textCatalog,
+            .textCatalog = textCatalog,
           }}
       {
         for (std::int32_t index = 0; index < 2; ++index)
@@ -157,7 +159,7 @@ namespace ao::winui::layout
         _root.Children().Append(_detailButton);
         _root.Children().Append(_dismissButton);
 
-        _control.bind(ctx.notifications, ctx.libraryJobs);
+        _control.bind(notifications, libraryJobs);
       }
 
       FrameworkElement element() const override { return _root; }
@@ -194,13 +196,17 @@ namespace ao::winui::layout
     class TrackCountComponent final : public LayoutComponent
     {
     public:
-      TrackCountComponent(LayoutBuildContext& ctx, bool const summary)
-        : _trackList{ctx.trackList}, _textCatalog{ctx.textCatalog}, _summary{summary}
+      TrackCountComponent(LayoutBuildContext& ctx,
+                          TrackListController& trackList,
+                          i18n::MessageCatalog textCatalog,
+                          async::Signal<ShellState>& shellStateChanged,
+                          bool const summary)
+        : _trackList{trackList}, _textCatalog{std::move(textCatalog)}, _summary{summary}
       {
         refreshTrackCount();
         applyShellState(ctx.shellState);
         _shellStateSub = subscribeUiUpdate(
-          ctx.shellStateChanged, "TrackCountComponent", [this](ShellState const state) { applyShellState(state); });
+          shellStateChanged, "TrackCountComponent", [this](ShellState const state) { applyShellState(state); });
         _trackListChangedSub =
           subscribeUiUpdate(_trackList.signalChanged(), "TrackCountComponent", [this] { refreshTrackCount(); });
       }
@@ -241,13 +247,18 @@ namespace ao::winui::layout
     class SelectionInfoComponent final : public LayoutComponent
     {
     public:
-      SelectionInfoComponent(LayoutBuildContext& ctx, bool const summary)
-        : _trackList{ctx.trackList}, _textCatalog{ctx.textCatalog}, _summary{summary}
+      SelectionInfoComponent(LayoutBuildContext& ctx,
+                             TrackListController& trackList,
+                             rt::ViewService& views,
+                             i18n::MessageCatalog textCatalog,
+                             async::Signal<ShellState>& shellStateChanged,
+                             bool const summary)
+        : _trackList{trackList}, _textCatalog{std::move(textCatalog)}, _summary{summary}
       {
-        follow(ctx.views);
+        follow(views);
         applyShellState(ctx.shellState);
         _shellStateSub = subscribeUiUpdate(
-          ctx.shellStateChanged, "SelectionInfoComponent", [this](ShellState const state) { applyShellState(state); });
+          shellStateChanged, "SelectionInfoComponent", [this](ShellState const state) { applyShellState(state); });
       }
 
       FrameworkElement element() const override { return _text; }
@@ -294,11 +305,11 @@ namespace ao::winui::layout
     class StatusMessageComponent final : public LayoutComponent
     {
     public:
-      explicit StatusMessageComponent(LayoutBuildContext& ctx)
+      StatusMessageComponent(LayoutBuildContext& ctx, async::Signal<std::string>& statusMessageChanged)
       {
         applyMessage(ctx.statusMessage);
         _statusMessageSub = subscribeUiUpdate(
-          ctx.statusMessageChanged, "StatusMessageComponent", [this](std::string message) { applyMessage(message); });
+          statusMessageChanged, "StatusMessageComponent", [this](std::string message) { applyMessage(message); });
       }
 
       FrameworkElement element() const override { return _text; }
@@ -311,26 +322,43 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  void registerStatusComponents(ComponentRegistry& registry)
+  void registerStatusComponents(ComponentRegistry& registry,
+                                rt::ViewService& views,
+                                rt::NotificationService& notifications,
+                                rt::LibraryJobs& libraryJobs,
+                                TrackListController& trackList,
+                                i18n::MessageCatalog textCatalog,
+                                async::Signal<ShellState>& shellStateChanged,
+                                async::Signal<std::string>& statusMessageChanged)
   {
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusActivity),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<ActivityStatusComponent>(ctx); });
+      "status.activity",
+      [&notifications, &libraryJobs, textCatalog](
+        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
+      { return std::make_unique<ActivityStatusComponent>(notifications, libraryJobs, textCatalog); });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusTrackCount),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<TrackCountComponent>(ctx, isSummaryVariant(node)); });
+      "status.trackCount",
+      [&trackList, textCatalog, &shellStateChanged](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      {
+        return std::make_unique<TrackCountComponent>(
+          ctx, trackList, textCatalog, shellStateChanged, isSummaryVariant(node));
+      });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusSelectionInfo),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<SelectionInfoComponent>(ctx, isSummaryVariant(node)); });
+      "status.selectionInfo",
+      [&trackList, &views, textCatalog, &shellStateChanged](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      {
+        return std::make_unique<SelectionInfoComponent>(
+          ctx, trackList, views, textCatalog, shellStateChanged, isSummaryVariant(node));
+      });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::StatusMessage),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<StatusMessageComponent>(ctx); });
+      "status.message",
+      [&statusMessageChanged](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
+      { return std::make_unique<StatusMessageComponent>(ctx, statusMessageChanged); });
   }
 } // namespace ao::winui::layout

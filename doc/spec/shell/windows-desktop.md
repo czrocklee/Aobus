@@ -174,7 +174,7 @@ Window retirement closes the dialog and suppresses late completion before releas
 The selected-row context menu lists writable tag-backed Playlists by stable List id, adds the captured selection through `ListMembershipAuthoringSession`, and offers explicit removal when the active List itself is directly writable.
 It never infers editability from a List name or presentation.
 The same menu exposes Manual Order Move Up, Move Down, Move to Top, Move to Bottom, and Reset Order according to `ListOrderAuthoringSession` capability flags.
-The four movement handlers also receive the shared `Alt+Up`, `Alt+Down`, `Alt+Home`, and `Alt+End` accelerators; they remain native component actions rather than additions to the layout-document action catalog.
+The four movement handlers also receive the shared `Alt+Up`, `Alt+Down`, `Alt+Home`, and `Alt+End` accelerators; they remain native component actions rather than additions to the layout-document action schema.
 WinUI does not expose drag reordering or Forget Hidden Positions in this version.
 
 The native item view reports the complete display count while materializing rows
@@ -283,7 +283,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`TrackTable`](../../../app/windows-winui/layout/component/track/TrackTable.cpp), [`ShellBuilder`](../../../app/windows-winui/layout/ShellBuilder.cpp), and [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp) own the row menu, ordinary menu/action route, captured selection, and window-local dialog lifetime.
 - [`ListAuthoringCoordinator`](../../../app/windows-winui/list/ListAuthoringCoordinator.h) owns native List CRUD, deletion preview, membership, and saved-order workflows; [`ListAuthoringAdapter`](../../../app/windows-winui/include/ao/winui/list/ListAuthoringAdapter.h) keeps committed tree invalidation and restoration policy free of WinRT types.
 - [`LibraryTransferCoordinator`](../../../app/windows-winui/library/LibraryTransferCoordinator.h) owns native YAML mode dialogs, Windows pickers, restore confirmation, and transfer lifetime; [`LibraryTransferAdapter`](../../../app/windows-winui/include/ao/winui/library/LibraryTransferAdapter.h) maps selector rows and reports without WinRT types.
-- [`TrackQuickFilterControl`](../../../app/windows-winui/track/TrackQuickFilterControl.h) and the `track.quickFilter` component in [`TrackRegistry.cpp`](../../../app/windows-winui/layout/component/track/TrackRegistry.cpp) own native completion plus valid-expression List creation.
+- [`TrackQuickFilterControl`](../../../app/windows-winui/track/TrackQuickFilterControl.h) and the `track.quickFilter` component in [`TrackComponents.cpp`](../../../app/windows-winui/layout/component/track/TrackComponents.cpp) own native completion plus valid-expression List creation.
 - [`CoverArtPlaceholder`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h), [`ResourceByteLoader`](../../../app/include/ao/rt/resource/ResourceByteLoader.h), and [`CoverArtPresenter`](../../../app/windows-winui/image/CoverArtPresenter.h) own shared placeholder policy, runtime byte delivery, and WinUI presentation respectively.
 - [`AobusSoulControl`](../../../app/windows-winui/playback/AobusSoulControl.h) adapts the shared [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h).
 - [`OutputDeviceControl`](../../../app/windows-winui/playback/OutputDeviceControl.h)
@@ -312,7 +312,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`WindowInteractionPolicyTest.cpp`](../../../test/unit/winui/WindowInteractionPolicyTest.cpp) protects the window-modal classification used by history and dialog admission.
 - [`ListAuthoringAdapterTest.cpp`](../../../test/unit/winui/list/ListAuthoringAdapterTest.cpp) protects post-save presentation resolution, committed tree invalidation, expansion restoration, active-ancestor reveal, and deterministic fallback; shared List editor, membership, and order-session tests protect the semantic workflows.
 - [`LibraryTransferAdapterTest.cpp`](../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) protects all export/import selector mappings, restore-only confirmation, and report-complete native preview text; shared task-service and YAML-transfer tests protect execution and data semantics.
-- [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects installation of the native-only saved-order handlers without expanding the layout-action catalog.
+- [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects installation of the native-only saved-order handlers without expanding the layout-action schema.
 - Tests under [`test/unit/desktop/`](../../../test/unit/desktop/) protect shared
   successor arguments, strict root planning, same-root identity, detached
   launch, native quoting, and handle inheritance on both hosts.
@@ -324,7 +324,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui/) that
   need a native host are compiled only by the native Windows profile. Windows
   shell policy carrying no WinRT dependency - settings compatibility,
-  output-preference resolution, root-commit sequencing, the component catalog,
+  output-preference resolution, root-commit sequencing, the component schema,
   and the keyboard-accelerator plan - compiles into `ao_core_test` on every
   host, as do the shared desktop rule tests.
 - Native Debug and Release `winui` builds protect `aobus-winui-lib`, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.

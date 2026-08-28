@@ -9,9 +9,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -39,8 +37,6 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    using uimodel::kAllExternalActions;
-
     /**
      * @brief playback.soulButton
      */
@@ -98,24 +94,24 @@ namespace ao::gtk::layout
 
   void registerSoulButtonComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
   {
-    registry.registerComponent(
-      // GDK tells a secondary hold apart from a primary one, which Windows
-      // cannot, so the slot is this shell's own extension rather than shared.
-      withShellActionSlots(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackSoulButton),
-                                               {// Which of two static ornaments the soul wears. The
-                                                // Windows soul draws the live transport icon instead,
-                                                // so this names a concept only this shell has.
-                                                {.name = std::string{kSoulGlyphProp},
-                                                 .kind = LayoutPropertyKind::Enum,
-                                                 .label = "Glyph",
-                                                 .defaultValue = LayoutValue{"none"},
-                                                 .enumValues = {"none", "sigil", "seal"}},
-                                                {.name = "showFullLogo",
-                                                 .kind = LayoutPropertyKind::Bool,
-                                                 .label = "Show Full Logo",
-                                                 .defaultValue = LayoutValue{false}}}),
-                           kAllExternalActions),
-      [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
-      { return std::make_unique<SoulButtonComponent>(playback, node); });
+    registry.registerSharedComponent("playback.soulButton",
+                                     // GDK tells a secondary hold apart from a primary one, which Windows
+                                     // cannot, so the slot is this shell's own extension rather than shared.
+                                     {.properties =
+                                        {// Which of two static ornaments the soul wears. The
+                                         // Windows soul draws the live transport icon instead,
+                                         // so this names a concept only this shell has.
+                                         {.name = std::string{kSoulGlyphProp},
+                                          .kind = PropertyKind::Enum,
+                                          .label = "Glyph",
+                                          .defaultValue = LayoutValue{"none"},
+                                          .enumValues = {"none", "sigil", "seal"}},
+                                         {.name = "showFullLogo",
+                                          .kind = PropertyKind::Bool,
+                                          .label = "Show Full Logo",
+                                          .defaultValue = LayoutValue{false}}},
+                                      .actionSlots = actionSlotBit(ActionSlot::SecondaryLongPress)},
+                                     [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+                                     { return std::make_unique<SoulButtonComponent>(playback, node); });
   }
 } // namespace ao::gtk::layout

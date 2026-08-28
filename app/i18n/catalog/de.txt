@@ -692,8 +692,6 @@ de:table {
     gtk_layout_validation_preset { "Validierung der Vorgabe ''{preset}'' fehlgeschlagen:\n\n{detail}" }
     gtk_layout_invalid_component_ids { "Ungültige Layout-Komponenten-IDs" }
     gtk_layout_validation_component { "Validierung der Vorgabe ''{preset}'', Komponente ''{component}'', Typ ''{type}'' fehlgeschlagen:\n\n{detail}" }
-    gtk_layout_invalid_actions { "Ungültige Layout-Aktionen" }
-    gtk_layout_validation_action { "Validierung der Vorgabe ''{preset}'', Komponente ''{component}'', Eigenschaft ''{property}'' fehlgeschlagen:\n\n{detail}" }
     gtk_common_ok { "OK" }
     gtk_common_add { "Hinzufügen" }
     gtk_common_undo { "Rückgängig" }

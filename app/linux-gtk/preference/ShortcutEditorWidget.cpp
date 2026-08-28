@@ -10,9 +10,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -42,18 +40,18 @@ namespace ao::gtk
   namespace
   {
     using i18n::MessageId;
-    using uimodel::LayoutActionCapability;
+    using uimodel::ActionCapability;
 
     constexpr auto kContentMargin = 12;
     constexpr auto kWarningMarginBottom = 6;
     constexpr auto kCategoryMarginTop = 12;
 
-    bool isShortcutEligible(uimodel::LayoutActionDescriptor const& desc)
+    bool isShortcutEligible(uimodel::ActionSchema const& actionSchema)
     {
       // A global accelerator fires with no widget anchor and no surface to host a popover, so
       // actions that require an anchor or present a menu cannot be driven by one.
-      return !desc.capabilities.has(LayoutActionCapability::RequiresAnchor) &&
-             !desc.capabilities.has(LayoutActionCapability::PresentsMenu);
+      return !actionSchema.supports(ActionCapability::RequiresAnchor) &&
+             !actionSchema.supports(ActionCapability::PresentsMenu);
     }
 
     Gdk::ModifierType accelMods(Gdk::ModifierType state)
@@ -64,7 +62,7 @@ namespace ao::gtk
   } // namespace
 
   ShortcutEditorWidget::ShortcutEditorWidget(i18n::MessageCatalog textCatalog,
-                                             uimodel::LayoutActionCatalog const& catalog,
+                                             uimodel::LayoutSchema const& schema,
                                              uimodel::KeymapModel keymap,
                                              ChangedCallback onChanged,
                                              Gtk::Window& hostForDialogs)
@@ -95,18 +93,19 @@ namespace ao::gtk
         { respond(responseId == Gtk::ResponseType::OK); });
     };
 
-    for (auto const& desc : catalog.descriptors())
+    for (auto const& actionSchema : schema.actions())
     {
-      if (!isShortcutEligible(desc))
+      if (!isShortcutEligible(actionSchema))
       {
         continue;
       }
 
-      _actions.push_back({.id = desc.id,
-                          .label = desc.label.empty() ? desc.id : desc.label,
-                          .category = desc.category.empty() ? gtkText(_textCatalog, MessageId::GtkShortcutOtherCategory)
-                                                            : desc.category});
-      _editableActionIds.push_back(desc.id);
+      _actions.push_back({.id = actionSchema.id,
+                          .label = actionSchema.label.empty() ? actionSchema.id : actionSchema.label,
+                          .category = actionSchema.category.empty()
+                                        ? gtkText(_textCatalog, MessageId::GtkShortcutOtherCategory)
+                                        : actionSchema.category});
+      _editableActionIds.push_back(actionSchema.id);
     }
 
     set_margin(kContentMargin);

@@ -8,7 +8,7 @@
 #include "pch.h"
 #include "platform/StringResources.h"
 #include <ao/Error.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
@@ -125,26 +125,27 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  void registerGenericComponents(ComponentRegistry& registry)
+  void registerGenericComponents(ComponentRegistry& registry, MenuComposer menus)
   {
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::Label),
+      "label",
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<LabelComponent>(resolvedText(node)); });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::ActionButton),
+      "actionButton",
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<ActionButtonComponent>(node.propertyOr<std::string>("glyph", {}), resolvedText(node));
       });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::MenuButton),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      "menuButton",
+      [menus = std::move(menus)](
+        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         auto const menuId = node.propertyOr<std::string>("menuId", "modernOverflow");
-        auto flyout = ctx.menus.flyout ? ctx.menus.flyout(menuId) : MenuFlyout{nullptr};
+        auto flyout = menus.flyout ? menus.flyout(menuId) : MenuFlyout{nullptr};
 
         if (!flyout)
         {

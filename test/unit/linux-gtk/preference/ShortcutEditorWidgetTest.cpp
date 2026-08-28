@@ -9,8 +9,7 @@
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdk/gdkkeysyms.h>
@@ -34,7 +33,7 @@ namespace ao::gtk::test
 {
   namespace
   {
-    using uimodel::LayoutActionCapability;
+    using uimodel::ActionCapability;
 
     uimodel::KeyChord chord(std::string const& text)
     {
@@ -43,22 +42,17 @@ namespace ao::gtk::test
       return *optChord;
     }
 
-    uimodel::LayoutActionCatalog makeCatalog()
+    uimodel::LayoutSchema makeSchema()
     {
-      auto catalog = uimodel::LayoutActionCatalog{};
-      catalog.registerActionDescriptor({.id = "playback.playPause",
-                                        .label = "Play/Pause",
-                                        .category = "Playback",
-                                        .capabilities = LayoutActionCapability::None});
-      catalog.registerActionDescriptor(
-        {.id = "playback.next", .label = "Next", .category = "Playback", .capabilities = LayoutActionCapability::None});
+      auto schema = uimodel::LayoutSchema{};
+      schema.addAction({.id = "playback.playPause", .label = "Play/Pause", .category = "Playback", .capabilities = 0});
+      schema.addAction({.id = "playback.next", .label = "Next", .category = "Playback", .capabilities = 0});
       // Requires a widget anchor and presents a menu: not drivable by a global accelerator.
-      catalog.registerActionDescriptor(
-        {.id = "track.editTags",
-         .label = "Edit Tags",
-         .category = "Tracks",
-         .capabilities = LayoutActionCapability::RequiresAnchor | LayoutActionCapability::PresentsMenu});
-      return catalog;
+      schema.addAction({.id = "track.editTags",
+                        .label = "Edit Tags",
+                        .category = "Tracks",
+                        .capabilities = ActionCapability::RequiresAnchor | ActionCapability::PresentsMenu});
+      return schema;
     }
 
     bool contains(std::vector<std::string> const& ids, std::string const& id)
@@ -123,7 +117,7 @@ namespace ao::gtk::test
 
     auto host = Gtk::Window{};
     auto editor = ShortcutEditorWidget{
-      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
+      ao::test::englishMessageCatalog(), makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
     drainGtkEvents();
 
     auto const& ids = editor.editableActionIds();
@@ -138,7 +132,7 @@ namespace ao::gtk::test
 
     auto host = Gtk::Window{};
     auto editor = ShortcutEditorWidget{
-      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
+      ao::test::englishMessageCatalog(), makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
     drainGtkEvents();
 
     CHECK(findLabelByText(editor, "Ctrl+P") != nullptr);
@@ -153,7 +147,7 @@ namespace ao::gtk::test
     auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto host = Gtk::Window{};
     auto editor =
-      ShortcutEditorWidget{textCatalog, makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
+      ShortcutEditorWidget{textCatalog, makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
     drainGtkEvents();
 
     CHECK(findLabelByText(editor, "Tastaturkürzel anpassen") != nullptr);
@@ -166,14 +160,12 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const longActionLabel = std::string{"Activar/desactivar reproducción aleatoria excepcionalmente larga"};
-    auto catalog = uimodel::LayoutActionCatalog{};
-    catalog.registerActionDescriptor({.id = "playback.toggleShuffle",
-                                      .label = longActionLabel,
-                                      .category = "Playback",
-                                      .capabilities = LayoutActionCapability::None});
+    auto schema = uimodel::LayoutSchema{};
+    schema.addAction(
+      {.id = "playback.toggleShuffle", .label = longActionLabel, .category = "Playback", .capabilities = 0});
     auto hostWindow = Gtk::Window{};
     auto editor = ShortcutEditorWidget{
-      ao::test::englishMessageCatalog(), catalog, uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, hostWindow};
+      ao::test::englishMessageCatalog(), schema, uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, hostWindow};
 
     auto allocationHost = AllocationHost{editor};
     allocationHost.allocateChild(420, 480);
@@ -198,7 +190,7 @@ namespace ao::gtk::test
     auto optLastModel = std::optional<uimodel::KeymapModel>{};
     auto host = Gtk::Window{};
     auto editor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
-                                       makeCatalog(),
+                                       makeSchema(),
                                        uimodel::KeymapModel{uimodel::defaultKeymap()},
                                        [&](uimodel::KeymapModel const& model)
                                        {
@@ -274,7 +266,7 @@ namespace ao::gtk::test
       auto editedKeymap = uimodel::KeymapModel{uimodel::defaultKeymap()};
       editedKeymap.applyOverrides(uimodel::KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
       auto editedEditor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
-                                               makeCatalog(),
+                                               makeSchema(),
                                                std::move(editedKeymap),
                                                [&](uimodel::KeymapModel const& model)
                                                {
@@ -296,7 +288,7 @@ namespace ao::gtk::test
       auto editedKeymap = uimodel::KeymapModel{uimodel::defaultKeymap()};
       editedKeymap.applyOverrides(uimodel::KeymapOverrides{{"playback.next", {"Ctrl+N"}}, {"playback.playPause", {}}});
       auto editedEditor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
-                                               makeCatalog(),
+                                               makeSchema(),
                                                std::move(editedKeymap),
                                                [&](uimodel::KeymapModel const& model)
                                                {
@@ -324,7 +316,7 @@ namespace ao::gtk::test
     auto host = Gtk::Window{};
     auto editorPtr = std::make_unique<ShortcutEditorWidget>(
       ao::test::englishMessageCatalog(),
-      makeCatalog(),
+      makeSchema(),
       uimodel::KeymapModel{uimodel::defaultKeymap()},
       [&](uimodel::KeymapModel const&) { ++changeCount; },
       host);
@@ -347,7 +339,7 @@ namespace ao::gtk::test
 
     auto host = Gtk::Window{};
     auto editor = ShortcutEditorWidget{
-      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
+      ao::test::englishMessageCatalog(), makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
 
     clickButtonByLabel(editor, "Add…", 1);
 
@@ -367,7 +359,7 @@ namespace ao::gtk::test
 
     auto host = Gtk::Window{};
     auto editor = ShortcutEditorWidget{
-      ao::test::englishMessageCatalog(), makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
+      ao::test::englishMessageCatalog(), makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
 
     clickButtonByLabel(editor, "Add…", 1);
     auto* const firstCapture = editor.captureWindow();

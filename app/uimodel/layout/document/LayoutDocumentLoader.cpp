@@ -23,8 +23,7 @@ namespace ao::uimodel
 {
   Result<PreparedLayout> prepareShellDocument(std::string_view const yaml,
                                               std::string_view const sourceName,
-                                              LayoutComponentCatalog const& components,
-                                              LayoutActionCatalog const& actions,
+                                              LayoutSchema const& schema,
                                               LayoutDialect const& dialect)
   {
     constexpr auto kLimits = LayoutDocumentLimits{};
@@ -71,7 +70,7 @@ namespace ao::uimodel
       return std::unexpected{preparedRes.error()};
     }
 
-    if (auto validatedRes = requireValidLayout(*preparedRes, components, actions, dialect); !validatedRes)
+    if (auto validatedRes = requireValidLayout(*preparedRes, schema, dialect); !validatedRes)
     {
       return makeError(
         validatedRes.error().code,

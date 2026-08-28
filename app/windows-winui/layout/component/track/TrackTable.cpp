@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/component/track/TrackTable.h"
-
 #include "layout/runtime/ActionRegistry.h"
+#include "layout/runtime/ComponentRegistrations.h"
+#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ResourceLookup.h"
@@ -127,20 +127,29 @@ namespace ao::winui::layout
     {
     public:
       TrackTableComponent(LayoutBuildContext& ctx,
+                          TrackListController& trackList,
+                          std::function<Result<>(rt::ViewId, TrackId)> playTrack,
+                          std::function<std::vector<uimodel::WritableTagListTarget>()> membershipTargets,
+                          std::function<void(ListId, bool)> editMembership,
+                          std::function<uimodel::ListOrderCapabilityState()> orderCapabilities,
+                          std::function<void(ListOrderCommand)> applyOrder,
+                          ActionRegistry const& actions,
+                          i18n::MessageCatalog textCatalog,
+                          std::function<void(std::string)> reportStatus,
                           DataTemplate const& headerTemplate,
                           DataTemplate const& rowTemplate,
                           Style const& rowContainerStyle,
                           double const trailingChromeWidth)
-        : _trackList{ctx.trackList}
-        , _playTrack{ctx.library.playTrack}
-        , _actions{ctx.actions}
-        , _membershipTargets{ctx.library.membershipTargets}
-        , _editMembership{ctx.library.editMembership}
-        , _orderCapabilities{ctx.library.orderCapabilities}
-        , _applyOrder{ctx.library.applyOrder}
-        , _textCatalog{ctx.textCatalog}
+        : _trackList{trackList}
+        , _playTrack{std::move(playTrack)}
+        , _actions{actions}
+        , _membershipTargets{std::move(membershipTargets)}
+        , _editMembership{std::move(editMembership)}
+        , _orderCapabilities{std::move(orderCapabilities)}
+        , _applyOrder{std::move(applyOrder)}
+        , _textCatalog{std::move(textCatalog)}
         , _gatePtr{ctx.gatePtr}
-        , _reportStatus{ctx.reportStatus}
+        , _reportStatus{std::move(reportStatus)}
         , _trailingChromeWidth{trailingChromeWidth}
       {
         _headers.ItemTemplate(headerTemplate);
@@ -547,27 +556,60 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  Result<std::unique_ptr<LayoutComponent>> makeTrackTable(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+  void registerTrackTableComponent(ComponentRegistry& registry,
+                                   TrackListController& trackList,
+                                   std::function<Result<>(rt::ViewId, TrackId)> playTrack,
+                                   std::function<std::vector<uimodel::WritableTagListTarget>()> membershipTargets,
+                                   std::function<void(ListId, bool)> editMembership,
+                                   std::function<uimodel::ListOrderCapabilityState()> orderCapabilities,
+                                   std::function<void(ListOrderCommand)> applyOrder,
+                                   ActionRegistry const& actions,
+                                   i18n::MessageCatalog textCatalog,
+                                   std::function<void(std::string)> reportStatus)
   {
-    auto const headerTemplate = lookupResource(ctx.resources, kHeaderTemplateKey).try_as<DataTemplate>();
-    auto const rowTemplate = lookupResource(ctx.resources, kRowTemplateKey).try_as<DataTemplate>();
+    registry.registerComponent(
+      "track.table",
+      [&trackList,
+       playTrack = std::move(playTrack),
+       membershipTargets = std::move(membershipTargets),
+       editMembership = std::move(editMembership),
+       orderCapabilities = std::move(orderCapabilities),
+       applyOrder = std::move(applyOrder),
+       &actions,
+       textCatalog = std::move(textCatalog),
+       reportStatus = std::move(reportStatus)](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      {
+        auto const headerTemplate = lookupResource(ctx.resources, kHeaderTemplateKey).try_as<DataTemplate>();
+        auto const rowTemplate = lookupResource(ctx.resources, kRowTemplateKey).try_as<DataTemplate>();
 
-    if (!headerTemplate || !rowTemplate)
-    {
-      return makeError(Error::Code::NotFound,
-                       std::format("Node '{}' needs the '{}' and '{}' item templates, which the window frame "
-                                   "does not define",
-                                   node.id,
-                                   kHeaderTemplateKey,
-                                   kRowTemplateKey));
-    }
+        if (!headerTemplate || !rowTemplate)
+        {
+          return makeError(Error::Code::NotFound,
+                           std::format("Node '{}' needs the '{}' and '{}' item templates, which the window frame "
+                                       "does not define",
+                                       node.id,
+                                       kHeaderTemplateKey,
+                                       kRowTemplateKey));
+        }
 
-    auto const scrollBarSize = lookupResource(ctx.resources, kScrollBarSizeKey);
+        auto const scrollBarSize = lookupResource(ctx.resources, kScrollBarSizeKey);
 
-    return std::make_unique<TrackTableComponent>(ctx,
-                                                 headerTemplate,
-                                                 rowTemplate,
-                                                 lookupResource(ctx.resources, kRowContainerStyleKey).try_as<Style>(),
-                                                 winrt::unbox_value_or<double>(scrollBarSize, kFallbackScrollBarSize));
+        return std::make_unique<TrackTableComponent>(
+          ctx,
+          trackList,
+          playTrack,
+          membershipTargets,
+          editMembership,
+          orderCapabilities,
+          applyOrder,
+          actions,
+          textCatalog,
+          reportStatus,
+          headerTemplate,
+          rowTemplate,
+          lookupResource(ctx.resources, kRowContainerStyleKey).try_as<Style>(),
+          winrt::unbox_value_or<double>(scrollBarSize, kFallbackScrollBarSize));
+      });
   }
 } // namespace ao::winui::layout

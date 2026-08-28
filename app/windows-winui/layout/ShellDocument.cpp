@@ -6,8 +6,8 @@
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocumentLoader.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
-#include <ao/winui/layout/LayoutCatalog.h>
 #include <ao/winui/layout/LayoutDialect.h>
+#include <ao/winui/layout/LayoutSchema.h>
 
 #include <string_view>
 
@@ -26,6 +26,6 @@ namespace ao::winui
   Result<uimodel::PreparedLayout> prepareShellPresetDocument(std::string_view const yaml,
                                                              std::string_view const sourceName)
   {
-    return uimodel::prepareShellDocument(yaml, sourceName, layoutCatalog(), layoutActionCatalog(), layoutDialect());
+    return uimodel::prepareShellDocument(yaml, sourceName, layoutSchema(), layoutDialect());
   }
 } // namespace ao::winui

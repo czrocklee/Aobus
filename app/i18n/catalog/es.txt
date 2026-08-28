@@ -692,8 +692,6 @@ es:table {
     gtk_layout_validation_preset { "Error de validación en el ajuste ''{preset}'':\n\n{detail}" }
     gtk_layout_invalid_component_ids { "IDs de componente de diseño no válidos" }
     gtk_layout_validation_component { "Error de validación en el ajuste ''{preset}'', componente ''{component}'', tipo ''{type}'':\n\n{detail}" }
-    gtk_layout_invalid_actions { "Acciones de diseño no válidas" }
-    gtk_layout_validation_action { "Error de validación en el ajuste ''{preset}'', componente ''{component}'', propiedad ''{property}'':\n\n{detail}" }
     gtk_common_ok { "Aceptar" }
     gtk_common_add { "Añadir" }
     gtk_common_undo { "Deshacer" }

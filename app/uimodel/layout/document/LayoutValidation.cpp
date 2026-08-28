@@ -4,10 +4,7 @@
 #include <ao/uimodel/layout/document/LayoutValidation.h>
 
 #include <ao/Error.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/action/LayoutActionSlotResolution.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutDialect.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -36,10 +33,10 @@ namespace ao::uimodel
     using NodeIdSet =
       boost::unordered_flat_set<std::string, utility::TransparentStringHash, utility::TransparentStringEqual>;
 
-    constexpr auto kAllSlots = std::to_array({LayoutActionSlot::PrimaryClick,
-                                              LayoutActionSlot::PrimaryLongPress,
-                                              LayoutActionSlot::SecondaryClick,
-                                              LayoutActionSlot::SecondaryLongPress});
+    constexpr auto kAllSlots = std::to_array({ActionSlot::PrimaryClick,
+                                              ActionSlot::PrimaryLongPress,
+                                              ActionSlot::SecondaryClick,
+                                              ActionSlot::SecondaryLongPress});
 
     std::string nodeLabel(LayoutNode const& node)
     {
@@ -54,24 +51,23 @@ namespace ao::uimodel
       return {.reason = reason, .nodeId = nodeLabel(node), .detail = std::move(detail), .message = std::move(message)};
     }
 
-    bool matchesPropertyKind(LayoutPropertyDescriptor const& propDesc, LayoutValue const& value);
+    bool matchesPropertyKind(PropertySchema const& propertySchema, LayoutValue const& value);
 
-    LayoutPropertyDescriptor const* findLayoutProperty(LayoutComponentDescriptor const& descriptor,
-                                                       std::string const& name)
+    PropertySchema const* findLayoutProperty(ComponentSchema const& schema, std::string const& name)
     {
-      auto const it = std::ranges::find(descriptor.layoutProps, name, &LayoutPropertyDescriptor::name);
-      return it == descriptor.layoutProps.end() ? nullptr : &*it;
+      auto const it = std::ranges::find(schema.layoutProperties, name, &PropertySchema::name);
+      return it == schema.layoutProperties.end() ? nullptr : &*it;
     }
 
     std::optional<LayoutRejection> validateLayoutField(LayoutNode const& node,
-                                                       LayoutComponentDescriptor const& descriptor,
-                                                       LayoutComponentDescriptor const* const parentDescriptor,
+                                                       ComponentSchema const& componentSchema,
+                                                       ComponentSchema const* const parentSchema,
                                                        LayoutDialect const& dialect,
                                                        std::string const& name,
                                                        LayoutValue const& value)
     {
       // The dialect rules first: a frontend rejects another frontend's styling
-      // field even where a component descriptor would have accepted it.
+      // field even where a component schema would have accepted it.
       if (dialect.layoutField != nullptr)
       {
         auto verdict = dialect.layoutField(node, name, value);
@@ -123,14 +119,14 @@ namespace ao::uimodel
 
       // A container may declare layout fields that are authored on each of
       // its direct children (for example, CenterBox's `slot`). The child is
-      // still validated against its own descriptor first, but the parent is
+      // still validated against its own schema first, but the parent is
       // the owner of these placement fields and must get a chance to accept
       // them as well.
-      auto const* layoutProp = findLayoutProperty(descriptor, name);
+      auto const* layoutProp = findLayoutProperty(componentSchema, name);
 
-      if (layoutProp == nullptr && parentDescriptor != nullptr)
+      if (layoutProp == nullptr && parentSchema != nullptr)
       {
-        layoutProp = findLayoutProperty(*parentDescriptor, name);
+        layoutProp = findLayoutProperty(*parentSchema, name);
       }
 
       if (layoutProp != nullptr)
@@ -143,7 +139,7 @@ namespace ao::uimodel
                         std::format("Layout field '{}' has the wrong value type", name));
         }
 
-        if (layoutProp->kind == LayoutPropertyKind::Enum && !layoutProp->enumValues.empty() &&
+        if (layoutProp->kind == PropertyKind::Enum && !layoutProp->enumValues.empty() &&
             !std::ranges::contains(layoutProp->enumValues, value.asString()))
         {
           return reject(LayoutRejectionReason::InvalidLayoutFieldValue,
@@ -161,17 +157,17 @@ namespace ao::uimodel
                     std::format("Component '{}' does not accept the layout field", node.type));
     }
 
-    bool matchesPropertyKind(LayoutPropertyDescriptor const& propDesc, LayoutValue const& value)
+    bool matchesPropertyKind(PropertySchema const& propertySchema, LayoutValue const& value)
     {
-      switch (propDesc.kind)
+      switch (propertySchema.kind)
       {
-        case LayoutPropertyKind::Bool: return value.getIf<bool>() != nullptr;
-        case LayoutPropertyKind::Int: return value.getIf<std::int64_t>() != nullptr;
-        case LayoutPropertyKind::Double:
-        case LayoutPropertyKind::Size: return value.isNumber();
-        case LayoutPropertyKind::String:
-        case LayoutPropertyKind::Enum: return value.getIf<std::string>() != nullptr;
-        case LayoutPropertyKind::StringList:
+        case PropertyKind::Bool: return value.getIf<bool>() != nullptr;
+        case PropertyKind::Int: return value.getIf<std::int64_t>() != nullptr;
+        case PropertyKind::Double:
+        case PropertyKind::Size: return value.isNumber();
+        case PropertyKind::String:
+        case PropertyKind::Enum: return value.getIf<std::string>() != nullptr;
+        case PropertyKind::StringList:
           return value.getIf<std::vector<std::string>>() != nullptr || value.getIf<std::string>() != nullptr;
       }
 
@@ -181,23 +177,23 @@ namespace ao::uimodel
     bool isGlobalActionProp(std::string_view const name)
     {
       return std::ranges::any_of(
-        kAllSlots, [name](LayoutActionSlot const slot) { return actionPropForSlot(slot) == name; });
+        kAllSlots, [name](ActionSlot const slot) { return LayoutSchema::actionProperty(slot) == name; });
     }
 
     std::optional<LayoutRejection> validateProperty(LayoutNode const& node,
-                                                    LayoutComponentDescriptor const& descriptor,
+                                                    ComponentSchema const& componentSchema,
                                                     std::string const& name,
                                                     LayoutValue const& value)
     {
       if (isGlobalActionProp(name))
       {
-        // Action slots carry their own policy and catalog rules.
+        // Action slots carry their own policy and schema rules.
         return std::nullopt;
       }
 
-      auto const it = std::ranges::find(descriptor.props, name, &LayoutPropertyDescriptor::name);
+      auto const it = std::ranges::find(componentSchema.properties, name, &PropertySchema::name);
 
-      if (it == descriptor.props.end())
+      if (it == componentSchema.properties.end())
       {
         return reject(LayoutRejectionReason::UnknownProperty,
                       node,
@@ -214,8 +210,8 @@ namespace ao::uimodel
       }
 
       // Action properties are injected with an open enum kind; their allowed
-      // values are the action catalog rather than a fixed value list.
-      if (it->kind == LayoutPropertyKind::Enum && !it->enumValues.empty() &&
+      // values are the action schema rather than a fixed value list.
+      if (it->kind == PropertyKind::Enum && !it->enumValues.empty() &&
           !std::ranges::contains(it->enumValues, value.asString()))
       {
         return reject(LayoutRejectionReason::InvalidPropertyValue,
@@ -228,7 +224,7 @@ namespace ao::uimodel
     }
 
     std::optional<LayoutRejection> validateChildCount(LayoutNode const& node,
-                                                      LayoutComponentDescriptor const& descriptor,
+                                                      ComponentSchema const& componentSchema,
                                                       LayoutDialect const& dialect)
     {
       auto const count = node.children.size();
@@ -247,36 +243,36 @@ namespace ao::uimodel
         }
       }
 
-      if (count < descriptor.minChildren)
+      if (count < componentSchema.minChildren)
       {
         return reject(
           LayoutRejectionReason::ChildCountBelowMinimum,
           node,
           std::string{"children"},
           std::format(
-            "Component '{}' requires at least {} children, found {}", node.type, descriptor.minChildren, count));
+            "Component '{}' requires at least {} children, found {}", node.type, componentSchema.minChildren, count));
       }
 
-      if (descriptor.optMaxChildren && count > *descriptor.optMaxChildren)
+      if (componentSchema.optMaxChildren && count > *componentSchema.optMaxChildren)
       {
         return reject(
           LayoutRejectionReason::ChildCountAboveMaximum,
           node,
           std::string{"children"},
           std::format(
-            "Component '{}' accepts at most {} children, found {}", node.type, *descriptor.optMaxChildren, count));
+            "Component '{}' accepts at most {} children, found {}", node.type, *componentSchema.optMaxChildren, count));
       }
 
       return std::nullopt;
     }
 
     std::optional<LayoutRejection> validateActions(LayoutNode const& node,
-                                                   LayoutComponentDescriptor const& descriptor,
-                                                   LayoutActionCatalog const& actions)
+                                                   ComponentSchema const& componentSchema,
+                                                   LayoutSchema const& schema)
     {
       for (auto const slot : kAllSlots)
       {
-        auto const propName = actionPropForSlot(slot);
+        auto const propName = LayoutSchema::actionProperty(slot);
         auto const it = node.props.find(propName);
 
         if (it == node.props.end())
@@ -284,7 +280,7 @@ namespace ao::uimodel
           continue;
         }
 
-        if (!descriptor.actionPolicy.isSlotAllowed(slot))
+        if (!componentSchema.allows(slot))
         {
           return reject(LayoutRejectionReason::UnsupportedActionSlot,
                         node,
@@ -309,21 +305,21 @@ namespace ao::uimodel
           continue;
         }
 
-        if (!actions.descriptor(actionId))
+        if (!schema.action(actionId))
         {
           return reject(
             LayoutRejectionReason::UnknownAction, node, actionId, std::format("Unknown action id '{}'", actionId));
         }
       }
 
-      for (auto const& [slot, defaultActionId] : descriptor.actionPolicy.defaultActionIds)
+      for (auto const& binding : componentSchema.defaultActions)
       {
-        if (!defaultActionId.empty() && !actions.descriptor(defaultActionId))
+        if (!binding.actionId.empty() && !schema.action(binding.actionId))
         {
           return reject(LayoutRejectionReason::UnknownAction,
                         node,
-                        defaultActionId,
-                        std::format("Component '{}' defaults to unknown action id '{}'", node.type, defaultActionId));
+                        binding.actionId,
+                        std::format("Component '{}' defaults to unknown action id '{}'", node.type, binding.actionId));
         }
       }
 
@@ -331,24 +327,23 @@ namespace ao::uimodel
     }
 
     std::optional<LayoutRejection> validateNode(LayoutNode const& node,
-                                                LayoutComponentCatalog const& components,
-                                                LayoutActionCatalog const& actions,
+                                                LayoutSchema const& schema,
                                                 LayoutDialect const& dialect,
                                                 LayoutSurface const surface,
                                                 NodeIdSet& seenIds,
-                                                LayoutComponentDescriptor const* const parentDescriptor = nullptr)
+                                                ComponentSchema const* const parentSchema = nullptr)
     {
-      auto const optDescriptor = components.descriptor(node.type);
+      auto const optComponentSchema = schema.component(node.type);
 
-      if (!optDescriptor)
+      if (!optComponentSchema)
       {
         return reject(LayoutRejectionReason::UnknownComponentType,
                       node,
                       node.type,
-                      std::format("The {} catalog does not register component type '{}'", dialect.name, node.type));
+                      std::format("The {} schema does not register component type '{}'", dialect.name, node.type));
       }
 
-      if (!supportsSurface(optDescriptor->surfaces, surface))
+      if (!supportsSurface(optComponentSchema->surfaces, surface))
       {
         return reject(LayoutRejectionReason::UnsupportedSurface,
                       node,
@@ -364,7 +359,7 @@ namespace ao::uimodel
           LayoutRejectionReason::UnsupportedSurface,
           node,
           std::string{"tooltip"},
-          std::format("{} components own their own tooltips; the catalog has no tooltip surface", dialect.name));
+          std::format("{} components own their own tooltips; the schema has no tooltip surface", dialect.name));
       }
 
       if (surface == LayoutSurface::Tooltip && node.optTooltip && node.optTooltip->nodePtr)
@@ -393,14 +388,14 @@ namespace ao::uimodel
                       std::format("Node id '{}' is already used in this document", node.id));
       }
 
-      if (auto optRejection = validateActions(node, *optDescriptor, actions); optRejection)
+      if (auto optRejection = validateActions(node, *optComponentSchema, schema); optRejection)
       {
         return optRejection;
       }
 
       for (auto const& [name, value] : node.props)
       {
-        if (auto optRejection = validateProperty(node, *optDescriptor, name, value); optRejection)
+        if (auto optRejection = validateProperty(node, *optComponentSchema, name, value); optRejection)
         {
           return optRejection;
         }
@@ -408,21 +403,21 @@ namespace ao::uimodel
 
       for (auto const& [name, value] : node.layout)
       {
-        if (auto optRejection = validateLayoutField(node, *optDescriptor, parentDescriptor, dialect, name, value);
+        if (auto optRejection = validateLayoutField(node, *optComponentSchema, parentSchema, dialect, name, value);
             optRejection)
         {
           return optRejection;
         }
       }
 
-      if (auto optRejection = validateChildCount(node, *optDescriptor, dialect); optRejection)
+      if (auto optRejection = validateChildCount(node, *optComponentSchema, dialect); optRejection)
       {
         return optRejection;
       }
 
       for (auto const& child : node.children)
       {
-        if (auto optRejection = validateNode(child, components, actions, dialect, surface, seenIds, &*optDescriptor);
+        if (auto optRejection = validateNode(child, schema, dialect, surface, seenIds, &*optComponentSchema);
             optRejection)
         {
           return optRejection;
@@ -432,7 +427,7 @@ namespace ao::uimodel
       if (node.optTooltip && node.optTooltip->nodePtr)
       {
         if (auto optRejection =
-              validateNode(*node.optTooltip->nodePtr, components, actions, dialect, LayoutSurface::Tooltip, seenIds);
+              validateNode(*node.optTooltip->nodePtr, schema, dialect, LayoutSurface::Tooltip, seenIds);
             optRejection)
         {
           return optRejection;
@@ -465,20 +460,16 @@ namespace ao::uimodel
   } // namespace
 
   std::optional<LayoutRejection> validateLayout(PreparedLayout const& layout,
-                                                LayoutComponentCatalog const& components,
-                                                LayoutActionCatalog const& actions,
+                                                LayoutSchema const& schema,
                                                 LayoutDialect const& dialect)
   {
     auto seenIds = NodeIdSet{};
-    return validateNode(layout.effectiveRoot(), components, actions, dialect, LayoutSurface::Main, seenIds);
+    return validateNode(layout.effectiveRoot(), schema, dialect, LayoutSurface::Main, seenIds);
   }
 
-  Result<> requireValidLayout(PreparedLayout const& layout,
-                              LayoutComponentCatalog const& components,
-                              LayoutActionCatalog const& actions,
-                              LayoutDialect const& dialect)
+  Result<> requireValidLayout(PreparedLayout const& layout, LayoutSchema const& schema, LayoutDialect const& dialect)
   {
-    if (auto const optRejection = validateLayout(layout, components, actions, dialect); optRejection)
+    if (auto const optRejection = validateLayout(layout, schema, dialect); optRejection)
     {
       return makeError(Error::Code::FormatRejected, describeLayoutRejection(dialect, *optRejection));
     }

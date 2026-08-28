@@ -60,33 +60,31 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   list/ListAuthoringCoordinator.h
   include/ao/winui/list/ListAuthoringAdapter.h
   layout/ElementKind.cpp
-  layout/LayoutCatalog.cpp
+  layout/LayoutSchema.cpp
   layout/LayoutDialect.cpp
   layout/PlacementPlan.cpp
   layout/ShellDocument.cpp
   layout/ShellStatePolicy.cpp
   layout/StyleLookup.cpp
   layout/ThemeSurface.cpp
-  layout/component/container/ContainerRegistry.cpp
-  layout/component/generic/GenericRegistry.cpp
+  layout/component/container/ContainerComponents.cpp
+  layout/component/generic/GenericComponents.cpp
   layout/component/playback/NowPlayingInfo.cpp
   layout/component/playback/NowPlayingInfo.h
-  layout/component/playback/PlaybackRegistry.cpp
+  layout/component/playback/PlaybackComponents.cpp
   layout/component/playback/SoulButton.cpp
   layout/component/playback/SoulButton.h
   layout/component/shell/NavigationPane.cpp
-  layout/component/shell/NavigationPane.h
   layout/component/shell/PaneSplitter.cpp
   layout/component/shell/PaneSplitter.h
-  layout/component/shell/ShellRegistry.cpp
-  layout/component/status/StatusRegistry.cpp
+  layout/component/shell/ShellComponents.cpp
+  layout/component/status/StatusComponents.cpp
   layout/component/track/TrackCoverArt.cpp
   layout/component/track/TrackCoverArt.h
   layout/component/track/TrackDetail.cpp
   layout/component/track/TrackDetail.h
-  layout/component/track/TrackRegistry.cpp
+  layout/component/track/TrackComponents.cpp
   layout/component/track/TrackTable.cpp
-  layout/component/track/TrackTable.h
   layout/runtime/ActionBinder.cpp
   layout/runtime/ActionBinder.h
   layout/runtime/ActionRegistry.cpp
@@ -104,7 +102,6 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   layout/runtime/LayoutHost.h
   layout/runtime/ResourceLookup.cpp
   layout/runtime/ResourceLookup.h
-  layout/runtime/ShellLibraryAccess.h
   layout/runtime/UiSubscription.h
   layout/ShellBuilder.cpp
   layout/ShellBuilder.h

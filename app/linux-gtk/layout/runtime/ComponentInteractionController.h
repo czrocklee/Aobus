@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <glibmm/refptr.h>
@@ -40,25 +40,25 @@ namespace ao::gtk::layout
     void attach(LayoutBuildContext& ctx,
                 uimodel::LayoutNode const& node,
                 Gtk::Widget& target,
-                uimodel::LayoutComponentActionPolicy policy);
+                uimodel::ComponentSchema const& schema);
     void detach();
 
   private:
     void attachPrimaryClick(uimodel::LayoutNode const& node,
                             Gtk::Widget& target,
-                            uimodel::LayoutComponentActionPolicy const& policy,
+                            uimodel::ComponentSchema const& schema,
                             ActionBinder const& binder);
     void attachSecondaryClick(uimodel::LayoutNode const& node,
                               Gtk::Widget& target,
-                              uimodel::LayoutComponentActionPolicy const& policy,
+                              uimodel::ComponentSchema const& schema,
                               ActionBinder const& binder);
     void attachPrimaryLongPress(uimodel::LayoutNode const& node,
                                 Gtk::Widget& target,
-                                uimodel::LayoutComponentActionPolicy const& policy,
+                                uimodel::ComponentSchema const& schema,
                                 ActionBinder const& binder);
     void attachSecondaryLongPress(uimodel::LayoutNode const& node,
                                   Gtk::Widget& target,
-                                  uimodel::LayoutComponentActionPolicy const& policy,
+                                  uimodel::ComponentSchema const& schema,
                                   ActionBinder const& binder);
 
     std::function<void()> _primaryClick;

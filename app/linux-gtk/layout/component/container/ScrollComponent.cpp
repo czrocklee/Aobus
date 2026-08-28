@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
@@ -93,35 +93,35 @@ namespace ao::gtk::layout
 
   void registerScrollComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "scroll",
+    registry.registerComponent({.id = "scroll",
                                 .displayName = "Scroll Window",
-                                .category = LayoutComponentCategory::Container,
-                                .props = {{.name = "hscrollPolicy",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "H. Scroll Policy",
-                                           .defaultValue = LayoutValue{"automatic"},
-                                           .enumValues = {"automatic", "always", "never"}},
-                                          {.name = "vscrollPolicy",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "V. Scroll Policy",
-                                           .defaultValue = LayoutValue{"automatic"},
-                                           .enumValues = {"automatic", "always", "never"}},
-                                          {.name = "minContentWidth",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Min Content Width",
-                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
-                                          {.name = "minContentHeight",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Min Content Height",
-                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
-                                          {.name = "propagateNaturalWidth",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Propagate Nat. Width",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "propagateNaturalHeight",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Propagate Nat. Height",
-                                           .defaultValue = LayoutValue{false}}},
+                                .category = ComponentCategory::Container,
+                                .properties = {{.name = "hscrollPolicy",
+                                                .kind = PropertyKind::Enum,
+                                                .label = "H. Scroll Policy",
+                                                .defaultValue = LayoutValue{"automatic"},
+                                                .enumValues = {"automatic", "always", "never"}},
+                                               {.name = "vscrollPolicy",
+                                                .kind = PropertyKind::Enum,
+                                                .label = "V. Scroll Policy",
+                                                .defaultValue = LayoutValue{"automatic"},
+                                                .enumValues = {"automatic", "always", "never"}},
+                                               {.name = "minContentWidth",
+                                                .kind = PropertyKind::Int,
+                                                .label = "Min Content Width",
+                                                .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
+                                               {.name = "minContentHeight",
+                                                .kind = PropertyKind::Int,
+                                                .label = "Min Content Height",
+                                                .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
+                                               {.name = "propagateNaturalWidth",
+                                                .kind = PropertyKind::Bool,
+                                                .label = "Propagate Nat. Width",
+                                                .defaultValue = LayoutValue{false}},
+                                               {.name = "propagateNaturalHeight",
+                                                .kind = PropertyKind::Bool,
+                                                .label = "Propagate Nat. Height",
+                                                .defaultValue = LayoutValue{false}}},
                                 .minChildren = 1,
                                 .optMaxChildren = 1},
                                createScroll);

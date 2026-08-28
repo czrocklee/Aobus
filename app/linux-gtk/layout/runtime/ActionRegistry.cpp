@@ -4,41 +4,44 @@
 #include "layout/runtime/ActionRegistry.h"
 
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <algorithm>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::gtk::layout
 {
-  ActionRegistry::ActionRegistry() = default;
-  ActionRegistry::~ActionRegistry() = default;
+  ActionRegistry::ActionRegistry(uimodel::LayoutSchema& schema)
+    : _schema{schema}
+  {
+  }
 
-  bool ActionRegistry::registerAction(uimodel::LayoutActionDescriptor descriptor,
+  bool ActionRegistry::registerAction(uimodel::ActionSchema schema,
                                       ActionHandler handler,
                                       ActionStateProvider stateProvider)
   {
-    if (!_catalog.registerActionDescriptor(descriptor))
+    if (!_schema.addAction(schema))
     {
-      APP_LOG_ERROR("ActionRegistry: Duplicate registration for action id '{}'", descriptor.id);
+      APP_LOG_ERROR("ActionRegistry: Duplicate registration for action id '{}'", schema.id);
       return false;
     }
 
-    _entries.push_back({.id = descriptor.id, .handler = std::move(handler), .stateProvider = std::move(stateProvider)});
+    _entries.push_back({.id = schema.id, .handler = std::move(handler), .stateProvider = std::move(stateProvider)});
     return true;
   }
 
-  std::optional<uimodel::LayoutActionDescriptor> ActionRegistry::descriptor(std::string_view id) const
+  std::optional<uimodel::ActionSchema> ActionRegistry::action(std::string_view id) const
   {
-    return _catalog.descriptor(id);
+    return _schema.action(id);
   }
 
-  std::vector<uimodel::LayoutActionDescriptor> ActionRegistry::descriptors() const
+  std::span<uimodel::ActionSchema const> ActionRegistry::actions() const
   {
-    return _catalog.descriptors();
+    return _schema.actions();
   }
 
   ActionAvailability ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
@@ -79,10 +82,5 @@ namespace ao::gtk::layout
 
     APP_LOG_DEBUG("ActionRegistry: Activated action '{}' for component '{}'", id, ctx.componentId);
     return true;
-  }
-
-  uimodel::LayoutActionCatalog const& ActionRegistry::catalog() const noexcept
-  {
-    return _catalog;
   }
 } // namespace ao::gtk::layout

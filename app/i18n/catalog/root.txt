@@ -694,8 +694,6 @@ root:table {
     gtk_layout_validation_preset { "Validation failed on preset ''{preset}'':\n\n{detail}" }
     gtk_layout_invalid_component_ids { "Invalid Layout Component IDs" }
     gtk_layout_validation_component { "Validation failed on preset ''{preset}'' component ''{component}'' type ''{type}'':\n\n{detail}" }
-    gtk_layout_invalid_actions { "Invalid Layout Actions" }
-    gtk_layout_validation_action { "Validation failed on preset ''{preset}'' component ''{component}'' property ''{property}'':\n\n{detail}" }
     gtk_common_ok { "OK" }
     gtk_common_add { "Add" }
     gtk_common_undo { "Undo" }

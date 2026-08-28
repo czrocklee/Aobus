@@ -35,7 +35,7 @@ namespace ao::winui
   /**
    * @brief Turns built-in Windows shell YAML into a validated candidate.
    *
-   * Parsing, template expansion, budget limits, and Windows catalog validation
+   * Parsing, template expansion, budget limits, and Windows schema validation
    * are one step because a built-in document is one candidate: any defect
    * rejects it entirely rather than degrading part of the shell. @p sourceName
    * only labels diagnostics.

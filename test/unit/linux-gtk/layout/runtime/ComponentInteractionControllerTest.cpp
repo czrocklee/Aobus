@@ -9,12 +9,9 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
-#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -23,6 +20,7 @@
 #include <gtkmm/window.h>
 
 #include <memory>
+#include <utility>
 
 namespace ao::gtk::layout::test
 {
@@ -35,8 +33,8 @@ namespace ao::gtk::layout::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto registry = ActionRegistry{};
     auto compRegistry = ComponentRegistry{};
+    auto registry = ActionRegistry{compRegistry.schema()};
 
     bool primaryClicked = false;
     bool secondaryClicked = false;
@@ -52,12 +50,18 @@ namespace ao::gtk::layout::test
     registry.registerAction({.id = "secondaryLong", .label = "Secondary Long", .category = "Test"},
                             [&](auto&) { secondaryLongPressed = true; });
 
-    auto runtimeState = uimodel::LayoutRuntimeState{};
+    auto session = uimodel::LayoutSession{};
+    auto buildSnapshot = activateBuildSnapshot(session);
     auto ctx = LayoutBuildContext{.registry = compRegistry,
                                   .actionRegistry = registry,
                                   .parentWindow = window,
-                                  .runtimeState = runtimeState,
-                                  .buildState = uimodel::LayoutBuildStateView{runtimeState}};
+                                  .session = session,
+                                  .buildSnapshot = std::move(buildSnapshot)};
+    constexpr auto kAllSlots = actionSlotBit(ActionSlot::PrimaryClick) | actionSlotBit(ActionSlot::PrimaryLongPress) |
+                               actionSlotBit(ActionSlot::SecondaryClick) |
+                               actionSlotBit(ActionSlot::SecondaryLongPress);
+    auto const allActions =
+      ComponentSchema{.id = "interactive", .displayName = "Interactive", .actionSlots = kAllSlots};
 
     SECTION("attaches primary click to Gtk::Button")
     {
@@ -66,7 +70,7 @@ namespace ao::gtk::layout::test
       node.props[std::string{uimodel::kPrimaryActionProp}] = uimodel::LayoutValue{std::string{"primary"}};
 
       auto controller = ComponentInteractionController{};
-      controller.attach(ctx, node, button, uimodel::kAllExternalActions);
+      controller.attach(ctx, node, button, allActions);
 
       emitClicked(button);
       CHECK(primaryClicked);
@@ -77,11 +81,15 @@ namespace ao::gtk::layout::test
       auto button = Gtk::Button{};
       auto node = uimodel::LayoutNode{.type = "btn"}; // No props
 
-      auto policy = uimodel::kExternalPrimaryActions;
-      policy.defaultActionIds.emplace_back(LayoutActionSlot::PrimaryClick, "primary");
+      auto schema = ComponentSchema{.id = "primary",
+                                    .displayName = "Primary",
+                                    .actionSlots = actionSlotBit(ActionSlot::PrimaryClick),
+                                    .defaultActions = {
+                                      {.slot = ActionSlot::PrimaryClick, .actionId = "primary"},
+                                    }};
 
       auto controller = ComponentInteractionController{};
-      controller.attach(ctx, node, button, policy);
+      controller.attach(ctx, node, button, schema);
 
       emitClicked(button);
       CHECK(primaryClicked);
@@ -95,7 +103,7 @@ namespace ao::gtk::layout::test
       node.props[std::string{uimodel::kPrimaryLongPressActionProp}] = uimodel::LayoutValue{std::string{"primaryLong"}};
 
       auto controller = ComponentInteractionController{};
-      controller.attach(ctx, node, box, uimodel::kAllExternalActions);
+      controller.attach(ctx, node, box, allActions);
 
       REQUIRE(emitGestureReleased(box));
       CHECK(secondaryClicked);
@@ -116,7 +124,12 @@ namespace ao::gtk::layout::test
 
       auto controller = ComponentInteractionController{};
       // Only allow secondary
-      controller.attach(ctx, node, button, uimodel::kExternalSecondaryActions);
+      auto const secondaryActions = ComponentSchema{
+        .id = "secondary",
+        .displayName = "Secondary",
+        .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress),
+      };
+      controller.attach(ctx, node, button, secondaryActions);
 
       emitClicked(button);
       CHECK_FALSE(primaryClicked);
@@ -134,7 +147,7 @@ namespace ao::gtk::layout::test
 
       {
         auto controllerPtr = std::make_unique<ComponentInteractionController>();
-        controllerPtr->attach(ctx, node, box, uimodel::kAllExternalActions);
+        controllerPtr->attach(ctx, node, box, allActions);
         CHECK(box.observe_controllers()->get_n_items() == initialControllerCount + 3);
       }
 
@@ -154,7 +167,7 @@ namespace ao::gtk::layout::test
                               });
       auto node = uimodel::LayoutNode{.type = "btn"};
       node.props[std::string{uimodel::kPrimaryActionProp}] = uimodel::LayoutValue{std::string{"destroying"}};
-      controllerPtr->attach(ctx, node, button, uimodel::kAllExternalActions);
+      controllerPtr->attach(ctx, node, button, allActions);
 
       emitClicked(button);
 

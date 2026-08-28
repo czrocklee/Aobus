@@ -6,8 +6,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -25,10 +24,11 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("ActionRegistry - binds and dispatches layout actions", "[gtk][unit][layout][action]")
   {
-    auto registry = ActionRegistry{};
+    auto schema = LayoutSchema{};
+    auto registry = ActionRegistry{schema};
 
-    auto const descriptor1 = LayoutActionDescriptor{
-      .id = "test.action1", .label = "Test Action 1", .category = "Test", .capabilities = LayoutActionCapability::None};
+    auto const actionSchema =
+      ActionSchema{.id = "test.action1", .label = "Test Action 1", .category = "Test", .capabilities = 0};
 
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -43,13 +43,13 @@ namespace ao::gtk::layout::test
     SECTION("Registers and retrieves actions")
     {
       bool called = false;
-      REQUIRE(registry.registerAction(descriptor1, [&](auto&) { called = true; }));
+      REQUIRE(registry.registerAction(actionSchema, [&](auto&) { called = true; }));
 
-      auto const optDesc = registry.descriptor("test.action1");
-      REQUIRE(optDesc);
-      CHECK(optDesc->id == "test.action1");
+      auto const optActionSchema = registry.action("test.action1");
+      REQUIRE(optActionSchema);
+      CHECK(optActionSchema->id == "test.action1");
 
-      auto const all = registry.descriptors();
+      auto const all = registry.actions();
       REQUIRE(all.size() == 1);
       CHECK(all[0].id == "test.action1");
 
@@ -59,17 +59,17 @@ namespace ao::gtk::layout::test
 
     SECTION("Rejects duplicate ids")
     {
-      REQUIRE(registry.registerAction(descriptor1, nullptr));
-      REQUIRE_FALSE(registry.registerAction(descriptor1, nullptr));
+      REQUIRE(registry.registerAction(actionSchema, nullptr));
+      REQUIRE_FALSE(registry.registerAction(actionSchema, nullptr));
 
-      auto const all = registry.descriptors();
+      auto const all = registry.actions();
       CHECK(all.size() == 1);
     }
 
     SECTION("Activates handlers with context")
     {
       bool called = false;
-      registry.registerAction(descriptor1,
+      registry.registerAction(actionSchema,
                               [&](ActionActivationContext const& c)
                               {
                                 called = true;
@@ -84,7 +84,7 @@ namespace ao::gtk::layout::test
     {
       bool called = false;
       registry.registerAction(
-        descriptor1,
+        actionSchema,
         [&](auto&) { called = true; },
         [](auto const&) { return ActionAvailability{.enabled = false, .disabledReason = "Test"}; });
 
@@ -96,10 +96,10 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(called);
     }
 
-    SECTION("Empty registry returns no descriptors and unknown id lookup returns nullopt")
+    SECTION("Empty registry returns no schema entries and unknown id lookup returns nullopt")
     {
-      CHECK(registry.descriptors().empty());
-      CHECK_FALSE(registry.descriptor("unknown"));
+      CHECK(registry.actions().empty());
+      CHECK_FALSE(registry.action("unknown"));
     }
 
     SECTION("Activating an unknown action id returns false")
@@ -111,7 +111,7 @@ namespace ao::gtk::layout::test
     {
       std::int32_t stateCalls = 0;
       registry.registerAction(
-        descriptor1,
+        actionSchema,
         [](auto&) {},
         [&](auto const&)
         {

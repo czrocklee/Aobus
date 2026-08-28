@@ -5,11 +5,10 @@
 
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/winui/input/KeyChordAccelerator.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -29,7 +28,7 @@ namespace ao::winui::test
     using uimodel::KeyChord;
     using uimodel::KeymapBindings;
     using uimodel::KeymapModel;
-    using uimodel::LayoutActionCatalog;
+    using uimodel::LayoutSchema;
 
     KeyChord chord(std::string const& text)
     {
@@ -38,20 +37,19 @@ namespace ao::winui::test
       return *optChord;
     }
 
-    LayoutActionCatalog catalogWith(std::string id, uimodel::LayoutActionCapabilities const capabilities)
+    LayoutSchema schemaWith(std::string id, uimodel::ActionCapabilityMask const capabilities)
     {
-      auto catalog = LayoutActionCatalog{};
-      catalog.registerActionDescriptor(
-        {.id = std::move(id), .label = "Test", .category = "Test", .capabilities = capabilities});
-      return catalog;
+      auto schema = LayoutSchema{};
+      schema.addAction({.id = std::move(id), .label = "Test", .category = "Test", .capabilities = capabilities});
+      return schema;
     }
 
     /// Answers yes for everything, so a case can isolate the other rules.
     KeymapActionAvailability const kEverythingOffered = [](std::string_view) { return true; };
 
-    bool shippedWindowsAction(LayoutActionCatalog const& catalog, std::string_view const id)
+    bool shippedWindowsAction(LayoutSchema const& schema, std::string_view const id)
     {
-      if (catalog.descriptor(id))
+      if (schema.action(id))
       {
         return true;
       }
@@ -67,7 +65,7 @@ namespace ao::winui::test
   {
     auto const keymap = KeymapModel{KeymapBindings{{"playback.playPause", {chord("Ctrl+P")}}}};
 
-    auto const plans = planKeymapAccelerators(keymap, LayoutActionCatalog{}, kEverythingOffered);
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
 
     REQUIRE(plans.size() == 1);
     CHECK(plans.front().actionId == "playback.playPause");
@@ -81,7 +79,7 @@ namespace ao::winui::test
       KeymapModel{KeymapBindings{{"playback.playPause", {chord("Ctrl+P")}}, {"track.orderMoveUp", {chord("Alt+Up")}}}};
 
     auto const plans = planKeymapAccelerators(
-      keymap, LayoutActionCatalog{}, [](std::string_view const id) { return id == "playback.playPause"; });
+      keymap, LayoutSchema{}, [](std::string_view const id) { return id == "playback.playPause"; });
 
     REQUIRE(plans.size() == 1);
     CHECK(plans.front().actionId == "playback.playPause");
@@ -91,19 +89,19 @@ namespace ao::winui::test
   {
     // A keystroke has no anchor, so binding one would raise a menu at nowhere.
     auto const keymap = KeymapModel{KeymapBindings{{"playback.showOutputDeviceSelector", {chord("Ctrl+O")}}}};
-    auto const catalog =
-      catalogWith("playback.showOutputDeviceSelector",
-                  uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu);
+    auto const schema = schemaWith("playback.showOutputDeviceSelector",
+                                   uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu);
 
-    CHECK(planKeymapAccelerators(keymap, catalog, kEverythingOffered).empty());
+    CHECK(planKeymapAccelerators(keymap, schema, kEverythingOffered).empty());
   }
 
   TEST_CASE("KeymapAcceleratorPlan - a menu that needs no anchor is kept", "[winui][unit][input]")
   {
     auto const keymap = KeymapModel{KeymapBindings{{"shell.showSoul", {chord("Ctrl+K")}}}};
-    auto const catalog = catalogWith("shell.showSoul", uimodel::LayoutActionCapability::PresentsMenu);
+    auto const schema =
+      schemaWith("shell.showSoul", uimodel::actionCapabilityBit(uimodel::ActionCapability::PresentsMenu));
 
-    CHECK(planKeymapAccelerators(keymap, catalog, kEverythingOffered).size() == 1);
+    CHECK(planKeymapAccelerators(keymap, schema, kEverythingOffered).size() == 1);
   }
 
   TEST_CASE("KeymapAcceleratorPlan - a chord Windows cannot express is dropped", "[winui][unit][input]")
@@ -111,7 +109,7 @@ namespace ao::winui::test
     auto const keymap =
       KeymapModel{KeymapBindings{{"playback.playPause", {KeyChord{.key = "Hyper"}, chord("Ctrl+P")}}}};
 
-    auto const plans = planKeymapAccelerators(keymap, LayoutActionCatalog{}, kEverythingOffered);
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
 
     REQUIRE(plans.size() == 1);
     CHECK(plans.front().key.virtualKey == 0x50);
@@ -126,7 +124,7 @@ namespace ao::winui::test
       KeymapModel{KeymapBindings{{"playback.playPause", {chord("Media:Play"), chord("Media:Pause"), chord("Ctrl+P")}},
                                  {"playback.stop", {chord("Media:Stop")}}}};
 
-    auto const plans = planKeymapAccelerators(keymap, LayoutActionCatalog{}, kEverythingOffered);
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
 
     REQUIRE(plans.size() == 1);
     CHECK(plans.front().actionId == "playback.playPause");
@@ -137,7 +135,7 @@ namespace ao::winui::test
   {
     auto const keymap = KeymapModel{KeymapBindings{{"playback.next", {chord("Ctrl+Right"), chord("Ctrl+Right")}}}};
 
-    auto const plans = planKeymapAccelerators(keymap, LayoutActionCatalog{}, kEverythingOffered);
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
 
     CHECK(plans.size() == 1);
   }
@@ -153,7 +151,7 @@ namespace ao::winui::test
       {"playback.stop", {chord("Ctrl+Shift+=")}},
     }};
 
-    auto const plans = planKeymapAccelerators(keymap, LayoutActionCatalog{}, kEverythingOffered);
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
 
     REQUIRE(plans.size() == 1);
     CHECK(plans.front().actionId == "playback.playPause");
@@ -166,7 +164,7 @@ namespace ao::winui::test
     auto const keymap =
       KeymapModel{KeymapBindings{{"playback.next", {chord("Ctrl+Right"), chord("Ctrl+N"), chord("Ctrl+Right")}}}};
 
-    auto const plans = planKeymapAccelerators(keymap, LayoutActionCatalog{}, kEverythingOffered);
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
 
     CHECK(plans.size() == 2);
   }
@@ -175,11 +173,11 @@ namespace ao::winui::test
   {
     // Layout actions and native-only shell commands both participate in the
     // keymap when the running shell offers a handler.
-    auto const catalog = layoutActionCatalog();
+    auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&catalog](std::string_view const id) { return shippedWindowsAction(catalog, id); };
+    auto const offered = [&schema](std::string_view const id) { return shippedWindowsAction(schema, id); };
 
-    auto const plans = planKeymapAccelerators(keymap, catalog, offered);
+    auto const plans = planKeymapAccelerators(keymap, schema, offered);
 
     auto const planned = [&plans](std::string_view const id)
     { return std::ranges::any_of(plans, [id](auto const& plan) { return plan.actionId == id; }); };
@@ -208,11 +206,11 @@ namespace ao::winui::test
 
   TEST_CASE("KeymapAcceleratorPlan - no two accelerators claim the same key", "[winui][unit][input]")
   {
-    auto const catalog = layoutActionCatalog();
+    auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&catalog](std::string_view const id) { return shippedWindowsAction(catalog, id); };
+    auto const offered = [&schema](std::string_view const id) { return shippedWindowsAction(schema, id); };
 
-    auto const plans = planKeymapAccelerators(keymap, catalog, offered);
+    auto const plans = planKeymapAccelerators(keymap, schema, offered);
     auto seen = std::set<std::pair<std::uint32_t, std::uint32_t>>{};
 
     for (auto const& plan : plans)

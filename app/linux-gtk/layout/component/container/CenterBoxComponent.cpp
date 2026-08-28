@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/centerbox.h>
@@ -87,19 +87,19 @@ namespace ao::gtk::layout
   void registerCenterBoxComponent(ComponentRegistry& registry)
   {
     constexpr std::size_t kCenterBoxMaxChildren = 3;
-    registry.registerComponent({.type = "centerBox",
+    registry.registerComponent({.id = "centerBox",
                                 .displayName = "Center Box",
-                                .category = LayoutComponentCategory::Container,
-                                .props = {{.name = "orientation",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Orientation",
-                                           .defaultValue = LayoutValue{"horizontal"},
-                                           .enumValues = {"horizontal", "vertical"}}},
-                                .layoutProps = {{.name = "slot",
-                                                 .kind = LayoutPropertyKind::Enum,
-                                                 .label = "Slot",
-                                                 .defaultValue = LayoutValue{""},
-                                                 .enumValues = {"", "start", "center", "end"}}},
+                                .category = ComponentCategory::Container,
+                                .properties = {{.name = "orientation",
+                                                .kind = PropertyKind::Enum,
+                                                .label = "Orientation",
+                                                .defaultValue = LayoutValue{"horizontal"},
+                                                .enumValues = {"horizontal", "vertical"}}},
+                                .layoutProperties = {{.name = "slot",
+                                                      .kind = PropertyKind::Enum,
+                                                      .label = "Slot",
+                                                      .defaultValue = LayoutValue{""},
+                                                      .enumValues = {"", "start", "center", "end"}}},
                                 .minChildren = 0,
                                 .optMaxChildren = kCenterBoxMaxChildren},
                                createCenterBox);

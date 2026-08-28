@@ -5,8 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
@@ -66,11 +65,11 @@ namespace ao::gtk::layout
 
   void registerBoxComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent(withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::Box),
-                                                   {{.name = "homogeneous",
-                                                     .kind = LayoutPropertyKind::Bool,
-                                                     .label = "Homogeneous",
-                                                     .defaultValue = LayoutValue{false}}}),
-                               createBox);
+    registry.registerSharedComponent("box",
+                                     {.properties = {{.name = "homogeneous",
+                                                      .kind = PropertyKind::Bool,
+                                                      .label = "Homogeneous",
+                                                      .defaultValue = LayoutValue{false}}}},
+                                     createBox);
   }
 } // namespace ao::gtk::layout

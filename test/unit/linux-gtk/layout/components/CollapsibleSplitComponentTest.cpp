@@ -32,7 +32,8 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and persists panel state", "[gtk][unit][geometry]")
   {
-    auto fixture = LayoutRuntimeFixture{};
+    auto stateStore = FakeLayoutComponentStateStore{};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
     auto& ctx = fixture.context();
     auto& layoutRuntime = fixture.layoutRuntime();
 
@@ -257,14 +258,14 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentState.components["detail-split"] = LayoutComponentStateEntry{
+      auto state = LayoutComponentStateDocument{.preset = "classic"};
+      state.components["detail-split"] = LayoutComponentStateEntry{
         .type = "collapsibleSplit",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
         .state = {{"size", LayoutValue{static_cast<std::int64_t>(900)}}, {"revealed", LayoutValue{true}}},
       };
+      fixture.setComponentState("classic", state);
 
       auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
@@ -297,14 +298,14 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentState.components["detail-split"] = LayoutComponentStateEntry{
+      auto state = LayoutComponentStateDocument{.preset = "classic"};
+      state.components["detail-split"] = LayoutComponentStateEntry{
         .type = "collapsibleSplit",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
         .state = {{"size", LayoutValue{static_cast<std::int64_t>(180)}}, {"revealed", LayoutValue{false}}},
       };
+      fixture.setComponentState("classic", state);
 
       auto const restoredPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const restoredBox = collapsibleSplitBox(*restoredPtr);
@@ -314,7 +315,8 @@ namespace ao::gtk::layout::test
       REQUIRE(restoredRevealer != nullptr);
       CHECK(restoredRevealer->get_reveal_child() == false);
 
-      ctx.runtimeState.componentState.components["detail-split"].baselineHash = "stale";
+      state.components["detail-split"].baselineHash = "stale";
+      fixture.setComponentState("classic", state);
 
       auto const fallbackPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const fallbackBox = collapsibleSplitBox(*fallbackPtr);
@@ -327,10 +329,7 @@ namespace ao::gtk::layout::test
 
     SECTION("collapsibleSplit toggle persists revealed state and current size")
     {
-      auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentStateStore = &stateStore;
+      fixture.setComponentState("classic", LayoutComponentStateDocument{.preset = "classic"});
 
       auto doc = LayoutDocument{};
       doc.root.id = "detail-split";
@@ -362,11 +361,7 @@ namespace ao::gtk::layout::test
 
     SECTION("collapsibleSplit edit mode toggle does not persist runtime state")
     {
-      auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentStateStore = &stateStore;
-      ctx.runtimeState.editMode = true;
+      fixture.setComponentState("classic", LayoutComponentStateDocument{.preset = "classic"}, true);
 
       auto doc = LayoutDocument{};
       doc.root.id = "detail-split";
@@ -393,10 +388,7 @@ namespace ao::gtk::layout::test
 
     SECTION("collapsibleSplit ignores state writes after context generation advances")
     {
-      auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.runtimeState.activePresetId = "classic";
-      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.runtimeState.componentStateStore = &stateStore;
+      fixture.setComponentState("classic", LayoutComponentStateDocument{.preset = "classic"});
 
       auto doc = LayoutDocument{};
       doc.root.id = "detail-split";
@@ -416,7 +408,7 @@ namespace ao::gtk::layout::test
         auto* const handleButton = endSideCollapsibleToggle(*box);
         REQUIRE(handleButton != nullptr);
 
-        ++ctx.runtimeState.componentStateGeneration;
+        fixture.advanceGeneration();
         emitClicked(*handleButton);
       }
 

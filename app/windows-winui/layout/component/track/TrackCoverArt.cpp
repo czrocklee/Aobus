@@ -49,8 +49,8 @@ namespace ao::winui::layout
       auto const fallback = uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector);
       auto const styleId =
         node.propertyOr<std::string>(kPlaceholderStyleProp, std::string{uimodel::coverArtPlaceholderStyleId(fallback)});
-      // Validation rejects a document that names a style the catalog does not
-      // list, so an unparsed id here means the descriptor default was empty.
+      // Validation rejects a document that names a style the schema does not
+      // list, so an unparsed id here means the schema entry default was empty.
       return uimodel::parseCoverArtPlaceholderStyle(styleId).value_or(fallback);
     }
 
@@ -65,9 +65,15 @@ namespace ao::winui::layout
     class TrackCoverArtComponent final : public LayoutComponent
     {
     public:
-      TrackCoverArtComponent(LayoutBuildContext& ctx, uimodel::CoverArtPlaceholderStyle const style)
-        : _textCatalog{ctx.textCatalog}
-        , _coverArt{_image, _placeholder, ctx.resourceBytes, ctx.theme, style}
+      TrackCoverArtComponent(LayoutBuildContext& ctx,
+                             uimodel::CoverArtPlaceholderStyle const style,
+                             async::Runtime& asyncRuntime,
+                             rt::WorkspaceService& workspace,
+                             rt::ResourceByteLoader& resourceBytes,
+                             ThemeCoordinator& theme,
+                             i18n::MessageCatalog textCatalog)
+        : _textCatalog{std::move(textCatalog)}
+        , _coverArt{_image, _placeholder, resourceBytes, theme, style}
         , _focusedDetailPtr{ctx.focusedDetailPtr}
       {
         // Uniform rather than UniformToFill: the inspector shows the whole
@@ -82,7 +88,7 @@ namespace ao::winui::layout
         _sizeChangedRevoker = _root.SizeChanged(
           winrt::auto_revoke, [this](IInspectable const&, SizeChangedEventArgs const&) { keepSquare(); });
 
-        follow(ctx.asyncRuntime, ctx.workspace);
+        follow(asyncRuntime, workspace);
       }
 
       FrameworkElement element() const override { return _root; }
@@ -139,8 +145,15 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  Result<std::unique_ptr<LayoutComponent>> makeTrackCoverArt(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+  Result<std::unique_ptr<LayoutComponent>> makeTrackCoverArt(LayoutBuildContext& ctx,
+                                                             uimodel::LayoutNode const& node,
+                                                             async::Runtime& asyncRuntime,
+                                                             rt::WorkspaceService& workspace,
+                                                             rt::ResourceByteLoader& resourceBytes,
+                                                             ThemeCoordinator& theme,
+                                                             i18n::MessageCatalog textCatalog)
   {
-    return std::make_unique<TrackCoverArtComponent>(ctx, placeholderStyleOf(node));
+    return std::make_unique<TrackCoverArtComponent>(
+      ctx, placeholderStyleOf(node), asyncRuntime, workspace, resourceBytes, theme, std::move(textCatalog));
   }
 } // namespace ao::winui::layout

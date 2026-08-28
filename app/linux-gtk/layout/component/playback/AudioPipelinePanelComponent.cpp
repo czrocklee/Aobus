@@ -7,7 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/AudioPipelinePanel.h"
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
@@ -72,14 +72,14 @@ namespace ao::gtk::layout
                                            i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "playback.audioPipelinePanel",
+      {.id = "playback.audioPipelinePanel",
        .displayName = "Audio Pipeline Panel",
-       .category = LayoutComponentCategory::Playback,
-       .props = {{.name = "variant",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Variant",
-                  .defaultValue = LayoutValue{""},
-                  .enumValues = {"inline", "compact", "tooltip"}}},
+       .category = ComponentCategory::Playback,
+       .properties = {{.name = "variant",
+                       .kind = PropertyKind::Enum,
+                       .label = "Variant",
+                       .defaultValue = LayoutValue{""},
+                       .enumValues = {"inline", "compact", "tooltip"}}},
        .minChildren = 0,
        .optMaxChildren = 0,
        .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |

@@ -41,7 +41,7 @@ Panel state and authored layout are different authorities: ordinary resizing cha
 ## Related documents
 
 - [Keymap reference](../reference/shell/keymap.md)
-- [Layout catalog reference](../reference/shell/layout-catalog.md)
+- [GTK layout schema reference](../reference/shell/layout-schema.md)
 - [Layout state reference](../reference/shell/layout-state.md)
 - [Shell layout lifecycle](../spec/shell/layout-lifecycle.md)
 - [Shell layout adaptation](../spec/shell/layout-adaptation.md)

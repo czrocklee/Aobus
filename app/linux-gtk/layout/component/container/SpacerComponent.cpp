@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
@@ -40,9 +40,9 @@ namespace ao::gtk::layout
 
   void registerSpacerComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "spacer",
+    registry.registerComponent({.id = "spacer",
                                 .displayName = "Spacer",
-                                .category = LayoutComponentCategory::Container,
+                                .category = ComponentCategory::Container,
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createSpacer);

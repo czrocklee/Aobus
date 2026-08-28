@@ -40,6 +40,7 @@
 #include <gtkmm/dialog.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/paned.h>
+#include <gtkmm/treeview.h>
 #include <gtkmm/window.h>
 
 #include <cstddef>
@@ -159,7 +160,7 @@ namespace ao::gtk::test
 
     SECTION("action descriptors retain stable ids with catalog-selected presentation")
     {
-      auto const optDescriptor = controller.actionCatalog().descriptor("playback.playPause");
+      auto const optDescriptor = controller.layoutSchema().action("playback.playPause");
       REQUIRE(optDescriptor);
       CHECK(optDescriptor->id == "playback.playPause");
       CHECK(optDescriptor->label == "Play/Pause");
@@ -215,7 +216,7 @@ namespace ao::gtk::test
       dialog->hide();
 
       CHECK(controller.editorDialog() == nullptr);
-      CHECK_FALSE(controller.runtimeState().editMode);
+      CHECK_FALSE(controller.layoutSession().isEditMode());
       CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
 
       controller.openEditor(*configStorePtr);
@@ -226,11 +227,11 @@ namespace ao::gtk::test
 
       ::g_signal_emit_by_name(dialog->gobj(), "hide");
       CHECK(controller.editorDialog() == replacementDialog);
-      CHECK(controller.runtimeState().editMode);
+      CHECK(controller.layoutSession().isEditMode());
 
       drainGtkEvents();
       CHECK(controller.editorDialog() == replacementDialog);
-      CHECK(controller.runtimeState().editMode);
+      CHECK(controller.layoutSession().isEditMode());
       CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
 
       replacementDialog->hide();
@@ -256,9 +257,8 @@ namespace ao::gtk::test
     SECTION("loadLayout load works")
     {
       controller.loadLayout();
-      drainGtkEvents();
-      CHECK(controller.runtimeState().componentStateStore ==
-            static_cast<uimodel::LayoutComponentStateStore*>(componentStateStorePtr.get()));
+      REQUIRE(pumpGtkEventsUntil([&controller] { return controller.layoutSession().presetId() == "classic"; }));
+      CHECK(controller.activeLayout().root.type == "box");
     }
 
     SECTION("loadLayout accepts the modern built-in preset")
@@ -268,7 +268,7 @@ namespace ao::gtk::test
       configStorePtr->saveAppPrefs(prefs);
 
       controller.loadLayout();
-      REQUIRE(pumpGtkEventsUntil([&controller] { return controller.runtimeState().activePresetId == "modern"; }));
+      REQUIRE(pumpGtkEventsUntil([&controller] { return controller.layoutSession().presetId() == "modern"; }));
 
       CHECK(controller.activeLayout().root.type == "box");
       CHECK(findNodeById(controller.activeLayout().root, "modern-bar") != nullptr);
@@ -293,7 +293,7 @@ namespace ao::gtk::test
       CHECK(ao::test::readFile(layoutPath) == original);
     }
 
-    SECTION("loadLayout rejects a custom layout outside the GTK catalog and preserves its file")
+    SECTION("loadLayout rejects a custom layout outside the GTK schema and preserves its file")
     {
       auto prefs = rt::AppPrefsState{};
       prefs.lastLayoutPreset = "classic";
@@ -364,19 +364,22 @@ namespace ao::gtk::test
 
       auto* const dialog = controller.editorDialog();
       REQUIRE(dialog != nullptr);
-      dialog->updateNodePosition("main-paned", 37, 53);
-      auto const* const draftSplit = findNodeById(dialog->document().root, "main-paned");
-      REQUIRE(draftSplit != nullptr);
-      CHECK(draftSplit->layout.at("x").asInt() == 37);
+      auto* const treeView = findWidget<Gtk::TreeView>(*dialog);
+      REQUIRE(treeView != nullptr);
+      auto const treeModelPtr = treeView->get_model();
+      REQUIRE(treeModelPtr);
+      REQUIRE_FALSE(treeModelPtr->children().empty());
+      treeView->get_selection()->select(treeModelPtr->children().begin());
+      auto const activeRootChildCount = controller.activeLayout().root.children.size();
+      REQUIRE(dialog->activate_action("editor.add_spacer"));
+      CHECK(dialog->document().root.children.size() == activeRootChildCount + 1);
 
       dialog->response(Gtk::ResponseType::OK);
       drainGtkEvents();
 
       REQUIRE(controller.editorDialog() == dialog);
       CHECK(dialog->get_visible());
-      auto const* const activeSplit = findNodeById(controller.activeLayout().root, "main-paned");
-      REQUIRE(activeSplit != nullptr);
-      CHECK_FALSE(activeSplit->layout.contains("x"));
+      CHECK(controller.activeLayout().root.children.size() == activeRootChildCount);
       CHECK(ao::test::readFile(layoutPath) == original);
 
       Gtk::Window* errorDialog = nullptr;
@@ -425,7 +428,7 @@ namespace ao::gtk::test
       paned->set_position(400);
 
       REQUIRE(pumpGtkEventsUntil(
-        [&controller] { return controller.runtimeState().componentState.components.contains("main-paned"); }));
+        [&controller] { return controller.layoutSession().componentState().components.contains("main-paned"); }));
       auto const optPersisted = componentStateStorePtr->load("classic");
       REQUIRE(optPersisted);
       REQUIRE(optPersisted->components.contains("main-paned"));
@@ -577,11 +580,11 @@ namespace ao::gtk::test
       controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-      REQUIRE(controller.runtimeState().componentState.components.contains("main-paned"));
+      REQUIRE(controller.layoutSession().componentState().components.contains("main-paned"));
 
       controller.resetRuntimeLayoutState();
 
-      CHECK(controller.runtimeState().componentState.components.empty());
+      CHECK(controller.layoutSession().componentState().components.empty());
       CHECK_FALSE(componentStateStorePtr->load("classic").has_value());
       auto const loadedLayoutRes = storePtr->load("classic");
       REQUIRE(loadedLayoutRes);

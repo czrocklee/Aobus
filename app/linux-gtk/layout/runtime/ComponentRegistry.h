@@ -4,7 +4,7 @@
 #pragma once
 
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/utility/TransparentStringHash.h>
 
@@ -12,10 +12,8 @@
 
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -27,20 +25,19 @@ namespace ao::gtk::layout
   class ComponentRegistry final
   {
   public:
-    ComponentRegistry();
-
-    void registerComponent(uimodel::LayoutComponentDescriptor descriptor, ComponentFactory factory);
+    void registerComponent(uimodel::ComponentSchema schema, ComponentFactory factory);
+    void registerSharedComponent(std::string_view id,
+                                 uimodel::ComponentSchemaExtension extension,
+                                 ComponentFactory factory);
+    void registerSharedComponent(std::string_view id, ComponentFactory factory);
 
     std::unique_ptr<LayoutComponent> create(LayoutBuildContext& ctx, uimodel::LayoutNode const& node) const;
 
-    std::vector<uimodel::LayoutComponentDescriptor> const& descriptors() const;
-
-    std::optional<uimodel::LayoutComponentDescriptor> descriptor(std::string_view type) const;
-
-    uimodel::LayoutComponentCatalog const& catalog() const noexcept;
+    uimodel::LayoutSchema& schema() noexcept { return _schema; }
+    uimodel::LayoutSchema const& schema() const noexcept { return _schema; }
 
   private:
-    uimodel::LayoutComponentCatalog _catalog;
+    uimodel::LayoutSchema _schema;
     boost::
       unordered_flat_map<std::string, ComponentFactory, utility::TransparentStringHash, utility::TransparentStringEqual>
         _factories;

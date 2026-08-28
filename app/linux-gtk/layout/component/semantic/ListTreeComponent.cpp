@@ -6,7 +6,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "list/ListNavigationController.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
@@ -62,9 +62,9 @@ namespace ao::gtk::layout
                                  ListNavigationController* listNavigationController)
   {
     registry.registerComponent(
-      {.type = "library.listTree",
+      {.id = "library.listTree",
        .displayName = "Library Tree",
-       .category = LayoutComponentCategory::Library,
+       .category = ComponentCategory::Library,
        .minChildren = 0,
        .optMaxChildren = 0},
       [trackRowCache, listNavigationController](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)

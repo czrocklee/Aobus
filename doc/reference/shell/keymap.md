@@ -113,11 +113,11 @@ shortcuts:
 - A modifier segment must be recognized before the final key token.
 - Equivalent parsed chords compare equal and are deduplicated within one action.
 - The persistence schema requires a mapping with nonempty, nonduplicate action-id keys and sequence values whose every element is a non-null scalar string.
-- A structurally valid action id need not be known to the current catalog; it remains in the effective and persisted mapping but does not produce a catalog-backed editor row.
+- A structurally valid action id need not be known to the current schema; it remains in the effective and persisted mapping but does not produce a schema-backed editor row.
 - A structurally valid but unparsable chord string is skipped by semantic keymap application without discarding valid siblings.
 - Shortcut-editor eligibility excludes actions with `RequiresAnchor` or `PresentsMenu`.
 - A shell may skip a neutral key it cannot translate to a native accelerator without changing the stored neutral value.
-- Windows additionally skips an action it registers no handler for, and any action whose descriptor declares `RequiresAnchor`, since a keystroke has no anchor to present from.
+- Windows additionally skips an action it registers no handler for, and any action whose schema entry declares `RequiresAnchor`, since a keystroke has no anchor to present from.
 - Windows translates the letters, digits, `F1` through `F24`, the named navigation and editing keys, and the common punctuation keys. GTK additionally accepts any key GDK names.
 - A punctuation character a key only produces with Shift held carries that Shift on Windows whether or not the chord spelled it. `+` and `=` are one key, so `Ctrl++` installs as Ctrl+Shift and stays distinct from `Ctrl+=`.
 - Windows numbers its punctuation keys by position, and the positions this shell knows are the ones a US layout carries. On a layout that moves them, a chord naming punctuation reaches a different physical key. No shipped binding uses punctuation, so this reaches only a user's own overrides.
@@ -134,11 +134,11 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`KeyChord.h`](../../../app/include/ao/uimodel/input/KeyChord.h) and [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp) own syntax and aliases.
 - [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp) owns the default inventory.
 - [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) owns the explicit override group schema and structural candidate policy.
-- [`LayoutActionCapabilities.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionCapabilities.h) owns eligibility flags.
+- [`LayoutSchema.h`](../../../app/include/ao/uimodel/layout/component/LayoutSchema.h) owns action capability and eligibility flags.
 - [`PlaybackCommand.h`](../../../app/include/ao/uimodel/playback/command/PlaybackCommand.h) owns the transport action ids every shell registers.
 - [`GtkAccelTranslator.h`](../../../app/linux-gtk/app/GtkAccelTranslator.h) owns the GDK edge, and [`KeyChordAccelerator.h`](../../../app/windows-winui/include/ao/winui/input/KeyChordAccelerator.h) the Windows one.
 - [`KeymapAcceleratorPlan.h`](../../../app/windows-winui/include/ao/winui/input/KeymapAcceleratorPlan.h) owns which bindings the Windows shell installs.
-- WinUI [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers reveal and saved-order handlers directly in the live action registry; those native component commands remain outside the Windows layout-action catalog.
+- WinUI [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers reveal and saved-order handlers directly in the live action registry; those native component commands remain outside the Windows layout schema.
 
 ## Test authority
 
@@ -152,5 +152,5 @@ There is no explicit migration table for renamed actions or key tokens.
 
 - [Application shell architecture](../../architecture/application-shell.md)
 - [Keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md)
-- [Layout catalog and action reference](layout-catalog.md)
+- [GTK layout schema and action reference](layout-schema.md)
 - [Application managed-state surface](../persistence/application-config.md)

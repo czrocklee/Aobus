@@ -5,9 +5,8 @@
 
 #include <ao/Contract.h>
 #include <ao/Error.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -178,7 +177,7 @@ namespace ao::uimodel
       auto canonical = std::string{};
       appendField(canonical, "type", node.type);
 
-      if (node.type == componentTypeName(SharedLayoutComponentType::Split))
+      if (node.type == kSplitComponentType)
       {
         appendField(canonical, "orientation", stringPropertyOr(node, "orientation", "vertical"));
         appendDoubleField(canonical, "initialPositionPercent", doublePropertyOr(node, "initialPositionPercent", 0.0));
@@ -203,15 +202,15 @@ namespace ao::uimodel
     }
 
     std::map<std::string, LayoutNode, std::less<>> statefulNodeIndex(PreparedLayout const& layout,
-                                                                     LayoutComponentCatalog const& catalog)
+                                                                     LayoutSchema const& schema)
     {
       auto result = std::map<std::string, LayoutNode, std::less<>>{};
 
       visitExpandedLayoutNodes(layout,
-                               [&result, &catalog](LayoutNode const& node)
+                               [&result, &schema](LayoutNode const& node)
                                {
-                                 if (auto const optDescriptor = catalog.descriptor(node.type);
-                                     !node.id.empty() && optDescriptor && optDescriptor->persistentState)
+                                 if (auto const optSchema = schema.component(node.type);
+                                     !node.id.empty() && optSchema && optSchema->persistentState)
                                  {
                                    result.emplace(node.id, node);
                                  }
@@ -261,7 +260,7 @@ namespace ao::uimodel
 
   void pruneComponentState(LayoutComponentStateDocument& stateDoc,
                            PreparedLayout const& layout,
-                           LayoutComponentCatalog const& catalog)
+                           LayoutSchema const& schema)
   {
     if (stateDoc.version != kStateFileVersion)
     {
@@ -269,7 +268,7 @@ namespace ao::uimodel
       return;
     }
 
-    auto const nodesById = statefulNodeIndex(layout, catalog);
+    auto const nodesById = statefulNodeIndex(layout, schema);
 
     std::erase_if(stateDoc.components,
                   [&nodesById](auto const& item)

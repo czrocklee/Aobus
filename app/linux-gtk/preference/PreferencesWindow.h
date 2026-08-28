@@ -28,7 +28,7 @@
 
 namespace ao::uimodel
 {
-  class LayoutActionCatalog;
+  class LayoutSchema;
   class OutputDeviceViewModel;
 }
 namespace ao::rt
@@ -58,7 +58,7 @@ namespace ao::gtk
     PreferencesWindow(PreferencesWindow&&) = delete;
     PreferencesWindow& operator=(PreferencesWindow&&) = delete;
 
-    void refreshKeyboardPage(uimodel::LayoutActionCatalog const& catalog,
+    void refreshKeyboardPage(uimodel::LayoutSchema const& schema,
                              uimodel::KeymapModel keymap,
                              ShortcutEditorWidget::ChangedCallback onChanged);
     void refreshPreferences(rt::AppPrefsState prefs,

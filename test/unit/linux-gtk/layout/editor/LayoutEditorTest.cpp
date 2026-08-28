@@ -52,7 +52,7 @@ namespace ao::gtk::layout::editor::test
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
       registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = textCatalog});
-    auto actionRegistry = ActionRegistry{};
+    auto actionRegistry = ActionRegistry{registry.schema()};
 
     auto window = Gtk::Window{};
     auto const doc = makeDefaultLayout();

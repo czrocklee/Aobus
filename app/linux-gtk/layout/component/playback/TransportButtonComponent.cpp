@@ -8,8 +8,7 @@
 #include "playback/TransportButton.h"
 #include <ao/Contract.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 
@@ -63,17 +62,15 @@ namespace ao::gtk::layout
                                         uimodel::PlaybackActions* playbackActions,
                                         i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackTransportButton),
-                          {{.name = "showLabel",
-                            .kind = LayoutPropertyKind::Bool,
-                            .label = "Show Label",
-                            .defaultValue = LayoutValue{false}},
-                           {.name = "size",
-                            .kind = LayoutPropertyKind::Enum,
-                            .label = "Size",
-                            .defaultValue = LayoutValue{"normal"},
-                            .enumValues = {"small", "normal", "large"}}}),
+    registry.registerSharedComponent(
+      "playback.transportButton",
+      {.properties =
+         {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
+          {.name = "size",
+           .kind = PropertyKind::Enum,
+           .label = "Size",
+           .defaultValue = LayoutValue{"normal"},
+           .enumValues = {"small", "normal", "large"}}}},
       [&playback, playbackActions, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
       {
         auto const optCommand = playbackCommandFor(node.propertyOr<std::string>(kCommandProp, ""));

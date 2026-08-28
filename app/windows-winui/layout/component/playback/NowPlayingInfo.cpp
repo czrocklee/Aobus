@@ -59,11 +59,17 @@ namespace ao::winui::layout
     class NowPlayingInfoComponent final : public LayoutComponent
     {
     public:
-      explicit NowPlayingInfoComponent(LayoutBuildContext& ctx)
+      NowPlayingInfoComponent(LayoutBuildContext& ctx,
+                              async::Runtime& asyncRuntime,
+                              rt::PlaybackService& playback,
+                              rt::ResourceByteLoader& resourceBytes,
+                              ThemeCoordinator& theme,
+                              i18n::MessageCatalog const& textCatalog,
+                              async::Signal<ShellState>& shellStateChanged)
         : _coverArt{_coverImage,
                     _coverPlaceholder,
-                    ctx.resourceBytes,
-                    ctx.theme,
+                    resourceBytes,
+                    theme,
                     uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying)}
       {
         auto coverColumn = ColumnDefinition{};
@@ -109,10 +115,10 @@ namespace ao::winui::layout
         _root.Children().Append(coverFrame);
         _root.Children().Append(text);
 
-        follow(ctx.asyncRuntime, ctx.playback, ctx.textCatalog);
+        follow(asyncRuntime, playback, textCatalog);
         applyShellState(ctx.shellState);
         _shellStateSub = subscribeUiUpdate(
-          ctx.shellStateChanged, "NowPlayingInfoComponent", [this](ShellState const state) { applyShellState(state); });
+          shellStateChanged, "NowPlayingInfoComponent", [this](ShellState const state) { applyShellState(state); });
       }
 
       FrameworkElement element() const override { return _root; }
@@ -158,8 +164,15 @@ namespace ao::winui::layout
   } // namespace
 
   Result<std::unique_ptr<LayoutComponent>> makeNowPlayingInfo(LayoutBuildContext& ctx,
-                                                              uimodel::LayoutNode const& /*node*/)
+                                                              uimodel::LayoutNode const& /*node*/,
+                                                              async::Runtime& asyncRuntime,
+                                                              rt::PlaybackService& playback,
+                                                              rt::ResourceByteLoader& resourceBytes,
+                                                              ThemeCoordinator& theme,
+                                                              i18n::MessageCatalog const& textCatalog,
+                                                              async::Signal<ShellState>& shellStateChanged)
   {
-    return std::make_unique<NowPlayingInfoComponent>(ctx);
+    return std::make_unique<NowPlayingInfoComponent>(
+      ctx, asyncRuntime, playback, resourceBytes, theme, textCatalog, shellStateChanged);
   }
 } // namespace ao::winui::layout

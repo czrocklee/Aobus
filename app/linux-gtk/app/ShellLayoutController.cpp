@@ -40,15 +40,13 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutValidation.h>
-#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
-#include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/layout/shell/LayoutSession.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/preference/ThemePreset.h>
@@ -89,8 +87,7 @@ namespace ao::gtk
 
     Result<uimodel::PreparedLayout> prepareValidatedLayout(uimodel::LayoutDocument const& document,
                                                            uimodel::LayoutDocumentLimits const& limits,
-                                                           uimodel::LayoutComponentCatalog const& components,
-                                                           uimodel::LayoutActionCatalog const& actions)
+                                                           uimodel::LayoutSchema const& schema)
     {
       auto preparedRes = uimodel::prepareLayout(document, limits);
 
@@ -99,8 +96,7 @@ namespace ao::gtk
         return std::unexpected{preparedRes.error()};
       }
 
-      if (auto validatedRes = uimodel::requireValidLayout(*preparedRes, components, actions, layout::layoutDialect());
-          !validatedRes)
+      if (auto validatedRes = uimodel::requireValidLayout(*preparedRes, schema, layout::layoutDialect()); !validatedRes)
       {
         return std::unexpected{validatedRes.error()};
       }
@@ -108,18 +104,36 @@ namespace ao::gtk
       return preparedRes;
     }
 
+    uimodel::LayoutComponentStateDocument componentStateForEditorSave(
+      ShellLayoutComponentStateStore* const componentStateStore,
+      std::string_view const presetId,
+      bool const reset,
+      uimodel::PreparedLayout const& preparedLayout,
+      uimodel::LayoutSchema const& schema)
+    {
+      auto state = uimodel::LayoutSession::emptyComponentState(presetId);
+
+      if (componentStateStore == nullptr || reset)
+      {
+        return state;
+      }
+
+      state = componentStateStore->load(presetId).value_or(uimodel::LayoutSession::emptyComponentState(presetId));
+      uimodel::pruneComponentState(state, preparedLayout, schema);
+      return state;
+    }
+
     LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
                                         ShellLayoutComponentStateStore* componentStateStore,
                                         AppConfigStore& configStore,
-                                        uimodel::LayoutComponentCatalog const& components,
-                                        uimodel::LayoutActionCatalog const& actions)
+                                        uimodel::LayoutSchema const& schema)
     {
       auto prefs = rt::AppPrefsState{};
       configStore.loadAppPrefs(prefs);
 
       static constexpr auto kSupportedPresets = std::array<std::string_view, 2>{"classic", "modern"};
 
-      auto const selection = uimodel::ShellLayoutSessionModel::selectPreset(prefs.lastLayoutPreset, kSupportedPresets);
+      auto const selection = uimodel::LayoutSession::selectPreset(prefs.lastLayoutPreset, kSupportedPresets);
 
       if (selection.usedFallback)
       {
@@ -149,7 +163,7 @@ namespace ao::gtk
         doc = layout::makeBuiltInLayout(presetId);
       }
 
-      auto preparedRes = prepareValidatedLayout(doc, store.limits(), components, actions);
+      auto preparedRes = prepareValidatedLayout(doc, store.limits(), schema);
 
       if (!preparedRes && usingCustomLayout)
       {
@@ -157,15 +171,15 @@ namespace ao::gtk
                      selection.presetId,
                      preparedRes.error().message);
         doc = layout::makeBuiltInLayout(presetId);
-        preparedRes = prepareValidatedLayout(doc, store.limits(), components, actions);
+        preparedRes = prepareValidatedLayout(doc, store.limits(), schema);
       }
 
       AO_INVARIANT(preparedRes, "Built-in shell layout is invalid");
 
       auto stateDoc = componentStateStore == nullptr
-                        ? uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
+                        ? uimodel::LayoutSession::emptyComponentState(selection.presetId)
                         : componentStateStore->load(selection.presetId)
-                            .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId));
+                            .value_or(uimodel::LayoutSession::emptyComponentState(selection.presetId));
 
       return {.presetId = selection.presetId,
               .document = std::move(doc),
@@ -196,7 +210,7 @@ namespace ao::gtk
     : _runtime{runtime}
     , _parentWindow{window}
     , _registry{}
-    , _actionRegistry{}
+    , _actionRegistry{_registry.schema()}
     , _textCatalog{collaborators.textCatalog}
     , _playbackActions{requirePlaybackActions(collaborators)}
     , _themeCoordinator{requireThemeCoordinator(collaborators)}
@@ -205,6 +219,7 @@ namespace ao::gtk
     , _outputDeviceIntent{collaborators.outputDeviceIntent}
     , _menuModelPtr{collaborators.menuModelPtr}
     , _host{_registry}
+    , _session{componentStateStorePtr.get()}
     , _configStorePtr{std::move(configStorePtr)}
     , _layoutStorePtr{std::move(layoutStorePtr)}
     , _componentStateStorePtr{std::move(componentStateStorePtr)}
@@ -215,18 +230,17 @@ namespace ao::gtk
                        _queuedOpenEditorConnection.disconnect();
                      }}
   {
-    _runtimeState.componentStateStore = _componentStateStorePtr.get();
     layout::LayoutRuntime::registerStandardComponents(_registry, _runtime, collaborators);
 
     auto const registerAction = [this](std::string_view id,
                                        std::string_view label,
                                        std::string_view category,
-                                       uimodel::LayoutActionCapabilities caps,
+                                       uimodel::ActionCapabilityMask caps,
                                        layout::ActionHandler handler,
                                        layout::ActionStateProvider stateProvider = {})
     {
       _actionRegistry.registerAction(
-        uimodel::LayoutActionDescriptor{
+        uimodel::ActionSchema{
           .id = std::string{id}, .label = std::string{label}, .category = std::string{category}, .capabilities = caps},
         std::move(handler),
         std::move(stateProvider));
@@ -273,8 +287,8 @@ namespace ao::gtk
     _editorDialogPtr.reset();
     _outputDevicePopover.detach();
     _menuPopover.detach();
-    // Components retain LayoutRuntimeState and may flush pending state while
-    // destructing, so release them before the state and its store owner.
+    // Component bindings may flush pending state while destructing, so release
+    // them before the session and its store owner.
     _host.clearLayout();
   }
 
@@ -299,7 +313,7 @@ namespace ao::gtk
       registerAction(uimodel::playbackCommandActionId(command),
                      uimodel::playbackActionLabel(_textCatalog, command),
                      gtkText(_textCatalog, MessageId::GtkActionCategoryPlayback),
-                     uimodel::LayoutActionCapability::None,
+                     0,
                      execute(command),
                      isEnabled(command));
     }
@@ -307,7 +321,7 @@ namespace ao::gtk
     registerAction("playback.showOutputDeviceSelector",
                    gtkText(_textCatalog, MessageId::GtkActionOutputDevices),
                    gtkText(_textCatalog, MessageId::GtkActionCategoryPlayback),
-                   uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
+                   uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
                      if (_outputDevicePopover.hasPopover())
@@ -328,7 +342,7 @@ namespace ao::gtk
     registerAction("shell.showSystemMenu",
                    gtkText(_textCatalog, MessageId::GtkActionSystemMenu),
                    gtkText(_textCatalog, MessageId::GtkActionCategoryShell),
-                   uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
+                   uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
                      if (_menuModelPtr)
@@ -353,14 +367,14 @@ namespace ao::gtk
     registerAction("shell.showSoul",
                    "Aobus Soul",
                    gtkText(_textCatalog, MessageId::GtkActionCategoryShell),
-                   uimodel::LayoutActionCapability::None,
+                   0,
                    [this](layout::ActionActivationContext& ctx) { presentSoul(ctx); },
                    {});
 
     registerAction("shell.editLayout",
                    gtkText(_textCatalog, MessageId::GtkShellEditLayout),
                    gtkText(_textCatalog, MessageId::GtkActionCategoryShell),
-                   uimodel::LayoutActionCapability::None,
+                   0,
                    [this](layout::ActionActivationContext&)
                    {
                      _queuedOpenEditorConnection.disconnect();
@@ -435,7 +449,7 @@ namespace ao::gtk
       "workspace.revealCurrentTrack",
       gtkText(_textCatalog, MessageId::GtkActionRevealTrack),
       gtkText(_textCatalog, MessageId::GtkActionCategoryWorkspace),
-      uimodel::LayoutActionCapability::None,
+      0,
       [this](layout::ActionActivationContext&) { _runtime.playback().commands().revealPlayingTrack(); },
       hasActiveSequence);
   }
@@ -446,7 +460,7 @@ namespace ao::gtk
       "track.presentProperties",
       gtkText(_textCatalog, MessageId::GtkActionTrackProperties),
       gtkText(_textCatalog, MessageId::GtkActionCategoryTracks),
-      uimodel::LayoutActionCapability::None,
+      0,
       [this](layout::ActionActivationContext&)
       {
         if (_tagEditController != nullptr)
@@ -472,7 +486,7 @@ namespace ao::gtk
       "track.editTags",
       gtkText(_textCatalog, MessageId::GtkActionEditTags),
       gtkText(_textCatalog, MessageId::GtkActionCategoryTracks),
-      uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
+      uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu,
       [this](layout::ActionActivationContext& ctx)
       {
         if (_tagEditController != nullptr)
@@ -506,7 +520,7 @@ namespace ao::gtk
         id,
         label,
         gtkText(_textCatalog, MessageId::GtkActionCategoryTracks),
-        uimodel::LayoutActionCapability::None,
+        0,
         [this, command](layout::ActionActivationContext&)
         {
           if (_trackPageHost == nullptr)
@@ -608,13 +622,13 @@ namespace ao::gtk
 
   Result<layout::LayoutHost::PreparedTree> ShellLayoutController::prepareHost(
     uimodel::PreparedLayout const& preparedLayout,
-    uimodel::LayoutBuildStateView buildState)
+    uimodel::LayoutBuildSnapshot buildSnapshot)
   {
     auto ctx = layout::LayoutBuildContext{.registry = _registry,
                                           .actionRegistry = _actionRegistry,
                                           .parentWindow = _parentWindow,
-                                          .runtimeState = _runtimeState,
-                                          .buildState = std::move(buildState)};
+                                          .session = _session,
+                                          .buildSnapshot = std::move(buildSnapshot)};
     return _host.prepare(ctx, preparedLayout);
   }
 
@@ -626,12 +640,21 @@ namespace ao::gtk
 
   void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc)
   {
-    rebuildHost(doc, uimodel::LayoutBuildStateView{_runtimeState});
+    auto optBuildSnapshot = _session.buildSnapshot();
+
+    if (!optBuildSnapshot)
+    {
+      APP_LOG_ERROR("ShellLayoutController: Layout component-state generation is exhausted");
+      return;
+    }
+
+    rebuildHost(doc, std::move(*optBuildSnapshot));
   }
 
-  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc, uimodel::LayoutBuildStateView buildState)
+  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc,
+                                          uimodel::LayoutBuildSnapshot buildSnapshot)
   {
-    auto preparedRes = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
+    auto preparedRes = prepareValidatedLayout(doc, layoutLimits(), _registry.schema());
 
     if (!preparedRes)
     {
@@ -639,7 +662,7 @@ namespace ao::gtk
       return;
     }
 
-    auto pendingRes = prepareHost(*preparedRes, std::move(buildState));
+    auto pendingRes = prepareHost(*preparedRes, std::move(buildSnapshot));
 
     if (!pendingRes)
     {
@@ -647,7 +670,8 @@ namespace ao::gtk
       return;
     }
 
-    _host.commit(_runtimeState, std::move(*pendingRes));
+    _session.advanceGeneration(pendingRes->generation());
+    _host.commit(std::move(*pendingRes));
   }
 
   void ShellLayoutController::loadLayout()
@@ -655,8 +679,7 @@ namespace ao::gtk
     auto* const asyncRuntime = &_runtime.async();
     // startCancellable invokes the task factory on a worker. Snapshot all
     // controller-owned inputs before publishing the lazy coroutine.
-    auto componentCatalog = _registry.catalog();
-    auto actionCatalog = _actionRegistry.catalog();
+    auto schema = _registry.schema();
 
     asyncRuntime->spawnWithLifetime(
       _tasks,
@@ -665,16 +688,14 @@ namespace ao::gtk
        storePtr = _layoutStorePtr,
        componentStateStorePtr = _componentStateStorePtr,
        configStorePtr = _configStorePtr,
-       componentCatalog = std::move(componentCatalog),
-       actionCatalog = std::move(actionCatalog)](std::stop_token const stopToken) mutable
+       schema = std::move(schema)](std::stop_token const stopToken) mutable
       {
         return loadLayoutWorkflow(controller,
                                   asyncRuntime,
                                   std::move(storePtr),
                                   std::move(componentStateStorePtr),
                                   std::move(configStorePtr),
-                                  std::move(componentCatalog),
-                                  std::move(actionCatalog),
+                                  std::move(schema),
                                   stopToken);
       },
       "shell layout load workflow");
@@ -686,8 +707,7 @@ namespace ao::gtk
     std::shared_ptr<ShellLayoutStore> layoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
     std::shared_ptr<AppConfigStore> configStorePtr,
-    uimodel::LayoutComponentCatalog componentCatalog,
-    uimodel::LayoutActionCatalog actionCatalog,
+    uimodel::LayoutSchema schema,
     std::stop_token const stopToken)
   {
     APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started");
@@ -698,8 +718,7 @@ namespace ao::gtk
 
     if (layoutStorePtr && configStorePtr)
     {
-      optRes = loadLayoutOnWorker(
-        *layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, componentCatalog, actionCatalog);
+      optRes = loadLayoutOnWorker(*layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, schema);
     }
 
     co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
@@ -721,8 +740,15 @@ namespace ao::gtk
                                                 uimodel::PreparedLayout preparedLayout,
                                                 uimodel::LayoutComponentStateDocument componentState)
   {
-    auto pendingRes = prepareHost(
-      preparedLayout, uimodel::LayoutBuildStateView{presetId, componentState, _runtimeState.componentStateGeneration});
+    auto optBuildSnapshot = _session.buildSnapshot(componentState, false);
+
+    if (!optBuildSnapshot)
+    {
+      APP_LOG_ERROR("ShellLayoutController: Layout component-state generation is exhausted");
+      return;
+    }
+
+    auto pendingRes = prepareHost(preparedLayout, std::move(*optBuildSnapshot));
 
     if (!pendingRes)
     {
@@ -731,7 +757,7 @@ namespace ao::gtk
       return;
     }
 
-    for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(preparedLayout, _registry.catalog()))
+    for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(preparedLayout, _registry.schema()))
     {
       if (diagnostic.severity == uimodel::LayoutNodeIdDiagnosticSeverity::Error)
       {
@@ -751,13 +777,8 @@ namespace ao::gtk
       }
     }
 
-    // Invalidate the old generation before replacing the shared component-state document.
-    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
-    _session.applyLayout(std::move(presetId), std::move(document));
-    auto const snapshot = _session.snapshot();
-    _runtimeState.activePresetId = snapshot.presetId;
-    _runtimeState.componentState = std::move(componentState);
-    _host.commit(_runtimeState, std::move(*pendingRes));
+    _session.apply(std::move(document), std::move(componentState), pendingRes->generation());
+    _host.commit(std::move(*pendingRes));
   }
 
   void ShellLayoutController::openEditor(AppConfigStore& configStore)
@@ -765,8 +786,7 @@ namespace ao::gtk
     auto prefs = rt::AppPrefsState{};
     configStore.loadAppPrefs(prefs);
 
-    auto const initialPresetId =
-      uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
+    auto const initialPresetId = uimodel::LayoutSession::activeOrDefaultPresetId(_session.presetId());
     auto const initialThemeId = std::string{uimodel::themePresetId(_themeCoordinator.activeTheme())};
 
     auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> uimodel::LayoutDocument
@@ -794,7 +814,7 @@ namespace ao::gtk
                                                                             _registry,
                                                                             _actionRegistry,
                                                                             _textCatalog,
-                                                                            _session.snapshot().layout,
+                                                                            _session.layout(),
                                                                             initialPresetId,
                                                                             initialThemeId,
                                                                             std::move(loader),
@@ -804,17 +824,17 @@ namespace ao::gtk
 
     _optEditorThemeToken = _themeCoordinator.registerToplevel(*dialogRaw);
 
-    _runtimeState.editMode = true;
-    _runtimeState.onNodeMoved = [weakDialogPtr = std::weak_ptr{_editorDialogPtr}](
-                                  std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)
-    {
-      if (auto const sharedDialogPtr = weakDialogPtr.lock(); sharedDialogPtr != nullptr)
-      {
-        sharedDialogPtr->updateNodePosition(nodeId, xPosition, yPosition);
-      }
-    };
+    _session.setEditMode(true,
+                         [weakDialogPtr = std::weak_ptr{_editorDialogPtr}](
+                           std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)
+                         {
+                           if (auto const sharedDialogPtr = weakDialogPtr.lock(); sharedDialogPtr != nullptr)
+                           {
+                             sharedDialogPtr->updateNodePosition(nodeId, xPosition, yPosition);
+                           }
+                         });
 
-    rebuildHost(_session.snapshot().layout);
+    rebuildHost(_session.layout());
 
     dialogRaw->signalApplyPreview().connect([this](uimodel::LayoutDocument const& doc) { rebuildHost(doc); });
 
@@ -832,8 +852,7 @@ namespace ao::gtk
           return;
         }
 
-        _runtimeState.editMode = false;
-        _runtimeState.onNodeMoved = nullptr;
+        _session.setEditMode(false);
         _optEditorThemeToken.reset();
         auto hiddenDialogPtr = std::exchange(_editorDialogPtr, {});
         auto retireDialog =
@@ -852,10 +871,17 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {
-          auto const snapshot = _session.snapshot();
-          rebuildHost(snapshot.layout,
-                      uimodel::LayoutBuildStateView{
-                        snapshot.presetId, _runtimeState.componentState, _runtimeState.componentStateGeneration});
+          auto optBuildSnapshot = _session.buildSnapshot(_session.componentState(), false);
+
+          if (optBuildSnapshot)
+          {
+            rebuildHost(_session.layout(), std::move(*optBuildSnapshot));
+          }
+          else
+          {
+            APP_LOG_ERROR("ShellLayoutController: Layout component-state generation is exhausted");
+          }
+
           _themeCoordinator.setTheme(oldTheme);
         }
       });
@@ -869,7 +895,7 @@ namespace ao::gtk
 
     for (auto const& [id, doc] : result.modified)
     {
-      auto preparedRes = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
+      auto preparedRes = prepareValidatedLayout(doc, layoutLimits(), _registry.schema());
 
       if (!preparedRes)
       {
@@ -881,8 +907,7 @@ namespace ao::gtk
       preparedModified.emplace(id, std::move(*preparedRes));
     }
 
-    auto activePreparedRes =
-      prepareValidatedLayout(result.activeDocument, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
+    auto activePreparedRes = prepareValidatedLayout(result.activeDocument, layoutLimits(), _registry.schema());
 
     if (!activePreparedRes)
     {
@@ -892,19 +917,18 @@ namespace ao::gtk
       return std::unexpected{activePreparedRes.error()};
     }
 
-    auto nextComponentState = uimodel::ShellLayoutSessionModel::emptyComponentState(result.activePresetId);
     auto const activeReset = std::ranges::contains(result.resets, result.activePresetId);
+    auto nextComponentState = componentStateForEditorSave(
+      _componentStateStorePtr.get(), result.activePresetId, activeReset, *activePreparedRes, _registry.schema());
 
-    if (_componentStateStorePtr && !activeReset)
+    auto optBuildSnapshot = _session.buildSnapshot(nextComponentState, false);
+
+    if (!optBuildSnapshot)
     {
-      nextComponentState = _componentStateStorePtr->load(result.activePresetId)
-                             .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(result.activePresetId));
-      uimodel::pruneComponentState(nextComponentState, *activePreparedRes, _registry.catalog());
+      return makeError(Error::Code::ResourceExhausted, "Layout component-state generation is exhausted");
     }
 
-    auto pendingRes = prepareHost(
-      *activePreparedRes,
-      uimodel::LayoutBuildStateView{result.activePresetId, nextComponentState, _runtimeState.componentStateGeneration});
+    auto pendingRes = prepareHost(*activePreparedRes, std::move(*optBuildSnapshot));
 
     if (!pendingRes)
     {
@@ -941,7 +965,7 @@ namespace ao::gtk
       for (auto const& item : result.modified)
       {
         if (auto const& id = item.first;
-            !_componentStateStorePtr->prune(id, preparedModified.at(id), _registry.catalog()))
+            !_componentStateStorePtr->prune(id, preparedModified.at(id), _registry.schema()))
         {
           APP_LOG_WARN("ShellLayoutController: Failed to prune runtime state for preset '{}'", id);
         }
@@ -965,22 +989,16 @@ namespace ao::gtk
       _themeCoordinator.setTheme(uimodel::themePresetFromId(prefsUpdate.lastThemePreset));
     }
 
-    // Invalidate the retiring generation before replacing its shared state document.
-    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
-    _session.applyLayout(result.activePresetId, result.activeDocument);
-    auto const snapshot = _session.snapshot();
-    _runtimeState.activePresetId = snapshot.presetId;
-    _runtimeState.componentState = std::move(nextComponentState);
-    _host.commit(_runtimeState, std::move(*pendingRes));
+    _session.apply(result.activeDocument, std::move(nextComponentState), pendingRes->generation());
+    _host.commit(std::move(*pendingRes));
     return {};
   }
 
   void ShellLayoutController::resetRuntimeLayoutState()
   {
-    auto const presetId = uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
-    auto nextComponentState = uimodel::ShellLayoutSessionModel::emptyComponentState(presetId);
-    auto preparedRes = prepareValidatedLayout(
-      _session.snapshot().layout, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
+    auto const presetId = uimodel::LayoutSession::activeOrDefaultPresetId(_session.presetId());
+    auto nextComponentState = uimodel::LayoutSession::emptyComponentState(presetId);
+    auto preparedRes = prepareValidatedLayout(_session.layout(), layoutLimits(), _registry.schema());
 
     if (!preparedRes)
     {
@@ -989,9 +1007,15 @@ namespace ao::gtk
       return;
     }
 
-    auto pendingRes =
-      prepareHost(*preparedRes,
-                  uimodel::LayoutBuildStateView{presetId, nextComponentState, _runtimeState.componentStateGeneration});
+    auto optBuildSnapshot = _session.buildSnapshot(nextComponentState, false);
+
+    if (!optBuildSnapshot)
+    {
+      APP_LOG_ERROR("ShellLayoutController: Layout component-state generation is exhausted");
+      return;
+    }
+
+    auto pendingRes = prepareHost(*preparedRes, std::move(*optBuildSnapshot));
 
     if (!pendingRes)
     {
@@ -1008,21 +1032,18 @@ namespace ao::gtk
       }
     }
 
-    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
-    auto reset = _session.resetRuntimeLayoutState();
-    _runtimeState.activePresetId = reset.presetId;
-    _runtimeState.componentState = std::move(reset.componentState);
-    _host.commit(_runtimeState, std::move(*pendingRes));
+    _session.apply(_session.layout(), std::move(nextComponentState), pendingRes->generation());
+    _host.commit(std::move(*pendingRes));
     refreshExportedActions();
   }
 
   void ShellLayoutController::saveCurrentPanelSizesAsLayoutDefaults()
   {
-    auto optPromotion = _session.preparePanelSizePromotion(_runtimeState.componentState);
+    auto optPromotion = _session.preparePanelSizePromotion();
 
     if (!optPromotion)
     {
-      auto const presetId = uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
+      auto const presetId = uimodel::LayoutSession::activeOrDefaultPresetId(_session.presetId());
       APP_LOG_INFO("ShellLayoutController: No panel sizes to promote for preset '{}'", presetId);
       return;
     }
@@ -1052,9 +1073,8 @@ namespace ao::gtk
   void ShellLayoutController::applyPromotedPanelSizes(uimodel::LayoutDocument promotedLayout,
                                                       uimodel::LayoutComponentStateDocument promotedState)
   {
-    auto const& presetId = promotedState.preset;
-    auto preparedRes =
-      prepareValidatedLayout(promotedLayout, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
+    auto const presetId = promotedState.preset;
+    auto preparedRes = prepareValidatedLayout(promotedLayout, layoutLimits(), _registry.schema());
 
     if (!preparedRes)
     {
@@ -1062,8 +1082,15 @@ namespace ao::gtk
       return;
     }
 
-    auto pendingRes = prepareHost(
-      *preparedRes, uimodel::LayoutBuildStateView{presetId, promotedState, _runtimeState.componentStateGeneration});
+    auto optBuildSnapshot = _session.buildSnapshot(promotedState, false);
+
+    if (!optBuildSnapshot)
+    {
+      APP_LOG_ERROR("ShellLayoutController: Layout component-state generation is exhausted");
+      return;
+    }
+
+    auto pendingRes = prepareHost(*preparedRes, std::move(*optBuildSnapshot));
 
     if (!pendingRes)
     {
@@ -1099,12 +1126,8 @@ namespace ao::gtk
       }
     }
 
-    _session.applyLayout(presetId, std::move(promotedLayout));
-    auto const snapshot = _session.snapshot();
-    _runtimeState.componentStateGeneration = pendingRes->componentStateGeneration();
-    _runtimeState.activePresetId = snapshot.presetId;
-    _runtimeState.componentState = std::move(promotedState);
-    _host.commit(_runtimeState, std::move(*pendingRes));
+    _session.apply(std::move(promotedLayout), std::move(promotedState), pendingRes->generation());
+    _host.commit(std::move(*pendingRes));
     refreshExportedActions();
   }
 
@@ -1145,10 +1168,10 @@ namespace ao::gtk
       .parentWindow = _parentWindow, .anchorWidget = _parentWindow, .componentId = std::string{componentId}};
   }
 
-  bool ShellLayoutController::canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const
+  bool ShellLayoutController::canProvideSafeAnchor(uimodel::ActionSchema const& actionSchema) const
   {
     // The parent window is a safe fallback anchor ONLY for specific shell actions.
     // E.g., shell.showSystemMenu can be safely opened relative to the main window.
-    return desc.id == "shell.showSystemMenu";
+    return actionSchema.id == "shell.showSystemMenu";
   }
 } // namespace ao::gtk

@@ -28,9 +28,9 @@ is the contemporaneous evidence; no RFC is retained for this decision.
 ## Decision
 
 WinUI adopts the shared version 1 layout-document language, parsing, template
-expansion, stable ids, catalog validation, and native-independent preparation.
+expansion, stable ids, schema validation, and native-independent preparation.
 Windows owns separate built-in Modern and Classic presets, its accepted
-component catalog, native construction and placement, controller binding,
+component schema, native construction and placement, controller binding,
 responsive policy, and generation lifetime. GTK keeps its own presets and
 runtime. There is no shared native build plan or responsive classifier.
 
@@ -99,7 +99,7 @@ model. That migration would add a second independent behavior change.
 
 - Modern and Classic can vary structurally without two permanent native trees
   or mirrored named-element controller branches.
-- Sharing the language does not promise identical presets, component catalogs,
+- Sharing the language does not promise identical presets, component schemas,
   appearance, or responsive behavior across frontends.
 - A shell switch reconstructs the native tree, so semantic state needs explicit
   ownership and reconciliation while view-only state may reset.

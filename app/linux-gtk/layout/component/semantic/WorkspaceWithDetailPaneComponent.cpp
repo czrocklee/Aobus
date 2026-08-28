@@ -8,8 +8,9 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPageHost.h"
+#include <ao/Contract.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
@@ -30,7 +31,7 @@ namespace ao::gtk::layout
   namespace
   {
     /**
-     * @brief app.workspaceWithDetailPane
+     * @brief workspace.withDetailPane
      *
      * Transitional composite that replicates the current stack + detail handle + revealer.
      */
@@ -53,10 +54,20 @@ namespace ao::gtk::layout
         _container.set_hexpand(true);
         _container.set_vexpand(true);
 
-        auto& stack = trackPageHost->stack();
-        stack.set_hexpand(true);
-        stack.set_vexpand(true);
-        _container.append(stack);
+        _stack = &trackPageHost->stack();
+        _stack->set_hexpand(true);
+        _stack->set_vexpand(true);
+
+        if (ctx.sharedWidgetHandoff != nullptr)
+        {
+          ctx.sharedWidgetHandoff->transfer(*_stack, _container);
+        }
+        else
+        {
+          AO_EXPECTS(_stack->get_parent() == nullptr,
+                     "workspace.withDetailPane cannot attach an already-parented TrackPageHost stack outside a build");
+          _container.append(*_stack);
+        }
 
         // Handle
         updateHandlePresentation(false);
@@ -90,6 +101,19 @@ namespace ao::gtk::layout
           });
       }
 
+      ~WorkspaceWithDetailPaneComponent() override
+      {
+        if (_stack != nullptr && _stack->get_parent() == &_container)
+        {
+          _container.remove(*_stack);
+        }
+      }
+
+      WorkspaceWithDetailPaneComponent(WorkspaceWithDetailPaneComponent const&) = delete;
+      WorkspaceWithDetailPaneComponent& operator=(WorkspaceWithDetailPaneComponent const&) = delete;
+      WorkspaceWithDetailPaneComponent(WorkspaceWithDetailPaneComponent&&) = delete;
+      WorkspaceWithDetailPaneComponent& operator=(WorkspaceWithDetailPaneComponent&&) = delete;
+
       Gtk::Widget& widget() override { return _container; }
 
     private:
@@ -102,6 +126,7 @@ namespace ao::gtk::layout
 
       i18n::MessageCatalog _textCatalog;
       Gtk::Box _container;
+      Gtk::Stack* _stack = nullptr;
       Gtk::ToggleButton _handle;
       Gtk::Revealer _revealer;
       std::unique_ptr<LayoutComponent> _detailPtr;
@@ -113,9 +138,9 @@ namespace ao::gtk::layout
                                                 i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "workspace.withDetailPane",
+      {.id = "workspace.withDetailPane",
        .displayName = "Workspace with Detail",
-       .category = LayoutComponentCategory::Layout,
+       .category = ComponentCategory::Layout,
        .minChildren = 0,
        .optMaxChildren = 1},
       [trackPageHost, textCatalog](LayoutBuildContext& ctx, LayoutNode const& node)

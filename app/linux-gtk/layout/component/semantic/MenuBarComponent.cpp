@@ -5,7 +5,6 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <giomm/menumodel.h>
@@ -43,8 +42,8 @@ namespace ao::gtk::layout
 
   void registerMenuBarComponent(ComponentRegistry& registry, Glib::RefPtr<Gio::MenuModel> const& menuModelPtr)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::MenuBar),
-                               [menuModelPtr](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-                               { return std::make_unique<MenuBarComponent>(menuModelPtr); });
+    registry.registerSharedComponent("app.menuBar",
+                                     [menuModelPtr](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                                     { return std::make_unique<MenuBarComponent>(menuModelPtr); });
   }
 } // namespace ao::gtk::layout

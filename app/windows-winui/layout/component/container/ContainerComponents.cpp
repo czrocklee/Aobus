@@ -8,7 +8,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "pch.h"
 #include <ao/Error.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -44,7 +44,7 @@ namespace ao::winui::layout
       return (value == nullptr ? fallback : std::string_view{*value}) == "vertical";
     }
 
-    /// A numeric property, accepting either YAML spelling the catalog admits.
+    /// A numeric property, accepting either YAML spelling the schema admits.
     double numberProp(uimodel::LayoutNode const& node, std::string_view const name, double const fallback)
     {
       auto const it = node.props.find(name);
@@ -170,7 +170,7 @@ namespace ao::winui::layout
   void registerContainerComponents(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::Box),
+      "box",
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<BoxComponent>(
@@ -178,7 +178,7 @@ namespace ao::winui::layout
       });
 
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::Split),
+      "split",
       [](LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<SplitComponent>(

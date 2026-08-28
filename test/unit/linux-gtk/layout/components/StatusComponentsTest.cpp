@@ -14,7 +14,7 @@
 
 namespace ao::gtk::layout::test
 {
-  TEST_CASE("StatusComponents - status bar components register status descriptors", "[gtk][unit][layout][status]")
+  TEST_CASE("StatusComponents - status bar components register status schema entries", "[gtk][unit][layout][status]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.status_test");
     auto const tempDir = ao::test::TempDir{};
@@ -23,15 +23,15 @@ namespace ao::gtk::layout::test
     auto registry = ComponentRegistry{};
     registerStatusComponents(registry, *runtimePtr, ao::test::englishMessageCatalog());
 
-    auto const optDesc = registry.descriptor("status.activity");
-    REQUIRE(optDesc);
-    CHECK(optDesc->displayName == "Activity Status");
+    auto const optComponentSchema = registry.schema().component("status.activity");
+    REQUIRE(optComponentSchema);
+    CHECK(optComponentSchema->displayName == "Activity Status");
 
-    auto const optSelectionDesc = registry.descriptor("status.selectionInfo");
-    REQUIRE(optSelectionDesc);
-    CHECK(optSelectionDesc->displayName == "Selection Info");
+    auto const optSelectionSchema = registry.schema().component("status.selectionInfo");
+    REQUIRE(optSelectionSchema);
+    CHECK(optSelectionSchema->displayName == "Selection Info");
 
-    CHECK_FALSE(registry.descriptor("status.statusSlot").has_value());
-    CHECK_FALSE(registry.descriptor("status.notificationCenter").has_value());
+    CHECK_FALSE(registry.schema().component("status.statusSlot").has_value());
+    CHECK_FALSE(registry.schema().component("status.notificationCenter").has_value());
   }
 } // namespace ao::gtk::layout::test

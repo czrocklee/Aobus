@@ -1,7 +1,9 @@
 # ao_test_options: shared test compilation settings
 add_library(ao_test_options INTERFACE)
 target_include_directories(ao_test_options INTERFACE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_compile_definitions(ao_test_options INTERFACE AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio")
+target_compile_definitions(
+  ao_test_options
+  INTERFACE AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio" AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_options(ao_test_options INTERFACE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:-Wno-array-bounds>
   $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
@@ -382,23 +384,17 @@ add_executable(ao_core_test
     unit/uimodel/input/KeymapStoreTest.cpp
     unit/uimodel/preference/PreferencesEditorModelTest.cpp
     unit/uimodel/preference/ThemePresetTest.cpp
-    unit/uimodel/layout/action/LayoutActionCatalogTest.cpp
-    unit/uimodel/layout/action/LayoutActionSlotResolutionTest.cpp
-    unit/uimodel/layout/action/LayoutActionValidatorTest.cpp
+    unit/uimodel/layout/component/LayoutSchemaTest.cpp
+    unit/uimodel/layout/shell/LayoutSessionTest.cpp
     unit/uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
-    unit/uimodel/layout/component/LayoutComponentCatalogTest.cpp
     unit/uimodel/layout/component/LayoutComponentStateTest.cpp
     unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
-    unit/uimodel/layout/component/SharedLayoutComponentTypeTest.cpp
-    unit/uimodel/layout/component/StatefulComponentStateTest.cpp
     unit/uimodel/layout/document/LayoutModelTest.cpp
     unit/uimodel/layout/document/LayoutPlacementTest.cpp
     unit/uimodel/layout/document/LayoutPreparationTest.cpp
     unit/uimodel/layout/document/LayoutValidationTest.cpp
     unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
-    unit/uimodel/layout/shell/LayoutBuildStateViewTest.cpp
     unit/uimodel/layout/shell/ShellGenerationSequenceTest.cpp
-    unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
     unit/uimodel/presentation/CoverArtPlaceholderTest.cpp
     unit/uimodel/presentation/PresentationTextTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
@@ -586,7 +582,7 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DispatcherQueueAdmission.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SelectedRootCommit.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutCatalog.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutSchema.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/PlacementPlan.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellDocument.cpp
@@ -612,7 +608,7 @@ add_executable(ao_core_test
     unit/winui/input/KeymapAcceleratorPlanTest.cpp
     unit/winui/library/LibraryTransferAdapterTest.cpp
     unit/winui/layout/ElementKindTest.cpp
-    unit/winui/layout/LayoutCatalogTest.cpp
+    unit/winui/layout/LayoutSchemaTest.cpp
     unit/winui/layout/LayoutDialectTest.cpp
     unit/winui/layout/PlacementPlanTest.cpp
     unit/winui/layout/ShellDocumentTest.cpp
@@ -924,7 +920,7 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorAbsoluteCanvasTest.cpp
-      unit/linux-gtk/layout/editor/LayoutEditorDescriptorTest.cpp
+      unit/linux-gtk/layout/editor/LayoutEditorSchemaTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorDialogSessionTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTemplateTest.cpp
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp

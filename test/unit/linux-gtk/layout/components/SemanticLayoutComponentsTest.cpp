@@ -47,8 +47,6 @@
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
-#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -1139,13 +1137,14 @@ namespace ao::gtk::layout::test
                                                 .createSmartListFromExpression = createSmartListFromExpression,
                                               });
 
-    auto actionRegistry = ActionRegistry{};
-    auto runtimeState = uimodel::LayoutRuntimeState{};
+    auto actionRegistry = ActionRegistry{registry.schema()};
+    auto session = uimodel::LayoutSession{};
+    auto buildSnapshot = activateBuildSnapshot(session);
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .parentWindow = window,
-                                  .runtimeState = runtimeState,
-                                  .buildState = uimodel::LayoutBuildStateView{runtimeState}};
+                                  .session = session,
+                                  .buildSnapshot = std::move(buildSnapshot)};
     auto pendingDebounce = sigc::slot<bool()>{};
     ctx.timeoutScheduler = [&](std::chrono::milliseconds interval, sigc::slot<bool()> callback)
     {

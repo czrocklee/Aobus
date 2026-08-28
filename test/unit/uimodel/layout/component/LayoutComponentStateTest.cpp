@@ -3,7 +3,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -44,11 +44,11 @@ namespace ao::uimodel::test
       return doc;
     }
 
-    LayoutComponentCatalog persistentLayoutCatalog()
+    LayoutSchema persistentLayoutSchema()
     {
-      auto catalog = LayoutComponentCatalog{};
-      catalog.registerComponentDescriptor(sharedComponentDescriptor(SharedLayoutComponentType::Split));
-      return catalog;
+      auto schema = LayoutSchema{};
+      REQUIRE(schema.addSharedComponent("split"));
+      return schema;
     }
   } // namespace
 
@@ -254,7 +254,7 @@ namespace ao::uimodel::test
 
     auto const preparedRes = prepareLayout(doc);
     REQUIRE(preparedRes);
-    pruneComponentState(stateDoc, *preparedRes, persistentLayoutCatalog());
+    pruneComponentState(stateDoc, *preparedRes, persistentLayoutSchema());
 
     CHECK(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));

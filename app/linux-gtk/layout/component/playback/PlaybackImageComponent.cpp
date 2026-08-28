@@ -22,8 +22,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -355,32 +354,32 @@ namespace ao::gtk::layout
                                       i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "playback.image",
+      {.id = "playback.image",
        .displayName = "Playback Cover Art",
-       .category = LayoutComponentCategory::Playback,
-       .props = {{.name = "targetSize",
-                  .kind = LayoutPropertyKind::Int,
-                  .label = "Target Size",
-                  .defaultValue = LayoutValue{static_cast<std::int64_t>(kThumbnailSize)}},
-                 {.name = "forceSquare",
-                  .kind = LayoutPropertyKind::Bool,
-                  .label = "Force Square",
-                  .defaultValue = LayoutValue{false}},
-                 {.name = "action",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Action",
-                  .defaultValue = LayoutValue{"none"},
-                  .enumValues = {"none", "jumpToAlbum"}},
-                 {.name = "placeholderStyle",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Placeholder Style",
-                  .defaultValue = LayoutValue{"equalizer"},
-                  .enumValues = coverArtPlaceholderStyleIds()}},
+       .category = ComponentCategory::Playback,
+       .properties = {{.name = "targetSize",
+                       .kind = PropertyKind::Int,
+                       .label = "Target Size",
+                       .defaultValue = LayoutValue{static_cast<std::int64_t>(kThumbnailSize)}},
+                      {.name = "forceSquare",
+                       .kind = PropertyKind::Bool,
+                       .label = "Force Square",
+                       .defaultValue = LayoutValue{false}},
+                      {.name = "action",
+                       .kind = PropertyKind::Enum,
+                       .label = "Action",
+                       .defaultValue = LayoutValue{"none"},
+                       .enumValues = {"none", "jumpToAlbum"}},
+                      {.name = "placeholderStyle",
+                       .kind = PropertyKind::Enum,
+                       .label = "Placeholder Style",
+                       .defaultValue = LayoutValue{"equalizer"},
+                       .enumValues = coverArtPlaceholderStyleIds()}},
        .minChildren = 0,
        .optMaxChildren = 0,
        .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |
                    static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Tooltip),
-       .actionPolicy = uimodel::kExternalSecondaryActions},
+       .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress)},
       [&runtime, imageLoader, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
       { return std::make_unique<PlaybackImageComponent>(runtime, imageLoader, textCatalog, ctx, node); });
   }

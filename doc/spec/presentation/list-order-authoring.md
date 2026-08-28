@@ -140,7 +140,7 @@ Its capture-phase guard keys by physical keycode and consumes repeated press eve
 Window deactivation and keymap replacement reset the guard.
 Holding a key therefore moves once; another committed step requires release and a new press.
 
-WinUI registers the four movement action handlers outside its layout-action catalog, so the ordinary Windows keymap plan installs the same shipped chords without making those ids authorable in layout documents.
+WinUI registers the four movement action handlers outside its layout schema, so the ordinary Windows keymap plan installs the same shipped chords without making those ids authorable in layout documents.
 
 Reset and Forget Hidden Positions remain menu/action commands without shipped global shortcuts.
 

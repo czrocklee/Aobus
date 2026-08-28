@@ -33,7 +33,7 @@ Nested capsules remain singular, such as `library/presentation`, `playback/now-p
 Adding a feature path requires updating `cmake/AssertUimodelOrganization.cmake`.
 
 Because folder context is not namespace context, public names carry enough feature meaning to remain unambiguous.
-Prefer `TrackColumnState`, `ActivityCompactState`, and `LayoutActionDescriptor` over `ColumnState`, `State`, or `Descriptor`.
+Prefer `TrackColumnState`, `ActivityCompactState`, and `ComponentSchema` over `ColumnState`, `State`, or `Schema`.
 
 ### Role names
 
@@ -65,7 +65,7 @@ Inputs arrive through stable core/runtime values, narrow runtime services, DTO s
 ### One frontend's vocabulary is not a shared model
 
 Portability is not the test. Deciding which component types a shell accepts, which XAML element each one constructs, which style targets are compatible, and which themed surfaces exist is all pure C++ that compiles anywhere - and all of it belongs to one frontend.
-A file that announces which frontend it serves is by that admission not shared, so the Windows-owned `app/windows-winui/layout/LayoutCatalog.h`, `GtkThemeSurface.cpp`, and `TuiFramePolicy.h` do not belong in `ao_app_uimodel` whatever they include.
+A file that announces which frontend it serves is by that admission not shared, so the Windows-owned `app/windows-winui/layout/LayoutSchema.h`, `GtkThemeSurface.cpp`, and `TuiFramePolicy.h` do not belong in `ao_app_uimodel` whatever they include.
 
 Such code goes to the frontend target that owns it. Do not create a cross-platform model target solely to make another host's gate compile frontend vocabulary. WinUI keeps these rules in the Windows-only `aobus-winui-lib`, under the `ao::winui` namespace with headers in `app/windows-winui/include/ao/winui/`.
 
@@ -78,7 +78,7 @@ What is left in UIModel is what more than one frontend genuinely decides the sam
 
 - `input` owns neutral chords and keymap state.
 - `field` owns shared track-field display formatting.
-- `layout` owns the neutral layout document, action/component catalogs, component state, and shell session.
+- `layout` owns the neutral layout document and schema, component state, and shell session.
 - `presentation` owns the cross-feature immutable authored-copy catalog; feature-specific projections still live with their feature capsule.
 - `library/list` owns list-tree, saved-List authoring, and order policy.
 - `library/presentation` owns track presentation catalogs, preferences, editors, recommendation, and column policy.

@@ -68,7 +68,7 @@ Use the [reference template](../template/reference.md).
 - [Shell layout document](shell/layout-document.md) enumerates the version 1 document, node, value, template, and tooltip surface.
 - [Shell layout component state](shell/layout-state.md) enumerates the version 1 per-preset state document, stateful types, guards, and promoted fields.
 - [Shared component vocabulary](shell/component-vocabulary.md) enumerates the component types more than one shell presents and the properties whose authored value means the same thing in each.
-- [Layout catalog and actions](shell/layout-catalog.md) enumerate descriptor vocabulary plus registered component and action ids.
+- [GTK layout schema and actions](shell/layout-schema.md) enumerate shared schema vocabulary plus registered GTK component and action ids.
 - [Keyboard map](shell/keymap.md) enumerates neutral chord syntax, defaults, eligibility, and the override shape.
 - [Library scan report](shell/library-scan-report.md) enumerates the verdicts a finished scan reduces to and the sentence every shell reports it with.
 
@@ -91,4 +91,4 @@ Use the [reference template](../template/reference.md).
 ## Windows
 
 - [Windows desktop state](windows/desktop-state.md) enumerates native desktop settings and semantic theme files, fields, defaults, validation, and versioning.
-- [Windows layout catalog](windows/layout-catalog.md) enumerates Windows shell component and action ids, accepted layout fields, native element mapping, style-key resolution, and the built-in preset documents.
+- [Windows layout schema](windows/layout-schema.md) enumerates Windows shell component and action ids, accepted layout fields, native element mapping, style-key resolution, and the built-in preset documents.

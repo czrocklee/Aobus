@@ -179,7 +179,7 @@ UIModel owns grouped display-index mapping, bounded row and artwork cache policy
 and Soul geometry and motion. WinUI owns its responsive breakpoints, XAML
 rendering, HWND integration, visibility, pointer gestures, and frame scheduling.
 
-What is this shell's own but needs no XAML to decide - its layout catalog and
+What is this shell's own but needs no XAML to decide - its layout schema and
 dialect, its element lattice and style resolution, its themed surfaces, and its
 strict settings and theme schemas - remains in the Windows-only
 `aobus-winui-lib`, not shared UIModel. These sources stay separable from XAML

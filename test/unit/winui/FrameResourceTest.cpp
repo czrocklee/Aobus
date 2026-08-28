@@ -4,7 +4,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/winui/layout/ElementKind.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/StyleLookup.h>
 

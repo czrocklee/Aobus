@@ -3,7 +3,6 @@
 
 #include "layout/component/track/TrackCoverArt.h"
 #include "layout/component/track/TrackDetail.h"
-#include "layout/component/track/TrackTable.h"
 #include "layout/runtime/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
@@ -15,7 +14,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListActions.h>
@@ -66,13 +65,20 @@ namespace ao::winui::layout
     class QuickFilterComponent final : public LayoutComponent
     {
     public:
-      explicit QuickFilterComponent(LayoutBuildContext& ctx)
-        : _createList{ctx.library.createList}
-        , _trackList{ctx.trackList}
+      QuickFilterComponent(LayoutBuildContext& ctx,
+                           std::function<void(ListId, std::string)> createList,
+                           TrackListController& trackList,
+                           rt::ViewService& views,
+                           rt::WorkspaceService& workspace,
+                           rt::CompletionService& completion,
+                           i18n::MessageCatalog const& textCatalog,
+                           std::function<void(std::string)> reportStatus)
+        : _createList{std::move(createList)}
+        , _trackList{trackList}
         , _gatePtr{ctx.gatePtr}
         , _control{TrackQuickFilterControlConfig{
             .input = _input,
-            .onError = ctx.reportStatus,
+            .onError = std::move(reportStatus),
             .onState =
               [this](uimodel::TrackFilterViewState const& state)
             {
@@ -80,7 +86,7 @@ namespace ao::winui::layout
               _createButton.Visibility(state.canCreateSmartList ? Visibility::Visible : Visibility::Collapsed);
               _createButton.IsEnabled(state.canCreateSmartList);
             },
-            .textCatalog = ctx.textCatalog,
+            .textCatalog = textCatalog,
           }}
       {
         auto inputColumn = ColumnDefinition{};
@@ -100,7 +106,7 @@ namespace ao::winui::layout
         _input.PlaceholderText(winrt::to_hstring(resourceString("winui_library_quick_filter_placeholder")));
         _root.Children().Append(_input);
 
-        auto const createLabel = i18n::requiredText(ctx.textCatalog, i18n::MessageId::WinUiListCreateFromFilter);
+        auto const createLabel = i18n::requiredText(textCatalog, i18n::MessageId::WinUiListCreateFromFilter);
         _createButton.Content(winrt::box_value(winrt::to_hstring(createLabel)));
         _createButton.Visibility(Visibility::Collapsed);
         ToolTipService::SetToolTip(_createButton, winrt::box_value(winrt::to_hstring(createLabel)));
@@ -115,7 +121,7 @@ namespace ao::winui::layout
           });
         Grid::SetColumn(_createButton, 1);
         _root.Children().Append(_createButton);
-        _control.bind(ctx.views, ctx.workspace, ctx.completion);
+        _control.bind(views, workspace, completion);
       }
 
       FrameworkElement element() const override { return _root; }
@@ -143,16 +149,24 @@ namespace ao::winui::layout
     class PresentationButtonComponent final : public LayoutComponent
     {
     public:
-      PresentationButtonComponent(LayoutBuildContext& ctx, bool const compact)
-        : _trackList{ctx.trackList}
+      PresentationButtonComponent(LayoutBuildContext& ctx,
+                                  TrackListController& trackList,
+                                  rt::ViewService& views,
+                                  rt::WorkspaceService& workspace,
+                                  uimodel::TrackPresentationCatalog& presentationCatalog,
+                                  uimodel::ListPresentations& listPresentations,
+                                  i18n::MessageCatalog const& textCatalog,
+                                  std::function<void(std::string)> reportStatus,
+                                  bool const compact)
+        : _trackList{trackList}
         , _gatePtr{ctx.gatePtr}
-        , _reportStatus{ctx.reportStatus}
+        , _reportStatus{std::move(reportStatus)}
         , _viewModelPtr{std::make_unique<uimodel::TrackPresentationPickerViewModel>(
-            ctx.views,
-            ctx.workspace,
-            ctx.presentationCatalog,
-            ctx.listPresentations,
-            ctx.textCatalog,
+            views,
+            workspace,
+            presentationCatalog,
+            listPresentations,
+            textCatalog,
             [this](uimodel::TrackPresentationPickerState const& state)
             {
               _state = state;
@@ -291,31 +305,54 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  void registerTrackComponents(ComponentRegistry& registry)
+  void registerTrackComponents(ComponentRegistry& registry,
+                               async::Runtime& asyncRuntime,
+                               rt::ViewService& views,
+                               rt::WorkspaceService& workspace,
+                               rt::CompletionService& completion,
+                               rt::ResourceByteLoader& resourceBytes,
+                               ThemeCoordinator& theme,
+                               TrackListController& trackList,
+                               uimodel::TrackPresentationCatalog& presentationCatalog,
+                               uimodel::ListPresentations& listPresentations,
+                               std::function<void(ListId, std::string)> createList,
+                               i18n::MessageCatalog textCatalog,
+                               std::function<void(std::string)> reportStatus)
   {
     registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackQuickFilter),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<QuickFilterComponent>(ctx); });
-
-    registry.registerComponent(
-      uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackPresentationButton),
-      [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      "track.quickFilter",
+      [createList = std::move(createList), &trackList, &views, &workspace, &completion, textCatalog, reportStatus](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
       {
-        return std::make_unique<PresentationButtonComponent>(
-          ctx, node.propertyOr<std::string>("variant", {}) == kCompactVariant);
+        return std::make_unique<QuickFilterComponent>(
+          ctx, createList, trackList, views, workspace, completion, textCatalog, reportStatus);
       });
 
-    registry.registerComponent(uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackTable),
-                               [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-                               { return makeTrackTable(ctx, node); });
+    registry.registerComponent(
+      "track.presentationButton",
+      [&trackList, &views, &workspace, &presentationCatalog, &listPresentations, textCatalog, reportStatus](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      {
+        return std::make_unique<PresentationButtonComponent>(
+          ctx,
+          trackList,
+          views,
+          workspace,
+          presentationCatalog,
+          listPresentations,
+          textCatalog,
+          reportStatus,
+          node.propertyOr<std::string>("variant", {}) == kCompactVariant);
+      });
 
     registry.registerComponent("track.detail",
-                               [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-                               { return makeTrackDetail(ctx, node); });
+                               [&workspace, textCatalog](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+                               { return makeTrackDetail(ctx, node, workspace, textCatalog); });
 
-    registry.registerComponent(uimodel::componentTypeName(uimodel::SharedLayoutComponentType::TrackCoverArt),
-                               [](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-                               { return makeTrackCoverArt(ctx, node); });
+    registry.registerComponent(
+      "track.coverArt",
+      [&asyncRuntime, &workspace, &resourceBytes, &theme, textCatalog](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+      { return makeTrackCoverArt(ctx, node, asyncRuntime, workspace, resourceBytes, theme, textCatalog); });
   }
 } // namespace ao::winui::layout
