@@ -14,10 +14,9 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
@@ -43,7 +42,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
   class TrackPresentationCatalog;
 }
 
@@ -78,23 +77,15 @@ namespace ao::winui
     std::filesystem::path const& musicRoot() const noexcept;
     bool scanAfterOpen() const noexcept { return _scanAfterOpen; }
     bool operationActive() const noexcept { return _operationActive; }
-    uimodel::PlaybackCommandSurface& playbackCommands() const noexcept;
+    uimodel::PlaybackActions& playbackActions() const noexcept;
     i18n::MessageCatalog const& textCatalog() const noexcept { return _textCatalog; }
 
     DesktopSettings const& settings() const noexcept { return _settings; }
     DesktopSettings& settings() noexcept { return _settings; }
-    uimodel::TrackColumnLayoutState const& columnLayouts() const noexcept { return _columnLayouts; }
-    uimodel::TrackColumnLayoutState& columnLayouts() noexcept { return _columnLayouts; }
-    uimodel::ListPresentationPreferenceState const& presentationPreferences() const noexcept
-    {
-      return _presentationPreferences;
-    }
-    uimodel::ListPresentationPreferenceState& presentationPreferences() noexcept { return _presentationPreferences; }
+    uimodel::TrackColumnLayouts const& columnLayouts() const noexcept { return _columnLayouts; }
+    uimodel::TrackColumnLayouts& columnLayouts() noexcept { return _columnLayouts; }
     uimodel::TrackPresentationCatalog& presentationCatalog() const noexcept { return *_presentationCatalogPtr; }
-    uimodel::ListPresentationPreferenceStore& presentationPreferenceStore() const noexcept
-    {
-      return *_presentationPreferenceStorePtr;
-    }
+    uimodel::ListPresentations& listPresentations() const noexcept { return *_listPresentationsPtr; }
     /// The effective keyboard map: the shipped defaults with the user's overrides merged in.
     uimodel::KeymapModel const& keymap() const noexcept { return _keymap; }
     std::filesystem::path const& stateRoot() const noexcept { return _stateRoot; }
@@ -136,8 +127,7 @@ namespace ao::winui
     Result<> saveSettingsCandidate(DesktopSettings const& settings);
     void bindRuntimeServices();
     void startActiveScan();
-    void finishActiveScan(
-      std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result);
+    void finishActiveScan(uimodel::LibraryScanOutcome outcome);
     void reportStatus(std::string status);
     void reportScanFailure(uimodel::LibraryScanOutcome const& outcome, std::string message);
     void reportBusy();
@@ -152,16 +142,16 @@ namespace ao::winui
     std::unique_ptr<rt::ConfigStore> _settingsStorePtr;
     std::unique_ptr<rt::ConfigStore> _playbackStorePtr;
     DesktopSettings _settings{};
-    uimodel::TrackColumnLayoutState _columnLayouts{};
-    uimodel::ListPresentationPreferenceState _presentationPreferences{};
+    uimodel::TrackColumnLayouts _columnLayouts{};
+    uimodel::ListPresentations::Snapshot _restoredListPresentations{};
     uimodel::KeymapModel _keymap{};
     std::optional<std::filesystem::path> _optSelectedRootCommit;
     std::unique_ptr<rt::AppRuntime> _runtimePtr;
     DispatcherQueueExecutor* _dispatcherExecutor = nullptr;
     std::unique_ptr<uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
-    std::unique_ptr<uimodel::ListPresentationPreferenceStore> _presentationPreferenceStorePtr;
-    async::Subscription _presentationPreferenceSub;
-    std::unique_ptr<uimodel::PlaybackCommandSurface> _playbackCommandsPtr;
+    std::unique_ptr<uimodel::ListPresentations> _listPresentationsPtr;
+    async::Subscription _listPresentationsSub;
+    std::unique_ptr<uimodel::PlaybackActions> _playbackActionsPtr;
     LibrarySessionCallbacks _callbacks{};
     async::TaskHandle _libraryTask;
     std::shared_ptr<CallbackLifetime> _callbackLifetimePtr = std::make_shared<CallbackLifetime>();

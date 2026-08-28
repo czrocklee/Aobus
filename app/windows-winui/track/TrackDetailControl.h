@@ -7,7 +7,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
+#include <ao/uimodel/library/detail/TrackFieldGrid.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>

@@ -23,14 +23,13 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/library/list/SmartListEditorModel.h>
-#include <ao/uimodel/library/list/SmartListTrackPresentationResolver.h>
+#include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
@@ -439,7 +438,7 @@ namespace ao::gtk
 
     if (auto const isAllTracks = rt::isVirtualListId(_parentListId); !isAllTracks)
     {
-      auto scope = _runtime.library().reader();
+      auto scope = _runtime.library().snapshot();
 
       if (auto optNode = scope.listNode(_parentListId); optNode)
       {

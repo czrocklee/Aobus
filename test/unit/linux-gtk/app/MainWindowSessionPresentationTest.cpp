@@ -20,11 +20,11 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -55,9 +55,9 @@ namespace ao::gtk::test
                                     ListId const listId,
                                     std::string const& presentationId)
     {
-      auto layoutState = uimodel::TrackColumnLayoutState{};
-      auto preferenceState = uimodel::ListPresentationPreferenceState{};
-      preferenceState.presentations.emplace(listId, presentationId);
+      auto layoutState = uimodel::TrackColumnLayouts::Snapshot{};
+      auto preferenceState = uimodel::ListPresentations::Snapshot{};
+      preferenceState.emplace(listId, presentationId);
       auto store = GtkLayoutStateStore{rt::LibraryPaths{tempDir.path()}.managedDataPath()};
       store.save(layoutState, preferenceState);
     }
@@ -65,7 +65,7 @@ namespace ao::gtk::test
     ListId createList(rt::AppRuntime& runtime, std::string name)
     {
       return ao::test::requireValue(runGtkTask(runtime,
-                                               runtime.library().writer().createList(rt::ListDraft{
+                                               runtime.library().commands().createList(rt::ListDraft{
                                                  .name = std::move(name),
                                                })));
     }

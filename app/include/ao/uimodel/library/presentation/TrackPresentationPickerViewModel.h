@@ -24,7 +24,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class ListPresentationPreferenceStore;
+  class ListPresentations;
 
   struct TrackPresentationPickerState final
   {
@@ -61,7 +61,7 @@ namespace ao::uimodel
     TrackPresentationPickerViewModel(rt::ViewService& views,
                                      rt::WorkspaceService& workspace,
                                      TrackPresentationCatalog& catalog,
-                                     ListPresentationPreferenceStore& preferences,
+                                     ListPresentations& listPresentations,
                                      i18n::MessageCatalog textCatalog,
                                      std::function<void(TrackPresentationPickerState const&)> onRender);
     ~TrackPresentationPickerViewModel() = default;
@@ -86,7 +86,7 @@ namespace ao::uimodel
     rt::ViewService& _views;
     rt::WorkspaceService& _workspace;
     TrackPresentationCatalog& _catalog;
-    ListPresentationPreferenceStore& _preferences;
+    ListPresentations& _listPresentations;
     i18n::MessageCatalog _textCatalog;
     std::function<void(TrackPresentationPickerState const&)> _onRender;
     async::Subscription _focusSub;

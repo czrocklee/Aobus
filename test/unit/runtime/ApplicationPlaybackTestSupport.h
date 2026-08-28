@@ -15,7 +15,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -46,14 +46,14 @@ namespace ao::rt::test
     void addReadyProvider() { playbackBootstrap.addProvider(makeReadyAudioProvider()); }
 
     PlaybackCommands& commands() { return playback.commands(); }
-    LibraryWriter& writer() { return writerFixture.writer(); }
+    LibraryCommands& libraryCommands() { return commandsFixture.commands(); }
 
     MusicLibraryFixture libraryFixture;
     ControlledSleeper sleeper;
     ExecutorT executor;
     async::Runtime asyncRuntime{executor, 1, &sleeper};
     LibraryChanges changes{executor, 0, "test-library"};
-    LibraryWriterFixture writerFixture{libraryFixture.library(), changes, executor};
+    LibraryCommandsFixture commandsFixture{libraryFixture.library(), changes, executor};
     TrackSourceCache sources{libraryFixture.library(), changes};
     ViewService views{executor, libraryFixture.library(), sources, changes};
     WorkspaceService workspace{executor, views, changes};

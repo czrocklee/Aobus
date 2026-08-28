@@ -6,8 +6,8 @@
 #include "completion/EntryCompletionController.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/library/track/TrackFilterCompleter.h>
-#include <ao/uimodel/library/track/TrackFilterViewModel.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
+#include <ao/uimodel/library/track/TrackFilterView.h>
 
 #include <glibmm/ustring.h>
 #include <gtkmm/box.h>

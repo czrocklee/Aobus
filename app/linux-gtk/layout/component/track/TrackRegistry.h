@@ -15,7 +15,7 @@ namespace ao::rt
 namespace ao::uimodel
 {
   class TrackPresentationCatalog;
-  class ListPresentationPreferenceStore;
+  class ListPresentations;
 }
 namespace ao::gtk
 {
@@ -40,7 +40,7 @@ namespace ao::gtk::layout
                                rt::AppRuntime& runtime,
                                TrackPageHost* trackPageHost,
                                uimodel::TrackPresentationCatalog* presentationCatalog,
-                               uimodel::ListPresentationPreferenceStore* presentationPreferences,
+                               uimodel::ListPresentations* listPresentations,
                                ThemeCoordinator* themeCoordinator,
                                std::function<void(ao::ListId, std::string)> createSmartListFromExpression,
                                i18n::MessageCatalog const& textCatalog);

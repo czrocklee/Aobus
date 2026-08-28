@@ -493,6 +493,17 @@ def requires_winui_compile_context(path: Path) -> bool:
     return is_winui_path(path) or winuitidy.requires_winui_compile_context(path)
 
 
+def limits_diagnostics_to_selected_path(invocation: TidyInvocation) -> bool:
+    """Keep header and forced-PCH WinUI diagnostics attached to their selected file.
+
+    Native WinUI compile commands force a shared PCH that includes hand-authored
+    C++/WinRT projection headers.  Reporting those headers from every selected
+    source duplicates unrelated diagnostics; changed headers already receive an
+    exact header-as-main invocation of their own.
+    """
+    return invocation.is_header or requires_winui_compile_context(invocation.compile_command_source)
+
+
 def winui_build_directory(tidy_build_dir: Path, *, path_was_explicit: bool) -> Path:
     """Keep VS-generated WinUI state separate from the Ninja tidy tree."""
     return builddir.winui_companion_build_dir(
@@ -944,8 +955,9 @@ def run_command(args: argparse.Namespace) -> int:
                     # Generated C++/WinRT headers preserve schema spelling while
                     # Windows resolves include paths case-insensitively.
                     extra.append("--extra-arg-before=-Wno-nonportable-include-path")
-            if invocation.is_header:
+            if limits_diagnostics_to_selected_path(invocation):
                 extra.append(f"-line-filter={path_line_filter([invocation.selected])}")
+            if invocation.is_header:
                 extra.append("--extra-arg-before=-x")
                 extra.append("--extra-arg-before=c++-header")
             if "linux-gtk/" in invocation.compile_command_source.as_posix():

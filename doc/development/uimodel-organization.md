@@ -77,12 +77,13 @@ What is left in UIModel is what more than one frontend genuinely decides the sam
 ### Feature ownership
 
 - `input` owns neutral chords and keymap state.
-- `field` owns shared track-field formatting, edit codecs, patch policy, and inline-edit workflow.
+- `field` owns shared track-field display formatting.
 - `layout` owns the neutral layout document, action/component catalogs, component state, and shell session.
 - `presentation` owns the cross-feature immutable authored-copy catalog; feature-specific projections still live with their feature capsule.
-- `library/list` owns list-tree, saved-List authoring, membership, and order policy.
+- `library/list` owns list-tree, saved-List authoring, and order policy.
 - `library/presentation` owns track presentation catalogs, preferences, editors, recommendation, and column policy.
-- `library/track`, `library/detail`, and `library/property` own their corresponding list, detail, and properties presentation behavior.
+- `library/track` owns track filtering, edit decoding, patch construction, and stable-target authoring sessions, including saved-List membership edits.
+- `library/detail` and `library/property` own their corresponding detail and properties presentation behavior.
 - `playback` owns published playback presentation and interaction, never succession or session-save coordination.
 - `preference` maps user choices to persisted deltas and platform-supplied appliers without owning GTK or config storage.
 - `status/activity` owns the platform-neutral activity projection.

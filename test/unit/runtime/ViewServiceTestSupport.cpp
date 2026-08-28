@@ -12,7 +12,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -23,21 +23,21 @@ namespace ao::rt::test
 {
   ViewServiceFixture::ViewServiceFixture()
     : changes{executor, 0, "test-library"}
-    , writerFixture{libraryFixture.library(), changes, executor}
+    , commandsFixture{libraryFixture.library(), changes, executor}
     , cachePtr{std::make_unique<TrackSourceCache>(libraryFixture.library(), changes)}
     , service{executor, libraryFixture.library(), *cachePtr, changes}
     , workspace{executor, service, changes}
   {
   }
 
-  LibraryWriter& ViewServiceFixture::writer()
+  LibraryCommands& ViewServiceFixture::commands()
   {
-    return writerFixture.writer();
+    return commandsFixture.commands();
   }
 
   TrackId ViewServiceFixture::addTrack(library::test::TrackSpec const& spec)
   {
-    return writerFixture.addTrack(spec);
+    return commandsFixture.addTrack(spec);
   }
 
   void ViewServiceFixture::drainCallbacks()

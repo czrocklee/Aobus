@@ -18,10 +18,10 @@
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
-#include <ao/uimodel/library/list/ListActionPolicy.h>
+#include <ao/uimodel/library/list/ListActions.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
-#include <ao/uimodel/library/track/TrackFilterViewModel.h>
+#include <ao/uimodel/library/track/TrackFilterView.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -151,7 +151,7 @@ namespace ao::winui::layout
             ctx.views,
             ctx.workspace,
             ctx.presentationCatalog,
-            ctx.presentationPreferences,
+            ctx.listPresentations,
             ctx.textCatalog,
             [this](uimodel::TrackPresentationPickerState const& state)
             {

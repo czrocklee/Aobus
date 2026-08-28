@@ -31,7 +31,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
@@ -133,8 +133,8 @@ namespace ao::gtk::test
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
     auto themeCoordinator = ThemeCoordinator{};
     auto& playback = runtime.playback();
-    auto commandSurface =
-      uimodel::PlaybackCommandSurface{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto playbackActions =
+      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
     auto optOutputSelectionRequested = std::optional<audio::OutputDeviceSelection>{};
     auto controller =
       ShellLayoutController{runtime,
@@ -144,7 +144,7 @@ namespace ao::gtk::test
                             componentStateStorePtr,
                             ShellLayoutCollaborators{
                               .textCatalog = ao::test::englishMessageCatalog(),
-                              .playbackCommandSurface = &commandSurface,
+                              .playbackActions = &playbackActions,
                               .themeCoordinator = &themeCoordinator,
                               .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
                                 [&optOutputSelectionRequested](audio::OutputDeviceSelection const& selection)
@@ -697,8 +697,8 @@ namespace ao::gtk::test
     window.set_application(appPtr);
     auto themeCoordinator = ThemeCoordinator{};
     auto& playback = runtime.playback();
-    auto commandSurface =
-      uimodel::PlaybackCommandSurface{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto playbackActions =
+      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
 
     auto const tempDir = fixture.tempDir().path();
     auto const topLevelCount = Gtk::Window::list_toplevels().size();
@@ -711,7 +711,7 @@ namespace ao::gtk::test
                               std::make_shared<ShellLayoutStore>(tempDir / "layouts"),
                               std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state"),
                               ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
-                                                       .playbackCommandSurface = &commandSurface,
+                                                       .playbackActions = &playbackActions,
                                                        .themeCoordinator = &themeCoordinator,
                                                        .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
 
@@ -735,8 +735,8 @@ namespace ao::gtk::test
     window.set_application(appPtr);
     auto themeCoordinator = ThemeCoordinator{};
     auto& playback = runtime.playback();
-    auto commandSurface =
-      uimodel::PlaybackCommandSurface{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto playbackActions =
+      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
 
     auto const tempDir = fixture.tempDir().path();
     auto const componentStateDir = tempDir / "layout-state";
@@ -757,7 +757,7 @@ namespace ao::gtk::test
                               std::move(layoutStorePtr),
                               std::move(componentStateStorePtr),
                               ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
-                                                       .playbackCommandSurface = &commandSurface,
+                                                       .playbackActions = &playbackActions,
                                                        .themeCoordinator = &themeCoordinator,
                                                        .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
       controller.loadLayout();

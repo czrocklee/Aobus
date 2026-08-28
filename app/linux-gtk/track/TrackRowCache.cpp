@@ -9,7 +9,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/utility/Path.h>
 
 #include <glibmm/refptr.h>
@@ -101,7 +101,7 @@ namespace ao::gtk
       return it->second;
     }
 
-    auto scope = _reads.reader();
+    auto scope = _reads.snapshot();
     auto optRow = scope.trackRow(id);
 
     if (!optRow)

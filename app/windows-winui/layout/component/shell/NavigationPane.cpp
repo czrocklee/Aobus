@@ -22,7 +22,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
-#include <ao/uimodel/library/list/ListActionPolicy.h>
+#include <ao/uimodel/library/list/ListActions.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>

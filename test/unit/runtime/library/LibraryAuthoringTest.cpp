@@ -3,7 +3,7 @@
 
 #include <ao/rt/library/LibraryAuthoring.h>
 
-#include "runtime/library/LibraryMutationService.h"
+#include "runtime/library/LibraryWriteLane.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -11,7 +11,7 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include "test/unit/runtime/library/LibraryMutationTestSupport.h"
+#include "test/unit/runtime/library/LibraryWriteLaneTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LoopExecutor.h>
@@ -29,7 +29,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
@@ -109,18 +109,18 @@ namespace ao::rt::test
       std::unique_ptr<Library> _libraryPtr;
     };
 
-    class MutationServiceFixture final
+    class WriteLaneFixture final
     {
     public:
-      explicit MutationServiceFixture(std::optional<library::test::TrackSpec> optInitialTrack = std::nullopt)
+      explicit WriteLaneFixture(std::optional<library::test::TrackSpec> optInitialTrack = std::nullopt)
         : _musicLibrary{library::test::makeTestMusicLibrary(_temp.path(), _temp.path() / "db")}
         , _initialTrackId{optInitialTrack ? library::test::addTrackWithUniqueFixtureUri(_musicLibrary, *optInitialTrack)
                                           : kInvalidTrackId}
         , _asyncRuntime{_executor}
         , _changes{_executor, currentRevision(_musicLibrary), "test-library"}
-        , _mutationService{_asyncRuntime.callbackExecutor(),
-                           ao::test::requireValue(library::WritableMusicLibrary::acquire(_musicLibrary)),
-                           _changes}
+        , _writeLane{_asyncRuntime.callbackExecutor(),
+                     ao::test::requireValue(library::WritableMusicLibrary::acquire(_musicLibrary)),
+                     _changes}
       {
       }
 
@@ -133,7 +133,7 @@ namespace ao::rt::test
       library::MusicLibrary& musicLibrary() noexcept { return _musicLibrary; }
       TrackId initialTrackId() const noexcept { return _initialTrackId; }
       async::Runtime& asyncRuntime() noexcept { return _asyncRuntime; }
-      LibraryMutationService& mutationService() noexcept { return _mutationService; }
+      LibraryWriteLane& writeLane() noexcept { return _writeLane; }
 
     private:
       static std::uint64_t currentRevision(library::MusicLibrary& musicLibrary)
@@ -148,14 +148,14 @@ namespace ao::rt::test
       async::LoopExecutor _executor;
       async::Runtime _asyncRuntime;
       LibraryChanges _changes;
-      LibraryMutationService _mutationService;
+      LibraryWriteLane _writeLane;
     };
 
     template<typename Operation,
              typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>>
-    async::Task<OperationResult> applyInteractive(LibraryMutationService::Submission submission, Operation operation)
+    async::Task<OperationResult> applyInteractive(LibraryWriteLane::Submission submission, Operation operation)
     {
-      auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
+      auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
 
       if (!mutationRes)
       {
@@ -165,11 +165,11 @@ namespace ao::rt::test
       co_return mutationRes->apply(std::move(operation));
     }
 
-    async::Task<Result<>> abortBackground(LibraryMutationService::Submission submission,
-                                          LibraryMutationService::BackgroundTaskLease const* lease)
+    async::Task<Result<>> abortBackground(LibraryWriteLane::Submission submission,
+                                          LibraryWriteLane::BackgroundTaskLease const* lease)
     {
       REQUIRE(lease != nullptr);
-      auto mutationRes = co_await LibraryMutationService::beginBackgroundMutationAsync(std::move(submission), *lease);
+      auto mutationRes = co_await LibraryWriteLane::beginBackgroundMutationAsync(std::move(submission), *lease);
 
       if (!mutationRes)
       {
@@ -180,9 +180,9 @@ namespace ao::rt::test
       co_return Result<>{};
     }
 
-    async::Task<Result<>> abortInteractive(LibraryMutationService::Submission submission)
+    async::Task<Result<>> abortInteractive(LibraryWriteLane::Submission submission)
     {
-      auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
+      auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
 
       if (!mutationRes)
       {
@@ -193,11 +193,10 @@ namespace ao::rt::test
       co_return Result<>{};
     }
 
-    async::Task<AuthoringStatus> startAndAbortAuthoring(LibraryMutationService::Submission submission,
+    async::Task<AuthoringStatus> startAndAbortAuthoring(LibraryWriteLane::Submission submission,
                                                         BoundTrackTargets targets)
     {
-      auto start =
-        co_await LibraryMutationService::beginAuthoringMutationAsync(std::move(submission), std::move(targets));
+      auto start = co_await LibraryWriteLane::beginAuthoringMutationAsync(std::move(submission), std::move(targets));
 
       if (start.optMutation)
       {
@@ -207,14 +206,14 @@ namespace ao::rt::test
       co_return start.status;
     }
 
-    async::Task<void> holdBackgroundMutation(LibraryMutationService::Submission submission,
-                                             LibraryMutationService::BackgroundTaskLease const* lease,
+    async::Task<void> holdBackgroundMutation(LibraryWriteLane::Submission submission,
+                                             LibraryWriteLane::BackgroundTaskLease const* lease,
                                              AsyncTestState<int> ready,
                                              AsyncBarrier* release)
     {
       REQUIRE(lease != nullptr);
       REQUIRE(release != nullptr);
-      auto mutationRes = co_await LibraryMutationService::beginBackgroundMutationAsync(std::move(submission), *lease);
+      auto mutationRes = co_await LibraryWriteLane::beginBackgroundMutationAsync(std::move(submission), *lease);
 
       if (!mutationRes)
       {
@@ -255,7 +254,7 @@ namespace ao::rt::test
     auto const beforeAvailability = fixture.runtimeLibrary().authoringAvailability();
     auto patch = MetadataPatch{};
     patch.optTitle = "After";
-    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().writer().updateMetadata(*boundRes, patch));
+    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().commands().updateMetadata(*boundRes, patch));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::Applied);
@@ -279,10 +278,10 @@ namespace ao::rt::test
     auto optNestedTask = std::optional<async::Task<Result<ListId>>>{};
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
       [&](LibraryChangeSet const&) noexcept
-      { optNestedTask.emplace(fixture.runtimeLibrary().writer().createList(ListDraft{.name = "Nested mutation"})); });
+      { optNestedTask.emplace(fixture.runtimeLibrary().commands().createList(ListDraft{.name = "Nested mutation"})); });
 
-    auto authoringRes =
-      fixture.runTask(fixture.runtimeLibrary().writer().updateMetadata(*boundRes, MetadataPatch{.optTitle = "After"}));
+    auto authoringRes = fixture.runTask(
+      fixture.runtimeLibrary().commands().updateMetadata(*boundRes, MetadataPatch{.optTitle = "After"}));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::Applied);
@@ -295,10 +294,10 @@ namespace ao::rt::test
   TEST_CASE("Library authoring - retained store writers remain safely destructible after commit",
             "[runtime][unit][library-authoring]")
   {
-    auto env = MutationServiceFixture{};
+    auto env = WriteLaneFixture{};
     auto optListWriter = std::optional<library::ListStore::Writer>{};
     REQUIRE(env.run(executeInteractiveMutation(
-      env.mutationService().captureSubmission(),
+      env.writeLane().captureSubmission(),
       [&env, &optListWriter](library::LibraryWrite& write) -> Result<OperationOutcome<bool>>
       {
         optListWriter.emplace(library::test::physicalWriter(env.musicLibrary().lists(), write));
@@ -320,13 +319,13 @@ namespace ao::rt::test
     auto readTransaction = musicLibrary.readTransaction();
     auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-    auto mutationService = LibraryMutationService{asyncRuntime.callbackExecutor(), std::move(writableLibrary), changes};
+    auto writeLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(writableLibrary), changes};
     // A resource row is a fixed 36 bytes, so exhausting a pinned map takes a store
     // that still holds variable-length content; a dictionary entry is one.
     auto const oversizedText = std::string(kMapSize * 4, 'x');
     auto failureRes = runLoopTask(asyncRuntime,
                                   executor,
-                                  applyInteractive(mutationService.captureSubmission(),
+                                  applyInteractive(writeLane.captureSubmission(),
                                                    [&oversizedText](library::LibraryWrite& write) -> Result<>
                                                    {
                                                      auto idRes =
@@ -347,35 +346,35 @@ namespace ao::rt::test
     auto retryRes = runLoopTask(
       asyncRuntime,
       executor,
-      applyInteractive(mutationService.captureSubmission(), [](library::LibraryWrite&) -> Result<> { return {}; }));
+      applyInteractive(writeLane.captureSubmission(), [](library::LibraryWrite&) -> Result<> { return {}; }));
     REQUIRE(retryRes);
   }
 
   TEST_CASE("Library authoring - failed root operation releases coordinator admission immediately",
             "[runtime][unit][library-authoring][concurrency]")
   {
-    auto env = MutationServiceFixture{};
+    auto env = WriteLaneFixture{};
 
     SECTION("Result error")
     {
-      auto failureRes = env.run(applyInteractive(env.mutationService().captureSubmission(),
+      auto failureRes = env.run(applyInteractive(env.writeLane().captureSubmission(),
                                                  [](library::LibraryWrite&) -> Result<>
                                                  { return makeError(Error::Code::Conflict, "rejected"); }));
 
       REQUIRE_FALSE(failureRes);
       CHECK(failureRes.error().code == Error::Code::Conflict);
-      REQUIRE(env.run(applyInteractive(
-        env.mutationService().captureSubmission(), [](library::LibraryWrite&) -> Result<> { return {}; })));
+      REQUIRE(env.run(
+        applyInteractive(env.writeLane().captureSubmission(), [](library::LibraryWrite&) -> Result<> { return {}; })));
     }
 
     SECTION("unexpected exception")
     {
-      CHECK_THROWS_WITH(env.run(applyInteractive(env.mutationService().captureSubmission(),
+      CHECK_THROWS_WITH(env.run(applyInteractive(env.writeLane().captureSubmission(),
                                                  [](library::LibraryWrite&) -> Result<>
                                                  { throw std::runtime_error{"unexpected mutation failure"}; })),
                         "unexpected mutation failure");
-      REQUIRE(env.run(applyInteractive(
-        env.mutationService().captureSubmission(), [](library::LibraryWrite&) -> Result<> { return {}; })));
+      REQUIRE(env.run(
+        applyInteractive(env.writeLane().captureSubmission(), [](library::LibraryWrite&) -> Result<> { return {}; })));
     }
   }
 
@@ -391,7 +390,7 @@ namespace ao::rt::test
     auto patch = MetadataPatch{};
     patch.optTitle = "Before";
 
-    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().writer().updateMetadata(*boundRes, patch));
+    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().commands().updateMetadata(*boundRes, patch));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::NoOp);
@@ -404,42 +403,40 @@ namespace ao::rt::test
   TEST_CASE("Library authoring - maintenance closes interactive admission",
             "[runtime][unit][library-authoring][concurrency]")
   {
-    auto env = MutationServiceFixture{};
+    auto env = WriteLaneFixture{};
     auto observed = std::vector<LibraryAuthoringAvailability>{};
-    auto optNestedSubmission = std::optional<LibraryMutationService::Submission>{};
-    auto subscription = env.mutationService().onAvailabilityChanged(
+    auto optNestedSubmission = std::optional<LibraryWriteLane::Submission>{};
+    auto subscription = env.writeLane().onAvailabilityChanged(
       [&](LibraryAuthoringAvailability const& availability) noexcept
       {
         observed.push_back(availability);
 
         if (availability.state == LibraryAuthoringState::Available)
         {
-          optNestedSubmission = env.mutationService().captureSubmission();
+          optNestedSubmission = env.writeLane().captureSubmission();
         }
       });
 
-    auto maintenanceRes =
-      env.run(LibraryMutationService::beginMaintenanceAsync(env.mutationService().captureSubmission()));
+    auto maintenanceRes = env.run(LibraryWriteLane::beginMaintenanceAsync(env.writeLane().captureSubmission()));
     REQUIRE(maintenanceRes);
     auto maintenance = std::move(*maintenanceRes);
-    auto const maintenanceAvailability = env.mutationService().availability();
+    auto const maintenanceAvailability = env.writeLane().availability();
     CHECK(maintenanceAvailability.state == LibraryAuthoringState::Maintenance);
-    auto interactiveRes =
-      env.run(LibraryMutationService::beginInteractiveMutationAsync(env.mutationService().captureSubmission()));
+    auto interactiveRes = env.run(LibraryWriteLane::beginInteractiveMutationAsync(env.writeLane().captureSubmission()));
     REQUIRE_FALSE(interactiveRes);
     CHECK(interactiveRes.error().code == Error::Code::InvalidState);
-    auto const listOrderBindingRes = env.mutationService().bindListOrder(kAllTracksListId, std::span<TrackId const>{});
+    auto const listOrderBindingRes = env.writeLane().bindListOrder(kAllTracksListId, std::span<TrackId const>{});
     REQUIRE_FALSE(listOrderBindingRes);
     CHECK(listOrderBindingRes.error().code == Error::Code::InvalidState);
     env.run(maintenance.finishAsync());
 
-    auto const availability = env.mutationService().availability();
+    auto const availability = env.writeLane().availability();
     CHECK(availability.state == LibraryAuthoringState::Available);
     REQUIRE(observed.size() == 2);
     CHECK(observed.front().state == LibraryAuthoringState::Maintenance);
     CHECK(observed.back().state == LibraryAuthoringState::Available);
     REQUIRE(optNestedSubmission);
-    auto nestedRes = env.run(LibraryMutationService::beginInteractiveMutationAsync(std::move(*optNestedSubmission)));
+    auto nestedRes = env.run(LibraryWriteLane::beginInteractiveMutationAsync(std::move(*optNestedSubmission)));
     REQUIRE_FALSE(nestedRes);
     CHECK(nestedRes.error().code == Error::Code::InvalidState);
   }
@@ -447,47 +444,45 @@ namespace ao::rt::test
   TEST_CASE("Library authoring - background task leases serialize and finish idempotently",
             "[runtime][unit][library-authoring][concurrency]")
   {
-    auto env = MutationServiceFixture{};
+    auto env = WriteLaneFixture{};
     std::size_t availabilityCount = 0;
-    auto subscription = env.mutationService().onAvailabilityChanged(
+    auto subscription = env.writeLane().onAvailabilityChanged(
       [&availabilityCount](LibraryAuthoringAvailability const&) noexcept { ++availabilityCount; });
 
-    auto backgroundRes =
-      env.mutationService().beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
+    auto backgroundRes = env.writeLane().beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::ScanApply);
     REQUIRE(backgroundRes);
     auto background = std::move(*backgroundRes);
-    CHECK(env.mutationService().availability().state == LibraryAuthoringState::Available);
+    CHECK(env.writeLane().availability().state == LibraryAuthoringState::Available);
     CHECK(availabilityCount == 0);
 
     auto overlappingRes =
-      env.mutationService().beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::AudioIdentityBackfill);
+      env.writeLane().beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::AudioIdentityBackfill);
     REQUIRE_FALSE(overlappingRes);
     CHECK(overlappingRes.error().code == Error::Code::ResourceBusy);
-    auto maintenanceRes =
-      env.run(LibraryMutationService::beginMaintenanceAsync(env.mutationService().captureSubmission()));
+    auto maintenanceRes = env.run(LibraryWriteLane::beginMaintenanceAsync(env.writeLane().captureSubmission()));
     REQUIRE_FALSE(maintenanceRes);
     CHECK(maintenanceRes.error().code == Error::Code::InvalidState);
 
-    REQUIRE(env.run(abortBackground(env.mutationService().captureSubmission(), &background)));
+    REQUIRE(env.run(abortBackground(env.writeLane().captureSubmission(), &background)));
 
-    auto interactiveMutationRes = env.run(abortInteractive(env.mutationService().captureSubmission()));
+    auto interactiveMutationRes = env.run(abortInteractive(env.writeLane().captureSubmission()));
     REQUIRE(interactiveMutationRes);
     CHECK(availabilityCount == 0);
 
     background.finish();
     background.finish();
-    auto staleMutationRes = env.run(
-      LibraryMutationService::beginBackgroundMutationAsync(env.mutationService().captureSubmission(), background));
+    auto staleMutationRes =
+      env.run(LibraryWriteLane::beginBackgroundMutationAsync(env.writeLane().captureSubmission(), background));
     REQUIRE_FALSE(staleMutationRes);
     CHECK(staleMutationRes.error().code == Error::Code::InvalidState);
 
     auto nextBackgroundRes =
-      env.mutationService().beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::AudioIdentityBackfill);
+      env.writeLane().beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::AudioIdentityBackfill);
     REQUIRE(nextBackgroundRes);
 
     background.finish();
     auto overlapAfterRepeatedFinishRes =
-      env.mutationService().beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
+      env.writeLane().beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::ScanApply);
     REQUIRE_FALSE(overlapAfterRepeatedFinishRes);
     CHECK(overlapAfterRepeatedFinishRes.error().code == Error::Code::ResourceBusy);
   }
@@ -495,28 +490,25 @@ namespace ao::rt::test
   TEST_CASE("Library authoring - interactive work reports Busy behind an active background mutation",
             "[runtime][regression][library-authoring][concurrency]")
   {
-    auto env = MutationServiceFixture{library::test::TrackSpec{.title = "Background target"}};
-    auto targetsRes = env.mutationService().bindTrackTargets(std::array{env.initialTrackId()});
+    auto env = WriteLaneFixture{library::test::TrackSpec{.title = "Background target"}};
+    auto targetsRes = env.writeLane().bindTrackTargets(std::array{env.initialTrackId()});
     REQUIRE(targetsRes);
-    auto backgroundRes =
-      env.mutationService().beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
+    auto backgroundRes = env.writeLane().beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::ScanApply);
     REQUIRE(backgroundRes);
     auto background = std::move(*backgroundRes);
     auto backgroundReady = AsyncTestState<int>::create(0);
     auto releaseBackground = AsyncBarrier{};
-    auto backgroundFuture = env.asyncRuntime().spawn(holdBackgroundMutation(
-      env.mutationService().captureSubmission(), &background, backgroundReady, &releaseBackground));
+    auto backgroundFuture = env.asyncRuntime().spawn(
+      holdBackgroundMutation(env.writeLane().captureSubmission(), &background, backgroundReady, &releaseBackground));
     REQUIRE(backgroundReady.waitUntil(1));
 
-    auto const authoringStatus =
-      env.run(startAndAbortAuthoring(env.mutationService().captureSubmission(), *targetsRes));
+    auto const authoringStatus = env.run(startAndAbortAuthoring(env.writeLane().captureSubmission(), *targetsRes));
 
     CHECK(authoringStatus == AuthoringStatus::Busy);
     releaseBackground.release();
     CHECK_NOTHROW(backgroundFuture.get());
 
-    auto const afterBackground =
-      env.run(startAndAbortAuthoring(env.mutationService().captureSubmission(), *targetsRes));
+    auto const afterBackground = env.run(startAndAbortAuthoring(env.writeLane().captureSubmission(), *targetsRes));
     CHECK(afterBackground == AuthoringStatus::NoOp);
   }
 
@@ -530,16 +522,16 @@ namespace ao::rt::test
     auto readTransaction = musicLibrary.readTransaction();
     auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction), "test-library"};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-    auto mutationServicePtr =
-      std::make_unique<LibraryMutationService>(asyncRuntime.callbackExecutor(), std::move(writableLibrary), changes);
-    auto backgroundRes = mutationServicePtr->beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::ScanApply);
+    auto writeLanePtr =
+      std::make_unique<LibraryWriteLane>(asyncRuntime.callbackExecutor(), std::move(writableLibrary), changes);
+    auto backgroundRes = writeLanePtr->beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::ScanApply);
     REQUIRE(backgroundRes);
     auto background = std::move(*backgroundRes);
     auto preTransactionEntered = AsyncTestState<int>::create(0);
     auto closingStopObserved = AsyncTestState<int>::create(0);
     auto releasePreTransaction = AsyncBarrier{};
-    auto future = asyncRuntime.spawn(LibraryMutationService::beginBackgroundMutationAsync(
-      mutationServicePtr->captureSubmission(),
+    auto future = asyncRuntime.spawn(LibraryWriteLane::beginBackgroundMutationAsync(
+      writeLanePtr->captureSubmission(),
       background,
       [&preTransactionEntered, &closingStopObserved, &releasePreTransaction](
         std::stop_token const stopToken) -> Result<>
@@ -556,14 +548,14 @@ namespace ao::rt::test
     if (!entered)
     {
       releasePreTransaction.release();
-      mutationServicePtr.reset();
+      writeLanePtr.reset();
       asyncRuntime.requestStop();
       asyncRuntime.join();
     }
 
     REQUIRE(entered);
 
-    mutationServicePtr.reset();
+    writeLanePtr.reset();
 
     CHECK(closingStopObserved.load() == 1);
     CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
@@ -590,16 +582,14 @@ namespace ao::rt::test
     auto secondChanges = LibraryChanges{executor, secondLibrary.libraryRevision(secondRead), "second-test-library"};
     auto firstWritable = ao::test::requireValue(library::WritableMusicLibrary::acquire(firstLibrary));
     auto secondWritable = ao::test::requireValue(library::WritableMusicLibrary::acquire(secondLibrary));
-    auto firstMutationService =
-      LibraryMutationService{asyncRuntime.callbackExecutor(), std::move(firstWritable), firstChanges};
-    auto secondMutationService =
-      LibraryMutationService{asyncRuntime.callbackExecutor(), std::move(secondWritable), secondChanges};
-    auto foreignTargets = ao::test::requireValue(firstMutationService.bindTrackTargets(std::array{firstTrackId}));
+    auto firstWriteLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(firstWritable), firstChanges};
+    auto secondWriteLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(secondWritable), secondChanges};
+    auto foreignTargets = ao::test::requireValue(firstWriteLane.bindTrackTargets(std::array{firstTrackId}));
 
-    auto const start = runLoopTask(
-      asyncRuntime,
-      executor,
-      LibraryMutationService::beginAuthoringMutationAsync(secondMutationService.captureSubmission(), foreignTargets));
+    auto const start =
+      runLoopTask(asyncRuntime,
+                  executor,
+                  LibraryWriteLane::beginAuthoringMutationAsync(secondWriteLane.captureSubmission(), foreignTargets));
 
     CHECK(start.status == AuthoringStatus::Stale);
     CHECK_FALSE(start.optMutation);
@@ -615,11 +605,11 @@ namespace ao::rt::test
     auto draft = ListDraft{
       .name = "Unrelated",
     };
-    REQUIRE(fixture.runTask(fixture.runtimeLibrary().writer().createList(draft)));
+    REQUIRE(fixture.runTask(fixture.runtimeLibrary().commands().createList(draft)));
 
     auto patch = MetadataPatch{};
     patch.optTitle = "Should not apply";
-    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().writer().updateMetadata(*boundRes, patch));
+    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().commands().updateMetadata(*boundRes, patch));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::Stale);

@@ -27,8 +27,8 @@
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -287,8 +287,7 @@ namespace ao::cli
           Error::Code::InvalidInput, "restore requires --confirm-destructive-restore after reviewing --dry-run output");
       }
 
-      auto planRes =
-        cli.runTask(cli.library().taskService().prepareLibraryImportAsync(utility::pathFromUtf8(path), mode));
+      auto planRes = cli.runTask(cli.library().jobs().prepareLibraryImportAsync(utility::pathFromUtf8(path), mode));
 
       if (!planRes)
       {
@@ -302,7 +301,7 @@ namespace ao::cli
         return;
       }
 
-      auto const result = cli.runTask(cli.library().taskService().applyLibraryImportPlanAsync(std::move(*planRes)));
+      auto const result = cli.runTask(cli.library().jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
 
       if (!result)
       {
@@ -913,8 +912,8 @@ namespace ao::cli
 
       auto failures = std::vector<std::string>{};
       auto const stopToken = std::stop_token{};
-      auto progressCallback = rt::LibraryTaskService::ScanProgressCallback{};
-      auto result = cli.runTask(cli.library().taskService().applyScanPlanAsync(
+      auto progressCallback = rt::LibraryJobs::ScanProgressCallback{};
+      auto result = cli.runTask(cli.library().jobs().applyScanPlanAsync(
         std::move(relinkPlan),
         // Default (eager) options on purpose: Moved items are fingerprinted
         // during apply regardless of policy, so a relink must never leave the
@@ -1030,7 +1029,7 @@ namespace ao::cli
       // The CLI drives its callback loop until the coordinated maintenance
       // operation reaches a terminal result. Diagnostic callbacks remain
       // worker-produced and indexer-serialized.
-      auto result = cli.runTask(cli.library().taskService().backfillAudioIdentityAsync(
+      auto result = cli.runTask(cli.library().jobs().backfillAudioIdentityAsync(
         {},
         verbose ? rt::AudioIdentityIndexProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
                                                          {
@@ -1126,8 +1125,7 @@ namespace ao::cli
                         OutputFormat format,
                         std::ostream& os)
     {
-      auto result =
-        cli.runTask(cli.library().taskService().loadResourceAsync(id, rt::ResourceSizeLimit::Administrative));
+      auto result = cli.runTask(cli.library().jobs().loadResourceAsync(id, rt::ResourceSizeLimit::Administrative));
 
       if (!result)
       {

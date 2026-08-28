@@ -53,12 +53,12 @@ namespace ao::winui
     unbind();
   }
 
-  void TransportButton::bind(ao::rt::PlaybackService& playback, ao::uimodel::PlaybackCommandSurface& commands)
+  void TransportButton::bind(ao::rt::PlaybackService& playback, ao::uimodel::PlaybackActions& actions)
   {
     unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,
-                                                                  commands,
+                                                                  actions,
                                                                   _textCatalog,
                                                                   _command,
                                                                   _showLabel,

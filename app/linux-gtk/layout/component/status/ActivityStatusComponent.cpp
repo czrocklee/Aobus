@@ -69,13 +69,13 @@ namespace ao::gtk::layout
     {
     public:
       ActivityStatusComponent(rt::NotificationService& notifications,
-                              rt::LibraryTaskService& libraryTasks,
+                              rt::LibraryJobs& libraryJobs,
                               i18n::MessageCatalog const& textCatalog,
                               LayoutNode const& node)
         : _widget{ActivityStatusWidgetDependencies{
             .notifications = notifications,
             .textCatalog = textCatalog,
-            .libraryTasks = &libraryTasks,
+            .libraryJobs = &libraryJobs,
             .options = optionsFromNode(node),
           }}
       {
@@ -90,7 +90,7 @@ namespace ao::gtk::layout
 
   void registerActivityStatusComponent(ComponentRegistry& registry,
                                        rt::NotificationService& notifications,
-                                       rt::LibraryTaskService& libraryTasks,
+                                       rt::LibraryJobs& libraryJobs,
                                        i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
@@ -109,7 +109,7 @@ namespace ao::gtk::layout
                             .kind = LayoutPropertyKind::Int,
                             .label = "Max Text Chars",
                             .defaultValue = LayoutValue{kDefaultMaxTextChars}}}),
-      [&notifications, &libraryTasks, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
-      { return std::make_unique<ActivityStatusComponent>(notifications, libraryTasks, textCatalog, node); });
+      [&notifications, &libraryJobs, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      { return std::make_unique<ActivityStatusComponent>(notifications, libraryJobs, textCatalog, node); });
   }
 } // namespace ao::gtk::layout

@@ -10,7 +10,7 @@
 #include <ao/async/Task.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/resource/ResourceByteCache.h>
 
 #include <cstddef>
@@ -26,10 +26,7 @@ namespace ao::rt
   ResourceByteLoader::ResourceByteLoader(CoreRuntime& runtime)
     : _readBytesPtr{std::make_shared<ReadBytes const>(
         [&runtime](ResourceId const resourceId, std::stop_token const stopToken)
-        {
-          return runtime.library().taskService().loadResourceAsync(
-            resourceId, ResourceSizeLimit::Interactive, stopToken);
-        })}
+        { return runtime.library().jobs().loadResourceAsync(resourceId, ResourceSizeLimit::Interactive, stopToken); })}
     , _asyncRuntime{&runtime.async()}
     , _scopePtr{std::make_unique<async::LifetimeScope>()}
   {

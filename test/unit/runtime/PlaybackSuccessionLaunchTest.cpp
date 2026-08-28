@@ -371,7 +371,7 @@ namespace ao::rt::test
       .failBlockedPreparation = true,
     }};
     fixture.buildThreeTrackManualView();
-    fixture.writerFixture.releaseLibrary();
+    fixture.commandsFixture.releaseLibrary();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     auto const successionBefore = fixture.successionPtr->state();
     auto const transportBefore = fixture.transport.playbackTransport.state();
@@ -452,7 +452,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
 
-    REQUIRE(fixture.writerFixture.runTask(fixture.writer().deleteList(fixture.listId)));
+    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteList(fixture.listId)));
     auto const invalidated = succession.state();
     CHECK(invalidated.sourceState == PlaybackSuccessionSourceState::Invalidated);
     CHECK(invalidated.currentTrackId == fixture.firstTrackId);
@@ -521,7 +521,7 @@ namespace ao::rt::test
     {
       auto fixture = PlaybackSuccessionFixture{};
       fixture.buildThreeTrackManualView();
-      REQUIRE(fixture.writerFixture.runTask(fixture.writer().deleteList(fixture.listId)));
+      REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteList(fixture.listId)));
 
       auto const result = fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId);
 

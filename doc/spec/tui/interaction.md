@@ -45,7 +45,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
 - The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
-- Soul/Space transport toggles and ordinary stop requests use `PlaybackCommandSurface`; explicit selected-track activation remains a distinct view-based sequence command.
+- Soul/Space transport toggles and ordinary stop requests use `PlaybackActions`; explicit selected-track activation remains a distinct view-based sequence command.
 - A modal surface arriving mid-gesture ends it: a pointer drag cannot be continued while text input or a modal overlay owns the workspace.
 - A zero-duration timeline rejects pointer and relative-keyboard seek.
 - Column drag changes only TUI session-local widths.
@@ -124,7 +124,7 @@ Space and the Soul control pause active playback and resume paused playback even
 From Idle, they resume a restored sequence-owned current track; otherwise they start the selected track.
 Stop is an idempotent silent no-op when playback is already Idle.
 
-Seek press begins a shared `SeekSliderInteractionModel` gesture, pointer motion publishes preview seeks, and release publishes the final seek through `PlaybackPositionViewModel`.
+Seek press begins a shared `SeekInteraction` gesture, pointer motion publishes preview seeks, and release publishes the final seek through `PlaybackPositionViewModel`.
 Release beyond the rail clamps to the rail range.
 Keyboard seek asks the same view model for a clamped five-second relative change and is inert without a known positive duration.
 Keyboard volume asks `VolumeViewModel` for a clamped five-percentage-point relative change, including the shared rule that raising volume clears explicit mute.

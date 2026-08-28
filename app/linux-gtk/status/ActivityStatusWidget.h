@@ -23,7 +23,7 @@
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class LibraryJobs;
   class NotificationService;
 }
 
@@ -54,7 +54,7 @@ namespace ao::gtk
   {
     rt::NotificationService& notifications;
     i18n::MessageCatalog const& textCatalog;
-    rt::LibraryTaskService const* libraryTasks = nullptr;
+    rt::LibraryJobs const* libraryJobs = nullptr;
     ActivityStatusWidgetOptions options{};
   };
 

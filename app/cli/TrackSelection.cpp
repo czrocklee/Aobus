@@ -12,7 +12,7 @@
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/QueryCompilation.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -76,7 +76,7 @@ namespace ao::cli
     return ids;
   }
 
-  std::vector<TrackId> requireTrackIds(rt::LibraryReader& reader, std::vector<std::uint32_t> const& rawIds)
+  std::vector<TrackId> requireTrackIds(rt::LibrarySnapshot& snapshot, std::vector<std::uint32_t> const& rawIds)
   {
     auto ids = std::vector<TrackId>{};
     ids.reserve(rawIds.size());
@@ -85,7 +85,7 @@ namespace ao::cli
     {
       auto const id = TrackId{rawId};
 
-      if (!reader.containsTrack(id))
+      if (!snapshot.containsTrack(id))
       {
         throwCommandError(Error::Code::NotFound, "track not found: {}", id);
       }

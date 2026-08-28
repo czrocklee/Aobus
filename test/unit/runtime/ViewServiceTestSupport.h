@@ -13,7 +13,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -26,14 +26,14 @@ namespace ao::rt::test
     MusicLibraryFixture libraryFixture;
     async::LoopExecutor executor;
     LibraryChanges changes;
-    LibraryWriterFixture writerFixture;
+    LibraryCommandsFixture commandsFixture;
     std::unique_ptr<TrackSourceCache> cachePtr;
     ViewService service;
     WorkspaceService workspace;
 
     ViewServiceFixture();
 
-    LibraryWriter& writer();
+    LibraryCommands& commands();
 
     TrackId addTrack(library::test::TrackSpec const& spec);
 

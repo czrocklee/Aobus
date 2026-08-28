@@ -157,7 +157,7 @@ namespace ao::winui::layout
         _root.Children().Append(_detailButton);
         _root.Children().Append(_dismissButton);
 
-        _control.bind(ctx.notifications, ctx.libraryTasks);
+        _control.bind(ctx.notifications, ctx.libraryJobs);
       }
 
       FrameworkElement element() const override { return _root; }

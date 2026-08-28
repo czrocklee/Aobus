@@ -170,9 +170,9 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 
 ## Implementation map
 
-- [`TrackFilterResolver`](../../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) defines input modes and resolution.
-- [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) composes Quick and expression completion.
-- [`TrackFilterViewModel`](../../../app/include/ao/uimodel/library/track/TrackFilterViewModel.h) owns frontend-neutral filter state.
+- [`resolveTrackFilter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) defines input modes and resolution.
+- [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) composes Quick and expression completion.
+- [`TrackFilterViewModel`](../../../app/include/ao/uimodel/library/track/TrackFilterView.h) owns frontend-neutral filter state.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns runtime view replacement and observations.
 - [`TrackSourceCache`](../../../app/include/ao/rt/source/TrackSourceCache.h) owns ad-hoc source acquisition.
 - [`TrackQuickFilter`](../../../app/linux-gtk/track/TrackQuickFilter.h), [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h), and [`TrackQuickFilterControl`](../../../app/windows-winui/track/TrackQuickFilterControl.h) are completion adapters; [`QuickFilterCompletionAdapter`](../../../app/windows-winui/include/ao/winui/track/QuickFilterCompletionAdapter.h) owns the WinUI UTF-8/UTF-16 and semantic-row boundary, while [`TrackRegistry.cpp`](../../../app/windows-winui/layout/component/track/TrackRegistry.cpp) owns the composed create action.
@@ -180,7 +180,7 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 
 ## Test map
 
-- [`TrackFilterResolverTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and explicit caseless expansion.
+- [`TrackFilterResolutionTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterResolutionTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and explicit caseless expansion.
 - [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the live field set, ranking, limits, replacement, escaping, and Quick/expression boundary.
 - [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, end-to-end caseless Quick-filter membership, synchronous failure handling, and single-render policy.
 - [`ViewServiceListFilterTest.cpp`](../../../test/unit/runtime/ViewServiceListFilterTest.cpp) protects runtime replacement, transient expression errors, and contextual stored-parent errors with empty projections.

@@ -7,7 +7,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -83,7 +83,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto& service = env.service;
     auto const listId =
-      ao::test::requireValue(env.writerFixture.runTask(env.writerFixture.writer().createList(ListDraft{
+      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createList(ListDraft{
         .name = "Saved List",
       })));
 
@@ -101,7 +101,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto& service = env.service;
     auto const listId =
-      ao::test::requireValue(env.writerFixture.runTask(env.writerFixture.writer().createList(ListDraft{
+      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createList(ListDraft{
         .name = "Explicit order",
       })));
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
@@ -121,7 +121,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto& service = env.service;
     auto const listId =
-      ao::test::requireValue(env.writerFixture.runTask(env.writerFixture.writer().createList(ListDraft{
+      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createList(ListDraft{
         .name = "Filtered List",
         .expression = "true",
       })));

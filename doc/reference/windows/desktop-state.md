@@ -147,7 +147,7 @@ classic:
 - [`DesktopSettingsYamlSchema`](../../../app/windows-winui/include/ao/winui/DesktopSettingsYamlSchema.h)
 - [`ThemeYamlSchema`](../../../app/windows-winui/include/ao/winui/Theme.h)
 - [`LibraryStartupPlanner`](../../../app/include/ao/desktop/LibraryStartupPlanner.h),
-  [`OutputDeviceSelectionPolicy`](../../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h),
+  [`OutputSelection`](../../../app/include/ao/uimodel/playback/output/OutputSelection.h),
   [`DesktopOutputSelection`](../../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h),
   [`SelectedRootCommit`](../../../app/windows-winui/include/ao/winui/app/SelectedRootCommit.h),
   [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.cpp), and
@@ -156,7 +156,7 @@ classic:
 ## Test authority
 
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp)
-- [`OutputDeviceSelectionPolicyTest.cpp`](../../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+- [`OutputSelectionTest.cpp`](../../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
 - [`DesktopOutputSelectionTest.cpp`](../../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
 - [`LibraryStartupPlannerTest.cpp`](../../../test/unit/desktop/LibraryStartupPlannerTest.cpp)
 - [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)

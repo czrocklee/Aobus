@@ -20,12 +20,12 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -67,14 +67,14 @@ namespace ao::rt::test
       PlaybackServiceFixture& operator=(PlaybackServiceFixture&&) = delete;
       ~PlaybackServiceFixture() = default;
 
-      LibraryWriter& writer() { return application.writer(); }
+      LibraryCommands& libraryCommands() { return application.libraryCommands(); }
 
       TrackId addPlayableTrack(std::string title)
       {
         auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
         audio::test::installAudioFixture(application.libraryFixture.root(), "basic_metadata.flac", playableUri);
-        auto const created = ao::test::requireValue(application.writerFixture.runTask(
-          writer().createTrackFromFile(application.libraryFixture.root() / playableUri)));
+        auto const created = ao::test::requireValue(application.commandsFixture.runTask(
+          libraryCommands().createTrackFromFile(application.libraryFixture.root() / playableUri)));
 
         if constexpr (requires { application.executor.drain(); })
         {
@@ -82,7 +82,7 @@ namespace ao::rt::test
         }
 
         REQUIRE(
-          application.writerFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
+          application.commandsFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
 
         if constexpr (requires { application.executor.drain(); })
         {
@@ -99,7 +99,7 @@ namespace ao::rt::test
         thirdTrackId = addPlayableTrack("Third");
         application.sources.reloadAllTracks();
         listId = ao::test::requireValue(
-          application.writerFixture.runTask(writer().createList(ListDraft{.name = "Playback order"})));
+          application.commandsFixture.runTask(libraryCommands().createList(ListDraft{.name = "Playback order"})));
         viewId = ao::test::requireValue(application.workspace.navigate({.target = listId}));
         application.addReadyProvider();
         application.executor.drain();
@@ -269,10 +269,10 @@ namespace ao::rt::test
                                          fixture.asyncRuntime};
     auto bootstrap = PlaybackBootstrap{fixture.playbackTransport};
     auto playbackPtr = bootstrap.createPlaybackService(fixture.executor, succession);
-    auto commandSurface = uimodel::PlaybackCommandSurface{*playbackPtr, [] {}};
+    auto playbackActions = uimodel::PlaybackActions{*playbackPtr, [] {}};
     std::size_t availabilityChanged = 0;
     auto const availabilitySubscription =
-      commandSurface.onAvailabilityChanged([&availabilityChanged] noexcept { ++availabilityChanged; });
+      playbackActions.onAvailabilityChanged([&availabilityChanged] noexcept { ++availabilityChanged; });
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const snapshotSubscription = playbackPtr->events().onSnapshot(
       [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });

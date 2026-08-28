@@ -33,7 +33,7 @@ namespace ao::rt
 {
   class CompletionService;
   class Library;
-  class LibraryReader;
+  class LibrarySnapshot;
 }
 
 namespace ao::async
@@ -85,8 +85,8 @@ namespace ao::gtk
     void buildMetadataTab();
     void buildPropertiesTab();
     void loadSelectedTrackFields();
-    void loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId);
-    void loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId);
+    void loadFirstTrack(rt::LibrarySnapshot const& scope, TrackId trackId);
+    void loadSubsequentTrack(rt::LibrarySnapshot const& scope, TrackId trackId);
     void handleSaveClicked();
     void updateSaveEnabled();
     void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);

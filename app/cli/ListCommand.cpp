@@ -24,8 +24,8 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/yaml/Reflect.h>
@@ -281,14 +281,14 @@ namespace ao::cli
       return ids;
     }
 
-    std::vector<rt::TrackRow> resolveRows(rt::LibraryReader const& reader, std::span<TrackId const> ids)
+    std::vector<rt::TrackRow> resolveRows(rt::LibrarySnapshot const& snapshot, std::span<TrackId const> ids)
     {
       auto rows = std::vector<rt::TrackRow>{};
       rows.reserve(ids.size());
 
       for (auto const trackId : ids)
       {
-        if (auto optRow = reader.trackRow(trackId); optRow)
+        if (auto optRow = snapshot.trackRow(trackId); optRow)
         {
           rows.push_back(std::move(*optRow));
         }
@@ -334,8 +334,8 @@ namespace ao::cli
 
     void printListDetail(CliRuntime& cli, ListId const listId)
     {
-      auto reader = cli.library().reader();
-      auto optNode = reader.listNode(listId);
+      auto snapshot = cli.library().snapshot();
+      auto optNode = snapshot.listNode(listId);
 
       if (!optNode)
       {
@@ -343,8 +343,8 @@ namespace ao::cli
       }
 
       auto const ids = effectiveListTrackIds(cli, listId);
-      auto const rows = resolveRows(reader, ids);
-      auto const order = reader.listOrderTrackIds(listId);
+      auto const rows = resolveRows(snapshot, ids);
+      auto const order = snapshot.listOrderTrackIds(listId);
       auto const dto = toListDetailDto(*optNode, order, rows);
 
       if (cli.options().format == OutputFormat::Yaml)
@@ -381,9 +381,9 @@ namespace ao::cli
       };
     }
 
-    rt::ListDraft requireListDraft(ListId const listId, rt::LibraryReader& reader)
+    rt::ListDraft requireListDraft(ListId const listId, rt::LibrarySnapshot& snapshot)
     {
-      auto optNode = reader.listNode(listId);
+      auto optNode = snapshot.listNode(listId);
 
       if (!optNode)
       {
@@ -439,7 +439,7 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const result = cli.runTask(cli.library().writer().previewCreateList(draft));
+        auto const result = cli.runTask(cli.library().commands().previewCreateList(draft));
 
         if (!result)
         {
@@ -450,7 +450,7 @@ namespace ao::cli
         return;
       }
 
-      auto const result = cli.runTask(cli.library().writer().createList(draft));
+      auto const result = cli.runTask(cli.library().commands().createList(draft));
 
       if (!result)
       {
@@ -495,8 +495,8 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "list update requires at least one field option");
       }
 
-      auto reader = cli.library().reader();
-      auto draft = requireListDraft(listId, reader);
+      auto snapshot = cli.library().snapshot();
+      auto draft = requireListDraft(listId, snapshot);
 
       if (optName)
       {
@@ -518,8 +518,8 @@ namespace ao::cli
         draft.parentId = ListId{*optParent};
       }
 
-      auto const result = cli.runTask(dryRun ? cli.library().writer().previewUpdateList(draft)
-                                             : cli.library().writer().updateList(draft));
+      auto const result = cli.runTask(dryRun ? cli.library().commands().previewUpdateList(draft)
+                                             : cli.library().commands().updateList(draft));
 
       if (!result)
       {
@@ -691,7 +691,7 @@ namespace ao::cli
       {
         if (add)
         {
-          auto result = cli.runTask(cli.library().writer().previewAddTracksToList(listId, targets));
+          auto result = cli.runTask(cli.library().commands().previewAddTracksToList(listId, targets));
 
           if (!result)
           {
@@ -712,7 +712,7 @@ namespace ao::cli
           return;
         }
 
-        auto result = cli.runTask(cli.library().writer().previewRemoveTracksFromList(listId, targets));
+        auto result = cli.runTask(cli.library().commands().previewRemoveTracksFromList(listId, targets));
 
         if (!result)
         {
@@ -744,7 +744,7 @@ namespace ao::cli
 
       if (add)
       {
-        auto result = cli.runTask(cli.library().writer().addTracksToList(listId, *bindingRes));
+        auto result = cli.runTask(cli.library().commands().addTracksToList(listId, *bindingRes));
 
         if (!result)
         {
@@ -774,7 +774,7 @@ namespace ao::cli
         return;
       }
 
-      auto result = cli.runTask(cli.library().writer().removeTracksFromList(listId, *bindingRes));
+      auto result = cli.runTask(cli.library().commands().removeTracksFromList(listId, *bindingRes));
 
       if (!result)
       {
@@ -849,7 +849,7 @@ namespace ao::cli
       auto const selectedTrackIds = trackIds(rawTrackIds);
       auto const optBeforeTrackId = optRawBeforeTrackId ? std::optional{TrackId{*optRawBeforeTrackId}} : std::nullopt;
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.runTask(cli.library().writer().moveListOrder(binding, selectedTrackIds, optBeforeTrackId));
+      auto result = cli.runTask(cli.library().commands().moveListOrder(binding, selectedTrackIds, optBeforeTrackId));
 
       if (!result)
       {
@@ -870,7 +870,7 @@ namespace ao::cli
     void resetListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.runTask(cli.library().writer().resetListOrder(binding));
+      auto result = cli.runTask(cli.library().commands().resetListOrder(binding));
 
       if (!result)
       {
@@ -890,7 +890,7 @@ namespace ao::cli
     void forgetHiddenListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.runTask(cli.library().writer().forgetHiddenListOrder(binding));
+      auto result = cli.runTask(cli.library().commands().forgetHiddenListOrder(binding));
 
       if (!result)
       {
@@ -1079,8 +1079,8 @@ namespace ao::cli
 
         if (deleteDescendants->count() > 0)
         {
-          auto const result = cli.runTask(dryRun ? cli.library().writer().previewDeleteListAndDescendants(listId)
-                                                 : cli.library().writer().deleteListAndDescendants(listId));
+          auto const result = cli.runTask(dryRun ? cli.library().commands().previewDeleteListAndDescendants(listId)
+                                                 : cli.library().commands().deleteListAndDescendants(listId));
 
           if (!result)
           {
@@ -1091,8 +1091,8 @@ namespace ao::cli
           return;
         }
 
-        auto const result = cli.runTask(dryRun ? cli.library().writer().previewDeleteList(listId)
-                                               : cli.library().writer().deleteList(listId));
+        auto const result = cli.runTask(dryRun ? cli.library().commands().previewDeleteList(listId)
+                                               : cli.library().commands().deleteList(listId));
 
         if (!result)
         {

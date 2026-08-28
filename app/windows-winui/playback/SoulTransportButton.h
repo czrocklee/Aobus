@@ -49,7 +49,7 @@ namespace ao::winui
     SoulTransportButton(SoulTransportButton&&) = delete;
     SoulTransportButton& operator=(SoulTransportButton&&) = delete;
 
-    void bind(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands);
+    void bind(rt::PlaybackService& playback, uimodel::PlaybackActions& actions);
     void unbind() noexcept;
     void activate();
 

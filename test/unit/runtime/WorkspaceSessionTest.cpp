@@ -13,7 +13,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -78,7 +78,7 @@ namespace ao::rt::test
     ListId createList(AppRuntime& runtime, std::string name)
     {
       return ao::test::requireValue(
-        runRuntimeTask(runtime, runtime.library().writer().createList(ListDraft{.name = std::move(name)})));
+        runRuntimeTask(runtime, runtime.library().commands().createList(ListDraft{.name = std::move(name)})));
     }
   } // namespace
 

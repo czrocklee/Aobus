@@ -27,15 +27,15 @@ namespace ao::gtk::layout
     public:
       TrackPresentationButtonComponent(rt::AppRuntime& runtime,
                                        uimodel::TrackPresentationCatalog* presentationCatalog,
-                                       uimodel::ListPresentationPreferenceStore* presentationPreferences,
+                                       uimodel::ListPresentations* listPresentations,
                                        ThemeCoordinator* themeCoordinator,
                                        i18n::MessageCatalog const& textCatalog,
                                        LayoutNode const& node)
         : _widget{runtime, textCatalog}
       {
-        if (presentationCatalog != nullptr && presentationPreferences != nullptr)
+        if (presentationCatalog != nullptr && listPresentations != nullptr)
         {
-          _widget.setPresentationServices(presentationCatalog, presentationPreferences, themeCoordinator);
+          _widget.setPresentationServices(presentationCatalog, listPresentations, themeCoordinator);
         }
 
         if (auto const it = node.props.find(kVariantProp); it != node.props.end())
@@ -57,17 +57,17 @@ namespace ao::gtk::layout
   void registerTrackPresentationButtonComponent(ComponentRegistry& registry,
                                                 rt::AppRuntime& runtime,
                                                 uimodel::TrackPresentationCatalog* presentationCatalog,
-                                                uimodel::ListPresentationPreferenceStore* presentationPreferences,
+                                                uimodel::ListPresentations* listPresentations,
                                                 ThemeCoordinator* themeCoordinator,
                                                 i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
       sharedComponentDescriptor(SharedLayoutComponentType::TrackPresentationButton),
-      [&runtime, presentationCatalog, presentationPreferences, themeCoordinator, textCatalog](
+      [&runtime, presentationCatalog, listPresentations, themeCoordinator, textCatalog](
         LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
       {
         return std::make_unique<TrackPresentationButtonComponent>(
-          runtime, presentationCatalog, presentationPreferences, themeCoordinator, textCatalog, node);
+          runtime, presentationCatalog, listPresentations, themeCoordinator, textCatalog, node);
       });
   }
 } // namespace ao::gtk::layout

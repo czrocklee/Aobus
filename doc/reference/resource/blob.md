@@ -75,7 +75,7 @@ It carries no payload and has no distinct persisted representation; it lets prep
 Descriptors are append-only in practice: a rescan that replaces a track's covers leaves earlier rows in place, and a row displaced by a collision must stay reachable along its probe chain.
 Removing one row from the middle of a chain turns a later row's path into a hole, which the open gate rejects as corruption.
 
-`LibraryTaskService::loadResourceAsync(id, sizeLimit, stopToken)` is the runtime owned-byte operation, used by interactive delivery and by administrative export:
+`LibraryJobs::loadResourceAsync(id, sizeLimit, stopToken)` is the runtime owned-byte operation, used by interactive delivery and by administrative export:
 
 | Input/result | Exact behavior |
 | --- | --- |
@@ -128,7 +128,7 @@ If a `full` document declares length `1024` for a digest whose row already holds
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp) defines create, digest reuse, length evidence, and probing.
 - [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp) defines the administrative scoped read used by export.
 - [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp) defines CLI resource listing and export.
-- [`LibraryTaskService.cpp`](../../../app/runtime/library/LibraryTaskService.cpp) defines the runtime owned-byte read and the carrier snapshot it walks.
+- [`LibraryJobs.cpp`](../../../app/runtime/library/LibraryJobs.cpp) defines the runtime owned-byte read and the carrier snapshot it walks.
 
 ## Test authority
 
@@ -137,7 +137,7 @@ If a `full` document declares length `1024` for a digest whose row already holds
 - [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) protects id creation, digest reuse, collision probing, declared and counted descriptor evidence, reads, removal, clear, and errors.
 - [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects valid references in track preparation.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, export by materialization, and both absence reports.
-- [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects interactive size, ownership, affinity, absence, event silence, cancellation, and carrier-index rebuild behavior.
+- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) protects interactive size, ownership, affinity, absence, event silence, cancellation, and carrier-index rebuild behavior.
 
 ## Related documents
 

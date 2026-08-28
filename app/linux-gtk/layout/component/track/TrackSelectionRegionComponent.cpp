@@ -3,13 +3,13 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
+#include "layout/component/track/TrackSelectionRegion.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/library/track/TrackSelectionRegionPolicy.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>

@@ -8,7 +8,7 @@
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
@@ -23,9 +23,9 @@ namespace ao::gtk::test
 
     SECTION("PlayPause action maps initial view state to button attributes")
     {
-      auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
+      auto actions = uimodel::PlaybackActions{playback, [] {}};
       auto button =
-        TransportButton{playback, commands, ao::test::englishMessageCatalog(), TransportButton::Action::PlayPause};
+        TransportButton{playback, actions, ao::test::englishMessageCatalog(), TransportButton::Action::PlayPause};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
       auto windowFixture = GtkWindowFixture{};
@@ -42,9 +42,9 @@ namespace ao::gtk::test
       rt::test::addReadyAudioProvider(fixture.runtime());
       drainGtkEvents();
       bool playSelectionCalled = false;
-      auto commands = uimodel::PlaybackCommandSurface{playback, [&playSelectionCalled] { playSelectionCalled = true; }};
+      auto actions = uimodel::PlaybackActions{playback, [&playSelectionCalled] { playSelectionCalled = true; }};
       auto button =
-        TransportButton{playback, commands, ao::test::englishMessageCatalog(), TransportButton::Action::Play, false};
+        TransportButton{playback, actions, ao::test::englishMessageCatalog(), TransportButton::Action::Play, false};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
 
@@ -54,9 +54,9 @@ namespace ao::gtk::test
 
     SECTION("The selected catalog supplies the accessible control name")
     {
-      auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
+      auto actions = uimodel::PlaybackActions{playback, [] {}};
       auto catalog = ao::test::messageCatalog("de-DE");
-      auto button = TransportButton{playback, commands, catalog, TransportButton::Action::Previous};
+      auto button = TransportButton{playback, actions, catalog, TransportButton::Action::Previous};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
       auto windowFixture = GtkWindowFixture{};

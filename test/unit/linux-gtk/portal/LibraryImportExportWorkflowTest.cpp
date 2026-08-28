@@ -23,8 +23,8 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -146,7 +146,7 @@ namespace ao::gtk::test
       portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
 
     std::int32_t progressFinishedCount = 0;
-    auto progressFinishedSub = fixture.runtime().library().taskService().onProgressFinished(
+    auto progressFinishedSub = fixture.runtime().library().jobs().onProgressFinished(
       [&progressFinishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
 
     workflow.scan();
@@ -174,10 +174,10 @@ namespace ao::gtk::test
 
     std::int32_t progressFinishedCount = 0;
     auto progressEvents = std::vector<rt::LibraryTaskProgressUpdated>{};
-    auto progressFinishedSub = fixture.runtime().library().taskService().onProgressFinished(
+    auto progressFinishedSub = fixture.runtime().library().jobs().onProgressFinished(
       [&progressFinishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
-    auto progressSub = fixture.runtime().library().taskService().onProgress(
-      [&progressEvents](auto const& event) noexcept { progressEvents.push_back(event); });
+    auto progressSub = fixture.runtime().library().jobs().onProgress([&progressEvents](auto const& event) noexcept
+                                                                     { progressEvents.push_back(event); });
 
     workflow.scan();
     REQUIRE(pumpGtkEventsUntil(

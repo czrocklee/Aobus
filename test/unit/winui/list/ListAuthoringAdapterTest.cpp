@@ -8,7 +8,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -23,12 +23,12 @@ namespace ao::winui::test
     auto fixture = uimodel::test::TrackPresentationFixture{};
     auto const listId = ListId{71};
 
-    fixture.preferences.setPresentationIdForList(listId, rt::kListOrderTrackPresentationId);
-    CHECK(resolveListAuthoringPresentation(fixture.preferences, listId, "$composer = 'Bach'").id ==
+    fixture.listPresentations.setPresentationIdForList(listId, rt::kListOrderTrackPresentationId);
+    CHECK(resolveListAuthoringPresentation(fixture.listPresentations, listId, "$composer = 'Bach'").id ==
           rt::kListOrderTrackPresentationId);
 
-    fixture.preferences.clearPresentationForList(listId);
-    CHECK(resolveListAuthoringPresentation(fixture.preferences, listId, "$composer = 'Bach'").id ==
+    fixture.listPresentations.clearPresentationForList(listId);
+    CHECK(resolveListAuthoringPresentation(fixture.listPresentations, listId, "$composer = 'Bach'").id ==
           "classical-composers");
   }
 

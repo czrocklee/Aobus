@@ -11,7 +11,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/uimodel/presentation/PresentationText.h>
@@ -48,7 +48,7 @@ namespace ao::winui
   {
   public:
     TrackListController(rt::AppRuntime& runtime,
-                        uimodel::TrackColumnLayoutState& columnLayouts,
+                        uimodel::TrackColumnLayouts& columnLayouts,
                         i18n::MessageCatalog textCatalog);
     ~TrackListController();
 
@@ -106,7 +106,7 @@ namespace ao::winui
     void resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
     i18n::MessageCatalog _textCatalog;
     rt::AppRuntime* _runtime = nullptr;
-    uimodel::TrackColumnLayoutState* _columnLayouts = nullptr;
+    uimodel::TrackColumnLayouts* _columnLayouts = nullptr;
     rt::ViewId _viewId{rt::kInvalidViewId};
     std::shared_ptr<rt::TrackListProjection> _projectionPtr;
     std::shared_ptr<void> _bindingLifetimePtr;

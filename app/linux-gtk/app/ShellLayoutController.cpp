@@ -49,8 +49,8 @@
 #include <ao/uimodel/layout/document/LayoutValidation.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
@@ -173,12 +173,11 @@ namespace ao::gtk
               .componentState = std::move(stateDoc)};
     }
 
-    uimodel::PlaybackCommandSurface& requirePlaybackCommandSurface(ShellLayoutCollaborators const& collaborators)
+    uimodel::PlaybackActions& requirePlaybackActions(ShellLayoutCollaborators const& collaborators)
     {
-      AO_EXPECTS(collaborators.playbackCommandSurface != nullptr,
-                 "ShellLayoutController: playback command surface is not bound");
+      AO_EXPECTS(collaborators.playbackActions != nullptr, "ShellLayoutController: playback actions are not bound");
 
-      return *collaborators.playbackCommandSurface;
+      return *collaborators.playbackActions;
     }
 
     ThemeCoordinator& requireThemeCoordinator(ShellLayoutCollaborators const& collaborators)
@@ -199,7 +198,7 @@ namespace ao::gtk
     , _registry{}
     , _actionRegistry{}
     , _textCatalog{collaborators.textCatalog}
-    , _playbackCommandSurface{requirePlaybackCommandSurface(collaborators)}
+    , _playbackActions{requirePlaybackActions(collaborators)}
     , _themeCoordinator{requireThemeCoordinator(collaborators)}
     , _tagEditController{collaborators.tagEditController}
     , _trackPageHost{collaborators.trackPageHost}
@@ -244,8 +243,7 @@ namespace ao::gtk
     registerWorkspaceActions(registerAction, hasActiveSequence);
     registerTrackActions(registerAction);
 
-    _actionStateSubscriptions.push_back(
-      _playbackCommandSurface.onAvailabilityChanged([this] { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_playbackActions.onAvailabilityChanged([this] { refreshExportedActions(); }));
     _actionStateSubscriptions.push_back(_runtime.views().onSelectionChanged(
       [this](rt::ViewService::SelectionChanged const&) { refreshExportedActions(); }));
     _actionStateSubscriptions.push_back(_runtime.views().onPresentationChanged(
@@ -288,14 +286,12 @@ namespace ao::gtk
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction)
   {
     auto const execute = [this](uimodel::PlaybackCommand command)
-    { return [this, command](layout::ActionActivationContext&) { _playbackCommandSurface.execute(command); }; };
+    { return [this, command](layout::ActionActivationContext&) { _playbackActions.execute(command); }; };
 
     auto const isEnabled = [this](uimodel::PlaybackCommand command)
     {
       return [this, command](layout::ActionActivationContext const&) -> layout::ActionAvailability
-      {
-        return layout::ActionAvailability{.enabled = _playbackCommandSurface.isEnabled(command), .disabledReason = ""};
-      };
+      { return layout::ActionAvailability{.enabled = _playbackActions.isEnabled(command), .disabledReason = ""}; };
     };
 
     for (auto const command : uimodel::playbackCommands())

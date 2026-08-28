@@ -120,7 +120,7 @@ Open Library may cancel an active scan through parent teardown; an already queue
 Import Library Data and Export Library Data are available from Modern's More and narrow Now Playing overflow menus and from Classic's File menu.
 Export first selects `delta`, `metadata`, `full`, or `listOnly`, defaulting to `full`, then uses the Windows save picker for a `.yaml` or `.yml` path.
 Import first selects `merge` or `restore`, defaulting to `merge`, then uses the Windows open picker.
-Both paths submit to the active session's `LibraryTaskService`; preparing an import, applying its plan, and exporting publish coarse file-named progress through Modern's existing activity surface and report their terminal outcome through the existing notification and status surfaces.
+Both paths submit to the active session's `LibraryJobs`; preparing an import, applying its plan, and exporting publish coarse file-named progress through Modern's existing activity surface and report their terminal outcome through the existing notification and status surfaces.
 Switching to Classic does not cancel or restart an admitted transfer; Classic's status bar reports the terminal status when it completes.
 A merge applies its prepared one-shot plan directly.
 A restore instead displays the prepared report's payload version and mode, target scope, create-update-delete counts, and ignored-reference count; its destructive action is scope-specific, defaults to Cancel, and is the only path that applies the plan.
@@ -270,7 +270,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 
 - [`app/windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) owns the `aobus-winui-lib` static-library and thin `aobus-winui` executable boundary.
 - [`App`](../../../app/windows-winui/App.xaml.h) owns the dispatcher, queued restart state, and [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.h).
-- [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one runtime, playback restore/admission, transactional selected-root commit, and the active-session scan workflow using the shared [`LibraryScanWorkflow`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h).
+- [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one runtime, playback restore/admission, transactional selected-root commit, and the active-session scan workflow using shared [`runLibraryScan`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h).
 - [`ao_app_desktop`](../../../app/desktop/) owns common root, startup, protocol,
   and detached-launch rules. [`ProcessLauncher`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
   owns real Win32 argument extraction and exact-executable discovery before
@@ -288,7 +288,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`AobusSoulControl`](../../../app/windows-winui/playback/AobusSoulControl.h) adapts the shared [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h).
 - [`OutputDeviceControl`](../../../app/windows-winui/playback/OutputDeviceControl.h)
   adapts shared [`OutputDeviceViewModel`](../../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
-  rows; [`OutputDeviceSelectionPolicy`](../../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+  rows; [`OutputSelection`](../../../app/include/ao/uimodel/playback/output/OutputSelection.h)
   owns pure restore admission and fallback resolution;
   [`DesktopOutputSelection`](../../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
   adapts that rule to Windows settings, while `LibrarySession` submits the
@@ -303,7 +303,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`TrackDisplayIndexTest.cpp`](../../../test/unit/uimodel/library/track/TrackDisplayIndexTest.cpp) and [`IndexedTrackRowCacheTest.cpp`](../../../test/unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp) protect grouping, source/display index mapping, and lazy row caching; runtime resource-byte tests protect shared cover delivery and stale-flight fencing.
 - [`LibraryScanWorkflowTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) protects the scan decision shared by GTK and WinUI.
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
-- [`OutputDeviceSelectionPolicyTest.cpp`](../../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+- [`OutputSelectionTest.cpp`](../../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
   protects catalog-aware persisted-route admission and fallback resolution.
 - [`DesktopOutputSelectionTest.cpp`](../../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
   protects Windows startup resolution and the deferred-checkpoint preference update.

@@ -3,16 +3,18 @@
 
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
+#include "LibraryScanWorkflow.h"
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <stop_token>
 #include <string_view>
 #include <vector>
 
@@ -156,5 +158,13 @@ namespace ao::uimodel
     }
 
     return outcome;
+  }
+
+  async::Task<LibraryScanOutcome> runLibraryScan(rt::LibraryJobs* const jobs,
+                                                 LibraryScanMode const mode,
+                                                 std::stop_token const stopToken)
+  {
+    auto result = co_await runLibraryScanWorkflow(jobs, mode, stopToken);
+    co_return decideLibraryScanOutcome(result);
   }
 } // namespace ao::uimodel

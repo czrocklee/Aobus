@@ -17,7 +17,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class ListPresentationPreferenceStore;
+  class ListPresentations;
   struct ListTreeProjection;
 }
 
@@ -44,10 +44,9 @@ namespace ao::winui
   bool listTreeChangeRequiresRebuild(rt::LibraryChangeSet const& changeSet) noexcept;
 
   /// Resolve the presentation that an authored saved List must display after save.
-  rt::TrackPresentationSpec resolveListAuthoringPresentation(
-    uimodel::ListPresentationPreferenceStore const& preferences,
-    ListId listId,
-    std::string_view localExpression);
+  rt::TrackPresentationSpec resolveListAuthoringPresentation(uimodel::ListPresentations const& listPresentations,
+                                                             ListId listId,
+                                                             std::string_view localExpression);
 
   /**
    * Resolve selection and expansion after native navigation nodes are replaced.

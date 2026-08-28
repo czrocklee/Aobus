@@ -9,7 +9,7 @@ namespace ao::rt
 }
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
   class OutputDeviceIntent;
 }
 namespace ao::i18n
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
    */
   void registerPlaybackComponents(ComponentRegistry& registry,
                                   rt::AppRuntime& runtime,
-                                  uimodel::PlaybackCommandSurface* playbackCommandSurface,
+                                  uimodel::PlaybackActions* playbackActions,
                                   ResourceImageLoader* imageLoader,
                                   i18n::MessageCatalog const& textCatalog,
                                   uimodel::OutputDeviceIntent const& outputDeviceIntent);

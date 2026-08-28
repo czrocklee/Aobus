@@ -19,7 +19,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
@@ -84,8 +84,7 @@ namespace ao::gtk::layout::test
       : appPtr{Gtk::Application::create(std::string{applicationId})}
       , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary), textOrderingPolicy)}
       , messageCatalog{ao::test::messageCatalog(locale)}
-      , playbackCommandSurface{runtimePtr->playback(),
-                               [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
+      , playbackActions{runtimePtr->playback(), [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
       , context{.registry = components,
                 .actionRegistry = actions,
                 .parentWindow = window,
@@ -97,7 +96,7 @@ namespace ao::gtk::layout::test
                                                 *runtimePtr,
                                                 ShellLayoutCollaborators{
                                                   .textCatalog = messageCatalog,
-                                                  .playbackCommandSurface = &playbackCommandSurface,
+                                                  .playbackActions = &playbackActions,
                                                 });
     }
 
@@ -124,7 +123,7 @@ namespace ao::gtk::layout::test
     ao::test::TempDir tempDir;
     std::unique_ptr<rt::AppRuntime> runtimePtr;
     i18n::MessageCatalog messageCatalog;
-    uimodel::PlaybackCommandSurface playbackCommandSurface;
+    uimodel::PlaybackActions playbackActions;
     ComponentRegistry components;
     ActionRegistry actions;
     Gtk::Window window;

@@ -174,7 +174,7 @@ The same soul button, with each shell's own extension alongside the shared prope
 - [`SharedLayoutComponentType.h`](../../../app/include/ao/uimodel/layout/component/SharedLayoutComponentType.h) names every shared component and its shared property names.
 - [`SharedLayoutComponentType.cpp`](../../../app/uimodel/layout/component/SharedLayoutComponentType.cpp) owns the shared descriptors and the departure report.
 - [`PlaybackCommand.h`](../../../app/include/ao/uimodel/playback/command/PlaybackCommand.h) owns the `command` ids.
-- [`PlaybackTimeFormatter.h`](../../../app/include/ao/uimodel/playback/seek/PlaybackTimeFormatter.h) owns the `mode` readings.
+- [`PlaybackPositionInteraction.h`](../../../app/include/ao/uimodel/playback/seek/PlaybackPositionInteraction.h) owns the `mode` readings.
 - Component registrations under [`app/linux-gtk/layout/component/`](../../../app/linux-gtk/layout/component/) and [`LayoutCatalog.cpp`](../../../app/windows-winui/layout/LayoutCatalog.cpp) build each shell's catalog from these descriptors.
 
 ## Test authority

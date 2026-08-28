@@ -73,7 +73,7 @@ Hiding a detail row also removes it from compact grouping when applicable.
 `LibraryTaskProgressUpdated` supplies a typed operation kind, subject, and fraction.
 Projection produces `Processing` compact state and one task detail row without parsing display text.
 
-`LibraryTaskService::onProgressFinished()` clears task progress and restores the current notification projection.
+`LibraryJobs::onProgressFinished()` clears task progress and restores the current notification projection.
 The pulse carries no task outcome, count, or message and never synthesizes success state.
 The awaited workflow caller owns success, warning, Error, and cancellation presentation.
 If a warning or error arrived while progress was active, finishing progress makes that retained notification eligible for compact status.
@@ -94,7 +94,7 @@ Runtime-transient info also has no local timeout because its authoritative servi
 ## Lifetime and failure
 
 The view model owns its subscriptions and the optional local deadline.
-The notification service and optional `LibraryTaskService` owner outlive it through application composition.
+The notification service and optional `LibraryJobs` owner outlive it through application composition.
 Projection exposes no recoverable error channel.
 Feed handlers are ordinary callables behind the notification signal's owning fatal boundary.
 They handle expected fallible work locally; an exception that escapes instead is diagnosed and aborted by that owner.

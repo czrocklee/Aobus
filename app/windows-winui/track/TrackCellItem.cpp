@@ -10,7 +10,7 @@
 #endif
 
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
+#include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 
 #include <utility>
 
@@ -20,7 +20,7 @@ namespace winrt::Aobus::implementation
     : _text{std::move(text)}, _fieldId{std::move(fieldId)}, _width{width}, _sortable{sortable}
   {
     if (auto const optField = ao::rt::trackFieldFromId(to_string(_fieldId));
-        optField && ao::uimodel::trackFieldColumnAlignment(*optField) == ao::uimodel::TrackColumnAlignment::End)
+        optField && ao::uimodel::trackColumnDefaults(*optField).alignment == ao::uimodel::TrackColumnAlignment::End)
     {
       _alignment = Microsoft::UI::Xaml::TextAlignment::Right;
     }

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
+#include "LibraryScanWorkflow.h"
 
 #include <ao/Error.h>
 #include <ao/async/Task.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
 #include <expected>
 #include <optional>
@@ -62,12 +63,10 @@ namespace ao::uimodel
     return summary.errorCount == 0 ? LibraryScanPlanDisposition::UpToDate : LibraryScanPlanDisposition::ErrorsOnly;
   }
 
-  async::Task<std::expected<LibraryScanWorkflowResult, LibraryScanWorkflowFailure>> runLibraryScanWorkflow(
-    rt::LibraryTaskService* const service,
-    LibraryScanMode const mode,
-    std::stop_token const stopToken)
+  async::Task<std::expected<LibraryScanWorkflowResult, LibraryScanWorkflowFailure>>
+  runLibraryScanWorkflow(rt::LibraryJobs* const jobs, LibraryScanMode const mode, std::stop_token const stopToken)
   {
-    auto planRes = co_await service->buildScanPlanAsync(stopToken);
+    auto planRes = co_await jobs->buildScanPlanAsync(stopToken);
 
     if (!planRes)
     {
@@ -95,7 +94,7 @@ namespace ao::uimodel
       options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
     }
 
-    auto appliedRes = co_await service->applyScanPlanAsync(std::move(plan), options, stopToken);
+    auto appliedRes = co_await jobs->applyScanPlanAsync(std::move(plan), options, stopToken);
 
     if (!appliedRes)
     {

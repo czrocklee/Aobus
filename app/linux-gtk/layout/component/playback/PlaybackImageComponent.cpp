@@ -19,7 +19,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
@@ -296,7 +296,7 @@ namespace ao::gtk::layout
         }
 
         auto coverArtId = kInvalidResourceId;
-        auto scope = _runtime.library().reader();
+        auto scope = _runtime.library().snapshot();
         coverArtId = scope.trackCoverArtId(_currentTrackId);
 
         if (coverArtId == _currentCoverArtId)

@@ -13,8 +13,8 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/resource/ResourceBytes.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/winui/MemoryRandomAccessStream.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 
@@ -70,7 +70,7 @@ namespace ao::winui
   {
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher{nullptr};
     winrt::Windows::Media::SystemMediaTransportControls controls{nullptr};
-    uimodel::PlaybackCommandSurface* commands = nullptr;
+    uimodel::PlaybackActions* actions = nullptr;
     ResourceId displayedArtworkId{kInvalidResourceId};
     winrt::Windows::Media::SystemMediaTransportControls::ButtonPressed_revoker buttonRevoker{};
     bool active = false;
@@ -79,7 +79,7 @@ namespace ao::winui
   void SmtcBridge::retireNativeSession(State& state) noexcept
   {
     state.active = false;
-    state.commands = nullptr;
+    state.actions = nullptr;
     state.displayedArtworkId = kInvalidResourceId;
     state.buttonRevoker.revoke();
 
@@ -103,12 +103,12 @@ namespace ao::winui
   SmtcBridge::SmtcBridge(HWND window,
                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                          rt::AppRuntime& runtime,
-                         uimodel::PlaybackCommandSurface& commands,
+                         uimodel::PlaybackActions& actions,
                          rt::ResourceByteLoader& resourceBytes)
     : _statePtr{std::make_shared<State>()}, _runtime{&runtime}, _resourceBytes{&resourceBytes}
   {
     _statePtr->dispatcher = std::move(dispatcher);
-    _statePtr->commands = &commands;
+    _statePtr->actions = &actions;
     _statePtr->active = true;
 
     auto interop = winrt::get_activation_factory<winrt::Windows::Media::SystemMediaTransportControls,
@@ -143,9 +143,9 @@ namespace ao::winui
           statePtr->dispatcher.TryEnqueue(
             [weakStatePtr, command]
             {
-              if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->commands != nullptr)
+              if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->actions != nullptr)
               {
-                statePtr->commands->execute(command);
+                statePtr->actions->execute(command);
               }
             });
         }
@@ -159,7 +159,7 @@ namespace ao::winui
   SmtcBridge::~SmtcBridge()
   {
     _statePtr->active = false;
-    _statePtr->commands = nullptr;
+    _statePtr->actions = nullptr;
     _statePtr->displayedArtworkId = kInvalidResourceId;
     _artworkRequest.reset();
     _artworkTask.reset();

@@ -19,8 +19,8 @@ CLI flags and output rendering belong to the [CLI command reference](../../../re
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
-`LibraryYamlExporter`, `LibraryYamlImporter`, and `LibraryTaskService` translate between a portable document and `ao::library::MusicLibrary`; YAML is not a physical storage format.
-Interactive and CLI callers use `LibraryTaskService` so a live-runtime commit consumes preview evidence rather than accepting a bare path.
+`LibraryYamlExporter`, `LibraryYamlImporter`, and `LibraryJobs` translate between a portable document and `ao::library::MusicLibrary`; YAML is not a physical storage format.
+Interactive and CLI callers use `LibraryJobs` so a live-runtime commit consumes preview evidence rather than accepting a bare path.
 The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated writable-library lease and transaction; they do not enter runtime maintenance or publish through `LibraryChanges` and must not mutate a library attached to a live runtime.
 
 ## Terminology
@@ -229,7 +229,7 @@ Export iterator integrity faults likewise unwind without producing a partial YAM
 After a durable live-runtime commit, revision-admission, publication-admission, or delivery failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and a live runtime terminates rather than exposing a recovery state.
 Offline import has no runtime publication phase; its transaction commit result is its terminal outcome.
 
-`LibraryTaskService` honors cancellation on executor transitions.
+`LibraryJobs` honors cancellation on executor transitions.
 Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.
 Before commit, cancellation aborts or prevents the Maintenance mutation and the workflow still completes its sequenced Maintenance exit while the runtime remains live.
 After durable commit, the command must reach `Published` or coordinated-Closing retirement before cancellation can propagate; a durable import is never reported as rolled back.
@@ -268,8 +268,8 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 
 - [`LibraryYamlExporter`](../../../../app/include/ao/rt/library/LibraryYamlExporter.h) and [`LibraryYamlExporter.cpp`](../../../../app/runtime/library/LibraryYamlExporter.cpp) implement export modes and baselines.
 - [`LibraryYamlImporter`](../../../../app/include/ao/rt/library/LibraryYamlImporter.h) and [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) implement strict parsing and prepared mutation behavior.
-- [`LibraryImportPlan`](../../../../app/include/ao/rt/library/LibraryImportPlan.h) and [`LibraryTaskService`](../../../../app/include/ao/rt/library/LibraryTaskService.h) define preview-bound application authorization.
-- [`LibraryMutationService`](../../../../app/runtime/library/LibraryMutationService.h) owns sequenced Maintenance entry, generation-bound preview/apply turns, revision settlement, and workflow exit.
+- [`LibraryImportPlan`](../../../../app/include/ao/rt/library/LibraryImportPlan.h) and [`LibraryJobs`](../../../../app/include/ao/rt/library/LibraryJobs.h) define preview-bound application authorization.
+- [`LibraryWriteLane`](../../../../app/runtime/library/LibraryWriteLane.h) owns sequenced Maintenance entry, generation-bound preview/apply turns, revision settlement, and workflow exit.
 - [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines canonical root-relative path evidence.
 - [`LibraryChanges`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines published change values.
 - [`LibraryTransferCoordinator`](../../../../app/windows-winui/library/LibraryTransferCoordinator.h) owns Windows pickers, native confirmation, notifications, and window-lifetime cancellation; [`LibraryTransferAdapter`](../../../../app/windows-winui/include/ao/winui/library/LibraryTransferAdapter.h) maps stable selector rows and shared report data without WinRT types.
@@ -282,7 +282,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryExportImportListTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
 - [`LibraryYamlSchemaTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
+- [`LibraryJobsTest.cpp`](../../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
 - [`LibraryTransferAdapterTest.cpp`](../../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping, restore-only destructive admission, and the complete native preview projection.
 - [`LibraryImportExportWorkflowTest.cpp`](../../../../test/unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp) proves confirmation precedes GTK mutation.
 - [`CliSmokeTest.cpp`](../../../../test/unit/cli/CliSmokeTest.cpp) proves CLI preview and explicit restore confirmation.

@@ -13,7 +13,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
@@ -58,7 +58,7 @@ namespace ao::gtk
   TrackPresentationButton::~TrackPresentationButton() = default;
 
   void TrackPresentationButton::setPresentationServices(uimodel::TrackPresentationCatalog* catalog,
-                                                        uimodel::ListPresentationPreferenceStore* preferences,
+                                                        uimodel::ListPresentations* listPresentations,
                                                         ThemeCoordinator* themeCoordinator)
   {
     // A pending apply belongs to the outgoing view model's session. Left
@@ -69,7 +69,7 @@ namespace ao::gtk
     _catalog = catalog;
     _themeCoordinator = themeCoordinator;
 
-    if (_catalog == nullptr || preferences == nullptr)
+    if (_catalog == nullptr || listPresentations == nullptr)
     {
       _viewModelPtr.reset();
       render({});
@@ -80,7 +80,7 @@ namespace ao::gtk
       _runtime.views(),
       _runtime.workspace(),
       *_catalog,
-      *preferences,
+      *listPresentations,
       _textCatalog,
       [this](uimodel::TrackPresentationPickerState const& state) { render(state); });
     _viewModelPtr->refresh();

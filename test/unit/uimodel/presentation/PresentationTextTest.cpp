@@ -10,7 +10,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
-#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -327,19 +326,6 @@ namespace ao::uimodel::test
           "Reset Manual Order and forgot 2 saved positions.");
     CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderForgotHidden, {{"count", 1}}) ==
           "Forgot 1 hidden saved position.");
-    CHECK(formatListMembershipMessage(
-            catalog, rt::AuthoringStatus::Applied, ListMembershipOperation::Add, "Road", "#road", 2, 0) ==
-          "Added #road to 2 tracks in Road.");
-    CHECK(formatListMembershipMessage(
-            catalog, rt::AuthoringStatus::Busy, ListMembershipOperation::Add, "Road", "#road", 0, 0) ==
-          "Library is busy. Try again.");
-    CHECK(formatListMembershipMessage(
-            catalog, rt::AuthoringStatus::NoOp, ListMembershipOperation::Remove, "Road", "#road", 0, 0) ==
-          "No #road membership or saved position remained in Road.");
-    CHECK(formatListMembershipMessage(
-            catalog, rt::AuthoringStatus::Applied, ListMembershipOperation::Remove, "Road", "#road", 2, 1) ==
-          "Removed #road from 2 tracks and forgot 1 saved position in Road.");
-
     CHECK(i18n::requiredText(catalog, MessageId::LibraryAudioIdentityIndexingComplete) ==
           "Audio identity indexing complete");
     CHECK(i18n::requiredText(catalog, MessageId::LibraryReadyIndexingAudioIdentity) ==
@@ -406,9 +392,6 @@ namespace ao::uimodel::test
     CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Alle 4 Titel aus der Quelle werden angezeigt");
     CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 2}}) ==
           "2 Titel wurden in der manuellen Sortierung verschoben.");
-    CHECK(formatListMembershipMessage(
-            catalog, rt::AuthoringStatus::Applied, ListMembershipOperation::Add, "Straße", "#straße", 2, 0) ==
-          "#straße wurde für 2 Titel in Straße hinzugefügt.");
     CHECK(i18n::requiredFormat(catalog, MessageId::LibraryExportFailed, {{"error", "Datenträger voll"}}) ==
           "Export fehlgeschlagen: Datenträger voll");
   }

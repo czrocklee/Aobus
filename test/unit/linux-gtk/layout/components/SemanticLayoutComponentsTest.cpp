@@ -43,14 +43,14 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -568,7 +568,7 @@ namespace ao::gtk::layout::test
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
     CHECK(std::get<std::string>(feed.entries.back().message) == "Tags added 1 for 1 track");
 
-    REQUIRE(runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
     auto const secondAddition = std::array{std::string{"Second"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{secondAddition}, std::span<std::string const>{});
 
@@ -590,7 +590,7 @@ namespace ao::gtk::layout::test
     CHECK(trackSpecFor(runtime.musicLibrary(), firstTrackId).tags == expectedTags);
     drainGtkEvents();
 
-    REQUIRE(runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Invalidate Second"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Invalidate Second"})));
     auto const notificationCount = runtime.notifications().feed().entries.size();
     auto const retryAddition = std::array{std::string{"Retry"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{retryAddition}, std::span<std::string const>{});
@@ -708,7 +708,7 @@ namespace ao::gtk::layout::test
     auto controller = TrackDetailUndoController{};
     controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
 
-    REQUIRE(runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
     REQUIRE(controller.pendingCustomMetadataUndo());
     CHECK_FALSE(controller.pendingCustomMetadataUndo()->sessionPtr->isCurrent());
 
@@ -804,7 +804,7 @@ namespace ao::gtk::layout::test
 
     emitClicked(titleEditor->editButton());
     REQUIRE(titleEditor->isEditing());
-    REQUIRE(runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
     drainGtkEvents();
 
     CHECK_FALSE(titleEditor->isEditing());
@@ -842,7 +842,7 @@ namespace ao::gtk::layout::test
     moodEditor->startEditing();
     REQUIRE(moodEditor->isEditing());
     moodEditor->entry().set_text("Dark");
-    REQUIRE(runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
 
     REQUIRE(pumpGtkEventsUntil([moodEditor] { return !moodEditor->isEditing(); }));
 
@@ -1111,10 +1111,10 @@ namespace ao::gtk::layout::test
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
-    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto pageHost = TrackPageHost{
-      stack, runtime, tagEditController, listNavigation, layoutStore, ao::test::englishMessageCatalog(), byteLoader};
+      stack, runtime, tagEditController, listNavigation, columnLayouts, ao::test::englishMessageCatalog(), byteLoader};
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();

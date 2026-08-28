@@ -6,7 +6,7 @@
 #include "platform/StringResources.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -187,9 +187,9 @@ namespace ao::winui
     unbind();
   }
 
-  void ActivityStatusControl::bind(rt::NotificationService& notifications, rt::LibraryTaskService& libraryTasks)
+  void ActivityStatusControl::bind(rt::NotificationService& notifications, rt::LibraryJobs& libraryJobs)
   {
-    if (_notifications == &notifications && _libraryTasks == &libraryTasks && _viewModelPtr)
+    if (_notifications == &notifications && _libraryJobs == &libraryJobs && _viewModelPtr)
     {
       return;
     }
@@ -197,7 +197,7 @@ namespace ao::winui
     unbind();
     resetPresentation();
     _notifications = &notifications;
-    _libraryTasks = &libraryTasks;
+    _libraryJobs = &libraryJobs;
 
     try
     {
@@ -206,7 +206,7 @@ namespace ao::winui
         _textCatalog,
         [this](uimodel::ActivityStatusViewState const& state) { render(state); },
         uimodel::ActivityStatusViewModelOptions{
-          .libraryTasks = &libraryTasks,
+          .libraryJobs = &libraryJobs,
           .emitInitialState = false,
         });
       render(_viewModelPtr->viewState());
@@ -217,7 +217,7 @@ namespace ao::winui
       clearDetailRows();
       _viewModelPtr.reset();
       _notifications = nullptr;
-      _libraryTasks = nullptr;
+      _libraryJobs = nullptr;
       throw;
     }
   }
@@ -225,7 +225,7 @@ namespace ao::winui
   void ActivityStatusControl::unbind() noexcept
   {
     _notifications = nullptr;
-    _libraryTasks = nullptr;
+    _libraryJobs = nullptr;
     _viewModelPtr.reset();
     cancelAutoDismissTimer();
     clearDetailRows();

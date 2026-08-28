@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/library/track/TrackFilterViewModel.h>
-
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
-#include <ao/uimodel/library/track/TrackFilterResolver.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
+#include <ao/uimodel/library/track/TrackFilterView.h>
 
 #include <functional>
 #include <string>
@@ -56,7 +55,7 @@ namespace ao::uimodel
       return;
     }
 
-    auto const resolved = resolveTrackFilterExpression(rawText);
+    auto const resolved = resolveTrackFilter(rawText);
     _resolvedExpression = resolved.expression;
 
     auto const result = _viewService.setFilter(_viewId, _resolvedExpression);
@@ -102,7 +101,7 @@ namespace ao::uimodel
 
     _entryText = foundRes->filterExpression;
 
-    auto const resolved = resolveTrackFilterExpression(_entryText);
+    auto const resolved = resolveTrackFilter(_entryText);
     _resolvedExpression = resolved.expression;
     _optFilterError = foundRes->optFilterError;
 

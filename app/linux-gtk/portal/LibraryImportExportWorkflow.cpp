@@ -16,10 +16,9 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryImportPlan.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <cstdint>
@@ -102,12 +101,11 @@ namespace ao::gtk::portal
 
   async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode, std::stop_token const stopToken)
   {
-    auto presentResult = _presentationCallbacks.guard(
-      [this](std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result) mutable
-      { presentScanOutcome(uimodel::decideLibraryScanOutcome(result)); });
-    auto* const taskService = &_runtime.library().taskService();
-    auto result = co_await uimodel::runLibraryScanWorkflow(taskService, mode, stopToken);
-    presentResult(std::move(result));
+    auto presentResult = _presentationCallbacks.guard([this](uimodel::LibraryScanOutcome outcome) mutable
+                                                      { presentScanOutcome(outcome); });
+    auto* const jobs = &_runtime.library().jobs();
+    auto outcome = co_await uimodel::runLibraryScan(jobs, mode, stopToken);
+    presentResult(std::move(outcome));
   }
 
   async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow(std::stop_token const stopToken)
@@ -138,8 +136,8 @@ namespace ao::gtk::portal
                                         rt::NotificationLifetime::transient());
         }
       });
-    auto* const taskService = &_runtime.library().taskService();
-    auto result = co_await taskService->backfillAudioIdentityAsync(stopToken);
+    auto* const jobs = &_runtime.library().jobs();
+    auto result = co_await jobs->backfillAudioIdentityAsync(stopToken);
 
     if (!result)
     {
@@ -170,8 +168,8 @@ namespace ao::gtk::portal
                                       gtkText(_textCatalog, i18n::MessageId::LibraryExported),
                                       rt::NotificationLifetime::transient());
       });
-    auto* const taskService = &_runtime.library().taskService();
-    auto result = co_await taskService->exportLibraryAsync(std::move(exportPath), mode, stopToken);
+    auto* const jobs = &_runtime.library().jobs();
+    auto result = co_await jobs->exportLibraryAsync(std::move(exportPath), mode, stopToken);
     presentResult(std::move(result));
   }
 
@@ -223,9 +221,8 @@ namespace ao::gtk::portal
                                 applyPreparedImport(std::move(plan));
                               }));
       });
-    auto* const taskService = &_runtime.library().taskService();
-    auto result =
-      co_await taskService->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
+    auto* const jobs = &_runtime.library().jobs();
+    auto result = co_await jobs->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
     presentResult(std::move(result));
   }
 
@@ -258,8 +255,8 @@ namespace ao::gtk::portal
                                       gtkText(_textCatalog, i18n::MessageId::LibraryImported),
                                       rt::NotificationLifetime::transient());
       });
-    auto* const taskService = &_runtime.library().taskService();
-    auto result = co_await taskService->applyLibraryImportPlanAsync(std::move(plan), stopToken);
+    auto* const jobs = &_runtime.library().jobs();
+    auto result = co_await jobs->applyLibraryImportPlanAsync(std::move(plan), stopToken);
     presentResult(std::move(result));
   }
 

@@ -8,8 +8,8 @@
 #include "Output.h"
 #include "ScanOutput.h"
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Path.h>
 #include <ao/yaml/Reflect.h>
@@ -254,7 +254,7 @@ namespace ao::cli
       options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
     }
 
-    auto applyProgress = rt::LibraryTaskService::ScanProgressCallback{};
+    auto applyProgress = rt::LibraryJobs::ScanProgressCallback{};
 
     if (verbose)
     {
@@ -268,7 +268,7 @@ namespace ao::cli
       };
     }
 
-    if (auto const applyRes = cli.runTask(cli.library().taskService().applyScanPlanAsync(
+    if (auto const applyRes = cli.runTask(cli.library().jobs().applyScanPlanAsync(
           std::move(plan),
           options,
           {},

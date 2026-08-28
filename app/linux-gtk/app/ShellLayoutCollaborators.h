@@ -15,9 +15,9 @@
 
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
   class TrackPresentationCatalog;
-  class ListPresentationPreferenceStore;
+  class ListPresentations;
 } // namespace ao::uimodel
 
 namespace ao::gtk
@@ -49,7 +49,7 @@ namespace ao::gtk
   struct ShellLayoutCollaborators final
   {
     i18n::MessageCatalog textCatalog;
-    uimodel::PlaybackCommandSurface* playbackCommandSurface = nullptr;
+    uimodel::PlaybackActions* playbackActions = nullptr;
     ThemeCoordinator* themeCoordinator = nullptr;
     TrackRowCache* trackRowCache = nullptr;
     ResourceImageLoader* imageLoader = nullptr;
@@ -57,7 +57,7 @@ namespace ao::gtk
     portal::ImportExportActions* importExportActions = nullptr;
     TrackPageHost* trackPageHost = nullptr;
     uimodel::TrackPresentationCatalog* trackPresentationCatalog = nullptr;
-    uimodel::ListPresentationPreferenceStore* trackPresentationPreferences = nullptr;
+    uimodel::ListPresentations* listPresentations = nullptr;
     ListNavigationController* listNavigationController = nullptr;
     uimodel::OutputDeviceIntent outputDeviceIntent = uimodel::OutputDeviceIntent::discarded();
     std::function<void(ao::ListId, std::string)> createSmartListFromExpression{};

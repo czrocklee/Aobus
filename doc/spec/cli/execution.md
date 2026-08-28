@@ -15,7 +15,7 @@ Exact command and DTO fields belong to the [CLI command reference](../../referen
 ## Code boundary
 
 The CLI is a non-interactive application adapter.
-`CliRuntime` composes `CoreRuntime` and exposes runtime `LibraryReader`/`LibraryWriter`, scan, transfer, and low-level administrative surfaces needed by commands.
+`CliRuntime` composes `CoreRuntime` and exposes runtime `LibrarySnapshot`/`LibraryCommands`, scan, transfer, and low-level administrative surfaces needed by commands.
 It bypasses UIModel because it owns no reusable interactive state.
 It also owns the synchronous boundary for asynchronous runtime tasks: `LoopExecutor` keeps callback delivery on the invocation thread, and `runTask()` drives that loop to terminal completion.
 

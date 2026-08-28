@@ -16,7 +16,7 @@ namespace ao::gtk::layout
   {
     registerPlaybackDetailsComponent(registry, runtime.playback(), textCatalog);
     registerNowPlayingStatusComponent(registry, runtime.playback(), textCatalog);
-    registerActivityStatusComponent(registry, runtime.notifications(), runtime.library().taskService(), textCatalog);
+    registerActivityStatusComponent(registry, runtime.notifications(), runtime.library().jobs(), textCatalog);
     registerSelectionInfoComponent(registry, runtime.views(), textCatalog);
     registerLibraryTrackCountComponent(registry, runtime, textCatalog);
     registerStatusMessageLabelComponent(registry, textCatalog);

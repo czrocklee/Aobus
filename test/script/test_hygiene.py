@@ -120,6 +120,15 @@ class TidyCommandTest(unittest.TestCase):
         self.assertFalse(invocation.is_header)
         self.assertFalse(tidy.TidyInvocation(companion, companion).is_include_fragment)
 
+    def test_winui_sources_limit_diagnostics_to_the_selected_file(self):
+        winui_source = tidy.PROJECT_ROOT / "app" / "windows-winui" / "MainWindow.xaml.cpp"
+        core_source = tidy.PROJECT_ROOT / "app" / "i18n" / "MessageCatalog.cpp"
+        core_header = tidy.PROJECT_ROOT / "app" / "include" / "ao" / "i18n" / "MessageCatalog.h"
+
+        self.assertTrue(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(winui_source, winui_source)))
+        self.assertTrue(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(core_header, core_source)))
+        self.assertFalse(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(core_source, core_source)))
+
     def test_default_tidy_uses_only_an_existing_normal_debug_dependency_tree(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

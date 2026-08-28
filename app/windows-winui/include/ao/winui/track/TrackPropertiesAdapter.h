@@ -7,9 +7,9 @@
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <cstddef>
 #include <cstdint>

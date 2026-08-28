@@ -32,8 +32,8 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 // MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
-#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/WinUiErrorBoundary.h>
@@ -177,7 +177,7 @@ namespace winrt::Aobus::implementation
         .sources = runtime.sources(),
         .trackList = *_trackListPtr,
         .presentationCatalog = session.presentationCatalog(),
-        .presentationPreferences = session.presentationPreferenceStore(),
+        .listPresentations = session.listPresentations(),
         .textOrderingPolicy = runtime.textOrderingPolicy(),
         .textCatalog = session.textCatalog(),
         .reportStatus =
@@ -203,7 +203,7 @@ namespace winrt::Aobus::implementation
         },
         .windowId = AppWindow().Id(),
         .asyncRuntime = runtime.async(),
-        .taskService = runtime.library().taskService(),
+        .jobs = runtime.library().jobs(),
         .notifications = runtime.notifications(),
         .textCatalog = session.textCatalog(),
         .reportStatus =

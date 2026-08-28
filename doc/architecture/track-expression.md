@@ -52,7 +52,7 @@ A Unicode-caseless text-substring predicate stores its folded literal in the pla
 
 ### Library and runtime consumers
 
-`LibraryWriter` validates a saved-List expression before committing its text as part of a List definition.
+`LibraryCommands` validates a saved-List expression before committing its text as part of a List definition.
 `TrackSourceCache`, `SmartListSource`, and `SmartListEvaluator` compile that text and maintain the resulting ordered membership over an upstream source.
 `ListOrderSource` then applies the List's independent saved-rank overlay; expression evaluation neither reads nor mutates that rank.
 The same source machinery materializes transient `ViewService` filters without persisting a new list.
@@ -121,7 +121,7 @@ TrackSource + TrackPresentationSpec
 ```text
 frontend editor or CLI command
   -> UIModel draft when interactive
-  -> LibraryWriter validation
+  -> LibraryCommands validation
   -> persisted local expression text
   -> TrackSourceCache dependency graph
   -> SmartListSource parse + compile
@@ -231,13 +231,13 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`Completion.h`](../../include/ao/query/Completion.h) defines tolerant core completion analysis.
 - [`FieldCatalog.h`](../../include/ao/query/FieldCatalog.h) defines typed variable descriptors and lookup.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) defines the application capability catalog and typed query bridge.
-- [`LibraryWriter.cpp`](../../app/runtime/library/LibraryWriter.cpp) validates persisted List definitions.
+- [`LibraryCommands.cpp`](../../app/runtime/library/LibraryCommands.cpp) validates persisted List definitions.
 - [`SmartListSource`](../../app/include/ao/rt/source/SmartListSource.h), [`SmartListEvaluator`](../../app/include/ao/rt/source/SmartListEvaluator.h), and [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) materialize predicate membership.
 - [`ListOrderSource`](../../app/include/ao/rt/source/ListOrderSource.h) applies independent saved rank after predicate evaluation.
 - [`ViewService`](../../app/include/ao/rt/ViewService.h) combines base list, transient filter, presentation, and projection state.
 - [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live runtime completion.
 - [`CompletionAliasPolicy`](../../app/include/ao/rt/completion/CompletionAliasPolicy.h) defines the ICU-free alias seam; [`IcuCompletionAliases`](../../app/include/ao/i18n/IcuCompletionAliases.h) supplies the interactive implementation.
-- [`TrackFilterResolver`](../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) own shared quick-filter authoring and completion policy.
+- [`resolveTrackFilter`](../../app/include/ao/uimodel/library/track/TrackFilter.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilter.h) own shared quick-filter authoring and completion policy.
 - [`completionDetail`](../../app/include/ao/uimodel/presentation/PresentationText.h) resolves completion roles and counts without changing query syntax.
 - [`TrackCommand.cpp`](../../app/cli/TrackCommand.cpp) is the current format-expression consumer.
 
@@ -246,7 +246,7 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - Query tests under [`test/unit/query/`](../../test/unit/query/) protect parsing, compilation, evaluation, serialization, completion, access profiles, and formatting.
 - Smart source tests under [`test/unit/runtime/source/`](../../test/unit/runtime/source/) protect persisted and transient membership materialization.
 - Completion tests under [`test/unit/runtime/completion/`](../../test/unit/runtime/completion/) protect live vocabulary composition.
-- [`TrackFilterResolverTest.cpp`](../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) and [`TrackFilterCompleterTest.cpp`](../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protect quick-filter resolution and completion.
+- [`TrackFilterResolutionTest.cpp`](../../test/unit/uimodel/library/track/TrackFilterResolutionTest.cpp) and [`TrackFilterCompleterTest.cpp`](../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protect quick-filter resolution and completion.
 - Presentation recommendation tests under [`test/unit/uimodel/library/presentation/`](../../test/unit/uimodel/library/presentation/) protect the read-only expression-to-preset seam.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects CLI filter and format workflows.
 

@@ -5,7 +5,7 @@
 
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
+#include <ao/uimodel/playback/output/OutputSelection.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #include <optional>

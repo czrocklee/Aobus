@@ -54,8 +54,8 @@ namespace ao::async
 
 namespace ao::uimodel
 {
-  class ListPresentationPreferenceStore;
-  class PlaybackCommandSurface;
+  class ListPresentations;
+  class PlaybackActions;
   class TrackPresentationCatalog;
 }
 
@@ -170,7 +170,7 @@ namespace ao::gtk
     layout::ActionRegistry _actionRegistry;
     uimodel::LayoutRuntimeState _runtimeState;
     i18n::MessageCatalog _textCatalog;
-    uimodel::PlaybackCommandSurface& _playbackCommandSurface;
+    uimodel::PlaybackActions& _playbackActions;
     ThemeCoordinator& _themeCoordinator;
     TagEditController* _tagEditController = nullptr;
     TrackPageHost* _trackPageHost = nullptr;

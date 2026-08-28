@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
+#include "app/uimodel/library/task/LibraryScanWorkflow.h"
 
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
 #include <catch2/catch_test_macros.hpp>
 

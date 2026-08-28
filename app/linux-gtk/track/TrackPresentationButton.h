@@ -22,7 +22,7 @@ namespace ao::rt
 namespace ao::uimodel
 {
   class TrackPresentationCatalog;
-  class ListPresentationPreferenceStore;
+  class ListPresentations;
 }
 
 namespace ao::gtk
@@ -44,7 +44,7 @@ namespace ao::gtk
     TrackPresentationButton& operator=(TrackPresentationButton&&) = delete;
 
     void setPresentationServices(uimodel::TrackPresentationCatalog* catalog,
-                                 uimodel::ListPresentationPreferenceStore* preferences,
+                                 uimodel::ListPresentations* listPresentations,
                                  ThemeCoordinator* themeCoordinator);
 
   private:

@@ -39,7 +39,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/preference/ThemePreset.h>
@@ -616,7 +616,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(runtime);
     auto& playback = runtime.playback();
     auto const sourceListId = ao::test::requireValue(runGtkTask(runtime,
-                                                                runtime.library().writer().createList(rt::ListDraft{
+                                                                runtime.library().commands().createList(rt::ListDraft{
                                                                   .name = "Temporary sequence source",
                                                                 })));
     runtime.reloadAllTracks();
@@ -627,7 +627,7 @@ namespace ao::gtk::test
     playback.commands().setShuffleMode(rt::ShuffleMode::On);
     playback.commands().setRepeatMode(rt::RepeatMode::All);
     REQUIRE(runtime.savePlaybackSession());
-    REQUIRE(runGtkTask(runtime, runtime.library().writer().deleteList(sourceListId)));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteList(sourceListId)));
     playback.commands().stop();
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";

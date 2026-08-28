@@ -46,7 +46,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -206,7 +206,7 @@ namespace ao::rt::test
       INFO((targetsRes ? "initial membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
       auto membershipResultValueRes = runRuntimeTask(
-        runtime, runtime.library().writer().editTags(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {}));
+        runtime, runtime.library().commands().editTags(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {}));
       INFO((membershipResultValueRes ? "initial membership updated" : membershipResultValueRes.error().message));
       REQUIRE(membershipResultValueRes);
       auto const& membershipRes = *membershipResultValueRes;
@@ -214,7 +214,7 @@ namespace ao::rt::test
       executor.drain();
       runtime.reloadAllTracks();
       auto listRes = runRuntimeTask(runtime,
-                                    runtime.library().writer().createList(ListDraft{
+                                    runtime.library().commands().createList(ListDraft{
                                       .name = "Playback session order",
                                       .expression = "#playbacksessionorder",
                                     }));
@@ -245,10 +245,10 @@ namespace ao::rt::test
       INFO((targetsRes ? "membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
       auto resultValueRes = included ? runRuntimeTask(runtime,
-                                                      runtime.library().writer().editTags(
+                                                      runtime.library().commands().editTags(
                                                         *targetsRes, {membershipTag.begin(), membershipTag.end()}, {}))
                                      : runRuntimeTask(runtime,
-                                                      runtime.library().writer().editTags(
+                                                      runtime.library().commands().editTags(
                                                         *targetsRes, {}, {membershipTag.begin(), membershipTag.end()}));
       INFO((resultValueRes ? "membership updated" : resultValueRes.error().message));
       REQUIRE(resultValueRes);
@@ -265,7 +265,7 @@ namespace ao::rt::test
       auto binding = ao::test::requireValue(runtime.library().bindListOrder(view.listId, effectiveTrackIds));
       return ao::test::requireValue(
         runRuntimeTask(runtime,
-                       runtime.library().writer().moveListOrder(
+                       runtime.library().commands().moveListOrder(
                          binding, {selectedTrackIds.begin(), selectedTrackIds.end()}, optBeforeTrackId)));
     }
 
@@ -1458,8 +1458,8 @@ namespace ao::rt::test
       auto const first = addPlayableTrack(*runtimePtr, *executor, "First");
       addPlayableTrack(*runtimePtr, *executor, "Second");
       runtimePtr->reloadAllTracks();
-      auto const listId = ao::test::requireValue(
-        runRuntimeTask(*runtimePtr, runtimePtr->library().writer().createList(ListDraft{.name = "Temporary source"})));
+      auto const listId = ao::test::requireValue(runRuntimeTask(
+        *runtimePtr, runtimePtr->library().commands().createList(ListDraft{.name = "Temporary source"})));
       auto const viewRes = runtimePtr->workspace().navigate({.target = listId});
       REQUIRE(viewRes);
       REQUIRE(startFromViewAndWait(*runtimePtr, *executor, *viewRes, first));
@@ -1467,7 +1467,7 @@ namespace ao::rt::test
 
       auto const selected = runtimePtr->playback().snapshot().transport.output.selectedDevice;
       runtimePtr->playback().commands().setOutputDevice(selected.backendId, selected.deviceId, selected.profileId);
-      REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().writer().deleteList(listId)));
+      REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteList(listId)));
       executor->drain();
       CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Invalidated);
       CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == first);
@@ -1532,7 +1532,7 @@ namespace ao::rt::test
     REQUIRE(runtimePtr->savePlaybackSession());
     CHECK(storedSession(runtimePtr->playbackSessionConfigStore()).positionMs == 450);
 
-    REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().writer().deleteTrack(first)));
+    REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteTrack(first)));
     executor->drain();
     REQUIRE(runtimePtr->savePlaybackSession());
     auto const moved = storedSession(runtimePtr->playbackSessionConfigStore());

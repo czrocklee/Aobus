@@ -18,10 +18,10 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/columnview.h>
@@ -215,7 +215,7 @@ namespace ao::gtk::test
             }
           });
         REQUIRE(runGtkTask(
-          fixture.runtime(), fixture.runtime().library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+          fixture.runtime(), fixture.runtime().library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
 
         // Replace the invalidated session before its deferred teardown runs.
         // Clearing the old session must disconnect that exact idle callback.

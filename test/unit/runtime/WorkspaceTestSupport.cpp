@@ -11,7 +11,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -37,7 +37,7 @@ namespace ao::rt::test
   ListId WorkspaceRuntimeFixture::createList(std::string name) const
   {
     return ao::test::requireValue(
-      runRuntimeTask(runtime(), runtime().library().writer().createList(ListDraft{.name = std::move(name)})));
+      runRuntimeTask(runtime(), runtime().library().commands().createList(ListDraft{.name = std::move(name)})));
   }
 
   ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request)

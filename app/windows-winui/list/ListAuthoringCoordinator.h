@@ -10,9 +10,10 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
-#include <ao/uimodel/library/list/SmartListEditorModel.h>
+#include <ao/uimodel/library/list/ListAuthoring.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/SmartListEditing.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
@@ -44,7 +45,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class ListPresentationPreferenceStore;
+  class ListPresentations;
   class TrackPresentationCatalog;
 }
 
@@ -61,7 +62,7 @@ namespace ao::winui
     rt::TrackSourceCache& sources;
     TrackListController& trackList;
     uimodel::TrackPresentationCatalog& presentationCatalog;
-    uimodel::ListPresentationPreferenceStore& presentationPreferences;
+    uimodel::ListPresentations& listPresentations;
     rt::TextOrderingPolicy const* textOrderingPolicy = nullptr;
     i18n::MessageCatalog textCatalog;
     std::function<void(std::string)> reportStatus;
@@ -118,15 +119,6 @@ namespace ao::winui
     void setDialogError(std::string text);
     void handleDialogClosed();
 
-    static async::Task<Result<ListId>> writeListDraft(rt::Library* library, rt::ListDraft draft);
-    static async::Task<Result<rt::DeleteListSubtreeReply>> previewDelete(rt::Library* library,
-                                                                         ListId listId,
-                                                                         bool includeDescendants);
-    static async::Task<Result<rt::DeleteListSubtreeReply>> commitDelete(rt::Library* library,
-                                                                        ListId listId,
-                                                                        bool includeDescendants,
-                                                                        rt::DeleteListOptions options);
-
     template<typename ResultType, typename Finish>
     static async::Task<void> finishOnCallbackExecutor(async::Runtime* runtime,
                                                       ListAuthoringCoordinator* owner,
@@ -151,7 +143,7 @@ namespace ao::winui
     rt::TrackSourceCache& _sources;
     TrackListController& _trackList;
     uimodel::TrackPresentationCatalog& _presentationCatalog;
-    uimodel::ListPresentationPreferenceStore& _presentationPreferences;
+    uimodel::ListPresentations& _listPresentations;
     rt::TextOrderingPolicy const* _textOrderingPolicy = nullptr;
     i18n::MessageCatalog _textCatalog;
     std::function<void(std::string)> _reportStatus;

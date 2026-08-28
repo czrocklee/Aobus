@@ -25,7 +25,7 @@ This decision replaces only the writer-reservation and scheduler-window coordina
 
 ## Decision
 
-Each live `ao::rt::Library` owns one private write sequencer inside `LibraryMutationService`.
+Each live `ao::rt::Library` owns one private write sequencer inside `LibraryWriteLane`.
 That sequencer owns the runtime's sole `WritableMusicLibrary` and is the only live-runtime authority allowed to open a `WriteTransaction`.
 Explicit offline scan/YAML composition and lower core-library fixtures remain outside the live runtime.
 
@@ -35,7 +35,7 @@ Once a command receives the active turn, it resumes on a worker and invokes a no
 An effective command retains the lane through durable commit and revision settlement, including replica and observer delivery plus the revision's applicable availability notification.
 No-op, preview, and pre-commit failure paths abort the transaction and release the lane without publication.
 
-Public live `LibraryWriter` mutators and previews return owning `async::Task<Result<T>>` values.
+Public live `LibraryCommands` mutators and previews return owning `async::Task<Result<T>>` values.
 Inputs that survive submission are copied or moved into command-owned storage; caller spans, views, paths by reference, transaction-bound values, and raw owner pointers do not cross the asynchronous boundary.
 Track/List authoring maps transient lane contention to non-terminal `Busy`; ordinary `Result` commands use `Error::Code::ResourceBusy`.
 `Unavailable` remains a logical admission/lifetime result, and `Stale` remains evidence invalidation.

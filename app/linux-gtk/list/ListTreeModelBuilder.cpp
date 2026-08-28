@@ -10,7 +10,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <giomm/listmodel.h>
@@ -30,7 +30,7 @@ namespace ao::gtk
     auto result = BuildResult{};
     result.storePtr = Gio::ListStore<ListTreeItem>::create();
 
-    auto scope = reads.reader();
+    auto scope = reads.snapshot();
     auto const snapshot = scope.lists();
     auto const projection = uimodel::buildListTreeProjection(textCatalog, snapshot);
 

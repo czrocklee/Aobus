@@ -27,20 +27,19 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
-#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
@@ -66,8 +65,7 @@ namespace ao::winui
 {
   namespace
   {
-    using LibraryScanResult = std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure>;
-    using PresentLibraryScan = compat::MoveOnlyFunction<void(LibraryScanResult)>;
+    using PresentLibraryScan = compat::MoveOnlyFunction<void(uimodel::LibraryScanOutcome)>;
 
     void checkpointWorkspaceBestEffort(rt::AppRuntime& runtime) noexcept
     {
@@ -88,13 +86,13 @@ namespace ao::winui
     }
 
     async::Task<void> runActiveScan(async::Runtime* const runtime,
-                                    rt::LibraryTaskService* const service,
+                                    rt::LibraryJobs* const jobs,
                                     PresentLibraryScan present,
                                     std::stop_token const stopToken)
     {
-      auto result = co_await uimodel::runLibraryScanWorkflow(service, uimodel::LibraryScanMode::Eager, stopToken);
+      auto outcome = co_await uimodel::runLibraryScan(jobs, uimodel::LibraryScanMode::Eager, stopToken);
       co_await runtime->resumeOnCallbackExecutor(stopToken);
-      present(std::move(result));
+      present(std::move(outcome));
     }
   } // namespace
 
@@ -149,15 +147,21 @@ namespace ao::winui
       APP_LOG_WARN("LibrarySession: failed to load Windows settings: {}", loadedRes.error().message);
     }
 
+    auto columnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
+
     if (auto loadedRes =
-          _settingsStorePtr->load("trackView.columnLayouts", _columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
-        !loadedRes && loadedRes.error().code != Error::Code::NotFound)
+          _settingsStorePtr->load("trackView.columnLayouts", columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
+        loadedRes)
+    {
+      _columnLayouts.restore(std::move(columnLayouts));
+    }
+    else if (loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loadedRes.error().message);
     }
 
     if (auto loadedRes = _settingsStorePtr->load(
-          "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{});
+          "trackView.presentations", _restoredListPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
@@ -283,9 +287,9 @@ namespace ao::winui
 
     // These UI-model owners borrow runtime services. They must disappear while
     // the runtime, stores, and dispatcher are still alive.
-    _playbackCommandsPtr.reset();
-    _presentationPreferenceSub.reset();
-    _presentationPreferenceStorePtr.reset();
+    _playbackActionsPtr.reset();
+    _listPresentationsSub.reset();
+    _listPresentationsPtr.reset();
     _presentationCatalogPtr.reset();
 
     // Stop and join every foreign producer while runtime callback consumers
@@ -313,9 +317,9 @@ namespace ao::winui
     return _runtimePtr->musicRoot();
   }
 
-  uimodel::PlaybackCommandSurface& LibrarySession::playbackCommands() const noexcept
+  uimodel::PlaybackActions& LibrarySession::playbackActions() const noexcept
   {
-    return *_playbackCommandsPtr;
+    return *_playbackActionsPtr;
   }
 
   rt::TrackPresentationSpec LibrarySession::presentationForList(ListId const listId) const
@@ -327,15 +331,15 @@ namespace ao::winui
 
     if (!rt::isVirtualListId(listId))
     {
-      if (auto const optNode = _runtimePtr->library().reader().listNode(listId); optNode)
+      if (auto const optNode = _runtimePtr->library().snapshot().listNode(listId); optNode)
       {
         context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
         context.listExpression = optNode->expression;
-        return _presentationPreferenceStorePtr->presentationForList(context);
+        return _listPresentationsPtr->presentationForList(context);
       }
     }
 
-    return _presentationPreferenceStorePtr->presentationForList(context);
+    return _listPresentationsPtr->presentationForList(context);
   }
 
   Result<> LibrarySession::saveSettings()
@@ -355,12 +359,15 @@ namespace ao::winui
 
   Result<> LibrarySession::saveSettingsCandidate(DesktopSettings const& settings)
   {
+    AO_INVARIANT(
+      _listPresentationsPtr != nullptr, "LibrarySession cannot save settings before List presentations are bound");
     _runtimePtr->workspace().saveSession(_runtimePtr->workspaceConfigStore());
+    auto const columnLayouts = _columnLayouts.snapshot();
+    auto const listPresentations = _listPresentationsPtr->snapshot();
     return _settingsStorePtr->saveTogether(
       rt::configWrite("desktop", settings, winui::DesktopSettingsYamlSchema{}),
-      rt::configWrite("trackView.columnLayouts", _columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
-      rt::configWrite(
-        "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{}));
+      rt::configWrite("trackView.columnLayouts", columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
+      rt::configWrite("trackView.presentations", listPresentations, uimodel::ListPresentationPreferenceYamlSchema{}));
   }
 
   Result<> LibrarySession::commitSelectedRoot()
@@ -473,29 +480,30 @@ namespace ao::winui
 
   void LibrarySession::bindRuntimeServices()
   {
-    _playbackCommandsPtr.reset();
-    _presentationPreferenceSub.reset();
-    _presentationPreferenceStorePtr.reset();
+    _playbackActionsPtr.reset();
+    _listPresentationsSub.reset();
+    _listPresentationsPtr.reset();
     _presentationCatalogPtr.reset();
     _presentationCatalogPtr =
       std::make_unique<uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), _textCatalog);
-    _presentationPreferenceStorePtr = std::make_unique<uimodel::ListPresentationPreferenceStore>(
-      *_presentationCatalogPtr, _runtimePtr->library().changes());
-    _presentationPreferenceStorePtr->setListPresentations(_presentationPreferences.presentations);
-    _presentationPreferenceSub = _presentationPreferenceStorePtr->signalChanged().connect(
+    _listPresentationsPtr =
+      std::make_unique<uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
+    _listPresentationsPtr->restore(std::move(_restoredListPresentations));
+    _restoredListPresentations.clear();
+    _listPresentationsSub = _listPresentationsPtr->signalChanged().connect(
       [this](ListId const)
       {
-        _presentationPreferences.presentations = _presentationPreferenceStorePtr->listPresentations();
+        auto const listPresentations = _listPresentationsPtr->snapshot();
         auto const savedRes = _settingsStorePtr->save(
-          "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{});
+          "trackView.presentations", listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
 
         if (!savedRes)
         {
           APP_LOG_WARN("LibrarySession: failed to persist presentation preference: {}", savedRes.error().message);
         }
       });
-    _playbackCommandsPtr =
-      std::make_unique<uimodel::PlaybackCommandSurface>(_runtimePtr->playback(), [this] { requestPlaySelection(); });
+    _playbackActionsPtr =
+      std::make_unique<uimodel::PlaybackActions>(_runtimePtr->playback(), [this] { requestPlaySelection(); });
   }
 
   void LibrarySession::rescan() noexcept
@@ -531,21 +539,21 @@ namespace ao::winui
   void LibrarySession::startActiveScan()
   {
     auto const lifetimePtr = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
-    auto present = PresentLibraryScan{[owner = this, lifetimePtr](LibraryScanResult result)
+    auto present = PresentLibraryScan{[owner = this, lifetimePtr](uimodel::LibraryScanOutcome outcome)
                                       {
                                         if (!lifetimePtr.expired())
                                         {
-                                          owner->finishActiveScan(std::move(result));
+                                          owner->finishActiveScan(std::move(outcome));
                                         }
                                       }};
     auto* const runtime = &_runtimePtr->async();
-    auto* const service = &_runtimePtr->library().taskService();
+    auto* const jobs = &_runtimePtr->library().jobs();
     _libraryTask = _runtimePtr->async().spawnCancellable(
-      [runtime, service, present = std::move(present)](std::stop_token const stopToken) mutable
-      { return runActiveScan(runtime, service, std::move(present), stopToken); });
+      [runtime, jobs, present = std::move(present)](std::stop_token const stopToken) mutable
+      { return runActiveScan(runtime, jobs, std::move(present), stopToken); });
   }
 
-  void LibrarySession::finishActiveScan(LibraryScanResult result)
+  void LibrarySession::finishActiveScan(uimodel::LibraryScanOutcome outcome)
   {
     if (_shutdown)
     {
@@ -559,7 +567,6 @@ namespace ao::winui
     // are decided in uimodel, so this window and the GTK one report the same
     // scan the same way. A scan that lost files says so here rather than
     // reporting a plain ready library.
-    auto const outcome = uimodel::decideLibraryScanOutcome(result);
     auto const severity = uimodel::libraryScanSeverity(outcome.verdict);
     auto message = formatLibraryScanMessage(_textCatalog, outcome);
 

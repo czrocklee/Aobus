@@ -15,7 +15,7 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <giomm/dbusconnection.h>
@@ -178,7 +178,7 @@ namespace ao::gtk::platform
   struct MprisBridge::Impl final
   {
     rt::PlaybackService& playback;
-    uimodel::PlaybackCommandSurface& commands;
+    uimodel::PlaybackActions& actions;
     Callbacks callbacks;
     PlaybackSource playbackSource;
     MprisPlaybackEndpoint endpoint;
@@ -193,14 +193,14 @@ namespace ao::gtk::platform
     MprisArtUrlSession artUrlSession;
 
     Impl(rt::PlaybackService& playbackRef,
-         uimodel::PlaybackCommandSurface& commandsRef,
+         uimodel::PlaybackActions& actionsRef,
          Callbacks callbacksIn,
          PlaybackSource playbackSourceIn)
       : playback{playbackRef}
-      , commands{commandsRef}
+      , actions{actionsRef}
       , callbacks{std::move(callbacksIn)}
       , playbackSource{std::move(playbackSourceIn)}
-      , endpoint{playback, commands, callbacks}
+      , endpoint{playback, actions, callbacks}
       , lastSnapshot{playbackSource.snapshot()}
       , artUrlSession{callbacks.requestArtUrl, [this] { emitPlayerPropertiesChanged({"Metadata"}); }}
     {
@@ -254,7 +254,7 @@ namespace ao::gtk::platform
 
     void subscribePlayback()
     {
-      subscriptions.push_back(commands.onAvailabilityChanged(
+      subscriptions.push_back(actions.onAvailabilityChanged(
         [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
       lastSnapshot = playbackSource.snapshot();
       refreshArt(lastSnapshot.transport);
@@ -757,18 +757,16 @@ namespace ao::gtk::platform
     }
   };
 
-  MprisBridge::MprisBridge(rt::PlaybackService& playback,
-                           uimodel::PlaybackCommandSurface& commands,
-                           Callbacks callbacks)
-    : MprisBridge{playback, commands, std::move(callbacks), playbackSourceFor(playback)}
+  MprisBridge::MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackActions& actions, Callbacks callbacks)
+    : MprisBridge{playback, actions, std::move(callbacks), playbackSourceFor(playback)}
   {
   }
 
   MprisBridge::MprisBridge(rt::PlaybackService& playback,
-                           uimodel::PlaybackCommandSurface& commands,
+                           uimodel::PlaybackActions& actions,
                            Callbacks callbacks,
                            PlaybackSource playbackSource)
-    : _implPtr{std::make_unique<Impl>(playback, commands, std::move(callbacks), std::move(playbackSource))}
+    : _implPtr{std::make_unique<Impl>(playback, actions, std::move(callbacks), std::move(playbackSource))}
   {
   }
 

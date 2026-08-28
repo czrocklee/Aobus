@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <filesystem>
 #include <memory>
@@ -35,13 +35,14 @@ namespace ao::gtk
     /**
      * @brief Load the layout state from disk.
      */
-    void load(uimodel::TrackColumnLayoutState& layoutState, uimodel::ListPresentationPreferenceState& prefState) const;
+    void load(uimodel::TrackColumnLayouts::Snapshot& layoutState,
+              uimodel::ListPresentations::Snapshot& prefState) const;
 
     /**
      * @brief Save the layout state to disk.
      */
-    void save(uimodel::TrackColumnLayoutState const& layoutState,
-              uimodel::ListPresentationPreferenceState const& prefState);
+    void save(uimodel::TrackColumnLayouts::Snapshot const& layoutState,
+              uimodel::ListPresentations::Snapshot const& prefState);
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

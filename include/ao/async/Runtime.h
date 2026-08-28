@@ -84,7 +84,7 @@ namespace ao::async
         // Boost.Asio supplies an empty payload to its completion token when
         // the source fails, while use_future preserves the source exception.
         auto transport = [](Task<T> source) -> Task<detail::TaskFuturePayload<T>>
-        { co_return detail::TaskFuturePayload<T>{co_await std::move(source)}; }(std::move(task));
+        { co_return detail::TaskFuturePayload{co_await std::move(source)}; }(std::move(task));
         return TaskFuture{boost::asio::co_spawn(workerPool(), std::move(transport), boost::asio::use_future)};
       }
     }

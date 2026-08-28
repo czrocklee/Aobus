@@ -9,7 +9,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
-#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
@@ -523,62 +522,6 @@ namespace ao::uimodel
 
     return requiredFormat(
       catalog, MessageId::SmartListShowingFirstMatches, {{"visible", kMaxPreview}, {"count", count}});
-  }
-
-  std::string formatListMembershipMessage(MessageCatalog const& catalog,
-                                          rt::AuthoringStatus const status,
-                                          ListMembershipOperation const operation,
-                                          std::string_view const listName,
-                                          std::string_view const tagExpression,
-                                          std::size_t const changedTrackCount,
-                                          std::size_t const forgottenPositionCount)
-  {
-    if (operation == ListMembershipOperation::Add)
-    {
-      switch (status)
-      {
-        case rt::AuthoringStatus::Busy: return std::string{requiredText(catalog, MessageId::LibraryBusyTryAgain)};
-        case rt::AuthoringStatus::Stale: return std::string{requiredText(catalog, MessageId::ListMembershipAddStale)};
-        case rt::AuthoringStatus::Unavailable:
-          return std::string{requiredText(catalog, MessageId::ListMembershipAddUnavailable)};
-        case rt::AuthoringStatus::NoOp:
-          return requiredFormat(
-            catalog, MessageId::ListMembershipAddNoOp, {{"list", listName}, {"tag", tagExpression}});
-        case rt::AuthoringStatus::Applied:
-          return requiredFormat(catalog,
-                                MessageId::ListMembershipAdded,
-                                {{"tag", tagExpression}, {"count", changedTrackCount}, {"list", listName}});
-      }
-    }
-
-    switch (status)
-    {
-      case rt::AuthoringStatus::Busy: return std::string{requiredText(catalog, MessageId::LibraryBusyTryAgain)};
-      case rt::AuthoringStatus::Stale: return std::string{requiredText(catalog, MessageId::ListMembershipRemoveStale)};
-      case rt::AuthoringStatus::Unavailable:
-        return std::string{requiredText(catalog, MessageId::ListMembershipRemoveUnavailable)};
-      case rt::AuthoringStatus::NoOp:
-        return requiredFormat(
-          catalog, MessageId::ListMembershipRemoveNoOp, {{"tag", tagExpression}, {"list", listName}});
-      case rt::AuthoringStatus::Applied:
-      {
-        if (forgottenPositionCount == 0)
-        {
-          return requiredFormat(catalog,
-                                MessageId::ListMembershipRemovedWithoutPosition,
-                                {{"tag", tagExpression}, {"count", changedTrackCount}, {"list", listName}});
-        }
-
-        return requiredFormat(catalog,
-                              MessageId::ListMembershipRemovedWithPositions,
-                              {{"tag", tagExpression},
-                               {"trackCount", changedTrackCount},
-                               {"positionCount", forgottenPositionCount},
-                               {"list", listName}});
-      }
-    }
-
-    return {};
   }
 
   std::string trackChannelText(MessageCatalog const& catalog, std::uint8_t const channels)

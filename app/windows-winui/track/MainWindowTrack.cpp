@@ -66,8 +66,7 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    if (auto const listId = _trackListPtr->activeListId();
-        _session->presentationPreferences().presentations.contains(listId))
+    if (auto const listId = _trackListPtr->activeListId(); _session->listPresentations().presentationIdForList(listId))
     {
       if (auto const selectedRes = _trackListPtr->selectPresentation(_session->presentationForList(listId));
           !selectedRes)

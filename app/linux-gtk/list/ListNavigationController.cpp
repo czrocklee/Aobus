@@ -10,9 +10,9 @@
 #include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
@@ -26,8 +26,9 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/library/list/ListActionPolicy.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/list/ListActions.h>
+#include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <gdkmm/rectangle.h>
@@ -62,23 +63,6 @@ namespace ao::gtk
     std::string displayedTag(std::string_view const tag)
     {
       return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
-    }
-
-    async::Task<Result<ListId>> updateListDraft(rt::Library* library, rt::ListDraft draft)
-    {
-      auto const listId = draft.listId;
-      auto result = co_await library->updateList(std::move(draft));
-      co_return std::move(result).transform([listId](rt::UpdateListReply const&) { return listId; });
-    }
-
-    async::Task<Result<ListId>> writeListDraft(rt::Library* library, rt::ListDraft draft)
-    {
-      if (draft.listId == kInvalidListId)
-      {
-        return library->createList(std::move(draft));
-      }
-
-      return updateListDraft(library, std::move(draft));
     }
   } // namespace
 
@@ -380,7 +364,7 @@ namespace ao::gtk
       return;
     }
 
-    auto scope = _runtime.library().reader();
+    auto scope = _runtime.library().snapshot();
 
     if (auto const optNode = scope.listNode(listId); optNode)
     {
@@ -436,7 +420,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "save list",
-                writeListDraft(&_runtime.library(), std::move(draft)),
+                uimodel::saveList(&_runtime.library(), std::move(draft)),
                 [presentationId = std::move(presentationId), presentResult = std::move(presentResult)](
                   ListNavigationController* owner, Result<ListId> submittedRes) mutable
                 {
@@ -491,8 +475,8 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "preview list deletion",
-                _runtime.library().previewDeleteList(listId),
-                [listId](ListNavigationController* owner, Result<rt::DeleteListReply> previewRes)
+                uimodel::previewListDeletion(&_runtime.library(), listId, false),
+                [listId](ListNavigationController* owner, Result<rt::DeleteListSubtreeReply> previewRes)
                 {
                   if (!previewRes)
                   {
@@ -500,12 +484,17 @@ namespace ao::gtk
                     return;
                   }
 
+                  AO_INVARIANT(
+                    !previewRes->deletedLists.empty(), "A successful List deletion preview must contain its root List");
+
+                  auto const& preview = previewRes->deletedLists.front();
+
                   owner->presentDeleteConfirmation(
                     listId,
                     false,
                     gtkText(owner->_textCatalog, i18n::MessageId::GtkListDeleteQuestionTitle),
-                    deleteListQuestion(owner->_textCatalog, previewRes->name),
-                    previewRes->optTagImpact);
+                    deleteListQuestion(owner->_textCatalog, preview.name),
+                    preview.optTagImpact);
                 });
   }
 
@@ -522,7 +511,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "preview list subtree deletion",
-                _runtime.library().previewDeleteListAndDescendants(listId),
+                uimodel::previewListDeletion(&_runtime.library(), listId, true),
                 [listId](ListNavigationController* owner, Result<rt::DeleteListSubtreeReply> previewRes)
                 {
                   if (!previewRes)
@@ -642,22 +631,11 @@ namespace ao::gtk
       owner->reconcilePendingSelection();
     };
 
-    if (deleteDescendants)
-    {
-      spawnUiTask(_runtime.async(),
-                  _tasks,
-                  *this,
-                  "delete list subtree",
-                  _runtime.library().deleteListAndDescendants(listId, options),
-                  complete);
-      return;
-    }
-
     spawnUiTask(_runtime.async(),
                 _tasks,
                 *this,
-                "delete list",
-                _runtime.library().deleteList(listId, options),
+                deleteDescendants ? "delete list subtree" : "delete list",
+                uimodel::deleteList(&_runtime.library(), listId, deleteDescendants, options),
                 std::move(complete));
   }
 

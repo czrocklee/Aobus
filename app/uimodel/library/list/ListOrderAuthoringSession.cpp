@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
-
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -17,10 +15,11 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderSession.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
@@ -224,7 +223,7 @@ namespace ao::uimodel
       return submitAsync<rt::AuthoringResult<rt::MoveListOrderReply>>(
         std::move(implPtr),
         [selectedTrackIds = std::move(selectedTrackIds), optBeforeTrackId](Impl& impl) mutable
-        { return impl.library.writer().moveListOrder(impl.order, std::move(selectedTrackIds), optBeforeTrackId); });
+        { return impl.library.commands().moveListOrder(impl.order, std::move(selectedTrackIds), optBeforeTrackId); });
     }
 
     static async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>>
@@ -484,7 +483,7 @@ namespace ao::uimodel
     }
 
     return Impl::submitAsync<rt::AuthoringResult<rt::ResetListOrderReply>>(
-      _implPtr, [](Impl& impl) { return impl.library.writer().resetListOrder(impl.order); });
+      _implPtr, [](Impl& impl) { return impl.library.commands().resetListOrder(impl.order); });
   }
 
   async::Task<Result<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>>
@@ -498,6 +497,6 @@ namespace ao::uimodel
     }
 
     return Impl::submitAsync<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>(
-      _implPtr, [](Impl& impl) { return impl.library.writer().forgetHiddenListOrder(impl.order); });
+      _implPtr, [](Impl& impl) { return impl.library.commands().forgetHiddenListOrder(impl.order); });
   }
 } // namespace ao::uimodel

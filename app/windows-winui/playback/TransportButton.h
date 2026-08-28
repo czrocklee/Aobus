@@ -38,7 +38,7 @@ namespace ao::winui
     TransportButton(TransportButton&&) = delete;
     TransportButton& operator=(TransportButton&&) = delete;
 
-    void bind(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands);
+    void bind(rt::PlaybackService& playback, uimodel::PlaybackActions& actions);
     void unbind() noexcept;
     void activate();
 

@@ -93,7 +93,7 @@ Runtime track-group snapshots retain raw text, numeric years, empty slots, and t
 Runtime completion items retain query syntax, rank, and typed detail roles or frequency counts.
 Core audio descriptors retain backend/profile ids and external device facts; UIModel supplies built-in backend/profile copy and semantic audio icon kinds.
 `OutputDeviceViewModel` projects the same route rows and selection command for GTK, TUI, and WinUI, and exposes the exact requested route independently of engine confirmation.
-`OutputDeviceSelectionPolicy` is pure: it requires non-empty backend and profile ids, rejects a profile known to be unsupported, permits an unavailable non-empty device as pending intent, and permits an empty device only when the published catalog advertises a compatible empty-id default.
+`OutputSelection` is pure: it requires non-empty backend and profile ids, rejects a profile known to be unsupported, permits an unavailable non-empty device as pending intent, and permits an empty device only when the published catalog advertises a compatible empty-id default.
 Consequently an empty device with the exclusive profile is never restorable.
 Runtime remains authoritative for the current accepted selection, while frontend lifecycle owners decide whether and where to persist requested intent.
 That decision is carried by `OutputDeviceIntent`, which every selector surface takes by value and which has no default state: a surface either names a recorder or declares `discarded()`.
@@ -154,7 +154,7 @@ Presentation owns the semantic state that those shell components adapt and rende
 `MainWindow` owns the visible window composition and the runtime/UIModel collaborators bound to it.
 It also retains the shared resolver and GTK shell catalog used by menus, preferences, shortcut and presentation editors, action descriptors, and layout-component accessibility fallbacks.
 Metadata/property surfaces and the Layout Editor consume that same injected resolver; stable document tokens remain identities while the GTK leaf maps built-in descriptor and enum values to localized display text.
-The List preview dialog may compose read-only runtime evaluators against the const library view, but GTK cannot name committing transaction authority or call `LibraryWriter` directly.
+The List preview dialog may compose read-only runtime evaluators against the const library view, but GTK cannot name committing transaction authority or call `LibraryCommands` directly.
 GTK owns generation-local drag handles, drop targets, indicators, autoscroll, and native shortcut dispatch.
 Rebuilding a track view destroys those gesture objects before their widgets; runtime revision and view/source generation changes invalidate retained order sessions rather than retargeting them.
 
@@ -204,7 +204,7 @@ Its structured automation DTOs are unversioned source-level contracts; field cha
 - UIModel depends on runtime interfaces and stable core value types, never platform UI libraries.
 - GTK, WinUI, and TUI may depend on runtime and UIModel and own all platform resources.
 - UIModel cannot include direct LMDB stores or audio player/engine/backend control headers.
-- GTK, WinUI, and TUI cannot call `LibraryWriter` directly; mutations cross a UIModel editor/session or a narrow semantic runtime surface.
+- GTK, WinUI, and TUI cannot call `LibraryCommands` directly; mutations cross a UIModel editor/session or a narrow semantic runtime surface.
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
 - UIModel exposes semantic presentation kinds; GTK maps those kinds to CSS classes and native icon names at its adapter boundary.
 - Core and runtime expose machine identities, structured absence, typed report/progress intent, and raw external data; shared authored copy resolves only after crossing into UIModel.
@@ -319,10 +319,10 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`OutputDeviceIntent`](../../app/include/ao/uimodel/playback/output/OutputDeviceIntent.h) owns the typed destination for a requested route and its explicit absence.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
   owns shared output-route projection, selection commands, and requested-intent reporting;
-  [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+  [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h)
   owns pure persisted-selection admission and fallback resolution.
 - [`TrackGroupHeadingPresentation`](../../app/include/ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h) resolves structured runtime group headings.
-- [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns revision-bound metadata/tag interaction lifetime.
+- [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns revision-bound metadata/tag interaction lifetime.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) owns stable field, sort, and group token conversion.
 - [`TrackColumnLayoutYamlSchema`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own versioned UIModel presentation documents.
 - [`ListTreeProjection`](../../app/include/ao/uimodel/library/list/ListTreeProjection.h) owns shared list-navigation hierarchy and recovery policy.
@@ -340,14 +340,14 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 ## Test map
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
-- [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
+- [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
 - [`PresentationTextTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
 - [`MessageCatalogTest.cpp`](../../test/unit/i18n/MessageCatalogTest.cpp), [`CatalogPatternTest.cpp`](../../test/unit/i18n/CatalogPatternTest.cpp), and the native [`WinUiLocalizationProbe.cpp`](../../test/helper/WinUiLocalizationProbe.cpp) protect explicit fallback, format signatures, immutable concurrent use, deterministic generation, and ICU/MRT parity.
 - [`MenuControllerTest.cpp`](../../test/unit/linux-gtk/app/MenuControllerTest.cpp), [`PreferencesWindowTest.cpp`](../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), [`TrackCustomViewDialogTest.cpp`](../../test/unit/linux-gtk/track/TrackCustomViewDialogTest.cpp), [`LayoutEditorTextTest.cpp`](../../test/unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp), and [`RenderTest.cpp`](../../test/unit/tui/RenderTest.cpp) protect the migrated GTK/TUI surface, localized built-in layout vocabulary, and preservation of command/key/document identities.
 - [`OutputDeviceIntentTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceIntentTest.cpp) protects the undecided-destination compile barrier and recorder dispatch.
 - [`OutputDeviceViewModelTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp)
-  and [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+  and [`OutputSelectionTest.cpp`](../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
   protect the three-frontend selector projection, command route, and restore
   admission policy.
 - [`ListTreeProjectionTest.cpp`](../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects shared list hierarchy, recovery, and ordering.

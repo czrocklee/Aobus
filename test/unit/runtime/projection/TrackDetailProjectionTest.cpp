@@ -16,7 +16,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -51,7 +51,7 @@ namespace ao::rt::test
       MusicLibraryFixture libraryFixture;
       async::LoopExecutor executor;
       LibraryChanges changes;
-      LibraryWriterFixture writerFixture;
+      LibraryCommandsFixture commandsFixture;
       TrackSourceCache sources;
       ViewService views;
       WorkspaceService workspace;
@@ -59,16 +59,16 @@ namespace ao::rt::test
       TrackDetailProjectionFixture()
         : libraryFixture{}
         , changes{executor, 0, "test-library"}
-        , writerFixture{libraryFixture.library(), changes, executor}
+        , commandsFixture{libraryFixture.library(), changes, executor}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources, changes}
         , workspace{executor, views, changes}
       {
       }
 
-      LibraryWriter& writer() { return writerFixture.writer(); }
+      LibraryCommands& commands() { return commandsFixture.commands(); }
 
-      TrackId addTrack(library::test::TrackSpec const& spec) { return writerFixture.addTrack(spec); }
+      TrackId addTrack(library::test::TrackSpec const& spec) { return commandsFixture.addTrack(spec); }
 
       TrackId addTrack(std::string_view const title)
       {
@@ -99,7 +99,7 @@ namespace ao::rt::test
     {
       auto const patch = MetadataPatch{.optTitle = "After"};
       auto const targetIds = std::array{id1};
-      REQUIRE(env.writerFixture.updateMetadata(targetIds, patch));
+      REQUIRE(env.commandsFixture.updateMetadata(targetIds, patch));
     }
 
     // Mutation service already published the signal
@@ -126,7 +126,7 @@ namespace ao::rt::test
 
     // Mutate a track not in the selection
     auto const otherIds = std::array{id2};
-    REQUIRE(env.writerFixture.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"}));
+    REQUIRE(env.commandsFixture.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"}));
 
     CHECK(publicationCount == 1);
     CHECK(projPtr->snapshot().trackIds == std::vector{id1});
@@ -341,7 +341,7 @@ namespace ao::rt::test
     // Add tag
     auto const targetIds = std::vector{id1};
     auto const tagsToAdd = std::vector<std::string>{"MyTag"};
-    REQUIRE(env.writerFixture.editTags(targetIds, tagsToAdd, {}));
+    REQUIRE(env.commandsFixture.editTags(targetIds, tagsToAdd, {}));
 
     auto const projPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector{id1}});
     auto const snap = projPtr->snapshot();
@@ -363,7 +363,7 @@ namespace ao::rt::test
       patch.customUpdates["Key1"] = "Value1";
       patch.customUpdates["Shared"] = "Same";
       patch.customUpdates["Mixed"] = "One";
-      REQUIRE(env.writerFixture.updateMetadata(std::vector{id1}, patch));
+      REQUIRE(env.commandsFixture.updateMetadata(std::vector{id1}, patch));
     }
 
     // Add custom metadata to id2
@@ -372,7 +372,7 @@ namespace ao::rt::test
       patch.customUpdates["Key2"] = "Value2";
       patch.customUpdates["Shared"] = "Same";
       patch.customUpdates["Mixed"] = "Two";
-      REQUIRE(env.writerFixture.updateMetadata(std::vector{id2}, patch));
+      REQUIRE(env.commandsFixture.updateMetadata(std::vector{id2}, patch));
     }
 
     auto const projPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector{id1, id2}});
@@ -434,11 +434,11 @@ namespace ao::rt::test
     auto const trackId = env.addTrack("Song");
     auto seedPatch = MetadataPatch{};
     seedPatch.customUpdates["Zulu"] = "Seed Value";
-    REQUIRE(env.writerFixture.updateMetadata(std::vector{seedTrackId}, seedPatch));
+    REQUIRE(env.commandsFixture.updateMetadata(std::vector{seedTrackId}, seedPatch));
     auto patch = MetadataPatch{};
     patch.customUpdates["Alpha"] = "First";
     patch.customUpdates["Zulu"] = "Last";
-    REQUIRE(env.writerFixture.updateMetadata(std::vector{trackId}, patch));
+    REQUIRE(env.commandsFixture.updateMetadata(std::vector{trackId}, patch));
 
     auto const projPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector{trackId}});
     auto const snapshot = projPtr->snapshot();

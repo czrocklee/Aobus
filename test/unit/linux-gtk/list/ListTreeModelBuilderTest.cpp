@@ -11,7 +11,7 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/liststore.h>
@@ -30,19 +30,19 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     // 1. Add some lists to the library
-    auto& writer = fixture.runtime().library().writer();
-    auto const idA =
-      ao::test::requireValue(runGtkTask(fixture.runtime(), writer.createList(rt::ListDraft{.name = "Parent List A"})));
+    auto& commands = fixture.runtime().library().commands();
+    auto const idA = ao::test::requireValue(
+      runGtkTask(fixture.runtime(), commands.createList(rt::ListDraft{.name = "Parent List A"})));
     drainGtkEvents();
     auto const idB = ao::test::requireValue(runGtkTask(fixture.runtime(),
-                                                       writer.createList(rt::ListDraft{
+                                                       commands.createList(rt::ListDraft{
                                                          .parentId = idA,
                                                          .name = "Filtered Child B",
                                                          .expression = "$genre = Rock",
                                                        })));
     drainGtkEvents();
     auto const idC =
-      ao::test::requireValue(runGtkTask(fixture.runtime(), writer.createList(rt::ListDraft{.name = "Root List C"})));
+      ao::test::requireValue(runGtkTask(fixture.runtime(), commands.createList(rt::ListDraft{.name = "Root List C"})));
     drainGtkEvents();
 
     // 2. Build the model

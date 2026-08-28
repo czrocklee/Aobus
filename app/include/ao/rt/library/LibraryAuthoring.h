@@ -13,7 +13,7 @@
 
 namespace ao::rt
 {
-  class LibraryMutationService;
+  class LibraryWriteLane;
 
   enum class LibraryAuthoringState : std::uint8_t
   {
@@ -28,6 +28,20 @@ namespace ao::rt
     std::uint64_t libraryRevision = 0;
 
     bool operator==(LibraryAuthoringAvailability const&) const = default;
+  };
+
+  struct LibraryStamp final
+  {
+    std::uint64_t runtimeId = 0;
+    std::uint64_t revision = 0;
+
+    bool matches(LibraryAuthoringAvailability const& availability) const noexcept
+    {
+      return availability.state == LibraryAuthoringState::Available && availability.runtimeInstanceId == runtimeId &&
+             availability.libraryRevision == revision;
+    }
+
+    bool operator==(LibraryStamp const&) const = default;
   };
 
   /**
@@ -46,8 +60,7 @@ namespace ao::rt
 
     bool matches(LibraryAuthoringAvailability const& availability) const noexcept
     {
-      return availability.state == LibraryAuthoringState::Available &&
-             availability.runtimeInstanceId == _runtimeInstanceId && availability.libraryRevision == _libraryRevision;
+      return _stamp.matches(availability);
     }
 
     std::span<TrackId const> trackIds() const noexcept { return _trackIds; }
@@ -56,15 +69,14 @@ namespace ao::rt
 
   private:
     BoundTrackTargets(std::uint64_t runtimeInstanceId, std::uint64_t libraryRevision, std::vector<TrackId> trackIds)
-      : _runtimeInstanceId{runtimeInstanceId}, _libraryRevision{libraryRevision}, _trackIds{std::move(trackIds)}
+      : _stamp{.runtimeId = runtimeInstanceId, .revision = libraryRevision}, _trackIds{std::move(trackIds)}
     {
     }
 
-    std::uint64_t _runtimeInstanceId = 0;
-    std::uint64_t _libraryRevision = 0;
+    LibraryStamp _stamp{};
     std::vector<TrackId> _trackIds;
 
-    friend class LibraryMutationService;
+    friend class LibraryWriteLane;
   };
 
   /**
@@ -82,8 +94,7 @@ namespace ao::rt
 
     bool matches(LibraryAuthoringAvailability const& availability) const noexcept
     {
-      return availability.state == LibraryAuthoringState::Available &&
-             availability.runtimeInstanceId == _runtimeInstanceId && availability.libraryRevision == _libraryRevision;
+      return _stamp.matches(availability);
     }
 
     ListId listId() const noexcept { return _listId; }
@@ -96,19 +107,17 @@ namespace ao::rt
                    std::uint64_t libraryRevision,
                    ListId listId,
                    std::vector<TrackId> effectiveTrackIds)
-      : _runtimeInstanceId{runtimeInstanceId}
-      , _libraryRevision{libraryRevision}
+      : _stamp{.runtimeId = runtimeInstanceId, .revision = libraryRevision}
       , _listId{listId}
       , _effectiveTrackIds{std::move(effectiveTrackIds)}
     {
     }
 
-    std::uint64_t _runtimeInstanceId = 0;
-    std::uint64_t _libraryRevision = 0;
+    LibraryStamp _stamp{};
     ListId _listId = kInvalidListId;
     std::vector<TrackId> _effectiveTrackIds;
 
-    friend class LibraryMutationService;
+    friend class LibraryWriteLane;
   };
 
   enum class AuthoringStatus : std::uint8_t

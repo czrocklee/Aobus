@@ -16,7 +16,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -49,7 +49,7 @@ namespace ao::tui::test
       ListId addList(std::string name) const
       {
         return ao::test::requireValue(rt::test::runRuntimeTask(
-          *runtimePtr, runtimePtr->library().writer().createList(rt::ListDraft{.name = std::move(name)})));
+          *runtimePtr, runtimePtr->library().commands().createList(rt::ListDraft{.name = std::move(name)})));
       }
     };
 

@@ -85,7 +85,7 @@ namespace ao::winui::layout
         _toolTipPtr = std::make_unique<AudioPipelineToolTip>(
           AudioPipelineToolTipConfig{.anchor = _button, .textCatalog = ctx.textCatalog});
 
-        _transportPtr->bind(ctx.playback, ctx.playbackCommands);
+        _transportPtr->bind(ctx.playback, ctx.playbackActions);
         _toolTipPtr->bind(ctx.playback);
         applyWindowActivity(ctx.windowActivity);
         _windowActivitySub = subscribeUiUpdate(ctx.windowActivityChanged,

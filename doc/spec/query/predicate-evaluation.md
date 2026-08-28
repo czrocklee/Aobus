@@ -133,7 +133,7 @@ Plans with no dictionary access may use the context-free convenience overloads.
 Supplying an explicit `DictionaryReadContext` or bound plan is a precondition for plans whose `requiresDictionary` flag is true.
 
 `SmartListSource` parses an empty expression as the constant `true` for source evaluation.
-`LibraryWriter` stores an empty List expression as the identity predicate; it does not select a different List kind.
+`LibraryCommands` stores an empty List expression as the identity predicate; it does not select a different List kind.
 
 ## Failure and cancellation
 

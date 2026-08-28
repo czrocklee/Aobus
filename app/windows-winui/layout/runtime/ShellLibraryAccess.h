@@ -9,9 +9,9 @@
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <filesystem>

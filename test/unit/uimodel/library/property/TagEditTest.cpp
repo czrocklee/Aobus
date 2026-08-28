@@ -5,13 +5,13 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
-#include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
+#include "test/unit/uimodel/library/track/TrackAuthoringTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -57,7 +57,7 @@ namespace ao::uimodel::test
     SECTION("an intervening commit reports the edit as stale")
     {
       auto sessionPtr = beginSession(fixture, std::array{trackId});
-      REQUIRE(fixture.runTask(fixture.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+      REQUIRE(fixture.runTask(fixture.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
 
       auto const result = fixture.runTask(applyTagEdit(*sessionPtr, textCatalog, {"Tag1"}, {}));
 
@@ -72,7 +72,7 @@ namespace ao::uimodel::test
       auto sessionPtr = beginSession(fixture, std::array{trackId});
       auto createCompletedPtr = std::make_shared<std::atomic_bool>(false);
       auto createFuture = fixture.runtime().spawn(rt::test::flagCompletion(
-        createCompletedPtr, fixture.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+        createCompletedPtr, fixture.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
       REQUIRE(fixture.executor().waitUntilQueued());
 
       auto editCompletedPtr = std::make_shared<std::atomic_bool>(false);

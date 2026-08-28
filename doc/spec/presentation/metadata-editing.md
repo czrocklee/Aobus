@@ -18,13 +18,13 @@ It does not define tag-file import mappings or query grammar.
 ## Code boundary
 
 Runtime `TrackDetailProjection` owns the authoritative aggregate snapshot and observes library/view changes.
-`LibraryMutationService` owns admission, commit, and change publication; `LibraryWriter` exposes bound metadata/tag commands.
-UIModel code under `app/include/ao/uimodel/library/detail/`, `library/property/`, and `field/` owns schema, visibility, display formatting, validation, edit codecs, and patch construction.
+`LibraryWriteLane` owns admission, commit, and change publication; `LibraryCommands` exposes bound metadata/tag commands.
+UIModel code under `app/include/ao/uimodel/library/detail/`, `library/property/`, `library/track/`, and `field/` owns schema, visibility, display formatting, validation, edit decoding, and patch construction.
 
-`TrackAuthoringSession` is the UIModel boundary for committing metadata and tag edits and may call the narrow runtime writer supplied by composition.
+`TrackAuthoringSession` is the UIModel boundary for committing metadata and tag edits and may call the bound runtime commands supplied by composition.
 It does not open transactions or mutate `MusicLibrary` stores directly.
-Interactive GTK, WinUI, and TUI frontends may render and collect edit intent but cannot call `LibraryWriter` directly, replace the bound targets, or reinterpret patch semantics.
-The non-interactive CLI may bind command-selected ids immediately before invoking the runtime writer, as defined by the [CLI execution specification](../cli/execution.md).
+Interactive GTK, WinUI, and TUI frontends may render and collect edit intent but cannot call `LibraryCommands` directly, replace the bound targets, or reinterpret patch semantics.
+The non-interactive CLI may bind command-selected ids immediately before invoking the runtime commands, as defined by the [CLI execution specification](../cli/execution.md).
 
 ## Terminology
 
@@ -155,23 +155,25 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 
 - [`TrackDetailProjection.h`](../../../app/include/ao/rt/projection/TrackDetailProjection.h) defines the aggregate snapshot.
 - [`TrackDetailProjection.cpp`](../../../app/runtime/projection/TrackDetailProjection.cpp) builds and observes live snapshots.
-- [`TrackFieldGridSchema.cpp`](../../../app/uimodel/library/detail/TrackFieldGridSchema.cpp) and [`TrackFieldGridPolicy.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGridPolicy.h) own field selection and visibility.
+- [`TrackFieldGrid.cpp`](../../../app/uimodel/library/detail/TrackFieldGrid.cpp) and [`TrackFieldGrid.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGrid.h) own field selection and visibility.
+- [`TrackAuthoring.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoring.h) owns edit decoding, writable-field classification, patch construction, and inline mixed-value protection.
 - [`TrackPropertiesFormModel.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormModel.h) and [`TrackPropertiesFormSpec.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormSpec.h) own compact form state, mixed-value policy, editor kinds, and patch construction.
 - [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, patches, and undo eligibility.
 - [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.
-- [`TrackAuthoringSession.h`](../../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns stable targets, current-binding lifetime, invalidation, and result mapping.
-- [`LibraryWriter.cpp`](../../../app/runtime/library/LibraryWriter.cpp) owns mutation commit.
+- [`TrackAuthoringSessions.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns stable targets, current-binding lifetime, invalidation, and result mapping.
+- [`LibraryCommands.cpp`](../../../app/runtime/library/LibraryCommands.cpp) owns mutation commit.
 - [`TrackPropertiesCoordinator`](../../../app/windows-winui/track/TrackPropertiesCoordinator.h) owns the native dialog and guarded asynchronous workflow; [`TrackPropertiesAdapter`](../../../app/windows-winui/include/ao/winui/track/TrackPropertiesAdapter.h) maps shared form and vocabulary state without WinRT.
 
 ## Test map
 
 - Runtime projection tests under [`test/unit/runtime/projection/`](../../../test/unit/runtime/projection/) protect aggregation and refresh.
-- [`TrackFieldGridSchemaTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridPolicyTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp) protect field/visibility policy.
+- [`TrackFieldGridSchemaTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridVisibilityTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp) protect field/visibility policy.
+- [`TrackAuthoringTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringTest.cpp) protects edit decoding, writable-field coverage, patch construction, and mixed-value sentinels.
 - [`TrackCustomMetadataTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, mixed values, and undo eligibility.
 - [`TagEditTest.cpp`](../../../test/unit/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
-- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, successful binding advancement, and invalidation after another commit.
-- [`LibraryWriterTest.cpp`](../../../test/unit/runtime/library/LibraryWriterTest.cpp) protects committed multi-target behavior.
-- [`LibraryWriterTrackPropertiesTest.cpp`](../../../test/unit/runtime/library/LibraryWriterTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when the later tag stage fails.
+- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, successful binding advancement, and invalidation after another commit.
+- [`LibraryCommandsTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsTest.cpp) protects committed multi-target behavior.
+- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when the later tag stage fails.
 - [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects WinUI control projection, mixed values, edit parsing, command availability, commit-state mapping, and tag/custom-key completion without WinRT.
 
 ## Related documents

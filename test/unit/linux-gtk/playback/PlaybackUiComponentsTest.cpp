@@ -14,7 +14,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <glibmm/refptr.h>

@@ -31,14 +31,13 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
-#include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
-#include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/detail/TrackFieldGrid.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <glibmm/main.h>

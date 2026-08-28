@@ -7,7 +7,7 @@ namespace ao::rt
 {
   class AppRuntime;
   class NotificationService;
-  class LibraryTaskService;
+  class LibraryJobs;
   class PlaybackService;
   class ViewService;
 }
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
                                          i18n::MessageCatalog const& textCatalog);
   void registerActivityStatusComponent(ComponentRegistry& registry,
                                        rt::NotificationService& notifications,
-                                       rt::LibraryTaskService& libraryTasks,
+                                       rt::LibraryJobs& libraryJobs,
                                        i18n::MessageCatalog const& textCatalog);
   void registerSelectionInfoComponent(ComponentRegistry& registry,
                                       rt::ViewService& views,

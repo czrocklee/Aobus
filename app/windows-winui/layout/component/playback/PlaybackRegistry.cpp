@@ -19,7 +19,7 @@
 #include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -90,7 +90,7 @@ namespace ao::winui::layout
         : _transport{
             TransportButtonConfig{.button = _button, .textCatalog = ctx.textCatalog, .command = commandOf(node)}}
       {
-        _transport.bind(ctx.playback, ctx.playbackCommands);
+        _transport.bind(ctx.playback, ctx.playbackActions);
       }
 
       FrameworkElement element() const override { return _button; }

@@ -12,7 +12,7 @@
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/utility/String.h>
 
@@ -467,7 +467,7 @@ namespace ao::gtk
       return;
     }
 
-    auto scope = _reads->reader();
+    auto scope = _reads->snapshot();
 
     _currentTags = scope.selectionTags(_selectedTrackIds);
 

@@ -24,11 +24,11 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
@@ -80,7 +80,7 @@ namespace ao::winui::layout
           [session]
         {
           return uimodel::buildListTreeProjection(
-            session->textCatalog(), session->runtime().library().reader().lists());
+            session->textCatalog(), session->runtime().library().snapshot().lists());
         },
         .subscribeListTreeChanged =
           [session](compat::MoveOnlyFunction<void()> handler)
@@ -96,7 +96,7 @@ namespace ao::winui::layout
         },
         .preferredPresentation = [session](ListId const listId) -> std::optional<rt::TrackPresentationSpec>
         {
-          if (!session->presentationPreferences().presentations.contains(listId))
+          if (!session->listPresentations().presentationIdForList(listId))
           {
             return std::nullopt;
           }
@@ -185,7 +185,7 @@ namespace ao::winui::layout
     // The transport is the one action family a keyboard map binds by default,
     // and the surface that runs it outlives every generation, so it is bound
     // here rather than left to the buttons that also invoke it.
-    auto& playback = _session.playbackCommands();
+    auto& playback = _session.playbackActions();
 
     for (auto const command : uimodel::playbackCommands())
     {
@@ -363,11 +363,11 @@ namespace ao::winui::layout
         .views = runtime.views(),
         .workspace = runtime.workspace(),
         .notifications = runtime.notifications(),
-        .libraryTasks = runtime.library().taskService(),
+        .libraryJobs = runtime.library().jobs(),
         .completion = runtime.completion(),
-        .playbackCommands = _session.playbackCommands(),
+        .playbackActions = _session.playbackActions(),
         .presentationCatalog = _session.presentationCatalog(),
-        .presentationPreferences = _session.presentationPreferenceStore(),
+        .listPresentations = _session.listPresentations(),
         .textCatalog = _session.textCatalog(),
         .trackList = _config.trackList,
         .resourceBytes = _config.resourceBytes,

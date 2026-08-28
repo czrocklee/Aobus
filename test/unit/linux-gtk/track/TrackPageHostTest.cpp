@@ -20,7 +20,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -50,10 +50,10 @@ namespace ao::gtk::test
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
 
-    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto host = TrackPageHost{
-      stack, runtime, tagEditController, listNavigation, layoutStore, ao::test::englishMessageCatalog(), byteLoader};
+      stack, runtime, tagEditController, listNavigation, columnLayouts, ao::test::englishMessageCatalog(), byteLoader};
 
     SECTION("initial state")
     {

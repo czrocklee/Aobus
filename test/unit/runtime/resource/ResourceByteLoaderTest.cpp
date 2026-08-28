@@ -17,8 +17,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/Sha256.h>
@@ -95,7 +95,7 @@ namespace ao::rt::test
     {
       auto const cache = ResourceDiskCache{ResourceDiskCache::Config{
         .directory = coverCacheDirectory(cacheRoot),
-        .maximumEntryBytes = LibraryTaskService::kMaximumInteractiveResourceBytes,
+        .maximumEntryBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
       }};
       cache.store(utility::computeSha256(bytes), bytes);
     }

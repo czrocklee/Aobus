@@ -1739,10 +1739,10 @@ namespace ao::rt::test
       std::chrono::microseconds measureDenseOrderBindDuration()
       {
         auto changes = makeStateOnlyLibraryChanges(_libraryFixture.library());
-        auto writerFixture = LibraryWriterFixture{_libraryFixture.library(), changes};
+        auto commandsFixture = LibraryCommandsFixture{_libraryFixture.library(), changes};
         auto effectiveTrackIds = _ids;
         auto const start = std::chrono::steady_clock::now();
-        auto result = writerFixture.library().bindListOrder(_orderedListId, std::move(effectiveTrackIds));
+        auto result = commandsFixture.library().bindListOrder(_orderedListId, std::move(effectiveTrackIds));
         auto const end = std::chrono::steady_clock::now();
         REQUIRE(result);
         CHECK(result->effectiveTrackIds().size() == kInitialTrackCount);

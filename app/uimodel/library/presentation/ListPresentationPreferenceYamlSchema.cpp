@@ -6,7 +6,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
 
@@ -79,12 +79,12 @@ namespace ao::uimodel
   } // namespace
 
   Result<ListPresentationPreferenceDocument> toListPresentationPreferenceDocument(
-    ListPresentationPreferenceState const& state)
+    ListPresentations::Snapshot const& state)
   {
     auto document = ListPresentationPreferenceDocument{};
-    document.preferences.reserve(state.presentations.size());
+    document.preferences.reserve(state.size());
 
-    for (auto const& [listId, presentationId] : state.presentations)
+    for (auto const& [listId, presentationId] : state)
     {
       AO_EXPECTS(listId != kInvalidListId, "Cannot persist a presentation preference for the invalid list id");
       AO_EXPECTS(!presentationId.empty(), "Cannot persist an empty presentation id");
@@ -98,7 +98,7 @@ namespace ao::uimodel
     return document;
   }
 
-  Result<ListPresentationPreferenceState> listPresentationPreferenceStateFromDocument(
+  Result<ListPresentations::Snapshot> listPresentationPreferenceStateFromDocument(
     ListPresentationPreferenceDocument const& document)
   {
     if (document.version != kListPresentationPreferenceVersion)
@@ -107,7 +107,7 @@ namespace ao::uimodel
                        std::format("Unsupported list presentation preference version {}", document.version));
     }
 
-    auto state = ListPresentationPreferenceState{};
+    auto state = ListPresentations::Snapshot{};
 
     for (auto const& preference : document.preferences)
     {
@@ -123,7 +123,7 @@ namespace ao::uimodel
         return makeError(Error::Code::FormatRejected, "List presentation preference uses an empty presentation id");
       }
 
-      if (!state.presentations.emplace(listId, preference.presentationId).second)
+      if (!state.emplace(listId, preference.presentationId).second)
       {
         return makeError(Error::Code::FormatRejected,
                          std::format("List presentation preferences repeat list id {}", preference.listId));
@@ -134,7 +134,7 @@ namespace ao::uimodel
   }
 
   Result<> ListPresentationPreferenceYamlSchema::serialize(ryml::NodeRef node,
-                                                           ListPresentationPreferenceState const& state) const
+                                                           ListPresentations::Snapshot const& state) const
   {
     auto documentRes = toListPresentationPreferenceDocument(state);
 
@@ -146,9 +146,9 @@ namespace ao::uimodel
     return writeDocument(node, *documentRes);
   }
 
-  Result<ListPresentationPreferenceState> ListPresentationPreferenceYamlSchema::deserialize(
+  Result<ListPresentations::Snapshot> ListPresentationPreferenceYamlSchema::deserialize(
     ryml::ConstNodeRef node,
-    ListPresentationPreferenceState const& /*seed*/) const
+    ListPresentations::Snapshot const& /*seed*/) const
   {
     auto documentRes = readDocument(node);
 

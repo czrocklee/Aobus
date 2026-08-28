@@ -152,7 +152,7 @@ Required lookup and semantic mappings:
 | `trackSelectionSummary` | count and optional duration | owning selection summary with derived selectors |
 | `smartListMembershipEditingText` | membership kind and optional expression | owning membership explanation |
 | `smartListPreviewStatus` | validity, source, and count state | owning preview status |
-| `formatListMembershipMessage` | typed authoring status, operation, List/tag values, and counts | owning Playlist-membership result |
+| `formatListMembershipEditNotification` | typed List-membership edit result | owning Playlist-membership result |
 | `trackChannelText` | nonzero channel count | owning lexical or pluralized text |
 | `transportControlLabel` | typed playback command | non-owning control label and tooltip |
 | `playbackActionLabel` | typed playback command | non-owning action-list label |

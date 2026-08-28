@@ -18,8 +18,8 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
@@ -43,11 +43,11 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog};
 
     auto window = Gtk::Window{};
     auto button = TrackPresentationButton{runtime, ao::test::englishMessageCatalog()};
-    button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
+    button.setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(button);
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
@@ -77,7 +77,7 @@ namespace ao::gtk::test
     REQUIRE(activeViewId != rt::kInvalidViewId);
     CHECK(runtime.views().trackListState(activeViewId).presentation.id == "albums");
 
-    auto const optStored = preferences.presentationIdForList(rt::kAllTracksListId);
+    auto const optStored = listPresentations.presentationIdForList(rt::kAllTracksListId);
     REQUIRE(optStored);
     CHECK(*optStored == "albums");
   }
@@ -90,15 +90,15 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
-    auto replacementPreferences = uimodel::ListPresentationPreferenceStore{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog};
+    auto replacementPreferences = uimodel::ListPresentations{catalog};
     auto window = Gtk::Window{};
 
     auto const activeViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
 
     auto button = TrackPresentationButton{runtime, ao::test::englishMessageCatalog()};
-    button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
+    button.setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(button);
     drainGtkEvents();
 
@@ -116,7 +116,7 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
-    CHECK_FALSE(preferences.presentationIdForList(rt::kAllTracksListId).has_value());
+    CHECK_FALSE(listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
     CHECK_FALSE(replacementPreferences.presentationIdForList(rt::kAllTracksListId).has_value());
   }
 
@@ -127,7 +127,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog};
     auto window = Gtk::Window{};
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
@@ -137,7 +137,7 @@ namespace ao::gtk::test
     REQUIRE(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
 
     auto buttonPtr = std::make_unique<TrackPresentationButton>(runtime, ao::test::englishMessageCatalog());
-    buttonPtr->setPresentationServices(&catalog, &preferences, &themeCoordinator);
+    buttonPtr->setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(*buttonPtr);
     drainGtkEvents();
 
@@ -165,13 +165,13 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     themeCoordinator.setTheme(uimodel::ThemePreset::Modern);
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog};
     auto window = Gtk::Window{};
 
     auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
     auto button = TrackPresentationButton{runtime, ao::test::englishMessageCatalog()};
-    button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
+    button.setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(button);
     window.present();
     drainGtkEvents();
@@ -184,7 +184,7 @@ namespace ao::gtk::test
     REQUIRE(albumsButton != nullptr);
 
     auto const secondListId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Other"})));
+      runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Other"})));
 
     emitClicked(*albumsButton);
 
@@ -196,10 +196,10 @@ namespace ao::gtk::test
 
       CHECK(runtime.views().trackListState(firstViewId).presentation.id == rt::kDefaultTrackPresentationId);
       CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
-      CHECK_FALSE(preferences.presentationIdForList(secondListId).has_value());
+      CHECK_FALSE(listPresentations.presentationIdForList(secondListId).has_value());
     }
 
-    CHECK_FALSE(preferences.presentationIdForList(rt::kAllTracksListId).has_value());
+    CHECK_FALSE(listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
 
     AppDialog* errorDialog = nullptr;
 

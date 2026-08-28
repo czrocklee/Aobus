@@ -18,7 +18,7 @@ The exact D-Bus names, methods, properties, mappings, and metadata keys belong t
 `ao::gtk::platform::MprisBridge` and `MprisPlaybackEndpoint` live entirely in `app/linux-gtk/platform/`.
 Core audio and runtime remain D-Bus-free.
 
-The bridge reads the coherent `rt::PlaybackService` snapshot and executes transport and succession commands through `uimodel::PlaybackCommandSurface`.
+The bridge reads the coherent `rt::PlaybackService` snapshot and executes transport and succession commands through `uimodel::PlaybackActions`.
 It never calls transport widgets or layout components, because those surfaces are optional and rebuildable.
 GTK application lifetime enters only through injected raise and quit callbacks; cover art enters only through an injected cancellable asynchronous `ResourceId` to URL request.
 
@@ -33,10 +33,10 @@ GTK application lifetime enters only through injected raise and quit callbacks; 
 
 - At most one Aobus GTK instance exports the canonical MPRIS name.
 - Failure to connect, register, or acquire the name never disables playback or terminates the application.
-- MPRIS transport methods use the same `PlaybackCommandSurface` as shell actions, shortcuts, and transport controls.
+- MPRIS transport methods use the same `PlaybackActions` as shell actions, shortcuts, and transport controls.
 - Repeat and shuffle authority remains behind `PlaybackCommands`; MPRIS does not reconstruct succession or access its internal owner.
 - Seek, volume, and now-playing state come from the coherent `PlaybackService` boundary.
-- Capability queries use `PlaybackCommandSurface::isCapable`, not GTK action or widget sensitivity.
+- Capability queries use `PlaybackActions::isCapable`, not GTK action or widget sensitivity.
 - A stale `SetPosition`, an invalid range, or a request without a current track does not mutate playback.
 - Preview seek updates do not emit the protocol's final-seek signal.
 - Runtime and core values never contain D-Bus object paths or file URLs.

@@ -5,10 +5,10 @@
 
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <filesystem>
 #include <memory>
@@ -26,8 +26,8 @@ namespace ao::gtk
   GtkLayoutStateStore::GtkLayoutStateStore(GtkLayoutStateStore&&) noexcept = default;
   GtkLayoutStateStore& GtkLayoutStateStore::operator=(GtkLayoutStateStore&&) noexcept = default;
 
-  void GtkLayoutStateStore::load(uimodel::TrackColumnLayoutState& layoutState,
-                                 uimodel::ListPresentationPreferenceState& prefState) const
+  void GtkLayoutStateStore::load(uimodel::TrackColumnLayouts::Snapshot& layoutState,
+                                 uimodel::ListPresentations::Snapshot& prefState) const
   {
     auto const loadedLayoutsRes =
       _storePtr->load("trackView.columnLayouts", layoutState, uimodel::TrackColumnLayoutYamlSchema{});
@@ -47,8 +47,8 @@ namespace ao::gtk
     }
   }
 
-  void GtkLayoutStateStore::save(uimodel::TrackColumnLayoutState const& layoutState,
-                                 uimodel::ListPresentationPreferenceState const& prefState)
+  void GtkLayoutStateStore::save(uimodel::TrackColumnLayouts::Snapshot const& layoutState,
+                                 uimodel::ListPresentations::Snapshot const& prefState)
   {
     if (auto const resRes = _storePtr->saveTogether(
           rt::configWrite("trackView.columnLayouts", layoutState, uimodel::TrackColumnLayoutYamlSchema{}),

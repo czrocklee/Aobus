@@ -6,9 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
-#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
-#include <ao/rt/ListMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
 #include <cstdint>
@@ -30,9 +28,9 @@ namespace ao::async
 namespace ao::rt
 {
   class LibraryChanges;
-  class LibraryReader;
-  class LibraryTaskService;
-  class LibraryWriter;
+  class LibrarySnapshot;
+  class LibraryJobs;
+  class LibraryCommands;
 
   /**
    * @brief How much the open library may hold, and how far it has grown.
@@ -51,9 +49,9 @@ namespace ao::rt
   };
 
   // CQRS façade over the music library, exposing four cooperating roles:
-  // reader (consistent point-in-time reads), writer (sequenced asynchronous
-  // mutations), task service (long-running async operations) and changes (the
-  // mutation event bus).
+  // snapshots (consistent point-in-time reads), commands (sequenced
+  // asynchronous mutations), jobs (long-running async operations), and changes
+  // (the mutation event bus).
   // Library owns none of its collaborators: the MusicLibrary storage, async
   // Runtime and LibraryChanges bus are injected by reference and outlive it.
   // It merely wires them together and hands out the role objects.
@@ -77,22 +75,12 @@ namespace ao::rt
     Library(Library&&) = delete;
     Library& operator=(Library&&) = delete;
 
-    LibraryReader reader() const;
+    LibrarySnapshot snapshot() const;
     /// What the open storage may hold, for a caller deciding whether it is enough.
     LibraryStorageCapacity storageCapacity() const;
     LibraryChanges const& changes() const noexcept;
-    LibraryWriter& writer() noexcept;
-    LibraryTaskService& taskService() noexcept;
-
-    // Frontend-facing list mutation. linux-gtk is barred from reaching
-    // LibraryWriter directly (frontend-core guardrail), so these stay.
-    async::Task<Result<ListId>> createList(ListDraft draft);
-    async::Task<Result<UpdateListReply>> updateList(ListDraft draft);
-    async::Task<Result<DeleteListReply>> deleteList(ListId listId, DeleteListOptions options = {});
-    async::Task<Result<DeleteListReply>> previewDeleteList(ListId listId, DeleteListOptions options = {});
-    async::Task<Result<DeleteListSubtreeReply>> deleteListAndDescendants(ListId listId, DeleteListOptions options = {});
-    async::Task<Result<DeleteListSubtreeReply>> previewDeleteListAndDescendants(ListId listId,
-                                                                                DeleteListOptions options = {});
+    LibraryCommands& commands() noexcept;
+    LibraryJobs& jobs() noexcept;
 
     LibraryAuthoringAvailability authoringAvailability() const;
     // Synchronous callback-executor notification. A handler must defer

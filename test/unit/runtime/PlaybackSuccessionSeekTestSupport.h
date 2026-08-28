@@ -14,7 +14,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <cstdint>
@@ -38,7 +38,7 @@ namespace ao::rt::test::playback_succession
     PlaybackSuccessionSeekFixture(PlaybackSuccessionSeekFixture&&) = delete;
     PlaybackSuccessionSeekFixture& operator=(PlaybackSuccessionSeekFixture&&) = delete;
 
-    LibraryWriter& writer();
+    LibraryCommands& commands();
     TrackId addPlayableTrack(std::string title);
     void buildThreeTrackManualView();
     void buildSingleTrackManualView();
@@ -48,7 +48,7 @@ namespace ao::rt::test::playback_succession
     QueuedExecutor executor;
     async::Runtime asyncRuntime;
     LibraryChanges changes;
-    LibraryWriterFixture writerFixture;
+    LibraryCommandsFixture commandsFixture;
     TrackSourceCache sources;
     ViewService views;
     WorkspaceService workspace;

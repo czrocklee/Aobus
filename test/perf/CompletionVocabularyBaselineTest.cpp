@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/library/LibraryMutationService.h"
+#include "runtime/library/LibraryWriteLane.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include "test/unit/runtime/library/LibraryMutationTestSupport.h"
+#include "test/unit/runtime/library/LibraryWriteLaneTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/i18n/IcuCompletionAliases.h>
@@ -19,7 +19,7 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/uimodel/library/track/TrackFilterCompleter.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -90,7 +90,7 @@ namespace ao::rt::test
     VocabularyTiming measureVocabularyRebuilds(CompletionService& service,
                                                async::Runtime& asyncRuntime,
                                                async::LoopExecutor& executor,
-                                               LibraryMutationService& mutationService)
+                                               LibraryWriteLane& writeLane)
     {
       auto aggregateSamples = std::vector<std::int64_t>{};
       auto tagSamples = std::vector<std::int64_t>{};
@@ -123,7 +123,7 @@ namespace ao::rt::test
           runLoopTask(asyncRuntime,
                       executor,
                       executeInteractiveMutation(
-                        mutationService.captureSubmission(),
+                        writeLane.captureSubmission(),
                         [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
                         { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
         REQUIRE(resetRes);
@@ -274,11 +274,11 @@ namespace ao::rt::test
     auto executor = async::LoopExecutor{};
     auto asyncRuntime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto mutationService = LibraryMutationService{
+    auto writeLane = LibraryWriteLane{
       asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(libraryFixture.library()), changes};
     auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
     auto service = CompletionService{libraryFixture.library(), changes, nullptr, aliasPolicyPtr.get()};
-    auto const vocabulary = measureVocabularyRebuilds(service, asyncRuntime, executor, mutationService);
+    auto const vocabulary = measureVocabularyRebuilds(service, asyncRuntime, executor, writeLane);
 
     APP_LOG_INFO("=== Shared completion vocabulary snapshot: {} tracks ===", kTrackCount);
     APP_LOG_INFO("  rebuild + aggregate: median/p95 {} / {} us, {} values from {} dictionary entries",

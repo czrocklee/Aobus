@@ -26,7 +26,8 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <ftxui/component/event.hpp>
@@ -196,7 +197,7 @@ namespace ao::tui
     , _library{library}
     , _asyncRuntime{runtime.async()}
     , _playback{runtime.playback()}
-    , _playbackCommands{_playback, [this] { playSelectedTrack(); }}
+    , _playbackActions{_playback, [this] { playSelectedTrack(); }}
     , _seekViewModel{_playback, {}}
     , _volumeViewModel{_playback}
     , _outputDevices{bindings.outputDevices}
@@ -411,7 +412,7 @@ namespace ao::tui
 
   void EventController::executePlaybackCommand(uimodel::PlaybackCommand const command)
   {
-    if (!_playbackCommands.execute(command) && command != uimodel::PlaybackCommand::Stop)
+    if (!_playbackActions.execute(command) && command != uimodel::PlaybackCommand::Stop)
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning,
