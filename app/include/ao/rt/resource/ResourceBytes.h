@@ -11,6 +11,9 @@
 
 namespace ao::rt
 {
+  /// Frontend resource delivery is bounded independently of the disk-cache budget.
+  inline constexpr std::size_t kMaximumInteractiveResourceBytes = std::size_t{32U} * 1024U * 1024U;
+
   /**
    * Immutable, independently owned encoded resource bytes.
    *

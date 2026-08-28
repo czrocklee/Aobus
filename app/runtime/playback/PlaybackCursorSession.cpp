@@ -8,11 +8,10 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
-#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -37,11 +36,10 @@ namespace ao::rt
       std::optional<std::size_t> const optRequiredCurrentIndex,
       std::size_t const fallbackAnchorIndex,
       TrackSourceCache& sources,
-      library::MusicLibrary const& library,
+      ViewService& views,
       RepeatMode const repeatMode,
       ShuffleMode const shuffleMode,
-      ShuffleHistory::CandidateChooser candidateChooser,
-      TextOrderingPolicy const* textOrderingPolicy)
+      ShuffleHistory::CandidateChooser candidateChooser)
     {
       if (launchSpec.sourceListId == kInvalidListId || currentTrackId == kInvalidTrackId)
       {
@@ -81,8 +79,7 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "Playback source was invalidated during launch");
       }
 
-      auto projectionPtr = std::make_unique<TrackListProjection>(
-        kInvalidViewId, projectionSourceLease, library, launchSpec.order, textOrderingPolicy);
+      auto projectionPtr = views.createTransientTrackListProjection(std::move(projectionSourceLease), launchSpec.order);
       auto const optCurrentIndex = projectionPtr->indexOf(currentTrackId);
 
       if (optRequiredCurrentIndex && !optCurrentIndex)
@@ -109,22 +106,20 @@ namespace ao::rt
     PlaybackLaunchSpec launchSpec,
     TrackId const startTrackId,
     TrackSourceCache& sources,
-    library::MusicLibrary const& library,
+    ViewService& views,
     RepeatMode const repeatMode,
     ShuffleMode const shuffleMode,
-    ShuffleHistory::CandidateChooser candidateChooser,
-    TextOrderingPolicy const* textOrderingPolicy)
+    ShuffleHistory::CandidateChooser candidateChooser)
   {
     return buildSession(std::move(launchSpec),
                         startTrackId,
                         std::size_t{0},
                         0,
                         sources,
-                        library,
+                        views,
                         repeatMode,
                         shuffleMode,
-                        std::move(candidateChooser),
-                        textOrderingPolicy);
+                        std::move(candidateChooser));
   }
 
   Result<std::unique_ptr<PlaybackCursorSession>> PlaybackCursorSession::createForRestore(
@@ -132,22 +127,20 @@ namespace ao::rt
     TrackId const currentTrackId,
     std::size_t const anchorIndex,
     TrackSourceCache& sources,
-    library::MusicLibrary const& library,
+    ViewService& views,
     RepeatMode const repeatMode,
     ShuffleMode const shuffleMode,
-    ShuffleHistory::CandidateChooser candidateChooser,
-    TextOrderingPolicy const* textOrderingPolicy)
+    ShuffleHistory::CandidateChooser candidateChooser)
   {
     return buildSession(std::move(launchSpec),
                         currentTrackId,
                         std::nullopt,
                         anchorIndex,
                         sources,
-                        library,
+                        views,
                         repeatMode,
                         shuffleMode,
-                        std::move(candidateChooser),
-                        textOrderingPolicy);
+                        std::move(candidateChooser));
   }
 
   PlaybackCursorSession::PlaybackCursorSession(PlaybackLaunchSpec launchSpec,

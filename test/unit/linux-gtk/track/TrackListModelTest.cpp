@@ -15,7 +15,7 @@
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -111,7 +111,6 @@ namespace ao::gtk::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.list_model_test");
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const& musicLibrary = runtime.musicLibrary();
 
     auto const id1 = addRuntimeTrack(runtime, makeTrackSpec("Song A", "Artist A", "Album A", 2020));
     auto const id2 = addRuntimeTrack(runtime, makeTrackSpec("Song B", "Artist B", "Album B", 2021));
@@ -121,8 +120,8 @@ namespace ao::gtk::test
     sourcePtr->addInitial(id2);
 
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-    auto const projectionPtr =
-      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, musicLibrary);
+    auto const projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
 
     auto const modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
@@ -277,9 +276,20 @@ namespace ao::gtk::test
 
     SECTION("Clearing and unbinding projection")
     {
+      auto selectionPtr = Gtk::MultiSelection::create(modelPtr);
+      CHECK(::g_list_model_get_n_items(G_LIST_MODEL(selectionPtr->gobj())) == 2);
+
       modelPtr->clearProjection();
+
       CHECK(modelPtr->projection() == nullptr);
       CHECK(modelPtr->get_n_items() == 0);
+      CHECK(::g_list_model_get_n_items(G_LIST_MODEL(selectionPtr->gobj())) == 0);
+      REQUIRE(spy.events.size() == 1);
+      CHECK(spy.events.front().position == 0);
+      CHECK(spy.events.front().removed == 2);
+      CHECK(spy.events.front().added == 0);
+      CHECK(spy.events.front().sizeDuringEvent == 0);
+      CHECK_FALSE(spy.events.front().projectionAttachedDuringEvent);
     }
   }
 
@@ -288,14 +298,13 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const& library = runtime.musicLibrary();
 
     auto const albumA1 = addRuntimeTrack(runtime, makeTrackSpec("A1", "Artist", "Album A"));
     auto const albumA2 = addRuntimeTrack(runtime, makeTrackSpec("A2", "Artist", "Album A"));
     auto const albumB = addRuntimeTrack(runtime, makeTrackSpec("B1", "Artist", "Album B"));
     auto sourcePtr = rt::test::makeMutableTrackSource({albumA1, albumA2, albumB});
-    auto projectionPtr =
-      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
+    auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
@@ -348,8 +357,8 @@ namespace ao::gtk::test
     auto const secondTrackId = addRuntimeTrack(runtime, makeTrackSpec("Second", "Artist", "Album"));
     auto sourcePtr = rt::test::makeMutableTrackSource({firstTrackId, secondTrackId});
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-    auto projectionPtr =
-      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+    auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
     auto const modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 
@@ -389,13 +398,12 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const& library = runtime.musicLibrary();
 
     auto const trackA = addRuntimeTrack(runtime, makeTrackSpec("Track 1", "Artist A", "Album A"));
     auto const trackB = addRuntimeTrack(runtime, makeTrackSpec("Track 2", "Artist B", "Album B"));
     auto sourcePtr = rt::test::makeMutableTrackSource({trackA, trackB});
-    auto projectionPtr =
-      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
+    auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
     projectionPtr->setPresentation(rt::TrackPresentationSpec{
       .groupBy = rt::TrackGroupKey::Album,
       .sortBy = {{.field = rt::TrackSortField::Album}},
@@ -473,8 +481,8 @@ namespace ao::gtk::test
     auto const trackB = addRuntimeTrack(runtime, makeTrackSpec("Track B", "Artist", "Album"));
     auto const trackC = addRuntimeTrack(runtime, makeTrackSpec("Track C", "Artist", "Album"));
     auto sourcePtr = rt::test::makeMutableTrackSource({trackA, trackB, trackC});
-    auto projectionPtr =
-      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+    auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);

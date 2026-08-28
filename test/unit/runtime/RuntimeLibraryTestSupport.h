@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::rt
 {
@@ -42,6 +43,9 @@ namespace ao::rt::test
   TrackId addRuntimeTrack(AppRuntime& runtime,
                           library::test::TrackSpec const& spec,
                           compat::MoveOnlyFunction<void()> settlePublication = {});
+
+  std::vector<TrackId> runtimeTrackIds(AppRuntime& runtime);
+  library::test::TrackSpec runtimeTrackSpec(AppRuntime& runtime, TrackId trackId);
 
   void updateRuntimeTrack(AppRuntime& runtime,
                           TrackId trackId,

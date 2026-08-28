@@ -24,7 +24,7 @@ The [system architecture](system-overview.md) makes GTK, WinUI, and TUI composit
 GTK, WinUI, or TUI composition root
   -> callback executor + paths + stores + audio providers
   -> AppRuntime
-       CoreRuntime + workspace/views + playback + session persistence
+       owns CoreRuntime + workspace/views + playback + session persistence
   -> UIModel and frontend observers
   -> checkpoint or frontend-specific library transition
   -> observers destroyed before AppRuntime
@@ -45,7 +45,8 @@ TUI creates one runtime for the selected root and does not run either desktop tr
 
 ### Interactive runtime composition
 
-`AppRuntime` extends `CoreRuntime` with `ViewService`, `WorkspaceService`, playback transport and succession, the workspace `ConfigStore`, and playback-session persistence.
+`AppRuntime` owns one `CoreRuntime` and adds `ViewService`, `WorkspaceService`, playback transport and succession, the workspace `ConfigStore`, and playback-session persistence.
+It forwards the audited application-facing core services without exposing the core owner or raw storage access.
 It is the lifetime root for these services rather than a universal behavioral facade.
 `AppRuntime::create()` requires an owning workspace `ConfigStore` and returns `InvalidInput` for its absence before building the internal service graph.
 It first completes `CoreRuntime` storage validation and initial All Tracks materialization, then constructs interactive services, and exposes ownership only after both stages succeed.
@@ -215,7 +216,7 @@ still exits. The native default passes no inheritable handle list.
 ### Shutdown
 
 GTK requests a final checkpoint, closes callback admission, removes the active window, and releases frontend controllers, widgets, platform adapters, and subscriptions before the associated runtime.
-`AppRuntime::shutdown()` then shuts down playback-session scheduling and audio callback producers before delegating to the Core boundary.
+`AppRuntime::shutdown()` then shuts down playback-session scheduling and audio callback producers before shutting down its owned Core boundary.
 `CoreRuntime::shutdown()` seals library mutation and publication admission before callback resumption closes, then stops and joins asynchronous workers while library-backed collaborators still exist.
 Both boundaries are idempotent so explicit composition-root shutdown and destructor fallback preserve the same order.
 
@@ -281,7 +282,7 @@ After successor activation, initial-scan or explicit-rescan planning and applica
 What a finished scan is reported as - its verdict, severity, retention, and sentence - is decided once in UIModel and enumerated by the [library scan report reference](../reference/shell/library-scan-report.md); a session posts that decision rather than reaching its own.
 An Open Library request may cancel an active scan through ordinary parent teardown; explicit Rescan still has no public cancellation or supersession command.
 The dispatcher executor is the only route by which runtime callbacks may update XAML.
-The window retires generation controllers and projections, destroys SMTC and artwork consumers, then destroys its constructor-bound resource loader before the session releases its unique runtime.
+The window retires generation controllers and projections and destroys SMTC and artwork consumers before releasing its session; releasing that session destroys its unique `AppRuntime`, whose interactive implementation owns and destroys the shared resource loader before the composed `CoreRuntime`.
 The runtime destructor joins its worker tasks; no deferred runtime release or quarantine owner is used.
 
 ## Implementation map

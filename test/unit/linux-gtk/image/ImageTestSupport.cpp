@@ -7,7 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/rt/library/LibraryJobs.h>
+#include <ao/rt/resource/ResourceBytes.h>
 #include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/Sha256.h>
 
@@ -69,7 +69,7 @@ namespace ao::gtk::test
   {
     auto const cache = rt::ResourceDiskCache{rt::ResourceDiskCache::Config{
       .directory = rt::coverCacheDirectory(cacheDirectory),
-      .maximumEntryBytes = rt::LibraryJobs::kMaximumInteractiveResourceBytes,
+      .maximumEntryBytes = rt::kMaximumInteractiveResourceBytes,
     }};
     cache.store(utility::computeSha256(bytes), bytes);
     REQUIRE(cache.read(utility::computeSha256(bytes)));

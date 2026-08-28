@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "runtime/library/ResourceMaterialization.h"
+#include "runtime/resource/ResourceMaterialization.h"
 
-#include "runtime/library/ResourceCarrierIndex.h"
+#include "runtime/resource/ResourceCarrierIndex.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -22,9 +22,9 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/resource/ResourceBytes.h>
 #include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/Sha256.h>
 
@@ -119,7 +119,7 @@ namespace ao::rt::test
     {
       return ResourceDiskCache{ResourceDiskCache::Config{
         .directory = coverCacheDirectory(root),
-        .maximumEntryBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+        .maximumEntryBytes = kMaximumInteractiveResourceBytes,
       }};
     }
 
@@ -139,7 +139,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto result = materializeResource(context, {});
@@ -162,7 +162,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     // A failed source is never a failed request: a missing file costs a failed
@@ -191,7 +191,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto result = materializeResource(context, {});
@@ -212,7 +212,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto result = materializeResource(context, {});
@@ -231,7 +231,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     REQUIRE(materializeResource(context, {}));
@@ -261,7 +261,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto result = materializeResource(context, {});
@@ -339,7 +339,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto result = materializeResource(context, {});
@@ -359,7 +359,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto stopSource = std::stop_source{};
@@ -461,7 +461,7 @@ namespace ao::rt::test
       .candidateUris = optIndex->carrierUris(resourceId),
       .musicRoot = restored.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto result = materializeResource(context, {});
@@ -480,7 +480,7 @@ namespace ao::rt::test
       .candidateUris = index.carrierUris(ResourceId{424242}),
       .musicRoot = fixture.library.rootPath(),
       .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto result = materializeResource(context, {});

@@ -119,7 +119,7 @@ namespace ao::gtk::test
 
     auto after = rt::AppSessionState{};
     configStorePtr->loadAppSession(after);
-    CHECK(after.lastLibraryPath == fixture.runtime().musicLibrary().rootPath().string());
+    CHECK(after.lastLibraryPath == fixture.runtime().musicRoot().string());
   }
 
   TEST_CASE("MainWindow - explicit session save persists current library path", "[gtk][unit][main-window]")
@@ -142,7 +142,7 @@ namespace ao::gtk::test
 
     auto after = rt::AppSessionState{};
     configStorePtr->loadAppSession(after);
-    CHECK(after.lastLibraryPath == fixture.runtime().musicLibrary().rootPath().string());
+    CHECK(after.lastLibraryPath == fixture.runtime().musicRoot().string());
   }
 
   TEST_CASE("MainWindow - library switch forgets playback and prevents stale path writes",
@@ -541,7 +541,7 @@ namespace ao::gtk::test
 
     auto loadedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(loadedSession);
-    CHECK(loadedSession.lastLibraryPath == runtime.musicLibrary().rootPath().string());
+    CHECK(loadedSession.lastLibraryPath == runtime.musicRoot().string());
   }
 
   TEST_CASE("MainWindow - rejected workspace state is not overwritten during preparation",

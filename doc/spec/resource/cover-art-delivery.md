@@ -82,19 +82,20 @@ Scan preparation converts embedded picture bytes into observed descriptors befor
 
 ### Runtime read and propagation
 
-`LibraryJobs::loadResourceAsync(id, sizeLimit, stopToken)` is the only runtime read, interactive and administrative alike.
+The source-private `ResourceMaterializer` owned by `CoreRuntime` is the only runtime materialization implementation, interactive and administrative alike.
 It resolves the descriptor and the carrier snapshot under a short worker-side read transaction, closes that transaction, and then walks two tiers: the derived cover cache first, then each carrier URI the snapshot names, in a stable order.
 A cache entry is served only when its content hashes to the digest; an entry that fails verification is discarded rather than served.
 A carrier is opened, its embedded pictures are hashed, and the first picture matching the digest answers; a carrier that cannot be read or carries no match advances to the next candidate.
 Content materialized from a carrier is installed in the cover cache when the cache is enabled and the content is within the cache's per-entry maximum.
 The result is returned as owned bytes on the callback executor, and the read publishes no library task progress or maintenance state.
 
-`sizeLimit` selects the ceiling applied to materialized bytes: `Interactive` applies the 32 MiB encoded-byte limit below, and `Administrative` applies none, which is the exemption CLI raw export keeps.
+Its interactive entry applies the 32 MiB encoded-byte limit below; its administrative entry applies none, which is the exemption CLI raw export keeps.
 An invalid id, an absent descriptor, or a walk that no source could satisfy returns an engaged result containing `nullopt`; materialized bytes above the caller's ceiling return `ValueTooLarge`; cancellation throws `OperationCancelled` and stops the walk between candidates.
 A stale reference that no source can satisfy is never rewritten by a read.
 
 `ResourceByteLoader` is constructed with one asynchronous byte source and one callback runtime for its whole life.
-Its `CoreRuntime&` constructor adapts `LibraryJobs::loadResourceAsync()` to that source contract; an explicit source adapter follows the same delivery, cancellation, and caching behavior.
+`AppRuntime` owns one loader value and binds its source to the private interactive materializer in the owned `CoreRuntime`; the same `(async::Runtime&, ReadBytes)` constructor accepts an explicit controlled source in focused tests.
+Interactive consumers borrow that value through `AppRuntime::resourceBytes()`.
 An invalid id rejects a request without invoking its callback.
 On a cache miss, equal ids share one source read and each active interest receives completion on the constructor-selected callback executor.
 On a cache hit, `request()` invokes the callback synchronously before returning and returns an empty request registration.
@@ -174,7 +175,7 @@ Selecting no group or Inspector entity clears and hides both decoded image and p
 Now Playing instead selects its configured placeholder when there is no active track.
 Selecting an invalid id for an entity clears the decoded image and displays the slot's fixed no-cover placeholder.
 Selecting a valid id hides the placeholder before consulting the encoded-byte cache or starting an asynchronous runtime read.
-A window-owned runtime `ResourceByteLoader` coalesces equal resource requests and shares its bounded encoded-byte cache among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before that loader and destroys the loader before releasing its session runtime.
+An `AppRuntime`-owned `ResourceByteLoader` coalesces equal resource requests and shares its bounded encoded-byte cache among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before releasing the session runtime that owns the loader.
 A current cached or loaded payload is copied into owning native memory on a worker; the callback executor wraps that memory as a random-access stream and replaces the image through the native XAML decoder without another application payload copy.
 Absent, over-budget, or undecodable valid resources leave both the decoded image and placeholder hidden.
 Selection replacement, reset, and teardown reject stale completion through generation and task lifetime.
@@ -273,9 +274,9 @@ These degradation states do not remove or rewrite a track's cover reference.
 
 - [`Sha256.cpp`](../../../lib/utility/Sha256.cpp) and [`ResourceLayout.cpp`](../../../lib/library/ResourceLayout.cpp) own the digest facility, the descriptor bytes, and id derivation.
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp), [`TrackBuilder.cpp`](../../../lib/library/TrackBuilder.cpp), and [`TrackView.cpp`](../../../lib/library/TrackView.cpp) own creation and primary selection.
-- [`LibrarySnapshot.cpp`](../../../app/runtime/library/LibrarySnapshot.cpp) owns synchronous cover identity reads; [`LibraryJobs.cpp`](../../../app/runtime/library/LibraryJobs.cpp) owns the read entry point and the carrier-index slot.
-- [`ResourceMaterialization.cpp`](../../../app/runtime/library/ResourceMaterialization.cpp) owns the two-tier walk, [`ResourceCarrierIndex.cpp`](../../../app/runtime/library/ResourceCarrierIndex.cpp) owns the reverse index, and [`ResourceDiskCache.cpp`](../../../app/runtime/resource/ResourceDiskCache.cpp) owns the derived cover cache.
-- [`ResourceByteLoader`](../../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../../app/include/ao/rt/resource/ResourceByteCache.h) own frontend-scoped encoded-byte delivery and retention.
+- [`LibrarySnapshot.cpp`](../../../app/runtime/library/LibrarySnapshot.cpp) owns synchronous cover identity reads; [`ResourceMaterializer.cpp`](../../../app/runtime/resource/ResourceMaterializer.cpp) owns the asynchronous read entry points and carrier-index slot.
+- [`ResourceMaterialization.cpp`](../../../app/runtime/resource/ResourceMaterialization.cpp) owns the two-tier walk, [`ResourceCarrierIndex.cpp`](../../../app/runtime/resource/ResourceCarrierIndex.cpp) owns the reverse index, and [`ResourceDiskCache.cpp`](../../../app/runtime/resource/ResourceDiskCache.cpp) owns the derived cover cache.
+- [`ResourceByteLoader`](../../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../../app/include/ao/rt/resource/ResourceByteCache.h) own `AppRuntime`-scoped encoded-byte delivery and retention.
 - [`RequestCoalescer`](../../../include/ao/async/RequestCoalescer.h) owns equal-key flight sharing, independently cancellable interests, retained upstream dependencies, and exact-flight completion fencing.
 - [`CoverArtPlaceholder.h`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h) owns platform-neutral placeholder policy.
 - GTK image delivery lives under [`app/linux-gtk/image/`](../../../app/linux-gtk/image/), including [`CoverArtView`](../../../app/linux-gtk/image/CoverArtView.h).
@@ -290,10 +291,9 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`Sha256Test.cpp`](../../../test/unit/utility/Sha256Test.cpp) and [`ResourceLayoutTest.cpp`](../../../test/unit/library/ResourceLayoutTest.cpp) protect published digest vectors, descriptor bytes, and id derivation.
 - [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protect Core behavior, including counted observed descriptors and a searched id collision resolved by the probe.
 - [`TrackBuilderSnapshotTest.cpp`](../../../test/unit/runtime/library/TrackBuilderSnapshotTest.cpp) protects scan-time conversion from borrowed picture bytes to observed descriptors.
-- [`ResourceMaterializationTest.cpp`](../../../test/unit/runtime/library/ResourceMaterializationTest.cpp) protects the walk, its ceilings, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
-- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) protects lazy index construction, one rebuild per stale revision, that one stale stamp still costs one build with several workers, and the exact interactive limit.
+- [`ResourceMaterializationTest.cpp`](../../../test/unit/runtime/resource/ResourceMaterializationTest.cpp) protects the walk, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceMaterializerTest.cpp`](../../../test/unit/runtime/resource/ResourceMaterializerTest.cpp) protects callback affinity, absence, both limits, cancellation, lazy index construction, and one rebuild per stale revision across several workers; [`ResourceDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
 - [`RequestCoalescerTest.cpp`](../../../test/unit/async/RequestCoalescerTest.cpp) protects shared flight, cancellation, fanout, retry, and clear-generation behavior across frontend adapters.
-- [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage beyond loader destruction, constructor-backed CoreRuntime and adapter-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement loader.
+- [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage beyond loader destruction, application-runtime and controlled-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement loader.
 - [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects the grouped-section cover slot across album and non-album presentations.
 - [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, decoded-image tooltip gating, authored visibility, hover timing, and action retention.

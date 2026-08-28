@@ -24,7 +24,6 @@
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
 #include "track/TrackPageHost.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -228,9 +227,13 @@ namespace ao::gtk::layout::test
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), ListNavigationController::Callbacks{}, themeCoordinator};
     auto columnLayouts = uimodel::TrackColumnLayouts{};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto trackPageHost = TrackPageHost{
-      stack, runtime, tagEditController, listNavigation, columnLayouts, ao::test::englishMessageCatalog(), byteLoader};
+    auto trackPageHost = TrackPageHost{stack,
+                                       runtime,
+                                       tagEditController,
+                                       listNavigation,
+                                       columnLayouts,
+                                       ao::test::englishMessageCatalog(),
+                                       runtime.resourceBytes()};
 
     auto registry = ComponentRegistry{};
     registerContainerComponents(registry, ao::test::englishMessageCatalog());

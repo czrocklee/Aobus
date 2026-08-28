@@ -60,14 +60,15 @@ Core libraries do not own application workspace state, frontend lifecycle, user 
 Its public surface under `app/include/ao/rt/` includes the library facade, sources and projections, workspace and view services, playback services, completion, configuration, notifications, and frontend-neutral value types.
 It also owns canonical cross-frontend paths derived from a supplied music-library root, without discovering platform application directories.
 The derived cover cache follows that rule: each composition root resolves the application cache directory and passes it in, and the runtime consumes the path it is given.
-Frontend-scoped runtime components may own reusable application delivery behavior, such as coalesced and cached immutable resource-byte requests, without becoming process-wide `CoreRuntime` services.
+Interactive-runtime-owned components may provide reusable application delivery behavior, such as coalesced and cached immutable resource-byte requests, without becoming `CoreRuntime` services.
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
-It owns storage, asynchronous execution, the library facade and change bus, source caching, completion, and notifications.
+It owns storage, asynchronous execution, the library facade and change bus, source caching, resource materialization, completion, and notifications.
 `CoreRuntime::create()` is a typed-result factory: it opens and validates storage, acquires the runtime library facade, and completes the initial All Tracks source reload before returning ownership.
 
-`AppRuntime` extends that composition for interactive applications.
-It adds view and workspace services, playback transport and succession, audio-player ownership, and playback-session persistence.
+`AppRuntime` owns one `CoreRuntime` and adds the interactive application graph; it does not inherit from or expose the core owner.
+It adds view and workspace services, playback transport and succession, audio-player ownership, playback-session persistence, and one shared `ResourceByteLoader` exposed through `resourceBytes()`.
+Its public application face explicitly forwards the core library, async runtime, sources, notifications, completion, ordering policy, and music root, but not raw `MusicLibrary` or database-path access.
 `AppRuntime::create()` is likewise the sole public construction boundary and returns no interactive graph until core initialization and the required workspace-store composition have succeeded.
 It also owns narrow cross-service application commands, such as album reveal, that compose a workspace navigation result with a playback request without making either domain service depend on the other.
 The [workspace architecture](workspace.md) owns the graph's view/workspace identities and semantic sessions.
@@ -189,7 +190,7 @@ The [architecture landscape](README.md) owns the portfolio classification, relat
 
 Composition roots own runtime lifetime and destroy frontend observers before the runtime services they observe.
 `CoreRuntime` stops and joins worker execution before destroying library-backed collaborators.
-`AppRuntime` shuts down playback-session work and audio callback producers before its service graph is released.
+`AppRuntime` shuts down playback-session work and audio callback producers before shutting down and releasing its owned core graph.
 
 Recoverable failures cross core and runtime boundaries as typed results or typed runtime events.
 The [failure and reporting architecture](failure-and-reporting.md) owns cross-layer classification, recovery, reporting, and application-leaf responsibilities.

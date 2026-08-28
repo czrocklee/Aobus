@@ -8,7 +8,6 @@
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
@@ -20,13 +19,10 @@
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
-#include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
@@ -342,7 +338,6 @@ namespace ao::gtk
 
   void SmartListDialog::buildPreview()
   {
-    _previewEnginePtr = std::make_unique<rt::SmartListEvaluator>(_runtime.musicLibrary());
     configurePreviewColumns();
     rebuildPreviewSource();
   }
@@ -395,31 +390,10 @@ namespace ao::gtk
         auto emptySelectionPtr = Glib::RefPtr<Gtk::SelectionModel>{};
         _previewColumnView.set_model(emptySelectionPtr);
 
-        _previewFilteredListPtr.reset();
+        _optPreviewSourceLease.reset();
         _previewModelPtr.reset();
 
-        auto const sourceListId = rt::resolveParentSourceId(_parentListId);
-        auto parentRes = _runtime.sources().acquire(sourceListId);
-
-        if (!parentRes)
-        {
-          APP_LOG_ERROR("Cannot build smart-list preview for source {}: {}", sourceListId, parentRes.error().message);
-          updateSourceLabels();
-          updateDialogState();
-          showError(parentRes.error().message);
-          return false;
-        }
-
-        _previewFilteredListPtr = std::make_shared<rt::SmartListSource>(*parentRes, *_previewEnginePtr);
-
-        auto projPtr = std::make_shared<rt::TrackListProjection>(rt::kInvalidViewId,
-                                                                 rt::TrackSourceLease{_previewFilteredListPtr},
-                                                                 _runtime.musicLibrary(),
-                                                                 rt::TrackOrderSpec{},
-                                                                 _runtime.textOrderingPolicy());
-
         _previewModelPtr = TrackListModel::create(_trackRowCache);
-        _previewModelPtr->bindProjection(std::move(projPtr));
 
         auto selectionModelPtr = Gtk::SingleSelection::create(_previewModelPtr);
         _previewColumnView.set_model(selectionModelPtr);
@@ -493,9 +467,8 @@ namespace ao::gtk
 
   uimodel::SmartListEditorViewState SmartListDialog::editorViewState() const
   {
-    auto const hasPreviewSource = _previewFilteredListPtr != nullptr;
-    auto const hasError = hasPreviewSource && _previewFilteredListPtr->hasError();
-    auto const optError = hasPreviewSource ? _previewFilteredListPtr->error() : std::nullopt;
+    auto const hasPreviewSource = _optPreviewSourceLease.has_value();
+    auto const optError = hasPreviewSource ? _runtime.sources().sourceError(*_optPreviewSourceLease) : std::nullopt;
 
     return ao::uimodel::makeSmartListEditorViewState(
       _textCatalog,
@@ -503,9 +476,9 @@ namespace ao::gtk
         .name = _nameEntry.get_text().raw(),
         .localExpression = _exprBox.entry().get_text().raw(),
         .hasPreviewSource = hasPreviewSource,
-        .hasError = hasError,
+        .hasError = optError.has_value(),
         .errorMessage = optError ? optError->message : std::string{},
-        .matchCount = hasPreviewSource ? _previewFilteredListPtr->size() : 0,
+        .matchCount = hasPreviewSource ? _optPreviewSourceLease->source().size() : 0,
         .isAllTracks = rt::isVirtualListId(_parentListId),
       });
   }
@@ -524,7 +497,7 @@ namespace ao::gtk
   {
     updateSourceLabels();
 
-    if (!_previewFilteredListPtr)
+    if (!_previewModelPtr)
     {
       _previewScrolledWindow.set_visible(false);
       updateDialogState();
@@ -532,9 +505,24 @@ namespace ao::gtk
     }
 
     auto const expr = std::string{_exprBox.entry().get_text()};
+    auto const sourceListId = rt::resolveParentSourceId(_parentListId);
+    auto sourceRes = _runtime.sources().acquire(rt::SourceSpec{.baseListId = sourceListId, .filterExpression = expr});
 
-    _previewFilteredListPtr->setExpression(expr);
-    _previewFilteredListPtr->reload();
+    if (!sourceRes)
+    {
+      APP_LOG_ERROR("Cannot build smart-list preview for source {}: {}", sourceListId, sourceRes.error().message);
+      _optPreviewSourceLease.reset();
+      _previewModelPtr->clearProjection();
+      _previewScrolledWindow.set_visible(false);
+      _matchCountLabel.set_markup(italicMarkup(gtkText(_textCatalog, i18n::MessageId::GtkSmartListWaitingForFilter)));
+      showError(sourceRes.error().message);
+      updateDialogState();
+      return;
+    }
+
+    _optPreviewSourceLease.emplace(std::move(*sourceRes));
+    _previewModelPtr->bindProjection(
+      _runtime.views().createTransientTrackListProjection(*_optPreviewSourceLease, rt::TrackOrderSpec{}));
 
     auto const state = editorViewState();
 

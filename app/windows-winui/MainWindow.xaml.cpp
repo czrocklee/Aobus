@@ -30,8 +30,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
-// MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
@@ -116,7 +114,6 @@ namespace winrt::Aobus::implementation
     _trackListPtr =
       std::make_unique<ao::winui::TrackListController>(runtime, session.columnLayouts(), session.textCatalog());
     _themePtr = std::make_unique<ao::winui::ThemeCoordinator>(session.stateRoot() / "windows-theme.yaml");
-    _resourceBytesPtr = std::make_unique<ao::rt::ResourceByteLoader>(runtime);
 
     // A reveal request reaches the track list the window owns, not the list a
     // generation happens to be showing, so it survives every shell rebuild.
@@ -356,7 +353,7 @@ namespace winrt::Aobus::implementation
         // The window owns the builder, so these are reached only from a build
         // the window itself started while its own consumers are still alive.
         .trackList = *_trackListPtr,
-        .resourceBytes = *_resourceBytesPtr,
+        .resourceBytes = _session->runtime().resourceBytes(),
         .theme = *_themePtr,
         .activeTheme = [this] { return _themeOverride; },
         .saveSettings = command(&MainWindow::saveWindowState),
@@ -492,7 +489,7 @@ namespace winrt::Aobus::implementation
     _listAuthoringCoordinatorPtr.reset();
 
     // SMTC and fullscreen playback adapters must stop observing the runtime
-    // before the window releases its resource and track services.
+    // before the window releases its track service.
     unbindPlayback();
 
     // The window's own retirement, run as named steps rather than left to
@@ -505,7 +502,6 @@ namespace winrt::Aobus::implementation
     }
 
     _revealTrackSub.reset();
-    _resourceBytesPtr.reset();
     _themePtr.reset();
     _trackListPtr.reset();
 

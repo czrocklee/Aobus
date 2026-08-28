@@ -48,8 +48,8 @@ App owns dispatcher + one LibraryWindowSession
   -> one process owns one LibrarySession + MainWindow for its lifetime
   -> aobus-winui-lib owns ShellStatePolicy + settings/theme schemas
   -> MainWindow owns the XAML frame, its resources, and one layout host
-     -> session callbacks, TrackListController, ResourceByteLoader, theme coordinator
-        -> cover-art presenters borrow the loader and theme the window owns
+     -> session callbacks, TrackListController, theme coordinator
+        -> cover-art presenters borrow the runtime-owned loader and window-owned theme
      -> ShellBuilder owns schema, actions, menus, pane accessors, and observable shell state
         -> component factories capture exact window/session services at registration
         -> LayoutBuildContext carries only generation-scoped build values

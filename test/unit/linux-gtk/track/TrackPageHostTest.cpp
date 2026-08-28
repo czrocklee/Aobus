@@ -19,7 +19,6 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -51,9 +50,13 @@ namespace ao::gtk::test
       window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
 
     auto columnLayouts = uimodel::TrackColumnLayouts{};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto host = TrackPageHost{
-      stack, runtime, tagEditController, listNavigation, columnLayouts, ao::test::englishMessageCatalog(), byteLoader};
+    auto host = TrackPageHost{stack,
+                              runtime,
+                              tagEditController,
+                              listNavigation,
+                              columnLayouts,
+                              ao::test::englishMessageCatalog(),
+                              runtime.resourceBytes()};
 
     SECTION("initial state")
     {

@@ -9,6 +9,7 @@
 #include "ViewState.h"
 #include "projection/TrackDetailProjection.h"
 #include "projection/TrackListProjection.h"
+#include "source/TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
@@ -119,6 +120,8 @@ namespace ao::rt
     std::chrono::milliseconds selectionDuration(ViewId viewId) const;
 
     Result<std::shared_ptr<TrackListProjection>> findTrackListProjection(ViewId viewId);
+    std::unique_ptr<TrackListProjection> createTransientTrackListProjection(TrackSourceLease sourceLease,
+                                                                            TrackOrderSpec const& order = {}) const;
     Result<TrackSourceState> listSourceState(ViewId viewId) const;
     Result<std::vector<TrackId>> listSourceTrackIds(ViewId viewId) const;
 

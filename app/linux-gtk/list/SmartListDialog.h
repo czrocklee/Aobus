@@ -9,6 +9,7 @@
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
@@ -19,7 +20,6 @@
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
 
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -34,11 +34,7 @@ namespace Gtk
 namespace ao::rt
 {
   class AppRuntime;
-  class AllTracksSource;
   struct ListNode;
-  class SmartListSource;
-  class SmartListEvaluator;
-  class TrackSource;
 }
 
 namespace ao::uimodel
@@ -127,8 +123,7 @@ namespace ao::gtk
     i18n::MessageCatalog _textCatalog;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
-    std::shared_ptr<rt::SmartListSource> _previewFilteredListPtr;
-    std::unique_ptr<rt::SmartListEvaluator> _previewEnginePtr;
+    std::optional<rt::TrackSourceLease> _optPreviewSourceLease;
     Glib::RefPtr<TrackListModel> _previewModelPtr;
 
     // Edit mode state

@@ -28,7 +28,7 @@ media file reading or YAML import
   -> ResourceStore descriptor (digest + length) + ResourceId
        |-> ordered Track cover references
        |    -> primary ResourceId in runtime rows/detail/playback state
-       |         `-> LibraryJobs materialization
+       |         `-> CoreRuntime-private resource materialization
        |              |-> derived cover cache (digest-keyed, verified)
        |              |-> carrier media file named by the reverse index
        |              `-> ResourceByteLoader / ResourceBytes
@@ -61,8 +61,10 @@ The library model owns cover ordering and reference integrity; resource delivery
 
 ### Runtime materialization and identity flow
 
-`LibraryJobs::loadResourceAsync()` is the only materialization boundary, for interactive delivery and for CLI export alike: it enters on the callback executor, resolves the descriptor and the carrier snapshot under a short worker-side read transaction, closes that transaction, walks the derived cover cache and then each carrier file, applies the ceiling the caller named, and returns owned bytes on the callback executor.
-The two callers differ in policy, not in path: an interactive caller passes the 32 MiB ceiling and CLI export passes none, which is the administrative exemption.
+`CoreRuntime` owns one source-private `ResourceMaterializer` as the only materialization implementation.
+It enters on the callback executor, resolves the descriptor and carrier snapshot under a short worker-side read transaction, closes that transaction, walks the derived cover cache and then each carrier file, applies the selected ceiling, and returns owned bytes on the callback executor.
+Interactive delivery uses its 32 MiB path through the `ReadBytes` callable bound into a `ResourceByteLoader`; CLI export calls the administrative path with no ceiling.
+The two callers therefore differ in policy, not in the materialization walk.
 YAML export still reads `ResourceStore` directly under its own scoped transaction, because a document carries descriptors rather than content.
 Runtime track rows, list/detail projections, and playback state carry only `ResourceId`, not decoded images or URLs.
 
@@ -73,13 +75,14 @@ The derived cover cache is a digest-keyed directory outside the library, supplie
 Entries are verified against the digest on read, installed after a carrier answers, converged toward a byte budget, and evicted least-recently-used.
 A cache that is absent, unwritable, or destroyed costs re-extraction and never a failed request.
 
-`LibraryJobs` owns the derived cover cache above and nothing else: it holds no in-memory or decoded resource state, publishes no maintenance progress, and introduces no resource-state owner.
-Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a loader-lifetime byte cache bounded by both entry count and aggregate bytes, and delivers immutable copyable `ResourceBytes` values through its constructor-selected runtime's callback executor.
+Runtime `ResourceByteLoader` is an `AppRuntime`-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a loader-lifetime byte cache bounded by both entry count and aggregate bytes, and delivers immutable copyable `ResourceBytes` values through its constructor-selected runtime's callback executor.
 `ResourceBytes` shares owned storage across callbacks and remains valid after loader destruction or cache eviction.
-The loader constructor selects one asynchronous byte-source port for its whole life, whether the default adapter reads through `CoreRuntime` or a focused test/composition adapter supplies bytes directly.
-WinUI, GTK, and TUI borrow a `CoreRuntime` that must outlive the loader and all work its destructor cancels; each composition root destroys the loader before releasing that runtime.
+The sole loader constructor accepts `async::Runtime&` plus one asynchronous `ReadBytes` port for its whole life.
+`AppRuntime` constructs one loader value whose port calls the private interactive materializer owned by its `CoreRuntime`; focused tests may construct a loader with a controlled port directly.
+WinUI, GTK, and TUI borrow that loader through `AppRuntime::resourceBytes()`, so all interactive consumers share one byte cache and the loader is destroyed before the owned `CoreRuntime`.
+The encoded-byte cache therefore follows the `AppRuntime` rather than any individual window or consumer; closing one consumer does not flush it, and retention remains bounded at 128 entries and 128 MiB until runtime teardown.
 Each spawned read retains the selected source until that flight finishes or loader destruction cancels it.
-It is instantiated by a composition root rather than owned globally by `CoreRuntime`.
+It belongs to the interactive runtime rather than the non-interactive `CoreRuntime` used by the CLI.
 GTK, TUI, WinUI, and MPRIS retain their transform-specific request and cache paths, while every frontend retains its own decode and stale-result policy.
 
 ### GTK image delivery
@@ -97,9 +100,9 @@ Group-heading, Inspector, and Now Playing layout components expose style enums i
 
 ### WinUI image delivery
 
-Each WinUI `MainWindow` owns one runtime `ResourceByteLoader` directly, constructed on that window's session runtime and never rebound.
-The loader uses the shared request coalescer for valid-resource reads and owns one bounded encoded-byte cache shared by all Windows presenters and SMTC in that window.
-A library replacement creates a new window and loader; it does not rebind a live loader to another runtime.
+Each WinUI library session has one `AppRuntime`-owned `ResourceByteLoader` that is never rebound.
+The loader uses the shared request coalescer for valid-resource reads and owns one bounded encoded-byte cache shared by all Windows presenters and SMTC in that session.
+A library replacement creates a new runtime and loader; it does not rebind a live loader.
 `CoverArtPresenter` owns one generation-fenced selection, renders the fixed slot placeholder through XAML for an invalid identity, supplies the current Windows theme accent to vinyl rendering, and decodes valid bytes through the native image source.
 It copies encoded bytes into native owning memory on a worker; the callback executor only wraps that prepared memory as a Windows random-access stream and updates XAML.
 It serves realized group headings, Inspector, Now Playing, and SMTC artwork for the window's one runtime.
@@ -137,7 +140,7 @@ CLI resource commands expose ids and described lengths for inspection, and expor
 - `ResourceStore` depends on LMDB and the digest utility, never runtime, UIModel, or platform image libraries.
 - Track and library mutation code may create/reuse descriptors and attach ids; resource storage does not depend on track presentation or consumers.
 - Core never opens a media file to satisfy a resource read; re-extraction is a runtime responsibility, because only runtime knows which files a library references and where its music root now is.
-- Runtime exposes stable ids and owned bytes without `Gdk::Pixbuf`, FTXUI cells, Kitty escapes, file URLs, MIME strings, or cache paths; its frontend-scoped byte loader may retain immutable encoded bytes but never decodes them.
+- Runtime exposes stable ids and owned bytes without `Gdk::Pixbuf`, FTXUI cells, Kitty escapes, file URLs, MIME strings, or cache paths; its `AppRuntime`-scoped byte loader may retain immutable encoded bytes but never decodes them.
 - The runtime consumes a cache directory it is given and resolves none; `applicationCacheDirectory()` is called by composition roots only.
 - Projections and playback state carry identity only; they do not read or decode bytes on behalf of frontends.
 - GTK, WinUI, and TUI own decoding, scaling, placeholder rendering, and stale-view suppression.
@@ -206,7 +209,7 @@ Missing reads are ordinary absence; LMDB operational faults follow the storage f
 The runtime reader copies the descriptor and the carrier snapshot it read and closes its transaction before any cache or file I/O, so no read transaction spans a materialization.
 
 Runtime byte and GTK/MPRIS transform requests have per-interest cancellation plus an owner lifetime scope; each WinUI presenter additionally owns a generation fence and worker stream-preparation task; TUI owns one selected byte interest plus cancellable settle and transform tasks, all retired together by replacement, clearing, and destruction.
-WinUI window teardown destroys SMTC and its cover-art presenters before the resource loader, then destroys that loader before the session releases its unique runtime; runtime shutdown joins cancelled work rather than deferring or quarantining a runtime owner.
+WinUI window teardown destroys SMTC and its cover-art presenters before releasing the session; session release destroys the unique `AppRuntime`, whose interactive implementation destroys the shared resource loader before the composed `CoreRuntime`; runtime shutdown joins cancelled work rather than deferring or quarantining a runtime owner.
 `ResourceByteLoader` destruction destroys its lifetime scope before clearing the shared request coalescer and byte cache; its constructor-selected source and callback-runtime reference then die with the loader.
 Each delivery owner cancels external work before clearing its shared request coalescer.
 The coalescer's flight token identifies one exact start generation, so a late completion after clear cannot match a same-key replacement.
@@ -222,8 +225,8 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 ## Implementation map
 
 - [`ResourceStore`](../../include/ao/library/ResourceStore.h), [`ResourceStore.cpp`](../../lib/library/ResourceStore.cpp), [`ResourceLayout.h`](../../include/ao/library/ResourceLayout.h), [`Sha256.h`](../../include/ao/utility/Sha256.h), and [`CoverArt.h`](../../include/ao/library/CoverArt.h) own Core identities and references.
-- [`LibraryJobs::loadResourceAsync`](../../app/runtime/library/LibraryJobs.cpp) owns materialization for every caller; [`ResourceMaterialization.cpp`](../../app/runtime/library/ResourceMaterialization.cpp) owns the walk, [`ResourceCarrierIndex.cpp`](../../app/runtime/library/ResourceCarrierIndex.cpp) the reverse index, and [`ResourceDiskCache.cpp`](../../app/runtime/resource/ResourceDiskCache.cpp) the derived cover cache; [`LibraryYamlExporter.cpp`](../../app/runtime/library/LibraryYamlExporter.cpp) reads descriptors directly under its own transaction.
-- [`ResourceByteLoader`](../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../app/include/ao/rt/resource/ResourceByteCache.h) own frontend-scoped encoded-byte coalescing, immutable ownership, caching, cancellation, and callback-executor delivery.
+- [`ResourceMaterializer.cpp`](../../app/runtime/resource/ResourceMaterializer.cpp) owns runtime materialization for every caller; [`ResourceMaterialization.cpp`](../../app/runtime/resource/ResourceMaterialization.cpp) owns the walk, [`ResourceCarrierIndex.cpp`](../../app/runtime/resource/ResourceCarrierIndex.cpp) the reverse index, and [`ResourceDiskCache.cpp`](../../app/runtime/resource/ResourceDiskCache.cpp) the derived cover cache; [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) binds interactive and administrative entry points, while [`LibraryYamlExporter.cpp`](../../app/runtime/library/LibraryYamlExporter.cpp) reads descriptors directly under its own transaction.
+- [`ResourceByteLoader`](../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../app/include/ao/rt/resource/ResourceByteCache.h) own `AppRuntime`-scoped encoded-byte coalescing, immutable ownership, caching, cancellation, and callback-executor delivery.
 - [`RequestCoalescer`](../../include/ao/async/RequestCoalescer.h) owns platform-neutral equal-key flight sharing, callback-interest cancellation, exact-flight dependency retention, and completion generation fencing.
 - [`TrackRow.h`](../../app/include/ao/rt/TrackRow.h), [`TrackListProjection.h`](../../app/include/ao/rt/projection/TrackListProjection.h), [`TrackDetailProjection.h`](../../app/include/ao/rt/projection/TrackDetailProjection.h), and [`PlaybackState.h`](../../app/include/ao/rt/PlaybackState.h) carry identities.
 - [`CoverArtPlaceholder`](../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h) owns shared presentation policy.
@@ -236,11 +239,11 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 ## Test map
 
 - [`ResourceStoreTest.cpp`](../../test/unit/library/ResourceStoreTest.cpp) protects identity, digest reuse, collisions, length evidence, reads, removal, and exhaustion behavior; [`Sha256Test.cpp`](../../test/unit/utility/Sha256Test.cpp) and [`ResourceLayoutTest.cpp`](../../test/unit/library/ResourceLayoutTest.cpp) protect the digest and descriptor surfaces.
-- [`ResourceMaterializationTest.cpp`](../../test/unit/runtime/library/ResourceMaterializationTest.cpp) and [`ResourceDiskCacheTest.cpp`](../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protect the two-tier walk, carrier fallback, verification, ceilings, cancellation, eviction, and cache-failure tolerance.
+- [`ResourceMaterializationTest.cpp`](../../test/unit/runtime/resource/ResourceMaterializationTest.cpp), [`ResourceMaterializerTest.cpp`](../../test/unit/runtime/resource/ResourceMaterializerTest.cpp), and [`ResourceDiskCacheTest.cpp`](../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protect the two-tier walk, carrier fallback, verification, ceilings, cancellation, lazy index rebuilding, callback affinity, eviction, and cache-failure tolerance.
 - [`ScanApplyOperationTest.cpp`](../../test/unit/runtime/library/ScanApplyOperationTest.cpp) protects covers as a scan fact across `New`, `Changed`, `Moved`, and `Unchanged` items.
 - [`TrackBuilderCoverArtTest.cpp`](../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects ordered references and primary selection.
 - [`RequestCoalescerTest.cpp`](../../test/unit/async/RequestCoalescerTest.cpp) protects shared-flight ordering, interest cancellation, exact-flight dependency retention/release, reentrancy, failure rollback, clear generation fencing, and owner-independent request handles.
-- [`ResourceByteCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded encoded-byte retention, shared storage lifetime beyond loader destruction, constructor-backed CoreRuntime and adapter-source reads, synchronous cache-hit delivery, retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement loader.
+- [`ResourceByteCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded encoded-byte retention, shared storage lifetime beyond loader destruction, application-runtime and controlled-source reads, synchronous cache-hit delivery, retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement loader.
 - GTK image tests under [`test/unit/linux-gtk/image/`](../../test/unit/linux-gtk/image/) protect cache, coalescing, scaling, cancellation, current-request publication, and render targets.
 - [`PlaybackImageTest.cpp`](../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects the runtime identity-to-widget consumer.
 - [`CoverArtPlaceholderTest.cpp`](../../test/unit/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects the shared presentation policy.

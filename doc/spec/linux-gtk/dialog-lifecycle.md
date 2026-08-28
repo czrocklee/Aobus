@@ -78,6 +78,7 @@ Its theme selector is preview-only; theme persistence belongs to Preferences.
 Native file-dialog cancellation or dismissal is silent and creates no replacement.
 Other native file-dialog failures are logged and presented in a parent-bound transient message at the initiating window.
 A saved-List preview-source acquisition failure uses the editor's existing error label.
+The saved-List editor evaluates each non-empty local expression through a leased ad-hoc runtime source: a valid expression drives the transient preview projection, a local expression failure hides that preview and shows its diagnostic, and a valid expression over a broken saved-List parent chain shows the propagated contextual parent error.
 Saved-List create or edit rejection retains the draft and editor, while delete rejection presents a parent-bound transient message without changing the tree or selection.
 Deferred track-presentation selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message.
 Active-pair terminal-retirement failure presents a parent-bound transient message and leaves the old pair visible.

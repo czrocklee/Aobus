@@ -1125,7 +1125,7 @@ namespace ao::cli
                         OutputFormat format,
                         std::ostream& os)
     {
-      auto result = cli.runTask(cli.library().jobs().loadResourceAsync(id, rt::ResourceSizeLimit::Administrative));
+      auto result = cli.runTask(cli.core().loadResourceBytesForExportAsync(id));
 
       if (!result)
       {

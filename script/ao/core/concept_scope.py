@@ -96,7 +96,7 @@ CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
     ConstructionChain(
         leaf="rt.ResourceByteLoader",
         path="app/include/ao/rt/resource/ResourceByteLoader.h",
-        steps=("ResourceByteLoader(CoreRuntime&)",),
+        steps=("ResourceByteLoader(async::Runtime&, ReadBytes)",),
     ),
     ConstructionChain(
         leaf="uimodel.ActivityStatusFeedProjection",

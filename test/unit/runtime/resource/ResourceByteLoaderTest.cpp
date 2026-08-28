@@ -16,8 +16,9 @@
 #include <ao/async/Task.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/rt/resource/ResourceDiskCache.h>
@@ -95,7 +96,7 @@ namespace ao::rt::test
     {
       auto const cache = ResourceDiskCache{ResourceDiskCache::Config{
         .directory = coverCacheDirectory(cacheRoot),
-        .maximumEntryBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+        .maximumEntryBytes = kMaximumInteractiveResourceBytes,
       }};
       cache.store(utility::computeSha256(bytes), bytes);
     }
@@ -207,21 +208,22 @@ namespace ao::rt::test
     installCacheEntry(tempDir.path() / "cache", expected);
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = std::shared_ptr<CoreRuntime>{
-      ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
-                                                 tempDir.path(),
-                                                 paths.databasePath(),
-                                                 tempDir.path() / "cache",
-                                                 library::test::kTestMusicLibraryMapBytes))};
-    auto loader = ResourceByteLoader{*runtimePtr};
+    auto runtimePtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+      .executorPtr = std::move(executorPtr),
+      .musicRoot = tempDir.path(),
+      .databasePath = paths.databasePath(),
+      .cacheDirectory = tempDir.path() / "cache",
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
+    }));
     auto received = std::vector<std::byte>{};
     bool callbackOnExecutor = false;
-    auto request = loader.request(resourceId,
-                                  [&](ResourceBytes bytes)
-                                  {
-                                    received.assign(bytes.view().begin(), bytes.view().end());
-                                    callbackOnExecutor = executor->isCurrent();
-                                  });
+    auto request = runtimePtr->resourceBytes().request(resourceId,
+                                                       [&](ResourceBytes bytes)
+                                                       {
+                                                         received.assign(bytes.view().begin(), bytes.view().end());
+                                                         callbackOnExecutor = executor->isCurrent();
+                                                       });
 
     REQUIRE(request);
     REQUIRE(executor->drainUntil([&] { return received.size() == expected.size(); }));

@@ -27,10 +27,8 @@ namespace ao::async
 
 namespace ao::rt
 {
-  class CoreRuntime;
-
   /**
-   * Frontend-scoped delivery of immutable resource bytes.
+   * Interactive-runtime-scoped delivery of immutable resource bytes.
    *
    * Public methods and loader-owned state are confined to the bound runtime's
    * callback executor. Equal ids share one read, while each callback interest
@@ -52,7 +50,6 @@ namespace ao::rt
       std::function<async::Task<Result<std::optional<std::vector<std::byte>>>>(ResourceId, std::stop_token)>;
     using Request = utility::ScopedRegistration;
 
-    explicit ResourceByteLoader(CoreRuntime& runtime);
     ResourceByteLoader(async::Runtime& runtime, ReadBytes readBytes);
     ~ResourceByteLoader();
 

@@ -300,7 +300,7 @@ This means the forwarding removal is blocked on a new UIModel `ListAuthoring` fr
 Deleting the forwarders while that regex still bans `.writer(` under `app/linux-gtk` would break the GTK build.
 
 `LibraryTaskService` becomes `LibraryJobs` and narrows to scan, import, export, and identity backfill with their progress feed.
-`loadResourceAsync` is not republished as a `LibraryResourceService`; resource materialization stays in the runtime implementation, `ResourceByteLoader` receives a narrow `ReadBytes` callable at construction, and `CoreRuntime` binds that callable to the internal materializer.
+`loadResourceAsync` is not republished as a `LibraryResourceService`; resource materialization stays in the runtime implementation, `ResourceByteLoader` receives a narrow `ReadBytes` callable at construction, and `AppRuntime` binds that callable to the internal materializer owned by its composed `CoreRuntime`.
 `resourceCarrierIndexBuildCount()` moves to a private test seam.
 This preserves every contract in the [cover-art delivery specification](../spec/resource/cover-art-delivery.md) and the [library task-execution specification](../spec/library/runtime/task-execution.md) while removing one public role.
 

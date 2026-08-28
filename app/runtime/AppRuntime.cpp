@@ -9,7 +9,6 @@
 #include "runtime/playback/PlaybackTransport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/Executor.h> // NOLINT(misc-include-cleaner): unique_ptr<Executor> destruction needs the complete type.
 #include <ao/async/Runtime.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Player.h>
@@ -23,16 +22,19 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <expected>
 #include <memory>
+#include <stop_token>
 #include <utility>
 
 namespace ao::rt
 {
   struct AppRuntime::Impl final
   {
+    ResourceByteLoader resourceByteLoader;
     ViewService viewService;
     PlaybackTransport playbackTransport;
     PlaybackSuccession playbackSuccession;
@@ -44,38 +46,39 @@ namespace ao::rt
     std::unique_ptr<PlaybackSessionPersistence> playbackSessionPersistencePtr;
     bool stopped = false;
 
-    Impl(AppRuntime& runtime,
+    Impl(CoreRuntime& core,
+         ResourceByteLoader::ReadBytes readResourceBytes,
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
          ConfigStore* playbackSessionConfigStoreValue)
-      : viewService{runtime.async().callbackExecutor(),
-                    runtime.musicLibrary(),
-                    runtime.sources(),
-                    runtime.library().changes(),
-                    runtime.textOrderingPolicy()}
-      , playbackTransport{runtime.async().callbackExecutor(),
-                          runtime.musicLibrary(),
-                          runtime.notifications(),
-                          std::make_unique<audio::Player>(runtime.async())}
-      , playbackSuccession{runtime.async().callbackExecutor(),
+      : resourceByteLoader{core.async(), std::move(readResourceBytes)}
+      , viewService{core.async().callbackExecutor(),
+                    core.musicLibrary(),
+                    core.sources(),
+                    core.library().changes(),
+                    core.textOrderingPolicy()}
+      , playbackTransport{core.async().callbackExecutor(),
+                          core.musicLibrary(),
+                          core.notifications(),
+                          std::make_unique<audio::Player>(core.async())}
+      , playbackSuccession{core.async().callbackExecutor(),
                            viewService,
-                           runtime.sources(),
-                           runtime.musicLibrary(),
+                           core.sources(),
+                           core.musicLibrary(),
                            playbackTransport,
-                           runtime.notifications(),
-                           runtime.async(),
-                           runtime.textOrderingPolicy()}
+                           core.notifications(),
+                           core.async()}
       , playbackBootstrap{playbackTransport}
-      , playbackPtr{playbackBootstrap.createPlaybackService(runtime.async().callbackExecutor(), playbackSuccession)}
-      , workspaceService{runtime.async().callbackExecutor(), viewService, runtime.library().changes()}
+      , playbackPtr{playbackBootstrap.createPlaybackService(core.async().callbackExecutor(), playbackSuccession)}
+      , workspaceService{core.async().callbackExecutor(), viewService, core.library().changes()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
       , playbackSessionConfigStore{playbackSessionConfigStoreValue != nullptr ? playbackSessionConfigStoreValue
                                                                               : workspaceConfigStorePtr.get()}
       , playbackSessionPersistencePtr{std::make_unique<PlaybackSessionPersistence>(*playbackSessionConfigStore,
-                                                                                   runtime.library(),
+                                                                                   core.library(),
                                                                                    playbackSuccession,
                                                                                    playbackTransport,
                                                                                    *playbackPtr,
-                                                                                   runtime.async())}
+                                                                                   core.async())}
     {
     }
 
@@ -113,37 +116,88 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "AppRuntime requires a workspace config store");
     }
 
-    auto runtimePtr = std::unique_ptr<AppRuntime>{new AppRuntime{}};
-    auto initializeRes = runtimePtr->initialize(std::move(dependencies.executorPtr),
-                                                std::move(dependencies.musicRoot),
-                                                std::move(dependencies.databasePath),
-                                                std::move(dependencies.cacheDirectory),
-                                                dependencies.musicLibraryPinnedMapBytes,
-                                                dependencies.sleeper,
-                                                dependencies.textOrderingPolicy,
-                                                dependencies.completionAliasPolicy);
+    auto coreRes = CoreRuntime::create(std::move(dependencies.executorPtr),
+                                       std::move(dependencies.musicRoot),
+                                       std::move(dependencies.databasePath),
+                                       std::move(dependencies.cacheDirectory),
+                                       dependencies.musicLibraryPinnedMapBytes,
+                                       dependencies.sleeper,
+                                       dependencies.textOrderingPolicy,
+                                       dependencies.completionAliasPolicy);
 
-    if (!initializeRes)
+    if (!coreRes)
     {
-      return std::unexpected{initializeRes.error()};
+      return std::unexpected{coreRes.error()};
     }
 
-    runtimePtr->_implPtr = std::make_unique<Impl>(
-      *runtimePtr, std::move(dependencies.workspaceConfigStorePtr), dependencies.playbackSessionConfigStore);
-    return runtimePtr;
+    return std::unique_ptr<AppRuntime>{new AppRuntime{
+      std::move(*coreRes), std::move(dependencies.workspaceConfigStorePtr), dependencies.playbackSessionConfigStore}};
   }
 
-  AppRuntime::AppRuntime() = default;
+  AppRuntime::AppRuntime(std::unique_ptr<CoreRuntime> corePtr,
+                         std::unique_ptr<ConfigStore> workspaceConfigStorePtr,
+                         ConfigStore* const playbackSessionConfigStore)
+    : _corePtr{std::move(corePtr)}
+  {
+    auto* const core = _corePtr.get();
+    auto readResourceBytes =
+      ResourceByteLoader::ReadBytes{[core](ResourceId const resourceId, std::stop_token const stopToken)
+                                    { return core->loadInteractiveResourceBytesAsync(resourceId, stopToken); }};
+    _implPtr = std::make_unique<Impl>(
+      *core, std::move(readResourceBytes), std::move(workspaceConfigStorePtr), playbackSessionConfigStore);
+  }
+
   AppRuntime::~AppRuntime() = default;
 
   void AppRuntime::shutdown() noexcept
   {
-    if (_implPtr)
-    {
-      _implPtr->shutdown();
-    }
+    _implPtr->shutdown();
+    _corePtr->shutdown();
+  }
 
-    CoreRuntime::shutdown();
+  Library const& AppRuntime::library() const noexcept
+  {
+    return _corePtr->library();
+  }
+
+  Library& AppRuntime::library() noexcept
+  {
+    return _corePtr->library();
+  }
+
+  async::Runtime& AppRuntime::async() noexcept
+  {
+    return _corePtr->async();
+  }
+
+  TrackSourceCache& AppRuntime::sources() noexcept
+  {
+    return _corePtr->sources();
+  }
+
+  NotificationService& AppRuntime::notifications() noexcept
+  {
+    return _corePtr->notifications();
+  }
+
+  CompletionService& AppRuntime::completion() noexcept
+  {
+    return _corePtr->completion();
+  }
+
+  TextOrderingPolicy const* AppRuntime::textOrderingPolicy() const noexcept
+  {
+    return _corePtr->textOrderingPolicy();
+  }
+
+  std::filesystem::path const& AppRuntime::musicRoot() const noexcept
+  {
+    return _corePtr->musicRoot();
+  }
+
+  ResourceByteLoader& AppRuntime::resourceBytes() noexcept
+  {
+    return _implPtr->resourceByteLoader;
   }
 
   PlaybackService& AppRuntime::playback() noexcept

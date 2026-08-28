@@ -10,7 +10,6 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 
 #include <cstdint>
-#include <filesystem>
 #include <memory>
 #include <span>
 #include <vector>
@@ -58,16 +57,9 @@ namespace ao::rt
   class Library final
   {
   public:
-    /// @param cacheDirectory Where the derived cover cache lives. A composition
-    ///        root resolves it, because the runtime owns paths derived from a
-    ///        supplied root and does not discover platform application
-    ///        directories. Empty is supported: a cover read then re-extracts
-    ///        from a carrier file every time, which costs latency, and costs the
-    ///        image itself for content whose carrier files are all gone.
     static Result<std::unique_ptr<Library>> create(async::Runtime& asyncRuntime,
                                                    library::MusicLibrary& storage,
-                                                   LibraryChanges& changes,
-                                                   std::filesystem::path cacheDirectory = {});
+                                                   LibraryChanges& changes);
     ~Library();
 
     Library(Library const&) = delete;

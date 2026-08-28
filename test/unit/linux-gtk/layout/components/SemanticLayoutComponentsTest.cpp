@@ -26,6 +26,7 @@
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
@@ -45,7 +46,6 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -116,13 +116,9 @@ namespace ao::gtk::layout::test
       std::int32_t _openLibraryCount = 0;
     };
 
-    library::test::TrackSpec trackSpecFor(library::MusicLibrary const& musicLibrary, TrackId const trackId)
+    library::test::TrackSpec trackSpecFor(rt::AppRuntime& runtime, TrackId const trackId)
     {
-      auto const transaction = musicLibrary.readTransaction();
-      auto const optView =
-        musicLibrary.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView);
-      return library::test::trackSpecFromView(musicLibrary, *optView);
+      return rt::test::runtimeTrackSpec(runtime, trackId);
     }
 
     bool hasNotification(rt::NotificationService& notifications,
@@ -222,8 +218,8 @@ namespace ao::gtk::layout::test
 
     int const cacheSize = 10;
     auto imageCachePtr = std::make_unique<ImageCache>(cacheSize);
-    auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
-    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
+    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
+      fixture.runtime().resourceBytes(), *imageCachePtr, fixture.runtime().async());
     auto menuModelPtr = Gio::Menu::create();
     menuModelPtr->append_submenu("Test Menu", Gio::Menu::create());
     registerTrackCoverArtComponent(fixture.components(), imageLoaderPtr.get(), ao::test::englishMessageCatalog());
@@ -558,9 +554,9 @@ namespace ao::gtk::layout::test
 
     auto const expectedTags = std::vector<std::string>{"First"};
     REQUIRE(pumpGtkEventsUntil([&runtime, firstTrackId, &expectedTags]
-                               { return trackSpecFor(runtime.musicLibrary(), firstTrackId).tags == expectedTags; }));
+                               { return trackSpecFor(runtime, firstTrackId).tags == expectedTags; }));
     REQUIRE(pumpGtkEventsUntil([&runtime] { return !runtime.notifications().feed().entries.empty(); }));
-    CHECK(trackSpecFor(runtime.musicLibrary(), firstTrackId).tags == expectedTags);
+    CHECK(trackSpecFor(runtime, firstTrackId).tags == expectedTags);
     auto feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
@@ -580,12 +576,12 @@ namespace ao::gtk::layout::test
     REQUIRE(pumpGtkEventsUntil(
       [&runtime, secondTrackId]
       {
-        return trackSpecFor(runtime.musicLibrary(), secondTrackId).tags == std::vector<std::string>{"Replacement"} &&
+        return trackSpecFor(runtime, secondTrackId).tags == std::vector<std::string>{"Replacement"} &&
                hasNotification(runtime.notifications(),
                                rt::NotificationSeverity::Error,
                                "Library changed while the tag editor was open. Reload and try again.");
       }));
-    CHECK(trackSpecFor(runtime.musicLibrary(), firstTrackId).tags == expectedTags);
+    CHECK(trackSpecFor(runtime, firstTrackId).tags == expectedTags);
     drainGtkEvents();
 
     REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Invalidate Second"})));
@@ -595,7 +591,7 @@ namespace ao::gtk::layout::test
     REQUIRE(pumpGtkEventsUntil([&runtime, notificationCount]
                                { return runtime.notifications().feed().entries.size() > notificationCount; }));
 
-    CHECK(trackSpecFor(runtime.musicLibrary(), secondTrackId).tags == std::vector<std::string>{"Replacement"});
+    CHECK(trackSpecFor(runtime, secondTrackId).tags == std::vector<std::string>{"Replacement"});
     CHECK(runtime.notifications().feed().entries.back().severity == rt::NotificationSeverity::Error);
   }
 
@@ -630,8 +626,7 @@ namespace ao::gtk::layout::test
         return hasNotification(
           runtime.notifications(), rt::NotificationSeverity::Warning, "Library is busy. Try again.");
       }));
-    REQUIRE(pumpGtkEventsUntil([&runtime, trackId]
-                               { return trackSpecFor(runtime.musicLibrary(), trackId).tags.size() == 1; }));
+    REQUIRE(pumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).tags.size() == 1; }));
   }
 
   TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
@@ -641,7 +636,7 @@ namespace ao::gtk::layout::test
       "io.github.aobus.detail_undo_test",
       [&trackId](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Undo Target"}); }};
-    auto const& musicLibrary = fixture.runtime().musicLibrary();
+    auto& runtime = fixture.runtime();
     auto undoController = TrackDetailUndoController{};
     auto sessionPtr =
       ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
@@ -649,12 +644,7 @@ namespace ao::gtk::layout::test
     undoController.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
     REQUIRE(runGtkTask(fixture.runtime(), undoController.undo()));
 
-    auto const transaction = musicLibrary.readTransaction();
-    auto const optView =
-      musicLibrary.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
-    REQUIRE(optView);
-
-    auto const spec = library::test::trackSpecFromView(musicLibrary, *optView);
+    auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
     CHECK(spec.customMetadata[0].first == "Mood");
     CHECK(spec.customMetadata[0].second == "Bright");
@@ -715,7 +705,7 @@ namespace ao::gtk::layout::test
     REQUIRE_FALSE(undoRes);
     CHECK(undoRes.error().message == "Library changed before metadata undo could be applied");
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
-    CHECK(trackSpecFor(runtime.musicLibrary(), trackId).customMetadata.empty());
+    CHECK(trackSpecFor(runtime, trackId).customMetadata.empty());
   }
 
   TEST_CASE("TrackDetailUndoController - rejected undo clears the terminal action",
@@ -741,7 +731,7 @@ namespace ao::gtk::layout::test
     REQUIRE_FALSE(undoRes);
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
     CHECK(changedCount == 2);
-    CHECK(trackSpecFor(fixture.runtime().musicLibrary(), trackId).customMetadata.empty());
+    CHECK(trackSpecFor(fixture.runtime(), trackId).customMetadata.empty());
   }
 
   TEST_CASE("TrackDetailUndoController - publication may destroy the controller before undo settles",
@@ -770,7 +760,7 @@ namespace ao::gtk::layout::test
     REQUIRE(undoRes);
     CHECK(controllerDestroyed);
     CHECK(controllerPtr == nullptr);
-    auto const spec = trackSpecFor(runtime.musicLibrary(), trackId);
+    auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
     CHECK(spec.customMetadata.front() == std::pair{std::string{"Mood"}, std::string{"Bright"}});
   }
@@ -844,7 +834,7 @@ namespace ao::gtk::layout::test
 
     REQUIRE(pumpGtkEventsUntil([moodEditor] { return !moodEditor->isEditing(); }));
 
-    auto const spec = trackSpecFor(runtime.musicLibrary(), trackId);
+    auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
     auto const expectedMetadata = std::pair{std::string{"Mood"}, std::string{"Bright"}};
     CHECK(spec.customMetadata.front() == expectedMetadata);
@@ -887,7 +877,7 @@ namespace ao::gtk::layout::test
       editor->stopEditing(true);
 
       CHECK(editor->text().raw() == "2020");
-      CHECK(trackSpecFor(runtime.musicLibrary(), trackId).year == 2020);
+      CHECK(trackSpecFor(runtime, trackId).year == 2020);
       auto const feed = runtime.notifications().feed();
       REQUIRE_FALSE(feed.entries.empty());
       CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
@@ -913,8 +903,7 @@ namespace ao::gtk::layout::test
           return hasNotification(
             runtime.notifications(), rt::NotificationSeverity::Warning, "Library is busy. Try again.");
         }));
-      REQUIRE(pumpGtkEventsUntil([&runtime, trackId]
-                                 { return trackSpecFor(runtime.musicLibrary(), trackId).title != "Before"; }));
+      REQUIRE(pumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).title != "Before"; }));
     }
 
     drainGtkEvents();
@@ -976,7 +965,6 @@ namespace ao::gtk::layout::test
                                musicLibrary, {.title = "Undo Button Target", .customMetadata = {{"Mood", "Bright"}}});
                            }};
     auto& runtime = fixture.runtime();
-    auto const& musicLibrary = runtime.musicLibrary();
 
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
@@ -995,11 +983,11 @@ namespace ao::gtk::layout::test
     auto* const deleteButton = findWidgetByClass<Gtk::Button>(root, "ao-detail-field-delete");
     REQUIRE(deleteButton != nullptr);
     emitClicked(*deleteButton);
-    REQUIRE(pumpGtkEventsUntil(
-      [&musicLibrary, trackId, undoBar]
-      { return trackSpecFor(musicLibrary, trackId).customMetadata.empty() && undoBar->get_visible(); }));
+    REQUIRE(
+      pumpGtkEventsUntil([&runtime, trackId, undoBar]
+                         { return trackSpecFor(runtime, trackId).customMetadata.empty() && undoBar->get_visible(); }));
 
-    CHECK(trackSpecFor(musicLibrary, trackId).customMetadata.empty());
+    CHECK(trackSpecFor(runtime, trackId).customMetadata.empty());
     CHECK(undoBar->get_visible());
     auto* const undoLabel = findLabelByText(root, "Custom metadata 'Mood' removed");
     REQUIRE(undoLabel != nullptr);
@@ -1011,10 +999,10 @@ namespace ao::gtk::layout::test
     emitClicked(*undoButton);
     emitClicked(*undoButton);
     REQUIRE(pumpGtkEventsUntil(
-      [&musicLibrary, trackId, undoBar]
-      { return !trackSpecFor(musicLibrary, trackId).customMetadata.empty() && !undoBar->get_visible(); }));
+      [&runtime, trackId, undoBar]
+      { return !trackSpecFor(runtime, trackId).customMetadata.empty() && !undoBar->get_visible(); }));
 
-    auto const spec = trackSpecFor(musicLibrary, trackId);
+    auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
     CHECK(spec.customMetadata[0].first == "Mood");
     CHECK(spec.customMetadata[0].second == "Bright");
@@ -1034,7 +1022,6 @@ namespace ao::gtk::layout::test
                                musicLibrary, {.title = "Add Target", .customMetadata = {{"Mood", "Bright"}}});
                            }};
     auto& runtime = fixture.runtime();
-    auto const& musicLibrary = runtime.musicLibrary();
 
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
@@ -1055,11 +1042,11 @@ namespace ao::gtk::layout::test
 
     auto* const undoBar = findWidgetByClass<Gtk::Widget>(root, "ao-undo-bar");
     REQUIRE(undoBar != nullptr);
-    REQUIRE(pumpGtkEventsUntil(
-      [&musicLibrary, trackId, undoBar]
-      { return trackSpecFor(musicLibrary, trackId).customMetadata.empty() && undoBar->get_visible(); }));
+    REQUIRE(
+      pumpGtkEventsUntil([&runtime, trackId, undoBar]
+                         { return trackSpecFor(runtime, trackId).customMetadata.empty() && undoBar->get_visible(); }));
     CHECK(undoBar->get_visible());
-    CHECK(trackSpecFor(musicLibrary, trackId).customMetadata.empty());
+    CHECK(trackSpecFor(runtime, trackId).customMetadata.empty());
 
     auto* const addButton = findWidgetByClass<Gtk::Button>(root, "ao-detail-add-custom-metadata-button");
     REQUIRE(addButton != nullptr);
@@ -1077,14 +1064,14 @@ namespace ao::gtk::layout::test
     REQUIRE(submitButton != nullptr);
     emitClicked(*submitButton);
     REQUIRE(pumpGtkEventsUntil(
-      [&musicLibrary, trackId, popover, undoBar]
+      [&runtime, trackId, popover, undoBar]
       {
-        auto const current = trackSpecFor(musicLibrary, trackId);
+        auto const current = trackSpecFor(runtime, trackId);
         return current.customMetadata.size() == 1 && current.customMetadata.front().second == "Dark" &&
                !popover->get_visible() && !undoBar->get_visible();
       }));
 
-    auto const spec = trackSpecFor(musicLibrary, trackId);
+    auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
     CHECK(spec.customMetadata[0].first == "Mood");
     CHECK(spec.customMetadata[0].second == "Dark");
@@ -1110,9 +1097,13 @@ namespace ao::gtk::layout::test
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
     auto columnLayouts = uimodel::TrackColumnLayouts{};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto pageHost = TrackPageHost{
-      stack, runtime, tagEditController, listNavigation, columnLayouts, ao::test::englishMessageCatalog(), byteLoader};
+    auto pageHost = TrackPageHost{stack,
+                                  runtime,
+                                  tagEditController,
+                                  listNavigation,
+                                  columnLayouts,
+                                  ao::test::englishMessageCatalog(),
+                                  runtime.resourceBytes()};
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();

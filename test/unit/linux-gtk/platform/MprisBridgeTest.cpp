@@ -365,8 +365,7 @@ namespace ao::gtk::platform::test
       output.put('\0');
     }
 
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto cache = MprisArtUrlCache{byteLoader, runtime.async(), cacheDir};
+    auto cache = MprisArtUrlCache{runtime.resourceBytes(), runtime.async(), cacheDir};
     bool callbackOnExecutor = false;
     auto const requestUrl = [&](ResourceId const requestedResourceId)
     {

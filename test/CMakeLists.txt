@@ -523,7 +523,6 @@ add_executable(ao_core_test
     unit/runtime/library/ScanApplyOperationTest.cpp
     unit/runtime/library/TrackBuilderSnapshotTest.cpp
     unit/runtime/library/LibraryJobsTest.cpp
-    unit/runtime/library/ResourceMaterializationTest.cpp
     unit/runtime/library/RuntimeFatalProbeTest.cpp
     unit/runtime/library/LibraryCommandsTest.cpp
     unit/runtime/library/LibraryAuthoringTest.cpp
@@ -557,6 +556,8 @@ add_executable(ao_core_test
     unit/runtime/resource/ResourceByteCacheTest.cpp
     unit/runtime/resource/ResourceDiskCacheTest.cpp
     unit/runtime/resource/ResourceByteLoaderTest.cpp
+    unit/runtime/resource/ResourceMaterializationTest.cpp
+    unit/runtime/resource/ResourceMaterializerTest.cpp
     unit/desktop/DetachedProcessLauncherTest.cpp
     unit/desktop/DetachedProcessLauncherWindowsTest.cpp
     unit/desktop/LibraryStartupPlannerTest.cpp

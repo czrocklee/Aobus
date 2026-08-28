@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -31,6 +31,7 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<TrackListModel> create(TrackRowCache const& provider);
 
+    void bindProjection(std::unique_ptr<rt::TrackListProjection> projectionPtr);
     void bindProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
     void clearProjection();
 

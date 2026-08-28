@@ -111,8 +111,7 @@ namespace ao::gtk::test
 
     auto& runtime = fixture.runtime();
     auto cache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto loader = ResourceImageLoader{byteLoader, cache, runtime.async()};
+    auto loader = ResourceImageLoader{runtime.resourceBytes(), cache, runtime.async()};
 
     constexpr std::int32_t kPixelSize = 48;
 
@@ -412,7 +411,7 @@ namespace ao::gtk::test
       auto request = ResourceImageLoader::Request{};
 
       {
-        auto scopedLoader = ResourceImageLoader{byteLoader, cache, runtime.async()};
+        auto scopedLoader = ResourceImageLoader{runtime.resourceBytes(), cache, runtime.async()};
         request = scopedLoader.requestThumbnail(
           resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
         REQUIRE(request);
@@ -421,7 +420,7 @@ namespace ao::gtk::test
       CHECK(callbackCount == 0);
       request.reset();
 
-      auto replacementLoader = ResourceImageLoader{byteLoader, cache, runtime.async()};
+      auto replacementLoader = ResourceImageLoader{runtime.resourceBytes(), cache, runtime.async()};
       std::int32_t replacementCallbackCount = 0;
       auto replacementRequest = replacementLoader.requestThumbnail(
         resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++replacementCallbackCount; });

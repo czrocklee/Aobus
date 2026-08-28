@@ -46,7 +46,6 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
@@ -85,8 +84,7 @@ namespace ao::gtk
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
       , trackRowCache{runtime.library(), catalog}
       , imageCache{100}
-      , resourceByteLoader{runtime}
-      , resourceImageLoader{resourceByteLoader, imageCache, runtime.async()}
+      , resourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()}
       , playbackActions{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , textCatalog{std::move(catalog)}
       , trackPresentationCatalog{runtime.workspace(), textCatalog}
@@ -123,7 +121,7 @@ namespace ao::gtk
                       listNavigationController,
                       trackColumnLayouts,
                       textCatalog,
-                      resourceByteLoader}
+                      runtime.resourceBytes()}
       , importExportCoordinator{window,
                                 runtime,
                                 textCatalog,
@@ -200,7 +198,6 @@ namespace ao::gtk
     ThemeCoordinator themeCoordinator;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
-    rt::ResourceByteLoader resourceByteLoader;
     ResourceImageLoader resourceImageLoader;
     uimodel::PlaybackActions playbackActions;
     i18n::MessageCatalog textCatalog;
@@ -261,8 +258,7 @@ namespace ao::gtk
     _implPtr->listNavigationController.addActionsTo(*this);
     _shellLayout.attachToWindow();
 
-    auto mprisArtUrlCachePtr =
-      std::make_shared<platform::MprisArtUrlCache>(_implPtr->resourceByteLoader, _runtime.async());
+    auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.resourceBytes(), _runtime.async());
     _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
       _runtime.playback(),
       _implPtr->playbackActions,

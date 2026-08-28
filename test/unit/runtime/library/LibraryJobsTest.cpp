@@ -13,14 +13,12 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/async/TaskFuture.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
@@ -34,9 +32,7 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/Path.h>
-#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -52,7 +48,6 @@
 #include <fstream>
 #include <memory>
 #include <optional>
-#include <span>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -152,270 +147,7 @@ namespace ao::rt::test
       REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
       REQUIRE(future.get());
     }
-
-    ResourceId writeResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
-    {
-      auto transaction = library::test::writeTransaction(library);
-      auto result = library::test::physicalWriter(library.resources(), transaction).create(bytes);
-      REQUIRE(result);
-      REQUIRE(transaction.commit());
-      return *result;
-    }
-
-    /**
-     * @brief Installs @p bytes in the derived cache the runtime will consult.
-     *
-     * Written through the production cache rather than by hand, so the test never
-     * restates the entry layout, and asserts the walk against the same tier a
-     * real session fills.
-     */
-    void installCacheEntry(std::filesystem::path const& cacheRoot, std::span<std::byte const> bytes)
-    {
-      auto const cache = ResourceDiskCache{ResourceDiskCache::Config{
-        .directory = coverCacheDirectory(cacheRoot),
-        .maximumEntryBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
-      }};
-      cache.store(utility::computeSha256(bytes), bytes);
-    }
-
-    async::Task<bool> loadResourceAndCheckExecutor(LibraryJobs* jobs, async::Executor* executor, ResourceId resourceId)
-    {
-      auto result = co_await jobs->loadResourceAsync(resourceId);
-      REQUIRE(result);
-      REQUIRE(*result);
-      co_return executor->isCurrent();
-    }
-
-    template<typename T>
-    async::Task<T> countCompletion(std::shared_ptr<std::atomic<std::size_t>> counterPtr, async::Task<T> task)
-    {
-      auto valueRes = co_await std::move(task);
-      counterPtr->fetch_add(1);
-      co_return valueRes;
-    }
   } // namespace
-
-  TEST_CASE("LibraryJobs - interactive resource reads return owned bytes on the callback executor",
-            "[runtime][unit][library-task][concurrency]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto const bytes = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
-    auto const resourceId = writeResource(libraryFixture.library(), bytes);
-    auto const cacheRoot = libraryFixture.root() / "cache";
-    installCacheEntry(cacheRoot, bytes);
-    auto executor = QueuedExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr =
-      ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes, cacheRoot));
-    std::int32_t progressFinishedCount = 0;
-    auto progressFinishedSub = runtimeLibraryPtr->jobs().onProgressFinished(
-      [&progressFinishedCount](LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
-    auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = spawnFuture(
-      runtime, loadResourceAndCheckExecutor(&runtimeLibraryPtr->jobs(), &executor, resourceId), completedPtr);
-
-    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
-    CHECK(future.get());
-    CHECK(progressFinishedCount == 0);
-
-    auto missingCompletedPtr = std::make_shared<std::atomic_bool>(false);
-    auto missingFuture =
-      spawnFuture(runtime, runtimeLibraryPtr->jobs().loadResourceAsync(ResourceId{987654}), missingCompletedPtr);
-    REQUIRE(executor.drainUntil([&missingCompletedPtr] { return isReady(missingCompletedPtr); }));
-    auto missingRes = missingFuture.get();
-    REQUIRE(missingRes);
-    CHECK_FALSE(*missingRes);
-
-    auto invalidCompletedPtr = std::make_shared<std::atomic_bool>(false);
-    auto invalidFuture =
-      spawnFuture(runtime, runtimeLibraryPtr->jobs().loadResourceAsync(kInvalidResourceId), invalidCompletedPtr);
-    REQUIRE(executor.drainUntil([&invalidCompletedPtr] { return isReady(invalidCompletedPtr); }));
-    auto invalidRes = invalidFuture.get();
-    REQUIRE(invalidRes);
-    CHECK_FALSE(*invalidRes);
-
-    runtime.requestStop();
-    runtime.join();
-  }
-
-  TEST_CASE("LibraryJobs - interactive resource encoded-byte limit is exact", "[runtime][unit][library-task]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = QueuedExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = std::unique_ptr<Library>{};
-
-    auto const cacheRoot = libraryFixture.root() / "cache";
-
-    SECTION("materialized bytes at the limit are returned")
-    {
-      auto bytes = std::vector<std::byte>(LibraryJobs::kMaximumInteractiveResourceBytes, std::byte{0x4A});
-      auto const resourceId = writeResource(libraryFixture.library(), bytes);
-      installCacheEntry(cacheRoot, bytes);
-      runtimeLibraryPtr =
-        ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes, cacheRoot));
-      auto result = runQueuedTask(runtime, executor, runtimeLibraryPtr->jobs().loadResourceAsync(resourceId));
-
-      REQUIRE(result);
-      REQUIRE(*result);
-      CHECK((*result)->size() == LibraryJobs::kMaximumInteractiveResourceBytes);
-      CHECK((*result)->front() == std::byte{0x4A});
-      CHECK((*result)->back() == std::byte{0x4A});
-    }
-
-    SECTION("materialized bytes above the limit are rejected before publication")
-    {
-      auto bytes = std::vector<std::byte>(LibraryJobs::kMaximumInteractiveResourceBytes + 1, std::byte{0x5B});
-      auto const resourceId = writeResource(libraryFixture.library(), bytes);
-
-      // The cache refuses an entry no frontend may serve, so this one is placed
-      // with a cache configured for the administrative case: the point under test
-      // is that the interactive request refuses the bytes it materialized.
-      auto const oversizedCache = ResourceDiskCache{ResourceDiskCache::Config{
-        .directory = coverCacheDirectory(cacheRoot),
-        .maximumEntryBytes = bytes.size(),
-      }};
-      oversizedCache.store(utility::computeSha256(bytes), bytes);
-      runtimeLibraryPtr =
-        ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes, cacheRoot));
-      auto result = runQueuedTask(runtime, executor, runtimeLibraryPtr->jobs().loadResourceAsync(resourceId));
-
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
-
-      // Administrative export keeps the exemption the delivery specification
-      // grants it, over the same walk.
-      auto administrativeRes = runQueuedTask(
-        runtime, executor, runtimeLibraryPtr->jobs().loadResourceAsync(resourceId, ResourceSizeLimit::Administrative));
-      REQUIRE(administrativeRes);
-      REQUIRE(*administrativeRes);
-      CHECK((*administrativeRes)->size() == bytes.size());
-    }
-
-    SECTION("a descriptor with no cache entry and no carrier yields no image")
-    {
-      auto const bytes = std::array{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
-      auto const resourceId = writeResource(libraryFixture.library(), bytes);
-      runtimeLibraryPtr =
-        ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes, cacheRoot));
-      auto result = runQueuedTask(runtime, executor, runtimeLibraryPtr->jobs().loadResourceAsync(resourceId));
-
-      REQUIRE(result);
-      CHECK_FALSE(*result);
-    }
-  }
-
-  TEST_CASE("LibraryJobs - the carrier index is built lazily and rebuilt once per revision",
-            "[runtime][unit][library-task][resource-walk]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto const bytes = std::array{std::byte{0xA1}, std::byte{0xB2}};
-    auto const resourceId = writeResource(libraryFixture.library(), bytes);
-    auto executor = QueuedExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(
-      Library::create(runtime, libraryFixture.library(), changes, libraryFixture.root() / "cache"));
-    auto& jobs = runtimeLibraryPtr->jobs();
-
-    // Laziness is what removes the ordering problem rather than deferring it:
-    // there is nothing to publish ahead of a revision.
-    CHECK(jobs.resourceCarrierIndexBuildCount() == 0);
-
-    REQUIRE(runQueuedTask(runtime, executor, jobs.loadResourceAsync(resourceId)));
-    CHECK(jobs.resourceCarrierIndexBuildCount() == 1);
-
-    SECTION("a second request at the same revision reuses the snapshot")
-    {
-      REQUIRE(runQueuedTask(runtime, executor, jobs.loadResourceAsync(resourceId)));
-      CHECK(jobs.resourceCarrierIndexBuildCount() == 1);
-    }
-
-    SECTION("a request after the revision moves sees a new snapshot")
-    {
-      // The runtime holds the writer session, so the revision has to move through
-      // it; a stale stamp is all the next miss needs to rebuild.
-      REQUIRE(
-        runQueuedTask(runtime, executor, runtimeLibraryPtr->commands().createList(ListDraft{.name = "Revision bump"})));
-      executor.drain();
-      REQUIRE(runQueuedTask(runtime, executor, jobs.loadResourceAsync(resourceId)));
-      CHECK(jobs.resourceCarrierIndexBuildCount() == 2);
-    }
-
-    runtime.requestStop();
-    runtime.join();
-  }
-
-  TEST_CASE("LibraryJobs - one stale stamp costs one index build across several workers",
-            "[runtime][unit][library-task][concurrency]")
-  {
-    constexpr std::size_t kRequestCount = 50;
-    auto libraryFixture = MusicLibraryFixture{};
-    auto const bytes = std::array{std::byte{0xC3}, std::byte{0xD4}};
-    auto const resourceId = writeResource(libraryFixture.library(), bytes);
-    auto executor = QueuedExecutor{};
-
-    // What this observes is the multiple-worker row of the concurrency matrix:
-    // the one-build contract holds with four workers rather than one. It is not
-    // a proof that the rebuild mutex serializes a simultaneous burst, because
-    // nothing here forces two requests to be inside the stale check at once, and
-    // no test can force that without a synchronization point inside the build.
-    // Requests that happen to serialize satisfy the assertion the same way, by
-    // finding the published snapshot at the stale check instead of at the mutex.
-    auto runtime = async::Runtime{executor, 4};
-    auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(
-      Library::create(runtime, libraryFixture.library(), changes, libraryFixture.root() / "cache"));
-    auto& jobs = runtimeLibraryPtr->jobs();
-    auto completedCountPtr = std::make_shared<std::atomic<std::size_t>>(0);
-    auto futures = std::vector<async::TaskFuture<Result<std::optional<std::vector<std::byte>>>>>{};
-    futures.reserve(kRequestCount);
-
-    for (std::size_t request = 0; request < kRequestCount; ++request)
-    {
-      futures.push_back(runtime.spawn(countCompletion(completedCountPtr, jobs.loadResourceAsync(resourceId))));
-    }
-
-    REQUIRE(executor.drainUntil([&completedCountPtr] { return completedCountPtr->load() == kRequestCount; }));
-
-    for (auto& future : futures)
-    {
-      REQUIRE(future.get());
-    }
-
-    CHECK(jobs.resourceCarrierIndexBuildCount() == 1);
-
-    runtime.requestStop();
-    runtime.join();
-  }
-
-  TEST_CASE("LibraryJobs - cancelling an interactive resource read suppresses completion",
-            "[runtime][regression][library-task][concurrency]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto const bytes = std::array{std::byte{0x01}, std::byte{0x02}};
-    auto const resourceId = writeResource(libraryFixture.library(), bytes);
-    auto executor = QueuedExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
-    auto stopSource = std::stop_source{};
-    auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = spawnFuture(
-      runtime,
-      runtimeLibraryPtr->jobs().loadResourceAsync(resourceId, ResourceSizeLimit::Interactive, stopSource.get_token()),
-      completedPtr);
-    executor.checkQueued();
-
-    REQUIRE(stopSource.request_stop());
-    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
-    CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
-
-    runtime.requestStop();
-    runtime.join();
-  }
 
   TEST_CASE("LibraryJobs - prepareLibraryImportAsync returns failure for invalid path", "[runtime][unit][library-task]")
   {

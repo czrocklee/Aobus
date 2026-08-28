@@ -266,12 +266,13 @@ add_library(ao_app_runtime STATIC
     runtime/library/LibraryScan.cpp
     runtime/library/ScanPlan.cpp
     runtime/library/ScanApplyOperation.cpp
-    runtime/library/ResourceCarrierIndex.cpp
-    runtime/library/ResourceMaterialization.cpp
     runtime/library/LibraryJobs.cpp
     runtime/resource/ResourceByteCache.cpp
     runtime/resource/ResourceByteLoader.cpp
+    runtime/resource/ResourceCarrierIndex.cpp
     runtime/resource/ResourceDiskCache.cpp
+    runtime/resource/ResourceMaterialization.cpp
+    runtime/resource/ResourceMaterializer.cpp
     runtime/source/TrackSourceCache.cpp
     runtime/source/ListOrderSource.cpp
     runtime/NavigationHistory.cpp
@@ -549,7 +550,17 @@ foreach(AO_FRONTEND_PLAYBACK_COMMANDS_SPELLING IN ITEMS
     message(FATAL_ERROR "Library command guardrail rejects '${AO_FRONTEND_PLAYBACK_COMMANDS_SPELLING}'")
   endif()
 endforeach()
-set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryCommands([^A-Za-z0-9_]|$)|${AO_FORBIDDEN_FRONTEND_LIBRARY_COMMANDS_REGEX}")
+set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/rt/CoreRuntime[.]h|ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryCommands([^A-Za-z0-9_]|$)|${AO_FORBIDDEN_FRONTEND_LIBRARY_COMMANDS_REGEX}")
+foreach(AO_FRONTEND_CORE_OWNER_SPELLING IN ITEMS
+    "#include <ao/rt/CoreRuntime.h>"
+    "#include \"ao/rt/CoreRuntime.h\"")
+  if(NOT "${AO_FRONTEND_CORE_OWNER_SPELLING}" MATCHES "${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX}")
+    message(FATAL_ERROR "Frontend core boundary does not reject '${AO_FRONTEND_CORE_OWNER_SPELLING}'")
+  endif()
+endforeach()
+if("#include <ao/rt/AppRuntime.h>" MATCHES "${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX}")
+  message(FATAL_ERROR "Frontend core boundary rejects AppRuntime")
+endif()
 set(AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX
   "ao/yaml/Reflect[.]h|namespace[ \t\r\n]+ao::yaml")
 set(AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX

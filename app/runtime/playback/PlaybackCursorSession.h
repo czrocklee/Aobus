@@ -22,16 +22,11 @@
 #include <span>
 #include <vector>
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
-
 namespace ao::rt
 {
   class TrackListProjection;
   class TrackSourceCache;
-  class TextOrderingPolicy;
+  class ViewService;
   struct TrackListProjectionDeltaBatch;
 
   /** Owns one bounded live-list playback source/projection conversation. */
@@ -41,15 +36,13 @@ namespace ao::rt
     using ProjectionBatchHandler =
       compat::MoveOnlyFunction<void(PlaybackCursor::Changes changes, bool sourceInvalidated)>;
 
-    static Result<std::unique_ptr<PlaybackCursorSession>> create(
-      PlaybackLaunchSpec launchSpec,
-      TrackId startTrackId,
-      TrackSourceCache& sources,
-      library::MusicLibrary const& library,
-      RepeatMode repeatMode,
-      ShuffleMode shuffleMode,
-      ShuffleHistory::CandidateChooser candidateChooser,
-      TextOrderingPolicy const* textOrderingPolicy = nullptr);
+    static Result<std::unique_ptr<PlaybackCursorSession>> create(PlaybackLaunchSpec launchSpec,
+                                                                 TrackId startTrackId,
+                                                                 TrackSourceCache& sources,
+                                                                 ViewService& views,
+                                                                 RepeatMode repeatMode,
+                                                                 ShuffleMode shuffleMode,
+                                                                 ShuffleHistory::CandidateChooser candidateChooser);
 
     /** Builds a non-playing restore candidate, allowing the saved current track to be a projection gap. */
     static Result<std::unique_ptr<PlaybackCursorSession>> createForRestore(
@@ -57,11 +50,10 @@ namespace ao::rt
       TrackId currentTrackId,
       std::size_t anchorIndex,
       TrackSourceCache& sources,
-      library::MusicLibrary const& library,
+      ViewService& views,
       RepeatMode repeatMode,
       ShuffleMode shuffleMode,
-      ShuffleHistory::CandidateChooser candidateChooser,
-      TextOrderingPolicy const* textOrderingPolicy = nullptr);
+      ShuffleHistory::CandidateChooser candidateChooser);
 
     ~PlaybackCursorSession() override;
 
